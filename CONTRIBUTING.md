@@ -10,6 +10,10 @@ Identity is its current v0.1 external authentication provider, not its product
 owner or repository contribution authority. Read the complete product boundary
 in [README.md](README.md) before changing product terminology or architecture.
 
+By submitting a contribution, you agree that it is licensed under Workstream's
+[AGPL-3.0-only license](LICENSE). Preserve applicable notices when adapting or
+incorporating third-party material.
+
 ## Simple Engineering Loop
 
 ```text

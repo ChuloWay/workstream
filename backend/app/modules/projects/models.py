@@ -793,6 +793,11 @@ class RevisionPolicy(Base):
 
     __tablename__ = "revision_policies"
     __table_args__ = (
+        CheckConstraint(
+            "semantics_status='legacy_incomplete' or "
+            "(max_revision_rounds >= 0 and revision_deadline_hours > 0)",
+            name="revision_policy_semantics_shape",
+        ),
         CheckConstraint("(get_byte(uuid_send(id), 6) >> 4) = 7 and (get_byte(uuid_send(id), 8) & 192) = 128", name="id_uuid7"),
         ForeignKeyConstraint(
             ["project_id", "guide_version"],

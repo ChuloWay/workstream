@@ -32,7 +32,8 @@ from tests.project_create_fixtures import seed_historical_project
 from tests.projects.guide_compilation.proposals.pg_support import (
     seed_selected_review_revision_inputs,
 )
-from tests.projects.public_activation.support import activation_body, publish
+from tests.projects.public_activation.support import activation_body
+from contribution_policy_read_journey import publish_with_policy_reads
 
 
 @pytest.mark.asyncio
@@ -65,7 +66,7 @@ async def test_guide_activation_public_socket_replay_and_fresh_authority(
         grant,
     ):
         await seed_selected_review_revision_inputs(factory, command, actor)
-        finance, _ = await seed_review_actor(
+        finance, finance_grant = await seed_review_actor(
             factory, command.project_id, role="finance_authority"
         )
         outsider, _ = await seed_review_actor(
@@ -83,6 +84,9 @@ async def test_guide_activation_public_socket_replay_and_fresh_authority(
                 slug="foreign-activation-" + uuid4().hex,
             )
         foreign, _ = await seed_review_actor(factory, foreign_id)
+        foreign_finance, _ = await seed_review_actor(
+            factory, foreign_id, role="finance_authority"
+        )
         origin = f"http://127.0.0.1:{find_free_port()}"
         log = (tmp_path / "activation-api.log").open("wb")
         process = subprocess.Popen(  # noqa: S603 - fixed production API
@@ -281,15 +285,25 @@ async def test_guide_activation_public_socket_replay_and_fresh_authority(
                     json={"target": response.json()["target"]},
                 )
                 assert approved.status_code == 200, approved.text
-                async with httpx.AsyncClient(
-                    base_url=origin,
-                    trust_env=False,
-                    timeout=20,
-                    headers={"Authorization": "Bearer " + token(finance)},
-                ) as finance_client:
-                    published, version_path = await publish(
-                        finance_client, command.project_id
-                    )
+                (
+                    published,
+                    inspect_retired_policy,
+                ) = await publish_with_policy_reads(
+                    direct,
+                    cli,
+                    origin,
+                    factory,
+                    command.project_id,
+                    foreign_id,
+                    token(finance),
+                    finance.actor_profile_id,
+                    finance_grant,
+                    caller,
+                    token(outsider),
+                    token(foreign_finance),
+                    admin,
+                    tmp_path,
+                )
                 response = await direct.get(policy_path, headers=headers)
                 assert response.status_code == 200, response.text
                 body = activation_body(response.json())
@@ -355,15 +369,7 @@ async def test_guide_activation_public_socket_replay_and_fresh_authority(
                 path.write_text(json.dumps(body))
                 denied(call(replay_key=str(uuid4())), (404, 409))
                 # Published-policy retirement cannot rewrite a retained activation.
-                retired = await direct.post(
-                    version_path + "/retirement",
-                    headers={
-                        "Authorization": "Bearer " + token(finance),
-                        "Idempotency-Key": str(uuid4()),
-                    },
-                    json={},
-                )
-                assert retired.status_code == 200, retired.text
+                await inspect_retired_policy()
                 assert success(call()) == saved
                 suspended = await direct.post(
                     f"/api/v1/actors/{actor.actor_profile_id}/suspend",

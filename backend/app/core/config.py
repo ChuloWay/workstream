@@ -228,12 +228,12 @@ class Settings(BaseSettings):
         ge=0,
     )
     artifact_scratch_reservation_ttl_seconds: float = Field(
-        default=2400.0,
+        default=3900.0,
         gt=0.0,
         le=86_400.0,
     )
     artifact_preparation_total_deadline_seconds: float = Field(
-        default=1800.0,
+        default=3400.0,
         gt=0.0,
         le=7200.0,
     )

@@ -14,7 +14,6 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from app.modules.artifacts.models import (
     ArtifactBinding,
     ArtifactContent,
-    PreSubmitEvidenceSet,
     SubmissionBundleAdmission, SubmissionBindingReceipt,
 )
 from app.modules.artifacts.submission_bindings import (
@@ -26,13 +25,13 @@ from app.modules.tasks.api import SubmissionCreationRequest, SubmissionCreationU
 from app.modules.tasks.models import Submission, SubmissionDispatch
 from app.modules.tasks.models import AuditEvent
 from app.modules.tasks.repository import TaskRepository
+from app.modules.tasks.submission_context import TaskSubmissionContextService
 from app.modules.tasks.service import TaskService
 from test_artifact_bindings import _Allow, _lineage, _request, _replay_request
 
 
 _TABLES = (
     ArtifactContent.__table__,
-    PreSubmitEvidenceSet.__table__,
     SubmissionBundleAdmission.__table__,
     ArtifactBinding.__table__,
     Submission.__table__,
@@ -112,7 +111,7 @@ async def _set_schema(session, schema: str) -> None:
 
 
 async def _seed(session, schema: str, request) -> None:
-    admission, evidence, content = _lineage(request)
+    admission, content = _lineage(request)
     await _set_schema(session, schema)
     await session.execute(
         ArtifactContent.__table__.insert().values(
@@ -120,9 +119,6 @@ async def _seed(session, schema: str, request) -> None:
             sha256=content.sha256,
             byte_count=content.byte_count,
         )
-    )
-    await session.execute(
-        PreSubmitEvidenceSet.__table__.insert().values(**vars(evidence))
     )
     await session.execute(
         SubmissionBundleAdmission.__table__.insert().values(
@@ -188,7 +184,7 @@ async def test_composed_final_denial_rolls_back_task_and_art_rows(
         # policy rejection is proved in task_authority/test_submission_policy.py.
         assert candidate is task
 
-    monkeypatch.setattr(TaskRepository, "lock_submission_context", lock_context)
+    monkeypatch.setattr(TaskSubmissionContextService, "lock_submission_context", lock_context)
     monkeypatch.setattr(TaskRepository, "get_task", get_task)
     monkeypatch.setattr(TaskService, "_load_locked_task_context", validate_context)
     async with _isolated_binding_schema(isolated_database_env) as (schema, factory):
@@ -247,7 +243,12 @@ async def test_postgresql_consumption_is_concurrent_and_rollback_safe(
                         assert exc.code == "submission_bundle_admission_already_consumed"
                         return None
 
-        outcomes = await asyncio.gather(consume_once(), consume_once())
+        contenders = [asyncio.create_task(consume_once()) for _ in range(2)]
+        try:
+            outcomes = await asyncio.gather(*contenders)
+        finally:
+            # Join both transactions before schema teardown even if one fails.
+            await asyncio.gather(*contenders, return_exceptions=True)
         assert sum(result is not None for result in outcomes) == 1
         original = next(result for result in outcomes if result is not None)
         async with factory.begin() as session:
@@ -288,10 +289,14 @@ async def test_postgresql_consumption_is_concurrent_and_rollback_safe(
                         SubmissionBundleAdmission, str(value.admission_id)
                     )).status
 
-        outcomes = await asyncio.gather(
-            consume_competing(first_competing),
-            consume_competing(competing),
-        )
+        contenders = [
+            asyncio.create_task(consume_competing(first_competing)),
+            asyncio.create_task(consume_competing(competing)),
+        ]
+        try:
+            outcomes = await asyncio.gather(*contenders)
+        finally:
+            await asyncio.gather(*contenders, return_exceptions=True)
         assert sorted(outcomes) == [
             "consumed",
             "stale",

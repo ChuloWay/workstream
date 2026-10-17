@@ -9,6 +9,7 @@ import (
 	"io"
 	"strings"
 	"unicode"
+	"unicode/utf16"
 
 	"github.com/Flow-Research/workstream/cli/internal/api"
 	"github.com/spf13/cobra"
@@ -109,7 +110,11 @@ func Run(args []string, stdout, stderr io.Writer, getenv environment, version st
 
 	project := &cobra.Command{Use: "project", Short: "Public project operations"}
 	addTaskReads(project, client, &output, stdout)
+	addTaskBatch(project, client, &output, stdout)
 	addProjectCreate(project, client, &output, stdout)
+	addProjectRoleMutations(project, client, &output, stdout)
+	addContributionPolicyReads(project, client, &output, stdout)
+	addContributionEvidence(root, project, client, &output, stdout)
 	addGuideCreate(project, client, &output, stdout)
 	project.AddCommand(&cobra.Command{
 		Use:   "show PROJECT_ID",
@@ -176,6 +181,9 @@ func Run(args []string, stdout, stderr io.Writer, getenv environment, version st
 		if output != "json" {
 			fmt.Fprintln(stderr, usage.message)
 		}
+		if usage.code == "file_io_error" {
+			return 1
+		}
 		return 2
 	default:
 		writeFailure(stderr, output, api.Failure{Code: "invalid_arguments"})
@@ -185,6 +193,26 @@ func Run(args []string, stdout, stderr io.Writer, getenv environment, version st
 
 func writeJSON(w io.Writer, raw json.RawMessage) error {
 	_, err := fmt.Fprintln(w, string(bytes.TrimSpace(raw)))
+	return err
+}
+
+func writeSafeJSON(w io.Writer, raw json.RawMessage) error {
+	// Preserve JSON values while keeping literal C1/bidi/format controls out
+	// of terminals. JSON already escapes C0 controls inside strings.
+	var safe strings.Builder
+	for _, r := range string(bytes.TrimSpace(raw)) {
+		if r >= 0x7f && (unicode.IsControl(r) || unicode.Is(unicode.Cf, r)) {
+			if r <= 0xffff {
+				fmt.Fprintf(&safe, "\\u%04x", r)
+			} else {
+				hi, lo := utf16.EncodeRune(r)
+				fmt.Fprintf(&safe, "\\u%04x\\u%04x", hi, lo)
+			}
+		} else {
+			safe.WriteRune(r)
+		}
+	}
+	_, err := fmt.Fprintln(w, safe.String())
 	return err
 }
 
@@ -202,12 +230,18 @@ func writeProfile(w io.Writer, output string, result api.Result[api.Profile]) er
 
 func writeFailure(w io.Writer, output string, f api.Failure) {
 	if output == "json" {
-		_ = json.NewEncoder(w).Encode(struct {
+		raw, err := json.Marshal(struct {
 			Error api.Failure `json:"error"`
 		}{Error: f})
+		if err == nil {
+			_ = writeSafeJSON(w, raw)
+		}
 		return
 	}
 	_, _ = fmt.Fprintln(w, "Error:", f.Error())
+	if len(f.Details) != 0 {
+		_, _ = fmt.Fprintln(w, "Intake findings:", safeText(string(f.Details)))
+	}
 }
 
 func optional(value *string) string {

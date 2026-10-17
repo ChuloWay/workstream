@@ -883,8 +883,8 @@ The preparation settings use the standard `WORKSTREAM_` environment prefix:
 | `WORKSTREAM_ARTIFACT_SCRATCH_MAXIMUM_CONCURRENCY` | `4` | Maximum concurrent preparations; cannot exceed the file limit. |
 | `WORKSTREAM_ARTIFACT_SCRATCH_MAXIMUM_WORKSPACE_ENTRIES` | `2000` | Maximum entries removable from one private processing workspace; it must be at least the accepted submission-ZIP entry limit. |
 | `WORKSTREAM_ARTIFACT_SCRATCH_MINIMUM_FREE_BYTES` | `536870912` | Free-space floor retained in addition to the next full reservation. |
-| `WORKSTREAM_ARTIFACT_SCRATCH_RESERVATION_TTL_SECONDS` | `2400` | Database-independent wall-clock expiry for abandoned reservations. |
-| `WORKSTREAM_ARTIFACT_PREPARATION_TOTAL_DEADLINE_SECONDS` | `1800` | Total first-pass and provider-consumption deadline. |
+| `WORKSTREAM_ARTIFACT_SCRATCH_RESERVATION_TTL_SECONDS` | `3900` | Database-independent wall-clock expiry for abandoned reservations. |
+| `WORKSTREAM_ARTIFACT_PREPARATION_TOTAL_DEADLINE_SECONDS` | `3400` | Total first-pass and provider-consumption deadline, aligned with the maximum selected POST execution budget. |
 | `WORKSTREAM_ARTIFACT_SCRATCH_CLEANUP_MARGIN_SECONDS` | `300` | Required margin between the total deadline and reservation TTL. |
 | `WORKSTREAM_ARTIFACT_SCRATCH_CLEANUP_INTERVAL_SECONDS` | `300` | Celery Beat cadence for the named stale-scratch cleanup task; accepted range is 1 through 86400 seconds. |
 | `WORKSTREAM_ARTIFACT_PENDING_WORK_SCAN_INTERVAL_SECONDS` | `60` | Celery Beat cadence for one authority-bound, database-cutoff pending-work page. |
@@ -1255,9 +1255,19 @@ reloads the active actor and identity link, task, active assignment, immediate
 predecessor, locked guide lineage, effective submission-artifact policy and
 compiled pre-submit policy. Drift fails closed before evidence persistence.
 
+For a checker-remediation replacement, TASK first supplies the exact current
+authorized source selected from its own locked predecessor and the retained
+CHECKERS result. ART checks that source before reading ZIP bytes and at each
+later context relock; a missing, foreign or superseded cause denies intake.
+
 `PreSubmitEvidenceSet` stores the exact actor/task/assignment/predecessor,
 prepared generation, archive digest/size, semantic-manifest identity, locked
 guide and policy hashes, effective-plan identity and catalogue identity.
+ARCH-04F3 also carries the server-selected `checker_remediation_manifest_id`
+for replacement. It is absent for an initial Submission and binds the existing
+evidence operation identity and passing capability; ART does not copy the
+checker result body into a second findings store.
+
 Ordered `PreSubmitEvidenceResult` rows store the closed definition, policy
 trace, phase, classification, status and bounded codes directly; required
 provenance is never hidden in generic metadata. A result-manifest digest binds
@@ -1295,6 +1305,9 @@ preserve the actor and identity link, project, task, assignment, predecessor ide
 locked guide/snapshot/policy lineage, semantic-manifest identity/digest,
 archive digest/size/media type, effective-plan digest, storage scheme, and
 operation identity required for database-only verified-admission publication.
+The replacement's exact remediation cause is part of the final preparation
+AUTH resource and durable lineage through evidence to the verified admission.
+
 It is not a bindable admission, Submission, review, or contribution fact.
 
 The intent, transaction-local authorization evidence, provisional capacity
@@ -1328,6 +1341,7 @@ project_id                     = UUID
 task_id                        = UUID
 assignment_id                  = UUID
 predecessor_submission_id      = UUID | null
+checker_remediation_manifest_id = UUID | null (required for replacement)
 locked_policy_context_hash    = SHA-256 copied from immutable pre-submit evidence
 artifact_content_id            = UUID
 verified_replica_id            = UUID
@@ -1382,7 +1396,7 @@ matches the durable intent, passing evidence, put attempt, content, verified
 replica, and successful full-read verification receipt. Direct provider
 acknowledgement and observed-confirmed recovery use distinct nullable receipt
 references; exactly one must match. Guide and checker-output verification do
-not create submission admissions. The hidden preparation POST returns bounded
+not create submission admissions. The public preparation POST returns bounded
 operation/current-admission state and does not wait for verification.
 
 `ready -> consumed` occurs only in the transaction creating Submission and
@@ -1417,8 +1431,17 @@ new human decision. That transaction consumes both fresh human
 `artifact.submission.binding.create` capabilities, mapped to PermissionId
 `artifact.binding.create`, locks and matches
 admission/task/assignment/predecessor/context, creates the
-immutable Submission and binding, and marks admission consumed. Any denial,
-cancellation, stale execution, or persistence failure rolls back all effects.
+immutable Submission and binding, and marks admission consumed.
+
+For replacement, both final AUTH resources and TASK consumption must match the
+admission's exact checker-remediation cause. The new Submission and generation-one
+evaluation dispatch commit through the same canonical writer. Direct SQL cannot
+substitute that cause or the required AUTH receipts. A retained uncaused
+`revision` dispatch cannot be invented into this lineage: migration
+`0034_checker_remediation_replacement` refuses upgrade before DDL if its exact
+cause and receipts cannot be proven, preserving the 0032 schema and rows.
+Any denial, cancellation, stale execution, or persistence failure rolls back
+all effects.
 After authority succeeds, proven task closure, predecessor advancement, or
 locked-context replacement may commit only `ready -> stale` plus bounded
 evidence, never a Submission/binding. Authorization/concealment precedes
@@ -1514,8 +1537,10 @@ A declaration is the durable parent of every admitted source attempt. Failed or
 abandoned declarations and admitted sources remain retained immutable ART facts.
 They do not claim that a batch or any Tasks were created. There is no source
 deletion API or retention scheduler, and automatic recovery cannot create Tasks.
-Atomic DRAFT import, project/external-ID conflicts, explicit screen/release and
-CLI conversion remain separate TASK-owned implementation work under issue 489.
+Atomic DRAFT import, project/external-ID conflicts and explicit screen/release
+are implemented by the [TASK batch owner](spec_chunk_4_task_queue_assignment.md#explicit-whole-batch-screening-and-release-contract),
+with separate [CLI conversion and batch commands](../cli/README.md#prepare-a-task-import-json-source).
+They are not ART operations; source storage alone never invokes them.
 When a client converts CSV, the retained source is the received JSON, not the
 original CSV.
 
@@ -1607,21 +1632,24 @@ with database-bound execute/finalize receipts. ARCH-04E2-B also retains the
 actual input-materialization decision through the ART result and terminal
 CHECKERS custody, and verifies it before publishing a routing source. Its hidden
 TASK operation commits the complete authorized outcome. Output write/bind
-authority remains unavailable; B8 supplies hidden completion delivery. Production
-routing registration remains pending.
+authority remains unavailable; B8 supplies completion delivery. Selected request
+and completion handlers are registered in production composition.
 
 Current ARCH-04C behavior records known post-authorization material failures as
 terminal, unroutable `material_unavailable`, after scratch cleanup and fresh
 finalization authority. It records no verified material custody, member results
 or completion event, and exact replay performs no provider I/O. Authority or
 selection denial and late lineage drift remain nonterminal. This hidden executor
-neither changes TASK state nor provides automatic or public retry. After a terminal
-result, a new authorized evaluation requires the coordinator's next generation.
+neither changes TASK state nor provides automatic or public retry. ARCH-04F4 adds
+a separate hidden, reason-bound Operator command that uses the coordinator's
+next generation only for an exact current terminal `infrastructure_failed` run;
+the prior result and ART evidence remain immutable. The existing request handler
+delivers its authorized successor without production registration.
 Unfinished expired-lease recovery retains the existing attempt and generation.
 
 The target outage policy remains distinct from that current implementation.
-Future bounded retry/continuation must preserve `evaluation_pending` while
-storage is transiently unavailable; it is not an active checker retry service.
+The hidden Operator retry preserves `evaluation_pending` while platform failure
+is retried; no automatic or public checker retry service is active.
 A provider object confirmed missing after its content was bound is a terminal
 artifact incident in v0.1: the immutable binding remains, evaluation stays
 blocked, and no contributor, Project Manager, or Operator route may replace or
@@ -1803,7 +1831,10 @@ projection with real identities and the full request digest. ART consumption now
 retains an immutable admission/binding/decision receipt, required by a deferred
 database guard on each new consumed admission. Existing retained rows are not
 backfilled or deleted; absent receipt custody cannot use current consumed replay.
-The hidden caller transaction commits this receipt with the Submission and its
-initial evaluation request. ARCH-04E1B-B7 consumes that request through a hidden
-handler and the existing exact-byte materializer. Production delivery registration,
-completion routing authority and public intake remain separate pending work.
+The caller transaction commits this receipt with the Submission and its initial
+evaluation request. ARCH-04E1B-B7 consumes that request through the selected
+handler and existing exact-byte materializer. Selected request/completion handlers
+are registered in production composition, and ARCH-02I-B exposes public ZIP
+preparation plus admission-backed initial/checker-remediation Submission
+creation. The bounded local public API and Celery service drill starts from public guide
+inputs with recorded inference.

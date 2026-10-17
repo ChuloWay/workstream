@@ -1,4 +1,4 @@
-"""Small protocol fixture for the local unselected external-checker probe."""
+"""Small protocol fixture for the local selected external-checker probe."""
 
 from __future__ import annotations
 
@@ -30,8 +30,19 @@ def main() -> int:
         sys.stdout.write("x" * (request["registry"]["resources"]["maximum_output_bytes"] + 1))
         return 0
     failures: list[str] = []
-    if Path("/work/input/src/main.txt").read_bytes() != b"verified bytes":
-        failures.append("material")
+    manifest = request["input"].get("manifest")
+    if manifest is None:
+        if Path("/work/input/src/main.txt").read_bytes() != b"verified bytes":
+            failures.append("material")
+    else:
+        for entry in manifest:
+            if entry["entry_type"] != "file":
+                continue
+            value = Path("/work/input", entry["normalized_path"]).read_bytes()
+            digest = "sha256:" + hashlib.sha256(value).hexdigest()
+            if len(value) != entry["byte_count"] or digest != entry["sha256"]:
+                failures.append("material")
+                break
     status = Path("/proc/self/status").read_text()
     if "CapEff:\t0000000000000000" not in status:
         failures.append("capabilities")
@@ -56,13 +67,34 @@ def main() -> int:
         failures.append("pids_limit")
     findings = [
         {
+            "check_id": "probe.isolation",
             "code": "probe.isolation_failed",
             "level": "error",
             "message": item,
             "path": None,
+            "line": None,
         }
         for item in failures
     ]
+    if Path("/work/input/project-rejected.txt").exists():
+        findings.append({
+            "check_id": "probe.project_rule",
+            "code": "probe.project_rule_failed",
+            "level": "error",
+            "message": "The sample project rejects this fixture file.",
+            "path": "project-rejected.txt",
+            "line": None,
+        })
+    if (request["identity"]["phase"] == "post_submit"
+            and Path("/work/input/post-rejected.txt").exists()):
+        findings.append({
+            "check_id": "probe.post_rule",
+            "code": "probe.post_rule_failed",
+            "level": "error",
+            "message": "The sample project requests a replacement for this fixture file.",
+            "path": "post-rejected.txt",
+            "line": None,
+        })
     body = {
         "schema_version": "external_checker_result.v1",
         "request_digest": request["request_digest"],

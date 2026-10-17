@@ -125,20 +125,17 @@ class ActivationHandle(PreparedGuideActivation):
 
 
 def activation_service(session, actor, command, grant, *, authority=True, close_error=False):
-    from app.adapters.checkers import project_guide_approval_compiler
+    from app.adapters.checkers import external_checker_registry_reader
     from app.adapters.contributions import contribution_policy_validation_port
     from app.adapters.projects.contribution_validation import GuideContributionPolicyValidation
     from app.modules.projects.guide_activation.service import GuideActivationService
 
-    planner, pre, post = project_guide_approval_compiler()
     return GuideActivationService(
         session,
         contribution=GuideContributionPolicyValidation(
             contribution_policy_validation_port(session)
         ),
-        planner=planner,
-        pre_catalogue=pre,
-        post_catalogue=post,
+        registry=external_checker_registry_reader(session),
         authorization=ActivationAuthority(
             session, actor, command.target.proposal.project_id, grant, close_error=close_error
         )
@@ -149,11 +146,15 @@ def activation_service(session, actor, command, grant, *, authority=True, close_
 
 @asynccontextmanager
 async def activation_case(
-    url, *, human_review_required=True, compensated=False, contribution_awards=()
+    url, *, human_review_required=True, compensated=False, contribution_awards=(),
+    post_submit_registry_spec=None, compilation_outcome=None,
 ):
     from .source_fixtures import source_case
 
-    async with source_case(url) as (values, factory, finalization, actor, grant):
+    async with source_case(
+        url, post_submit_registry_spec=post_submit_registry_spec,
+        compilation_outcome=compilation_outcome,
+    ) as (values, factory, finalization, actor, grant):
         await seed_selected_review_revision_inputs(
             factory, finalization, actor, human_review_required=human_review_required
         )
@@ -242,14 +243,19 @@ async def publish_policy(factory, project_id, *, compensated=False, contribution
     award_bindings = ()
     if contribution_awards:
         from .compensation_fixtures import create_binding
-        award_bindings = tuple([
-            (instrument, await create_binding(factory, world, instrument_type=instrument))
-            for instrument in contribution_awards
-        ])
+
+        award_bindings = tuple(
+            [
+                (instrument, await create_binding(factory, world, instrument_type=instrument))
+                for instrument in contribution_awards
+            ]
+        )
     policy = None
     for operation in ("create_draft", "update_draft", "publish"):
         async with factory() as session, session.begin():
             policy = await getattr(world.service(session), operation)(
-                world.request(operation, policy, compensated=compensated, award_bindings=award_bindings)
+                world.request(
+                    operation, policy, compensated=compensated, award_bindings=award_bindings
+                )
             )
     return world, policy

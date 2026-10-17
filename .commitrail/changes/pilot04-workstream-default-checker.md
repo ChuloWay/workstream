@@ -1,0 +1,1688 @@
+# [PILOT-04] Deliver The External Checker Flow End To End
+
+- Initiative: None
+- Durable disposition: Planned
+- Intended merge outcome: Replace both built-in checker catalogues with one
+  versioned Workstream default checker and immutable digest-pinned project
+  images, then prove ZIP-to-prechecks-to-Submission-to-post-checks without a
+  parallel runtime.
+
+## Intent
+
+Required activation feedback repair permits PROJECTS
+`api/guide_proposals.py`, `guide_activation/service.py`, the shared
+`api/deps/guide_proposal_http.py`, canonical error primitives in
+`core/api_controls.py` and `main.py`, current activation contract/PostgreSQL
+tests, `tests/test_api_controls.py`, the checker architecture/roadmap and this
+record. Expose only bounded requirement ID, stage and title from the exact
+approved compilation when missing capabilities block activation. Populate the
+existing canonical `error.details`, after current PM authority and custody
+checks; preserve concealed failures and refusal before activation writes.
+No new route, approval/activation behavior, legacy error decoder, provider
+coordinates, rationale/evidence exposure, DDL, skips or cap changes. Risk L1:
+pure envelope/bounds/concealment regressions and the real PostgreSQL
+gap-to-corrected-binding journey, including refusal rollback, precede full CI
+and independent authority review. Human review focuses on exact approved
+generation and absence of cross-project disclosure.
+
+Final predecessor cleanup permits `backend/app/modules/artifacts/submission_admission.py`,
+`backend/tests/artifacts/test_selected_predecessor_rules.py`, its explicit module
+registration in `backend/scripts/test_lane_catalogue.py`, and this record.
+Require a consumed predecessor's actual selected PRE lineage and rules commitment;
+reject missing selected custody before preparing bytes. Never reinterpret its
+retained policy-context hash as a checker-rules hash. Preserve all stored rows,
+current unchanged-work rejection and genuine rules-change acceptance. Prohibited:
+schema/data changes, legacy resubmission adapters, invented hash sentinels,
+skip/cap changes or broader admission rewrites. Risk is L1; focused current and
+missing/contradictory-lineage regressions, existing native predecessor controls,
+the final real-image drill and full CI verify it. Independent QA reviews custody
+and rejection ordering; human review focuses on fail-closed retained inputs.
+
+Issue #491 owns the complete checker cutover. A contributor ZIP must first pass
+the one Workstream default checker and every required project pre-submit image.
+Only then may the existing caller-owned transaction create an immutable
+Submission, move the task to `evaluation_pending`, and retain its durable
+initial post-submit dispatch. Post-submit images produce evidence only.
+
+## Current behavior
+
+This branch contains the normalized external contract, immutable registry,
+long-lived Rust service and SDK, typed Unix-socket client, callback-scoped ART
+grant, and the exact four-behavior Workstream default checker. ART verifies the
+received ZIP and canonical manifest before the default and every locked PRE
+image run over one genuine prepared-material capability. The selected durable
+owner takes TASK custody before CHECKERS state, commits its generation lease
+before execution, runs without a database transaction, and finalizes either the
+exact result or one recoverable infrastructure outcome in a fresh short root.
+Only a complete pass mints the one-use admission capability consumed by TASK's
+existing atomic Submission, `evaluation_pending`, evaluation reservation and
+outbox operation. Work findings retain bounded evidence without a Submission.
+Its closed AUTH contract now assigns those two phases to the dedicated selected
+PRE service principal and binds preparation, scope, the durable request and the
+exact execute/finalize fact digest without granting direct service access.
+The selected POST processor consumes only actual Submission and ART material
+through the phase-typed callback grant, runs every locked POST image in order,
+and returns canonical evidence and observed isolation without any acceptance
+or routing authority. The existing CHECKERS scheduler now recognizes that
+sole external envelope, derives its lease and
+execution deadlines from the exact locked images, recomputes the ART-owned
+manifest before execution, and retains the complete selected result for
+restart/replay. The existing production outbox registry now owns the evaluation
+request handler alongside assignment invalidation, leases worker-owned ART
+material only during execution, and creates the configured Rust adapter only
+for a selected request. New TASK submission composition now requires selected
+POST custody and refuses an unresolved legacy admission instead of executing
+it; no old request/result runtime or decoder remains. Admission,
+routing completion and remediation fixtures now exercise the selected PRE/POST
+owners. Both obsolete executable catalogues and their isolated callers and
+tests are removed together with obsolete contracts; stored immutable evidence
+remains intact without an old runtime reader. F-020 recovery now proves that registration alone cannot
+activate the retained warning-bearing generation and that only an exact
+registered binding in a corrected, linked approval can activate. The combined
+native journey now exercises real PostgreSQL 16, MinIO, the Rust service and the
+digest-pinned image across pass, work-failure, infrastructure/restart/fresh
+verification and POST evidence paths with database, object-store and workspace
+cleanup.
+
+## Bounded change
+
+### Allowed
+
+- `backend/tests/test_submission_predecessor_custody.py` may replace the
+  unavailable-provider test double with the actual async-iterable `open` port.
+  Preserve the infrastructure-failure result and denial before replacement
+  byte access; no production provider behavior or outcome change.
+
+- Current selected-custody fixture closure also permits
+  `backend/tests/checkers/external/test_selected_pre_submit_coordination.py`,
+  `backend/tests/test_post_submit_selection.py`,
+  `backend/tests/test_post_submit_materialization.py`,
+  `backend/tests/projects/policy_read_faults.py` and
+  `backend/tests/tasks/test_payment_policy_migration.py`.
+  Remove obsolete call signatures/evidence-set joins and use the current
+  selected manifest, grant location and full context hash. Replace the old
+  catalogue-rule corruption with a hash-consistent invalid default identity.
+  Migration assertions must preserve every original value while explicitly
+  checking the exact additive current columns; no wildcard tolerance or row
+  rewrite. Keep all authority, immutable evidence and recovery assertions.
+
+- Hosted ART-binding fixture reconciliation permits
+  `backend/tests/test_artifact_bindings.py`,
+  `backend/tests/test_artifact_bindings_db.py`,
+  `backend/tests/test_submission_composition.py` and
+  `backend/tests/test_submission_preparation_adapter.py`, plus this record.
+  Replace superseded evidence-set fixtures with complete current selected-run
+  admission facts and exact authority inputs. Retain denial, immutable packet,
+  stale lineage, concurrent single consumption, rollback and fresh replay
+  proofs. Diagnose any database lock failure before changing cleanup; never
+  hide it with retry, disabling guards or adding a second admission path.
+  No production/schema changes are authorized by this fixture repair. Focused
+  pure tests and real PostgreSQL controls precede independent review/full CI.
+
+- The hosted transport-budget test repair permits
+  `backend/tests/tasks/evaluation_delivery/test_completion.py` and this record.
+  Configure an explicit test-owned in-memory broker before importing the actual
+  Celery task and clear settings custody after the check. Preserve every timeout,
+  lease and actual task hard-limit assertion; no production setting, worker
+  topology, CI cap or execution behavior changes. Acceptance is the isolated
+  no-broker test and existing worker topology controls, followed by full CI.
+
+- The bounded hosted shared-fixture repair permits only
+  `backend/tests/checker_output_admission_helpers.py`,
+  `backend/tests/test_artifact_admission_digest.py` and this record. Reconstruct
+  the current selected POST request through the CHECKERS repository's strict
+  stored-request owner, including its separately retained digest, and include
+  the selected PRE run's explicit null slot in the guide admission digest
+  expectation. Preserve real stored CHECKERS rows, ART authority, storage,
+  recovery, replay and immutable lineage assertions. No production, schema,
+  migration, compatibility decoder, old checker contract, test selection, skip
+  or cap change is allowed. Acceptance is focused collection, Ruff, the affected
+  real PostgreSQL fixture consumers and the unchanged guide replay proof. Risk
+  is L0 because the repair only aligns shared test inputs with current owners.
+
+- Final dead-contract removal permits the obsolete CHECKERS modules
+  `api/pre_submit.py`, `api/post_submit.py`, `api/historical_post_submit.py`,
+  `api/policy_compilation.py` and `post_submit_contracts.py`, their unused exports
+  in `api/__init__.py`, and this record. Production consumers now use the sole
+  external contracts and canonical packet/value primitives. Remove these
+  unreferenced catalogue/planner/DTO implementations rather than aliases or
+  replacement decoders. Preserve current public ports, schema identifiers,
+  stored records, migrations, AUTH and immutable evidence. Acceptance is no
+  production reference to the removed modules, current app/contract imports,
+  Ruff, full collection, focused current-owner controls and the final native
+  journey. Architecture reviewers inspect the combined removal; risk is L1.
+
+- Project POST-policy custody accepts only the locked external-image policy.
+  This repair permits `backend/app/modules/projects/post_policy/custody.py`
+  and this record: remove the obsolete catalogue union, read fallback and
+  activation fallback while retaining exact operation receipts, sidecar hashes,
+  authority, lineage and caller-owned transactions. No stored row deletion,
+  migration, alternate decoder, deployment or merge is authorized by this
+  scope. Native current-policy public reads/approval/replay/revocation and
+  activation controls, Ruff and relevant owner checks verify the removal.
+  The lead independently inspects the final diff; affected architecture and
+  authority reviewers replay the combined candidate. Risk is L1 because
+  policy custody remains fail-closed and governs activation.
+
+- Administrative permission-read fixture reconciliation permits only
+  `backend/tests/authorization/admin_access/test_admin_reads_postgresql.py`
+  and this record. Replace the obsolete exact permission total 78 with 80,
+  reflecting the selected PRE execute/finalize permissions. Preserve role,
+  response, authority and observation assertions. No product, migration,
+  workflow, test selection or implementation change is permitted. Acceptance
+  is both existing public administrative reads on real PostgreSQL, plus Ruff
+  and whitespace checks. The low-risk review checks the exact diff and native
+  evidence. This fixture correction has no additional roadmap impact.
+
+- The bounded permission-fixture/PostgreSQL CI provider repair permits only
+  `mcp_server/tests/test_access_reads.py`'s representative permission response
+  total (78 to the current exact 80), four exact PostgreSQL image source
+  prefixes in `.github/workflows/backend.yml` (two),
+  `.github/workflows/cli.yml` (one) and `.github/workflows/mcp.yml` (one),
+  and this record. Preserve every assertion, negative/schema constant, SDK
+  lock, fixture identity, test selector, service count, PostgreSQL 16 version,
+  OCI digest, health check, resource bound, job dependency and required check.
+  No backend product, migration or CLI product/test source may change. The
+  previous invalid-total negative remains invalid; no dynamic total fallback
+  or schema broadening is allowed. Independently fetched Docker Hub OCI index
+  bytes must match pinned `33f923b05f64ca54ac4401c01126a6b92afe839a0aa0a52bc5aeb5cc958e5f20`.
+  Acceptance is the complete existing MCP package selection, retaining and
+  identifying its two baseline environment-gated skips, including declarative
+  schema/wire and authority-revocation cases; existing lightweight workflow
+  controls and exact provider-only structural comparison must pass. Local
+  MCP 2.2 evidence is separate from hosted SDK/wire proof.
+
+- The bounded CI collection/selected-contract repair permits only additive
+  package markers `backend/tests/authorization/pre_submit/__init__.py` and
+  `backend/tests/authorization/post_submit_routing/__init__.py`, plus the exact
+  affected `mcp_server/contracts/{authorization_context_get,permissions_list,
+  admin_roles_list,actor_get}.json` snapshots and
+  this record. No production, CLI, migration, workflow, pytest import mode,
+  collection selection, canonical runner or test assertion changes are allowed.
+  Both AUTH directories sit under the existing packaged `tests.authorization`
+  owner and have colliding flat `test_contracts` names; package-qualified imports
+  must retain every original node. Reuse the selected-fragment canonical capture
+  functions, change only the demonstrated selected PRE ActionId/PermissionId additions,
+  ServiceIdentity addition, dependent permission count, hashes and source
+  provenance. Preserve all nine operations and the other five snapshot files
+  byte-for-byte, including their captured source and hash. No MCP tool is added.
+  Acceptance is fresh complete canonical backend collection with every node
+  assigned once across all ten declared lanes, plus real backend OpenAPI drift
+  checks and a deliberately wrong-schema negative that still fails. This repair
+  makes no database/runtime or hosted green claim.
+
+- Bounded current-document reconciliation covers `docs/roadmap_status.md`,
+  `docs/architecture_checker_framework.md` and
+  `docs/decision_0014_external_service_adapter_convention.md`. Describe selected
+  hidden PRE/POST and production request/completion composition, distinguish
+  retained predecessor contracts from removed executable catalogues, preserve
+  the four default blockers and warning-only summary/attestation, and retain
+  PILOT-08 false-guide activation and PILOT-12 public intake as remaining work.
+  Generated output-file authority is still deny-only; normalized JSON result
+  custody does not prove ART file outputs. Local runc/docker-dev proof is not
+  deployed or gVisor proof. Worker transport/budget code and
+  `docs/operations_authorization_service.md` remain lead-owned.
+
+- Delegated TEST-only reconciliation is limited to
+  `tests/projects/post_policy/test_guards.py`, `test_postgresql.py`,
+  `test_public_api.py`, `tests/authorization/post_policy/pg_support.py`,
+  `tests/projects/test_locked_policy_custody.py` and the single
+  `activation_case` registry-spec passthrough in
+  `tests/projects/guide_activation/pg_support.py` (all under `backend/`).
+  Use the current two-argument service, saved approved external policy and
+  real Operator-authorized immutable registration. Preserve authority,
+  transaction, custody, replay, mutation and revocation assertions. Shared
+  `tests/checkers/post_submit/support.py` and all production files stay untouched.
+  Remove only mutable catalogue injection, whose owner no longer exists;
+  replace its purpose with exact approved-binding version/digest substitution
+  refusal and unchanged locked-context reads without live registry lookup.
+
+  Purpose mapping: the obsolete `catalogue` parametrization of
+  `test_exact_source_and_authority_substitutions_reject_without_writes` is
+  removed because a mutable catalogue is no longer a service input. Its remaining
+  upstream/project/link/policy-hash substitutions retain their zero-write checks.
+  `test_post_policy_operation_preserves_finalization_without_provider_or_evaluator_calls`
+  now binds one genuinely registered POST entry to the approved snapshot and
+  refuses a substituted capability version. The old catalogue-rollout context
+  case is replaced by
+  `test_registry_substitution_blocks_activation_but_frozen_context_never_re_resolves`:
+  a substituted registry digest blocks activation with unchanged state; restored
+  identity activates; frozen and active contexts remain identical with live
+  registry reads forbidden. Public response comparison uses the actual saved
+  approved external policy. All SQL immutability, deferred receipt closure,
+  replay, commit rollback, revocation and HTTP admission tests remain selected.
+
+- This record and affected current PILOT-04 architecture, roadmap and owner docs.
+- The existing local Rust-runtime protocol fixture and selected end-to-end
+  probe, to distinguish actual default rejection from actual project-image
+  rejection and verify both leave the task in progress without a Submission.
+- The existing OUTBOX prefork topology and its delivery task hard bound, with
+  topology and real process-containment regressions, to honor the selected
+  request budget without changing event-specific owner deadlines or selectors.
+- The backend CI Redis service source and its exact structural regression,
+  preserving the official image digest, service count, ports and health checks
+  while repairing a reproduced registry quota failure before test checkout.
+- CHECKERS policy contracts, registry reads, default/external execution,
+  durable attempt/result custody, post routing and composition roots.
+- ART preparation, verified-material callback, evidence, admission and
+  post-submit materialization owners needed by the one selected runtime.
+- PROJECT approval persistence and activation readiness for exact registry,
+  requirement, stage, configuration and resource-limit binding.
+- TASK's existing submission composition and CHECKERS dispatch owners only to
+  compose the already-owned atomic Submission/`evaluation_pending`/outbox
+  operation after prechecks pass and to route post-submit evidence.
+- The minimum existing hidden preparation-to-Submission composition needed to
+  prove PILOT-04. PILOT-12 retains assignment-bound upload intent, contributor
+  REST/CLI intake and requirements-read surfaces. The existing hidden command
+  stops rejecting absent summary/attestation so the default checker can retain
+  warning-only observations; this does not publish the PILOT-12 surface.
+- One successor migration plus model, Alembic graph, fingerprint, reset
+  inventory and direct-SQL guards if existing evidence tables cannot retain the
+  exact external execution and latency facts. Its ordinal follows the actual
+  single linear predecessor at publication.
+- Removal of both obsolete catalogue implementations, callers and obsolete
+  tests after replacement proof.
+- Focused contract, AUTH, custody, replay, concurrency, failure, service,
+  public API, CLI, PostgreSQL and MinIO tests and their exact CI ownership.
+- The CHECKERS composition adapter and existing selected PRE/POST composition
+  tests may defer the fixed Unix provider until a locked external entry is
+  actually invoked. A default-only PRE policy and an empty POST policy require
+  no Rust-service configuration; a nonempty policy with absent configuration
+  must become the existing recoverable `implementation_unavailable` outcome
+  after durable reservation. Partial configuration remains invalid. No second
+  provider, fallback executor, alternate result or lifecycle path is allowed.
+- The existing CLI post-policy read DTO and its HTTP/public-socket contract
+  tests. Replace the removed catalogue-policy decoder with the one closed
+  `external_post_submit_policy.v1` response; preserve selectors, fresh read
+  authority, raw output, denial handling and transport failure semantics. No
+  legacy-response fallback or command-surface change is allowed.
+- Bounded hosted-suite reconciliation may update
+  `backend/tests/retained_material_fixtures.py`,
+  `backend/tests/projects/guide_compilation/test_capability_growth_postgresql.py`,
+  `backend/tests/projects/guide_compilation/test_live_cutover_postgresql.py`,
+  `backend/tests/projects/guide_activation/test_admission.py`, and the existing
+  Retained-material callers
+  must use the current typed TASK submission-context port; worker tests must
+  await the current async composition helper; activation admission tests use
+  the current constructor. Historical migration fixtures may preserve raw rows
+  and predecessor shapes, but cannot reconstruct an executable catalogue DTO
+  or feed retained rows into the current scheduler.
+- The selected-only contract cleanup may update CHECKERS public API value types,
+  execution, result classification, repository, coordination and retry owners,
+  plus `backend/app/modules/tasks/post_submit_routing/evaluation_guard.py` and
+  focused selected-flow tests. The current boundary accepts only the selected
+  external request/result schemas. Stored historical rows remain immutable and
+  readable as raw history, but cannot acquire a lease, execute, retry, finalize
+  or publish a completion. Selected replay compares the same exact TASK owner
+  projection and full locked selected-policy body as initial reservation.
+  TASK, assignment and Submission lock order, terminal eligibility, denial
+  semantics and persisted historical facts remain unchanged.
+
+### Not allowed
+
+- No second scheduler, store, submission lifecycle, acceptance operation,
+  policy representation, compatibility alias or parallel execution.
+- No checker-owned acceptance, Review fabrication, ContributionPolicy change,
+  payment work, provider-path authority, host socket exposure, or external
+  execution inside a database transaction.
+- No optional summary/attestation blocker. Their absence remains a warning.
+- No generic Workstream implementation of project rules; every project
+  pre/post check is an approved digest-pinned external image.
+- No PILOT-05, PILOT-06 or PILOT-09 work, deployment, merge or issue closure.
+
+## Design and decisions
+
+Approval resolves every project binding to an immutable phase-specific registry
+row and persists its row ID, entry digest, platform image manifest digest,
+schemas, configuration and resource ceilings under the locked policy hash.
+Runtime never selects a latest version or trusts a proposal string as authority.
+
+ART computes and verifies received bytes and the canonical file manifest before
+external execution. Its callback grant maps one sealed read-only workspace into
+the Rust service and expires on completion, timeout, disconnect or cancellation.
+The Workstream checker implements exactly archive safety, server-owned receipt
+and manifest identity, high-confidence secret detection and task-rule-aware
+unchanged-resubmission refusal. Missing summary/attestation yields warnings.
+Every required project pre image then runs in locked order. Work failures retain
+bounded findings, create no Submission or dispatch, consume no contributor
+attempt and leave the task `in_progress`. Infrastructure outcomes are
+recoverable and are not contributor-failure facts.
+
+External work remains outside database transactions. After every required
+precheck passes, the caller opens one root and invokes the existing TASK
+submission composition operation, which consumes the exact admission while
+atomically creating Submission, advancing to `evaluation_pending`, reserving
+the initial evaluation and appending the dispatch event. Post workers resolve
+only locked entries, read immutable Submission material through ART and persist
+normalized evidence; they cannot accept work.
+
+Activation refuses any required capability suggestion without an exact
+requirement/stage binding to a registered digest-pinned image in the same
+approved generation. Registration alone, wrong project/stage/requirement, or a
+stale approval does not clear F-020. Existing false-policy and warning-
+acknowledgment guards remain.
+
+The old pre/post catalogues are removed in the same final change after every
+production caller and required proof uses the selected runtime.
+Retained approvals, locked guides, evidence and completed runs are never
+rewritten or deleted. No historical catalogue decoder or executable compatibility
+path remains. Unsupported queue envelopes and locked policy bodies fail closed;
+they cannot select a checker implementation. Existing nullable storage columns
+preserve original facts without adding an old writer or reader. Native checks
+require the complete guide, policy,
+packet, manifest and selected-run custody whenever selected lineage is present,
+so migration does not synthesize or rewrite historical facts.
+
+Pre execution uses a durable lease/generation fence. One root reserves the
+exact prepared-generation, policy, registry and request identities, commits,
+then the ART callback and external service execute without a database
+transaction. A fresh root locks TASK currentness before CHECKERS attempt state,
+verifies lease/generation and material/result/isolation identities, and appends
+the immutable outcome or marks a recoverable infrastructure result. Expired
+leases are finalized as infrastructure failures under the same locks. Because
+pre-Submission prepared bytes and the grant are deliberately process-local, a
+restart never reconstructs them from a DTO or path: retry requires a fresh
+upload, a fresh server-computed byte/manifest identity and a new attempt
+generation while retaining the failed attempt. A grant is never serialized or
+resumed. Queue/read-current/reserve, completion, replay and acknowledgment all
+acquire TASK custody before CHECKERS state, including the retained
+intermediate-wait regression.
+
+## Acceptance criteria
+
+- [x] Approval binds the default behavior digest and every project binding to
+  an exact immutable registry row, phase, image, schemas, configuration and
+  limits; substitutions and stale approvals fail closed.
+- [x] Activation enforces exact F-020 requirement/stage/generation coverage and
+  retains false-policy and warning-acknowledgment guards.
+- [x] F-020 recovery is proven by register -> recompile -> approve -> activate
+  in one current generation; registration alone and wrong generation, stage,
+  requirement, registry digest or stale approval remain blocked.
+- [x] ART verifies server receipt identity and a bounded safe manifest before
+  any project image reads material.
+- [x] The default checker runs exactly four blockers; absent summary and
+  attestation remain warning-only.
+- [x] Every required pre image passes before admission consumption. Work
+  findings create no Submission/dispatch and keep the task `in_progress`;
+  infrastructure failures remain recoverable and consume no attempt.
+- [x] Passing preparation invokes the existing caller-owned atomic operation
+  and commits Submission, `evaluation_pending` and initial dispatch together.
+- [x] Required post images consume immutable Submission custody, persist
+  normalized evidence and never decide acceptance.
+- [x] Timeout, cancellation, crash/restart, changed policy/material,
+  cross-project access and duplicate delivery cannot create partial effects;
+  latency and queue/execution lineage are retained, and restart requires fresh
+  server-verified uploaded material rather than a reconstructed scratch handle.
+- [x] Retained old evidence remains readable without rewriting hashes; unresolved
+  old execution cannot cross into the new runtime and requires authorized policy
+  transition.
+- [x] Both obsolete catalogues, implementations, callers and obsolete tests are
+  removed without a fallback or parallel runtime.
+- [x] A real PostgreSQL 16, MinIO and Rust-service journey proves pass, work
+  failure, infrastructure/retry and post-dispatch paths with cleanup.
+
+## Risk and review routing
+
+The migration-only archive scope includes
+`backend/tests/fixtures/pilot04_predecessor_rows.json.gz`,
+`backend/tests/historical_submission_fixtures.py`, and the existing retry and
+replacement migration tests. Replace executable pinned-source writers and the
+raw DTO facade with checksum-bound stored rows and explicit snapshot selection.
+Fixture restoration is restricted to an owned isolated test database. It must
+restore trigger/FK settings, validate foreign keys and named material custody,
+and compare every restored row before any migration assertion receives data.
+Restoring terminal archive facts is setup evidence, not proof of a current or
+predecessor writer. The archive records capture/schema provenance; no product
+runtime, deployment, retained-row deletion or permissive current guard is added.
+Wrong checksums, unowned targets, changed schema/rows and unsupported fixture
+variants must refuse. Independent CI/QA review and the preserved real PostgreSQL
+migration invariants verify this fixture replacement.
+
+Current history and queue fixtures also replace built-in failure-name switches
+with normalized registered-image verdicts. Allowed producer paths are
+`backend/tests/checkers/execution/storage_fixture.py`,
+`backend/tests/submission_fixtures.py`, `backend/tests/retained_material_fixtures.py`,
+the project bootstrap helpers in `backend/tests/test_tasks.py`,
+`backend/tests/projects/{policy_bundle_fixtures.py,unified_policy_fixtures.py}`,
+and `backend/tests/committed_guide_fixtures.py`. Register and bind the exact POST
+image before guide approval and TASK release. Preserve admitted immutable bytes
+in the existing scripted provider for the test session factory, and traverse
+current ART reads, grants, CHECKERS phase AUTH and finalization for both verdicts.
+Do not retrofit locked policies, synthesize failed members, translate old names,
+or add compatibility arguments. Consumer assertions remain independently owned.
+Required real PostgreSQL controls cover failed/passing generations, currentness,
+bounded history and review non-admissibility. Scripted provider evidence does
+not claim MinIO or real container execution. Independent root review covers this
+test-fixture author repair; production, DDL and public route changes are prohibited.
+
+The final caller trace includes `backend/app/modules/checkers/{history.py,
+execution_results.py,api/history.py}`, the existing history privacy expectation,
+and `backend/tests/checkers/execution/test_storage.py`. Remove retired catalogue
+message lookup and severity-policy classification from history reads. Render
+bounded messages from normalized status, admit the persisted selected `error`
+severity, and mark required failed image members as blocking. Keep concealed
+internal findings, exact parent selectors, immutable rows and read authority.
+A real failed registered-image result must be readable by both contributor and
+management projections without raw image messages; the regression must fail on
+the prior reader. Independent authority/architecture review checks the caller
+repair. Risk remains L1; no public route or stored-data rewrite is added.
+
+At clean `c4d590c7b706bacf926c324f587dffdaef0f4924`, the native SQL identity
+substitution controls, empty-policy production request/completion acceptance,
+and failed selected-result history regression passed (4 cases, 106.13 seconds).
+These tests use controlled normalized image results with real PostgreSQL,
+ART material and AUTH custody; they do not replace the real Rust image journey.
+Restoring only the previous history reader and message table in a temporary
+checkout makes the exact history regression fail with `KeyError` (42.98 seconds).
+Both runs confirmed database, role and MinIO cleanup. Raw evidence is
+`/tmp/pilot04-root-current-history-identity21.{log,json}` and
+`/tmp/pilot04-root-history-prior-reader-mutant21.{log,json}`; the temporary
+counterfactual checkout is removed. Public history schema controls passed two
+cases separately. Later changes require affected evidence reconciliation.
+
+Final cleanup also permits `backend/scripts/behavior_ownership.py`, its existing
+PILOT-04 partition transition test and `.ci/behavior-ownership/partition.v1.json`.
+Retire exactly the five removed checker contracts and two removed ART PRE
+writers; admit only the canonical value and PRE packet owners. Regenerate the
+current partition with its existing protected base. Preserve all other target
+assignments and refusal of unrelated additions/removals. The focused transition
+test and architecture/ownership checks verify this metadata reconciliation;
+it changes no runtime behavior or test selection.
+
+- Risk class: L1
+- Required reviewers: architecture, security, authorization, product_ops,
+  reuse_dedup, qa, test_delta, documentation, ci_integrity
+- Human review focus: Locked policy/registry custody, TASK-before-CHECKERS
+  ordering for read-current/reserve/enqueue/complete/replay/acknowledge,
+  all-pre-before-Submission, transaction boundaries, durable pre lease and
+  process-local grant lifetime, work-versus-infrastructure outcomes, retained
+  history, F-020, post non-acceptance and complete catalogue removal.
+
+## Evidence
+
+| Claim | Command or proof | Result | Remaining uncertainty |
+|---|---|---|---|
+| Existing component custody | Prior PR538 default, Rust service/SDK, ART callback and contract reviews | Passed at recorded component heads | Final selected flow/current-main integration pending |
+| PRE transaction boundary | `pytest -q` for invalid claim controls and `test_checker_processor_starts_only_after_authority_transaction_commits`, plus Ruff on the four affected files | 5 passed; processor construction is refused while the authority root is active and reached only after it commits | Durable lease/generation schema and selected external sequence remain pending |
+| Selected PRE callback | `pytest -q backend/tests/checkers/external/test_selected_pre_submit.py`; Ruff and `git diff --check` on the affected files | 4 passed; exact default runs first, a real high-confidence secret prevents every external invocation, locked external pass/fail is retained, and the genuine request-bound ART grant completes cleanup with one bounded owned mount | Durable persistence, admission composition, crash recovery and native service journey remain pending |
+| Selected admission binding | `pytest -q backend/tests/test_submission_change_gate.py backend/tests/checkers/external/test_selected_pre_submit.py`; Ruff and `git diff --check` on the affected files | 11 passed; existing callers retain their exact archive/manifest rejection while the selected binder carries unchanged work plus exact predecessor/current rules into the default checker | The binder is not yet selected by the durable admission caller |
+| Selected durable result contract | `pytest -q backend/tests/checkers/external/test_selected_pre_submit.py`; Ruff and `git diff --check` on the affected files | 5 passed; canonical result/terminal digests bind the default, ordered external results, isolation, generation lease, outcome and measured queue/execution latency | PostgreSQL reservation, lease and finalize storage remain pending |
+| Selected durable request contract | The same five selected-PRE tests plus focused Ruff and `git diff --check` | Passed; the reservation digest covers contributor/link, TASK, assignment, ART attempt/generation, policy/default, exact default input and archive/manifest custody, and the terminal includes that request digest | PostgreSQL ownership and SQL custody remain pending |
+| Selected idempotent replay contract | `pytest -q backend/tests/checkers/external/test_selected_pre_submit.py backend/tests/checkers/external/test_selected_pre_submit_coordination.py backend/tests/checkers/external/test_selected_pre_submit_service.py backend/tests/checkers/external/test_selected_preparation_command.py backend/tests/authorization/pre_submit/test_contracts.py backend/tests/test_submission_bundle_admission.py`; focused Ruff and `git diff --check` | 70 passed; one actor/key namespace permits a fresh prepared generation only when every stable byte, packet, policy, TASK and assignment fact matches, validates stored terminal timing/results, replays bounded work findings or an existing durable upload, and rejects changed stable facts | Native uniqueness/immutability and concurrent PostgreSQL replay proof remain pending |
+| Selected POST policy handoff | Focused selected PRE/admission/composition tests plus Ruff and `git diff --check` | 76 database-free tests passed; the complete approved POST image policy and digest now travel inside the selected PRE request, verified admission and ART consumption result, and malformed or substituted retained policy fails closed | Submission request selection and durable external POST result storage remain pending; seven separately selected routing tests required a PostgreSQL URL and were not claimed |
+| Selected durable owner source | `pytest -q` over selected PRE, policy, coordination, PROJECT activation/proposal contracts and architecture module boundaries; focused Ruff | 51 focused/architecture tests passed; the selected run is its own durable attempt identity, TASK locks precede CHECKERS state, one-use admission facts are substitution-resistant, ordered deadlines fit ART custody, and four private module edges were removed through public ports/composition | Native migration, exact AUTH SQL closure, crash reclaim and admission composition remain pending |
+| Selected lease execution boundary | `pytest -q backend/tests/checkers/external/test_selected_pre_submit_coordination.py backend/tests/checkers/external/test_selected_pre_submit_service.py backend/tests/checkers/external/test_selected_pre_submit.py backend/tests/architecture/test_module_boundaries.py`; focused Ruff | 49 passed; fixed-service preparation precedes owner locks, the lease commits before material execution, execution occurs with no root open, and exact lease/result digests are consumed in a separate finalization root | Native SQL custody and live admission selection remain pending |
+| Selected PRE authority contract | `pytest -q backend/tests/authorization/pre_submit/test_contracts.py backend/tests/authorization/test_catalogue.py backend/tests/checkers/external/test_selected_pre_submit_service.py backend/tests/architecture/test_module_boundaries.py`; focused Ruff and `git diff --check` | 50 passed; one dedicated service identity owns only execute/finalize, prepared selectors bind project/run/request, exact phase facts bind the decision and audit digest, direct service calls remain unavailable, and composition uses the public authority port | Native actor/action/evidence constraints and live workflow injection remain pending |
+| Selected POST callback | `pytest -q backend/tests/checkers/external/test_selected_post_submit.py`; Ruff and `git diff --check` on the affected files | 3 passed; actual Submission/ART identity reaches every locked POST image through its short-lived grant, work pass/fail remains evidence only, and infrastructure failure stays recoverable | Durable POST reservation/finalization, worker restart and routing composition remain pending |
+| Selected durable POST contract | `pytest -q backend/tests/checkers/external/test_selected_post_submit.py backend/tests/test_submission_bundle_admission.py`; Ruff and `git diff --check` on the affected files | 56 passed; the request digest binds the exact approved selected policy, separately named locked TASK context and native Submission/ART identity, while the result digest binds request/generation, ordered execution evidence or a closed recoverable infrastructure category without acceptance authority; a legacy catalogue hash cannot stand in for the selected image-policy digest | The existing scheduler/materializer still needs to select this contract and persist it through restart/replay |
+| Selected POST scheduler compatibility | `pytest -q backend/tests/checkers/external/test_selected_post_submit.py backend/tests/checkers/execution/test_results.py backend/tests/checkers/execution/test_completion_contract.py backend/tests/checkers/post_submit/test_request.py backend/tests/test_submission_bundle_admission.py`; focused Ruff | 84 passed; one discriminated owner accepts retained legacy and selected request/result envelopes, selected leases cover the ordered image budget and finalization margin, ART recomputes the selected manifest, and focused scheduler controls prove exact completed/infrastructure envelopes and generic replay parsing | Native selected columns/constraints and live Rust worker proof remain pending |
+| Selected POST native custody | `python3 /tmp/p04_selected_runner.py <repo> /tmp/p04-selected-post-result-replay 420 tests/checkers/external/test_selected_post_submit.py::test_selected_post_materializes_actual_submission_and_replays`; focused selected-POST pure tests and Ruff | PostgreSQL 16 PASS 1 in 36.10s with database/role cleanup complete, plus 7 pure tests; actual immutable Submission and verified ART lineage materialize through the selected policy, finalize selected result/member custody and replay the stored strict envelope | The approved policy is empty in this discriminator; a locked nonempty image, live Rust service and worker restart remain pending |
+| Nonempty selected POST policy and result | `python3 /tmp/p04_selected_runner.py <repo> /tmp/p04-selected-post-nonempty5 600 tests/checkers/external/test_selected_post_submit.py::test_selected_post_persists_locked_external_member`; `pytest -q backend/tests/checkers/external/test_selected_post_submit.py -m 'not postgres_schema_contract'`; focused Ruff and `git diff --check` | PostgreSQL 16 PASS 1 with database/role cleanup complete, plus 7 pure tests; an actual immutable registry entry is registered through Operator authority, compiled into one supported POST requirement, approved, activated, materialized from the real Submission/ART lineage and persisted as the exact selected member. Persisted UUID-bearing policy JSON and SQL requirement custody are decoded and validated without relaxing strict in-memory contracts. | The adapter in this discriminator is bounded and deterministic; a live Rust service, restart/reclaim and external work/infra outcomes remain pending |
+| Actual selected POST Rust service | `run_selected_post_probe.py` through the isolated PostgreSQL runner at `/tmp/p04-selected-post-probe-final2`, using local registry platform manifest `sha256:c664d8d85d6dfcded31710223c8d91441548e5445f0aa9b59d246fc464a129ef`; focused Rust POST-grant round-trip test, Ruff and `git diff --check` | PASS 1 in 45.06s on PostgreSQL 16/schema 0037 with database/role and callback workspace cleanup complete. The real Rust service validates the full POST grant, launches the digest-pinned container in explicit local `runc`/`docker-dev` mode, reads every verified manifest file, returns an exact isolation receipt, and the normal owner persists its selected member. | This local proof does not claim hosted `runsc`; restart/reclaim, live PRE orchestration and final end-to-end MinIO evidence remain pending |
+| Actual selected PRE Rust service | `PYTHONPATH=.:backend /tmp/workstream-pilot-review-locked-env/bin/python experiments/pilot04_external_checker_runtime/run_selected_pre_probe.py --image-reference localhost:35104/ws-pilot04-checker@sha256:c664d8d85d6dfcded31710223c8d91441548e5445f0aa9b59d246fc464a129ef --service-binary external_checkers/target/debug/workstream-checker-service`; Ruff and `py_compile` | PASS. Genuine prepared ART bytes and the server-computed manifest enter the selected default-plus-project-image processor before any Submission exists. The callback-scoped grant launches the exact digest-pinned image through the Rust service in explicit local `runc`/`docker-dev` mode, returns matching result/isolation custody, and confirms the workspace is empty after the callback. | This is the actual selected PRE execution boundary, not the final PostgreSQL/MinIO admission-to-dispatch journey or a hosted `runsc` claim. |
+| Production delivery registration and owner boundaries | `pytest -q backend/tests/architecture/test_module_boundaries.py backend/tests/test_artifact_architecture.py backend/tests/outbox/test_contracts.py`; focused Ruff and a direct registry construction probe | 116 passed; the existing production outbox registry exposes assignment invalidation and evaluation request handlers, selected Rust configuration is lazy, and PRE coordination stays behind CHECKERS' public adapter root | Database-backed legacy/selected delivery and worker restart proofs remain pending |
+| New Submission selected-only boundary | `pytest -q backend/tests/test_submission_bundle_admission.py backend/tests/checkers/external/test_selected_post_submit.py backend/tests/test_artifact_architecture.py::test_checker_custody_ports_have_exact_owner_and_art_consumers`; focused Ruff | 59 passed; retained legacy and selected admission projections are mutually exclusive, and the TASK writer accepts only selected POST custody for a new immutable Submission | Native rollback proof for a retained unresolved legacy admission remains pending |
+| Obsolete catalogue removal | Focused lane/architecture/ownership suite; recursive collection of every modified surviving test module; Ruff, module-boundary inventory and stale-import scan | 84 focused tests passed and 94 surviving tests collected. Ten obsolete executable catalogue/runner targets, their private-edge debt and tests are absent; exact ownership metadata admits only the selected owners and those retirements. | The stacked branch still has separately tracked structural-debt growth from earlier P02/P10/P04 source, so the repository-wide structural-debt gate is not claimed by this deletion checkpoint. |
+| F-020 recovery | `python3 /tmp/p04_selected_runner.py <repo> /tmp/pilot04-f020-native6 600 tests/projects/guide_activation/test_postgresql.py::test_checker_registration_requires_corrected_approval_before_activation`; focused external-policy tests and Ruff | PostgreSQL 16 PASS 1 with schema 0037 and database/role/MinIO cleanup complete, plus 6 pure compiler tests. A real Operator registration does not clear the existing warning generation; correction observes the current registry projection, a linked successor approval binds the exact row/digest, the successor activates, and the old generation remains refused. Wrong stage, requirement, identity and registry digest substitutions fail closed. | This proves the activation recovery gate, not the combined intake-to-POST journey. |
+| Retained admission migration shape | `pytest -q backend/tests/test_submission_bundle_admission.py backend/tests/checkers/external/test_selected_pre_submit_coordination.py backend/tests/checkers/external/test_selected_preparation_command.py backend/tests/test_artifact_architecture.py::test_checker_materialization_contract_has_one_canonical_consumer_owner`; focused Ruff | 62 passed; selected rows require complete new custody while every new column stays null on retained legacy rows, avoiding fabricated backfill or historical hash rewrites | Successor SQL and direct retained/selected row controls remain pending |
+| Owner/caller trace | PROJECT approval/activation, ART preparation/admission, TASK composition and CHECKERS dispatch | Selected PRE uses durable reserve/lease/finalize roots around the genuine ART callback; a pass is consumed only by TASK's existing atomic Submission/evaluation reservation/outbox composition, while POST uses immutable Submission/ART custody | Independent final integration review remains |
+| Default behavior and warnings | `pytest -q backend/tests/checkers/default/test_contract.py backend/tests/checkers/default/test_execution.py backend/tests/checkers/external/test_selected_pre_submit.py -m 'not postgres_schema_contract'` | 30 passed. The manifest and executable behavior retain exactly four ordered blockers; empty summary and attestation produce warnings without changing eligibility. | Full required checks remain on the final reconciled head. |
+| End-to-end replacement | `run_selected_end_to_end_probe.py` through the isolated runner, `/tmp/pilot04-selected-e2e10.log` and `.json`, using platform manifest `sha256:c664d8d85d6dfcded31710223c8d91441548e5445f0aa9b59d246fc464a129ef` | PASS on PostgreSQL 16/schema 0037 with database/role/MinIO/workspace cleanup complete. Real MinIO PRE and the Rust/runc image commit one Submission, `evaluation_pending` and dispatch, then actual Submission/ART POST evidence. A secret finding leaves a separate Task `in_progress` with no Submission. Service loss retains `implementation_unavailable`; restart uses a fresh upload and independent ART verification, records a completed successor generation and commits exactly one later Submission/dispatch. | This local proof uses explicit `runc`/`docker-dev`; hosted CI must exercise its configured runtime and the final reconciled head. |
+
+
+| Delegated current post-policy callers | Exact `c1195f8b2d55bc02976efe41d6052bca8b975a66`: six focused PostgreSQL cases in `/tmp/pilot04-post-policy-c119-native-callers.log` and producer metadata `.json`; scoped Ruff and `git diff --check` | 6 passed in 104.91s, schema `0036_selected_checker_flow`, database/role cleanup complete. The registered digest substitution refuses activation with unchanged activation facts; restored registration activates, and active/frozen reads never consult registry. Public approval/replay/revocation and commit rollback, plus canonical AUTH derive/read/approve evidence pass. | Local PostgreSQL 16.15 uses an owned 512 MiB tmpfs and 256 MiB memory bound with fsync/synchronous_commit/full_page_writes enabled. This test-only proof uses local ART and scripted setup, not MinIO or runtime evaluation; final combined source and hosted CI remain separately verified. |
+
+The registered-one-entry projection and exact approved-binding version rejection
+also passed at `397e8812c`, with that test/source blob unchanged at `c1195f8b2`.
+The companion registry-refusal test initially expected `proposal_stale`; its
+actual canonical readiness outcome is `approval_blocked`, corrected and verified
+in the six-case proof above. Two broader selections reached their unchanged
+240-second child budget (physical-disk reset IO, then a selection too large for
+that focused budget); both cleaned their databases/roles and are not reported as
+complete module passes. All surviving tests remain in their canonical CI lanes.
+The delegated reconciliation changes no capability or public exposure, so it has
+no independent roadmap change beyond the parent cutover's documented scope.
+
+## Reconciliation
+
+- Current-source reconciliation: implementation starts at PR538 head
+  `7453a0d8c5664cfd486872a381899f3755393004`; final publication will reconcile
+  actual merged `main` and intervening owners.
+- Next usable boundary: independent full-scope review and final required CI;
+  no component-only merge.
+- Remaining risk: reconcile the final stacked migration and owner metadata with
+  actual `main`, then validate the complete required test union on that tree.
+
+## Production completion repair
+
+Independent review found that the production outbox registry selected evaluation
+requests but omitted the existing completion handler. The earlier real Rust/MinIO
+probe called the executor directly and ended at `evaluation_pending`; it did not
+prove worker completion routing. The registry now composes the canonical
+completion handler. The new native production-registry test exercises request
+delivery, emitted completion delivery, acknowledgment and duplicate refusal for
+both human review and shared automatic acceptance with complete awards. Its
+runtime result remains pending until the isolated PostgreSQL command completes.
+Publication must remove the accidentally stacked PILOT-02/PILOT-10 source and
+reconcile the selected-flow successor with the actual merged migration chain.
+
+## External PRE configuration repair
+
+PRE bindings previously forced configuration to an empty object, so an otherwise
+registered PRE image with required configuration could never be approved. PRE now
+uses the existing bounded flat CapabilityParameter contract, enforces unique
+parameter names and validates the exact registered schema in both compilation
+and approval. Configuration arrays are normalized to JSON arrays for both
+phases. Empty PRE parameters are excluded during serialization, preserving
+retained empty-binding hashes. Focused compiler regressions cover configured
+PRE success, required/type rejection, duplicate names and retained serialization.
+
+### Selected replacement cause repair
+
+After reconciling merged replacement intake and the operator-retry branch, source
+review found selected PRE lineage omitted the remediation manifest. The repair
+binds the exact cause through canonical reservation JSON, TASK revalidation,
+ART final authority and ready-admission facts. Initial attempts require no cause;
+replacement attempts require a UUID cause alongside the predecessor. Focused
+proof covers cause round trips, publication and substitution denial. The first
+contract run passed 120 tests; the expanded run passed 121 with one stale AUTH
+fixture missing required packet/manifest facts. That fixture is being corrected
+without changing authority guards. PostgreSQL currentness and full Rust/MinIO
+proof remain pending on the final reconciled migration.
+
+The reconciled AUTH composition exceeded its existing 1,200-line boundary. Move
+its exact artifact-binding matcher to the existing materialization binding owner,
+with explicit context/digest inputs and unchanged predicates; do not alter the
+structural debt ledger or its limit.
+
+The first reconciled Rust probe exposed a branch-reconstruction error: TASK's
+repository reverted the merged `select_submission_context` operation while its
+service still called it. Restore the merged repository operation, retaining
+selected-policy decoding, and make selected PRE locking use the same canonical
+TASK context service as all intake callers. This also retains CHECKERS currentness
+validation for replacement attempts. The failed probe's owned database was
+cleaned; rerun the real service proof after the repaired candidate is frozen.
+
+Configuration repair: PRE and POST machine configuration accepts bounded
+canonical relative paths/patterns through the existing CHECKERS syntax validator,
+while retaining command, credential and control-character guards. Actual model
+prose fields remain unchanged. The affected 127 contract/policy tests pass; an
+independent 18-control replay confirms the former valid-path rejection is fixed.
+
+The first reconciled native owner run failed four cases at deferred Submission
+dispatch custody, before completion/replacement assertions. The new selected
+admission has no historical evidence row, but merged replacement dispatch SQL
+still used an inner join to that row. Preserve the replacement cause predicates
+and adapt that join for the explicit selected lineage. All owned database, role
+and MinIO resources were cleaned. No passing full-flow claim is made for that run.
+
+Full-cutover cleanup after the user's clarification: remove the unused production
+historical catalogue factory and historical Submission-content adapter. Move
+only the frozen metadata needed to seed actual predecessor schemas into
+`tests/historical_checker_metadata.py` and the migration-only Submission fixture.
+No product adapter constructs the removed catalogue. New Operator retries only
+construct selected external requests; immutable receipt replay is preserved.
+
+Real local selected Rust/MinIO run at fbb397a passed default/PRE/Submission/POST
+and production completion to review_pending, default-secret rejection without a
+Submission, and unavailable-PRE recovery through fresh verified bytes. All owned
+DB/role/MinIO/scratch cleanup passed. The runtime was runc/docker-dev, not gVisor.
+The same-head native run passed the real production automatic acceptance case
+(with exact contribution and both awards); replacement failed at strict UUID
+lineage construction. Normalize the native PostgreSQL remediation UUID to the
+TASK public port's Python UUID representation rather than weakening validation.
+Replacement proof and runtime-budget alignment remain pending.
+
+Runtime budget repair aligns selected POST work, ART custody and the production
+request transport; only request events receive extended delivery bounds. Preserve
+unknown-event refusal before invocation and authorized immutable finalization
+replay by resolving bounds independently of current handler registration; the
+existing claim/invocation guards still require a registered handler. Focused
+unknown-registration and selected production delivery regressions are required.
+
+Canonical multi-project fixtures reuse only an exact already-registered immutable
+checker entry via the public registry reader, asserting the full spec digest;
+otherwise they publish through real Operator authority. They do not duplicate
+registrations or bypass registry custody. Selected replacement test substitutions
+normalize a native cause UUID at the typed fixture boundary.
+
+Static selected policy budgets are validated before compilation and approval.
+POST rejects both a single excessive image and an excessive aggregate; PRE
+rejects aggregate work beyond the platform custody ceiling. Lower deployment
+limits still produce a recoverable infrastructure refusal at runtime. Focused
+policy, outbox and transport verification passed 56 tests in the local locked
+environment; this is not final-head full-suite CI evidence. Native 434b9e0d3
+passed replacement replay, unknown registration and automatic acceptance; its
+two cause guards stopped at a native UUID fixture boundary. Normalize that
+fixture identifier only, preserving the strict production registry reader.
+Database, role and MinIO cleanup completed; cause-guard rerun remains pending.
+
+The selected cause-guard rerun reached the intended SQL immutability denial
+(SQLSTATE 55000) but exposed two superseded test assumptions: successor requests
+were rebuilt with the historical DTO, and mutation refusal was caught as an
+integrity violation instead of DBAPIError. Use the exact selected constructor
+for selected fixtures and retain the exact 55000 assertion. No production guard
+or database constraint changes are part of this test repair. Reconcile roadmap
+claims to selected hidden delivery, keeping public intake and hosted isolation
+proof explicitly outside the delivered surface. Final guard rerun is required.
+
+Real Celery transport must cover selected POST work, not just the asynchronous
+owner timeout. Its fixed prefork hard bound is now the maximum lease plus a
+60-second shutdown margin (3660 seconds), with exact task/message validation
+to reject shorter or longer overrides. Per-event bounds remain selected request
+3520/3600 and ordinary events 240/300. Preserve the existing scaled real-prefork
+kill/reap/UNKNOWN regression while scaling both the installed test bound and its
+entry guard; no production duration is shortened for verification.
+
+Current-document reconciliation distinguishes selected hidden production
+composition from public intake and false-guide activation. Immutable predecessor
+contracts are retained provenance, not executable catalogue fallback. Source
+inspection confirms output-file storage/binding is deny-only while selected
+images produce closed JSON results. This editorial repair adds no runtime
+proof; the lead owns final-head native cause guards, worker timing and hosted CI.
+
+Final repaired native evidence: cause-substitution and intermediate TASK-lock
+wait controls passed 3 tests in 186.12s at 11bd7bda0. Real prefork kill/reap,
+UNKNOWN persistence and independent hard-limit checks passed 2 tests in 25.81s
+at 2d111d8c7; topology and transport controls passed 24 tests in 3.65s. Owned
+database, role and MinIO cleanup completed for both native runs. The selected
+Rust/MinIO probe at 89df6a34a passed actual default and external PRE rejection
+without a new Submission, passing PRE-to-Submission/dispatch-to-POST/completion
+to review_pending, fresh completion restart/replay, and unavailable-service
+recovery through fresh verified bytes. Image platform manifest is
+sha256:c2d957341116c2324299461598330bf93937786c30658a4b71ef9392e9b78278.
+Its runtime is local runc/docker-dev, not hosted gVisor. Database, role, object
+store and scratch cleanup passed. Later documentation commits change no product
+code from that tested head. Full final-head hosted CI remains required.
+
+Fresh hosted CI at c0ffb0f47 found one current-roadmap vocabulary violation
+(corrected to Celery composition) and two lanes failed before checkout on an
+anonymous public-ECR Redis Data limit exceeded response. Use the identical
+official Redis OCI index from Docker Hub instead: independently fetched bytes
+hash to the same pinned 520775a41a63e77e06c73e35d2fd9cc15921a609516818796b4ecbb813078bc7.
+Only the two registry prefixes and exact structural expectation change; all
+services, digest, health checks, test selection and caps remain unchanged.
+New-source CI verification is required; those failed lanes ran no tests.
+
+Fresh CLI public-contract CI then reached the current backend successfully but
+rejected its selected external POST policy locally as `invalid_api_response`.
+The CLI still decoded the removed catalogue schema. The bounded caller repair
+uses a strict closed external-policy/registry DTO, rejects the historical active
+catalogue shape and retains the existing public authority, replay and transport
+controls. Focused Go packages and five HTTP contract tests pass. The strengthened
+real PostgreSQL public-socket node publishes a genuine Operator-authorized POST
+registry entry, derives one nonempty locked binding and passes in 96.64 seconds
+at code/test head `84087f49245482ecf775a6d68dc83a849f9ebe0a`, schema head
+`0036_selected_checker_flow`, with complete isolated database/role cleanup. It
+uses the actual current backend JSON rather than a copied nested fixture. This
+record-only descendant changes no tested CLI or test bytes. The prior hosted
+143-pass/one-fail run is retained as the failing-before discriminator.
+
+At clean `a9547a49b42c246d355b818e63c68ed85fa6270a`, the unchanged canonical
+`run_test_lanes.py --collect-only` collected 8,887 unique nodes in 228.06 seconds,
+with zero deselections and complete, nonoverlapping assignment to all ten lanes.
+Both namespaced AUTH families are retained: three selected PRE contracts and
+96 post-submit-routing nodes. Producer manifest and per-lane inventories are in
+`/tmp/pilot04-a954-collection-canonical/`; raw collection output is
+`/tmp/pilot04-a954-collection-canonical.log`, with generated metadata in
+`/tmp/pilot04-a954-collection-metadata.json`. This is collection proof, not
+backend test execution or lane-runtime evidence.
+
+All eleven MCP selected-fragment tests passed in 37.93 seconds against a fresh
+backend OpenAPI command. A deliberately added counterfeit ActionId produced the
+intended one drift-check failure with ten other checks passing in 1.24 seconds.
+Logs are `/tmp/pilot04-a954-mcp-current-canonical.log` and
+`/tmp/pilot04-a954-mcp-wrong-enum.log`. Canonical capture is from backend source
+`3fde44797607d4c187dc62f93876e6ae70d5c555`; this repair leaves that backend code
+unchanged. The local contract tests reuse the existing MCP 2.2.0 environment,
+with the backend command in the locked backend environment; hosted SDK/wire and
+full required CI proof remain separate. Five unaffected snapshot files retain
+exact bytes, source and hashes; all nine operations are unchanged. Initial
+harness setup failures (invalid output-parent layout and an incompatible backend
+MCP SDK for test conftest) are retained in raw logs and are not test results.
+
+Hosted e7 CLI checks found one formatting-only failure in the public policy
+regression. Apply the repository formatter; Python AST equality before/after
+confirms no test behavior change, preserving the native 8408 producer proof.
+
+The fixed Unix checker provider is now resolved only when a locked external
+entry executes. Nineteen focused runtime and selected-PRE tests pass: an empty
+PRE policy runs the actual verified-archive default with no grant or provider
+construction, while a nonempty policy with absent settings opens its ART grant
+and returns the existing recoverable `implementation_unavailable` category.
+The production empty-POST request/completion route also passes against real
+PostgreSQL with absent service settings, zero persisted external members and
+complete database/role cleanup (`/tmp/pilot04-optional-runtime-post.log` and
+`.json`). Strict partial-setting validation and the sole fixed provider remain
+unchanged. Full final-head hosted CI remains required.
+
+At clean `769d117a7230af053ac7ff63c52f6b35b674c21b`, the entire existing MCP
+package selection passed 367 tests in 47.56 seconds using the existing local
+MCP 2.2.0 environment. Its two baseline environment-gated skips remain exactly
+the fresh backend OpenAPI comparison and clean-wheel independence proof; each
+has a separate required hosted invocation. Declarative schemas, exact GET wire,
+projection, invalid response and post-revocation controls execute in this suite.
+The old invalid-total negative is unchanged; the representative positive fixture
+alone now matches the backend's exact 80. Raw output is
+`/tmp/pilot04-permission-pg-mcp-package.log`. This is not hosted SDK 2.3 wire or
+container/build proof.
+
+Existing lightweight workflow controls passed all 20 tests in 2.309 seconds
+(`/tmp/pilot04-permission-pg-lightweight.log`). Independently fetched official
+Docker Hub PostgreSQL 16 OCI index bytes are 10,237 bytes and hash exactly to
+`33f923b05f64ca54ac4401c01126a6b92afe839a0aa0a52bc5aeb5cc958e5f20`
+(`/tmp/pilot04-postgres-33f923-dockerhub-manifest.json`). Reversing only the four
+provider-prefix replacements yields byte-identical original workflow text:
+backend two services, CLI one and MCP one. All version/digest, health, PostgreSQL
+configuration, resource bounds, job dependencies and required checks are retained.
+No container or image layers were provisioned for this source repair. Actual
+new-source hosted service startup, SDK/wire, build and full CI remain required.
+
+Refreshed frozen-head native evidence at 953e9f9ab452f982160ff12d1d8ca8794e4564bf:
+production empty POST with absent external settings passed 1 test in 49.19s.
+This supersedes the earlier optional-runtime sidecar whose recorded HEAD was
+e7 while the author tested uncommitted changes; do not attribute that earlier
+run to the later frozen commit. The configured Rust/MinIO flow also passed at
+953 with the same c2d957 platform image: default and external PRE rejection,
+passing atomic Submission/dispatch through POST and completion to review_pending,
+restart/replay and unavailable-service recovery via fresh verified bytes. Both
+isolated runners record schema0036 and completed DB/role/MinIO cleanup; runtime
+remains local runc/docker-dev. Later README/roadmap reconciliation is prose-only.
+
+Correction dispatch loads the immutable checker projection in its own explicit
+root after capturing AUTH context and ending identity reads. Its product request
+still starts in a fresh transaction and rechecks current manager authority before
+committing or publishing. The former dependency assumed identity resolution had
+left a root open: a valid detached identity and fresh request session raised
+`ExternalCheckerRegistryUnavailable` before reaching either admission or denial.
+The existing public manager-handoff regression reproduces that failure at
+`2f1f46930` in 23.18 seconds with isolated schema `0036` and cleanup complete;
+the targeted trace locates the missing registry-read transaction. Final proof
+uses the normal public owner, with diagnostic exception capture removed.
+
+
+### TASK/ART single execution flow cleanup
+
+The current TASK and ART consumers now accept only the closed external POST policy
+and selected PRE run custody. TASK admission/replay no longer decodes catalogue
+checker content, and ART material selection requires selected PRE admission and the
+exact submitted external policy. ART removed its obsolete PRE evidence writer,
+invocation store, phase wrapper, old capability issuance, and durable publication
+and replay branches. Immutable historical models and columns remain retained;
+these are not executable checker contracts.
+
+The selected PRE materializer still requires the committed lease, callback-scoped
+genuine ART grant, exact generation/manifest/bytes and default input digest before
+execution. The mounted failed-PRE projection accepts only selected execution facts
+and retains the existing sanitized default and external findings. The existing
+AUTH protocol fields remain stable, but runtime submission admission rejects an
+old evidence-set lineage. No migration or catalogue fallback is added.
+
+Validation at this source checkpoint: TASK/ART Ruff and Python compilation pass;
+current owner/DTO imports pass. Native and broader current-flow checks remain
+required after the CHECKERS composition and selected fixture repairs are combined.
+This checkpoint does not claim hosted suite readiness.
+
+
+### Current ART projection and runtime proof reconciliation
+
+ART input selection now uses the single POST context identity and requires its
+hash to equal the retained submitted external policy digest. Binding authority
+projects the sole selected PRE run and a constant null historical evidence key,
+matching the unchanged authorization protocol. The private durable put result and
+publish call expose one selected run only. PRE execution input requires the lease
+attempt, request digest and genuine ART grant port, with no optional old plan.
+
+The selected PRE unit arrangement now uses canonical reservation and committed
+lease facts instead of the retired plan/invocation claim. It retains real scratch
+inspection and the callback grant and proves that substituting the default packet
+fails before byte access or external invocation. The actual Rust end-to-end probe
+constructs its registry specs from the pure external contract helper; it no longer
+imports the obsolete PRE arrangement merely for a spec. The open PRE schema,
+digest pinning and resource limits remain the same.
+
+Focused selected PRE processor, current ART factory/admission publication and
+short-root execution service checks pass (11 cases). Ruff and diff whitespace
+checks pass. This is author verification; independent review and the final clean
+combined PostgreSQL/MinIO/real-image journey remain required, as does full hosted
+CI. No migration or provider proof is claimed by this checkpoint.
+
+### Hosted selected-test reconciliation
+
+The hosted cutover artifacts expose obsolete catalogue test callers alongside
+real owner defects. This test-only repair replaces live fixture references to
+removed structural request/consumer/result contracts with selected external
+contracts and deletes cases whose sole purpose is built-in catalogue execution.
+Immutable retained data remains; no historical runtime/DTO path is restored. Authority, full lineage, lease/lock, cleanup, rollback, exact replay and
+review-source proof must remain. No aliases, fallback providers, skips, selector,
+timeout, migration or production edits are allowed.
+
+Allowed files: this record; backend/tests/checkers/execution/{support.py,
+test_concurrency.py,test_coordination.py,test_execution.py};
+backend/tests/checkers/post_submit/{test_requirement_dispositions.py,
+test_public_boundary.py}; backend/tests/authorization/post_submit/{test_live_authority.py,
+test_timeout.py}; backend/tests/test_post_submit_materialization.py;
+backend/tests/test_post_submit_selection.py; backend/tests/test_agent_runtime.py;
+backend/tests/tasks/post_submit_routing/{support.py,test_evaluation_guard.py,
+test_evaluation_currentness.py}; backend/tests/reviews/decision/support.py.
+Parent/peer owns admin permission counts, TASK port fixture wiring, current
+owner corrections, compilation coordinator awaits and migration baselines.
+
+Acceptance: updated live tests target the sole selected execution contract;
+retained required checks keep their discriminating negatives; deleted obsolete
+semantics have an explicit retained-proof mapping. Focused pure/current-contract
+checks and native authority/material/locking cases are required, followed by the
+lead's complete canonical suite. Risk is test-integrity: independent test-delta
+review checks each deletion and preserves authority/evidence behavior.
+
+Additional causal test scope (peer confirmed disjoint):
+backend/tests/checkers/execution/{test_material_lineage.py,test_storage.py,
+material_storage_helpers.py,storage_fixture.py};
+backend/tests/authorization/post_submit/test_receipt_custody.py;
+backend/tests/authorization/task_locked_context/test_visibility.py. These repair
+selected result/member SQL fixture shapes and retain current closed-policy
+visibility, immutable lineage and action receipt controls. The unsupported raw
+envelope guard is retained at the current owner entry. Retained raw row migration
+custody remains peer-owned proof.
+
+Explicit user cleanup supersedes prior retained-runtime/decoder test preservation.
+Allowed additional files: backend/tests/checkers/post_submit/support.py and
+removal of test_configuration.py, test_input_bounds.py, test_request.py and
+test_result_contract.py in that directory. These obsolete tests enforce removed
+historical catalogue/rule request contracts, not current selected execution.
+Current selected PRE/POST/default tests retain exact closed input/result bounds,
+phase/id/digest/stage binding, infrastructure/work separation and no acceptance.
+Stored immutable data remains; no active historical DTO/factory/terminal executor
+path is recreated. The unsupported raw envelope negative retains the no alternate
+execution boundary. Exact module inventory deletion is coordinated with the lead
+for the final canonical exhaustive suite; no test selection/cap is weakened.
+
+Deleted semantic families: built-in catalogue configuration/selection, old
+structural request DTO field/aggregate bounds, nine-member generic result shapes,
+and disabled mandatory catalogue readiness. Required current proof remains in
+checkers/external/{test_contracts.py,test_policy.py,test_selected_pre_submit.py,
+test_selected_post_submit.py}, checkers/default/{test_contract.py,test_execution.py} and unified
+project guide compilation contract tests (unknown/stale/stage/typed config).
+Authority, callback lifetime, post-I/O revocation, cleanup failure, crossed native
+lineage/receipts, exact replay, complete selected member closure and review-source
+mutation tests are updated rather than removed.
+
+First focused pure scope passed 5 tests in 21.53s before the backend selected-only
+API checkpoint; raw /tmp/pilot04-selected-test-pure-current.log. The wider caller
+collection failure from module-level old output fixture imports is retained at
+/tmp/pilot04-selected-test-pure-first.log. Full composed collection/native proof
+remains required after peer source/shared fixture cleanup; this is not green CI.
+
+The TASK-to-ART selected-source query now requires the exact immutable
+selected_post_submit_policy_body. Its privacy test asserts that field is present,
+while exact raw guide/review/revision policy bodies, package URI, summary and
+attestation remain absent. The previous blanket policy_body substring assertion
+rejected the required selected policy projection; exact project selectors and
+no FOR UPDATE read contract remain unchanged.
+
+Further current test-consumer scope, explicitly handed off by the peer: backend/
+tests/checker_output_admission_helpers.py, tests/test_tasks.py,
+tests/test_checker_output_custody.py, tests/test_submission_bundle_preparation_recovery.py,
+tests/checkers/execution/test_completion_contract.py, removal of
+tests/checkers/test_phase_service.py. The obsolete phase adapter is removed;
+selected PRE ownership and selected POST consumer/current completion tests retain
+phase isolation, canonical result binding and no unchecked callback shortcut.
+Output reservation fixtures derive exact stored current request facts, not a
+constructed unrelated catalogue request. Unsupported output access remains denied.
+
+Further explicit lead scope: backend/tests/test_pre_submit_evidence_relock.py and
+backend/tests/test_submission_bundle_admission.py; peer handoff also permits
+backend/tests/checkers/external/test_selected_preparation_command.py. Remove only
+old evidence writer/pass-capability publication phases. Retain current adapter,
+preflight-denial-before-bytes, TASK/actor/PROJECT/grant order, root-only authority,
+header/media, status projection and cleanup controls. Post-byte drift moves to
+the actual selected preparation command and proves no coordinator execution or
+durable intent on failed relock. Exact selected admission capability single-use,
+construction/substitution and locked lineage remain in
+test_selected_pre_submit_coordination.py; selected command/service and actual
+root Rust/MinIO failure/replay evidence cover no admission on work/infrastructure
+failure. No old writer or live historical factory is reconstructed.
+
+The zero-member/locked-one-image direct SQL negative now binds fresh final AUTH
+to the same counterfeit facts and bypasses request validation only for that
+exact counterfeit, simulating a faulty application. This prevents a mismatched
+valid AUTH digest from masking the locked-policy completeness guard. The normal
+request validator remains active for every other result; the final positive
+control uses the original complete result. No product checks are weakened.
+
+### Selected-only migration-test caller reconciliation
+
+Explicit lead/peer ownership permits test-only edits to
+`backend/tests/checkers/execution/test_material_migration.py`,
+`backend/tests/checkers/execution/test_checker_retry_migration.py`,
+`backend/tests/tasks/post_submit_routing/test_requests.py` and removal of
+`backend/tests/historical_checker_metadata.py` after its only caller is converted
+by the raw predecessor-fixture owner. Preserve retained-row equality, failed
+preflight rollback, observed migration/writer exclusion and the Operator-receipt
+supersession guard. Archived JSON is updated and hashed as raw facts; current
+product decoders never accept it. The live completion-denial fixture uses the
+sole selected current-reference API. No production, migration, fingerprint,
+workflow, cap or skip changes are allowed. Acceptance requires fresh full
+collection after the peer raw producer checkpoint, focused current contracts,
+and isolated native migration/SQL controls where the claim depends on Postgres.
+This is author test reconciliation, requiring lead/QA review in the complete
+candidate; it does not establish hosted readiness.
+
+### Deleted-test inventory reconciliation
+
+Lead authorizes `backend/scripts/test_lane_catalogue.py` and
+`backend/tests/test_ci_lane_catalogue.py` solely to remove the five modules
+deleted above: the old phase-service test and built-in POST configuration, input,
+request and result tests. Remove the matching four POST exact-set entries. All
+remaining modules, exhaustive discovery, ten lanes, partition algorithm, markers,
+execution caps and required CI controls remain unchanged. Canonical collection
+and exact inventory tests must pass; CI/test-delta reviewers inspect the deleted
+module basis in the complete candidate. No current selected/default or custody
+test is omitted.
+
+The exact composed source `e8b5ae1d6f31c414f962e5bff1646788eed536fc` passed
+the native locked-one-image/self-consistent-zero-member SQL control in 22.93
+seconds on installed `0036`. Fresh AUTH binds the same counterfeit, SQL refuses
+completed custody, all run/member/completion writes roll back, and the restored
+complete result finalizes. DB, role and MinIO cleanup all passed. This closes the
+focused policy-completeness proof; broader native/full hosted checks remain
+required. Raw evidence: `/tmp/pilot04-selected-e8b-zero-native.log` and `.json`.
+The earlier installed-function syntax failure remains a failed prerequisite
+attempt, not a counterfeit-result proof.
+
+Fresh full discovery on the raw-producer composition collected 8,731 tests with
+one import error: the current default-checker test still imported its packet
+from the deleted PRE DTO module. The current-consumer test scope therefore
+includes `backend/tests/checkers/default/test_execution.py` for the exact neutral
+`api.pre_submit_material.SubmissionPacketView` import correction only. All four
+default checks and their controls remain required; no deleted DTO is restored.
+
+### Same-count selected-result SQL identity controls
+
+Lead authorizes two additional native controls in the already-owned
+`backend/tests/checkers/execution/test_storage.py`: a self-consistent foreign
+registry UUID (outer and normalized member agree) and a substituted observed
+platform image digest under the unchanged locked one-image policy. Each must
+first fail the real current request validator, then simulate a faulty validator
+only for that exact counterfeit. Fresh final AUTH binds the same counterfeit;
+forcing all deferred constraints must refuse the write, preserve run/member/
+completion/audit facts on rollback, and permit the restored valid result. These
+controls test SQL custody independently of the application guard. No product or
+DDL edits, mismatched earlier AUTH evidence, fixture bypass, or weakened checks
+are permitted; the sole migration author owns any reproduced SQL repair.
+
+Current-consumer scan found a body-local import missed by collection: the
+already-owned PROJECT post-policy PostgreSQL test patched the removed phase
+wrapper as its no-execution sentinel. Replace only that sentinel with
+`PostSubmissionExecutor.evaluate_post_submission`. Preserve actual approved
+external policy, proposal finalization, provider/document denial, derive/approval
+replay and unchanged finalization state. This is a required current isolation
+control, not obsolete catalogue behavior; the old wrapper is not restored.
+
+### Plain archived migration consumers
+
+Lead assigns migration consumers to this lane and raw execution/base producers
+to the QA/backend owners. Allowed test paths: execution/test_material_migration;
+authorization/post_submit/test_migration; tasks/post_submit_routing/{test_migration,
+test_outcome_migration}; reviews/{packet,decision,acceptance,lifecycle}/test_migration;
+contributions/records/test_migration; the existing reviews/acceptance and
+contributions/records historical_support helpers; and one migration-only
+`backend/tests/migration_ancestor_rows.py` for literal ancestor queue, lease,
+packet and Review rows. Keep these separate from current packet/review fixtures.
+No dict-versus-current compatibility switch, old model facade, archived service
+subprocess, production or migration edits are allowed. Plain request/result/
+material/lease dictionaries and direct SQL carry predecessor facts only. Preserve
+retained-row equality, immutability, preflight refusal and observed writer locks;
+current public/native tests own current execution and economic behavior. Risks
+remain L1 fixture/custody reconciliation, requiring QA/test-delta review, fresh
+collection and discriminating native predecessor checks before readiness.
+
+The raw migration consumers no longer call the current packet fixture's alternate
+factory hook. Its now-unused `completed_source_factory` parameter is removed from
+`backend/tests/reviews/packet/support.py`; the current fixture always uses the
+same canonical `completed_source`. This exact helper cleanup adds no raw/current
+switch, changes no current source behavior and retains all current packet tests.
+
+The two identity controls reproduced missing native custody at clean `154062bde`:
+all deferred constraints accepted the foreign registry UUID and image digest
+while the current request validator rejected them. Both failed with the intended
+`DID NOT RAISE` in 62.64 seconds, with complete resource cleanup. The sole schema
+author supplied the exact policy identity guard; the controls now pin its
+`checker terminal selected policy differs` message and SQLSTATE `23514`, not an
+unrelated integrity error. Affected native replay follows that frozen DDL; the
+original failed evidence is retained.
+
+### Current external-policy and normalized-verdict consumers
+
+Lead/QA handoff permits current caller changes in
+`backend/tests/projects/post_submit_fixtures.py`, actual test bodies only in
+`backend/tests/test_tasks.py`, `backend/tests/authorization/task_authority/test_submission_policy.py`,
+`backend/tests/tasks/test_project_display.py`, `backend/tests/tasks/test_locked_context.py`,
+`backend/tests/authorization/submission_history/{test_reads,test_privacy}.py` and
+`backend/tests/test_review_queue_persistence.py`. QA owns producer/helper definitions
+and the registry-before-activation bootstrap. Use explicit approved image specs
+for work-failing/member-visible fixtures and normalized passed/failed verdicts;
+never translate old built-in names or create failed evidence under an empty policy.
+Remove only obsolete platform catalogue assertions, retaining exact locked policy
+identity, corrupted-read refusal, zero effects, privacy, parent isolation, stable
+successor display and current generation guards. Current registered capabilities
+replace old catalogue labels in summaries. No source, migration, CI, cap or skip
+changes are authorized. Native verification follows combined QA producer freeze.
+
+### Remaining raw migration callers
+
+Lead authorizes the final caller paths: `backend/tests/tasks/test_payment_policy_migration.py`,
+`backend/tests/tasks/test_submission_lineage.py`, `backend/tests/checkers/execution/test_migration.py`
+and `backend/tests/tasks/post_submit_routing/test_migration.py`. The literal
+base handoff also requires the single admission-ID dictionary access in
+`backend/tests/tasks/submission_dispatch/test_migration.py`. Replace attribute
+access over archived request/result facts with dictionary indexing. The packet
+custody upgrade uses the literal revision-0021 Submission snapshot supplied by
+the backend owner, never the current preparation callback on a predecessor
+schema. Preserve every retained-row, preflight, immutability and negative
+assertion; no production, producer, migration, compatibility helper, test cap or
+selection changes. Collection and native predecessor proof follow the frozen
+literal-base handoff. Both strengthened identity controls passed at exact
+clean `e947161412b1a7dcc85ffcb0a7bac75922c4cab8` in 34.94 seconds with the exact
+guard message and SQLSTATE `23514`, installed schema 0036 and complete cleanup.
+Plain archived material supplies its semantic manifest digest; the payment
+migration uses the canonical session engine, without reintroducing fixture DTOs
+or engine facades.
+
+The frozen literal-base handoff removes unused `provision_checker` keywords
+from the owned execution/material/AUTH migration tests. The existing
+`backend/tests/contributions/records/historical_support.py` selects the explicit
+paid snapshot for the actual installed predecessor revision (0015, 0018 or
+0024) through the canonical session owner. Its unused award-shape and arbitrary
+option parameters are removed: unsupported shapes fail at the function boundary,
+not by silently dropping requested awards. Preserve the two/four exact award
+assertions and complete/incomplete retained-award refusal; no runtime policy or
+award synthesis, producer, schema or test-selection changes.
+The same owned raw migration files remove the obsolete current-writer seeding
+column/restore calls and imports. Literal snapshots must load into the exact
+installed predecessor schema, without temporary current ART/remediation columns.
+Every migration assertion and row/custody/lock check remains in place; the shared
+helper owner removes unused definitions after its remaining consumers are traced.
+
+### Scratch format cutover cleanup
+
+User explicitly requires no backward compatibility in the selected checker flow.
+Allowed files: `backend/app/modules/artifacts/preparation.py` and
+`backend/tests/test_artifact_preparation.py`. Remove the superseded scratch marker
+upgrade, version-2 ledger coercion, and their upgrade-only test. Retain current
+marker/ledger validation, concurrent initialization, bounded scratch custody and
+restart recovery. No retained business data, authorization, migration schema,
+provider runtime, CI selection or resource limits change. Verify the full scratch
+preparation test module and independent affected source review before readiness.
+
+The same cleanup authorizes deleting the now-unused `add_current_art_seed_column`
+and `restore_predecessor_evidence_schema` functions from
+`backend/tests/migration_fixtures.py` after the raw callers were reconciled.
+A repository search found no remaining callers. The separately consumed project
+guide fixture context remains unchanged; no shared live consumer is deleted.
+
+The first scratch-module run passed 93 current cases and exposed one remaining
+obsolete version-two normalization test. Remove that upgrade-only test as part
+of the same authorized cutover; rerun the complete current scratch module.
+
+### Retained dispatch upgrade assertion reconciliation
+
+The composed native batch passed three retry/replacement migration controls and
+exposed the dispatch test's outdated additive-column assertion after upgrading
+to current 0036. In `backend/tests/tasks/submission_dispatch/test_migration.py`,
+replace the single 0034-column allowlist with the exact 0034/0036 columns on
+Admissions, Submissions and CheckerRuns. Every added value must remain NULL;
+all retained rows/values, counts, authority and no-dispatch assertions remain
+exact. No automatic/dynamic column exclusion, backfill, schema change, relaxed
+selection or skip. Rerun the failed node and independently review the delta.
+
+### Archived project ownership query
+
+The native paid-0018 discriminator at clean `70424eedb` passed archive and checker
+source preparation but stopped on a fixture assumption that Submission stores a
+project ID. The raw ancestor query now joins its stored TASK for that field,
+matching the schema owner without a request fallback or invented column. Every
+remaining Submission field used by this helper is checked against the canonical
+model. All migration assertions and actual SQL guards remain unchanged; only the
+same paid discriminator is rerun after this repair.
+
+### Archived queue and claim custody
+
+The subsequent paid discriminator at clean `d524a4090` reached the raw queue
+fixture and correctly refused its pending-insert deferred event after an active
+lease was added in the same transaction. In the same allowed raw ancestor helper,
+commit the literal pending queue without a lease, then claim that stored queue in
+a separate transaction by inserting its lease and updating the queue pointer.
+This matches the predecessor SQL lifecycle without disabling guards or invoking
+a current Review service. Audit the remaining queue/lease enums, packet identity,
+review counts/digests and terminal updates against the installed predecessor
+guards before rerunning only the paid discriminator; retain all assertions.
+
+### Retired PRE database write refusal
+
+The current-schema cutover now refuses every new write through the retained PRE
+attempt/evidence tables while preserving their immutable rows for historical
+inspection. New bundle intent and admission rows must carry selected PRE lineage;
+valid archived evidence can no longer open the removed writer path. The five
+legacy trigger functions are reduced to unconditional SQLSTATE 55000 retained-data
+refusals, so no catalogue reconstruction or attempt-completion implementation
+remains executable at the current head. An archived 0034 source regression clones
+each old row shape and proves intent, admission, attempt, evidence, result and
+attempt-update refusal with byte-exact retained-row equality. The installed-body
+test validates every PL/pgSQL function and asserts these functions contain only
+the refusal contract. A fresh PG16 install reached the canonical fingerprint
+boundary after all function validators and measured
+`f510310623f222209cbbee89291edb8e1582d65ddaf9d173d534dd796ab68991` in
+199.51 seconds; isolated database, role and MinIO cleanup all completed. This
+measurement used the uncommitted repair tree and is fingerprint evidence, not a
+frozen-head positive runtime claim. Current selected PRE/Submission/POST native
+flow must pass again after integration.
+
+### Archived terminal member envelope
+
+The literal terminal fixture now encodes raw archived member columns with the
+required `post_submit_structural_result` protocol tag, matching the predecessor
+0008 SQL reconstruction. Supplied counts, routing, severity and material remain
+literal; a conflicting supplied tag refuses. The pure bare-member control passes
+and fails on the prior helper at the intended envelope equality assertion.
+Ruff and diff checks pass. This repairs fixture serialization only; the completed
+0008 native migration discriminator remains required before claiming that path.
+
+### Shared authorization contract replay
+
+Reconcile the current exact action inventory and fixed-service binding snapshots
+in `authorization/setup_finalization/test_catalogue.py` and
+`authorization/test_assignment_invalidation_contract.py` with the selected PRE
+actions/context. Diagnose and repair the controlled executor deadline fixture in
+`authorization/post_submit/test_timeout.py` while retaining revocation, replica
+drift, cancellation, source/workspace/projection cleanup and zero-terminal-effect
+controls. The boundary waiter must expose an executor failure that occurs before
+the consumer rather than report only its own timeout. Scope is these tests and
+necessary shared test support; no production authorization, timing cap, schema or
+runtime behavior is authorized to change by this fixture reconciliation.
+
+The diagnostic exposes `checker lease progression is invalid` before the consumer:
+the old 12,345-second sentinel also extended the real selected execution lease
+beyond its installed one-hour guard. Use a controlled 300-second budget and its
+existing finalization margin; the event-armed real timeout and ten-second test
+boundary remain unchanged. The diagnostic failed its intended native node in
+113.79 seconds with database/role cleanup complete (683 producer with the waiter
+change, not a frozen-head replay). Both current pure modules pass all 35 cases;
+Ruff and diff checks pass. The complete deadline module must pass on the frozen
+repair before closing its cancellation and cleanup proof.
+
+### Captured service principal prerequisites
+
+The static predecessor archive now carries the exact project-neutral POST service
+actor `01a13047-9e70-7b29-a0c9-f30981caec3b` and active identity link
+`01a13047-9e71-7f5e-88ea-ee2d1b04ac68` in the 15 applicable 0010-through-0024
+snapshots. Both rows were captured by writer `926b4ef118db3708e50d1869db5ee78a79e5b5de`
+in the named `0034_checker_retry_source` snapshot; provenance therefore describes
+these snapshots as composite captures rather than claiming every row came from
+one fresh database. No retry run, audit, grant, receipt or project-bound row is
+copied. A decoded old/new comparison proves exactly 30 supplemental rows and
+identical seeds, revisions, tables and values everywhere else. Those rows remain
+unchanged in the additive archive, now checksum-bound at
+`e24ab79e764452f92d41bf93ecb00c6a9e08fae427145c51a3e55160108ed054`.
+This supplies a retained predecessor identity prerequisite; canonical migration
+and receipt proof remains required.
+
+### Literal routing-success predecessor fixture
+
+The retained 0031-to-0032 routing upgrade control must not execute the removed
+checker or routing runtime against a predecessor schema. A one-time isolated
+capture at source commit `3e2d59ba426a950e64b8e1632f4587c3265b0ea7`
+produced one genuine human-review outcome and one genuine automatic-acceptance
+outcome, restored every temporary current-only seed column, and then proved the
+original receipt, context, governed outcome and acceptance predicates before
+the existing upgrade passed. The committed
+`0031_routing_success_true_false` snapshot contains all 579 rows across the 76
+nonempty public tables in that exact predecessor database. Its provenance names
+the source revision, producer, capture shape and the two manifest IDs.
+
+Allowed scope is limited to the checksum-bound predecessor archive and loader,
+`tests/tasks/post_submit_routing/test_remediation_migration.py`, and this record.
+The migration test restores literal rows into an owned isolated 0031 database,
+revalidates both complete success closures before upgrade, upgrades to 0032,
+and requires byte-identical retained owners plus the exact new recommendation.
+No archived writer, old request/result decoder, checker service, temporary
+current column, guard bypass or compatibility API remains in the committed test.
+The one-time generator passed the original migration control in 173.92 seconds
+with complete database, role and object-store cleanup. The first current-loader
+replay passed in 110.52 seconds with the same complete cleanup; its metadata
+identifies the clean parent because the archive/test repair was not committed
+yet, so this is qualified working-tree evidence. The first clean-head replay
+passed in 227.07 seconds with complete cleanup, then independent review required
+stronger non-vacuity assertions for the two policy branches. The final test
+therefore requires exactly `[true, false]`, two requests, one Final Acceptance,
+one ContributionRecord and exact automatic-manifest-to-acceptance-to-contribution
+lineage. At clean `48bc8d741a0796292aaed6d19d99f1ca1f59c859`, that final
+control passed in 228.89 seconds with database, role and object-store cleanup
+complete. Independent review verified the exact archive provenance, both branch
+counts and links, unchanged retained rows and installed 0032 validity predicate.
+
+### Literal second-review predecessor fixtures
+
+The two 0023-to-0024 ReviewPolicy controls must preserve the retained-true
+refusal and valid-false upgrade without running the removed policy/checker
+owners against a predecessor schema. At exact source commit
+`3e2d59ba426a950e64b8e1632f4587c3265b0ea7`, the unchanged original nodes
+passed together in 394.45 seconds with complete database, role and object-store
+cleanup. A one-time follow-up capture then emitted separate exact 0023 databases
+after the genuine true and false policy writes and after every temporary
+current-only seed column was removed. Each snapshot contains 240 rows across 33
+nonempty public tables and exactly one ReviewPolicy with the named boolean.
+
+Allowed scope is limited to the checksum-bound predecessor archive and loader,
+`tests/projects/review_policy/test_migration.py`,
+`tests/projects/guide_activation/source_fixtures.py`,
+`tests/migration_fixtures.py`, and this record. The committed migration tests
+restore literal true/false snapshots and retain the original exact refusal,
+unchanged policy/selector/hash checks, current-head upgrade and installed CHECK
+constraint assertion. Current guide compilation now calls its current writer
+directly. The unused predecessor-shape wrapper and its cause-column add/restore
+helpers are deleted after repository search found no callers. No old policy
+model construction, private mutation service, temporary column, compatibility
+alias, guard bypass or archived writer remains in the committed tests.
+
+### Frozen cutover verification before publication
+
+At clean `835737909aa3844d6cda1a0605a3098ed73781c1`, the canonical isolated
+PostgreSQL/MinIO runner passed three current-schema controls in 245.53 seconds:
+all installed PL/pgSQL functions compile; new writes through retired PRE shapes
+are refused with exact SQLSTATE and retained-row equality; and the current
+selected admission/dispatch/empty-POST production completion path reaches shared
+false-policy acceptance with complete contribution/award facts and exact replay.
+Runner exit was zero and database, role and object-store cleanup completed.
+Installed fingerprint is `f510310623f222209cbbee89291edb8e1582d65ddaf9d173d534dd796ab68991`.
+
+Independent SQL/TASK/ART source reviews and archive review passed their named
+frozen heads. The full current scratch module passed 93 tests after both format
+upgrade implementations and upgrade-only tests were removed. Ruff and all six
+current documentation/process gates passed. Canonical collection at `835737909`
+found 8,754 unique tests across ten lanes with no exclusions; this is collection,
+not exhaustive execution.
+
+The repaired completed-0008 discriminator passed at clean `70424eedb` in 90.06
+seconds; its prior exact-source control failed with the intended terminal-member
+error in 89.96 seconds. Paid-0018 preservation passed at clean `0749dfb10` in 96.33
+seconds, reaching the actual submitter record and exact two awards through 0019.
+Both canonical runners exited zero with full database/role/object-store cleanup.
+Fixture join and queue/claim transaction repairs received independent test-delta
+review without changing retained-value, refusal, count or zero-effect assertions.
+Prior fixture failures and bounded runner timeouts remain qualified in raw logs;
+a timed-out runner is never counted as a pass even when its pytest log completed.
+
+Remaining raw migration controls, a fresh final image drill and full required
+hosted CI remain necessary before human merge approval. The actual Rust image
+proof at `6fd3fde80` uses local runc/docker-dev and does not claim hosted gVisor,
+public contributor upload/CLI or an exhaustive suite. No deployment or merge.
+
+### Hosted checker execution fixture reconciliation
+
+Lead-authorized test-only scope: `backend/tests/checkers/execution/` files
+`test_checker_retry.py`, `test_concurrency.py`, `test_execution.py`,
+`test_storage.py`, `test_checker_retry_history_replay.py`, plus
+`backend/tests/checkers/external/test_registry.py` and this existing record.
+The hosted 683 logs retain the exact failed nodes. Production, migrations,
+fingerprints, workflow caps, skips, inventories and shared producers are prohibited.
+
+The former lease constant no longer controls a selected policy lease. Arrange a
+short first lease through the actual budget/margin inputs in a scoped test patch,
+then wait for its persisted expiry using the real database clock. Restore normal
+budgets before takeover; all native expiry, generation, AUTH and stale-finalizer
+guards stay enabled. Completed retry negatives use the supported failed-image
+`needs_revision` outcome instead of the removed built-in setup classification.
+Unreadable bytes forbid the current selected consumer, not a retired registry.
+Storage negatives require the current exact guard message and SQLSTATE 23514,
+retained-row rollback and valid recovery. The retry-history journey supplies a
+controlled selected executor before handler composition and requires a stored
+completed successor before deriving its completion source; it retains actual ART,
+AUTH, governed remediation, replacement and no-byte-reopen replay. The registry
+mock implements only the current exact-row read and keeps all conflict assertions.
+
+Risk: bounded test fixture changes can otherwise hide a lifecycle failure; require
+lead/independent test-delta review, focused pure registry controls and canonical
+isolated native retry/takeover, byte-failure, storage and later-Submission replay
+cases with exact heads and complete DB/role/MinIO cleanup. No current failure
+boundary, assertion, cap or test selection is removed to obtain a pass.
+
+### Hosted PROJECT fixture reconciliation
+
+Allowed scope is limited to current external-policy PROJECT test fixtures and
+their assertions: `tests/projects/guide_compilation/test_capability_growth.py`,
+`test_capability_growth_postgresql.py`, `test_compilation_storage_limit.py`,
+`test_live_worker.py`, `test_context_builder.py`,
+`proposals/test_postgresql.py`, the active-guide read fixtures and activation
+tests, `tests/projects/policy_read_fixtures.py`,
+`tests/projects/policy_read_faults.py`,
+`tests/projects/test_policy_read_composition.py`, their proposal/finalization
+context helpers, and the matching assertions in `tests/test_projects.py`. The batch may
+update current registered capability projections, strict worker error fakes,
+current proposal fields and current compiler identifiers. It must not restore a
+built-in checker catalogue, legacy decoder, execution fallback, migration or
+product compatibility path. The bounded production repair may update only
+`app/modules/projects/authorization_reads.py`, `service.py`,
+`guide_compilation/approval_custody.py`, and `api/locked_policy.py` to require
+the sole current external pre/post policy schemas and their self-excluding
+digests. It removes generic canonical-hash and old-plan fallbacks without
+rewriting retained rows.
+
+The final hosted capability-growth repair is limited to this record and
+`tests/projects/guide_compilation/test_capability_growth_postgresql.py`. Its
+non-oversized branch must expect the current `policy_draft_ready` handoff: one
+immutable sufficiency report, one draft submission-artifact policy and the two
+exact linked projection operations. It must retain both original gap requirement
+IDs and stages while proving that no effective, PRE or POST checker policy exists
+before project-manager approval. The oversized terminal branch, canonical byte
+measurement, single runtime call, stored-result replay, audit count and
+provider-construction refusal remain unchanged. No product, schema, guard,
+workflow selection or timeout change is authorized by this repair.
+
+### Complete-source custody inventory performance
+
+Lead-authorized bounded test-only performance scope: this existing record and
+`backend/tests/test_artifact_architecture.py`. The schema lane timed out before
+finishing its exact sorted execution plan; the first remaining node was a custody
+import-spelling negative. A single unchanged node passed locally in 41.82 seconds.
+No per-node hosted duration was captured, so this identifies avoidable repeated
+source parsing rather than proving the sole timeout cause.
+
+Freeze a complete actual APP Python-source import inventory once per test module,
+using immutable module-name sets. The positive still validates every discovered
+source path and exact custody consumer set plus composition annotations. Each of
+the ten spelling negatives rebuilds the real `app/main.py` import inventory with
+its injected import and replaces only that path in a copied complete inventory;
+no shared AST or fixture may be mutated. Require a valid unmodified inventory
+before each injected negative so an unrelated baseline error cannot satisfy it.
+
+Prohibited: production files, workflow/runner/schema caps, selectors, skips,
+whitelists, reduced discovery, mutable cached ASTs, or synthetic inventories that
+bypass actual source. Risk is lost structural enforcement. Acceptance requires
+all existing complete-module tests and ten spelling negatives, same-source
+before/after complete-module timings, and discriminating rejection of an actual
+extra custody consumer with unchanged exact expected consumer sets. Lead and QA
+review the immutable inventory and negative non-vacuity; human review focuses on
+complete discovery, spelling coverage and isolation between parameter cases.
+
+The unchanged complete module passed all 35 cases at clean `95d410810`:
+767.93 seconds within pytest and 812.541 seconds including process lifetime.
+Its ten custody negatives consumed 228.93 seconds and five composition negatives
+198.39 seconds under host contention; these are local measurements, not inferred
+hosted timings. The same allowed module now also freezes actual complete-source
+composition imports and ordered call names once. Call multiplicity stays intact,
+including the three observability constructions. Each of the five existing alias
+negatives validates the actual baseline then appends only its freshly parsed
+injected file to an immutable inventory copy. All exact owner paths, construction
+counts, spelling variants and required assertions remain. Require the same 35-case
+module and discriminating composition/custody mutants before claiming this repair.
+
+At clean `7cd949a646b115b265a4dd723a17366c291edf5e`, the same complete
+35-case module passed in 118.99 seconds within pytest and 140.073 seconds including
+process lifetime. Both baseline and optimized subprocesses exited zero within the
+unchanged 1200-second bound and had identical start/end heads and clean trees.
+Host contention and cache conditions differed, so these are measured local runs,
+not a guaranteed hosted speedup. The optimized complete-source fixture setup took
+17.87 seconds for composition and 9.62 for custody; the fifteen injected negative
+calls took 0.02–0.12 seconds each. No test, spelling, exact consumer path, call
+multiplicity or assertion was removed.
+
+An out-of-tree CPU probe compiled the actual parser, validators and negative test
+functions from that frozen source and read all 507 actual APP files. It confirmed
+that inventory summaries contain only immutable scalar containers, both complete
+baselines validate, all fifteen ordinary negatives pass, and no inventory changes
+between cases. Changing custody consumer equality to keys-only and disabling the
+eight composition ownership assertions caused the expected `DID NOT RAISE` failure
+for every one of the ten custody and five composition negatives. This is a pure
+source/mutation discriminator, separately qualified from the complete pytest run;
+it makes no database, native lifecycle or exhaustive hosted-suite claim. Raw
+before/after and mutant evidence remains available to the lead. Independent QA
+source review covered the complete discovery and custody extraction; composition
+addendum review remains necessary for the final union. Ruff and diff checks pass.
+
+### Protected AUTH structure shrink after reviewed fixture updates
+
+Lead-authorized scope: `backend/tests/test_projects.py`,
+`backend/tests/authorization/setup_finalization/test_catalogue.py`,
+`.ci/auth-boundaries/TEST_STRUCTURE_DEBT.json`, and this existing record only.
+At clean `94687d444`, canonical observed debt differs from the existing ledger:
+the exact active-action comparison reaches 121 lines against its 120-line hard
+limit, and the already oversized PROJECT test file grows from 5821 to 5826 lines.
+Protected main is `51c7e2eed53b4fd45b3ae201ef3b30445c233a09`. Updating the ledger
+would improperly admit new debt and growth, independently refused by the trusted
+transition validator. The two obsolete PRE debt deletions already in the ledger
+are legitimate and remain unchanged.
+
+Extract the exact expected action literals into one module-level immutable
+frozenset; retain actual ACTIVE enumeration and equality in the existing test.
+Confirm exact before/after member identity and rejection of missing and extra
+actions. In the PROJECT fixture, strict stored-policy validation already enforces
+the code-owned default behavior digest, so remove the duplicate comparison and
+unused import. Remove only the two redundant None checks: retained compiled-row
+attribute assertions still require the row, and equality with the strict validated
+SHA string requires the stored bundle hash. Preserve compiler/version, current
+policy hash, empty entries and every DB lineage assertion. The file must shrink
+below its protected-main size without formatting or whitespace manipulation.
+
+Risk: loss of exact action/compiled-policy proof. Lead and CI/test-delta review
+must verify unchanged inventory and negative discriminators plus strict default
+validation reachability. Prohibited: production, policy/limits, test skips, new
+debt, ledger exceptions, suppressed guards or any unrelated test/assertion edit.
+Acceptance requires exact canonical observed-ledger parity, protected-base
+shrink-only transition and retained new-debt/growth refusal controls. No native
+lifecycle proof or full hosted-suite claim is added by this metadata repair.
+
+At clean `25742a230207880315db3dd66daa1ec501db267c`, eight focused pure tests
+passed in 414.37 seconds (447.322 seconds including process lifetime), exit zero
+and identical clean start/end heads. They exercise actual active inventory,
+complete structural-ledger parity, protected-main transition/assertion maps, and
+retained new/grown/unshrunk debt, stale-hash and policy-limit refusals. A separate
+actual-source discriminator proves the exact 117 action literals are unchanged:
+removing either PRE action or activating an extra planned action fails equality.
+It also confirms only the three approved duplicate assertion nodes were removed;
+all other PROJECT test-body AST is identical. The retained postconditions reject
+missing compiled rows, null stored hashes and substituted default behavior even
+with a recomputed valid outer policy digest. Independent QA reviewed that frozen
+source and ledger with no required finding. This is pure structural/test evidence;
+PROJECT native custody and the complete hosted suite remain separate obligations.
+
+### Exact selected PRE catalogue expectations in shared foundation tests
+
+Lead-authorized test-only scope: this existing record,
+`backend/tests/authorization/admin_access/test_grant_reads_postgresql.py`, and
+`backend/tests/authorization/catalogue_fixtures.py`. Fresh hosted shared-A evidence
+at `da76eabed` fails only stale expectations for the two current selected PRE
+execute/finalize permissions and active actions. The catalogue defines 80
+permissions; the system-auditor read test still expects 78. The separate explicit
+audit-allowed action set omits `checker.pre_submit.execute` and
+`checker.pre_submit.finalize`, although both are active and their fixed-service
+expectations are already exact.
+
+Update only 78 to 80 in the exact public permission total/items comparison and
+add those two literal action strings to the independent audit expectation. Keep
+five role definitions, grant/profile/link identities, exact scope, denial and
+zero-effect assertions unchanged. Preserve the actual audit-schema test body,
+including permission/action mismatch, planned-action refusal, missing/unknown
+action, decision evidence and digest validators. No production, authority grants,
+DDL, ledger/limits, skipped tests or dynamically derived expected inventory.
+
+Risk: masking an authority expansion through a count-only fix. Verify the exact
+two catalogue additions and unchanged fixed-service bindings, pure audit contract
+and missing/extra expected-set discriminators, plus the actual PostgreSQL-backed
+system-auditor permission read and write refusal through signed public callers.
+Native verification is serial with the other owner and uses only isolated owned
+resources. Lead CI/test-delta review and complete hosted CI remain required; no
+publication, merge or full-suite claim follows from these fixture repairs.
+
+### Receipt-expiry fixture repair after the schema-lane cap
+
+Allowed scope is the current receipt-custody fixture in
+`backend/tests/authorization/post_submit/test_receipt_custody.py`, the expired
+execution delivery control in `backend/tests/tasks/evaluation_delivery/test_custody.py`,
+the two unused constants in `backend/app/modules/checkers/execution.py`, and this record.
+The six AUTH expiry controls patch an unused `LEASE_SECONDS` name while the
+current owner derives its lease from the selected execution budget and finalization
+margin. Hosted SQL timestamps show six real expiry waits of roughly 120 seconds
+each, contributing to the unchanged 1200-second schema-lane cap.
+
+Use a scoped one-second initial execution budget and nine-second finalization
+margin, then restore the current owner settings before takeover/finalization.
+Wait for the persisted database expiry and assert database time has reached it;
+retain genuine AUTH receipt substitution, exact rollback, valid recovery and
+expired-delivery refusal controls. Remove the unused `LEASE_SECONDS` and
+`EXECUTION_TIMEOUT_SECONDS` declarations; no executing owner reads either name.
+Do not change production budgets, database facts/guards, lane placement, caps,
+nodes, skips or exemptions. Required validation is Ruff/diff, exact seven-node
+collection, independent source review and serialized real PostgreSQL controls.
+This is an author repair; no completed native or full hosted-suite result is
+claimed before those checks finish.
+
+The changed sources pass Ruff, Python parsing and `git diff --check`.
+Focused collection retains exactly seven nodes: the five execute-receipt
+substitutions, finalization's execute-chain substitution, and expired delivery
+execution. Exact-word scans find no remaining references to either removed
+constant. Neither changed test file nor the execution owner has a protected
+structural-debt entry; the existing behavior ownership target is unchanged.
+Lead source review found no issue with scoped setting restoration, persisted
+ten-second duration, real database expiry or retained custody/refusal assertions.
+Serialized PostgreSQL execution remains pending; this validation does not claim
+the schema lane or the full hosted suite passed.
+
+
+### Final hosted-failure repair verification
+
+The first full hosted run at candidate `da76eabed` (tested merge reference
+`7b9a2f3a`) passed seven backend lanes. Shared A failed only the stale permission
+count and missing PRE audit-action literals; project B failed only the stale
+capability-growth draft expectation. Schema execution reached its unchanged
+1200-second cap while making progress; six obsolete lease patches caused roughly
+720 seconds of real expiry waits. These are diagnosed failures, not a full-suite
+pass. The repair batch leaves every lane, node, CI limit and production execution
+budget unchanged.
+
+At clean `7e17883e`, both capability-growth PostgreSQL cases passed in 183.83
+seconds: exact current draft output/projection/finalization links, retained
+capability gaps, no effective PRE/POST policies, oversized terminal refusal and
+exact replay without provider construction. At clean `9813a7b0`, twelve pure
+audit contracts passed, the independent inventory discriminators rejected missing
+and extra actions, and two signed public PostgreSQL read/write-denial controls
+passed in 27.78 seconds. At clean `c5d28178`, all seven receipt/delivery controls
+passed in 545.95 seconds within the unchanged 600-second local bound, proving
+persisted ten-second initial leases, real database expiry, exact AUTH receipt
+rejection, rollback, valid recovery and expired-delivery refusal. All three native
+runners installed `0036_selected_checker_flow` and verified owned database/role
+and MinIO namespace cleanup. The receipt fixtures use the current local ART
+provider; this is not a new real-image or MinIO byte proof.
+
+The integrated source at clean `85b083279` is byte-identical to those reviewed
+repair files. Lead and independent peer source/test-delta review passed, including
+review of the reviewer-authored receipt changes. Ruff and Commitrail checks pass.
+Canonical collection at that exact head contains 8,776 unique nodes in all ten
+lanes, zero skips/deselections, and no exclusions; collection is not execution
+evidence. Removing two unreferenced executor constants adds no runtime behavior.
+The exact `da76eabed` Rust/PostgreSQL/MinIO image drill and capability-activation
+proof remain separate earlier-head evidence. Fresh full hosted CI on the
+published repair candidate and authenticated completed-node evidence verification
+are still required before merge readiness. No deployment or merge is authorized
+by these local results.
+
+### Exact identifier classifications after obsolete-owner removal
+
+Lead-authorized metadata-only scope: this existing record and
+`backend/scripts/identifier_generation_classifications.json`. Published `62b661bd`
+hosted schema evidence reports exactly three unclassified generation sites and
+four stale classifications. The semantic-manifest UUIDv5 owner moved from deleted
+`pre_submit_evidence.py` to `submission_manifest.py` without changing its digest
+identity expression. The deleted `PreSubmitAttemptStore.reserve` UUIDv4 nonce has
+no current generation site. Two `OutboxDelivery._finalize` UUIDv4 calls remain
+AUTH request/correlation transport tokens; reviewed expiry checks changed the
+exact enclosing AsyncWith fingerprints.
+
+Remove only those four stale keys and register the three observed exact keys.
+Keep the manifest's `uuid5:call:content_identity` and both outbox calls'
+`uuid4:call:transport_token` meanings. Verify the manifest remains a canonical
+content identity supplied to current selected ART admission, while the outbox
+values are passed only as request/correlation IDs to the current authority port.
+Do not add a category, generic owner wildcard, suppressed generation site,
+scanner/policy change, production/test/DDL edit, skip or weakened UUID assertion.
+
+Risk: incorrectly classifying a row surrogate as a token or hiding future code
+movement. Acceptance requires all 24 unchanged identifier-inventory pure tests,
+zero current unresolved/string-UUID references, exact missing-current and
+stale-key mutation refusals, and unchanged unrelated classification entries.
+Lead CI/test-delta review checks exact owner/key/category fidelity. No native
+runtime or full hosted-suite claim is made by this metadata reconciliation.
+
+
+At clean `33c47d683`, all 24 unchanged identifier-inventory tests passed in
+34.05 seconds (52.789 seconds including process lifetime), exit zero and identical
+clean start/end heads. The independent actual-scanner discriminator copied both
+affected owner files byte-for-byte: original metadata reproduced exactly three
+unclassified and four stale sites; corrected metadata had no errors; deleting
+each of the three current keys or restoring each of the four stale keys produced
+its intended error. Those focused copies are qualified separately from the full
+repository checks in the existing 24-test module. Independent source/metadata
+review passed and confirms untouched scanner, categories, unrelated entries,
+tests, production, policy and waivers.
+
+The complete hosted run at `62b661bd8` (identical tested merge tree `de7cafd43`)
+finished nine backend lanes successfully. Schema execution completed in 748.049
+seconds within the unchanged 1200-second cap, with 571 ordinary tests passing and
+only this stale UUID-inventory test failing. This is not a full-suite pass. A fresh
+required hosted run on the published metadata-repair candidate remains required
+for merge readiness. Earlier native/image proofs remain explicitly tied to their
+recorded heads; this metadata-only correction requires no new runtime proof.
+
+### Owner-aligned completion-evidence lane capacity
+
+Lead-authorized bounded scope: this existing record,
+`backend/scripts/test_lane_catalogue.py`, and only the literal expected-module
+sets in `backend/tests/test_ci_lane_catalogue.py`. Move the whole six-node
+`tests/checkers/execution/test_completion_evidence.py` module from TASK selection
+to the existing four PROJECT partitions in `CHECKER_DELIVERY_MODULES`. Its native
+proofs own current CHECKERS result, material, execution/finalization receipts and
+successor currentness, without TASK routing or mutation authority. Preserve every
+test body, assertion, PostgreSQL marker, execution kind and selection algorithm.
+No production, migration, workflow, timeout, lane-count, exclusion, waiver or
+required-check change is allowed. Correct only the accompanying outdated
+three-way description of the existing four-way checker partition.
+
+Authenticated hosted run `38297853598`, tested merge
+`d5ba919b2488724027bf0326e148a816a3f6ebe1`, completed all six cases: two on TASK-A
+and four on TASK-C. TASK-C completed 294 of 295 nodes before its unchanged
+1200-second cap; the last ordinary worker permission-denial test did not finish.
+PROJECT A/B/C/D elapsed 736.325/892.426/934.605/995.090 seconds, leaving observed
+headroom of 463.675/307.574/265.395/204.910 seconds. TASK-B passed in 1127.335
+seconds and receives no additional margin from this move. The captured TASK-A
+foreign-owner case took 9.07 seconds; the interrupted TASK-C run has no complete
+per-node duration report. Removing native fixture work is a bounded capacity
+repair, not a measured whole-module saving or guarantee of future execution time.
+
+Risk: missing or duplicating nodes during reassignment, or confusing natural
+HEAD-seeded UUID parameter changes with catalogue effects. Acceptance requires
+real canonical before/after collection of all 8,776 unique nodes across the same
+ten lanes without skips or deselections. Apply both catalogues to one identical
+real collected node list to prove exactly six lane changes, 8,770 unrelated lane
+assignments unchanged, and all six execution kinds still `ordinary_isolated`.
+Cross-head comparisons must qualify the collector's existing HEAD-seeded UUID
+parameter values. Existing exact catalogue, exhaustive assignment and negative
+partition tests remain mandatory. Lead CI-integrity and independent peer
+test-delta review inspect the frozen scope and evidence; a fresh complete hosted
+run is required for capacity and merge readiness. No new native proof is needed
+because test sources and runtime owners are unchanged.
+
+
+At clean `8219b30bb`, the existing catalogue/runner modules passed all 63 tests
+in 19.34 seconds, including exact membership, exhaustive/disjoint selection and
+negative partition controls. Actual canonical collection at clean `1eafd2ce4`
+and `8219b30bb` each retained 8,776 unique nodes in ten lanes with zero skips or
+deselections. Applying both catalogues to one identical actual collected list
+changes exactly the six completion-evidence lane assignments and leaves 8,770
+rows unchanged; all six remain ordinary isolated execution. The collector seeds
+UUID parameter values from HEAD, so this same-list comparison isolates catalogue
+effects. Cross-head comparisons separately normalize only those existing UUID
+parameter spellings; no collector or selection algorithm changed. Test source
+AST comparison confirms only the expected-module literals were relocated. Ruff
+and diff checks pass, and lead independent source/test-delta review found no
+issue. Fresh complete hosted execution is still required; the measured capacity
+qualification above does not guarantee a green run or authorize merging.

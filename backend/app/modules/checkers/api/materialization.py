@@ -2,17 +2,22 @@
 
 from dataclasses import dataclass
 from abc import ABC, abstractmethod
-from contextlib import AbstractAsyncContextManager
-from typing import Literal, Protocol
+from contextlib import AbstractAsyncContextManager, AbstractContextManager
+from typing import Protocol
 from uuid import UUID
 
 from app.core.hashing import canonical_json_hash
 from app.modules.checkers.api.execution import ExecuteFacts, execution_authority_digest, VerifiedMaterialFacts
-from app.modules.checkers.api.post_submit_catalogue import PostSubmitValue, ResourceId, Sha256, VersionNumber
+from app.modules.checkers.api.material import SubmissionMaterialEntry
+from app.modules.checkers.api.canonical_values import CheckerValue, ResourceId, Sha256, VersionNumber
 
-from app.modules.checkers.api.post_submit import (
-    PostSubmissionEvaluationRequest,
-    PostSubmissionEvaluationResult,
+from app.modules.checkers.api.evaluation_contract import (
+    PostSubmissionExecutionRequest,
+    PostSubmissionExecutionResult,
+)
+from app.modules.checkers.api.external import (
+    ExternalCheckerExecutionRequest,
+    PostSubmitExternalCheckerMaterial,
 )
 
 
@@ -24,7 +29,7 @@ class PostSubmissionMaterializationFailure(RuntimeError):
     """Retain a known post-authorization material failure after successful cleanup."""
 
 
-class MaterializationFacts(PostSubmitValue):
+class MaterializationFacts(CheckerValue):
     """Exact selected ancestry without provider coordinates or scratch authority."""
 
     execution: ExecuteFacts
@@ -84,16 +89,6 @@ class MaterializationAuthorityPort(Protocol):
         ...
 
 
-@dataclass(frozen=True, slots=True)
-class SubmissionMaterialEntry:
-    """Expose verified archive metadata without a filesystem path."""
-    normalized_path: str
-    entry_type: Literal["file", "directory"]
-    byte_count: int
-    sha256: str | None
-    executable: bool | None
-
-
 class SubmissionMaterialView(Protocol):
     """Permit bounded reads only during the consumer callback."""
 
@@ -104,12 +99,28 @@ class SubmissionMaterialView(Protocol):
     def read_file(self, normalized_path: str, *, maximum_bytes: int) -> bytes:
         """Read one bounded verified file without filesystem authority."""
 
+    def external_checker_grant(
+        self, request: ExternalCheckerExecutionRequest
+    ) -> AbstractContextManager["ExternalCheckerGrantReference"]:
+        """Issue one request-bound opaque grant for this callback lifetime only."""
+
+    @property
+    def external_checker_material(self) -> PostSubmitExternalCheckerMaterial:
+        """Return detached exact POST custody without provider or path coordinates."""
+
+
+class ExternalCheckerGrantReference(Protocol):
+    """Opaque ART grant identity accepted by the trusted service adapter."""
+
+    grant_id: str
+    binding_digest: str
+
 
 class PostSubmissionMaterialConsumer(Protocol):
     """Evaluate scoped input asynchronously and return detached phase facts."""
     async def evaluate(
-        self, request: PostSubmissionEvaluationRequest, material: SubmissionMaterialView,
-    ) -> PostSubmissionEvaluationResult:
+        self, request: PostSubmissionExecutionRequest, material: SubmissionMaterialView,
+    ) -> PostSubmissionExecutionResult:
         """Return detached closed phase facts before ART revokes material access."""
 
 
@@ -126,7 +137,7 @@ class PostSubmissionMaterializationResult:
     content_sha256: str
     byte_count: int
     semantic_manifest_sha256: str
-    evaluation: PostSubmissionEvaluationResult
+    evaluation: PostSubmissionExecutionResult
     input_materialization_evidence_id: UUID
 
 

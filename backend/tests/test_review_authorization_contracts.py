@@ -38,11 +38,9 @@ from app.modules.authorization.review_contracts import (
     ReviewDeclinePreferenceContract,
     ReviewRevisionContextRepairContract,
     ReviewRevisionDecisionContract,
-    ReviewRevisionObligationCloseContract,
     ServiceExecutionMode,
     RevisionPreparationDirection,
     RevisionPreparationOutcome,
-    RevisionClosureCause,
 )
 
 from tests.authorization.review_contract_fixtures import _decision_values
@@ -89,29 +87,6 @@ def _reconcile_values() -> dict[str, object]:
     }
 
 
-def _obligation_values() -> dict[str, object]:
-    return {
-        "action_id": ActionId.REVIEW_REVISION_OBLIGATION_CLOSE,
-        "lifecycle_phase": ReviewLifecyclePhase.SHADOW,
-        "lifecycle_digest": SHA,
-        "project_id": new_record_id(),
-        "task_id": new_record_id(),
-        "task_assignment_id": new_record_id(),
-        "source_task_assignment_id": new_record_id(),
-        "prior_submission_id": new_record_id(),
-        "needs_revision_review_id": new_record_id(),
-        "revision_episode_id": new_record_id(),
-        "preparation_head_id": new_record_id(),
-        "preparation_head_generation": 1,
-        "preparation_head_digest": SHA,
-        "revision_policy_id": new_record_id(),
-        "revision_policy_generation": 1,
-        "revision_policy_digest": SHA,
-        "revision_round": 3,
-        "revision_limit": 3,
-        "observed_at": NOW,
-        "reached_cause": RevisionClosureCause.LIMIT_REACHED,
-    }
 
 
 def test_manifest_covers_review_actions_with_only_scoped_controller_available():
@@ -407,45 +382,22 @@ def test_revised_submission_decision_requires_exact_predecessor_and_response_lin
         ReviewRevisionDecisionContract.model_validate(values | {"decision_shape": "initial"})
 
 
-def test_obligation_close_requires_the_selected_frozen_boundary_to_be_reached():
-    values = _obligation_values()
-    assert ReviewRevisionObligationCloseContract.model_validate(values).revision_round == 3
-    with pytest.raises(ValidationError):
-        ReviewRevisionObligationCloseContract.model_validate(values | {"revision_round": 2})
-    with pytest.raises(ValidationError):
-        ReviewRevisionObligationCloseContract.model_validate(
-            values
-            | {
-                "reached_cause": RevisionClosureCause.DEADLINE_EXPIRED,
-                "revision_deadline": None,
-            }
-        )
-    expired = ReviewRevisionObligationCloseContract.model_validate(
-        values
-        | {
-            "reached_cause": RevisionClosureCause.DEADLINE_EXPIRED,
-            "revision_deadline": NOW,
-        }
-    )
-    assert expired.reached_cause is RevisionClosureCause.DEADLINE_EXPIRED
 
 
 def test_revision_repair_uses_canonical_outcome_direction_and_repairability():
     values = {
-        key: value
-        for key, value in _obligation_values().items()
-        if key
-        not in {
-            "action_id",
-            "revision_policy_id",
-            "revision_policy_generation",
-            "revision_policy_digest",
-            "revision_round",
-            "revision_limit",
-            "observed_at",
-            "reached_cause",
-        }
-    } | {
+        "lifecycle_phase": ReviewLifecyclePhase.SHADOW,
+        "lifecycle_digest": SHA,
+        "project_id": new_record_id(),
+        "task_id": new_record_id(),
+        "task_assignment_id": new_record_id(),
+        "source_task_assignment_id": new_record_id(),
+        "prior_submission_id": new_record_id(),
+        "needs_revision_review_id": new_record_id(),
+        "revision_episode_id": new_record_id(),
+        "preparation_head_id": new_record_id(),
+        "preparation_head_generation": 1,
+        "preparation_head_digest": SHA,
         "action_id": ActionId.REVIEW_REVISION_CONTEXT_REPAIR,
         "preparation_head_outcome": RevisionPreparationOutcome.BLOCKED,
         "preparation_head_repairable": True,
@@ -556,3 +508,9 @@ def test_initial_decision_cannot_claim_inherited_blockers():
     values = _decision_values() | {"decision": ReviewDecisionValue.NEEDS_REVISION, "inherited_unresolved_blocking_count": 1}
     with pytest.raises(ValidationError, match="initial decision has inherited blockers"):
         ReviewDecisionContract(**values)
+
+
+def test_retired_manager_revision_closure_is_not_authorizable():
+    """Deadline expiry uses TASK service custody, never the retired cap-close action."""
+    with pytest.raises(ValueError):
+        ActionId("review.revision_obligation.close")

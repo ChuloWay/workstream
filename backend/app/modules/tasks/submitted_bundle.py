@@ -44,6 +44,8 @@ class SubmittedBundleReader:
             Submission.locked_post_submit_checker_policy_id,
             Submission.locked_post_submit_checker_policy_version,
             Submission.locked_post_submit_checker_policy_hash,
+            Submission.selected_post_submit_policy_sha256,
+            Submission.selected_post_submit_policy_body,
             Submission.locked_review_policy_id,
             Submission.locked_review_policy_generation,
             Submission.locked_review_policy_hash,
@@ -75,6 +77,12 @@ class SubmittedBundleReader:
                 post_policy_id=UUID(row["locked_post_submit_checker_policy_id"]),
                 post_policy_version=row["locked_post_submit_checker_policy_version"],
                 post_policy_hash=row["locked_post_submit_checker_policy_hash"],
+                selected_post_policy_hash=row[
+                    "selected_post_submit_policy_sha256"
+                ],
+                selected_post_policy_body=row[
+                    "selected_post_submit_policy_body"
+                ],
                 review_policy_id=UUID(row["locked_review_policy_id"]),
                 review_generation=row["locked_review_policy_generation"],
                 review_hash=row["locked_review_policy_hash"],

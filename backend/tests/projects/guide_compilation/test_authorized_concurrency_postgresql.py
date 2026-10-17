@@ -6,6 +6,8 @@ from tests.projects.guide_compilation.helpers import runtime_configuration
 
 from app.modules.authorization.api import ProjectGuideCompilationRequestOrigin
 import asyncio
+from dataclasses import replace
+from uuid import uuid4
 
 import pytest
 from .runtime_fixtures import record_attempt_document_access
@@ -13,6 +15,11 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.modules.authorization.api import ActorIdentityFacts, ActorKind
+from app.modules.authorization.guide_compilation import (
+    ProjectGuideCompilationAuthorizationAdapter,
+)
+from app.modules.projects.guide_compilation.repository import GuideCompilationRepository
+from tests.auth_concurrency_support import wait_for_named_database_lock
 
 from .helpers import context, identity, result, seed_database, service_actor
 from .test_authorized_execution_service import _execution_service, _preflight
@@ -57,6 +64,120 @@ async def test_concurrent_identical_requests_commit_one_attempt_event_and_receip
             await session.rollback()
         assert counts == (1, 1, 1)
     finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_direct_and_natural_request_replays_share_auth_then_operation_lock_order(
+    clean_postgres_database: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    values = await seed_database(clean_postgres_database)
+    human, link, _grant = await _seed_human(clean_postgres_database, values)
+    actor = ActorIdentityFacts(human, link, ActorKind.HUMAN)
+    exact_facts, attempt_identity = _request(values), identity(context(values))
+    origin = ProjectGuideCompilationRequestOrigin(trigger="project_manager")
+    engine = create_async_engine(clean_postgres_database)
+    factory = async_sessionmaker(engine, expire_on_commit=False)
+    auth_held = asyncio.Event()
+    release_natural = asyncio.Event()
+    direct_lookup_started = asyncio.Event()
+    waiter_name = "guide-request-replay-" + uuid4().hex
+    pids: dict[str, int] = {}
+    tasks: list[asyncio.Task] = []
+    original_prepare = ProjectGuideCompilationAuthorizationAdapter.prepare_request
+    original_matching = GuideCompilationRepository.matching_request_operation
+
+    async def pause_natural_after_auth(adapter, **kwargs):
+        handle = await original_prepare(adapter, **kwargs)
+        task = asyncio.current_task()
+        if task is not None and task.get_name() == "natural-request-replay":
+            pids["natural"] = await adapter._prepared._session.scalar(
+                text("select pg_backend_pid()")
+            )
+            auth_held.set()
+            await release_natural.wait()
+        return handle
+
+    async def name_direct_operation_lookup(repository, *args, **kwargs):
+        task = asyncio.current_task()
+        if task is not None and task.get_name() == "direct-request-replay":
+            pids["direct"] = await repository._session.scalar(text("select pg_backend_pid()"))
+            await repository._session.execute(
+                text("select set_config('application_name', :name, true)"),
+                {"name": waiter_name},
+            )
+            direct_lookup_started.set()
+        return await original_matching(repository, *args, **kwargs)
+
+    async def replay(facts):
+        async with factory() as session:
+            return await _authorized_service(session, actor).authorize_request(
+                origin=origin,
+                actor=actor,
+                facts=facts,
+                identity=attempt_identity,
+                runtime_configuration=runtime_configuration(),
+            )
+
+    try:
+        first = await replay(exact_facts)
+        stored_facts = replace(exact_facts, operation_id=first.operation_id)
+        natural_facts = replace(stored_facts, operation_id=uuid4())
+        monkeypatch.setattr(
+            ProjectGuideCompilationAuthorizationAdapter,
+            "prepare_request",
+            pause_natural_after_auth,
+        )
+        monkeypatch.setattr(
+            GuideCompilationRepository,
+            "matching_request_operation",
+            name_direct_operation_lookup,
+        )
+        natural = asyncio.create_task(replay(natural_facts), name="natural-request-replay")
+        tasks.append(natural)
+        await asyncio.wait_for(auth_held.wait(), 5)
+        direct = asyncio.create_task(replay(stored_facts), name="direct-request-replay")
+        tasks.append(direct)
+        await asyncio.wait_for(direct_lookup_started.wait(), 5)
+        await asyncio.wait_for(
+            wait_for_named_database_lock(
+                clean_postgres_database,
+                waiter_name,
+                expected_waiter_pid=pids["direct"],
+                expected_blocker_pid=pids["natural"],
+            ),
+            5,
+        )
+        release_natural.set()
+        natural_receipt, direct_receipt = await asyncio.wait_for(
+            asyncio.gather(natural, direct), 10
+        )
+        assert natural_receipt == direct_receipt == first
+        async with factory() as session:
+            retained = (
+                await session.execute(
+                    text(
+                        "select "
+                        "(select count(*) from project_guide_compilation_attempts),"
+                        "(select count(*) from project_guide_compilation_request_operations),"
+                        "(select count(*) from audit_events where action_id="
+                        "'project.guide_compilation.request'),"
+                        "(select count(*) from project_guide_compilations),"
+                        "(select count(*) from audit_events where action_id="
+                        "'project.guide_compilation.execute'),"
+                        "(select count(*) from outbox_events),"
+                        "(select status from project_guide_compilation_attempts)"
+                    )
+                )
+            ).one()
+        assert retained == (1, 1, 1, 0, 0, 0, "compilation_reserved")
+    finally:
+        release_natural.set()
+        for task in tasks:
+            if not task.done():
+                task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
         await engine.dispose()
 
 

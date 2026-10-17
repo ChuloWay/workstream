@@ -16,14 +16,21 @@ from .test_reads import history_case, history_paths
 async def test_historical_owner_after_reassignment(task_client, monkeypatch, state):
     case = await history_case(task_client, monkeypatch)
     replacement = await admit_and_grant_project_submitter(task_client, monkeypatch, case[0], "replacement-contributor")
-    # Retained-data scenario, not a claim that live post-Submission release is supported.
-    async with db_session.get_session_factory()() as session, session.begin():
-        assignment = await session.scalar(select(TaskAssignment).where(TaskAssignment.task_id == case[1], TaskAssignment.status == "active"))
-        assignment.status = "released"
-        assignment.released_at = await session.scalar(select(func.clock_timestamp()))
-        task = await session.get(WorkstreamTask, case[1])
-        task.status = state
-        task.assigned_to = None if state == "ready" else replacement["actor_profile_id"]
+    if state == "ready":
+        from tests.submission_fixtures import route_retained_checker_remediation
+        from tests.test_tasks import _expire_retained_source_for_reclaim
+
+        source_id = await route_retained_checker_remediation(case[2], generation=2)
+        await _expire_retained_source_for_reclaim(db_session.get_session_factory(), source_id)
+    else:
+        # Retained audience fixture; no claim that these are live release commands.
+        async with db_session.get_session_factory()() as session, session.begin():
+            assignment = await session.scalar(select(TaskAssignment).where(TaskAssignment.task_id == case[1], TaskAssignment.status == "active"))
+            assignment.status = "released"
+            assignment.released_at = await session.scalar(select(func.clock_timestamp()))
+            task = await session.get(WorkstreamTask, case[1])
+            task.status = state
+            task.assigned_to = replacement["actor_profile_id"]
     for path in history_paths(*case).values():
         assert (await task_client.get(path, headers=auth_headers())).status_code == 404
     set_dev_actor(monkeypatch, roles="", subject="worker-one")
@@ -47,12 +54,13 @@ async def test_wrong_project_does_not_wait(task_client, monkeypatch):
 
 
 async def test_cursor_scope_and_continuation(task_client, monkeypatch):
-    from tests.submission_fixtures import seed_retained_submission
+    from tests.submission_fixtures import (
+        route_retained_checker_remediation,
+        seed_retained_submission,
+    )
     from tests.test_tasks import complete_submission_payload
     case = await history_case(task_client, monkeypatch)
-    async with db_session.get_session_factory()() as session, session.begin():
-        task = await session.get(WorkstreamTask, case[1])
-        task.status = "needs_revision"
+    await route_retained_checker_remediation(case[2], generation=2)
     successor = await seed_retained_submission(case[1], complete_submission_payload("sha256:successor"), predecessor_id=case[2])
     path = history_paths(*case)["task.submission.list"]
     first = await task_client.get(path, headers=auth_headers(), params={"limit": 1})
@@ -108,47 +116,43 @@ async def test_invalid_cursor_never_enters_private_projection(task_client, monke
 
 
 async def test_same_task_history_separates_contributors(task_client, monkeypatch):
-    """Retained prerequisites prove projection isolation, not live post-submit reclaim."""
+    """Actual expiry/reclaim retains separate contributor histories on one task."""
     from app.core.identifiers import new_record_id
     from app.modules.tasks.models import Submission
-    from app.modules.tasks.submission_composition import build_submission
-    from tests.test_tasks import actor_id
+    from tests.submission_fixtures import route_retained_checker_remediation, seed_retained_submission
+    from tests.test_tasks import (
+        _expire_retained_source_for_reclaim, actor_id, complete_submission_payload,
+    )
 
     case = await history_case(task_client, monkeypatch)
     other = await admit_and_grant_project_submitter(
         task_client, monkeypatch, case[0], "second-history-contributor",
     )
-    other_submission_id = str(new_record_id())
-    async with db_session.get_session_factory()() as session, session.begin():
-        task = await session.get(WorkstreamTask, case[1])
-        original = await session.get(Submission, case[2])
-        # Historical rows with all production constraints enabled. This does
-        # not activate assignment release/reclaim after a Submission exists.
-        assignment = TaskAssignment(
-            id=str(new_record_id()), project_id=case[0], task_id=case[1],
-            submitter_contribution_policy_version_id=original.contribution_policy_version_id,
-            contributor_id=other["actor_profile_id"], assigned_by="retained-prerequisite",
-            status="released", released_at=await session.scalar(select(func.clock_timestamp())),
+    assert other["actor_profile_id"] != await actor_id("worker-one")
+    source_id = await route_retained_checker_remediation(case[2], generation=2)
+    await _expire_retained_source_for_reclaim(db_session.get_session_factory(), source_id)
+    set_dev_actor(monkeypatch, roles="", subject="second-history-contributor")
+    for command in ("claim", "start"):
+        response = await task_client.post(
+            f"/api/v1/tasks/{case[1]}/{command}",
+            headers={**auth_headers(), "Idempotency-Key": str(new_record_id())},
         )
-        session.add(assignment)
-        await session.flush()
-        second = build_submission(
-            submission_id=other_submission_id, task=task,
-            contributor_id=other["actor_profile_id"], version=2,
-            summary="Second contributor retained work", worker_attestation="Retained evidence",
-            supersedes_submission_id=None,
-            contribution_policy_version_id=assignment.submitter_contribution_policy_version_id,
-            task_assignment_id=assignment.id,
-        )
-        session.add(second)
-        await session.flush()
-        second.locked_at = await session.scalar(select(func.clock_timestamp()))
+        assert response.status_code == 200, response.text
+    other_submission_id = await seed_retained_submission(
+        case[1], complete_submission_payload("sha256:second-contributor"),
+    )
     path = history_paths(*case)["task.submission.list"]
     for subject, expected in (("worker-one", case[2]), ("second-history-contributor", other_submission_id)):
         set_dev_actor(monkeypatch, roles="", subject=subject)
         response = await task_client.get(path, headers=auth_headers(), params={"limit": 1})
         assert response.status_code == 200, response.text
         assert [item["id"] for item in response.json()["items"]] == [expected]
+        item = response.json()["items"][0]
+        expected_state = (
+            ("rejected", "revision_deadline_expired", True) if subject == "worker-one"
+            else ("evaluation_pending", None, False)
+        )
+        assert (item["status"], item["status_reason"], item["decided_at"] is not None) == expected_state
         assert response.json()["next_cursor"] is None
         who = await actor_id(subject)
         async with db_session.get_session_factory()() as session:
@@ -157,6 +161,9 @@ async def test_same_task_history_separates_contributors(task_client, monkeypatch
     response = await task_client.get(history_paths(*case, manager=True)["task.submission.list"], headers=auth_headers())
     assert response.status_code == 200, response.text
     assert [item["id"] for item in response.json()["items"]] == [case[2], other_submission_id]
+    assert [(item["status"], item["status_reason"]) for item in response.json()["items"]] == [
+        ("rejected", "revision_deadline_expired"), ("evaluation_pending", None),
+    ]
 
 
 @pytest.mark.parametrize("manager", [False, True])

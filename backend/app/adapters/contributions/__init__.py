@@ -72,6 +72,7 @@ def submitter_contribution_participant(session, fence):
 
 def contribution_export_service(
     session: AsyncSession, *, authorization: ContributionReadAuthorizationPort,
+    cursor_secret: bytes,
 ) -> ContributionExportPort:
     """Compose one mandatory authorized evidence projection on the caller's snapshot."""
     from app.adapters.actors import contribution_actor_label_port
@@ -80,9 +81,13 @@ def contribution_export_service(
     from app.adapters.tasks import contribution_task_evidence_port
     from app.modules.contributions.records.read_repository import ContributionReadRepository
     from app.modules.contributions.records.read_service import ContributionReadService
+    from app.modules.contributions.records.pagination import ContributionExportCursorCodec
 
     return ContributionReadService(
-        authorization=authorization, records=ContributionReadRepository(session),
+        authorization=authorization,
+        records=ContributionReadRepository(
+            session, cursor_codec=ContributionExportCursorCodec(cursor_secret),
+        ),
         awards=contribution_award_read_port(session), acceptances=final_acceptance_read_port(session),
         tasks=contribution_task_evidence_port(session), actors=contribution_actor_label_port(session),
     )

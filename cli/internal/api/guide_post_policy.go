@@ -3,18 +3,21 @@ package api
 import (
 	"context"
 	"encoding/json"
+	jsonv2 "encoding/json/v2"
 	"errors"
 	"math/big"
 	"net/http"
 	"net/url"
 	"regexp"
 	"slices"
+	"strings"
+	"unicode/utf8"
 )
 
 // GuidePostPolicy is an observation of one retained policy, not readiness or authority.
 type GuidePostPolicy struct {
 	Target              PostPolicyTarget       `json:"target"`
-	Policy              CompiledPostPolicy     `json:"policy"`
+	Policy              ExternalPostPolicy     `json:"policy"`
 	Proposal            GuideProposal          `json:"proposal"`
 	ActivationContext   GuideActivationContext `json:"activation_context"`
 	LifecycleStatus     string                 `json:"lifecycle_status"`
@@ -33,25 +36,49 @@ type PostPolicyTarget struct {
 	PredecessorPolicyID   *string        `json:"predecessor_policy_id"`
 }
 
-type CompiledPostPolicy struct {
-	SchemaVersion          string            `json:"schema_version"`
-	CompilerVersion        string            `json:"compiler_version"`
-	ProjectID              string            `json:"project_id"`
-	GuideVersion           string            `json:"guide_version"`
-	CatalogueID            string            `json:"catalogue_id"`
-	CatalogueSourceVersion string            `json:"catalogue_source_version"`
-	CatalogueSchemaVersion string            `json:"catalogue_schema_version"`
-	CatalogueManifestHash  string            `json:"catalogue_manifest_sha256"`
-	Entries                []PostPolicyEntry `json:"entries"`
-	BlockingSeverities     []string          `json:"blocking_severities"`
+type ExternalPostPolicy struct {
+	SchemaVersion string                   `json:"schema_version"`
+	Entries       []ExternalCheckerBinding `json:"entries"`
+	PolicyHash    string                   `json:"policy_sha256"`
 }
 
-type PostPolicyEntry struct {
-	CheckerID             string          `json:"checker_id"`
-	DefinitionVersion     string          `json:"definition_version"`
-	ImplementationVersion string          `json:"implementation_version"`
-	Classification        string          `json:"classification"`
-	Configuration         json.RawMessage `json:"configuration"`
+type ExternalCheckerBinding struct {
+	RequirementID     string                       `json:"requirement_id"`
+	Stage             string                       `json:"stage"`
+	Registry          ExternalCheckerRegistryEntry `json:"registry"`
+	Configuration     json.RawMessage              `json:"configuration"`
+	ConfigurationHash string                       `json:"configuration_sha256"`
+}
+
+type ExternalCheckerRegistryEntry struct {
+	CapabilityID                 string                        `json:"capability_id"`
+	CapabilityVersion            string                        `json:"capability_version"`
+	Phase                        string                        `json:"phase"`
+	ImageDigest                  string                        `json:"image_digest"`
+	ConfigurationSchema          ExternalCheckerSchema         `json:"configuration_schema"`
+	InputSchema                  ExternalCheckerSchema         `json:"input_schema"`
+	OutputSchema                 ExternalCheckerSchema         `json:"output_schema"`
+	Resources                    ExternalCheckerResourceLimits `json:"resources"`
+	RegistryEntryID              string                        `json:"registry_entry_id"`
+	EntryDigest                  string                        `json:"entry_digest"`
+	RegistrationOperationID      string                        `json:"registration_operation_id"`
+	RegisteredByActorProfileID   string                        `json:"registered_by_actor_profile_id"`
+	AuthorizationDecisionEventID string                        `json:"authorization_decision_event_id"`
+	CreatedAt                    string                        `json:"created_at"`
+}
+
+type ExternalCheckerSchema struct {
+	SchemaID      string          `json:"schema_id"`
+	SchemaVersion string          `json:"schema_version"`
+	Document      json.RawMessage `json:"document"`
+	SchemaHash    string          `json:"schema_sha256"`
+}
+
+type ExternalCheckerResourceLimits struct {
+	CPUMillis          *big.Int `json:"cpu_millis"`
+	MemoryBytes        *big.Int `json:"memory_bytes"`
+	DeadlineMillis     *big.Int `json:"deadline_ms"`
+	MaximumOutputBytes *big.Int `json:"maximum_output_bytes"`
 }
 
 type GuideActivationContext struct {
@@ -106,7 +133,7 @@ func (c *Client) GuidePostPolicy(ctx context.Context, project, guide, compilatio
 	}
 	proposal, err := decodeGuideProposal(fields["proposal"], project, guide, compilation)
 	if err != nil || validatePostTarget(fields["target"], &value.Target, proposal.Value, policy) != nil ||
-		validateCompiledPostPolicy(fields["policy"], &value.Policy, value.Target.Proposal) != nil ||
+		validateExternalPostPolicy(fields["policy"], &value.Policy, value.Target.PolicyHash) != nil ||
 		validateActivationContext(fields["activation_context"], &value.ActivationContext) != nil {
 		return result, &Failure{Code: "invalid_api_response"}
 	}
@@ -184,45 +211,101 @@ func sameNullableText(a, b *string) bool {
 }
 
 var postPolicyIdentifier = regexp.MustCompile(`^[a-z][a-z0-9_.-]{0,99}$`)
+var postPolicySchemaVersion = regexp.MustCompile(`^[a-z0-9][a-z0-9_.-]{0,49}$`)
 
-func validateCompiledPostPolicy(raw json.RawMessage, value *CompiledPostPolicy, target ProposalTarget) error {
-	// Public schema defaults are wire values, not a local compiler implementation.
-	*value = CompiledPostPolicy{SchemaVersion: "post_submit_checker_policy", CompilerVersion: "workstream-post-submit-compiler",
-		CatalogueID: "workstream.post_submission_checkers", CatalogueSourceVersion: "v0.1", CatalogueSchemaVersion: "post_submission_checker_capability_projection"}
-	fields, err := contextObject(raw, value, []string{"project_id", "guide_version", "catalogue_manifest_sha256", "entries", "blocking_severities"}, []string{"blocking_severities"})
-	if err != nil || value.SchemaVersion != "post_submit_checker_policy" || value.CompilerVersion != "workstream-post-submit-compiler" ||
-		value.CatalogueID != "workstream.post_submission_checkers" || value.CatalogueSourceVersion != "v0.1" || value.CatalogueSchemaVersion != "post_submission_checker_capability_projection" ||
-		!sameUUID(value.ProjectID, target.ProjectID) || value.GuideVersion != target.GuideVersion ||
-		value.CatalogueID != target.PostCatalogueID || value.CatalogueSourceVersion != target.PostCatalogueVersion ||
-		value.CatalogueSchemaVersion != target.PostCatalogueSchemaVersion || value.CatalogueManifestHash != target.PostCatalogueManifestHash ||
-		len(value.Entries) < 1 || len(value.Entries) > 9 || len(value.BlockingSeverities) < 2 || len(value.BlockingSeverities) > 5 {
-		return errors.New("invalid compiled post-policy")
+func validateExternalPostPolicy(raw json.RawMessage, value *ExternalPostPolicy, targetHash string) error {
+	fields, err := contextObject(raw, value, []string{"schema_version", "entries", "policy_sha256"}, nil)
+	if err != nil || value.SchemaVersion != "external_post_submit_policy.v1" ||
+		!contextPolicyDigest.MatchString(value.PolicyHash) || value.PolicyHash != targetHash {
+		return errors.New("invalid external post-policy")
 	}
 	var entries []json.RawMessage
-	if json.Unmarshal(fields["entries"], &entries) != nil {
-		return errors.New("invalid entries")
+	if jsonv2.Unmarshal(fields["entries"], &entries) != nil || entries == nil || len(entries) != len(value.Entries) {
+		return errors.New("invalid external post-policy entries")
 	}
-	seen := make(map[string]bool, len(value.Entries))
+	var previous [3]string
 	for i := range value.Entries {
 		entry := &value.Entries[i]
-		_, err := contextObject(entries[i], entry, []string{"checker_id", "definition_version", "implementation_version", "classification", "configuration"}, nil)
-		var configuration struct{}
-		if err != nil || seen[entry.CheckerID] || !postPolicyIdentifier.MatchString(entry.CheckerID) || !postPolicyIdentifier.MatchString(entry.ImplementationVersion) ||
-			entry.DefinitionVersion != "v0.1" || !slices.Contains([]string{"platform_default", "project_required", "project_warning"}, entry.Classification) ||
-			decode(entry.Configuration, &configuration, nil, nil) != nil {
-			return errors.New("invalid policy entry")
+		if validateExternalCheckerBinding(entries[i], entry) != nil {
+			return errors.New("invalid external checker binding")
 		}
-		seen[entry.CheckerID] = true
+		identity := [3]string{entry.RequirementID, entry.Registry.CapabilityID, entry.Registry.CapabilityVersion}
+		if i > 0 && compareCheckerBindingIdentity(identity, previous) <= 0 {
+			return errors.New("external checker bindings are not canonical")
+		}
+		previous = identity
 	}
-	// These are public response invariants, not local catalogue evaluation.
-	canonical := make([]string, 0, 5)
-	for _, severity := range []string{"critical", "high", "medium", "low", "info"} {
-		if slices.Contains(value.BlockingSeverities, severity) {
-			canonical = append(canonical, severity)
+	return nil
+}
+
+func compareCheckerBindingIdentity(left, right [3]string) int {
+	for i := range left {
+		if comparison := strings.Compare(left[i], right[i]); comparison != 0 {
+			return comparison
 		}
 	}
-	if !slices.Contains(canonical, "critical") || !slices.Contains(canonical, "high") || !slices.Equal(canonical, value.BlockingSeverities) {
-		return errors.New("invalid blocking severities")
+	return 0
+}
+
+func validateExternalCheckerBinding(raw json.RawMessage, value *ExternalCheckerBinding) error {
+	fields, err := contextObject(raw, value, []string{"requirement_id", "stage", "registry", "configuration", "configuration_sha256"}, nil)
+	if err != nil || utf8.RuneCountInString(value.RequirementID) < 1 || utf8.RuneCountInString(value.RequirementID) > 100 || value.Stage != "post_submit" ||
+		!contextPolicyDigest.MatchString(value.ConfigurationHash) || validateJSONObject(value.Configuration) != nil ||
+		validateExternalCheckerRegistry(fields["registry"], &value.Registry) != nil || value.Registry.Phase != value.Stage {
+		return errors.New("invalid external checker binding")
+	}
+	return nil
+}
+
+func validateExternalCheckerRegistry(raw json.RawMessage, value *ExternalCheckerRegistryEntry) error {
+	fields, err := contextObject(raw, value, []string{
+		"capability_id", "capability_version", "phase", "image_digest", "configuration_schema", "input_schema", "output_schema", "resources",
+		"registry_entry_id", "entry_digest", "registration_operation_id", "registered_by_actor_profile_id", "authorization_decision_event_id", "created_at",
+	}, nil)
+	if err != nil || !postPolicyIdentifier.MatchString(value.CapabilityID) || !postPolicySchemaVersion.MatchString(value.CapabilityVersion) ||
+		value.Phase != "post_submit" || !contextPolicyDigest.MatchString(value.ImageDigest) || !contextPolicyDigest.MatchString(value.EntryDigest) ||
+		!validUUID(value.RegistryEntryID) || !validUUID(value.RegistrationOperationID) || !validUUID(value.RegisteredByActorProfileID) ||
+		!validUUID(value.AuthorizationDecisionEventID) || !validTime(value.CreatedAt) ||
+		validateExternalCheckerSchema(fields["configuration_schema"], &value.ConfigurationSchema, "") != nil ||
+		validateExternalCheckerSchema(fields["input_schema"], &value.InputSchema, "external_checker_post_submit_input") != nil ||
+		validateExternalCheckerSchema(fields["output_schema"], &value.OutputSchema, "external_checker_result") != nil ||
+		validateExternalCheckerResources(fields["resources"], &value.Resources) != nil {
+		return errors.New("invalid external checker registry entry")
+	}
+	identity, valid := uuidIdentity(value.RegistryEntryID)
+	if !valid || identity[6]>>4 != 7 || identity[8]&0xc0 != 0x80 {
+		return errors.New("invalid external checker registry identity")
+	}
+	return nil
+}
+
+func validateExternalCheckerSchema(raw json.RawMessage, value *ExternalCheckerSchema, requiredID string) error {
+	_, err := contextObject(raw, value, []string{"schema_id", "schema_version", "document", "schema_sha256"}, nil)
+	if err != nil || !postPolicyIdentifier.MatchString(value.SchemaID) || !postPolicySchemaVersion.MatchString(value.SchemaVersion) ||
+		(requiredID != "" && value.SchemaID != requiredID) || !contextPolicyDigest.MatchString(value.SchemaHash) ||
+		validateJSONObject(value.Document) != nil {
+		return errors.New("invalid external checker schema")
+	}
+	return nil
+}
+
+func validateExternalCheckerResources(raw json.RawMessage, value *ExternalCheckerResourceLimits) error {
+	_, err := contextObject(raw, value, []string{"cpu_millis", "memory_bytes", "deadline_ms", "maximum_output_bytes"}, nil)
+	if err != nil || !boundedInteger(value.CPUMillis, 100, 64_000) || !boundedInteger(value.MemoryBytes, 16*1024*1024, 64*1024*1024*1024) ||
+		!boundedInteger(value.DeadlineMillis, 100, 3_600_000) || !boundedInteger(value.MaximumOutputBytes, 256, 65_536) {
+		return errors.New("invalid external checker resources")
+	}
+	return nil
+}
+
+func boundedInteger(value *big.Int, minimum, maximum int64) bool {
+	return value != nil && value.IsInt64() && value.Int64() >= minimum && value.Int64() <= maximum
+}
+
+func validateJSONObject(raw json.RawMessage) error {
+	var value map[string]json.RawMessage
+	if err := jsonv2.Unmarshal(raw, &value); err != nil || value == nil {
+		return errors.New("invalid JSON object")
 	}
 	return nil
 }

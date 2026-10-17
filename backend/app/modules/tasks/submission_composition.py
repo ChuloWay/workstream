@@ -11,6 +11,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text, select, func
 from sqlalchemy.exc import DBAPIError
 
+from app.modules.projects.api.policy_lineage import RevisionPolicySemantics
+from app.modules.tasks.api.submission_context import require_revision_capacity
 from app.modules.tasks.api import (
     SubmissionCreationAuthorizationPort,
     SubmissionCreationAuthorityFacts,
@@ -19,8 +21,9 @@ from app.modules.tasks.api import (
     SubmissionCreationResult,
     SubmissionCreationUnavailable,
     TaskSubmissionContextRequest,
+    TaskSubmissionContextPort,
 )
-from app.modules.checkers.api import SubmissionPacketView
+from app.modules.checkers.api.pre_submit_material import SubmissionPacketView
 from app.modules.tasks.models import EvidenceItem, Submission
 from app.modules.tasks.submission_participants import (
     SubmissionArtifactAdmissionPort, SubmissionArtifactAdmissionRequest,
@@ -32,7 +35,9 @@ from app.modules.tasks.submission_dispatch import (
 from app.modules.tasks.submission_replay import read_creation_replay
 from app.modules.tasks.lifecycle import ensure_allowed_transition
 from app.modules.checkers.api.execution import EvaluationCoordinationPort
-from app.modules.checkers.api.post_submit import make_post_submit_request
+from app.modules.checkers.api.selected_post_submit import (
+    make_selected_post_submit_request,
+)
 from app.modules.outbox.api import OutboxAppendPort
 from app.modules.tasks.repository import TaskRepository
 from app.modules.tasks.service import TaskService
@@ -104,6 +109,7 @@ class TaskSubmissionCreationService:
         authorization: SubmissionCreationAuthorizationPort,
         admissions: SubmissionArtifactAdmissionPort,
         contexts: TaskService,
+        submission_contexts: TaskSubmissionContextPort,
         evaluations: EvaluationCoordinationPort,
         events: OutboxAppendPort,
     ) -> None:
@@ -112,6 +118,7 @@ class TaskSubmissionCreationService:
         self._admissions = admissions
         self._repository = TaskRepository(session)
         self._contexts = contexts
+        self._submission_contexts = submission_contexts
         self._evaluations = evaluations
         self._events = events
 
@@ -142,7 +149,7 @@ class TaskSubmissionCreationService:
         replay = await read_creation_replay(self._session, task, request)
         if replay is not None:
             return await self._replay(request, *replay)
-        context = await self._repository.lock_submission_context(
+        context = await self._submission_contexts.lock_submission_context(
             TaskSubmissionContextRequest(
                 task_id=request.task_id,
                 assignment_id=request.assignment_id,
@@ -150,7 +157,12 @@ class TaskSubmissionCreationService:
                 predecessor_submission_id=request.predecessor_submission_id,
             )
         )
-        version = 1 if context.predecessor is None else context.predecessor.version + 1
+        # Version orders every Submission on the task; the revision allowance
+        # belongs to this assignment and is carried separately in the context.
+        latest_task_submission = await self._repository.get_latest_submission_for_task(task.id)
+        version = latest_task_submission.version + 1 if latest_task_submission else 1
+        if context.predecessor is not None and version != context.predecessor.version + 1:
+            raise SubmissionCreationUnavailable("submission creation is unavailable")
         submission_id = new_record_id()
         final = SubmissionCreationAuthorityFacts(
             task_id=preliminary.task_id,
@@ -165,6 +177,17 @@ class TaskSubmissionCreationService:
         prepared_authorization = await self._authorization.prepare(final)
         try:
             project = await self._contexts._load_locked_task_context(task)
+            if context.predecessor is not None:
+                selected_revision = project.facts.activation_receipt.command.revision
+                require_revision_capacity(
+                    context, project_id=project.facts.project_id,
+                    policy_id=selected_revision.policy_id,
+                    policy_generation=selected_revision.generation,
+                    policy_hash=selected_revision.policy_hash,
+                    max_revision_rounds=RevisionPolicySemantics.model_validate_json(
+                        project.facts.revision_policy.value,
+                    ).max_revision_rounds,
+                )
             submission = build_submission(
                 submission_id=str(submission_id), task=task,
                 contribution_policy_version_id=context.submitter_contribution_policy_version_id,
@@ -192,22 +215,40 @@ class TaskSubmissionCreationService:
                 type(consumed) is not SubmissionArtifactAdmissionResult
                 or not isinstance(consumed.binding_id, UUID)
                 or not isinstance(consumed.content_id, UUID)
+                or consumed.selected_evaluation_content is None
             ):
-                raise RuntimeError("artifact admission did not produce exact binding facts")
+                raise SubmissionCreationUnavailable("submission creation is unavailable")
             submission.submission_bundle_admission_id = str(request.admission_id)
             submission.artifact_binding_id = str(consumed.binding_id)
             submission.artifact_content_id = str(consumed.content_id)
+            submission.selected_post_submit_policy_sha256 = (
+                consumed.selected_evaluation_content.policy.policy_sha256
+            )
+            submission.selected_post_submit_policy_body = (
+                consumed.selected_evaluation_content.policy.model_dump(mode="json")
+            )
             await self._session.flush()
             creation_decision_id = await self._authorization.consume(prepared_authorization, final)
             if not isinstance(creation_decision_id, UUID):
                 raise SubmissionCreationUnavailable("submission creation is unavailable")
-            evaluation = make_post_submit_request(
-                **consumed.evaluation_content.model_dump(),
-                evaluation_request_id=new_record_id(), evaluation_generation=1,
-                task_id=request.task_id, assignment_id=request.assignment_id,
-                submission_id=submission_id, submission_version=version,
-                content_id=consumed.content_id, binding_id=consumed.binding_id,
-                content_sha256=consumed.archive_sha256, byte_count=consumed.byte_count,
+            request_fields = dict(
+                evaluation_request_id=new_record_id(),
+                evaluation_generation=1,
+                task_id=request.task_id,
+                assignment_id=request.assignment_id,
+                submission_id=submission_id,
+                submission_version=version,
+                content_id=consumed.content_id,
+                binding_id=consumed.binding_id,
+                content_sha256=consumed.archive_sha256,
+                byte_count=consumed.byte_count,
+            )
+            selected = consumed.selected_evaluation_content
+            evaluation = make_selected_post_submit_request(
+                project_id=selected.project_id,
+                expected_context=selected.expected_context,
+                policy=selected.policy,
+                **request_fields,
             )
             ensure_allowed_transition(task.status, "submitted")
             task.status = "submitted"
@@ -226,6 +267,7 @@ class TaskSubmissionCreationService:
                 creation_decision_id=str(creation_decision_id), binding_decision_id=str(consumed.binding_decision_id),
                 request_digest=creation_request_digest(request),
                 creation_kind=context.kind, creation_status=context.status,
+                checker_remediation_manifest_id=context.checker_remediation_manifest_id,
                 evaluation_request_id=str(reservation.request_id),
                 evaluation_request_digest=reservation.request_digest,
                 evaluation_attempt_id=str(reservation.attempt_id), evaluation_result_id=str(reservation.result_id),
@@ -258,6 +300,7 @@ class TaskSubmissionCreationService:
                 contributor_id=request.contributor_id, submission_id=UUID(receipt.submission_id),
                 submission_version=receipt.submission_version,
                 packet_sha256=SubmissionPacketView(request.summary, request.contributor_attestation).sha256,
+                task_context=context,
             ))
             if (consumed.binding_id, consumed.content_id, consumed.binding_decision_id) != (
                 UUID(receipt.artifact_binding_id), UUID(receipt.artifact_content_id), UUID(receipt.binding_decision_id),
@@ -279,8 +322,10 @@ class TaskSubmissionCreationService:
                 or evaluation.content_id != consumed.content_id
                 or evaluation.content_sha256 != consumed.archive_sha256
                 or evaluation.byte_count != consumed.byte_count
-                or evaluation.structural_input.summary != request.summary
-                or evaluation.structural_input.worker_attestation != request.contributor_attestation
+                or consumed.selected_evaluation_content is None
+                or evaluation.project_id != consumed.selected_evaluation_content.project_id
+                or evaluation.expected_context != consumed.selected_evaluation_content.expected_context
+                or evaluation.policy != consumed.selected_evaluation_content.policy
             ):
                 raise SubmissionCreationUnavailable("submission creation is unavailable")
             await self._events.require_existing(receipt.evaluation_event_id, evaluation_request_event(receipt))

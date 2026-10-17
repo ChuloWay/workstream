@@ -78,6 +78,7 @@ def http_fixture():
         def do_POST(self):  # noqa: N802 - standard HTTP handler interface
             body = self.rfile.read(int(self.headers.get("Content-Length", "0")))
             response.setdefault("raw_commands", []).append(body)
+            response.setdefault("request_headers", []).append(dict(self.headers))
             response["commands"].append(
                 (
                     self.headers.get("Content-Type"),
@@ -93,6 +94,8 @@ def http_fixture():
             if after_body := response.get("after_body"):
                 after_body()
             self.do_GET()
+
+        do_PUT = do_POST
 
         def do_CONNECT(self):  # noqa: N802 - captures attempted HTTPS proxy use
             requests.append(

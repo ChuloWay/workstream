@@ -1,11 +1,9 @@
 package api
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
-	"io"
 	"math/big"
 	"net/http"
 	"net/url"
@@ -74,7 +72,7 @@ func (c *Client) ActivateGuide(ctx context.Context, project, guide string, body 
 		!sameUUID(value.Command.IdempotencyKey, key) || !sameGuideActivationInput(value.Command.GuideActivationInput, input) ||
 		value.ActivationGeneration.Cmp(new(big.Int).Add(input.GuideMutationGeneration, big.NewInt(1))) != 0 ||
 		!validTime(value.EffectiveAt) || (value.PriorProjectStatus != "draft" && value.PriorProjectStatus != "active") ||
-		validateActivationContribution(fields["contribution"], &value.Contribution, input) != nil || !c.safeActivationReceipt(raw) {
+		validateActivationContribution(fields["contribution"], &value.Contribution, input) != nil || !c.safeMutationResponse(raw) {
 		return result, guideActivationFailure(&Failure{Code: "invalid_api_response", OutcomeUnknown: true})
 	}
 	return Result[GuideActivationReceipt]{Raw: raw, Value: value}, nil
@@ -143,32 +141,6 @@ func validateActivationContribution(raw json.RawMessage, value *GuideActivationC
 		}
 	}
 	return nil
-}
-
-func (c *Client) safeActivationReceipt(raw json.RawMessage) bool {
-	// Scan decoded strings so JSON escaping or alternate UUID spelling cannot
-	// conceal credential reflection. UseNumber preserves the backend integer range.
-	decoder := json.NewDecoder(bytes.NewReader(raw))
-	decoder.UseNumber()
-	for {
-		token, err := decoder.Token()
-		if err == io.EOF {
-			return true
-		}
-		if err != nil {
-			return false
-		}
-		switch value := token.(type) {
-		case string:
-			if !c.safeMetadata(value) || sameUUID(value, c.token) {
-				return false
-			}
-		case json.Number:
-			if !c.safeMetadata(value.String()) {
-				return false
-			}
-		}
-	}
 }
 
 func guideActivationFailure(err error) error {

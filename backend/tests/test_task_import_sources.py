@@ -26,6 +26,8 @@ from app.modules.artifacts.models import ArtifactTaskImportSource, ArtifactPutAt
 from app.modules.artifacts.models import ArtifactReplica
 from app.modules.artifacts.models import ArtifactVerificationJob
 from app.modules.artifacts.authorization import PreparedArtifactInternalAuthority
+from app.modules.artifacts.service import validate_artifact_storage_namespace_at_startup
+from app.adapters.artifacts import create_artifact_store_bootstrap
 from app.adapters.artifacts.s3_compatible import S3CompatibleArtifactStore
 from app.interfaces.artifacts import ArtifactStoreUnavailableError
 from app.modules.authorization.models import AdminRoleGrant
@@ -70,6 +72,16 @@ async def import_source_client(task_database_env, monkeypatch, tmp_path):
             await provider.create_bucket(Bucket=bucket)
         except ClientError as error:
             assert error.response["Error"]["Code"] in {"BucketAlreadyExists", "BucketAlreadyOwnedByYou"}
+    # ASGITransport omits lifespan startup. Claim the actual singleton before
+    # scripted guide prerequisites reuse it; no guide provider bytes are proved.
+    settings = get_settings()
+    bootstrap = create_artifact_store_bootstrap(settings)
+    try:
+        await validate_artifact_storage_namespace_at_startup(
+            bootstrap, settings, db_session.get_session_factory()
+        )
+    finally:
+        bootstrap.close()
     async with AsyncClient(transport=ASGITransport(app=create_app()), base_url="http://testserver") as client:
         admitted = await client.get("/api/v1/actors/me", headers=auth_headers())
         assert admitted.status_code == 200, admitted.text
@@ -106,6 +118,32 @@ async def _effects():
         return tuple([await session.scalar(select(func.count()).select_from(owner)) for owner in (
             ArtifactTaskImportSource, ArtifactPutAttempt, ArtifactAdmissionCharge, WorkstreamTask,
         )])
+
+
+async def test_artifact_worker_database_resources_close_with_each_sync_loop(
+    import_source_client,
+):
+    """Process initialization and later scans must not share loop-bound SQL pools."""
+    from app.adapters.artifacts.internal_workers import (
+        initialize_artifact_internal_runtime,
+        scan_artifact_pending_work,
+        shutdown_artifact_internal_runtime,
+    )
+    from app.workers.async_runner import run_async_task
+
+    shutdown_artifact_internal_runtime()
+    await db_session.dispose_engine()
+
+    async def ignore(_identifier):
+        return None
+
+    try:
+        run_async_task(initialize_artifact_internal_runtime)
+        assert run_async_task(lambda: scan_artifact_pending_work(ignore, ignore)) == 0
+        assert run_async_task(lambda: scan_artifact_pending_work(ignore, ignore)) == 0
+    finally:
+        shutdown_artifact_internal_runtime()
+        await db_session.dispose_engine()
 
 
 async def test_200_row_public_source_round_trip_and_exact_replay(import_source_client):

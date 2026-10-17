@@ -3,6 +3,7 @@
 from app.modules.actors.api import ServiceIdentity
 
 FIXED_SERVICE_ACTION_EXPECTATIONS = {
+    ServiceIdentity.TASK_REVISION_EXPIRER: {"task.revision.expire", "task.revision.recover"},
     ServiceIdentity.TASK_POST_SUBMIT_ROUTER: {"task.post_submit.route"},
     ServiceIdentity.TASK_ASSIGNMENT_RECONCILER: {"task.assignment.authority_reconcile"},
     ServiceIdentity.OUTBOX_DISPATCHER: {"outbox.dispatch"},
@@ -19,6 +20,10 @@ FIXED_SERVICE_ACTION_EXPECTATIONS = {
         "artifact.pre_submit.checker_input.materialize",
         "artifact.post_submit.checker_input.materialize",
         "artifact.review_packet.materialize",
+    },
+    ServiceIdentity.CHECKER_PRE_SUBMIT: {
+        "checker.pre_submit.execute",
+        "checker.pre_submit.finalize",
     },
     ServiceIdentity.CHECKER_POST_SUBMIT: {"checker.post_submit.execute", "checker.post_submit.finalize"},
     ServiceIdentity.ARTIFACT_CHECKER_OUTPUT: {"artifact.checker_output.write"},
@@ -218,11 +223,6 @@ REV_CUSTODY_EXPECTATIONS = {
         "WS-XINT-003-08A",
         "planned",
     ),
-    "review.revision_obligation.close": (
-        "project.task.manage",
-        "WS-XINT-003-08A",
-        "planned",
-    ),
     "review.revision_context.legacy_close": (
         "operations.reconcile.run",
         "WS-XINT-003-08A",
@@ -253,7 +253,7 @@ historical_permissions = frozenset("""actor.profile.read_self actor.profile.upda
 
 new_permissions = frozenset(
     """
-    task.post_submit.route checker.post_submit.execute checker.post_submit.finalize task.assignment.authority_reconcile outbox.dispatch project.setup_diagnostic.read project.effective_policy.read
+    task.revision.expire task.revision.recover task.post_submit.route checker.pre_submit.execute checker.pre_submit.finalize checker.post_submit.execute checker.post_submit.finalize task.assignment.authority_reconcile outbox.dispatch project.setup_diagnostic.read project.effective_policy.read
     operations.task.start_override operations.submission_gate.repair
     operations.checker.retry artifact.binding.read artifact.replica.read
     artifact.receipt.read artifact.verification_job.read
@@ -269,6 +269,10 @@ expected = {
     "contribution.read_self": ("contribution.read_self", "PILOT-10"),
     "contribution.read_project": ("contribution.read_project", "PILOT-10"),
     "task.post_submit.route": ("task.post_submit.route", "WS-ARCH-001-04E2"),
+    "task.revision.expire": ("task.revision.expire", "PILOT-08"),
+    "task.revision.recover": ("task.revision.recover", "PILOT-08"),
+    "checker.pre_submit.execute": ("checker.pre_submit.execute", "PILOT-04"),
+    "checker.pre_submit.finalize": ("checker.pre_submit.finalize", "PILOT-04"),
     "checker.post_submit.execute": ("checker.post_submit.execute", "WS-ARCH-001-04D2"),
     "checker.post_submit.finalize": ("checker.post_submit.finalize", "WS-ARCH-001-04D2"),
     "checker.registry.register": ("operations.reconcile.run", "PILOT-04"),
@@ -301,11 +305,14 @@ expected = {
     "project.task.queue.read": ("project.task.manage", "WS-ARCH-001-03C4"),
     "operations.task.queue.read": ("operations.status.read", "WS-ARCH-001-03C4"),
     "project.task.create": ("project.task.manage", "WS-ARCH-001-03C3"),
+    "project.task.import": ("project.task.manage", "PILOT-02B"),
+    "project.task.import_batch.read": ("project.task.manage", "PILOT-02B"),
     "artifact.task_import_source.declare": ("project.task.manage", "PILOT-02A"),
     "artifact.task_import_source.upload": ("project.task.manage", "PILOT-02A"),
     "artifact.task_import_source.read": ("project.task.manage", "PILOT-02A"),
     "project.task.screen": ("project.task.manage", "WS-ARCH-001-03C3"),
     "project.task.release": ("project.task.manage", "WS-ARCH-001-03C3"),
+    "project.task.revision.repair": ("project.task.manage", "PILOT-08"),
     "project.task.work_context.read": ("project.task.manage", "task-project-grant-authorization"),
     "operations.submission_gate.repair": (
         "operations.submission_gate.repair",
@@ -445,6 +452,11 @@ expected = {
 
 
 AUDIT_ALLOWED_ACTION_VALUES = {
+    "task.revision.expire",
+    "task.revision.recover",
+    "checker.pre_submit.execute",
+    "checker.pre_submit.finalize",
+    "operations.checker.retry",
     "contribution.read_self",
     "contribution.read_project",
     "task.post_submit.route",
@@ -486,11 +498,14 @@ AUDIT_ALLOWED_ACTION_VALUES = {
     "project.task.queue.read",
     "operations.task.queue.read",
     "project.task.create",
+    "project.task.import",
+    "project.task.import_batch.read",
     "artifact.task_import_source.declare",
     "artifact.task_import_source.upload",
     "artifact.task_import_source.read",
     "project.task.screen",
     "project.task.release",
+    "project.task.revision.repair",
     "project.task.work_context.read",
     "operations.task.start_override",
     "actor.admin_role_grant_history.read",

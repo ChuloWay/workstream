@@ -6,12 +6,14 @@ Workstream is developing its first, unreleased v0.1. This specification covers
 the existing task-record and assignment foundation, including the bounded
 [project-grant authorization replacement](../.commitrail/changes/task-project-grant-authorization.md).
 CP08 delivers exact contribution-policy lineage through task, assignment and
-hidden Submission creation. ARCH-03C2 delivers exact assignment-invalidation
+Submission creation. ARCH-03C2 delivers exact assignment-invalidation
 publication and registered delivery. ARCH-03C4 delivers the three public task
 queues with exact project authority. ARCH-03C5 delivers distinct Contributor and
 Manager task detail and requirements. ARCH-03C6 exposes the three distinct
-locked-context reads with exact current grants. Public Submission cutover remains pending;
-the [capability ledger](roadmap_status.md) identifies its owner.
+locked-context reads with exact current grants. ARCH-02I-B exposes public ZIP
+preparation and admission-backed initial/checker-remediation Submission creation.
+The bounded local public API and Celery service drill has passed; the
+[capability ledger](roadmap_status.md) tracks that proof.
 
 Task responses and immutable command receipts contain no task-local payment
 amount, currency, payout type or guide-keyed payment-policy stamp. Compensation
@@ -65,10 +67,12 @@ Audit Authority task history and removes the old unbounded task-only audit route
 
 There is no self-activation endpoint. A contributor cannot acquire permission
 by creating a worker profile, supplying skill tags, or presenting a token role.
-There is no public JSON-packet submission creation route. The existing
-`GET /api/v1/tasks/{task_id}/submissions` remains a read, not evidence that POST
-creation is usable. Admission-backed Submission creation stays hidden until
-its separate canonical public integration is complete.
+There is no public JSON-packet submission creation route. Contributors upload
+one ZIP through the public submission-bundle preparation route, then the public
+`POST /api/v1/tasks/{task_id}/submissions` operation consumes a fresh ready
+admission through the canonical writer for initial work or exact checker
+remediation. The corresponding GET remains a history
+read, not creation authority.
 
 ## Canonical Task-Import Sources
 
@@ -78,7 +82,12 @@ Each row has a required case-sensitive `external_task_id` (1..200 characters,
 no surrounding whitespace or control characters), nonblank `title` and
 `description`, and optional `task_type`, `difficulty`, `skill_tags`,
 `estimated_time_minutes`, `acceptance_criteria` and `rejection_criteria`. Text and collection bounds
-are part of the schema. External IDs must be unique inside the document;
+are part of the schema. Omitted or null task-local acceptance criteria remain
+optional through single and bulk SCREEN/RELEASE; the locked project guide
+supplies the governed requirements. Screening still requires nonblank title
+and description, active-guide custody and exact policy locks. Supplied criteria
+retain their schema type/length checks and exact text.
+External IDs must be unique inside the document;
 duplicate errors identify the zero-based row and the first duplicate's row.
 The parser accepts only strict UTF-8 JSON. It rejects a BOM, duplicate object
 members, non-finite numbers, NUL and unpaired surrogates. The source ceiling is 8 MiB.
@@ -92,12 +101,80 @@ locked guide/policy identities, creator identity or server provenance fields.
 PILOT-02A supplies usable authorized declaration, upload, status and verified
 download through the [ART source custody contract](spec_artifact_storage_service.md#task-import-source-custody).
 These operations create no Tasks. Failed or abandoned declarations remain
-retained source records with no batch/task success claim. A later bounded
-PILOT-02 operation must import a verified source into DRAFT atomically, enforce
-project/external-ID uniqueness and replay/conflict rules, and bind exact ART
-and AUTH custody. Explicit screen and release, their existing locked-guide
-prerequisites and normal transitions remain unchanged. No public batch import,
-batch screen/release or CLI conversion is delivered by source custody alone.
+retained source records with no batch/task success claim. The separate atomic JSON-to-DRAFT import contract is below. Source custody alone
+still supplies no batch screen/release or CLI conversion.
+
+### Atomic JSON-to-DRAFT import contract
+
+`POST /api/v1/projects/{project_id}/task-import-batches` accepts only a native
+`source_id` and the shared UUID `Idempotency-Key`. A covered Project Manager's
+first import reads and verifies actual provider bytes, parses the retained JSON,
+then creates one immutable native batch and every DRAFT Task in one root. Each
+row uses the normal authorized Task creation and `TaskCreated` evidence; a
+later row, audit, binding or uniqueness failure rolls back the complete batch.
+Case-sensitive project/external-ID uniqueness covers all non-NULL Task external
+IDs, including normal creation. Existing arbitrary `import_batch_id` strings
+remain metadata; only immutable native membership supplies batch custody.
+
+The server stamps `json_import`, `task-import-source:<source UUID>`, the actual
+received-file SHA and the native batch UUID spelling. Normal manual TaskCreate
+cannot select `json_import`; row input cannot supply these labels or other
+provenance. Published difficulty values through 80 characters are preserved.
+The response retains original document order, optional display label and original
+Task creation facts; it does not transition or assign any Task.
+
+After commit, same-key replay and a new key selecting the same actual project/
+SHA/byte-count recover the original batch and Task IDs after fresh batch/source
+authority, even after Tasks advance. This recovery uses immutable native
+source/verification/acknowledgement receipts and performs no provider read or
+reparsing. A different source needs its own actual verified receipt; a claimed
+SHA alone cannot recover. Reusing the original key with a changed source selector
+conflicts even if both verified sources contain identical bytes.
+
+`GET /api/v1/projects/{project_id}/task-import-batches/{batch_id}` returns original
+creation facts separately from current states selected by ordered native
+membership. Missing, foreign and revoked status access is concealed. The bounded
+implementation and required native proof are recorded in the
+[atomic-import change record](../.commitrail/changes/pilot02-atomic-json-draft-import.md).
+
+### Explicit whole-batch screening and release contract
+
+Separate `POST /api/v1/projects/{project_id}/task-import-batches/{batch_id}/screen`
+and `/release` accept a reason and exactly one UUID `Idempotency-Key`. SCREEN
+permits an omitted reason; RELEASE requires the normal nonblank decision reason.
+Both operate on the complete immutable native import membership, preserving
+original row order. Arbitrary `Task.import_batch_id` metadata cannot select
+members. Each actual Task consumes fresh covered-PM authority through the normal
+SCREEN/RELEASE owner, with all Task/assignment custody locked before authority
+and guide/policy evaluation. One caller transaction commits every member's normal
+transition, guide/policy locks, authority evidence and success receipt together;
+a late failure rolls back the complete successful effect set.
+
+The compact response identifies project, native batch, operation and row count,
+then returns every ordered Task ID, row index, poststate, locked guide version,
+locked ContributionPolicyVersion ID and locked context hash. It repeats no Task
+instructions. SCREEN returns `screening`; RELEASE returns `ready`. The server
+records a separate aggregate retry namespace and retained canonical per-Task
+keys; callers cannot choose those row keys or attach old standalone successes.
+
+Same-key replay reauthorizes every current member and recovers the exact recorded
+response only while all Tasks retain their corresponding poststate, unassigned
+custody and locked context. A partially advanced or assigned member refuses the
+whole operation, as does a changed reason, selector or member set. This differs
+from import replay, which recovers original DRAFT creation facts after Tasks
+advance. An uncertain client write requires manual replay of the unchanged
+project, batch, operation, reason and key; later authority or Task changes may
+prevent recovery. There are no automatic write retries or per-row commits.
+
+The CLI keeps local CSV conversion, source declaration/upload/status, import,
+batch status, screening and release explicit. UTF-8 quoted CSV and semicolon skill
+fields produce validated canonical JSON; its exact bytes supply the uploaded
+SHA/count. The server retains those JSON bytes, with no claim to retaining the
+original CSV. Native aggregate DDL and the public 200/500-member journey are
+implemented in the [bulk/CLI change record](../.commitrail/changes/pilot02-bulk-transitions-cli.md).
+Its historical native proofs name their exact sources; current-source verification
+and full hosted evidence are recorded separately in the PR. This contract does
+not claim deployment.
 
 ## Transitions and locked lineage
 
@@ -115,13 +192,13 @@ draft -> screening -> ready -> claimed -> in_progress
 - Existing locked context remains tied to the attempt. A later guide or
   policy publication alone is not permission to rewrite that context.
 - The guide's ContributionPolicyVersion is locked before work becomes claimable
-  and copied through assignment and hidden Submission creation by CP08.
+  and copied through assignment and admission-backed Submission creation by CP08.
   Claim does not perform a fresh CON lookup.
 
 For claim/start, the actor/action/idempotency-key receipt is reserved first;
 task and assignment are then locked, followed by canonical actor, identity
-link and applicable grant revalidation and locking. This matches hidden
-Submission creation's lock order. Authorization consumes the exact locked
+link and applicable grant revalidation and locking. This matches
+admission-backed Submission creation's lock order. Authorization consumes the exact locked
 facts before writes. Product writes and their audit evidence commit or roll
 back together.
 
@@ -164,8 +241,9 @@ tokens and not the full planned workflow:
 - Claimed with the caller's exact active assignment: `start`.
 - Otherwise: no contributor command hint.
 - Management context does not advertise contributor commands.
-- No `submit` or pre-submit execution hint is advertised by this surface while
-  the canonical public submission integration remains hidden.
+- No `submit` or pre-submit execution hint is advertised by this work-context
+  surface; the separate public preparation and Submission operations perform
+  their own fresh authorization.
 
 Pre-submission intake failures prevent Submission creation. Post-submission
 evaluation concerns the submitted work and supplies evidence for
@@ -173,10 +251,11 @@ policy-governed routing; it does not own final acceptance.
 
 ARCH-04E1A persists that successful evidence in one immutable route-neutral
 TASK source table and exposes detached source facts plus a source-neutral,
-accepted-effects Protocol. REV-04C supplies the hidden FinalAcceptance/TASK/CON
-participant and uses the bounded exact-source verifier, but no general routing
-publication writer/reader, handler, current pointer, routing authority or live
-TASK transition.
+accepted-effects Protocol. REV-04C supplies the shared FinalAcceptance/TASK/CON
+participant and bounded exact-source verifier. ARCH-04E2-B supplies exact routing
+authority and complete-effect custody; B8 supplies completion delivery, and the
+selected request/completion handlers are registered in production composition.
+No general public routing writer or reader is exposed.
 ARCH-04E1B-B1 requires the existing CHECKERS coordinator to acquire TASK-owned
 Task/Assignment/latest Submission locks before reservation or current-result
 fences. Review admission INSERTs also take the project-qualified TASK lock
@@ -184,9 +263,9 @@ before checker fences and foreign-key custody. Exact locked owner lineage is rev
 SELECT-only exact reservation replay, never a new generation or fence change.
 The adapter supplies this required guard without a reverse module dependency.
 No TASK status transition or execution authority is added.
-Before either true human admission or false automatic acceptance is published,
-the remaining ARCH-04E work must harden the same table with mandatory exact
-routing and owner-receipt custody and reject retained pre-authority rows.
+True-policy success reaches `review_pending`; eligible false-policy success uses
+the shared acceptance operation only under a live REV generation. A typed
+pre-effect non-live refusal rolls back and uses bounded retry.
 
 ## Required verification
 
@@ -305,7 +384,8 @@ Only contributor context has `lifecycle`, with `assigned_to_current_actor` and
 `next_actions`. Unassigned READY advertises `claim`; own CLAIMED advertises
 `start`; other own-active states have no action hint. Task status appears only in
 `task.status`. Hints never authorize execution. There is no `can_submit` flag or
-precheck capability; hidden submission creation is not advertised as usable.
+precheck capability; the public submission command performs its own fresh
+authority and admission checks.
 Contributor context also includes `guide_documents`: ordered document IDs,
 labels, media types, byte counts, SHA-256 and task-scoped authorized read references.
 It is empty for ready unassigned browsing and contains only exact locked originals
@@ -614,9 +694,9 @@ stamps creation time and forbids request update, deletion and truncation.
 This is preparation only: no source manifest, current routing pointer, outbox
 publication, TASK transition, Review, FinalAcceptance or ContributionRecord is
 created by that preparation alone. ARCH-04E2-B commits exact AUTH custody and
-complete governed success outcomes through the hidden operation; ARCH-04F2
+complete governed success outcomes through the canonical operation; ARCH-04F2
 extends that same operation with the exact contributor-remediation consequence.
-Production delivery remains unavailable. Atomic publication binds the
+PILOT-04 registers selected production request/completion delivery. Atomic publication binds the
 manifest to the reserved identity and verifies genuine immutable AUTH evidence.
 
 
@@ -627,16 +707,17 @@ verified completion with the existing reservation. A proposal contains semantic
 source facts only; the persisted manifest additionally requires its database
 creation time. No source INSERT or authority follows from constructing a proposal.
 B6 atomic Submission/dispatch sets `evaluation_pending` through the canonical
-operation. 04E2-B consumes that real lineage; production dispatch registration
-and public intake remain separate boundaries.
+operation. 04E2-B consumes that real lineage; selected dispatch registration
+and public intake are delivered by PILOT-04 and ARCH-02I-B respectively.
 
-### Checked packet custody at hidden creation
+### Checked packet custody at admission-backed creation
 
 ARCH-04E1B-B4 forwards the canonical summary/attestation commitment from the
 actual Submission request to ART. Consumption rejects a different packet before
 binding or consumed replay. PostgreSQL also checks the final bound Submission
 against retained pre-submit evidence at commit, permitting the existing atomic
-insert-then-bind sequence. This does not activate dispatch or expose public intake.
+insert-then-bind sequence. B4 established this owner boundary; PILOT-04 and
+ARCH-02I-B subsequently supplied selected dispatch and public intake.
 
 
 ### Submission evaluation input facts
@@ -648,15 +729,29 @@ projection to reconcile every identity/hash/generation with historical PROJECTS
 facts. Missing criteria become empty checker text; no requirement is fabricated.
 The [ART capacity check](spec_artifact_storage_service.md#evaluation-content-capacity-before-durable-admission)
 consumes these facts before durable admission. ARCH-04E1B-B6 reuses that bounded
-content with real record identities and fresh authorization in the existing hidden
+content with real record identities and fresh authorization in the canonical
 Submission command. Its caller-owned root transaction commits ART consumption,
 Submission, both exact AUTH decisions, the generation-one evaluation reservation,
 TASK evaluation_pending and one shared request event. Admission-scoped replay
 validates the original immutable owners under live authority without reserve or
 append calls; it cannot reset a later generation. Every new predecessor-linked
-Submission uses the same writer. Public intake and delivery activation remain deferred.
+Submission uses the same writer. ARCH-02I-B exposes public ZIP preparation
+and admission-backed Submission creation; PILOT-04 registers selected request
+and completion handlers. The bounded local public/worker drill starts from public guide
+inputs with recorded inference; hosted operation remains separate.
 
-### Hidden initial evaluation delivery
+ARCH-04F3 names the supported predecessor-linked creation kind
+`checker_remediation`. TASK locks its task, assignment and latest Submission,
+selects the owner-qualified 04F2 manifest, and checks its exact completed
+current CHECKERS result and AUTH-backed consequence before ART reads replacement
+bytes. The same cause is rechecked at later preparation and consumption locks.
+The existing writer consumes only a ready admission carrying that cause and
+atomically creates the successor Submission, binding, exact AUTH decisions,
+generation-one reservation and request event. A replay under fresh authority
+returns the committed identities. Human-review revision has no uncaused runtime
+or replay path; its own exact Review source remains future work.
+
+### Initial evaluation delivery
 
 ARCH-04E1B-B7 recovers the exact immutable dispatch event and CHECKERS request.
 An independent committed-invocation read precedes execution. Each phase acquires
@@ -666,13 +761,13 @@ Terminal replay validates retained execute/finalize receipts without reopening
 bytes. Uncertain execution does not renew an expired lease or request a retry;
 shared UNKNOWN handling preserves it for later authorized recovery.
 
-The handler is unregistered. Completion routing, governed outcomes and public
-intake remain separate boundaries; this adds no Review or acceptance. B8 and
-04F2 now supply the hidden success/remediation completion operation described
-below.
+PILOT-04 registers this request handler and the separate completion handler.
+B8 and 04F2 supply the governed success/remediation operation described below;
+ARCH-02I-B exposes public intake. Request delivery itself creates no Review
+or acceptance.
 
 
-### Hidden completion delivery
+### Completion delivery
 
 ARCH-04E1B-B8 connects the closed completion envelope to the existing
 `TaskPostSubmitOutcome`. The handler independently checks committed invocation,
@@ -684,21 +779,34 @@ invocations reject before owner entry; uncertain owner/commit failures remain
 shared OUTBOX UNKNOWN, never an automatic uncertain-effect retry. A still-current
 unfinalized invocation can replay the exact outcome with fresh authority.
 The true branch never observes REV generation or enters CON. Both request and
-completion handlers remain absent from production registration. Connected
-production readiness and the remaining remediation intake/recovery boundaries
-precede public intake.
+completion handlers are registered by PILOT-04. ARCH-02I-B exposes initial and
+exact-cause checker-remediation intake over the 04F3 owner. New false/pass
+effects require a live REV generation; a typed pre-effect non-live refusal
+rolls back and uses bounded OUTBOX retry. The local public API and Celery
+service drill starts from public guide inputs with recorded inference; manager-visible
+setup-fault hold is separate
+safety work. ARCH-04F4 supplies separate hidden Operator retry of a known terminal
+`infrastructure_failed` checker run through the existing request handler.
+Fresh-authorized historical replay does not require the old run to remain current.
 
 ARCH-04F2 extends this handler and the existing root outcome transaction for an
 exact current `needs_revision` checker recommendation. The manifest retains the
-recommendation and actual `task.post_submit.route` decision; the only lifecycle
-effect is `evaluation_pending -> needs_revision` with the assignment still
-active. This branch is identical for locked `human_review_required=true` and
+recommendation and actual `task.post_submit.route` decision. When another
+revision remains, the effect is `evaluation_pending -> needs_revision` with the
+assignment active. On the final permitted failed attempt, PILOT-08 instead
+records exhaustion, closes the assignment and returns the task to ready; it
+creates no next preparation or timer. This branch is identical for locked `human_review_required=true` and
 `false`: it does not observe a REV generation, enter CON, or create a Review,
 FinalAcceptance, ContributionRecord or CompensationAward. Replay revalidates the
 stored source, receipt and complete outcome and returns their identities without
 repeating effects. Existing acceptance consumers admit only `allow_review`.
 
 The operation adds no route or contributor response schema. Contributors use the
-existing bounded Submission/checker-history reads above. Exact-cause replacement
-Submission intake, setup-fault and Operator recovery, production handler
-registration, public intake and the first end-to-end drill remain separate work.
+existing bounded Submission/checker-history reads above. ARCH-04F3 supplies
+the exact-cause replacement Submission owner used by ARCH-02I-B public intake.
+PILOT-04 registers the request and completion handlers. The local public
+API/Celery drill starts from public guide inputs with recorded inference;
+manager-visible setup-fault hold remains separate work.
+The planned hold will retain the Submission and locked rules without
+contributor penalty; changing or
+re-screening submitted-task rules is deferred.

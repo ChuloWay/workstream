@@ -17,6 +17,7 @@ CONTEXT_DIGEST_RESOURCE_TYPES = (
     "submission_binding",
     "outbox_event",
     "checker_run",
+    "selected_pre_submit_run",
     "task_post_submit_routing_manifest",
     "task_authority",
     "task_submission_history",
@@ -43,6 +44,7 @@ CONTEXT_DIGEST_RESOURCE_TYPES = (
     "contribution_policy",
     "external_checker_registry_entry",
     "task_import_source",
+    "task_import_batch",
 )
 
 
@@ -50,6 +52,7 @@ AuthorizationDecisionResourceType = Literal[
     "joint_lifecycle_control",
     "outbox_event",
     "checker_run",
+    "selected_pre_submit_run",
     "task_post_submit_routing_manifest",
     "task_authority",
     "task_submission_history",
@@ -106,6 +109,7 @@ AuthorizationDecisionResourceType = Literal[
     "contribution_policy",
     "external_checker_registry_entry",
     "task_import_source",
+    "task_import_batch",
 ]
 
 

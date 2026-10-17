@@ -113,10 +113,7 @@ async def test_changed_locked_context_cannot_advance_generation(tmp_path, isolat
         for field in ("source_id", "effective_policy_id", "pre_policy_id", "review_policy_id", "revision_policy_id"):
             context = h.request.expected_context.model_copy(update={field: new_record_id()})
             changed = change_request(h.request, expected_context=context,
-                                     structural_input=h.request.structural_input.model_copy(update={
-                                         "observed_context": h.request.structural_input.observed_context.model_copy(
-                                             update={field: getattr(context, field)}),
-                                     }), evaluation_request_id=new_record_id(), evaluation_generation=2)
+                                     evaluation_request_id=new_record_id(), evaluation_generation=2)
             async with h.factory() as session, session.begin():
                 with pytest.raises(CheckerExecutionUnavailable, match="checker_reservation_scope_unavailable"):
                     await evaluation_coordinator(session).reserve_current_evaluation(changed)
@@ -125,9 +122,10 @@ async def test_changed_locked_context_cannot_advance_generation(tmp_path, isolat
 
 async def test_superseded_submission_cannot_reserve_or_replay(tmp_path, isolated_database_env):
     from tests.checkers.execution.storage_fixture import storage_request
-    from .support import completed_source, successor_submission
+    from .remediation_support import remediation_source
+    from .support import successor_submission
 
-    async with completed_source(tmp_path, isolated_database_env) as h:
+    async with remediation_source(tmp_path, isolated_database_env) as h:
         successor = await successor_submission(h)
         async with h.factory() as session, session.begin():
             before = list(await session.scalars(select(CheckerRun.id)))

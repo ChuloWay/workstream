@@ -25,7 +25,6 @@ This table is the planning source of truth for the v0.1 review and human-revisio
 | `review.queue.routing.correct` | `review.queue.override` | Operator; canonical reason required | exact invalid routing state | REV | registered planned | `WS-XINT-003-08A` |
 | `review.queue.close` | `review.queue.override` | Operator; canonical reason required | exact stale queue entry | REV | registered planned | `WS-XINT-003-08A` |
 | `review.revision_context.repair` | `project.task.manage` | Project Manager grant for exact project | invalid revision context | REV | registered planned/unavailable | `WS-XINT-003-08A` |
-| `review.revision_obligation.close` | `project.task.manage` | Project Manager grant for exact project | exact unfulfillable obligation | REV | registered planned/unavailable | `WS-XINT-003-08A` |
 | `review.revision_context.legacy_close` | `operations.reconcile.run` | Operator; canonical reason required | exact legacy revision context | REV | registered planned/unavailable | `WS-XINT-003-08A` |
 | `review.lifecycle.activation.manage` | `operations.reconcile.run` | Operator; exact phase and reason | lifecycle release controller | REV | active internally; no public route | `REV-12A4A` scoped `WS-XINT-003-08B` slice |
 | `review.reconcile.run` | `operations.reconcile.run` | one of two fixed reconciler identities | invalidation or general reconciliation batch | REV | registered planned | `WS-XINT-003-08B` |
@@ -58,8 +57,8 @@ only, and every command prepares fresh authority inside its transaction.
 |---|---|---|---|
 | `artifact.review_packet.materialize` | `artifact.review_packet.materialize` | fixed ART materializer; exact active-lease packet | runtime `WS-XINT-002-07`; activation sub-wave `07A` |
 | `artifact.review_evidence.binding.create` | `artifact.binding.create` | future fixed ART binding service only | runtime catalogue custody `WS-XINT-002-07`; no approved activation wave |
-| `artifact.submission_bundle.prepare` | `submission.create` | assigned contributor; exact human-revision preparation | base availability `WS-ARCH-001-02G`; human-revision extension requires the future exact WS-ARCH-001-05 replacement for superseded XINT-002-05D before 02I |
-| `submission.create` | `submission.create` | assigned contributor; exact prepared human revision | base hidden availability `WS-ARCH-001-02H`; human-revision extension requires the future exact WS-ARCH-001-05 replacement for superseded XINT-002-05D before 02I |
+| `artifact.submission_bundle.prepare` | `submission.create` | assigned contributor; exact preparation | public initial/checker-remediation availability delivered by ARCH-02I-B; human-review revision extension requires the future exact WS-ARCH-001-05 replacement for superseded XINT-002-05D |
+| `submission.create` | `submission.create` | assigned contributor; exact prepared admission | public initial/checker-remediation availability delivered by ARCH-02I-B; human-review revision extension requires the future exact WS-ARCH-001-05 replacement for superseded XINT-002-05D |
 
 These actions are not XINT-003 custody. Generic artifact download, adjudication, automated routing, reputation, settlement, and agent workspace authority are out of scope.
 
@@ -111,7 +110,6 @@ actions remain reference-only external handoffs.
 | `review.queue.routing.correct` | merged REV-11A correction command |
 | `review.queue.close` | merged REV-11A close command |
 | `review.revision_context.repair` | 02C unavailable registration plus merged REV-11B covered-project repair command |
-| `review.revision_obligation.close` | 02C unavailable registration plus merged REV-11B obligation-close command |
 | `review.revision_context.legacy_close` | 02C unavailable registration plus merged REV-11D legacy-close command |
 | `review.lifecycle.activation.manage` | Active internally through REV-12A4A: exact Operator transition/history custody for the bounded atomic-participant manifest; production acceptance and later human/fulfillment scopes require successor proofs |
 | `review.reconcile.run` | merged REV-11C invalidation and general reconciliation commands |
@@ -119,8 +117,8 @@ actions remain reference-only external handoffs.
 | `review.projection.rebuild` | merged REV-12P2 derived-projection command |
 | `artifact.review_packet.materialize` | XINT-002-07A after hidden ART packet behavior and REV active-lease manifest |
 | `artifact.review_evidence.binding.create` | future only; remains planned/unavailable in v0.1 |
-| `artifact.submission_bundle.prepare` | Future exact WS-ARCH-001-05 replacement after merged REV-09A1-09B human-revision preparation and replay behavior; required before 02I |
-| `submission.create` | Future exact WS-ARCH-001-05 replacement after merged REV-09A1-09B verified, consumable human-revision admission; required before 02I |
+| `artifact.submission_bundle.prepare` | Future exact WS-ARCH-001-05 human-review revision extension after REV-09A1-09B preparation and replay; public initial/checker-remediation entry is delivered by 02I-B |
+| `submission.create` | Future exact WS-ARCH-001-05 human-review revision extension after REV-09A1-09B verified admission; public initial/checker-remediation entry is delivered by 02I-B |
 
 ### Shared acceptance controller slice
 
@@ -149,8 +147,8 @@ phases without rewriting contribution or award facts.
 
 This is not acceptance authority. The initial manifest refuses retained
 pre-authority FinalAcceptance rows before entering live. ARCH-04E2-B supplies
-mandatory source receipts and complete atomic consequences in a hidden operation.
-B8 supplies hidden completion delivery. Production routing, human review and
-payment delivery remain unavailable.
+mandatory source receipts and complete atomic consequences in the canonical
+operation. B8 supplies completion delivery, and selected production routing is
+registered. Human review and payment delivery remain unavailable.
 Obligation roots, ordinals and cutoff/drain machinery are deferred until
 fulfillment activation; conditional awards remain atomic in the first path.

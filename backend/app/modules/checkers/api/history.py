@@ -6,15 +6,20 @@ from pydantic import BaseModel, ConfigDict
 
 
 CheckerStatus = Literal["queued", "running", "completed", "infrastructure_failed"]
-CheckerResultStatus = Literal["passed", "warning", "failed"]
-CheckerSeverity = Literal["info", "low", "medium", "high", "critical"]
+CheckerResultStatus = Literal["passed", "warning", "failed", "coverage_incomplete"]
+CheckerSeverity = Literal["info", "low", "medium", "high", "critical", "error"]
 CheckerRoutingRecommendation = Literal["not_evaluated", "allow_review", "needs_revision", "task_setup_blocked"]
 CheckerOutcomeSource = Literal["none", "auto_checker"]
 
 class ContributorCheckerResult(BaseModel):
+    """One stored finding, or one member that reported no findings."""
+
     model_config = ConfigDict(extra="forbid", frozen=True)
     id: UUID
     checker_name: str
+    check_id: str | None
+    path: str | None
+    line: int | None
     status: CheckerResultStatus
     severity: CheckerSeverity
     worker_message: str | None
@@ -78,3 +83,13 @@ class CheckerHistoryReadPort(Protocol):
         run_id: UUID | None = None, limit: int = 25,
         after: tuple[datetime, UUID] | None = None,
     ) -> tuple[list[ContributorCheckerHistory | ManagementCheckerHistory], bool]: ...
+
+    async def read_finding_counts(
+        self, submission_ids: tuple[UUID, ...], *, manager: bool,
+    ) -> dict[UUID, tuple[int, int, int]]:
+        """Return (blocking, warning, coverage_incomplete) per current completed run.
+
+        This satisfies TASK's ``SubmissionFindingCountsPort`` structurally, without
+        a public dependency from CHECKERS back onto TASK.
+        """
+        ...

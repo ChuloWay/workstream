@@ -15,14 +15,15 @@ from app.modules.reviews.api.lifecycle import (
 from app.modules.reviews.lifecycle.fence import PostgresJointLifecycleMutationFence
 from app.modules.reviews.lifecycle.models import JointLifecycleReleaseControl, JointLifecycleTransition
 
-# This reviewed scope is not production routing availability. Its composition
-# inventory tests must change before adding any asynchronous acceptance writer.
+# The selected production completion handler is the reviewed automatic writer.
+# New effects still require this controller's authorized live generation.
 FIRST_CONTRIBUTION_MANIFEST_DIGEST = canonical_json_hash({
     "participants": ["reviews.acceptance", "tasks.accepted_effects", "contributions.records"],
     "new_effects": "live_root_transaction",
     "replay": "current_generation_select_only",
     "live_readiness": "no_pre_authority_final_acceptances",
-    "unavailable": ["production_routing", "human_review", "fulfillment_admission", "payment_delivery"],
+    "production_routing": "selected_post_submit_completion",
+    "unavailable": ["human_review", "fulfillment_admission", "payment_delivery"],
 })
 _EDGES = frozenset({
     ("disabled", "shadow"), ("shadow", "live"), ("shadow", "disabled"),

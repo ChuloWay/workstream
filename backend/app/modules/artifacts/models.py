@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from uuid import UUID
 
 from sqlalchemy import Uuid
 from sqlalchemy import (
@@ -152,46 +153,33 @@ class PreSubmitEvidenceSet(Base):
             name="fk_pre_submit_evidence_task_project",
         ),
         ForeignKeyConstraint(
-            ["task_id", "guide_version"],
-            ["workstream_tasks.id", "workstream_tasks.locked_guide_version"],
-            name="fk_pre_submit_evidence_task_guide",
-        ),
-        ForeignKeyConstraint(
             ["guide_id", "project_id", "guide_version"],
             ["project_guides.id", "project_guides.project_id", "project_guides.version"],
             name="fk_pre_submit_evidence_guide_lineage",
         ),
         ForeignKeyConstraint(
-            ["task_id", "source_snapshot_id", "source_snapshot_sha256"],
-            [
-                "workstream_tasks.id",
-                "workstream_tasks.locked_guide_source_snapshot_id",
-                "workstream_tasks.locked_guide_source_snapshot_hash",
-            ],
-            name="fk_pre_submit_evidence_task_source_snapshot",
+            ["source_snapshot_id", "source_snapshot_sha256"],
+            ["guide_source_snapshots.id", "guide_source_snapshots.bundle_hash"],
+            name="fk_pre_submit_evidence_source_snapshot_hash",
         ),
         ForeignKeyConstraint(
             ["predecessor_submission_id", "task_id", "predecessor_submission_version"],
             ["submissions.id", "submissions.task_id", "submissions.version"],
             name="fk_pre_submit_evidence_predecessor",
         ),
-        ForeignKeyConstraint(
-            ["task_id", "effective_policy_id", "locked_artifact_policy_sha256"],
-            [
-                "workstream_tasks.id",
-                "workstream_tasks.locked_effective_project_submission_artifact_policy_id",
-                "workstream_tasks.locked_effective_project_submission_artifact_policy_hash",
-            ],
-            name="fk_pre_submit_evidence_task_artifact_policy",
+        CheckConstraint(
+            "(predecessor_submission_id is null) = (checker_remediation_manifest_id is null)",
+            name="remediation_shape",
         ),
         ForeignKeyConstraint(
-            ["task_id", "pre_submit_policy_id", "locked_checker_policy_sha256"],
-            [
-                "workstream_tasks.id",
-                "workstream_tasks.locked_pre_submit_checker_policy_id",
-                "workstream_tasks.locked_pre_submit_checker_bundle_hash",
-            ],
-            name="fk_pre_submit_evidence_task_checker_policy",
+            ["effective_policy_id", "locked_artifact_policy_sha256"],
+            ["effective_project_submission_artifact_policies.id", "effective_project_submission_artifact_policies.effective_policy_hash"],
+            name="fk_pre_submit_evidence_effective_policy_hash",
+        ),
+        ForeignKeyConstraint(
+            ["pre_submit_policy_id", "locked_checker_policy_sha256"],
+            ["pre_submit_checker_policies.id", "pre_submit_checker_policies.compiled_bundle_hash"],
+            name="fk_pre_submit_evidence_checker_policy_hash",
         ),
         CheckConstraint(
             "packet_sha256 is null or " + SHA256_CHECK.format(column="packet_sha256"),
@@ -290,6 +278,11 @@ class PreSubmitEvidenceSet(Base):
         ForeignKey("submissions.id", ondelete="RESTRICT")
     )
     predecessor_submission_version: Mapped[int | None] = mapped_column(Integer)
+    checker_remediation_manifest_id: Mapped[UUID | None] = mapped_column(
+        Uuid(),
+        ForeignKey("task_post_submit_routing_manifests.id", ondelete="RESTRICT",
+                   name="fk_pre_submit_evidence_sets_checker_remediation_manifest"),
+    )
     prepared_generation_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False)
     archive_sha256: Mapped[str] = mapped_column(String(71), nullable=False)
     archive_byte_count: Mapped[int] = mapped_column(BigInteger, nullable=False)
@@ -1213,7 +1206,7 @@ class ArtifactPutAttempt(Base):
 
 
 class SubmissionBundleDurableIntent(Base):
-    """Immutable join fencing one passing evidence set to one provider intent."""
+    """Immutable join fencing one legacy or selected PRE result to provider intent."""
 
     __tablename__ = "submission_bundle_durable_intents"
     __table_args__ = (
@@ -1223,17 +1216,46 @@ class SubmissionBundleDurableIntent(Base):
             name="uq_submission_bundle_intent_evidence",
         ),
         UniqueConstraint(
+            "selected_pre_submit_run_id",
+            name="uq_submission_bundle_intent_selected_run",
+        ),
+        UniqueConstraint(
             "put_attempt_id",
             name="uq_submission_bundle_intent_put_attempt",
+        ),
+        CheckConstraint(
+            "((pre_submit_evidence_set_id is not null)::int + "
+            "(selected_pre_submit_run_id is not null)::int) = 1",
+            name="pre_submit_lineage",
+        ),
+        CheckConstraint(
+            "(pre_submit_evidence_set_id is not null and selected_request_json is null "
+            "and selected_request_digest is null and selected_terminal_json is null "
+            "and selected_terminal_digest is null) or "
+            "(selected_pre_submit_run_id is not null "
+            "and jsonb_typeof(selected_request_json)='object' "
+            "and selected_request_digest ~ '^sha256:[0-9a-f]{64}$' "
+            "and jsonb_typeof(selected_terminal_json)='object' "
+            "and selected_terminal_digest ~ '^sha256:[0-9a-f]{64}$')",
+            name="selected_snapshot",
         ),
     )
 
     id: Mapped[str] = mapped_column(Uuid(as_uuid=False), primary_key=True)
-    pre_submit_evidence_set_id: Mapped[str] = mapped_column(
+    pre_submit_evidence_set_id: Mapped[str | None] = mapped_column(
         ForeignKey("pre_submit_evidence_sets.id", ondelete="RESTRICT"),
-        nullable=False,
+        nullable=True,
         index=True,
     )
+    selected_pre_submit_run_id: Mapped[str | None] = mapped_column(
+        ForeignKey("selected_pre_submit_runs.id", ondelete="RESTRICT"),
+        nullable=True,
+        index=True,
+    )
+    selected_request_json: Mapped[dict | None] = mapped_column(JSONB)
+    selected_request_digest: Mapped[str | None] = mapped_column(String(71))
+    selected_terminal_json: Mapped[dict | None] = mapped_column(JSONB)
+    selected_terminal_digest: Mapped[str | None] = mapped_column(String(71))
     put_attempt_id: Mapped[str] = mapped_column(
         ForeignKey("artifact_put_attempts.id", ondelete="RESTRICT"),
         nullable=False,
@@ -1255,6 +1277,9 @@ class SubmissionBundleAdmission(Base):
             "pre_submit_evidence_set_id", name="uq_submission_bundle_admission_evidence"
         ),
         UniqueConstraint(
+            "selected_pre_submit_run_id", name="uq_submission_bundle_admission_selected_run"
+        ),
+        UniqueConstraint(
             "verification_receipt_id", name="uq_submission_bundle_admission_verification"
         ),
         Index(
@@ -1265,17 +1290,95 @@ class SubmissionBundleAdmission(Base):
         ),
         CheckConstraint("status in ('ready','consumed','stale')", name="status"),
         CheckConstraint(
+            "((pre_submit_evidence_set_id is not null)::int + "
+            "(selected_pre_submit_run_id is not null)::int) = 1",
+            name="pre_submit_lineage",
+        ),
+        CheckConstraint(
             SHA256_CHECK.format(column="locked_policy_context_hash"),
             name="policy_context_hash",
         ),
         CheckConstraint(
             SHA256_CHECK.format(column="semantic_manifest_sha256"), name="manifest_sha256"
         ),
+        CheckConstraint(
+            "(selected_pre_submit_run_id is null and semantic_manifest_body is null) or "
+            "(selected_pre_submit_run_id is not null and "
+            "jsonb_typeof(semantic_manifest_body)='object')",
+            name="manifest_body",
+        ),
+        CheckConstraint(
+            "(selected_pre_submit_run_id is null and packet_sha256 is null) or "
+            "(selected_pre_submit_run_id is not null and "
+            + SHA256_CHECK.format(column="packet_sha256")
+            + ")",
+            name="packet_sha256",
+        ),
+        CheckConstraint(
+            "(selected_pre_submit_run_id is null and effective_plan_sha256 is null) or "
+            "(selected_pre_submit_run_id is not null and "
+            + SHA256_CHECK.format(column="effective_plan_sha256")
+            + ")",
+            name="effective_plan_sha256",
+        ),
+        CheckConstraint(
+            "(selected_pre_submit_run_id is null and selected_rules_sha256 is null) or "
+            "(selected_pre_submit_run_id is not null and "
+            + SHA256_CHECK.format(column="selected_rules_sha256")
+            + ")",
+            name="selected_rules_sha256",
+        ),
+        CheckConstraint(
+            "(selected_pre_submit_run_id is null and "
+            "selected_post_submit_policy_sha256 is null and "
+            "selected_post_submit_policy_body is null) or "
+            "(selected_pre_submit_run_id is not null and "
+            + SHA256_CHECK.format(column="selected_post_submit_policy_sha256")
+            + " and jsonb_typeof(selected_post_submit_policy_body)='object')",
+            name="selected_post_submit_policy",
+        ),
+        CheckConstraint(
+            "(selected_pre_submit_run_id is null and guide_id is null and "
+            "guide_version is null and source_snapshot_id is null and "
+            "source_snapshot_sha256 is null and effective_policy_id is null and "
+            "effective_policy_sha256 is null and pre_submit_policy_id is null and "
+            "pre_submit_policy_sha256 is null) or "
+            "(selected_pre_submit_run_id is not null and guide_id is not null and "
+            "octet_length(guide_version) between 1 and 50 and "
+            "source_snapshot_id is not null and effective_policy_id is not null and "
+            "pre_submit_policy_id is not null and "
+            + SHA256_CHECK.format(column="source_snapshot_sha256")
+            + " and "
+            + SHA256_CHECK.format(column="effective_policy_sha256")
+            + " and "
+            + SHA256_CHECK.format(column="pre_submit_policy_sha256")
+            + ")",
+            name="locked_policy_digests",
+        ),
         CheckConstraint(SHA256_CHECK.format(column="archive_sha256"), name="archive_sha256"),
         CheckConstraint("archive_byte_count >= 0", name="archive_size"),
         CheckConstraint(
             "(predecessor_submission_id is null) = (predecessor_submission_version is null)",
             name="predecessor_shape",
+        ),
+        CheckConstraint(
+            "(predecessor_submission_id is null) = (checker_remediation_manifest_id is null)",
+            name="remediation_shape",
+        ),
+        ForeignKeyConstraint(
+            ["revision_preparation_id", "revision_preparation_sha256"],
+            ["task_revision_preparations.id", "task_revision_preparations.preparation_sha256"],
+            name="fk_submission_bundle_admission_revision_preparation",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "(revision_preparation_id is null) = (revision_preparation_sha256 is null)",
+            name="revision_preparation_shape",
+        ),
+        CheckConstraint(
+            "revision_preparation_sha256 is null or "
+            + SHA256_CHECK.format(column="revision_preparation_sha256"),
+            name="revision_preparation_digest",
         ),
         CheckConstraint(
             "((put_operation_receipt_id is not null)::int + "
@@ -1300,8 +1403,11 @@ class SubmissionBundleAdmission(Base):
     durable_intent_id: Mapped[str] = mapped_column(
         ForeignKey("submission_bundle_durable_intents.id", ondelete="RESTRICT"), nullable=False
     )
-    pre_submit_evidence_set_id: Mapped[str] = mapped_column(
-        ForeignKey("pre_submit_evidence_sets.id", ondelete="RESTRICT"), nullable=False, index=True
+    pre_submit_evidence_set_id: Mapped[str | None] = mapped_column(
+        ForeignKey("pre_submit_evidence_sets.id", ondelete="RESTRICT"), nullable=True, index=True
+    )
+    selected_pre_submit_run_id: Mapped[str | None] = mapped_column(
+        ForeignKey("selected_pre_submit_runs.id", ondelete="RESTRICT"), nullable=True, index=True
     )
     put_attempt_id: Mapped[str] = mapped_column(
         ForeignKey("artifact_put_attempts.id", ondelete="RESTRICT"), nullable=False
@@ -1340,9 +1446,32 @@ class SubmissionBundleAdmission(Base):
         ForeignKey("submissions.id", ondelete="RESTRICT")
     )
     predecessor_submission_version: Mapped[int | None] = mapped_column(Integer)
+    checker_remediation_manifest_id: Mapped[UUID | None] = mapped_column(
+        Uuid(),
+        ForeignKey("task_post_submit_routing_manifests.id", ondelete="RESTRICT",
+                   name="fk_submission_bundle_admissions_checker_remediation_manifest"),
+    )
+    revision_preparation_id: Mapped[UUID | None] = mapped_column(Uuid())
+    revision_preparation_sha256: Mapped[str | None] = mapped_column(String(71))
     locked_policy_context_hash: Mapped[str] = mapped_column(String(71), nullable=False)
+    guide_id: Mapped[str | None] = mapped_column(Uuid(as_uuid=False))
+    guide_version: Mapped[str | None] = mapped_column(String(50))
+    source_snapshot_id: Mapped[str | None] = mapped_column(Uuid(as_uuid=False))
+    source_snapshot_sha256: Mapped[str | None] = mapped_column(String(71))
+    effective_policy_id: Mapped[str | None] = mapped_column(Uuid(as_uuid=False))
+    effective_policy_sha256: Mapped[str | None] = mapped_column(String(71))
+    pre_submit_policy_id: Mapped[str | None] = mapped_column(Uuid(as_uuid=False))
+    pre_submit_policy_sha256: Mapped[str | None] = mapped_column(String(71))
+    effective_plan_sha256: Mapped[str | None] = mapped_column(String(71))
+    selected_rules_sha256: Mapped[str | None] = mapped_column(String(71))
+    selected_post_submit_policy_sha256: Mapped[str | None] = mapped_column(
+        String(71)
+    )
+    selected_post_submit_policy_body: Mapped[dict | None] = mapped_column(JSONB)
+    packet_sha256: Mapped[str | None] = mapped_column(String(71))
     semantic_manifest_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False)
     semantic_manifest_sha256: Mapped[str] = mapped_column(String(71), nullable=False)
+    semantic_manifest_body: Mapped[dict | None] = mapped_column(JSONB)
     archive_sha256: Mapped[str] = mapped_column(String(71), nullable=False)
     archive_byte_count: Mapped[int] = mapped_column(BigInteger, nullable=False)
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="ready", index=True)

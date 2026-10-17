@@ -3,9 +3,10 @@
 import json
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.modules.tasks.submission_attempts import COVERAGE_RETURN_REASON
 from app.modules.tasks.api import (
     SubmissionCreationRequest, SubmissionCreationUnavailable, SubmissionPredecessorFacts,
     TaskLockedProjectContextReferences, TaskPolicyLineage, TaskSubmissionContextFacts,
@@ -52,21 +53,32 @@ async def read_creation_replay(
         or submission.worker_attestation != request.contributor_attestation
         or submission.artifact_binding_id != str(receipt.artifact_binding_id)
         or submission.artifact_content_id != str(receipt.artifact_content_id)
-        or submission.contribution_policy_version_id != assignment.submitter_contribution_policy_version_id
-        or receipt.creation_kind != ("revision" if predecessor_id else "initial")
+        or receipt.creation_kind != ("checker_remediation" if predecessor_id else "initial")
         or receipt.creation_status != ("needs_revision" if predecessor_id else "in_progress")
+        or (receipt.checker_remediation_manifest_id is None) != (predecessor_id is None)
     ):
         raise invalid
     predecessor = None
     if predecessor_id:
-        version = await session.scalar(select(Submission.version).where(
+        original = await session.scalar(select(Submission).where(
             Submission.id == predecessor_id, Submission.task_id == task.id,
             Submission.contributor_id == submission.contributor_id,
+            Submission.task_assignment_id == submission.task_assignment_id,
         ))
-        if version is None or version + 1 != submission.version:
+        if original is None or original.version + 1 != submission.version:
             raise invalid
-        predecessor = SubmissionPredecessorFacts(request.predecessor_submission_id, version)
-    elif submission.version != 1:
+        revision_round = await session.scalar(select(func.count(Submission.id)).where(
+            Submission.task_assignment_id == submission.task_assignment_id,
+            Submission.version <= original.version,
+            Submission.status_reason.is_distinct_from(COVERAGE_RETURN_REASON),
+        ))
+        predecessor = SubmissionPredecessorFacts(
+            request.predecessor_submission_id, original.version, revision_round
+        )
+    elif await session.scalar(select(func.count(Submission.id)).where(
+        Submission.task_assignment_id == submission.task_assignment_id,
+        Submission.version < submission.version,
+    )) != 0:
         raise invalid
     try:
         policy = TaskPolicyLineage.model_validate_json(json.dumps({
@@ -95,6 +107,7 @@ async def read_creation_replay(
             submitter_contribution_policy_version_id=submission.contribution_policy_version_id,
             locked_project_context=refs, locked_policy=policy,
             acceptance_criteria=task.acceptance_criteria,
+            checker_remediation_manifest_id=receipt.checker_remediation_manifest_id,
         )
     except (ValueError, TypeError, AttributeError) as exc:
         raise invalid from exc

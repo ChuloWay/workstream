@@ -34,11 +34,8 @@ from app.core.config import (
     get_settings,
 )
 from app.core.observability import ObservabilityMiddleware, ObservabilityRuntime
+from app.db.session import get_session_factory
 from app.interfaces.artifacts import ArtifactStoreBootstrap, ArtifactStoreNamespaceClaim
-from app.modules.checkers.catalogue import (
-    build_pre_submission_checker_catalogue,
-    parse_disabled_pre_submission_checker_ids,
-)
 
 MAX_VALIDATION_ERRORS = 20
 MAX_VALIDATION_LOCATION_PARTS = 8
@@ -93,11 +90,6 @@ async def _application_lifespan(app: FastAPI) -> AsyncIterator[None]:
     runtime: ObservabilityRuntime = app.state.observability_runtime
     runtime.start()
     try:
-        app.state.pre_submission_checker_catalogue = build_pre_submission_checker_catalogue(
-            disabled_entry_ids=parse_disabled_pre_submission_checker_ids(
-                settings.artifact_pre_submission_checker_disabled_ids
-            )
-        )
         if settings.pagination_cursor_hmac_secret is None:
             raise RuntimeError("pagination cursor HMAC secret is required")
         decode_pagination_cursor_hmac_secret(settings.pagination_cursor_hmac_secret)
@@ -137,6 +129,7 @@ async def _validate_artifact_storage_namespace_at_startup(
     return await validate_artifact_storage_namespace_at_startup(
         bootstrap,
         settings,
+        get_session_factory(),
     )
 
 
@@ -185,7 +178,9 @@ def _json_safe_validation_value(value: Any) -> Any:
 def _validation_summary(error: dict[str, Any]) -> dict[str, Any]:
     """Return bounded type/location evidence for the canonical error object."""
     raw_type = error.get("type")
-    error_type = raw_type if isinstance(raw_type, str) and raw_type.isascii() else "validation_error"
+    error_type = (
+        raw_type if isinstance(raw_type, str) and raw_type.isascii() else "validation_error"
+    )
     error_type = error_type[:MAX_VALIDATION_CODE_LENGTH]
     location: list[int | str] = []
     raw_location = error.get("loc")
@@ -249,6 +244,7 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException) 
         code=code,
         message=message,
         retryable=retryable,
+        details=exc.error_details if isinstance(exc, StructuredHTTPException) else None,
         compatibility={"detail": exc.detail},
         headers=exc.headers,
     )
@@ -298,9 +294,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         settings,
         service_name="workstream-api",
         route_templates=route_templates,
-        export_adapter=create_observability_export_adapter(
-            settings, service_name="workstream-api"
-        ),
+        export_adapter=create_observability_export_adapter(settings, service_name="workstream-api"),
     )
     app.state.observability_runtime = runtime
     app.add_middleware(RequestContextMiddleware)

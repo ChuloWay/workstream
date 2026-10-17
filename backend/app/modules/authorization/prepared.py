@@ -5,6 +5,8 @@ from app.modules.authorization.catalogue import GUIDE_PROPOSAL_ACTION_IDS, POST_
 from app.modules.authorization.domain.lifecycle import parse_lifecycle_prepare, lifecycle_matches
 from app.modules.authorization.prepared_routing_replay import validate_routing_replay
 from app.modules.authorization.prepared_lifecycle_replay import validate_lifecycle_replay
+from app.modules.authorization.fixed_service_revalidation import fixed_service_context_revalidator
+from app.modules.authorization.prepared_checker_retry_replay import validate_checker_retry_replay
 from app.modules.reviews.api.lifecycle import LifecycleTransitionCommand
 
 from copy import Error as CopyError
@@ -16,7 +18,6 @@ from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.hashing import canonical_json_hash
 from app.modules.actors.repository import ActorRepository
 from app.modules.actors.api import ServiceIdentity
 from app.modules.audit.schemas import ActorReferenceKind
@@ -40,6 +41,8 @@ from app.modules.authorization.domain.guide_compilation import (
 from app.modules.authorization.domain.guide_proposals import (
     GUIDE_PROPOSAL_RESOURCE_BY_ACTION,
 )
+from app.modules.authorization.domain.checker_retry import checker_retry_resource_matches, parse_checker_retry_prepare
+from app.modules.checkers.api.execution import CheckerRetryPreparation
 from app.modules.authorization.domain.prepared_submission_policy import parse_submission_policy_prepare
 from app.modules.authorization.domain.prepared_compilation import prepared_compilation_matches
 from app.modules.authorization.domain.contribution_policies import (
@@ -70,6 +73,8 @@ from app.modules.authorization.domain.post_policy import PostPolicyResourceConte
 from app.modules.authorization.domain.assignment_invalidation import (
     AssignmentInvalidationResourceContext,
 )
+from app.modules.authorization.domain.revision_expiry import RevisionExpiryResourceContext
+from app.modules.authorization.domain.revision_recovery import RevisionRecoveryResourceContext
 from app.modules.authorization.domain.outbox_dispatch import (
     OutboxDispatchResourceContext,
 )
@@ -120,17 +125,22 @@ from app.modules.authorization.submission_preparation import (
     SubmissionBundlePreparationResourceContext,
 )
 from app.modules.authorization.domain.task_authority import (
-    TASK_ACTIONS, TaskAuthorityResourceContext, parse_task_authority_binding,
+    TASK_ACTIONS, TASK_IMPORT_BATCH_ACTIONS, TaskAuthorityResourceContext, TaskImportBatchResourceContext, parse_task_authority_binding,
 )
 from app.modules.authorization.domain.post_submit_routing import (
     ROUTE, PostSubmitRoutingResourceContext, post_submit_routing_prepare_matches,
 )
 from app.modules.tasks.api.post_submit_routing import TaskRoutingRequestFacts
 from app.modules.authorization.domain.post_submit import POST_SUBMIT_ACTIONS, PostSubmitResourceContext, post_submit_prepare_matches
+from app.modules.authorization.domain.pre_submit import (
+    PRE_SUBMIT_ACTIONS,
+    PreSubmitResourceContext,
+    pre_submit_prepare_matches,
+)
 from app.modules.authorization.prepared_submission_replay import validate_submission_replay
 from app.modules.authorization.prepared_post_submit_replay import validate_post_submit_replay
 from app.modules.authorization.pre_submit_materialization import (
-    parse_prepared_artifact_bindings,
+    parse_prepared_artifact_bindings, exact_artifact_binding_matches,
     parse_project_create_binding,
 )
 
@@ -193,11 +203,15 @@ class _PreparedAuthorizationBinding:
     scope: PreparedAuthorityScope
     idempotency_key: UUID
     request_digest: str
+    checker_retry_preparation: CheckerRetryPreparation | None = None
     assignment_invalidation_context: AssignmentInvalidationResourceContext | None = None
+    revision_expiry_context: RevisionExpiryResourceContext | None = None
+    revision_recovery_context: RevisionRecoveryResourceContext | None = None
     outbox_dispatch_digest: str | None = None
     post_submit_prepare_context: dict | None = None
+    pre_submit_prepare_context: dict | None = None
     routing_request: TaskRoutingRequestFacts | None = None
-    task_authority_context: TaskAuthorityResourceContext | None = None
+    task_authority_context: TaskAuthorityResourceContext | TaskImportBatchResourceContext | None = None
     lifecycle_command: LifecycleTransitionCommand | None = None
     project_create_operation_id: UUID | None = None
     project_create_project_id: UUID | None = None
@@ -384,25 +398,6 @@ def _submission_policy_binding_matches(
     return binding.submission_policy_context == resource.model_dump(
         mode="json"
     ) and binding.submission_policy_resource_digest == authorization_resource_digest(resource)
-
-
-def _exact_artifact_binding_matches(
-    binding: _PreparedAuthorizationBinding,
-    resource: PreSubmitCheckerInputResourceContext
-    | SubmissionBindingResourceContext
-    | SubmissionCreationResourceContext,
-) -> bool:
-    """Require every materialization fact to equal the prepared request."""
-    if isinstance(resource, PreSubmitCheckerInputResourceContext):
-        context = resource.model_dump(mode="json", exclude={"semantic_manifest_sha256"})
-        return binding.exact_artifact_context == context and (
-            binding.exact_artifact_resource_digest
-            == canonical_json_hash({"pre_submit_checker_input_preparation": context})
-        )
-    context = resource.model_dump(mode="json")
-    return binding.exact_artifact_context == context and (
-        binding.exact_artifact_resource_digest == authorization_resource_digest(resource)
-    )
 
 
 def _submission_preparation_binding_matches(
@@ -600,7 +595,7 @@ class PreparedAuthorizationService:
         return issuance
 
     def _validate_consumption(
-        self, issuance, expected_action_id, caller_input, final_resource_context
+        self, issuance, expected_action_id, caller_input, final_resource_context, *, historical_checker_retry_link=False,
     ):
         """Bind consumption to its issued request, root transaction and exact resource."""
         if expected_action_id is not issuance.binding.action_id:
@@ -619,6 +614,16 @@ class PreparedAuthorizationService:
             or issuance.binding.assignment_invalidation_context != final_resource_context
         ):
             raise PreparedAuthorizationHandleInvalid("invalid assignment reconciliation authority")
+        if expected_action_id is ActionId.TASK_REVISION_EXPIRE and (
+            type(final_resource_context) is not RevisionExpiryResourceContext
+            or issuance.binding.revision_expiry_context != final_resource_context
+        ):
+            raise PreparedAuthorizationHandleInvalid("invalid revision expiry authority")
+        if expected_action_id is ActionId.TASK_REVISION_RECOVER and (
+            type(final_resource_context) is not RevisionRecoveryResourceContext
+            or issuance.binding.revision_recovery_context != final_resource_context
+        ):
+            raise PreparedAuthorizationHandleInvalid("invalid revision recovery authority")
         if not lifecycle_matches(issuance.binding.lifecycle_command, final_resource_context):
             raise PreparedAuthorizationHandleInvalid("invalid lifecycle authority")
         if expected_action_id is ROUTE:
@@ -636,11 +641,22 @@ class PreparedAuthorizationService:
             expected_action_id, issuance.binding.post_submit_prepare_context, final_resource_context,
         ):
             raise PreparedAuthorizationHandleInvalid("invalid prepared post-submit authority")
+        if expected_action_id in PRE_SUBMIT_ACTIONS and not pre_submit_prepare_matches(
+            expected_action_id,
+            issuance.binding.pre_submit_prepare_context,
+            final_resource_context,
+        ):
+            raise PreparedAuthorizationHandleInvalid("invalid prepared selected PRE authority")
         if expected_action_id is ActionId.OUTBOX_DISPATCH and (
             type(final_resource_context) is not OutboxDispatchResourceContext
             or issuance.binding.outbox_dispatch_digest != authorization_resource_digest(final_resource_context)
         ):
             raise PreparedAuthorizationHandleInvalid("invalid prepared outbox authority")
+        if expected_action_id is ActionId.OPERATIONS_CHECKER_RETRY and not checker_retry_resource_matches(
+            issuance.binding.checker_retry_preparation, final_resource_context,
+            issuance.authority.context.identity_link_id, historical_checker_retry_link,
+        ):
+            raise PreparedAuthorizationHandleInvalid("invalid prepared checker retry authority")
 
     async def consume(
         self,
@@ -652,8 +668,8 @@ class PreparedAuthorizationService:
         """Consume one exact capability before evaluating and evidencing final facts."""
         issuance = self._live_issuance(handle)
         self._validate_consumption(issuance, expected_action_id, caller_input, final_resource_context)
-        if expected_action_id in TASK_ACTIONS and (
-            not isinstance(final_resource_context, TaskAuthorityResourceContext)
+        if expected_action_id in TASK_ACTIONS | TASK_IMPORT_BATCH_ACTIONS and (
+            not isinstance(final_resource_context, (TaskAuthorityResourceContext, TaskImportBatchResourceContext))
             or issuance.binding.task_authority_context != final_resource_context
         ):
             raise PreparedAuthorizationHandleInvalid("invalid prepared authorization handle")
@@ -706,7 +722,10 @@ class PreparedAuthorizationService:
                 SubmissionCreationResourceContext,
                 TaskImportSourceResourceContext,
             ),
-        ) and not _exact_artifact_binding_matches(issuance.binding, final_resource_context):
+        ) and not exact_artifact_binding_matches(
+            issuance.binding.exact_artifact_context,
+            issuance.binding.exact_artifact_resource_digest, final_resource_context,
+        ):
             raise PreparedAuthorizationHandleInvalid("invalid prepared authorization handle")
         if isinstance(
             final_resource_context, SubmissionBundlePreparationResourceContext
@@ -748,6 +767,8 @@ class PreparedAuthorizationService:
             replay = (
                 validate_routing_replay
                 if expected_action_id is ActionId.TASK_POST_SUBMIT_ROUTE
+                else validate_checker_retry_replay
+                if expected_action_id is ActionId.OPERATIONS_CHECKER_RETRY
                 else validate_lifecycle_replay
                 if expected_action_id is ActionId.REVIEW_LIFECYCLE_ACTIVATION_MANAGE
                 else validate_submission_replay
@@ -892,6 +913,9 @@ class PreparedAuthorizationService:
             scope=scope,
             idempotency_key=caller_input.idempotency_key,
             request_digest=prepared_request_digest(caller_input.request_value),
+            checker_retry_preparation=parse_checker_retry_prepare(
+                action_id, caller_input, scope, self._context, PreparedAuthorizationHandleInvalid,
+            ),
             **service_bindings,
             project_create_operation_id=operation_id,
             project_create_project_id=project_id,
@@ -943,7 +967,7 @@ class PreparedAuthorizationService:
                 artifact_resource_type=artifact_resource[0],
                 artifact_resource_id=resource.resource_id,
             )
-        if isinstance(resource, (ProjectGuideProjectionResourceContext, PostPolicyResourceContext, OutboxDispatchResourceContext, AssignmentInvalidationResourceContext, PostSubmitResourceContext, PostSubmitRoutingResourceContext)):
+        if isinstance(resource, (ProjectGuideProjectionResourceContext, PostPolicyResourceContext, OutboxDispatchResourceContext, AssignmentInvalidationResourceContext, RevisionExpiryResourceContext, RevisionRecoveryResourceContext, PreSubmitResourceContext, PostSubmitResourceContext, PostSubmitRoutingResourceContext)):
             return PreparedAuthorityScope(
                 kind=PreparedAuthorityScopeKind.PROJECT,
                 project_id=resource.scope_project_id,
@@ -962,6 +986,7 @@ class PreparedAuthorizationService:
             or GUIDE_PROPOSAL_RESOURCE_BY_ACTION.get(action_id)
             or COMPILATION_RESOURCE_BY_ACTION.get(action_id)
             or (TaskAuthorityResourceContext if action_id in TASK_ACTIONS else None)
+            or (TaskImportBatchResourceContext if action_id in TASK_IMPORT_BATCH_ACTIONS else None)
             or (TaskImportSourceResourceContext if action_id in TASK_IMPORT_SOURCE_ACTIONS else None)
         )
         if action_id in CONTRIBUTION_POLICY_MUTATION_ACTIONS and isinstance(resource, ContributionPolicyMutationResourceContext):
@@ -1110,44 +1135,6 @@ async def fixed_service_action_context(
     ):
         raise PreparedAuthorizationUnsupported(AuthorizationDenialCode.PERMISSION_NOT_GRANTED)
     return context
-
-
-def fixed_service_context_revalidator(
-    repository: AdminAuthorizationRepository,
-    expected_identity: ServiceIdentity,
-):
-    """Build AUTH's canonical fixed-service lifecycle revalidator."""
-
-    async def revalidate(
-        original: ServiceAuthorizationContext,
-        _requested_action: ActionId,
-    ) -> ServiceAuthorizationContext | None:
-        locked = await repository.lock_request_actor(
-            original.identity_link_id, original.actor_profile_id
-        )
-        if locked is None:
-            return None
-        link, profile = locked
-        if (
-            profile.actor_kind != ActorKind.SERVICE.value
-            or profile.service_identity != expected_identity.value
-        ):
-            return None
-        try:
-            return ServiceAuthorizationContext(
-                actor_profile_id=UUID(profile.id),
-                actor_kind=ActorKind.SERVICE,
-                actor_status=ActorStatus(profile.status),
-                identity_link_id=UUID(link.id),
-                identity_link_status=IdentityLinkStatus(link.status),
-                service_identity=expected_identity,
-                request_id=original.request_id,
-                correlation_id=original.correlation_id,
-            )
-        except (TypeError, ValueError):
-            return None
-
-    return revalidate
 
 
 @asynccontextmanager

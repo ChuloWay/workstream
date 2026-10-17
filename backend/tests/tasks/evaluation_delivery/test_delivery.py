@@ -25,7 +25,7 @@ async def test_shared_delivery_runs_exact_request_once(tmp_path, isolated_databa
         await provision_minio_bucket.__wrapped__()
     async with material_fixture(tmp_path, isolated_database_env, provider=provider) as h:
         d = await delivery_fixture(h)
-        assert (REQUEST_EVENT, 1) not in production_outbox_delivery(h.factory)._registry.keys
+        assert (REQUEST_EVENT, 1) in production_outbox_delivery(h.factory)._registry.keys
         receipt = await d.delivery.deliver(h.created.evaluation_event_id, h.request.project_id, "worker")
         assert outcome(receipt)["delivery_state"] == "acknowledged"
         saved = await state(h)

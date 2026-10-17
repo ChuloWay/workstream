@@ -79,6 +79,7 @@ async def test_guide_replay_preserves_canonical_producer_digest(
                         "checker_run_id": None,
                         "logical_role": None,
                         "pre_submit_evidence_set_id": None,
+                        "selected_pre_submit_run_id": None,
                         "sha256": source.commitment.sha256,
                         "byte_count": source.commitment.byte_count,
                         "media_type": source.commitment.media_type,

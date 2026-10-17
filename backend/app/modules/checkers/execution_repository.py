@@ -13,12 +13,16 @@ from app.modules.checkers.api.execution import (
     EvaluationReservation,
     ExecutionLease,
 )
-from app.modules.checkers.api.post_submit import (
-    PostSubmissionEvaluationRequest,
-    PostSubmissionEvaluationResult,
+from app.modules.checkers.api.evaluation_contract import (
+    PostSubmissionExecutionRequest,
+    PostSubmissionExecutionResult,
+    validate_stored_execution_request,
+    validate_stored_execution_result,
 )
-from app.modules.checkers.api.post_submit_catalogue import canonical_post_submit_bytes
-from app.modules.checkers.models import CheckerResult, CheckerRun, CheckerSubmissionFence
+from app.modules.checkers.api.canonical_values import canonical_checker_bytes
+from app.modules.checkers.models import (
+    CheckerResult, CheckerResultFinding, CheckerRun, CheckerSubmissionFence,
+)
 
 
 def require_transaction(session: AsyncSession) -> None:
@@ -27,9 +31,9 @@ def require_transaction(session: AsyncSession) -> None:
         raise CheckerExecutionUnavailable("checker_caller_transaction_required")
 
 
-def request_text(request: PostSubmissionEvaluationRequest) -> str:
+def request_text(request: PostSubmissionExecutionRequest) -> str:
     """Serialize canonical request facts without the separately stored digest."""
-    return canonical_post_submit_bytes(request, exclude={"request_sha256"}).decode("utf-8")
+    return canonical_checker_bytes(request, exclude={"request_sha256"}).decode("utf-8")
 
 
 def reservation(run: CheckerRun) -> EvaluationReservation:
@@ -43,20 +47,24 @@ def reservation(run: CheckerRun) -> EvaluationReservation:
     )
 
 
-def stored_request(run: CheckerRun) -> PostSubmissionEvaluationRequest:
+def stored_request(run: CheckerRun) -> PostSubmissionExecutionRequest:
     """Reconstitute and validate the stored request with its digest."""
     body = json.loads(run.request_json)
     body["request_sha256"] = run.request_digest
-    return PostSubmissionEvaluationRequest.model_validate_json(json.dumps(body))
+    return validate_stored_execution_request(
+        json.dumps(body, separators=(",", ":"), sort_keys=True)
+    )
 
 
-def stored_result(run: CheckerRun) -> PostSubmissionEvaluationResult:
+def stored_result(run: CheckerRun) -> PostSubmissionExecutionResult:
     """Validate retained results against their stored request and run identities."""
     if run.result_json is None or run.result_digest is None:
         raise CheckerExecutionUnavailable("checker_result_unavailable")
     body = json.loads(run.result_json)
     body["result_digest"] = run.result_digest
-    result = PostSubmissionEvaluationResult.model_validate_json(json.dumps(body))
+    result = validate_stored_execution_result(
+        json.dumps(body, separators=(",", ":"), sort_keys=True)
+    )
     result.validate_request(stored_request(run))
     if (str(result.attempt_id), str(result.result_id)) != (run.id, run.result_id):
         raise CheckerExecutionUnavailable("checker_result_unavailable")
@@ -70,7 +78,7 @@ class ExecutionRepository:
         """Bind repository operations to the supplied transaction session."""
         self.session = session
 
-    async def lock_current(self, request: PostSubmissionEvaluationRequest) -> CheckerRun:
+    async def lock_current(self, request: PostSubmissionExecutionRequest) -> CheckerRun:
         """Qualify stored owner facts before locking the single fence, then run."""
         require_transaction(self.session)
         match = (
@@ -121,7 +129,7 @@ class ExecutionRepository:
         return await self.session.scalar(select(func.clock_timestamp()))
 
     async def require_lease(
-        self, request: PostSubmissionEvaluationRequest, lease: ExecutionLease
+        self, request: PostSubmissionExecutionRequest, lease: ExecutionLease
     ) -> CheckerRun:
         """Lock current custody and reject stale, expired or substituted leases."""
         run = await self.lock_current(request)
@@ -136,24 +144,50 @@ class ExecutionRepository:
             raise CheckerExecutionUnavailable("checker_execution_lease_unavailable")
         return run
 
-    async def write_members(self, run: CheckerRun, result: PostSubmissionEvaluationResult) -> None:
+    async def write_members(self, run: CheckerRun, result: PostSubmissionExecutionResult) -> None:
         """Flush ordered closed results under the locked running parent."""
-        for order, member in enumerate(result.member_results):
+        for member in result.execution.external_members if result.execution else ():
+            member_id = str(new_record_id())
             self.session.add(
                 CheckerResult(
-                    id=str(new_record_id()),
+                    id=member_id,
                     checker_run_id=run.id,
                     task_id=run.task_id,
                     submission_id=run.submission_id,
-                    member_order=order,
-                    checker_name=member.checker_id,
-                    definition_version=member.definition_version,
-                    implementation_version=member.implementation_version,
-                    status=member.status,
-                    code=member.code,
-                    failure_category=member.failure_category,
-                    severity=member.severity,
-                    counters=[item.model_dump(mode="json") for item in member.counters],
+                    member_order=member.order,
+                    checker_name=member.requirement_id,
+                    definition_version=member.result.schema_version,
+                    implementation_version=member.registry_entry_digest,
+                    status=member.result.verdict or "infrastructure_failed",
+                    code=(
+                        "passed"
+                        if member.result.verdict == "passed"
+                        else member.result.findings[0].code
+                        if member.result.findings
+                        else "invalid_output"
+                    ),
+                    failure_category=(
+                        "none" if member.result.verdict == "passed" else "submission_structure"
+                    ),
+                    severity=("info" if member.result.verdict == "passed" else "error"),
+                    counters=[],
                 )
             )
+            for finding_order, finding in enumerate(member.result.findings):
+                self.session.add(
+                    CheckerResultFinding(
+                        id=str(new_record_id()),
+                        checker_result_id=member_id,
+                        checker_run_id=run.id,
+                        task_id=run.task_id,
+                        submission_id=run.submission_id,
+                        member_order=member.order,
+                        finding_order=finding_order,
+                        check_id=finding.check_id,
+                        code=finding.code,
+                        level=finding.level,
+                        path=finding.path,
+                        line=finding.line,
+                    )
+                )
         await self.session.flush()

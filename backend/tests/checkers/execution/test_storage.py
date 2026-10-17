@@ -13,6 +13,38 @@ from tests.checkers.post_submit.support import change_request
 from tests.post_submit_materialization_helpers import material_fixture
 from .support import reserve, live_executor
 from .test_concurrency import final_facts
+from tests.checkers.external.support import post_registry_spec
+
+
+async def test_failed_external_image_history_uses_normalized_result_status(
+    tmp_path, isolated_database_env,
+):
+    from app.modules.checkers.history import CheckerHistoryRepository
+
+    async with material_fixture(
+        tmp_path, isolated_database_env, post_submit_registry_spec=post_registry_spec()
+    ) as h:
+        await reserve(h)
+        executor = live_executor(h)
+        lease, _ = await executor._claim(h.request)
+        facts = await final_facts(h, lease, verdict="failed")
+        await executor.finalize(facts)
+        async with h.factory() as session:
+            for manager in (False, True):
+                rows, more = await CheckerHistoryRepository(session).read(
+                    submission_id=h.request.submission_id,
+                    task_id=h.request.task_id,
+                    manager=manager,
+                )
+                assert not more and len(rows) == 1
+                member, = rows[0].results
+                assert member.checker_name == h.request.policy.entries[0].requirement_id
+                assert member.status == "failed" and member.severity == "error"
+                assert member.worker_message == "Project check failed."
+                assert member.worker_suggested_fix == "Review the project guide and check findings."
+                if manager:
+                    assert member.blocks_review is True
+                    assert member.message == member.worker_message
 
 
 @pytest.mark.parametrize("duplicate", ["request", "generation"])
@@ -55,37 +87,23 @@ async def test_duplicate_request_and_generation_rejected(
 
 
 async def test_terminal_member_and_routing_custody(tmp_path, isolated_database_env, monkeypatch):
-    from app.modules.checkers.api.post_submit import PostSubmitMemberResult
-    from app.modules.checkers.post_submit_contracts import make_post_submit_result
     import app.modules.checkers.execution as execution
 
-    async with material_fixture(tmp_path, isolated_database_env) as h:
+    async with material_fixture(tmp_path, isolated_database_env,
+                                post_submit_registry_spec=post_registry_spec()) as h:
         await reserve(h)
         executor = live_executor(h)
         lease, _ = await executor._claim(h.request)
-        facts = await final_facts(h, lease)
-        members = list(facts.result.member_results)
-        definition = h.request.catalogue.definition(
-            members[0].checker_id, members[0].definition_version
-        )
-        members[0] = PostSubmitMemberResult(
-            checker_id=definition.capability_id,
-            implementation_version=definition.implementation_version,
-            status=definition.failure_status,
-            severity=definition.failure_severity,
-            code=definition.failure_code,
-            failure_category=definition.failure_category,
-        )
-        body = facts.result.model_dump(exclude={"result_digest"})
-        body["member_results"] = tuple(members)
-        blocked = make_post_submit_result(**body)
-        facts = facts.model_copy(update={"result": blocked})
+        facts = await final_facts(h, lease, verdict="failed")
+        blocked = facts.result
         canonical = execution.classify_result
-        assert canonical(h.request, blocked).routing == "needs_revision"
+        assert canonical(h.request, blocked, human_review_required=True).routing == "needs_revision"
         monkeypatch.setattr(
             execution,
             "classify_result",
-            lambda request, result: replace(canonical(request, result), routing="allow_review"),
+            lambda request, result, **policy: replace(
+                canonical(request, result, **policy), routing="allow_review",
+            ),
         )
         with pytest.raises(IntegrityError, match="completed custody or routing invalid"):
             await executor.finalize(facts)
@@ -108,21 +126,23 @@ async def test_execution_custody_rejects_mutation(tmp_path, isolated_database_en
             original = await session.get(CheckerRun, str(receipt.attempt_id))
             before = getattr(original, field)
             replacement = (
-                "{}"
+                request_text(change_request(h.request, evaluation_request_id=new_record_id()))
                 if field == "request_json"
                 else 2
                 if field == "evaluation_generation"
                 else str(new_record_id())
             )
             setattr(original, field, replacement)
-            with pytest.raises(IntegrityError, match="checker run custody is immutable"):
+            with pytest.raises(IntegrityError, match="checker run custody is immutable") as refused:
                 await session.flush()
+            assert refused.value.orig.sqlstate == "23514"
             await session.rollback()
             assert getattr(await session.get(CheckerRun, str(receipt.attempt_id)), field) == before
 
 
 async def test_unfinished_members_cannot_commit(tmp_path, isolated_database_env):
-    async with material_fixture(tmp_path, isolated_database_env) as h:
+    async with material_fixture(tmp_path, isolated_database_env,
+                                post_submit_registry_spec=post_registry_spec()) as h:
         await reserve(h)
         lease, _ = await live_executor(h)._claim(h.request)
         async with h.factory() as session:
@@ -143,36 +163,37 @@ async def test_member_shape_and_complete_set_enforced_in_database(
     from sqlalchemy import insert
     from app.modules.checkers.execution_repository import ExecutionRepository
 
-    async with material_fixture(tmp_path, isolated_database_env) as h:
+    async with material_fixture(tmp_path, isolated_database_env,
+                                post_submit_registry_spec=post_registry_spec()) as h:
         await reserve(h)
         executor = live_executor(h)
         lease, _ = await executor._claim(h.request)
         facts = await final_facts(h, lease)
-        first = facts.result.member_results[0]
+        first = facts.result.execution.external_members[0]
         values = dict(
             id=str(new_record_id()),
             checker_run_id=str(lease.reservation.attempt_id),
             task_id=str(h.request.task_id),
             submission_id=str(h.request.submission_id),
             member_order=0,
-            checker_name=first.checker_id,
-            definition_version=first.definition_version,
-            implementation_version=first.implementation_version,
-            status=first.status,
-            code=first.code,
-            failure_category=first.failure_category,
-            severity=first.severity,
+            checker_name=first.requirement_id,
+            definition_version=first.result.schema_version,
+            implementation_version=first.registry_entry_digest,
+            status=first.result.verdict,
+            code="passed",
+            failure_category="none",
+            severity="info",
             counters=[],
         )
         invalid = [
             ({"checker_name": "unselected_checker"}, "differs from selected definition"),
             (
-                {"member_order": len(facts.result.member_results)},
+                {"member_order": len(facts.result.execution.external_members)},
                 "differs from selected definition",
             ),
-            ({"status": "passed", "code": "packet_fields_missing"}, "passing member shape invalid"),
-            ({"counters": [{"key": "invalid_count", "value": 1025}]}, "counters invalid"),
-            ({"counters": [{"key": "invalid_count"}]}, "counters invalid"),
+            ({"status": "passed", "code": "unexpected_pass_code"}, "differs from selected definition"),
+            ({"counters": [{"metric": 1}]}, "differs from selected definition"),
+            ({"counters": {"metric": 1}}, "differs from selected definition"),
             ({"task_id": str(new_record_id())}, "fk_checker_results_run_ownership"),
         ]
         async with h.factory() as session:
@@ -188,7 +209,7 @@ async def test_member_shape_and_complete_set_enforced_in_database(
 
         async def omit_last(repo, run, result):
             await original(
-                repo, run, result.model_copy(update={"member_results": result.member_results[:-1]})
+                repo, run, result.model_copy(update={"execution": replace(result.execution, required_external_count=0, external_members=())})
             )
 
         monkeypatch.setattr(ExecutionRepository, "write_members", omit_last)
@@ -207,40 +228,54 @@ async def test_consistently_short_result_cannot_omit_selected_policy_member(
     tmp_path, isolated_database_env, monkeypatch
 ):
     from app.modules.checkers.execution_results import ResultClassification
-    from app.modules.checkers.post_submit_contracts import make_post_submit_result
+    from app.modules.checkers.api.selected_post_submit import make_selected_post_submit_result
     from app.modules.outbox.models import OutboxEvent
     from app.modules.checkers.api.execution import COMPLETION_EVENT
     from sqlalchemy import func
     from sqlalchemy import text
     from . import material_storage_helpers
 
-    async with material_fixture(tmp_path, isolated_database_env) as h:
+    async with material_fixture(tmp_path, isolated_database_env,
+                                post_submit_registry_spec=post_registry_spec()) as h:
         await reserve(h)
         executor = live_executor(h)
         lease, _ = await executor._claim(h.request)
         valid = await final_facts(h, lease)
-        assert len(valid.result.member_results) > 1
-        assert all(member.status == "passed" for member in valid.result.member_results)
+        assert len(valid.result.execution.external_members) == 1
+        assert all(member.result.verdict == "passed" for member in valid.result.execution.external_members)
         body = valid.result.model_dump(exclude={"result_digest"})
-        body["member_results"] = valid.result.member_results[:-1]
-        short = make_post_submit_result(**body)
+        body["execution"] = replace(valid.result.execution, required_external_count=0, external_members=())
+        short = make_selected_post_submit_result(**body)
         facts = valid.model_copy(update={"result": short})
         # Simulate a faulty validator/compiler accepting a self-consistent short
         # result. Persisted members, counts, result digest and event all agree;
         # only comparison with the locked policy's selected set can reject it.
         canonical = material_storage_helpers.classify_result
 
-        def faulty_classifier(request, result):
+        def faulty_classifier(request, result, **policy):
             assert request == h.request and result == short
-            return ResultClassification("allow_review", len(short.member_results), 0, 0, 0)
+            return ResultClassification("allow_review", len(short.execution.external_members), 0, 0, 0)
 
         monkeypatch.setattr(material_storage_helpers, "classify_result", faulty_classifier)
+        # This SQL-owner control deliberately simulates an application accepting
+        # only this counterfeit, while its AUTH digest binds the same counterfeit
+        # facts. A mismatched valid AUTH receipt must not mask policy-set custody.
+        from app.modules.checkers.api.selected_post_submit import SelectedPostSubmissionEvaluationResult
+        validate_request = SelectedPostSubmissionEvaluationResult.validate_request
+
+        def faulty_request_validator(result, request):
+            if result == short and request == h.request:
+                return None
+            return validate_request(result, request)
+
+        monkeypatch.setattr(SelectedPostSubmissionEvaluationResult, "validate_request", faulty_request_validator)
         async with h.factory() as session:
             await material_storage_helpers.write_terminal(
-                session, facts, facts.material.model_dump(mode="json"), authorized_facts=valid,
+                session, facts, facts.material.model_dump(mode="json"),
             )
-            with pytest.raises(IntegrityError, match="checker completed custody or routing invalid"):
+            with pytest.raises(IntegrityError, match="checker terminal selected policy differs") as refused:
                 await session.execute(text("SET CONSTRAINTS public.checker_terminal_custody IMMEDIATE"))
+            assert refused.value.orig.sqlstate == "23514"
             await session.rollback()
         async with h.factory() as session:
             assert (
@@ -259,20 +294,94 @@ async def test_consistently_short_result_cannot_omit_selected_policy_member(
         assert await executor.finalize(valid) == valid.result
 
 
+@pytest.mark.parametrize("substitution", ["registry_entry_id", "image_digest"])
+async def test_same_count_result_cannot_substitute_locked_image_identity(
+    tmp_path, isolated_database_env, monkeypatch, substitution
+):
+    from app.modules.checkers.api.external import make_external_checker_execution_result
+    from app.modules.checkers.api.selected_post_submit import (
+        SelectedPostSubmissionEvaluationResult,
+        make_selected_post_submit_result,
+    )
+    from sqlalchemy import func, text
+    from . import material_storage_helpers
+
+    async with material_fixture(
+        tmp_path, isolated_database_env, post_submit_registry_spec=post_registry_spec()
+    ) as h:
+        await reserve(h)
+        executor = live_executor(h)
+        lease, _ = await executor._claim(h.request)
+        valid = await final_facts(h, lease)
+        member, = valid.result.execution.external_members
+        if substitution == "registry_entry_id":
+            foreign_id = new_record_id()
+            normalized_body = member.result.model_dump(exclude={"result_digest"})
+            normalized_body["registry_entry_id"] = foreign_id
+            changed = replace(
+                member, registry_entry_id=foreign_id,
+                result=make_external_checker_execution_result(**normalized_body),
+            )
+        else:
+            foreign_image = "sha256:" + (
+                "c" if member.isolation.platform_manifest_digest != "sha256:" + "c" * 64 else "d"
+            ) * 64
+            changed = replace(member, isolation=replace(
+                member.isolation, platform_manifest_digest=foreign_image,
+            ))
+        body = valid.result.model_dump(exclude={"result_digest"})
+        body["execution"] = replace(valid.result.execution, external_members=(changed,))
+        counterfeit = make_selected_post_submit_result(**body)
+        assert counterfeit.execution.required_external_count == 1
+        assert counterfeit.execution.policy_sha256 == h.request.policy.policy_sha256
+        with pytest.raises(ValueError, match="selected POST result request mismatch"):
+            counterfeit.validate_request(h.request)
+        facts = valid.model_copy(update={"result": counterfeit})
+        canonical = SelectedPostSubmissionEvaluationResult.validate_request
+
+        def faulty_validator(result, request):
+            if result == counterfeit and request == h.request:
+                return None
+            return canonical(result, request)
+
+        monkeypatch.setattr(SelectedPostSubmissionEvaluationResult, "validate_request", faulty_validator)
+        async with h.factory() as session:
+            before_audits = await session.scalar(text("SELECT count(*) FROM public.audit_events"))
+            await material_storage_helpers.write_terminal(
+                session, facts, facts.material.model_dump(mode="json"),
+            )
+            with pytest.raises(IntegrityError, match="checker terminal selected policy differs") as denied:
+                await session.execute(text("SET CONSTRAINTS ALL IMMEDIATE"))
+            assert denied.value.orig.sqlstate == "23514"
+            await session.rollback()
+        async with h.factory() as session:
+            run = await session.get(CheckerRun, str(lease.reservation.attempt_id))
+            assert run.status == "running" and run.result_json is None
+            assert run.finalize_evidence_id is None and run.completion_event_id is None
+            assert await session.scalar(select(func.count()).select_from(CheckerResult)) == 0
+            assert await session.scalar(text("SELECT count(*) FROM public.audit_events")) == before_audits
+            assert await session.scalar(text(
+                "SELECT count(*) FROM public.outbox_events "
+                "WHERE event_type='PostSubmissionEvaluationCompleted'"
+            )) == 0
+        monkeypatch.setattr(SelectedPostSubmissionEvaluationResult, "validate_request", canonical)
+        assert await executor.finalize(valid) == valid.result
+
+
 async def test_infrastructure_failure_code_is_closed_in_database(tmp_path, isolated_database_env):
     import json
     from sqlalchemy import update, func, text
     from app.core.hashing import canonical_json_hash
-    from app.modules.checkers.post_submit_contracts import make_post_submit_result
+    from app.modules.checkers.api.selected_post_submit import make_selected_post_submit_result
 
     async with material_fixture(tmp_path, isolated_database_env) as h:
         await reserve(h)
         lease, _ = await live_executor(h)._claim(h.request)
-        result = make_post_submit_result(
+        result = make_selected_post_submit_result(
             request_id=h.request.evaluation_request_id, request_digest=h.request.request_sha256,
             attempt_id=lease.reservation.attempt_id, result_id=lease.reservation.result_id,
             evaluation_generation=h.request.evaluation_generation, outcome="infrastructure_failed",
-            member_results=(), infrastructure_failure_code="material_unavailable",
+            execution=None, infrastructure_failure_code="material_unavailable",
         )
         body = result.model_dump(mode="json", exclude={"result_digest"})
         async with h.factory() as session:

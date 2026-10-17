@@ -56,12 +56,14 @@ class StructuredHTTPException(HTTPException):
         detail: Any,
         error_code: str,
         error_message: str,
+        error_details: dict[str, Any] | None = None,
         retryable: bool = False,
         headers: Mapping[str, str] | None = None,
     ) -> None:
         super().__init__(status_code=status_code, detail=detail, headers=headers)
         self.error_code = error_code
         self.error_message = error_message
+        self.error_details = error_details
         self.retryable = retryable
 
 

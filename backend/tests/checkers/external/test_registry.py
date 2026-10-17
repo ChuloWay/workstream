@@ -35,6 +35,13 @@ class _Session:
     def __init__(self, active: bool = True) -> None:
         self.root = SimpleNamespace(is_active=active) if active else None
         self.sync_session = self
+        self.rows = []
+
+    async def get(self, model, entry_id, *, populate_existing):
+        from app.modules.checkers.models import ExternalCheckerRegistryEntryRecord
+
+        assert model is ExternalCheckerRegistryEntryRecord and populate_existing is True
+        return next((row for row in self.rows if row.id == entry_id), None)
 
     def get_transaction(self):
         return self.root
@@ -116,8 +123,10 @@ class _Repository:
 
 def _service(active: bool = True):
     authority = _Authority()
-    service = ExternalCheckerRegistryService(_Session(active), authority)  # type: ignore[arg-type]
+    session = _Session(active)
+    service = ExternalCheckerRegistryService(session, authority)  # type: ignore[arg-type]
     repository = _Repository()
+    session.rows = repository.rows
     service._repository = repository  # type: ignore[assignment]
     return service, authority, repository
 

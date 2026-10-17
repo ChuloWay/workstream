@@ -1,33 +1,17 @@
 """0032 preserves genuine retained success outcomes and their exact evidence."""
 
 import asyncio
+import json
 
 import asyncpg
 import pytest
 from alembic import command
 
 from app.db import session as db_session
-from scripts.bootstrap_access_administrator import _run as run_bootstrap
+from tests.historical_submission_fixtures import restore_archived_snapshot
 from tests.migration_fixtures import _config
-from tests.reviews.lifecycle.transition_support import command_for, transition
-from tests.tasks.post_submit_routing.outcome_support import (
-    apply_outcome,
-    authorized_routing_source,
-)
 
 pytestmark = pytest.mark.postgres_schema_contract
-
-
-async def _activate_acceptance_lifecycle(access) -> None:
-    """Use signed human authority to activate the retained false-policy branch."""
-    administrator = await access.signed.actor("migration-administrator")
-    operator = await access.signed.actor("migration-operator")
-    code, result = await run_bootstrap(administrator.id, execute=True)
-    assert code == 0 and result["result_code"] == "bootstrapped"
-    await access.signed.grant(administrator, operator)
-    await transition(await command_for(operator.id, "shadow"))
-    live = await transition(await command_for(operator.id, "live"))
-    assert live.generation == 2
 
 
 async def _snapshot(connection) -> dict[str, list[asyncpg.Record]]:
@@ -67,7 +51,7 @@ async def _routing_validity(connection) -> list[asyncpg.Record]:
     """Return exact receipt hashes and all success-closure predicates."""
     return await connection.fetch(
         """
-        SELECT m.id, m.human_review_required,
+        SELECT m.id, m.human_review_required, m.final_acceptance_id,
           m.authority_context->'source'->>'routing_recommendation' AS source_recommendation,
           public.task_routing_resource_digest(m) AS resource_digest,
           a.after_facts->>'resource_context_digest' AS receipt_digest,
@@ -90,12 +74,10 @@ async def _routing_validity(connection) -> list[asyncpg.Record]:
 
 
 async def test_routing_upgrade_preserves_success_evidence(
-    tmp_path,
     isolated_database_env,
     migration_lock,
-    admin_access,
 ):
-    """Upgrade real 0031 true/false outcomes without rewriting their evidence."""
+    """Upgrade captured 0031 true/false outcomes without rewriting their evidence."""
     url = isolated_database_env.replace("+asyncpg", "")
     with migration_lock():
         await db_session.dispose_engine()
@@ -105,51 +87,33 @@ async def test_routing_upgrade_preserves_success_evidence(
         finally:
             await connection.close()
         await asyncio.to_thread(command.upgrade, _config(), "0031_task_import_source")
-
-        # Current application construction requires the future owner column while
-        # it writes genuine predecessor outcomes. Remove it before the real upgrade.
-        connection = await asyncpg.connect(url)
-        try:
-            await connection.execute(
-                "ALTER TABLE public.task_post_submit_routing_manifests "
-                "ADD COLUMN routing_recommendation varchar(32) NOT NULL"
-            )
-        finally:
-            await connection.close()
-
-        await _activate_acceptance_lifecycle(admin_access)
-        async with authorized_routing_source(
-            tmp_path / "human",
+        await restore_archived_snapshot(
             isolated_database_env,
-            human_review_required=True,
-        ) as human:
-            async with human.factory() as session, session.begin():
-                human_result = await apply_outcome(session, human, None)
-            async with authorized_routing_source(
-                tmp_path / "automatic",
-                isolated_database_env,
-                human_review_required=False,
-                storage_settings=human.settings,
-                provision_services=False,
-            ) as automatic:
-                async with automatic.factory() as session, session.begin():
-                    automatic_result = await apply_outcome(session, automatic, 2)
-
-        assert human_result.final_acceptance_id is None
-        assert automatic_result.final_acceptance_id is not None
+            snapshot_name="0031_routing_success_true_false",
+        )
         await db_session.dispose_engine()
         connection = await asyncpg.connect(url)
         try:
-            await connection.execute(
-                "ALTER TABLE public.task_post_submit_routing_manifests "
-                "DROP COLUMN routing_recommendation"
-            )
             assert await connection.fetchval(
                 "SELECT version_num FROM public.alembic_version"
             ) == "0031_task_import_source"
             before = await _snapshot(connection)
             before_validity = await _routing_validity(connection)
             assert len(before_validity) == 2
+            human, automatic = before_validity
+            assert [row["human_review_required"] for row in before_validity] == [True, False]
+            assert human["final_acceptance_id"] is None
+            assert automatic["final_acceptance_id"] is not None
+            assert len(before["requests"]) == 2
+            assert len(before["acceptances"]) == 1
+            assert len(before["contributions"]) == 1
+            acceptance = json.loads(before["acceptances"][0]["value"])
+            contribution = json.loads(before["contributions"][0]["value"])
+            assert acceptance["id"] == str(automatic["final_acceptance_id"])
+            assert acceptance["source_routing_manifest_id"] == str(automatic["id"])
+            assert contribution["source_final_acceptance_id"] == acceptance["id"]
+            assert contribution["submission_id"] == acceptance["submission_id"]
+            assert contribution["task_id"] == acceptance["task_id"]
             assert all(
                 row["source_recommendation"] == "allow_review"
                 and row["resource_digest"] == row["receipt_digest"]

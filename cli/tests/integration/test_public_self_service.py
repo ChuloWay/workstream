@@ -113,7 +113,12 @@ async def test_installed_cli_uses_only_public_profile_and_project_context(
     try:
         await _ready(origin + "/api/v1/health", api)
         async with httpx.AsyncClient(
-            base_url=origin, trust_env=False, timeout=10
+            base_url=origin,
+            trust_env=False,
+            timeout=10,
+            # CLI subprocesses can outlive Uvicorn's idle timeout. Comparison
+            # calls use fresh connections, not retries of a stale pooled socket.
+            limits=httpx.Limits(max_keepalive_connections=0),
         ) as direct:
             # Initial schema generation is API-fixture startup, not a CLI
             # request. Keep it bounded separately from command deadlines.

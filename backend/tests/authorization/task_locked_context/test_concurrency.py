@@ -88,7 +88,14 @@ async def test_locked_context_lock_order_and_refresh(admin_access, auth_database
         original = getattr(owner,method)
         async def trace(self,*args,_original=original,_label=label,**kwargs):
             order.append(_label)
-            return await _original(self,*args,**kwargs)
+            result = await _original(self,*args,**kwargs)
+            if (_label == "task" and result is not None
+                    and self._session.info.get("corrupt_locked_context_read")):
+                # Fault only the detached read after actual TASK custody. The
+                # writer makes an allowed display update with guards enabled.
+                self._session.expunge(result)
+                result.locked_post_submit_checker_policy_body = {**original_body, "blocking_severities": []}
+            return result
         monkeypatch.setattr(owner,method,trace)
     original_prepare = PreparedTaskAuthorization.prepare
     async def capture(self,facts):
@@ -101,12 +108,11 @@ async def test_locked_context_lock_order_and_refresh(admin_access, auth_database
         await reader.commit()
         await reader.execute(text("select set_config('application_name','task-read-refresh',false)"))
         await reader.commit()
+        reader.info["corrupt_locked_context_read"] = corrupt
         changed = await writer.get(WorkstreamTask,str(task),with_for_update=True)
         # Title is a display change; the same row lock protects the authority facts.
         changed.title = "Refreshed instructions"
         original_body = stale.locked_post_submit_checker_policy_body.copy()
-        if corrupt:
-            changed.locked_post_submit_checker_policy_body = {**original_body, "blocking_severities": []}
         await writer.flush()
         command = task_commands(reader,settings=get_settings(),authorization=PreparedTaskAuthorization(reader,actor),
             audit=task_transition_audit(reader),actor_profile_id=actor.actor_profile_id)
@@ -128,9 +134,9 @@ async def test_locked_context_lock_order_and_refresh(admin_access, auth_database
             result = await asyncio.wait_for(waiting,20)
             assert result.task_id == task
         # Reload after rollback in the invalid-custody branch.
-        await reader.refresh(stale)
-        assert stale.title == "Refreshed instructions"
-        assert stale.locked_post_submit_checker_policy_body == ({**original_body, "blocking_severities": []} if corrupt else original_body)
+        refreshed = await reader.get(WorkstreamTask, str(task), populate_existing=True)
+        assert refreshed.title == "Refreshed instructions"
+        assert refreshed.locked_post_submit_checker_policy_body == original_body
     assert order[:4] == ["task","assignment","actor","grant"], order
     assert len(facts_seen) == 1 and ActionId(facts_seen[0].operation.value).value.endswith("read")
 

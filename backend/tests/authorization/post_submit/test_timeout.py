@@ -12,6 +12,22 @@ from tests.post_submit_materialization_helpers import material_fixture
 from .test_receipt_custody import snapshot
 
 
+async def wait_for_boundary(task, entered):
+    """Surface an early executor failure instead of hiding it behind the waiter."""
+    waiter = asyncio.create_task(entered.wait())
+    try:
+        done, _ = await asyncio.wait(
+            (task, waiter), timeout=10, return_when=asyncio.FIRST_COMPLETED,
+        )
+        if task in done:
+            await task
+            raise AssertionError("executor completed before the controlled boundary")
+        assert waiter in done, "executor did not reach the controlled boundary"
+    finally:
+        waiter.cancel()
+        await asyncio.gather(waiter, return_exceptions=True)
+
+
 @pytest.mark.parametrize("consumer_failure", ["cancel", "runtime_error", "timeout_error"])
 @pytest.mark.parametrize("change", ["revoked", "replica_unavailable", "unchanged"])
 async def test_outer_deadline_revalidates_material_after_cleanup(tmp_path, isolated_database_env, monkeypatch, change, consumer_failure):
@@ -29,13 +45,13 @@ async def test_outer_deadline_revalidates_material_after_cleanup(tmp_path, isola
                     error = RuntimeError if consumer_failure == "runtime_error" else TimeoutError
                     raise error("consumer failed after abort") from None
                 raise
-        monkeypatch.setattr(execution._StructuralConsumer, "evaluate", paused)
+        monkeypatch.setattr(execution._SelectedExternalConsumer, "evaluate", paused)
         # Arm the actual asyncio deadline after the consumer enters, avoiding a
         # machine-speed race between setup queries and the short test deadline.
         deadlines = controlled_deadline(monkeypatch, execution)
         task = asyncio.create_task(live_executor(h).evaluate_post_submission(h.request))
         try:
-            await asyncio.wait_for(entered.wait(), 10)
+            await wait_for_boundary(task, entered)
             before = await snapshot(h)
             if change == "revoked":
                 await service_link_state(h.factory, ServiceIdentity.ARTIFACT_MATERIALIZER, active=False)
@@ -68,13 +84,16 @@ async def test_outer_deadline_revalidates_material_after_cleanup(tmp_path, isola
 
 def controlled_deadline(monkeypatch, execution):
     """Use the real timeout, armed only after the boundary under test is reached."""
+    # This budget also determines the durable lease. Keep its finalization margin
+    # inside the installed one-hour lease guard while disarming only this timer.
+    controlled_seconds = 300
     original_timeout, deadlines = asyncio.timeout, []
     def timeout(seconds):
-        timer = original_timeout(None if seconds == 12345 else seconds)
-        if seconds == 12345:
+        timer = original_timeout(None if seconds == controlled_seconds else seconds)
+        if seconds == controlled_seconds:
             deadlines.append(timer)
         return timer
-    monkeypatch.setattr(execution, "EXECUTION_TIMEOUT_SECONDS", 12345)
+    monkeypatch.setattr(execution.PostSubmissionExecutor, "_execution_budget_seconds", staticmethod(lambda request: controlled_seconds))
     monkeypatch.setattr(asyncio, "timeout", timeout)
     return deadlines
 
@@ -110,7 +129,7 @@ async def test_outer_deadline_cannot_hide_failed_scratch_cleanup(tmp_path, isola
         if failure == "release":
             monkeypatch.setattr(h.manager, "release", failed_release)
         else:
-            monkeypatch.setattr(execution._StructuralConsumer, "evaluate", paused_consumer)
+            monkeypatch.setattr(execution._SelectedExternalConsumer, "evaluate", paused_consumer)
             if failure == "workspace":
                 monkeypatch.setattr(h.manager, "_cleanup_workspace_sync", failed_workspace)
             else:
@@ -118,7 +137,7 @@ async def test_outer_deadline_cannot_hide_failed_scratch_cleanup(tmp_path, isola
         deadlines = controlled_deadline(monkeypatch, execution)
         task = asyncio.create_task(live_executor(h).evaluate_post_submission(h.request))
         try:
-            await asyncio.wait_for(entered.wait(), 10)
+            await wait_for_boundary(task, entered)
             before = await snapshot(h)
             deadlines[0].reschedule(asyncio.get_running_loop().time())
             for _ in range(10):

@@ -98,12 +98,14 @@ def test_lane_command_uses_exact_nodes_and_isolation_contract(tmp_path: Path) ->
     assert command[-1] == nodes[0]
     assert "--cov=app" in command
     assert "--cov-report=" in command
-    assert command.count("--durations=25") == 1
-    assert "--durations=0" not in command
+    assert command.count("--durations=0") == 1
+    assert command.count("--durations-min=0") == 1
+    assert "--durations=25" not in command
 
     admin = runner.admin_runner_command([f"{runner.ADMIN_RUNNER_MODULE}::test_one"])
-    assert admin.count("--durations=25") == 1
-    assert "--durations=0" not in admin
+    assert admin.count("--durations=0") == 1
+    assert admin.count("--durations-min=0") == 1
+    assert "--durations=25" not in admin
 
 
 def test_lane_environment_uses_private_evidence_and_coverage(tmp_path: Path) -> None:
@@ -311,15 +313,34 @@ def test_collection_accepts_a_minimal_base_environment(
 
 
 def test_timing_summary_is_derived_from_exact_declared_lanes() -> None:
-    elapsed = (1.125, 2.25, 0.5, 3.75, 1.0, 0.75, 0.625, 0.5, 0.25, 0.375)
+    elapsed = (
+        1.125,
+        2.25,
+        0.5,
+        3.75,
+        1.0,
+        0.75,
+        0.625,
+        0.5,
+        0.25,
+        0.375,
+        0.875,
+        1.5,
+        0.25,
+        0.5,
+        0.125,
+        0.375,
+    )
     lanes = [{"elapsed_seconds": value} for value in elapsed]
 
     assert runner._timing_summary(lanes) == {
-        "aggregate_runner_seconds": 11.125,
+        "aggregate_runner_seconds": 14.75,
         "slowest_lane_seconds": 3.75,
     }
     with pytest.raises(LaneError, match="invalid_lane_timing_inventory"):
         runner._timing_summary(lanes[:-1])
+    with pytest.raises(LaneError, match="invalid_lane_timing_inventory"):
+        runner._timing_summary([*lanes, {"elapsed_seconds": 0.0}])
     with pytest.raises(LaneError, match="invalid_lane_timing"):
         runner._timing_summary([*lanes[:-1], {"elapsed_seconds": -1.0}])
 

@@ -9,8 +9,8 @@ from sqlalchemy.exc import IntegrityError
 
 from app.db import session as db_session
 from tests.checkers.execution.historical_execution import (
-    historical_completed_source,
-    historical_reserve,
+    archived_completed_checker_source,
+    seed_archived_checker_request,
 )
 from tests.historical_submission_fixtures import historical_material_fixture
 from tests.migration_fixtures import (
@@ -55,10 +55,10 @@ async def test_pre_authority_rows_refuse_upgrade_without_rewriting(
         finally:
             await connection.close()
         await asyncio.to_thread(command.upgrade, _config(), "0024_require_second_review_false")
-        factory = historical_completed_source if terminal else historical_material_fixture
+        factory = archived_completed_checker_source if terminal else historical_material_fixture
         async with factory(tmp_path, isolated_database_env) as h:
             if not terminal:
-                await historical_reserve(h)
+                await seed_archived_checker_request(h)
             await asyncio.to_thread(command.upgrade, _config(), "0029_external_checker_registry")
             connection = await asyncpg.connect(url)
             try:

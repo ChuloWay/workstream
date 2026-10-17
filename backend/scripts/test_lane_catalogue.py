@@ -4,15 +4,36 @@ from dataclasses import dataclass
 
 ADMIN_RUNNER_MODULE = "tests/test_isolated_database_runner.py"
 SCHEMA_MODULE = "tests/test_alembic.py"
-PARTITIONED_SHARED_LANES = ("shared_foundations_a", "shared_foundations_b")
+PARTITIONED_SHARED_LANES = (
+    "shared_foundations_a",
+    "shared_foundations_b",
+    "shared_foundations_c",
+)
 PARTITIONED_PROJECT_LANES = (
     "project_lifecycle_a",
     "project_lifecycle_b",
     "project_lifecycle_c",
     "project_lifecycle_d",
+    "project_lifecycle_e",
+    "project_lifecycle_f",
+    "project_lifecycle_g",
 )
-PARTITIONED_PROJECT_AC_LANES = ("project_lifecycle_a", "project_lifecycle_c")
-PARTITIONED_TASK_LANES = ("task_lifecycle_a", "task_lifecycle_b", "task_lifecycle_c")
+PARTITIONED_TASK_LANES = (
+    "task_lifecycle_a",
+    "task_lifecycle_b",
+    "task_lifecycle_c",
+    "task_lifecycle_d",
+    "task_lifecycle_e",
+)
+
+STATIC_FOUNDATION_MODULES = (
+    "tests/test_artifact_architecture.py",
+    "tests/architecture/test_module_boundaries.py",
+    "tests/architecture/test_authorization_boundary.py",
+    "tests/architecture/test_test_structure_boundary.py",
+    "tests/test_identifier_inventory.py",
+    "tests/test_record_id_collection.py",
+)
 
 
 @dataclass(frozen=True)
@@ -28,6 +49,7 @@ SHARED_FOUNDATION_MODULES = (
     "tests/reviews/lifecycle/test_transitions.py",
     "tests/reviews/lifecycle/test_authority_binding.py",
     "tests/artifacts/test_review_packet_contract.py",
+    "tests/artifacts/test_selected_predecessor_rules.py",
     "tests/authorization/post_submit/test_atomicity.py",
     "tests/authorization/post_submit/test_concurrency.py",
     "tests/authorization/post_submit/test_live_authority.py",
@@ -41,6 +63,7 @@ SHARED_FOUNDATION_MODULES = (
     "tests/authorization/guide_activation/test_postgresql.py",
     "tests/authorization/guide_activation/test_concurrency.py",
     "tests/authorization/test_pre_submit_attempt_authority.py",
+    "tests/authorization/pre_submit/test_contracts.py",
     "tests/authorization/test_guide_metadata_contracts.py",
     "tests/authorization/post_policy/test_concurrency.py",
     "tests/authorization/post_policy/test_context.py",
@@ -77,7 +100,6 @@ SHARED_FOUNDATION_MODULES = (
     "tests/test_artifact_preparation.py",
     "tests/test_artifact_store_conformance.py",
     "tests/test_artifact_verification.py",
-    "tests/test_task_import_sources.py",
     "tests/test_artifacts.py",
     "tests/test_assertion_helpers.py",
     "tests/test_aws_credential_isolation.py",
@@ -166,6 +188,7 @@ SHARED_FOUNDATION_MODULES = (
     "tests/authorization/task_authority/test_lifecycle_races.py",
     "tests/authorization/task_authority/test_task_commands.py",
     "tests/authorization/task_authority/test_management_commands.py",
+    "tests/authorization/task_authority/test_management_participants.py",
     "tests/authorization/task_authority/test_management_concurrency.py",
     "tests/authorization/task_authority/test_management_authority.py",
     "tests/authorization/task_authority/test_management_contracts.py",
@@ -189,6 +212,7 @@ SHARED_FOUNDATION_MODULES = (
     "tests/test_auth_concurrency_observer.py",
     "tests/test_authorization.py",
     "tests/authorization/test_catalogue.py",
+    "tests/authorization/test_authorization_custody_documentation.py",
     "tests/authorization/test_acceptance_source_contracts.py",
     "tests/authorization/test_outbox_dispatch_contract.py",
     "tests/authorization/test_assignment_invalidation_contract.py",
@@ -224,9 +248,7 @@ SHARED_FOUNDATION_MODULES = (
     "tests/test_artifact_admission_digest.py",
     "tests/test_submission_bundle_admission.py",
     "tests/test_submission_bundle_preparation_recovery.py",
-    "tests/checkers/test_phase_service.py",
     "tests/test_submission_preparation_adapter.py",
-    "tests/test_submission_predecessor_custody.py",
     "tests/test_submission_preparation_authorization.py",
     "tests/test_submission_composition.py",
     "tests/test_artifact_bindings.py",
@@ -250,15 +272,20 @@ SHARED_FOUNDATION_MODULES = (
     "tests/test_project_policy_mutations.py",
     "tests/projects/review_policy/test_semantics.py",
     "tests/projects/review_policy/test_mutation.py",
-    "tests/projects/review_policy/test_activation.py",
     "tests/projects/review_policy/test_postgresql.py",
     "tests/projects/review_policy/test_schema.py",
     "tests/projects/review_policy/test_migration.py",
     "tests/projects/test_compensation_binding_eligibility.py",
     "tests/test_review_authorization_contracts.py",
-)
+) + STATIC_FOUNDATION_MODULES
 
 PROJECT_MODULES = (
+    # Project-bound batch custody stays in the project semantic family.
+    "tests/tasks/test_task_import_batch_contract.py",
+    "tests/tasks/test_task_import_batch_bindings.py",
+    "tests/tasks/test_task_import_batches.py",
+    "tests/tasks/test_task_batch_transition_contract.py",
+    "tests/tasks/test_task_batch_transitions.py",
     "tests/contributions/test_export_csv.py",
     "tests/contributions/test_export_projection.py",
     "tests/authorization/test_contribution_read_scope.py",
@@ -267,14 +294,26 @@ PROJECT_MODULES = (
     "tests/contributions/exports/test_public_reads.py",
     "tests/contributions/exports/test_failures.py",
     "tests/contributions/exports/test_concurrency.py",
-    # Atomic submission composition shares the existing multi-owner project lanes;
-    # task C and schema are close to their cap on the merged baseline.
+    # Atomic submission composition stays with its multi-owner project family.
     "tests/tasks/evaluation_delivery/test_custody.py",
     "tests/tasks/evaluation_delivery/test_delivery.py",
     "tests/tasks/evaluation_delivery/test_isolation.py",
     "tests/tasks/submission_dispatch/test_composition.py",
     "tests/tasks/submission_dispatch/test_concurrency.py",
     "tests/tasks/submission_dispatch/test_migration.py",
+    "tests/tasks/submission_dispatch/test_replacement_migration.py",
+    "tests/tasks/submission_dispatch/test_replacement_creation.py",
+    "tests/tasks/submission_dispatch/test_revision_capacity.py",
+    "tests/tasks/submission_dispatch/test_revision_exhaustion.py",
+    "tests/tasks/submission_dispatch/test_revision_exhaustion_races.py",
+    "tests/tasks/submission_dispatch/test_revision_pause.py",
+    "tests/tasks/submission_dispatch/test_revision_pause_races.py",
+    "tests/tasks/submission_dispatch/test_revision_clock_sql.py",
+    "tests/tasks/submission_dispatch/test_revision_exhaustion_recovery.py",
+    "tests/tasks/submission_dispatch/test_revision_retained_pause.py",
+    "tests/tasks/submission_dispatch/test_revision_expiry.py",
+    "tests/tasks/submission_dispatch/test_revision_expiry_security.py",
+    "tests/tasks/submission_dispatch/test_revision_recovery_postgresql.py",
     "tests/tasks/submission_dispatch/test_replay.py",
     "tests/tasks/submission_dispatch/test_rollback.py",
     "tests/tasks/submission_dispatch/test_storage.py",
@@ -325,7 +364,6 @@ PROJECT_MODULES = (
     "tests/projects/guide_compilation/finalization/test_replay.py",
     "tests/projects/guide_compilation/finalization/test_service.py",
     "tests/projects/guide_compilation/finalization/test_structure.py",
-    "tests/projects/post_policy/test_compiler.py",
     "tests/projects/post_policy/test_public_api.py",
     "tests/projects/post_policy/test_public_recovery.py",
     "tests/projects/post_policy/test_delivery_worker.py",
@@ -334,7 +372,6 @@ PROJECT_MODULES = (
     "tests/projects/public_activation/test_failures.py",
     "tests/projects/public_activation/test_workflow.py",
     "tests/projects/post_policy/test_authority.py",
-    "tests/projects/post_policy/test_direct_sql.py",
     "tests/projects/post_policy/test_concurrency.py",
     "tests/projects/post_policy/test_replacement.py",
     "tests/projects/post_policy/test_inventory.py",
@@ -344,7 +381,6 @@ PROJECT_MODULES = (
     "tests/projects/post_policy/test_postgresql.py",
     "tests/projects/guide_compilation/proposals/test_approved_tip.py",
     "tests/projects/guide_compilation/proposals/test_artifact_paths.py",
-    "tests/projects/guide_compilation/proposals/test_selected_checks.py",
     "tests/projects/guide_compilation/proposals/test_authority_contract.py",
     "tests/projects/guide_compilation/proposals/test_contracts.py",
     "tests/projects/guide_compilation/proposals/test_audit_schema.py",
@@ -397,7 +433,6 @@ PROJECT_MODULES = (
     "tests/projects/test_locked_policy_contract.py",
     "tests/projects/test_locked_policy_custody.py",
     "tests/projects/test_locked_policy_concurrency.py",
-    "tests/projects/test_activation_readiness.py",
     "tests/projects/test_policy_read_composition.py",
     "tests/projects/test_active_guide_read_composition.py",
     "tests/projects/test_diagnostic_read_composition.py",
@@ -413,48 +448,62 @@ PROJECT_MODULES = (
     "tests/projects/test_retired_submission_derivation_route.py",
 )
 
-# These broad PROJECT owners exhausted project B's execution budget. Retained
-# hosted timings keep their deterministic node partition on project A and C,
-# excluding B while preserving headroom across both measured current trees.
-PROJECT_AC_PARTITION_MODULES = (
+# Broad project intake uses the same deterministic project-family partition.
+PROJECT_INTAKE_MODULES = (
     "tests/test_guide_document_intake.py",
     "tests/test_projects.py",
 )
 
-# Checker delivery shares project dispatch ownership and the existing
-# three-way partition; exclusive placement exceeded the hosted execution cap.
+# Checker delivery shares project dispatch ownership across the project family.
 CHECKER_DELIVERY_MODULES = (
+    "tests/checkers/default/test_contract.py",
+    "tests/checkers/default/test_execution.py",
     "tests/checkers/external/test_contracts.py",
     "tests/checkers/external/test_runtime.py",
     "tests/checkers/external/test_migration.py",
     "tests/checkers/external/test_postgresql.py",
     "tests/checkers/external/test_registry.py",
-    "tests/checkers/execution/test_results.py",
+    "tests/checkers/external/test_policy.py",
+    "tests/checkers/external/test_selected_post_submit.py",
+    "tests/checkers/external/test_selected_pre_submit.py",
+    "tests/checkers/external/test_selected_pre_submit_coordination.py",
+    "tests/checkers/external/test_selected_pre_submit_service.py",
+    "tests/checkers/external/test_selected_preparation_command.py",
     "tests/checkers/execution/test_execution.py",
+    "tests/checkers/execution/test_completion_evidence.py",
     "tests/checkers/execution/test_coordination.py",
     "tests/checkers/execution/test_concurrency.py",
     "tests/checkers/execution/test_storage.py",
     "tests/checkers/execution/test_migration.py",
     "tests/checkers/execution/test_material_lineage.py",
     "tests/checkers/execution/test_material_migration.py",
+    "tests/checkers/execution/test_checker_retry.py",
+    "tests/checkers/execution/test_checker_retry_authority.py",
+    "tests/checkers/execution/test_checker_retry_history_replay.py",
+    "tests/checkers/execution/test_checker_retry_migration.py",
     "tests/test_post_submit_materialization.py",
     "tests/test_post_submit_selection.py",
-    "tests/test_submission_evaluation_capacity.py",
     "tests/test_checker_output_custody.py",
     "tests/test_checker_output_storage.py",
 )
 
 
 TASK_MODULES = (
+    "tests/tasks/submission_dispatch/test_revision_recovery_contracts.py",
+    "tests/tasks/submission_dispatch/test_predecessor_receipt.py",
+    "tests/tasks/test_revision_error_mapping.py",
     "tests/tasks/test_task_import_contract.py",
-    "tests/checkers/execution/test_completion_evidence.py",
+    "tests/test_task_import_sources.py",
+    "tests/test_submission_predecessor_custody.py",
     "tests/checkers/execution/test_completion_contract.py",
-    "tests/tasks/post_submit_routing/test_failure_completion.py",
     "tests/tasks/post_submit_routing/test_remediation.py",
     "tests/tasks/post_submit_routing/test_remediation_storage.py",
     "tests/tasks/post_submit_routing/test_remediation_currentness.py",
     "tests/tasks/post_submit_routing/test_remediation_migration.py",
-
+    # Stored attempt-outcome proofs use TASK custody; every project lane runs
+    # within measured variance of the hosted execution deadline.
+    "tests/tasks/post_submit_routing/test_attempt_outcome_custody.py",
+    "tests/checkers/execution/test_findings_and_coverage.py",
     # New completion proofs use TASK custody and its measured lane headroom.
     "tests/tasks/evaluation_delivery/test_completion.py",
     "tests/tasks/evaluation_delivery/test_completion_contracts.py",
@@ -507,29 +556,9 @@ TASK_MODULES = (
     "tests/tasks/test_assignment_invalidation_races.py",
     "tests/tasks/test_contribution_claim_races.py",
     "tests/tasks/test_submission_lineage.py",
-    "tests/checkers/post_submit/test_catalogue.py",
-    "tests/checkers/post_submit/test_compiled_policy.py",
-    "tests/checkers/post_submit/test_configuration.py",
-    "tests/checkers/post_submit/test_conformance.py",
-    "tests/checkers/post_submit/test_input_bounds.py",
+    "tests/tasks/test_public_submission_intake.py",
     "tests/checkers/post_submit/test_public_boundary.py",
-    "tests/checkers/post_submit/test_request.py",
     "tests/checkers/post_submit/test_requirement_dispositions.py",
-    "tests/checkers/post_submit/test_result_contract.py",
-    "tests/test_checker_catalogue.py",
-    "tests/test_checkers.py",
-    "tests/checkers/test_effective_intake_rules.py",
-    "tests/test_blocked_pre_submit_feedback_postgresql.py",
-    "tests/test_default_pre_submit_execution.py",
-    "tests/test_approved_guide_intake.py",
-    "tests/test_pre_submit_attempt_recovery.py",
-    "tests/test_pre_submit_attempt_contracts.py",
-    "tests/test_pre_submit_attempt_authority_integration.py",
-    "tests/test_pre_submit_attempt_lock_order.py",
-    "tests/test_pre_submit_role_issue_lock_order.py",
-    "tests/test_pre_submit_related_lock_order.py",
-    "tests/test_pre_submit_attempt_schema.py",
-    "tests/test_effective_pre_submit_execution.py",
     "tests/test_project_guide_compilation_contracts.py",
     "tests/test_review_queue_persistence.py",
     "tests/test_review_lease_persistence.py",
@@ -559,23 +588,72 @@ OBSERVABILITY_MODULES = (
     "tests/test_celery_observability.py",
 )
 
-# Routing PREP proofs share the three-way project-policy partition.
+# Routing PREP proofs share the project-policy family partition.
 ROUTING_AUTH_PREPARATION_MODULES = (
     "tests/authorization/post_submit_routing/test_contracts.py",
     "tests/authorization/post_submit_routing/test_prepared.py",
 )
 
+PROJECT_PARTITIONED_MODULES = (
+    PROJECT_MODULES
+    + CHECKER_DELIVERY_MODULES
+    + ROUTING_AUTH_PREPARATION_MODULES
+    + PROJECT_INTAKE_MODULES
+)
+
+# Measured long-running proofs stay in their project semantic family but need
+# exact lane ownership so their waits and large fixtures do not collide.
+PROJECT_MODULE_LANE_OVERRIDES = {
+    "tests/test_projects.py": (
+        # Seven-lane placement from hosted main durations (34501cd64): every
+        # project lane lands between 621 and 737 seconds of measured test time.
+        "project_lifecycle_c",
+        "project_lifecycle_b",
+        "project_lifecycle_g",
+        "project_lifecycle_f",
+    ),
+    "tests/tasks/test_task_batch_transitions.py": (
+        # Tuple order spreads the measured 500/200-row cases away from E.
+        "project_lifecycle_e",
+        "project_lifecycle_d",
+        "project_lifecycle_a",
+        "project_lifecycle_b",
+        "project_lifecycle_c",
+    ),
+    "tests/tasks/submission_dispatch/test_revision_clock_sql.py": ("project_lifecycle_f",),
+    "tests/tasks/submission_dispatch/test_revision_retained_pause.py": (
+        # The measured historical cases move from D to the new G lane.
+        "project_lifecycle_a",
+        "project_lifecycle_c",
+        "project_lifecycle_g",
+    ),
+    "tests/tasks/submission_dispatch/test_revision_pause_races.py": (
+        # The waits move from D to the new F lane, leaving busy B clear.
+        "project_lifecycle_a",
+        "project_lifecycle_c",
+        "project_lifecycle_e",
+        "project_lifecycle_f",
+    ),
+    "tests/tasks/submission_dispatch/test_revision_exhaustion.py": ("project_lifecycle_g",),
+    "tests/tasks/submission_dispatch/test_revision_expiry.py": (
+        # Five residues split the prior B collision while preserving project custody.
+        "project_lifecycle_a",
+        "project_lifecycle_e",
+        "project_lifecycle_c",
+        "project_lifecycle_b",
+        "project_lifecycle_d",
+    ),
+}
+
 PARTITION_GROUPS = (
     (PARTITIONED_SHARED_LANES, SHARED_FOUNDATION_MODULES),
-    (
-        PARTITIONED_PROJECT_LANES,
-        PROJECT_MODULES + CHECKER_DELIVERY_MODULES + ROUTING_AUTH_PREPARATION_MODULES,
-    ),
-    (PARTITIONED_PROJECT_AC_LANES, PROJECT_AC_PARTITION_MODULES),
+    (PARTITIONED_PROJECT_LANES, PROJECT_PARTITIONED_MODULES),
     (PARTITIONED_TASK_LANES, TASK_MODULES),
 )
 PARTITION_LANES_BY_MODULE = {
-    module: names for names, modules in PARTITION_GROUPS for module in modules
+    module: PROJECT_MODULE_LANE_OVERRIDES.get(module, names)
+    for names, modules in PARTITION_GROUPS
+    for module in modules
 }
 
 LANES = (
@@ -585,6 +663,7 @@ LANES = (
         (
             SCHEMA_MODULE,
             "tests/migrations/test_contribution_read_audit.py",
+            "tests/migrations/test_contribution_export_snapshots.py",
             "tests/authorization/post_submit/test_receipt_custody.py",
             "tests/authorization/post_submit/test_migration.py",
             "tests/reviews/packet/test_storage.py",
@@ -597,13 +676,8 @@ LANES = (
             "tests/reviews/acceptance/test_storage.py",
             "tests/reviews/acceptance/test_migration.py",
             "tests/test_database_reset.py",
-            "tests/test_artifact_architecture.py",
-            "tests/architecture/test_module_boundaries.py",
-            "tests/architecture/test_authorization_boundary.py",
-            "tests/architecture/test_test_structure_boundary.py",
-            "tests/test_identifier_inventory.py",
-            "tests/test_record_id_collection.py",
             "tests/test_ci_lane_catalogue.py",
+            "tests/test_ci_scope_selection.py",
             "tests/test_ci_test_lanes.py",
             "tests/test_test_lane_evidence.py",
             "tests/test_merge_test_lane_evidence.py",
@@ -615,10 +689,11 @@ LANES = (
     *(
         TestLane(
             name,
-            PROJECT_MODULES
-            + CHECKER_DELIVERY_MODULES
-            + ROUTING_AUTH_PREPARATION_MODULES
-            + (PROJECT_AC_PARTITION_MODULES if name in PARTITIONED_PROJECT_AC_LANES else ()),
+            tuple(
+                module
+                for module in PROJECT_PARTITIONED_MODULES
+                if name in PARTITION_LANES_BY_MODULE[module]
+            ),
         )
         for name in PARTITIONED_PROJECT_LANES
     ),

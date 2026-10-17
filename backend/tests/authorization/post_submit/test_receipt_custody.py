@@ -15,7 +15,7 @@ from app.modules.checkers.api.execution import (
 )
 from app.modules.checkers.execution_repository import ExecutionRepository, reservation
 from app.modules.checkers.models import CheckerRun, CheckerResult
-from app.modules.checkers.post_submit_contracts import make_post_submit_result
+from app.modules.checkers.api.selected_post_submit import make_selected_post_submit_result
 from app.modules.outbox.models import OutboxEvent
 from app.modules.tasks.models import AuditEvent
 from tests.checkers.execution.support import live_executor, reserve
@@ -33,6 +33,24 @@ async def snapshot(h):
             await session.scalar(select(func.count()).select_from(CheckerResult)),
             await session.scalar(select(func.count()).select_from(OutboxEvent)),
         )
+
+
+async def claim_expiring_lease(h, monkeypatch):
+    """Claim a genuine ten-second lease, restoring owner budgets before takeover."""
+    import app.modules.checkers.execution as execution
+
+    executor = live_executor(h)
+    with monkeypatch.context() as patch:
+        patch.setattr(executor, "_execution_budget_seconds", lambda _request: 1)
+        patch.setattr(execution, "SELECTED_POST_FINALIZATION_MARGIN_MS", 9_000)
+        lease, replay = await executor._claim(h.request)
+    assert replay is None
+    async with h.factory() as session:
+        assert await session.scalar(text(
+            "SELECT EXTRACT(EPOCH FROM worker_lease_expires_at-started_at) "
+            "FROM public.checker_runs WHERE id=:id"
+        ), {"id": lease.reservation.attempt_id}) == 10
+    return lease
 
 
 async def next_lease(h, borrowed=None, *, shadow=False):
@@ -71,11 +89,9 @@ async def next_lease(h, borrowed=None, *, shadow=False):
     ["previous_lease", "foreign_attempt", "material_read", "nonexistent", "shadow_tables"],
 )
 async def test_execute_receipt_substitution_rejected(tmp_path, isolated_database_env, substitution, monkeypatch):
-    import app.modules.checkers.execution as execution
-    monkeypatch.setattr(execution, "LEASE_SECONDS", 5)
     async with material_fixture(tmp_path / "one", isolated_database_env) as h:
         await reserve(h)
-        lease, _ = await live_executor(h)._claim(h.request)
+        lease = await claim_expiring_lease(h, monkeypatch)
         async with h.factory() as session:
             run = await session.get(CheckerRun, str(lease.reservation.attempt_id))
             borrowed = UUID(run.execute_evidence_id)
@@ -108,13 +124,12 @@ async def test_execute_receipt_substitution_rejected(tmp_path, isolated_database
 async def test_final_receipt_commits_only_exact_outcome(
     tmp_path, isolated_database_env, substitution, monkeypatch
 ):
-    import app.modules.checkers.execution as execution
-
-    if substitution == "execute_chain":
-        monkeypatch.setattr(execution, "LEASE_SECONDS", 1)
     async with material_fixture(tmp_path, isolated_database_env) as h:
         await reserve(h)
-        lease, _ = await live_executor(h)._claim(h.request)
+        if substitution == "execute_chain":
+            lease = await claim_expiring_lease(h, monkeypatch)
+        else:
+            lease, _ = await live_executor(h)._claim(h.request)
         old_execute = None
         if substitution == "execute_chain":
             async with h.factory() as session:
@@ -122,16 +137,16 @@ async def test_final_receipt_commits_only_exact_outcome(
             await wait_for_expiry(h, lease)
             lease = await next_lease(h)
         source = await final_facts(h, lease)
-        result = make_post_submit_result(
+        result = make_selected_post_submit_result(
             request_id=h.request.evaluation_request_id, request_digest=h.request.request_sha256,
             attempt_id=lease.reservation.attempt_id, result_id=lease.reservation.result_id,
             evaluation_generation=h.request.evaluation_generation, outcome="infrastructure_failed",
-            member_results=(), infrastructure_failure_code="deadline_exceeded",
+            execution=None, infrastructure_failure_code="deadline_exceeded",
         )
         facts = source.model_copy(update={"result": result})
         stored = facts
         if substitution == "result":
-            changed = make_post_submit_result(**(result.model_dump(exclude={"result_digest"}) | {
+            changed = make_selected_post_submit_result(**(result.model_dump(exclude={"result_digest"}) | {
                 "infrastructure_failure_code": "invalid_output",
             }))
             stored = facts.model_copy(update={"result": changed})
@@ -167,6 +182,8 @@ async def wait_for_expiry(h, lease):
         await session.execute(text(
             "select pg_sleep(greatest(0,extract(epoch from cast(:expiry as timestamptz)-clock_timestamp()))+0.02)"
         ), {"expiry": lease.expires_at})
+        assert await session.scalar(text("SELECT clock_timestamp()>=:expiry"),
+                                    {"expiry": lease.expires_at})
 
 
 @pytest.mark.parametrize("outcome", ["completed", "infrastructure_failed"])
@@ -181,14 +198,14 @@ async def test_terminal_receipt_digest_matches_database(tmp_path, isolated_datab
                 update={
                     "material": None,
                     "input_materialization_evidence_id": None,
-                    "result": make_post_submit_result(
+                    "result": make_selected_post_submit_result(
                         request_id=h.request.evaluation_request_id,
                         request_digest=h.request.request_sha256,
                         attempt_id=lease.reservation.attempt_id,
                         result_id=lease.reservation.result_id,
                         evaluation_generation=h.request.evaluation_generation,
                         outcome=outcome,
-                        member_results=(),
+                        execution=None,
                         infrastructure_failure_code="material_unavailable",
                     ),
                 }
@@ -218,14 +235,14 @@ async def test_final_receipt_independently_requires_execute_receipt(
             update={
                 "material": None,
                 "input_materialization_evidence_id": None,
-                "result": make_post_submit_result(
+                "result": make_selected_post_submit_result(
                     request_id=h.request.evaluation_request_id,
                     request_digest=h.request.request_sha256,
                     attempt_id=lease.reservation.attempt_id,
                     result_id=lease.reservation.result_id,
                     evaluation_generation=h.request.evaluation_generation,
                     outcome="infrastructure_failed",
-                    member_results=(),
+                    execution=None,
                     infrastructure_failure_code="material_unavailable",
                 ),
             }

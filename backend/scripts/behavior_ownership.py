@@ -69,6 +69,36 @@ TASK_CHECKER_CLEANUP_TARGETS = frozenset({
     "backend/app/modules/authorization/domain/submission_history.py",
     "backend/app/modules/authorization/history_authorization.py",
 })
+PILOT_08_REVISION_TARGETS = frozenset({
+    "backend/app/modules/tasks/api/assignment_outcome.py",
+    "backend/app/modules/tasks/api/revision_exhaustion.py",
+    "backend/app/modules/tasks/post_submit_routing/terminal_replay.py",
+    "backend/app/modules/tasks/revision/blocked_notice.py",
+    "backend/app/modules/tasks/revision/exhausted_notice.py",
+    "backend/app/modules/tasks/revision/exhaustion.py",
+    "backend/app/modules/tasks/revision/exhaustion_event.py",
+    "backend/app/modules/tasks/revision/exhaustion_recovery.py",
+    "backend/app/modules/tasks/revision/terminal_read.py",
+    "backend/app/modules/authorization/domain/revision_expiry.py",
+    "backend/app/modules/authorization/domain/revision_recovery.py",
+    "backend/app/modules/authorization/fixed_service_revalidation.py",
+    "backend/app/modules/authorization/revision_expiry_authorization.py",
+    "backend/app/modules/authorization/revision_recovery_authorization.py",
+    "backend/app/modules/tasks/api/revision.py",
+    "backend/app/modules/tasks/api/revision_expiry.py",
+    "backend/app/modules/tasks/api/revision_recovery.py",
+    "backend/app/modules/tasks/revision/expired_notice.py",
+    "backend/app/modules/tasks/revision/expiry.py",
+    "backend/app/modules/tasks/revision/expiry_event.py",
+    "backend/app/modules/tasks/revision/models.py",
+    "backend/app/modules/tasks/revision/recovery.py",
+    "backend/app/modules/tasks/revision/recovery_scan.py",
+    "backend/app/modules/tasks/revision/service.py",
+    "backend/app/workers/revision_recovery.py",
+})
+PILOT_READ_1_TARGETS = frozenset({
+    "backend/app/modules/tasks/submission_attempts.py",
+})
 TASK_CHECKER_CLEANUP_REMOVED_TARGETS = frozenset({
     "backend/app/core/permissions.py",
     "backend/app/modules/tasks/authorization.py",
@@ -128,7 +158,12 @@ AUTH_OUTBOX_02_TARGETS = frozenset({
     "backend/app/workers/outbox.py",
 })
 CON_02B_DELIVERY_TARGETS = frozenset({'backend/app/modules/outbox/delivery_repository.py', 'backend/app/modules/outbox/api.py', 'backend/app/modules/outbox/delivery.py', 'backend/app/modules/outbox/registry.py'})
-CI_LANE_CATALOGUE_TARGETS = frozenset({"backend/scripts/test_lane_catalogue.py"})
+CI_LANE_CATALOGUE_TARGETS = frozenset(
+    {
+        "backend/scripts/select_ci_scope.py",
+        "backend/scripts/test_lane_catalogue.py",
+    }
+)
 PILOT_10_EXPORT_TARGETS = frozenset({
     "backend/app/adapters/reviews/contribution_reads.py",
     "backend/app/adapters/tasks/contribution_reads.py",
@@ -144,6 +179,7 @@ PILOT_10_EXPORT_TARGETS = frozenset({
     "backend/app/modules/contributions/api/records.py",
     "backend/app/modules/contributions/api/source_reads.py",
     "backend/app/modules/contributions/records/csv.py",
+    "backend/app/modules/contributions/records/pagination.py",
     "backend/app/modules/contributions/records/read_facts.py",
     "backend/app/modules/contributions/records/read_repository.py",
     "backend/app/modules/contributions/records/read_service.py",
@@ -165,6 +201,52 @@ PILOT_04_RUNTIME_TARGETS = frozenset(
         "backend/app/adapters/checkers/external_service.py",
         "backend/app/interfaces/external_checker_execution.py",
         "backend/app/modules/artifacts/preparation.py",
+    }
+)
+PILOT_04_DEFAULT_CHECKER_TARGETS = frozenset(
+    {
+        "backend/app/modules/checkers/api/default_checker.py",
+        "backend/app/modules/checkers/default_checker.py",
+    }
+)
+PILOT_04_RETIRED_CATALOGUE_TARGETS = frozenset(
+    {
+        "backend/app/modules/artifacts/pre_submit_attempts.py",
+        "backend/app/modules/artifacts/pre_submit_evidence.py",
+        "backend/app/modules/checkers/api/historical_post_submit.py",
+        "backend/app/modules/checkers/api/policy_compilation.py",
+        "backend/app/modules/checkers/api/post_submit.py",
+        "backend/app/modules/checkers/api/pre_submit.py",
+        "backend/app/modules/checkers/api/pre_submit_catalogue.py",
+        "backend/app/modules/checkers/api/post_submit_catalogue.py",
+        "backend/app/modules/checkers/catalogue.py",
+        "backend/app/modules/checkers/compiler.py",
+        "backend/app/modules/checkers/effective_plan.py",
+        "backend/app/modules/checkers/post_submit_catalogue.py",
+        "backend/app/modules/checkers/post_submit_implementations.py",
+        "backend/app/modules/checkers/post_submit_contracts.py",
+        "backend/app/modules/checkers/pre_submit_execution.py",
+        "backend/app/modules/checkers/runner.py",
+        "backend/app/modules/projects/post_submit_policy.py",
+    }
+)
+PILOT_04_SELECTED_FLOW_TARGETS = frozenset(
+    {
+        "backend/app/modules/artifacts/selected_pre_submit_admission.py",
+        "backend/app/modules/artifacts/selected_pre_submit_execution.py",
+        "backend/app/modules/authorization/domain/pre_submit.py",
+        "backend/app/modules/authorization/pre_submit_authorization.py",
+        "backend/app/modules/checkers/api/canonical_values.py",
+        "backend/app/modules/checkers/api/evaluation_contract.py",
+        "backend/app/modules/checkers/api/external_policy.py",
+        "backend/app/modules/checkers/api/material.py",
+        "backend/app/modules/checkers/api/policy_custody.py",
+        "backend/app/modules/checkers/api/pre_submit_material.py",
+        "backend/app/modules/checkers/api/selected_post_submit.py",
+        "backend/app/modules/checkers/api/selected_pre_submit.py",
+        "backend/app/modules/checkers/selected_post_submit_execution.py",
+        "backend/app/modules/checkers/selected_pre_submit_coordination.py",
+        "backend/app/modules/checkers/selected_pre_submit_execution.py",
     }
 )
 LOCAL_PILOT_HELPER_TARGETS = frozenset(
@@ -242,6 +324,15 @@ ARCH_04E2B_OUTCOME_TARGETS = frozenset({
 ARCH_04E1BB8_COMPLETION_TARGETS = frozenset({
     "backend/app/modules/tasks/evaluation_completion_delivery.py",
 })
+ARCH_04F3_REPLACEMENT_TARGETS = frozenset({
+    "backend/app/modules/tasks/submission_context.py",
+})
+ARCH_04F4_RETRY_TARGETS = frozenset({
+    "backend/app/modules/checkers/checker_retry.py",
+    "backend/app/modules/authorization/checker_retry_authorization.py",
+    "backend/app/modules/authorization/domain/checker_retry.py",
+    "backend/app/modules/authorization/prepared_checker_retry_replay.py",
+})
 
 ARCH_04E1BB7_DELIVERY_TARGETS = frozenset({
     "backend/app/modules/checkers/delivery_authority.py",
@@ -302,9 +393,7 @@ ARCH_04A_POST_SUBMIT_TARGETS = frozenset(
     {
         "backend/app/modules/checkers/api/post_submit.py",
         "backend/app/modules/checkers/api/post_submit_catalogue.py",
-        "backend/app/modules/checkers/post_submit_catalogue.py",
         "backend/app/modules/checkers/post_submit_contracts.py",
-        "backend/app/modules/checkers/post_submit_implementations.py",
     }
 )
 ARCH_02F_SUBMISSION_COMPOSITION_TARGETS = frozenset(
@@ -658,6 +747,18 @@ PILOT_02A_IMPORT_SOURCE_TARGETS = frozenset({
     "backend/app/modules/authorization/task_import_sources.py",
     "backend/app/modules/tasks/api/task_import.py",
 })
+PILOT_02B_ATOMIC_IMPORT_TARGETS = frozenset({
+    "backend/app/modules/tasks/task_import_batches.py",
+    "backend/app/modules/tasks/task_import_membership.py",
+    "backend/app/modules/tasks/api/task_import_membership.py",
+})
+PILOT_02C_BULK_TRANSITION_TARGETS = frozenset({
+    "backend/app/api/deps/task_batch_transitions.py",
+    "backend/app/modules/tasks/api/task_batch_transition.py",
+    "backend/app/modules/tasks/task_batch_transition/models.py",
+    "backend/app/modules/tasks/task_batch_transition_router.py",
+    "backend/app/modules/tasks/task_batch_transitions.py",
+})
 
 
 class BehaviorOwnershipError(RuntimeError):
@@ -823,7 +924,7 @@ def _validate_additive_partition_transition(
     ]
     if (
         trusted_targets != sorted(trusted_targets)
-        or removed - (REV_04C_REMOVED_TARGETS | ARCH_04D2_REMOVED_TARGETS | ARCH_03D_REMOVED_TARGETS | TASK_CHECKER_CLEANUP_REMOVED_TARGETS | ARCH_03C2_REMOVED_TARGETS | OUTBOX_IDENTITY_REMOVED_TARGETS | V01_BASELINE_REMOVED_TARGETS | POL_03B_REMOVED_TARGETS | POL_04B_REMOVED_TARGETS | POL_05A_REMOVED_TARGETS | ARCH_03A_GUIDE_CONTEXT_REMOVED_TARGETS | ARCH_04B_SEAM_REMOVED_TARGETS)
+        or removed - (REV_04C_REMOVED_TARGETS | ARCH_04D2_REMOVED_TARGETS | ARCH_03D_REMOVED_TARGETS | TASK_CHECKER_CLEANUP_REMOVED_TARGETS | ARCH_03C2_REMOVED_TARGETS | OUTBOX_IDENTITY_REMOVED_TARGETS | V01_BASELINE_REMOVED_TARGETS | POL_03B_REMOVED_TARGETS | POL_04B_REMOVED_TARGETS | POL_05A_REMOVED_TARGETS | ARCH_03A_GUIDE_CONTEXT_REMOVED_TARGETS | ARCH_04B_SEAM_REMOVED_TARGETS | PILOT_04_RETIRED_CATALOGUE_TARGETS)
         or [current_by_target[item["target"]] for item in retained_trusted]
         != retained_trusted
     ):
@@ -831,6 +932,8 @@ def _validate_additive_partition_transition(
     additions = set(current_by_target) - set(trusted_targets)
     approved_additions = (
         AUTH_BOUNDARY_FOUNDATION_TARGETS | TASK_CHECKER_CLEANUP_TARGETS
+        | PILOT_08_REVISION_TARGETS
+        | PILOT_READ_1_TARGETS
         | CON_02B_DELIVERY_TARGETS
         | AUTH_OUTBOX_02_TARGETS
         | ARCH_03C1_TARGETS
@@ -841,6 +944,8 @@ def _validate_additive_partition_transition(
         | PILOT_04_REGISTRY_TARGETS
         | PILOT_10_EXPORT_TARGETS
         | PILOT_04_RUNTIME_TARGETS
+        | PILOT_04_DEFAULT_CHECKER_TARGETS
+        | PILOT_04_SELECTED_FLOW_TARGETS
         | LOCAL_PILOT_HELPER_TARGETS
         | MODULE_BOUNDARY_FOUNDATION_TARGETS
         | MODULE_PUBLIC_API_FOUNDATION_TARGETS
@@ -889,6 +994,8 @@ def _validate_additive_partition_transition(
             | ARCH_04E1BB6_DISPATCH_TARGETS
             | ARCH_04E1BB7_DELIVERY_TARGETS
             | ARCH_04E1BB8_COMPLETION_TARGETS
+            | ARCH_04F3_REPLACEMENT_TARGETS
+            | ARCH_04F4_RETRY_TARGETS
             | OBSERVABILITY_FOUNDATION_TARGETS
         | ARCH_04E1A_SOURCE_TARGETS
         | ARCH_04D2_AUTHORITY_TARGETS
@@ -907,6 +1014,8 @@ def _validate_additive_partition_transition(
         | TASK_COMMAND_REPLAY_TARGETS
         | PILOT_13_GUIDE_READ_TARGETS
         | PILOT_02A_IMPORT_SOURCE_TARGETS
+        | PILOT_02B_ATOMIC_IMPORT_TARGETS
+        | PILOT_02C_BULK_TRANSITION_TARGETS
     )
     expected_additions = (approved_additions & additions) - set(trusted_targets)
     if POL_03A_DECLARATIVE_MODEL_TARGET in additions:

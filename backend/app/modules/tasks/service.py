@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 from uuid import UUID
@@ -11,14 +10,17 @@ from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import ValidationError
 
-from app.modules.checkers.api.pre_submit import (
-    EffectivePreSubmissionPlanningPort, EffectivePreSubmissionPlanLineage,
-)
 from app.modules.tasks.api import TaskSubmissionContextFacts
-from app.modules.checkers.api.post_submit_catalogue import CompiledPostSubmitPolicy, PostSubmitCatalogue
+from app.modules.checkers.api.external_policy import (
+    LockedExternalCheckerPolicies,
+    LockedExternalPostSubmitPolicy,
+    validate_stored_external_post_policy,
+)
 from app.modules.projects.api.locked_policy import (
-    ProjectLockedPolicyContextFacts, ProjectLockedPolicyContextPort,
-    ProjectLockedPolicyContextRequest, ProjectLockedPolicyContextUnavailable,
+    ProjectLockedPolicyContextFacts,
+    ProjectLockedPolicyContextPort,
+    ProjectLockedPolicyContextRequest,
+    ProjectLockedPolicyContextUnavailable,
 )
 from app.modules.tasks.lifecycle import (
     InvalidTaskTransition,
@@ -135,8 +137,10 @@ class TaskService:
     """Coordinates task lifecycle rules, assignment, and audit writes."""
 
     def __init__(
-        self, session: AsyncSession, *, project_contexts: ProjectLockedPolicyContextPort,
-        pre_submit_planner: EffectivePreSubmissionPlanningPort, post_submit_catalogue: Callable[[], PostSubmitCatalogue],
+        self,
+        session: AsyncSession,
+        *,
+        project_contexts: ProjectLockedPolicyContextPort,
     ) -> None:
         """Create a service instance bound to one database session.
 
@@ -144,20 +148,25 @@ class TaskService:
             session: Async SQLAlchemy session for the current request.
         """
         self._project_contexts = project_contexts
-        self._pre_submit_planner = pre_submit_planner
-        self._post_submit_catalogue = post_submit_catalogue
         self._session = session
         self._repo = TaskRepository(session)
 
     async def read_management_task_submission_requirements(
-        self, project_id: UUID, task_id: UUID,
+        self,
+        project_id: UUID,
+        task_id: UUID,
     ) -> ManagementTaskSubmissionRequirements:
         """Read hidden management requirements in the caller's authorized transaction."""
         task, context = await self._read_locked_context(project_id, task_id)
-        return ManagementTaskSubmissionRequirements(**self._submission_requirement_values(task, context))
+        return ManagementTaskSubmissionRequirements(
+            **self._submission_requirement_values(task, context)
+        )
 
     async def read_contributor_task_submission_requirements(
-        self, project_id: UUID, task_id: UUID, contributor_id: UUID,
+        self,
+        project_id: UUID,
+        task_id: UUID,
+        contributor_id: UUID,
     ) -> ContributorTaskSubmissionRequirements:
         """Lock TASK, conceal invisible work, then validate historical policy custody."""
         request = ContributorTaskDetailRequest(project_id, task_id, contributor_id)
@@ -179,13 +188,14 @@ class TaskService:
             return task
 
     async def _read_locked_context(
-        self, project_id: UUID, task_id: UUID,
+        self,
+        project_id: UUID,
+        task_id: UUID,
     ) -> tuple[WorkstreamTask, LockedTaskContext]:
         """Resolve historical PROJECTS custody only after the shared TASK lock."""
         with self._session.no_autoflush:
             task = await self._lock_scoped_task(project_id, task_id)
             return task, await self._load_locked_task_context(task)
-
 
     async def _load_active_policy_context(self, project_id: str) -> ProjectLockedPolicyContextFacts:
         """Resolve exact activated custody and verify both installed checker plans."""
@@ -197,58 +207,88 @@ class TaskService:
             raise TaskProjectNotReady("active guide policy context is unavailable") from exc
 
     def _validate_installed_plans(self, facts: ProjectLockedPolicyContextFacts) -> None:
-        """Check deployment capability before new readiness, without executing checks."""
+        """Require newly ready tasks to use the activated selected-image policy."""
         try:
-            self._pre_submit_planner.compile_effective_plan(
-                lineage=EffectivePreSubmissionPlanLineage(
-                    project_id=facts.project_id, guide_id=facts.guide_id,
-                    guide_version=facts.guide_version, source_snapshot_id=facts.source_snapshot_id,
-                    source_snapshot_hash=facts.source_snapshot_hash,
-                    effective_policy_id=facts.effective_policy_id,
-                    effective_policy_hash=facts.effective_policy_hash,
-                    pre_submit_policy_id=facts.pre_submit_policy_id,
-                    pre_submit_policy_bundle_hash=facts.pre_submit_policy_bundle_hash,
-                ),
-                effective_policy=json.loads(facts.effective_policy.value),
-                compiled_bundle=json.loads(facts.compiled_pre_submit_bundle.value),
+            policies = LockedExternalCheckerPolicies.model_validate_json(
+                facts.external_checker_policies.value
             )
-            CompiledPostSubmitPolicy.model_validate_json(
-                facts.compiled_post_submit_policy.value,
-            ).validate_catalogue(self._post_submit_catalogue())
-        except ValueError as exc:
-            raise TaskProjectNotReady("installed checkers cannot execute the locked policies") from exc
+            post = LockedExternalPostSubmitPolicy.model_validate_json(
+                facts.compiled_post_submit_policy.value
+            )
+            if post != policies.post_submit:
+                raise ValueError("activated POST policy differs from selected images")
+        except (ValidationError, ValueError) as exc:
+            raise TaskProjectNotReady(
+                "installed checkers cannot execute the locked policies"
+            ) from exc
 
     async def _load_locked_task_context(self, task: WorkstreamTask) -> LockedTaskContext:
         """Resolve frozen custody without selecting current policy or deployment capabilities."""
         missing = self._missing_locked_context_fields(task)
         if missing:
-            raise TaskLockedContextInvalid("task locked context is incomplete", {"missing_fields": missing})
+            raise TaskLockedContextInvalid(
+                "task locked context is incomplete", {"missing_fields": missing}
+            )
         try:
             facts = await self._project_contexts.lock_locked_policy_context(
                 ProjectLockedPolicyContextRequest(
-                    project_id=UUID(task.project_id), guide_version=task.locked_guide_version,
+                    project_id=UUID(task.project_id),
+                    guide_version=task.locked_guide_version,
                     source_snapshot_id=UUID(task.locked_guide_source_snapshot_id),
                     source_snapshot_hash=task.locked_guide_source_snapshot_hash,
-                    effective_policy_id=UUID(task.locked_effective_project_submission_artifact_policy_id),
+                    effective_policy_id=UUID(
+                        task.locked_effective_project_submission_artifact_policy_id
+                    ),
                     effective_policy_hash=task.locked_effective_project_submission_artifact_policy_hash,
                     pre_submit_policy_id=UUID(task.locked_pre_submit_checker_policy_id),
                     pre_submit_policy_bundle_hash=task.locked_pre_submit_checker_bundle_hash,
                 ),
             )
+        except (ProjectLockedPolicyContextUnavailable, ValueError, TypeError) as exc:
+            raise TaskLockedContextInvalid("task locked policy custody is invalid") from exc
+        return self._validate_locked_task_context(task, facts)
+
+    def _validate_locked_task_context(
+        self, task: WorkstreamTask, facts: ProjectLockedPolicyContextFacts,
+    ) -> LockedTaskContext:
+        """Compare every current Task stamp with already locked immutable PROJECT facts."""
+        missing = self._missing_locked_context_fields(task)
+        if missing:
+            raise TaskLockedContextInvalid(
+                "task locked context is incomplete", {"missing_fields": missing}
+            )
+        try:
             expected = self._policy_stamps(facts)
             if any(getattr(task, name) != value for name, value in expected.items()):
                 raise ValueError("task policy stamps differ from activation receipt")
-            parsed = CompiledPostSubmitPolicy.model_validate_json(facts.compiled_post_submit_policy.value)
-        except (ProjectLockedPolicyContextUnavailable, ValueError, TypeError) as exc:
+            parsed = self._parse_post_submit_policy_summary(facts)
+        except (ValueError, TypeError) as exc:
             raise TaskLockedContextInvalid("task locked policy custody is invalid") from exc
         return LockedTaskContext(
             facts=facts,
-            locked_post_submit_policy_body=PostSubmitPolicyBodySummary(
-                schema_version=parsed.schema_version, default_checkers=tuple(parsed.default_checkers),
-                required_checkers=tuple(parsed.required_checkers), warning_checkers=tuple(parsed.warning_checkers),
-                execution_checkers=tuple(parsed.execution_checkers),
-                blocking_severities=tuple(parsed.blocking_severities),
-            ),
+            locked_post_submit_policy_body=parsed,
+        )
+
+    @staticmethod
+    def _parse_post_submit_policy_summary(
+        facts: ProjectLockedPolicyContextFacts,
+    ) -> PostSubmitPolicyBodySummary:
+        """Decode the closed external POST policy bound to approval custody."""
+        body = json.loads(facts.compiled_post_submit_policy.value)
+        selected = validate_stored_external_post_policy(body)
+        policies = LockedExternalCheckerPolicies.model_validate_json(
+            facts.external_checker_policies.value
+        )
+        if selected != policies.post_submit:
+            raise ValueError("locked selected POST policy differs from approval")
+        checkers = tuple(item.registry.capability_id for item in selected.entries)
+        return PostSubmitPolicyBodySummary(
+            schema_version=selected.schema_version,
+            default_checkers=(),
+            required_checkers=checkers,
+            warning_checkers=(),
+            execution_checkers=checkers,
+            blocking_severities=("critical", "high"),
         )
 
     def _missing_locked_context_fields(self, task: WorkstreamTask) -> list[str]:
@@ -256,10 +296,14 @@ class TaskService:
         return [field for field in LOCKED_CONTEXT_REQUIRED_FIELDS if not getattr(task, field)]
 
     def _contributor_submission_requirements_response(
-        self, task: WorkstreamTask, context: LockedTaskContext,
+        self,
+        task: WorkstreamTask,
+        context: LockedTaskContext,
     ) -> ContributorTaskSubmissionRequirements:
         """Compose the contributor projection shared by hidden and retained reads."""
-        return ContributorTaskSubmissionRequirements(**self._submission_requirement_values(task, context))
+        return ContributorTaskSubmissionRequirements(
+            **self._submission_requirement_values(task, context)
+        )
 
     def _submission_requirement_values(
         self,
@@ -375,10 +419,14 @@ class TaskService:
             ),
             packaging=self._packaging_requirements(policy),
             maximum_archive_entries=self._optional_policy_non_negative_int(
-                policy, "maximum_archive_entries", minimum=1,
+                policy,
+                "maximum_archive_entries",
+                minimum=1,
             ),
             maximum_archive_size_bytes=self._optional_policy_non_negative_int(
-                policy, "maximum_archive_size_bytes", minimum=1,
+                policy,
+                "maximum_archive_size_bytes",
+                minimum=1,
             ),
         )
 
@@ -453,7 +501,8 @@ class TaskService:
         self,
         policy: dict[str, Any],
         field: str,
-        *, minimum: int = 0,
+        *,
+        minimum: int = 0,
     ) -> int | None:
         """Return an optional non-negative integer from the locked policy."""
         value = policy.get(field)
@@ -552,7 +601,9 @@ class TaskService:
             "locked_guide_version": task.locked_guide_version,
             "locked_guide_source_snapshot_id": UUID(task.locked_guide_source_snapshot_id),
             "locked_guide_source_snapshot_hash": task.locked_guide_source_snapshot_hash,
-            "locked_effective_project_submission_artifact_policy_id": UUID(task.locked_effective_project_submission_artifact_policy_id),
+            "locked_effective_project_submission_artifact_policy_id": UUID(
+                task.locked_effective_project_submission_artifact_policy_id
+            ),
             "locked_effective_project_submission_artifact_policy_hash": task.locked_effective_project_submission_artifact_policy_hash,
             "locked_pre_submit_checker_policy_id": UUID(task.locked_pre_submit_checker_policy_id),
             "locked_pre_submit_checker_bundle_hash": task.locked_pre_submit_checker_bundle_hash,
@@ -569,7 +620,9 @@ class TaskService:
         }
 
     def _management_locked_context_response(
-        self, task: WorkstreamTask, context: LockedTaskContext,
+        self,
+        task: WorkstreamTask,
+        context: LockedTaskContext,
     ) -> ManagementTaskLockedContext:
         """Compose the sole management projection, shared by hidden and retained reads."""
         return ManagementTaskLockedContext(
@@ -586,11 +639,10 @@ class TaskService:
         Raises:
             TaskValidationError: If one or more required fields are missing.
         """
-        required_fields = {"title", "description", "acceptance_criteria"}
+        required_fields = {"title", "description"}
         field_values = {
             "title": task.title,
             "description": task.description,
-            "acceptance_criteria": task.acceptance_criteria,
         }
         missing = [
             field
@@ -628,7 +680,9 @@ class TaskService:
             "locked_post_submit_checker_policy_id": str(command.target.policy_id),
             "locked_post_submit_checker_policy_version": facts.guide_version,
             "locked_post_submit_checker_policy_hash": command.target.policy_hash,
-            "locked_post_submit_checker_policy_body": json.loads(facts.compiled_post_submit_policy.value),
+            "locked_post_submit_checker_policy_body": json.loads(
+                facts.compiled_post_submit_policy.value
+            ),
             "locked_review_policy_id": str(command.review.policy_id),
             "locked_review_policy_generation": command.review.generation,
             "locked_review_policy_hash": command.review.policy_hash,
@@ -637,14 +691,18 @@ class TaskService:
             "locked_revision_policy_hash": command.revision.policy_hash,
             "locked_guide_source_snapshot_id": str(facts.source_snapshot_id),
             "locked_guide_source_snapshot_hash": facts.source_snapshot_hash,
-            "locked_effective_project_submission_artifact_policy_id": str(facts.effective_policy_id),
+            "locked_effective_project_submission_artifact_policy_id": str(
+                facts.effective_policy_id
+            ),
             "locked_effective_project_submission_artifact_policy_hash": facts.effective_policy_hash,
             "locked_pre_submit_checker_policy_id": str(facts.pre_submit_policy_id),
             "locked_pre_submit_checker_bundle_hash": facts.pre_submit_policy_bundle_hash,
         }
 
     @staticmethod
-    def validate_submission_policy_context(task_context: TaskSubmissionContextFacts, project_context: ProjectLockedPolicyContextFacts) -> None:
+    def validate_submission_policy_context(
+        task_context: TaskSubmissionContextFacts, project_context: ProjectLockedPolicyContextFacts
+    ) -> None:
         """Reconcile every locked TASK policy stamp with its exact PROJECTS receipt."""
         from app.modules.tasks.api.transition_audit import TaskPolicyLineage
 
@@ -658,7 +716,9 @@ class TaskService:
             if getattr(task_context.locked_policy, key) != value:
                 raise ValueError("task submission policy differs")
 
-    def _stamp_locked_context(self, task: WorkstreamTask, facts: ProjectLockedPolicyContextFacts) -> None:
+    def _stamp_locked_context(
+        self, task: WorkstreamTask, facts: ProjectLockedPolicyContextFacts
+    ) -> None:
         """Copy the exact activated guide and contribution-policy context."""
         for name, value in self._policy_stamps(facts).items():
             setattr(task, name, value)
@@ -675,7 +735,6 @@ class TaskService:
         missing = self._missing_locked_context_fields(task)
         if missing:
             raise TaskTransitionBlocked(f"task missing locked context: {', '.join(missing)}")
-
 
     @staticmethod
     def task_response_for_authority(task: WorkstreamTask, *, can_manage: bool) -> TaskResponse:
@@ -695,7 +754,6 @@ class TaskService:
             response.locked_pre_submit_checker_policy_id = None
             response.locked_pre_submit_checker_bundle_hash = None
         return response
-
 
     def _ensure_transition_allowed(self, from_status: str, to_status: str) -> None:
         """Map lifecycle transition validation into service-layer errors.

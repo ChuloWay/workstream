@@ -28,14 +28,16 @@ var bearerValue = regexp.MustCompile(`^[A-Za-z0-9\-._~+/]+=*$`)
 var safeCode = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_]{0,99}$`)
 var safeCorrelation = regexp.MustCompile(`^[0-9a-fA-F-]{36}$`)
 
-// Failure contains only bounded, public error metadata. It never includes a
-// credential, URL, response body, or transport exception.
+// Failure contains bounded public error metadata. Details is populated only
+// from the validated contributor PRE finding projection, never an arbitrary
+// error envelope or transport exception. Credential reflections are rejected.
 type Failure struct {
-	Code           string `json:"code"`
-	Status         int    `json:"status,omitempty"`
-	CorrelationID  string `json:"correlation_id,omitempty"`
-	OutcomeUnknown bool   `json:"outcome_unknown,omitempty"`
-	RecoveryHint   string `json:"-"`
+	Code           string          `json:"code"`
+	Status         int             `json:"status,omitempty"`
+	CorrelationID  string          `json:"correlation_id,omitempty"`
+	OutcomeUnknown bool            `json:"outcome_unknown,omitempty"`
+	RecoveryHint   string          `json:"-"`
+	Details        json.RawMessage `json:"details,omitempty"`
 }
 
 func (f *Failure) Error() string {
@@ -58,10 +60,11 @@ func (f *Failure) Error() string {
 }
 
 type Client struct {
-	origin    string
-	token     string
-	http      *http.Client
-	guideHTTP *http.Client
+	origin        string
+	token         string
+	http          *http.Client
+	guideHTTP     *http.Client
+	taskBatchHTTP *http.Client
 }
 
 type Profile struct {
@@ -125,7 +128,11 @@ func New(origin, token string) (*Client, error) {
 	guideHTTP := *client
 	guideHTTP.Transport = guideTransport
 	guideHTTP.Timeout = 10 * time.Minute
-	return &Client{origin: normalized, token: token, http: client, guideHTTP: &guideHTTP}, nil
+	// Complete 1..500-member writes include fresh per-Task authorization and one
+	// atomic commit. Keep their measured budget separate from ordinary requests.
+	taskBatchHTTP := *client
+	taskBatchHTTP.Timeout = 3 * time.Minute
+	return &Client{origin: normalized, token: token, http: client, guideHTTP: &guideHTTP, taskBatchHTTP: &taskBatchHTTP}, nil
 }
 
 func validateOrigin(raw string) (string, error) {
@@ -309,6 +316,31 @@ func (c *Client) safeMetadata(value string) bool {
 	return !strings.Contains(strings.ToLower(value), strings.ToLower(c.token))
 }
 
+func (c *Client) safeMutationResponse(raw json.RawMessage) bool {
+	// Decode escaped strings and preserve integer text before checking reflection.
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.UseNumber()
+	for {
+		token, err := decoder.Token()
+		if err == io.EOF {
+			return true
+		}
+		if err != nil {
+			return false
+		}
+		switch value := token.(type) {
+		case string:
+			if !c.safeMetadata(value) || sameUUID(value, c.token) {
+				return false
+			}
+		case json.Number:
+			if !c.safeMetadata(value.String()) {
+				return false
+			}
+		}
+	}
+}
+
 func (c *Client) request(ctx context.Context, method, path, query string, body []byte) (json.RawMessage, error) {
 	return c.requestWithKey(ctx, method, path, query, body, "", http.StatusOK)
 }
@@ -318,8 +350,12 @@ func (c *Client) requestWithKey(ctx context.Context, method, path, query string,
 }
 
 func (c *Client) requestWithResponseLimit(ctx context.Context, method, path, query string, body []byte, key string, successStatus, responseLimit int) (json.RawMessage, error) {
-	mutation := method == http.MethodPatch || method == http.MethodPost
-	response, err := c.openRequest(ctx, c.http, method, path, query, body, key, "application/json")
+	return c.requestWithClientAndResponseLimit(ctx, c.http, method, path, query, body, key, successStatus, responseLimit)
+}
+
+func (c *Client) requestWithClientAndResponseLimit(ctx context.Context, requestClient *http.Client, method, path, query string, body []byte, key string, successStatus, responseLimit int) (json.RawMessage, error) {
+	mutation := method == http.MethodPatch || method == http.MethodPost || method == http.MethodPut
+	response, err := c.openRequest(ctx, requestClient, method, path, query, body, key, "application/json")
 	if err != nil {
 		return nil, err
 	}
@@ -345,11 +381,11 @@ func (c *Client) openRequest(ctx context.Context, requestClient *http.Client, me
 		reader = bytes.NewReader(body)
 		contentType = "application/json"
 	}
-	return c.openBodyRequest(ctx, requestClient, method, path, query, reader, int64(len(body)), key, accept, contentType)
+	return c.openBodyRequest(ctx, requestClient, method, path, query, reader, int64(len(body)), key, accept, contentType, nil)
 }
 
-func (c *Client) openBodyRequest(ctx context.Context, requestClient *http.Client, method, path, query string, reader io.Reader, length int64, key, accept, contentType string) (*http.Response, error) {
-	mutation := method == http.MethodPatch || method == http.MethodPost
+func (c *Client) openBodyRequest(ctx context.Context, requestClient *http.Client, method, path, query string, reader io.Reader, length int64, key, accept, contentType string, headers http.Header) (*http.Response, error) {
+	mutation := method == http.MethodPatch || method == http.MethodPost || method == http.MethodPut
 	target := c.origin + path
 	if query != "" {
 		target += "?" + query
@@ -368,6 +404,11 @@ func (c *Client) openBodyRequest(ctx context.Context, requestClient *http.Client
 		if req.Body == nil || req.Body == http.NoBody {
 			req.Body = io.NopCloser(bytes.NewReader(nil))
 		}
+	}
+	// Additional headers are fixed by internal operations, never caller-selected
+	// header names. Shared credential/content headers below cannot be overridden.
+	for name, values := range headers {
+		req.Header[name] = append([]string(nil), values...)
 	}
 	req.Header.Set("Authorization", "Bearer "+c.token)
 	req.Header.Set("Accept", accept)
@@ -388,9 +429,9 @@ func (c *Client) openBodyRequest(ctx context.Context, requestClient *http.Client
 
 func (c *Client) responseCorrelation(response *http.Response) string {
 	correlation := response.Header.Get("X-Correlation-ID")
-	if !safeCorrelation.MatchString(correlation) || !c.safeMetadata(correlation) {
+	if !safeCorrelation.MatchString(correlation) || !c.safeMetadata(correlation) || sameUUID(correlation, c.token) {
 		correlation = response.Header.Get("X-Request-ID")
-		if !safeCorrelation.MatchString(correlation) || !c.safeMetadata(correlation) {
+		if !safeCorrelation.MatchString(correlation) || !c.safeMetadata(correlation) || sameUUID(correlation, c.token) {
 			correlation = ""
 		}
 	}
@@ -398,7 +439,7 @@ func (c *Client) responseCorrelation(response *http.Response) string {
 }
 
 func (c *Client) responseFailure(method string, response *http.Response, responseBody []byte) error {
-	mutation := method == http.MethodPatch || method == http.MethodPost
+	mutation := method == http.MethodPatch || method == http.MethodPost || method == http.MethodPut
 	correlation := c.responseCorrelation(response)
 	code := "api_error"
 	knownEnvelope := false
@@ -415,7 +456,7 @@ func (c *Client) responseFailure(method string, response *http.Response, respons
 			code = envelope.Error.Code
 		}
 	}
-	if method == http.MethodPost {
+	if method == http.MethodPost || method == http.MethodPut {
 		knownEnvelope = canonicalMutationError(responseBody, response.Header.Get("Content-Type"))
 	}
 	// A complete API 4xx envelope is a known denial, independent of code
@@ -424,7 +465,7 @@ func (c *Client) responseFailure(method string, response *http.Response, respons
 		OutcomeUnknown: mutation && (response.StatusCode < 400 || response.StatusCode >= 500 || !knownEnvelope)}
 }
 
-// POST writes need a complete public ApiError, not a gateway's code-shaped
+// POST/PUT writes need a complete public ApiError, not a gateway's code-shaped
 // JSON. Profile PATCH deliberately retains its existing response contract.
 func canonicalMutationError(raw []byte, contentType string) bool {
 	mediaType, _, err := mime.ParseMediaType(contentType)

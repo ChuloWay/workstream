@@ -2,6 +2,7 @@ name: Backend
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft, edited]
   push:
     branches:
       - main
@@ -18,11 +19,50 @@ env:
   MINIO_IMAGE: workstream-minio:source
 
 jobs:
+  scope:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      full_suite: ${{ steps.select.outputs.full_suite }}
+      preflight: ${{ steps.select.outputs.preflight }}
+      external_checker: ${{ steps.select.outputs.external_checker }}
+      cli_contract: ${{ steps.select.outputs.cli_contract }}
+      minio_image: ${{ steps.select.outputs.minio_image }}
+      lanes_required: ${{ steps.select.outputs.lanes_required }}
+      lane_matrix: ${{ steps.select.outputs.lane_matrix }}
+      scope_reason: ${{ steps.select.outputs.scope_reason }}
+      mcp_contract: ${{ steps.select.outputs.mcp_contract }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - id: select
+        name: Select conservative change impact
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_DRAFT: ${{ github.event_name == 'pull_request' && github.event.pull_request.draft || false }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python backend/scripts/select_ci_scope.py \
+            --event-name "${EVENT_NAME}" \
+            --pull-request-draft "${PR_DRAFT}" \
+            --base-ref "${BASE_SHA}" \
+            --head-ref "${HEAD_SHA}" \
+            --github-output "${GITHUB_OUTPUT}"
+
   minio-image:
+    needs: scope
+    if: ${{ needs.scope.outputs.minio_image == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     outputs:
       artifact: ${{ steps.identity.outputs.artifact }}
+      producer_attempt: ${{ steps.identity.outputs.producer_attempt }}
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
@@ -35,6 +75,7 @@ jobs:
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
           echo "artifact=minio-source-${GITHUB_SHA}-${GITHUB_RUN_ATTEMPT}" >> "${GITHUB_OUTPUT}"
+          echo "producer_attempt=${GITHUB_RUN_ATTEMPT}" >> "${GITHUB_OUTPUT}"
 
       - name: Restore exact source image from trusted cache
         id: cache
@@ -90,6 +131,8 @@ jobs:
           retention-days: 7
 
   auth-boundary-preflight:
+    needs: scope
+    if: ${{ needs.scope.outputs.preflight == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
@@ -103,12 +146,12 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Restore exact backend pip downloads from trusted cache
-        id: pip-cache
+      - name: Restore exact backend uv downloads from trusted cache
+        id: uv-cache
         uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
         with:
-          path: ${{ runner.temp }}/backend-pip-cache
-          key: backend-pip-v1-${{ runner.os }}-${{ runner.arch }}-py312-${{ hashFiles('backend/pyproject.toml', '.github/workflows/backend.yml') }}
+          path: ${{ runner.temp }}/backend-uv-cache
+          key: backend-uv-v1-${{ runner.os }}-${{ runner.arch }}-py312-${{ hashFiles('backend/uv.lock', '.github/workflows/backend.yml') }}
 
       - name: Bind exact checked-out tree
         shell: bash
@@ -117,23 +160,24 @@ jobs:
           test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
           test -z "$(git status --porcelain)"
           test "$(git rev-parse "${GITHUB_SHA}^{tree}")" = "$(git rev-parse HEAD^{tree})"
-          echo "PIP_CACHE_DIR=${RUNNER_TEMP}/backend-pip-cache" >> "${GITHUB_ENV}"
+          echo "UV_CACHE_DIR=${RUNNER_TEMP}/backend-uv-cache" >> "${GITHUB_ENV}"
 
-      - name: Install backend architecture dependencies
+      - name: Install frozen backend architecture dependencies
         working-directory: backend
         run: |
           set -euo pipefail
-          python -m pip install --upgrade pip
-          python -m pip install -e ".[dev,agents]"
-          python -m pip install ruff==0.15.22
-          test "$(ruff --version)" = "ruff 0.15.22"
+          python -m pip install "uv==0.10.7"
+          test "$(uv --version)" = "uv 0.10.7"
+          uv lock --check
+          uv sync --frozen --all-extras
+          test "$(uv run --frozen ruff --version)" = "ruff 0.15.22"
 
       - name: Validate module, AUTH, and test boundaries
         working-directory: backend
         shell: bash
         run: |
           set -euo pipefail
-          ruff check \
+          uv run --frozen ruff check \
             app/modules/authorization/api \
             scripts/authorization_boundary.py \
             scripts/module_boundaries.py \
@@ -141,27 +185,37 @@ jobs:
             tests/architecture/test_authorization_boundary.py \
             tests/architecture/test_module_boundaries.py \
             tests/architecture/test_test_structure_boundary.py
-          python -m scripts.module_boundaries validate \
+          uv run --frozen python -m scripts.module_boundaries validate \
             --protected-base "${{ github.event.pull_request.base.sha || github.event.before }}"
-          PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python -m pytest -q \
+          PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 uv run --frozen python -m pytest -q \
             -p pytest_asyncio.plugin \
             tests/architecture/test_module_boundaries.py \
             tests/architecture/test_authorization_boundary.py
-          python -m scripts.authorization_boundary validate \
+          uv run --frozen python -m scripts.authorization_boundary validate \
             --ledger ../.ci/auth-boundaries/IMPORT_LEDGER.md
-          python -m scripts.test_structure_boundary validate \
+          uv run --frozen python -m scripts.test_structure_boundary validate \
             --policy ../.ci/auth-boundaries/TEST_STRUCTURE_POLICY.md \
             --ledger ../.ci/auth-boundaries/TEST_STRUCTURE_DEBT.json
-          python -m scripts.behavior_ownership validate
+          uv run --frozen python -m scripts.behavior_ownership validate
 
-      - name: Save verified backend pip downloads to trusted cache
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.pip-cache.outputs.cache-hit != 'true'
+      - name: Lint and check docstring coverage once
+        working-directory: backend
+        shell: bash
+        run: |
+          set -euo pipefail
+          uv run --frozen ruff check app tests scripts
+          uv run --frozen docstr-coverage --config .docstr.yaml
+
+      - name: Save verified backend uv downloads to trusted cache
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.uv-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
         with:
-          path: ${{ runner.temp }}/backend-pip-cache
-          key: backend-pip-v1-${{ runner.os }}-${{ runner.arch }}-py312-${{ hashFiles('backend/pyproject.toml', '.github/workflows/backend.yml') }}
+          path: ${{ runner.temp }}/backend-uv-cache
+          key: backend-uv-v1-${{ runner.os }}-${{ runner.arch }}-py312-${{ hashFiles('backend/uv.lock', '.github/workflows/backend.yml') }}
 
   external-checker-runtime:
+    needs: scope
+    if: ${{ needs.scope.outputs.external_checker == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
@@ -194,27 +248,20 @@ jobs:
           cargo test --workspace --locked
 
   lanes:
-    needs: minio-image
+    needs: [scope, minio-image]
+    if: >-
+      ${{ always() && needs.scope.result == 'success' &&
+          needs.scope.outputs.lanes_required == 'true' &&
+          needs.minio-image.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
     strategy:
       fail-fast: false
-      matrix:
-        lane:
-          - shared_foundations_a
-          - shared_foundations_b
-          - schema_contracts
-          - project_lifecycle_a
-          - project_lifecycle_b
-          - project_lifecycle_c
-          - project_lifecycle_d
-          - task_lifecycle_a
-          - task_lifecycle_b
-          - task_lifecycle_c
+      matrix: ${{ fromJSON(needs.scope.outputs.lane_matrix) }}
 
     services:
       redis:
-        image: public.ecr.aws/docker/library/redis:7-alpine@sha256:520775a41a63e77e06c73e35d2fd9cc15921a609516818796b4ecbb813078bc7
+        image: docker.io/library/redis:7-alpine@sha256:520775a41a63e77e06c73e35d2fd9cc15921a609516818796b4ecbb813078bc7
         ports:
           - 6380:6379
         options: >-
@@ -223,7 +270,7 @@ jobs:
           --health-timeout 5s
           --health-retries 10
       postgres:
-        image: public.ecr.aws/docker/library/postgres:16@sha256:33f923b05f64ca54ac4401c01126a6b92afe839a0aa0a52bc5aeb5cc958e5f20
+        image: docker.io/library/postgres:16@sha256:33f923b05f64ca54ac4401c01126a6b92afe839a0aa0a52bc5aeb5cc958e5f20
         env:
           POSTGRES_DB: workstream_test
           POSTGRES_USER: workstream
@@ -247,11 +294,11 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Restore exact backend pip downloads from trusted cache
+      - name: Restore exact backend uv downloads from trusted cache
         uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
         with:
-          path: ${{ runner.temp }}/backend-pip-cache
-          key: backend-pip-v1-${{ runner.os }}-${{ runner.arch }}-py312-${{ hashFiles('backend/pyproject.toml', '.github/workflows/backend.yml') }}
+          path: ${{ runner.temp }}/backend-uv-cache
+          key: backend-uv-v1-${{ runner.os }}-${{ runner.arch }}-py312-${{ hashFiles('backend/uv.lock', '.github/workflows/backend.yml') }}
 
       - id: identity
         name: Bind exact checked-out tree
@@ -265,24 +312,16 @@ jobs:
           test "$(git rev-parse "${tree_sha}^{tree}")" = "$(git rev-parse HEAD^{tree})"
           echo "job_start_epoch=${job_start_epoch}" >> "${GITHUB_OUTPUT}"
           echo "tree_sha=${tree_sha}" >> "${GITHUB_OUTPUT}"
-          echo "PIP_CACHE_DIR=${RUNNER_TEMP}/backend-pip-cache" >> "${GITHUB_ENV}"
+          echo "UV_CACHE_DIR=${RUNNER_TEMP}/backend-uv-cache" >> "${GITHUB_ENV}"
 
-      - name: Install backend and exact Ruff
+      - name: Install frozen backend
         working-directory: backend
         run: |
           set -euo pipefail
-          python -m pip install --upgrade pip
-          python -m pip install -e ".[dev,agents]"
-          python -m pip install ruff==0.15.22
-          test "$(ruff --version)" = "ruff 0.15.22"
-
-      - name: Lint
-        working-directory: backend
-        run: ruff check app tests scripts
-
-      - name: Docstring coverage
-        working-directory: backend
-        run: docstr-coverage --config .docstr.yaml
+          python -m pip install "uv==0.10.7"
+          test "$(uv --version)" = "uv 0.10.7"
+          uv lock --check
+          uv sync --frozen --all-extras
 
       - name: Download source-pinned MinIO image
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
@@ -319,17 +358,25 @@ jobs:
           set -euo pipefail
           storage=$(docker exec "${POSTGRES_CONTAINER}" stat -f -c '%T %b %S' /var/lib/postgresql/data)
           read -r filesystem blocks block_size <<< "${storage}"
-          [[ -n "${filesystem}" && "${blocks}" =~ ^[0-9]+$ && "${block_size}" =~ ^[0-9]+$ ]]
+          if ! [[ -n "${filesystem}" && "${blocks}" =~ ^[0-9]+$ && "${block_size}" =~ ^[0-9]+$ ]]; then
+            exit 1
+          fi
           if [[ "${EXPECTED_PG_STORAGE}" == tmpfs ]]; then
-            [[ "${filesystem}" == tmpfs ]]
-            (( blocks * block_size == 2147483648 ))
+            if [[ "${filesystem}" != tmpfs ]] ||
+              (( blocks * block_size != 2147483648 )); then
+              exit 1
+            fi
           elif [[ "${EXPECTED_PG_STORAGE}" == disk ]]; then
-            [[ "${filesystem}" != tmpfs ]]
+            if [[ "${filesystem}" == tmpfs ]]; then
+              exit 1
+            fi
           else
             exit 1
           fi
           settings=$(docker exec "${POSTGRES_CONTAINER}" psql -U workstream -d workstream_test -At -c "SELECT current_setting('fsync'), current_setting('full_page_writes'), current_setting('synchronous_commit'), current_setting('data_directory')")
-          [[ "${settings}" == 'on|on|on|/var/lib/postgresql/data' ]]
+          if [[ "${settings}" != 'on|on|on|/var/lib/postgresql/data' ]]; then
+            exit 1
+          fi
           echo "PostgreSQL CI storage: ${filesystem}, bytes=$((blocks * block_size)); write settings: ${settings}"
 
       - name: Execute semantic lane ${{ matrix.lane }}
@@ -344,11 +391,11 @@ jobs:
         run: |
           set -uo pipefail
           install -d -m 700 ".ci/lane-bundle/${{ matrix.lane }}"
-          python scripts/run_test_lanes.py \
+          uv run --frozen python scripts/run_test_lanes.py \
             --lane "${{ matrix.lane }}" \
             --metadata-dir ".ci/lane-bundle/${{ matrix.lane }}/metadata" \
             --summary-json ".ci/lane-bundle/${{ matrix.lane }}/summary.json" \
-            --timeout-seconds 1200
+            --timeout-seconds 1500
 
       - name: Bind lane bundle timing
         if: ${{ always() }}
@@ -378,17 +425,32 @@ jobs:
           retention-days: 7
 
   cli-public-contract:
+    needs: [scope, minio-image]
+    if: >-
+      ${{ always() && needs.scope.result == 'success' &&
+          needs.scope.outputs.cli_contract == 'true' &&
+          needs.minio-image.result == 'success' }}
     uses: ./.github/workflows/cli.yml
+    with:
+      minio_artifact: ${{ needs.minio-image.outputs.artifact }}
+      minio_producer_attempt: ${{ needs.minio-image.outputs.producer_attempt }}
 
-  test:
-    if: ${{ always() }}
-    needs: [auth-boundary-preflight, external-checker-runtime, lanes, minio-image, cli-public-contract]
+  mcp-contract:
+    needs: scope
+    if: ${{ needs.scope.outputs.mcp_contract == 'true' }}
+    uses: ./.github/workflows/mcp.yml
+
+  full-suite:
+    if: >-
+      ${{ always() && needs.scope.result == 'success' &&
+          needs.scope.outputs.full_suite == 'true' }}
+    needs: [scope, auth-boundary-preflight, external-checker-runtime, lanes, minio-image, cli-public-contract, mcp-contract]
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
     services:
       redis:
-        image: public.ecr.aws/docker/library/redis:7-alpine@sha256:520775a41a63e77e06c73e35d2fd9cc15921a609516818796b4ecbb813078bc7
+        image: docker.io/library/redis:7-alpine@sha256:520775a41a63e77e06c73e35d2fd9cc15921a609516818796b4ecbb813078bc7
         ports:
           - 6380:6379
         options: >-
@@ -397,7 +459,7 @@ jobs:
           --health-timeout 5s
           --health-retries 10
       postgres:
-        image: public.ecr.aws/docker/library/postgres:16@sha256:33f923b05f64ca54ac4401c01126a6b92afe839a0aa0a52bc5aeb5cc958e5f20
+        image: docker.io/library/postgres:16@sha256:33f923b05f64ca54ac4401c01126a6b92afe839a0aa0a52bc5aeb5cc958e5f20
         env:
           POSTGRES_DB: workstream_test
           POSTGRES_USER: workstream
@@ -420,11 +482,11 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Restore exact backend pip downloads from trusted cache
+      - name: Restore exact backend uv downloads from trusted cache
         uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
         with:
-          path: ${{ runner.temp }}/backend-pip-cache
-          key: backend-pip-v1-${{ runner.os }}-${{ runner.arch }}-py312-${{ hashFiles('backend/pyproject.toml', '.github/workflows/backend.yml') }}
+          path: ${{ runner.temp }}/backend-uv-cache
+          key: backend-uv-v1-${{ runner.os }}-${{ runner.arch }}-py312-${{ hashFiles('backend/uv.lock', '.github/workflows/backend.yml') }}
 
       - id: identity
         name: Bind exact checked-out tree
@@ -437,11 +499,16 @@ jobs:
           test -z "$(git status --porcelain)"
           echo "job_start_epoch=${job_start_epoch}" >> "${GITHUB_OUTPUT}"
           echo "tree_sha=${tree_sha}" >> "${GITHUB_OUTPUT}"
-          echo "PIP_CACHE_DIR=${RUNNER_TEMP}/backend-pip-cache" >> "${GITHUB_ENV}"
+          echo "UV_CACHE_DIR=${RUNNER_TEMP}/backend-uv-cache" >> "${GITHUB_ENV}"
 
-      - name: Install backend
+      - name: Install frozen backend
         working-directory: backend
-        run: python -m pip install -e ".[dev,agents]"
+        run: |
+          set -euo pipefail
+          python -m pip install "uv==0.10.7"
+          test "$(uv --version)" = "uv 0.10.7"
+          uv lock --check
+          uv sync --frozen --all-extras
 
       - name: Download source-pinned MinIO image
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
@@ -477,14 +544,27 @@ jobs:
           path: backend/.ci/download
           merge-multiple: false
 
-      - name: Require preflight, every semantic lane and CLI public contract
+      - name: Require selected supporting checks and every expected lane
         if: ${{ always() }}
         env:
           PREFLIGHT_RESULT: ${{ needs.auth-boundary-preflight.result }}
           EXTERNAL_CHECKER_RESULT: ${{ needs.external-checker-runtime.result }}
+          EXTERNAL_EXPECTED: ${{ needs.scope.outputs.external_checker }}
           LANES_RESULT: ${{ needs.lanes.result }}
           CLI_RESULT: ${{ needs.cli-public-contract.result }}
-        run: test "${PREFLIGHT_RESULT}" = success && test "${EXTERNAL_CHECKER_RESULT}" = success && test "${LANES_RESULT}" = success && test "${CLI_RESULT}" = success
+          CLI_EXPECTED: ${{ needs.scope.outputs.cli_contract }}
+          MCP_RESULT: ${{ needs.mcp-contract.result }}
+          MCP_EXPECTED: ${{ needs.scope.outputs.mcp_contract }}
+        run: |
+          set -euo pipefail
+          test "${PREFLIGHT_RESULT}" = success
+          test "${LANES_RESULT}" = success
+          require_expected() {
+            if [[ "$1" == true ]]; then test "$2" = success; elif [[ "$1" == false ]]; then test "$2" = skipped; else exit 1; fi
+          }
+          require_expected "${EXTERNAL_EXPECTED}" "${EXTERNAL_CHECKER_RESULT}"
+          require_expected "${CLI_EXPECTED}" "${CLI_RESULT}"
+          require_expected "${MCP_EXPECTED}" "${MCP_RESULT}"
 
       - name: Merge and independently validate exact lane custody
         working-directory: backend
@@ -492,13 +572,13 @@ jobs:
         run: |
           set -euo pipefail
           install -d -m 700 .ci/test-lanes
-          python -m scripts.merge_test_lane_evidence \
+          uv run --frozen python -m scripts.merge_test_lane_evidence \
             --input-root .ci/download \
             --metadata-dir .ci/test-lanes/run \
             --summary-json .ci/test-lanes/run-summary.json \
             --expected-head "${GITHUB_SHA}" \
             --run-attempt "${GITHUB_RUN_ATTEMPT}"
-          python scripts/validate_test_lane_evidence.py \
+          uv run --frozen python scripts/validate_test_lane_evidence.py \
             --metadata-dir .ci/test-lanes/run \
             --summary-json .ci/test-lanes/run-summary.json
 
@@ -509,7 +589,7 @@ jobs:
           set -euo pipefail
           shopt -s nullglob
           coverage_files=(.ci/test-lanes/run/.coverage.*)
-          test "${#coverage_files[@]}" -eq 10
+          test "${#coverage_files[@]}" -eq 16
           for source in "${coverage_files[@]}"; do
             destination="$(basename "${source}")"
             test -f "${source}"
@@ -519,7 +599,7 @@ jobs:
             test "$(sha256sum "${source}" | cut -d' ' -f1)" = \
               "$(sha256sum "${destination}" | cut -d' ' -f1)"
           done
-          coverage combine
+          uv run --frozen coverage combine
 
       - name: API contract real API e2e
         working-directory: backend
@@ -528,14 +608,14 @@ jobs:
           WORKSTREAM_TEST_ADMIN_DATABASE_URL: postgresql+asyncpg://workstream:workstream@localhost:5433/postgres
           WORKSTREAM_TEST_MINIO_ENDPOINT: http://127.0.0.1:9000
         run: >-
-          python scripts/run_isolated_tests.py
+          uv run --frozen python scripts/run_isolated_tests.py
           --metadata-json "${RUNNER_TEMP}/api-database.json"
           --timeout-seconds 1500
-          -- python scripts/api_contract_e2e.py
+          -- uv run --frozen python scripts/api_contract_e2e.py
 
       - name: Backend coverage diagnostics (no percentage gate)
         working-directory: backend
-        run: coverage report --precision=2
+        run: uv run --frozen coverage report --precision=2
 
       - name: Record hosted timing, complete execution and diagnostic coverage
         working-directory: backend
@@ -544,8 +624,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          coverage json --include='app/*' -o .ci/test-lanes/coverage.json
-          python - <<'PY'
+          uv run --frozen coverage json --include='app/*' -o .ci/test-lanes/coverage.json
+          uv run --frozen python - <<'PY'
           from __future__ import annotations
 
           from collections import Counter
@@ -588,7 +668,7 @@ jobs:
               raise SystemExit("hosted evidence head drift")
 
           lanes = summary.get("lanes")
-          if not isinstance(lanes, list) or len(lanes) != 10:
+          if not isinstance(lanes, list) or len(lanes) != 16:
               raise SystemExit("invalid hosted lane inventory")
           collected: list[str] = []
           completed: list[str] = []
@@ -657,7 +737,7 @@ jobs:
 
           start_epochs = []
           selected_bundles = select_lane_bundles(
-              Path(".ci/download"), expected_head, int(os.environ["GITHUB_RUN_ATTEMPT"]),
+              Path(".ci/download"), expected_head, int(os.environ["GITHUB_RUN_ATTEMPT"])
           )
           for bundle in selected_bundles.values():
               timing_path = bundle / "job-start-epoch.txt"
@@ -683,6 +763,8 @@ jobs:
               raise SystemExit("invalid hosted global coverage")
 
           hosted = {
+              "mode": summary["mode"],
+              "full_canonical_node_count": summary["canonical_node_count"],
               "aggregate_runner_seconds": float(aggregate),
               "canonical_collected_count": len(collected),
               "completed_count": len(completed),
@@ -718,3 +800,56 @@ jobs:
           include-hidden-files: true
           if-no-files-found: warn
           retention-days: 7
+
+  test:
+    name: ${{ github.event_name == 'pull_request' && github.event.pull_request.draft && 'draft-test' || 'test' }}
+    if: ${{ always() }}
+    needs: [scope, auth-boundary-preflight, external-checker-runtime, lanes, minio-image, cli-public-contract, mcp-contract, full-suite]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require the selected draft scope or complete merge proof
+        env:
+          SCOPE_RESULT: ${{ needs.scope.result }}
+          FULL_SUITE: ${{ needs.scope.outputs.full_suite }}
+          MCP_EXPECTED: ${{ needs.scope.outputs.mcp_contract }}
+          MCP_RESULT: ${{ needs.mcp-contract.result }}
+          PREFLIGHT_EXPECTED: ${{ needs.scope.outputs.preflight }}
+          PREFLIGHT_RESULT: ${{ needs.auth-boundary-preflight.result }}
+          EXTERNAL_EXPECTED: ${{ needs.scope.outputs.external_checker }}
+          EXTERNAL_RESULT: ${{ needs.external-checker-runtime.result }}
+          LANES_EXPECTED: ${{ needs.scope.outputs.lanes_required }}
+          LANES_RESULT: ${{ needs.lanes.result }}
+          MINIO_EXPECTED: ${{ needs.scope.outputs.minio_image }}
+          MINIO_RESULT: ${{ needs.minio-image.result }}
+          CLI_EXPECTED: ${{ needs.scope.outputs.cli_contract }}
+          CLI_RESULT: ${{ needs.cli-public-contract.result }}
+          FULL_RESULT: ${{ needs.full-suite.result }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${SCOPE_RESULT}" = success
+          [[ "${FULL_SUITE}" == true || "${FULL_SUITE}" == false ]]
+          if [[ "${FULL_SUITE}" == true ]]; then
+            test "${FULL_RESULT}" = success
+            test "${MCP_RESULT}" = success
+            exit 0
+          fi
+          require_expected() {
+            local expected="$1"
+            local actual="$2"
+            if [[ "${expected}" == true ]]; then
+              test "${actual}" = success
+            elif [[ "${expected}" == false ]]; then
+              test "${actual}" = skipped
+            else
+              exit 1
+            fi
+          }
+          require_expected "${PREFLIGHT_EXPECTED}" "${PREFLIGHT_RESULT}"
+          require_expected "${EXTERNAL_EXPECTED}" "${EXTERNAL_RESULT}"
+          require_expected "${LANES_EXPECTED}" "${LANES_RESULT}"
+          require_expected "${MINIO_EXPECTED}" "${MINIO_RESULT}"
+          require_expected "${CLI_EXPECTED}" "${CLI_RESULT}"
+          require_expected "${MCP_EXPECTED}" "${MCP_RESULT}"
+          test "${FULL_RESULT}" = skipped

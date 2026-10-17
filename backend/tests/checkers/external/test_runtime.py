@@ -15,7 +15,14 @@ import zipfile
 import pytest
 from pydantic import ValidationError
 
-from app.adapters.checkers import external_checker_execution_factory
+from app.adapters.checkers import (
+    configured_external_checker_execution,
+    external_checker_execution_factory,
+)
+from app.adapters.checkers.external_service import (
+    EXTERNAL_CHECKER_CAPABILITY_KEY,
+    EXTERNAL_CHECKER_PROVIDER_KEY,
+)
 from app.core.config import Settings
 from app.interfaces.external_checker_execution import (
     ExternalCheckerIsolationReceipt,
@@ -44,7 +51,7 @@ from app.modules.checkers.api.external import (
     ExternalCheckerContractError,
     ExternalCheckerExecutionRequest,
     ExternalCheckerExecutionResult,
-    ExternalCheckerMaterial,
+    PreSubmitExternalCheckerMaterial,
     external_checker_json_hash,
     make_external_checker_execution_request,
     make_external_checker_execution_result,
@@ -60,20 +67,23 @@ async def _stream(value: bytes):
 
 
 def _request(*, identity=None, archive_sha256=SHA, archive_byte_count=4):
+    identity = identity or execution_identity()
     return make_external_checker_execution_request(
         registry=registry_entry(),
-        identity=identity or execution_identity(),
+        identity=identity,
         configuration={},
         configuration_sha256=external_checker_json_hash({}),
         input={"task_version": "v3"},
         input_sha256=external_checker_json_hash({"task_version": "v3"}),
         materials=(
-            ExternalCheckerMaterial(
+            PreSubmitExternalCheckerMaterial(
                 role="submission_archive",
-                content_id=uuid4(),
-                replica_id=uuid4(),
-                sha256=archive_sha256,
-                byte_count=archive_byte_count,
+                prepared_generation_id=identity.prepared_generation_id,
+                attempt_id=identity.attempt_id,
+                attempt_request_digest=identity.attempt_request_digest,
+                archive_sha256=archive_sha256,
+                archive_byte_count=archive_byte_count,
+                semantic_manifest_sha256=SHA,
                 media_type="application/zip",
             ),
         ),
@@ -90,7 +100,7 @@ def test_shared_rust_fixtures_preserve_python_contract_and_derived_digests():
     result.validate_request(request)
     assert request.configuration == {"threshold": 1e-6}
     assert request.request_digest == (
-        "sha256:81adbc8a7cc0e13b4221ac06ecdd2f95850d6215c3a336d932ad14f8988a70b7"
+        "sha256:a06707b14348ffe5ef22a55de8d4ec4845c9029da7180d5731fb2c120b5591f3"
     )
     changed = request.model_dump(mode="json")
     changed["configuration"]["threshold"] = 2e-6
@@ -134,6 +144,20 @@ def test_external_service_settings_share_the_art_scratch_root(tmp_path: Path):
             sandbox_uid=1000,
             sandbox_gid=1000,
         )
+
+
+@pytest.mark.asyncio
+async def test_configured_execution_defers_absent_fixed_provider_until_invocation():
+    adapter = configured_external_checker_execution(Settings())
+
+    assert adapter.identity.capability_key == EXTERNAL_CHECKER_CAPABILITY_KEY
+    assert adapter.identity.provider_key == EXTERNAL_CHECKER_PROVIDER_KEY
+    with pytest.raises(ExternalServiceUnavailableError) as invocation:
+        await adapter.execute(_request(), object())
+    assert invocation.value.identity == adapter.identity
+    with pytest.raises(ExternalServiceUnavailableError) as health:
+        await adapter.health()
+    assert health.value.identity == adapter.identity
 
 
 def test_service_runtime_files_stay_outside_art_scratch_custody(tmp_path: Path):

@@ -24,12 +24,10 @@ def _worker_port(h, monkeypatch):
     """Keep the real child runtime on the fixture's exact claimed namespace."""
     import app.adapters.artifacts as artifact_adapter
     import app.core.config as config
-    import app.modules.artifacts.service as artifact_service
 
     assert internal_workers._runtime is None
     monkeypatch.setattr(config, "get_settings", lambda: h.settings)
     monkeypatch.setattr(internal_workers, "get_settings", lambda: h.settings)
-    monkeypatch.setattr(artifact_service, "get_session_factory", lambda: h.factory)
     h.worker_scratch_managers = []
     original_create = artifact_adapter.create_artifact_scratch_manager
 
@@ -66,7 +64,7 @@ async def test_worker_art_lease_executes_exact_hidden_request(
         port = _worker_port(h, monkeypatch)
         try:
             d = await delivery_fixture(h, materialization=port)
-            assert (REQUEST_EVENT, 1) not in production_outbox_delivery(h.factory)._registry.keys
+            assert (REQUEST_EVENT, 1) in production_outbox_delivery(h.factory)._registry.keys
             receipt = await d.delivery.deliver(
                 h.created.evaluation_event_id, h.request.project_id, "worker-runtime",
             )

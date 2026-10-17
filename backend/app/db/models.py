@@ -36,6 +36,7 @@ from app.modules.checkers.models import (  # noqa: F401
     CheckerRun,
     CheckerSubmissionFence,
     ExternalCheckerRegistryEntryRecord,
+    SelectedPreSubmitRun,
 )
 from app.modules.compensation.models import (  # noqa: F401
     CompensationAdapterBindingLifecycleEvent,
@@ -87,6 +88,10 @@ from app.modules.tasks.models import (  # noqa: F401
     TaskAssignment,
     WorkstreamTask,
 )
+from app.modules.tasks.task_batch_transition.models import (  # noqa: F401
+    TaskBatchTransitionMember,
+    TaskBatchTransitionReceipt,
+)
 from app.modules.tasks.post_submit_routing.models import (  # noqa: F401
     TaskPostSubmitRoutingManifest,
     TaskRoutingRequest,
@@ -113,3 +118,5 @@ from app.modules.contributions.records.models import ContributionRecord  # noqa:
 from app.modules.compensation.awards.models import CompensationAward  # noqa: F401
 
 from app.modules.reviews.lifecycle.models import JointLifecycleReleaseControl  # noqa: F401
+
+from app.modules.tasks.revision.models import TaskRevisionPreparation, TaskRevisionExpiration, TaskRevisionExhaustion  # noqa: F401

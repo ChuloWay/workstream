@@ -6,7 +6,9 @@ from app.modules.authorization.catalogue import ActionId
 from app.modules.authorization.domain.lifecycle import ReviewLifecycleActivationContract
 from app.modules.authorization.domain.post_submit_routing import PostSubmitRoutingResourceContext
 from app.modules.authorization.domain.post_submit import PostSubmitResourceContext
+from app.modules.authorization.domain.pre_submit import PreSubmitResourceContext
 from app.modules.authorization.domain.assignment_invalidation import AssignmentInvalidationResourceContext
+from app.modules.authorization.domain.revision_expiry import RevisionExpiryResourceContext
 from app.modules.authorization.domain.outbox_dispatch import OutboxDispatchResourceContext
 from app.modules.authorization.domain.guide_proposals import GuideProposalResourceContext
 from app.modules.authorization.domain.post_policy import PostPolicyResourceContext
@@ -14,7 +16,7 @@ from app.modules.authorization.domain.action_groups import (
     GUIDE_BOUND_PROJECT_MANAGER_ACTIONS, SUBMISSION_POLICY_MUTATIONS,
 )
 from app.modules.authorization.domain.project_create import ProjectCreateResourceContext
-from app.modules.authorization.domain.task_authority import TaskAuthorityResourceContext
+from app.modules.authorization.domain.task_authority import TaskAuthorityResourceContext, TaskImportBatchResourceContext
 from app.modules.authorization.domain.task_queues import QueueReadResourceContext
 from app.modules.authorization.domain.submission_history import HistoryReadResourceContext
 
@@ -33,16 +35,13 @@ def project_authority_audit_target(
         AdapterBindingReadResourceContext,
         AdapterBindingMutationResourceContext,
     )
-    from app.modules.authorization.domain.checker_registry import (
-        ExternalCheckerRegistryResourceContext,
-    )
+    from app.modules.authorization.domain.checker_registry import ExternalCheckerRegistryResourceContext
+    from app.modules.authorization.domain.checker_retry import CheckerRetryResourceContext
     from app.modules.authorization.domain.guide_compilation import (
         ProjectGuideCompilationRequestResourceContext,
         ProjectGuideCompilationExecuteResourceContext,
     )
-    from app.modules.authorization.domain.guide_compilation_projections import (
-        ProjectGuideProjectionResourceContext,
-    )
+    from app.modules.authorization.domain.guide_compilation_projections import ProjectGuideProjectionResourceContext
     from app.modules.authorization.domain.project_setup_finalization import (
         ProjectSetupFinalizationResourceContext,
     )
@@ -54,6 +53,9 @@ def project_authority_audit_target(
 
     if type(resource) is ReviewLifecycleActivationContract:
         return None, resource.resource_type, str(resource.resource_id), "joint_lifecycle_control", str(resource.resource_id)
+    if type(resource) is TaskImportBatchResourceContext:
+        project_id, resource_id = str(resource.scope_project_id), str(resource.resource_id)
+        return project_id, resource.resource_type, resource_id, resource.resource_type, resource_id
     if type(resource) is ContributionProjectReadResourceContext:
         if matched_scope_project_id != resource.scope_project_id:
             return None
@@ -70,23 +72,20 @@ def project_authority_audit_target(
     if type(resource) is AssignmentInvalidationResourceContext:
         project_id = str(resource.scope_project_id)
         return project_id, "task", str(resource.resource_id), "project", project_id
+    if type(resource) is RevisionExpiryResourceContext:
+        project_id = str(resource.scope_project_id)
+        return project_id, "task", str(resource.resource_id), "project", project_id
     if isinstance(resource, (TaskAuthorityResourceContext, QueueReadResourceContext, HistoryReadResourceContext)):
         project_id = str(resource.scope_project_id)
         return project_id, "project", project_id, "project", project_id
     if isinstance(resource, ProjectCreateResourceContext):
-        return (
-            None, "project_create_operation", str(resource.resource_id),
-            "project", str(resource.requested_project_id),
-        )
+        return None, "project_create_operation", str(resource.resource_id), "project", str(resource.requested_project_id)
     if isinstance(resource, ExternalCheckerRegistryResourceContext):
         entry_id = str(resource.resource_id)
-        return (
-            None,
-            resource.resource_type,
-            entry_id,
-            resource.resource_type,
-            entry_id,
-        )
+        return None, resource.resource_type, entry_id, resource.resource_type, entry_id
+    if type(resource) is CheckerRetryResourceContext:
+        project_id = str(resource.project_id)
+        return project_id, "checker_run", str(resource.resource_id), "project", project_id
     if action_id in SUBMISSION_POLICY_MUTATIONS and isinstance(
         resource, ProjectSubmissionArtifactPolicyMutationResourceContext,
     ):
@@ -103,7 +102,7 @@ def project_authority_audit_target(
             AdapterBindingMutationResourceContext,
             ProjectGuideProjectionResourceContext,
             ProjectSetupFinalizationResourceContext,
-            GuideProposalResourceContext, PostPolicyResourceContext, OutboxDispatchResourceContext, PostSubmitResourceContext, PostSubmitRoutingResourceContext,
+            GuideProposalResourceContext, PostPolicyResourceContext, OutboxDispatchResourceContext, PreSubmitResourceContext, PostSubmitResourceContext, PostSubmitRoutingResourceContext,
         ),
     ):
         project_id = str(getattr(resource, "project_id", None) or resource.scope_project_id)

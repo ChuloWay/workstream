@@ -6,7 +6,9 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.modules.checkers.api.execution import COMPLETION_EVENT, EvaluationCompletion
 from app.modules.outbox.api import CommittedInvocationPort, HandlerOutcome, OutboxEventEnvelope
-from app.modules.tasks.api.routing_outcome import TaskRoutingOutcome
+from app.modules.tasks.api.routing_outcome import (
+    TaskRoutingLifecycleDeferred, TaskRoutingOutcome,
+)
 from app.modules.tasks.post_submit_routing.outcome import TaskPostSubmitOutcome
 from app.modules.tasks.post_submit_routing.requests import TaskRoutingRequestUnavailable
 
@@ -41,19 +43,23 @@ class EvaluationCompletionHandler:
         observed = await self._observer.observe_invocation(envelope)
         if observed is None or observed.claim != envelope.claim:
             return HandlerOutcome.REJECT
-        async with self._sessions() as session, session.begin():
-            operation = self._outcomes(session)
-            generation = await operation.observe_delivery_generation(envelope)
-            staged = await operation.apply(envelope, current_generation=generation)
-            result = TaskRoutingOutcome.model_validate(staged.model_dump())
-            if (
-                result.project_id, result.task_id, result.submission_id, result.completion_event_id
-            ) != (
-                completion.project_id, completion.task_id, completion.submission_id,
-                envelope.claim.event_id,
-            ) or ((result.final_acceptance_id is None) != (generation is None)):
-                raise TaskRoutingRequestUnavailable("routing outcome identity differs")
-            if result.routing_recommendation != completion.routing_recommendation:
-                raise TaskRoutingRequestUnavailable("routing outcome recommendation differs")
+        try:
+            async with self._sessions() as session, session.begin():
+                operation = self._outcomes(session)
+                generation = await operation.observe_delivery_generation(envelope)
+                staged = await operation.apply(envelope, current_generation=generation)
+                result = TaskRoutingOutcome.model_validate(staged.model_dump())
+                if (
+                    result.project_id, result.task_id, result.submission_id, result.completion_event_id
+                ) != (
+                    completion.project_id, completion.task_id, completion.submission_id,
+                    envelope.claim.event_id,
+                ) or ((result.final_acceptance_id is None) != (generation is None)):
+                    raise TaskRoutingRequestUnavailable("routing outcome identity differs")
+                if result.routing_recommendation != completion.routing_recommendation:
+                    raise TaskRoutingRequestUnavailable("routing outcome recommendation differs")
+        except TaskRoutingLifecycleDeferred:
+            # Context exit rolled back the root; only the typed pre-effect refusal retries.
+            return HandlerOutcome.RETRY
         # Context exit includes deferred constraints and the actual root commit.
         return HandlerOutcome.ACKNOWLEDGE

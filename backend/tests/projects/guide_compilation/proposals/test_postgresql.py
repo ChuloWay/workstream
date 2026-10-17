@@ -7,11 +7,6 @@ from sqlalchemy import select
 
 from app.core.identifiers import new_record_id
 from app.adapters.artifacts import guide_document_manifest_port
-from app.modules.checkers.catalogue import (
-    build_pre_submission_checker_catalogue,
-    project_guide_pre_submission_capabilities,
-)
-from app.modules.checkers.api.post_submit_catalogue import current_post_submit_catalogue
 from app.modules.projects.api.guide_proposals import (
     GuideProposalApproval,
     GuideProposalCorrection,
@@ -25,13 +20,18 @@ from app.modules.projects.guide_compilation.proposal_service import GuideProposa
 from app.modules.projects.guide_setup_continuation import retryable_compilation_dispatch_predicate
 from app.modules.projects.models import ProjectSetupRun
 from tests.projects.guide_compilation.finalization.pg_support import finalize, stored_state
+from tests.checkers.external.support import capability_projection
 from .pg_support import ProposalAuthority, proposal_case, read_package
 
 
 async def approve(factory, command, actor, grant, payload):
     try:
         async with factory() as session, session.begin():
-            planner = build_pre_submission_checker_catalogue()
+            from app.adapters.checkers import (
+                external_checker_capability_projection,
+                external_checker_registry_reader,
+            )
+
             return await GuideProposalService(
                 session,
                 ProposalAuthority(
@@ -40,14 +40,13 @@ async def approve(factory, command, actor, grant, payload):
                     command.project_id,
                     grant,
                 ),
+                external_checker_registry_reader(session),
             ).approve(
                 payload,
                 actor=actor,
                 request_id=uuid4(),
                 material=guide_document_manifest_port(session),
-                pre_capabilities=project_guide_pre_submission_capabilities(planner),
-                post_capabilities=current_post_submit_catalogue(),
-                planner=planner,
+                capabilities=await external_checker_capability_projection(session),
             )
     except GuideProposalError as exc:
         raise exc from exc.__context__
@@ -71,49 +70,51 @@ async def correct(factory, command, actor, grant, payload, *, authority_resource
 
 
 async def test_review_package_is_exact_complete_and_redacted(clean_postgres_database):
-    from app.interfaces.project_agents import ProjectGuideCompilationResult
-    from tests.projects.guide_compilation.helpers import result
-
-    body = result().model_dump(mode="json")
-    evidence = body["findings"][0]["evidence_refs"]
-    body.update(
-        status="guide_blocked", submission_artifact_policy=None,
-        requirements=[
-            dict(requirement_id="packet", statement="Limit artifact file size.",
-                 disposition="supported_pre_submit", evidence_refs=evidence),
-            dict(requirement_id="coverage", statement="Check acceptance criteria coverage.",
-                 disposition="supported_post_submit", evidence_refs=evidence),
-            dict(requirement_id="semantic", statement="Evaluate specialist correctness.",
-                 disposition="post_submit_capability_gap", evidence_refs=evidence),
-        ],
-        pre_submit_bindings=[dict(requirement_id="packet", capability_id="policy.file_size.limit",
-                                 capability_version="v1", stage="pre_submit")],
-        post_submit_bindings=[dict(requirement_id="coverage", capability_id="check_acceptance_criteria_present",
-                                  capability_version="v0.1", stage="post_submit", parameters=[])],
-        capability_suggestions=[dict(requirement_id="semantic", stage="post_submit",
-                                     title="Specialist correctness evaluator", rationale="The catalogue lacks this evaluation.",
-                                     evidence_refs=evidence)],
-        setup_notes=["A project manager must review the specialist evaluation gap."],
+    from tests.projects.guide_compilation.test_capability_growth import (
+        _context as growth_context,
+        growth_report,
     )
-    body["findings"][0]["severity"] = "blocking_gap"
-    outcome = ProjectGuideCompilationResult.model_validate(body)
-    async with proposal_case(clean_postgres_database, classification="guide_blocked", outcome=outcome) as (
-        _, factory, command, actor, grant
-    ):
+
+    outcome = growth_report()
+    capabilities = growth_context().checker_capabilities
+    async with proposal_case(
+        clean_postgres_database,
+        classification=outcome.status,
+        outcome=outcome,
+        checker_capabilities=capabilities,
+    ) as (_, factory, command, actor, grant):
         package = await read_package(factory, command, actor, grant)
         assert package.target.compilation_id == command.compilation_id
         assert package.target.setup_run_id == command.setup_run_id
         assert package.current is True
         expected = outcome.model_dump(mode="json")
+        assert len(expected["pre_submit_bindings"]) == 1
+        assert len(expected["post_submit_bindings"]) == 1
+        assert {item["stage"] for item in expected["capability_suggestions"]} == {
+            "pre_submit",
+            "post_submit",
+        }
         for section in ("findings", "requirements", "capability_suggestions"):
             for item in expected[section]:
-                item["evidence_refs"] = [dict(document_number=1, start_page=ref["start_page"],
-                                             end_page=ref["end_page"], section=ref["section"])
-                                         for ref in item["evidence_refs"]]
+                item["evidence_refs"] = [
+                    dict(
+                        document_number=1,
+                        start_page=ref["start_page"],
+                        end_page=ref["end_page"],
+                        section=ref["section"],
+                    )
+                    for ref in item["evidence_refs"]
+                ]
         assert package.result.model_dump(mode="json") == expected
         serialized = package.model_dump_json()
-        for forbidden in ("source_item_id", "document_version_id", "provider_object_ref",
-                          "runtime_configuration", "provider_idempotency_key", "put_attempt_id"):
+        for forbidden in (
+            "source_item_id",
+            "document_version_id",
+            "provider_object_ref",
+            "runtime_configuration",
+            "provider_idempotency_key",
+            "put_attempt_id",
+        ):
             assert forbidden not in serialized
 
 
@@ -234,11 +235,7 @@ async def test_correction_uses_canonical_human_request_and_binds_feedback(clean_
             request_id=uuid4(),
             correlation_id=uuid4(),
         )
-        planner = build_pre_submission_checker_catalogue()
-        pre, post = (
-            project_guide_pre_submission_capabilities(planner),
-            current_post_submit_catalogue(),
-        )
+        capabilities = capability_projection()
         receipts = []
         for _ in range(2):
             async with factory() as session:
@@ -250,8 +247,7 @@ async def test_correction_uses_canonical_human_request_and_binds_feedback(clean_
                     ProjectGuideCompilationAuthorizationAdapter(kernel, prepared),
                     request_inputs=CompilationRequestInputs(
                         guide_document_manifest_port(session),
-                        pre,
-                        post,
+                        capabilities,
                         runtime_configuration(),
                     ),
                 )
@@ -266,8 +262,7 @@ async def test_correction_uses_canonical_human_request_and_binds_feedback(clean_
             attempt = await session.get(ProjectGuideCompilationAttempt, receipts[0].attempt_id)
             inputs = CompilationRequestInputs(
                 guide_document_manifest_port(session),
-                pre,
-                post,
+                capabilities,
                 runtime_configuration(),
             )
             setup = await session.get(ProjectSetupRun, str(correction.successor_setup_run_id))
@@ -442,10 +437,14 @@ async def test_capability_close_failure_rolls_back_every_decision_effect(clean_p
     async with proposal_case(clean_postgres_database) as (_, factory, command, actor, grant):
         package = await read_package(factory, command, actor, grant)
         before = await stored_state(factory, command)
-        planner = build_pre_submission_checker_catalogue()
         for action in ("approve", "correct"):
             with pytest.raises(GuideProposalError, match="authority_unavailable"):
                 async with factory() as session, session.begin():
+                    from app.adapters.checkers import (
+                        external_checker_capability_projection,
+                        external_checker_registry_reader,
+                    )
+
                     service = GuideProposalService(
                         session,
                         ProposalAuthority(
@@ -455,6 +454,7 @@ async def test_capability_close_failure_rolls_back_every_decision_effect(clean_p
                             grant,
                             close_error=True,
                         ),
+                        external_checker_registry_reader(session),
                     )
                     if action == "approve":
                         await service.approve(
@@ -465,9 +465,7 @@ async def test_capability_close_failure_rolls_back_every_decision_effect(clean_p
                             actor=actor,
                             request_id=uuid4(),
                             material=guide_document_manifest_port(session),
-                            pre_capabilities=project_guide_pre_submission_capabilities(planner),
-                            post_capabilities=current_post_submit_catalogue(),
-                            planner=planner,
+                            capabilities=await external_checker_capability_projection(session),
                         )
                     else:
                         await service.request_correction(
@@ -595,7 +593,6 @@ async def test_unified_approval_postgresql_requires_reservation_and_operation(
 
     async with proposal_case(clean_postgres_database) as (_, factory, command, actor, grant):
         package = await read_package(factory, command, actor, grant)
-        planner = build_pre_submission_checker_catalogue()
         if omitted == "reservation":
 
             async def reserve_without_record(*_args, **_kwargs):
@@ -627,6 +624,11 @@ async def test_unified_approval_postgresql_requires_reservation_and_operation(
                             add(row, **kwargs)
 
                     monkeypatch.setattr(session, "add", add_without_operation)
+                from app.adapters.checkers import (
+                    external_checker_capability_projection,
+                    external_checker_registry_reader,
+                )
+
                 await GuideProposalService(
                     session,
                     ProposalAuthority(
@@ -635,6 +637,7 @@ async def test_unified_approval_postgresql_requires_reservation_and_operation(
                         command.project_id,
                         grant,
                     ),
+                    external_checker_registry_reader(session),
                 ).approve(
                     GuideProposalApproval(
                         target=package.target,
@@ -643,9 +646,7 @@ async def test_unified_approval_postgresql_requires_reservation_and_operation(
                     actor=actor,
                     request_id=uuid4(),
                     material=guide_document_manifest_port(session),
-                    pre_capabilities=project_guide_pre_submission_capabilities(planner),
-                    post_capabilities=current_post_submit_catalogue(),
-                    planner=planner,
+                    capabilities=await external_checker_capability_projection(session),
                 )
                 # Reach this exact deferred guard with complete output pointers;
                 # other constraints cannot mask the missing relation under test.
@@ -848,7 +849,11 @@ async def test_projected_draft_content_cannot_be_changed_before_approval(clean_p
 @pytest.mark.parametrize("guide_version", ["v0.1", "example-proof"])
 async def test_approval_preserves_opaque_guide_version(clean_postgres_database, guide_version):
     async with proposal_case(clean_postgres_database, guide_version=guide_version) as (
-        values, factory, command, actor, grant
+        values,
+        factory,
+        command,
+        actor,
+        grant,
     ):
         package = await read_package(factory, command, actor, grant)
         payload = GuideProposalApproval(target=package.target, idempotency_key=uuid4())
@@ -856,13 +861,28 @@ async def test_approval_preserves_opaque_guide_version(clean_postgres_database, 
         assert await approve(factory, command, actor, grant, payload) == receipt
         async with factory() as session:
             operation = await session.get(ProjectGuideProposalApproval, receipt.operation_id)
-            assert operation.effective_pre_submit_plan["lineage"]["guide_version"] == guide_version
+            assert operation.effective_pre_submit_plan["schema_version"] == (
+                "external_checker_policies.v1"
+            )
             assert operation.target_json["guide_version"] == guide_version
         await finalize(factory, values, command)
 
 
-@pytest.mark.parametrize("authority_change", ["revoked_grant", "suspended_actor", "revoked_link", "audit", "operator", "system_manager", "foreign_project"])
-async def test_stored_authority_variants_deny_review_replay_and_correction(clean_postgres_database, authority_change):
+@pytest.mark.parametrize(
+    "authority_change",
+    [
+        "revoked_grant",
+        "suspended_actor",
+        "revoked_link",
+        "audit",
+        "operator",
+        "system_manager",
+        "foreign_project",
+    ],
+)
+async def test_stored_authority_variants_deny_review_replay_and_correction(
+    clean_postgres_database, authority_change
+):
     from sqlalchemy import text
     from .pg_support import seed_review_actor, revoke_review_grant
     from project_create_fixtures import seed_historical_project
@@ -878,44 +898,95 @@ async def test_stored_authority_variants_deny_review_replay_and_correction(clean
         elif authority_change in {"suspended_actor", "revoked_link"}:
             async with factory() as session, session.begin():
                 if authority_change == "suspended_actor":
-                    await session.execute(text("UPDATE actor_profiles SET status='suspended',suspended_by=:id,suspended_at=now(),suspension_reason='Test turnover' WHERE id=:id"), {"id": str(actor.actor_profile_id)})
+                    await session.execute(
+                        text(
+                            "UPDATE actor_profiles SET status='suspended',suspended_by=:id,suspended_at=now(),suspension_reason='Test turnover' WHERE id=:id"
+                        ),
+                        {"id": str(actor.actor_profile_id)},
+                    )
                 else:
-                    await session.execute(text("UPDATE actor_identity_links SET status='revoked',revoked_by=:actor,revoked_at=now(),revoked_reason='Test turnover' WHERE id=:id"), {"actor": str(actor.actor_profile_id), "id": str(actor.identity_link_id)})
+                    await session.execute(
+                        text(
+                            "UPDATE actor_identity_links SET status='revoked',revoked_by=:actor,revoked_at=now(),revoked_reason='Test turnover' WHERE id=:id"
+                        ),
+                        {"actor": str(actor.actor_profile_id), "id": str(actor.identity_link_id)},
+                    )
         else:
             project = command.project_id
-            role, scope = {"audit": ("audit_authority", "project"), "operator": ("operator", "system"),
-                           "system_manager": ("project_manager", "system"), "foreign_project": ("project_manager", "project")}[authority_change]
+            role, scope = {
+                "audit": ("audit_authority", "project"),
+                "operator": ("operator", "system"),
+                "system_manager": ("project_manager", "system"),
+                "foreign_project": ("project_manager", "project"),
+            }[authority_change]
             if authority_change == "foreign_project":
                 project = new_record_id()
                 async with factory() as session, session.begin():
-                    await seed_historical_project(session, project_id=str(project), name="Foreign guide owner", slug=f"foreign-{project}")
-            _, denied_grant = await seed_review_actor(factory, project, actor=actor, role=role, scope=scope)
+                    await seed_historical_project(
+                        session,
+                        project_id=str(project),
+                        name="Foreign guide owner",
+                        slug=f"foreign-{project}",
+                    )
+            _, denied_grant = await seed_review_actor(
+                factory, project, actor=actor, role=role, scope=scope
+            )
         before = await stored_state(factory, command)
         async with factory() as session:
-            audit_before = (await session.execute(text("SELECT id FROM audit_events ORDER BY id"))).all()
+            audit_before = (
+                await session.execute(text("SELECT id FROM audit_events ORDER BY id"))
+            ).all()
         for operation in (
             read_package(factory, command, actor, denied_grant),
             approve(factory, command, actor, denied_grant, payload),
-            correct(factory, command, actor, denied_grant, GuideProposalCorrection(
-                target=package.target, idempotency_key=uuid4(), reason="Reconsider this proposal.")),
+            correct(
+                factory,
+                command,
+                actor,
+                denied_grant,
+                GuideProposalCorrection(
+                    target=package.target,
+                    idempotency_key=uuid4(),
+                    reason="Reconsider this proposal.",
+                ),
+            ),
         ):
             with pytest.raises(GuideProposalError, match="authority_unavailable"):
                 await operation
         assert await stored_state(factory, command) == before
         async with factory() as session:
-            assert (await session.execute(text("SELECT id FROM audit_events ORDER BY id"))).all() == audit_before
-            assert (await session.execute(text("SELECT count(*) FROM project_guide_proposal_corrections"))).scalar_one() == 0
+            assert (
+                await session.execute(text("SELECT id FROM audit_events ORDER BY id"))
+            ).all() == audit_before
+            assert (
+                await session.execute(
+                    text("SELECT count(*) FROM project_guide_proposal_corrections")
+                )
+            ).scalar_one() == 0
 
 
-async def test_another_current_manager_can_admit_correction_after_creator_revocation(clean_postgres_database):
+async def test_another_current_manager_can_admit_correction_after_creator_revocation(
+    clean_postgres_database,
+):
     from .pg_support import seed_review_actor, revoke_review_grant, request_corrected_attempt
-    from app.modules.projects.guide_compilation.models import ProjectGuideCompilationRequestOperation
+    from app.modules.projects.guide_compilation.models import (
+        ProjectGuideCompilationRequestOperation,
+    )
 
     async with proposal_case(clean_postgres_database) as (_, factory, command, actor, grant):
         package = await read_package(factory, command, actor, grant)
         before = await stored_state(factory, command)
-        successor = await correct(factory, command, actor, grant, GuideProposalCorrection(
-            target=package.target, idempotency_key=uuid4(), reason="Recheck the guide requirement."))
+        successor = await correct(
+            factory,
+            command,
+            actor,
+            grant,
+            GuideProposalCorrection(
+                target=package.target,
+                idempotency_key=uuid4(),
+                reason="Recheck the guide requirement.",
+            ),
+        )
         second_actor, _ = await seed_review_actor(factory, command.project_id)
         await revoke_review_grant(factory, actor, grant)
         requested = await request_corrected_attempt(factory, second_actor, successor)
@@ -923,8 +994,13 @@ async def test_another_current_manager_can_admit_correction_after_creator_revoca
         async with factory() as session:
             correction = await session.get(ProjectGuideProposalCorrection, successor.operation_id)
             setup = await session.get(ProjectSetupRun, str(successor.successor_setup_run_id))
-            operation = (await session.scalars(select(ProjectGuideCompilationRequestOperation).where(
-                ProjectGuideCompilationRequestOperation.attempt_id == requested.attempt_id))).one()
+            operation = (
+                await session.scalars(
+                    select(ProjectGuideCompilationRequestOperation).where(
+                        ProjectGuideCompilationRequestOperation.attempt_id == requested.attempt_id
+                    )
+                )
+            ).one()
             assert correction.actor_profile_id == str(actor.actor_profile_id)
             assert setup.authorized_by_actor_profile_id == str(actor.actor_profile_id)
             assert operation.actor_profile_id == str(second_actor.actor_profile_id)
@@ -939,20 +1015,27 @@ async def assert_approval_replay_unchanged(factory, command, actor, grant, paylo
 
     async def counts():
         async with factory() as session:
-            return (await session.execute(text(
-                "SELECT (SELECT count(*) FROM project_guide_proposal_approvals),"
-                "(SELECT count(*) FROM submission_policy_mutation_idempotency_records),"
-                "(SELECT count(*) FROM effective_project_submission_artifact_policies),"
-                "(SELECT count(*) FROM pre_submit_checker_policies),"
-                "(SELECT count(*) FROM audit_events)"
-            ))).one()
+            return (
+                await session.execute(
+                    text(
+                        "SELECT (SELECT count(*) FROM project_guide_proposal_approvals),"
+                        "(SELECT count(*) FROM submission_policy_mutation_idempotency_records),"
+                        "(SELECT count(*) FROM effective_project_submission_artifact_policies),"
+                        "(SELECT count(*) FROM pre_submit_checker_policies),"
+                        "(SELECT count(*) FROM audit_events)"
+                    )
+                )
+            ).one()
+
     before = await counts()
     assert await approve(factory, command, actor, grant, payload) == receipt
     assert await counts() == before
 
 
 @pytest.mark.parametrize("activate_before_commit", [False, True])
-async def test_database_approval_requires_guide_to_remain_draft(clean_postgres_database, activate_before_commit):
+async def test_database_approval_requires_guide_to_remain_draft(
+    clean_postgres_database, activate_before_commit
+):
     from contextlib import nullcontext
     from sqlalchemy import text
     from sqlalchemy.exc import DBAPIError
@@ -963,30 +1046,72 @@ async def test_database_approval_requires_guide_to_remain_draft(clean_postgres_d
         await seed_selected_review_revision_inputs(factory, command, actor)
         package = await read_package(factory, command, actor, grant)
         before = await stored_state(factory, command)
-        expected = pytest.raises(DBAPIError, match="proposal approval target is no longer current") if activate_before_commit else nullcontext()
+        expected = (
+            pytest.raises(DBAPIError, match="proposal approval target is no longer current")
+            if activate_before_commit
+            else nullcontext()
+        )
         with expected:
             async with factory() as session, session.begin():
+                from app.adapters.checkers import (
+                    external_checker_capability_projection,
+                    external_checker_registry_reader,
+                )
+
                 if activate_before_commit:
                     # Transaction rollback restores these unrelated activation prerequisites.
-                    for trigger in ("guide_mutation_product_custody", "guide_lineage_lifecycle_guard"):
-                        await session.execute(text(f"ALTER TABLE project_guides DISABLE TRIGGER {trigger}"))
-                planner = build_pre_submission_checker_catalogue()
-                await GuideProposalService(session, ProposalAuthority(session, actor, command.project_id, grant)).approve(
-                    GuideProposalApproval(target=package.target, idempotency_key=uuid4()), actor=actor, request_id=uuid4(),
+                    for trigger in (
+                        "guide_mutation_product_custody",
+                        "guide_lineage_lifecycle_guard",
+                    ):
+                        await session.execute(
+                            text(f"ALTER TABLE project_guides DISABLE TRIGGER {trigger}")
+                        )
+                await GuideProposalService(
+                    session,
+                    ProposalAuthority(session, actor, command.project_id, grant),
+                    external_checker_registry_reader(session),
+                ).approve(
+                    GuideProposalApproval(target=package.target, idempotency_key=uuid4()),
+                    actor=actor,
+                    request_id=uuid4(),
                     material=guide_document_manifest_port(session),
-                    pre_capabilities=project_guide_pre_submission_capabilities(planner),
-                    post_capabilities=current_post_submit_catalogue(), planner=planner,
+                    capabilities=await external_checker_capability_projection(session),
                 )
                 if activate_before_commit:
                     # Stage lifecycle drift after valid approval assembly to reach the DB guard itself.
-                    await session.execute(text("UPDATE project_guides SET status='active',approved_by=:actor,effective_at=now() WHERE id=:guide"),
-                                          {"actor": str(actor.actor_profile_id), "guide": str(command.guide_id)})
-                await session.execute(text("SET CONSTRAINTS guide_proposal_approval_custody IMMEDIATE"))
+                    await session.execute(
+                        text(
+                            "UPDATE project_guides SET status='active',approved_by=:actor,effective_at=now() WHERE id=:guide"
+                        ),
+                        {"actor": str(actor.actor_profile_id), "guide": str(command.guide_id)},
+                    )
+                await session.execute(
+                    text("SET CONSTRAINTS guide_proposal_approval_custody IMMEDIATE")
+                )
         if activate_before_commit:
             assert await stored_state(factory, command) == before
             async with factory() as session:
-                assert await session.scalar(text("SELECT count(*) FROM pg_trigger WHERE tgrelid='project_guides'::regclass AND tgenabled='D'")) == 0
-                for table in ("project_guide_proposal_approvals", "submission_policy_mutation_idempotency_records",
-                              "effective_project_submission_artifact_policies", "pre_submit_checker_policies"):
+                assert (
+                    await session.scalar(
+                        text(
+                            "SELECT count(*) FROM pg_trigger WHERE tgrelid='project_guides'::regclass AND tgenabled='D'"
+                        )
+                    )
+                    == 0
+                )
+                for table in (
+                    "project_guide_proposal_approvals",
+                    "submission_policy_mutation_idempotency_records",
+                    "effective_project_submission_artifact_policies",
+                    "pre_submit_checker_policies",
+                ):
                     assert await session.scalar(text(f"SELECT count(*) FROM {table}")) == 0
-                assert await session.scalar(text("SELECT count(*) FROM audit_events WHERE action_id='project.submission_artifact_policy.approve'")) == 0
+                assert (
+                    await session.scalar(
+                        text(
+                            "SELECT count(*) FROM audit_events WHERE action_id='project.submission_artifact_policy.approve'"
+                        )
+                    )
+                    == 0
+                )

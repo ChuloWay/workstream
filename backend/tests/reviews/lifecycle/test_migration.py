@@ -9,7 +9,6 @@ import asyncpg
 import pytest
 from alembic import command
 
-from tests.checkers.execution.historical_execution import historical_completed_source
 from app.db import session as db_session
 from tests.contributions.records.support import (
     award_values,
@@ -17,7 +16,6 @@ from tests.contributions.records.support import (
     insert_record,
 )
 from tests.contributions.records.test_migration import snapshot as source_snapshot
-from tests.migration_fixtures import add_current_art_seed_column, restore_predecessor_evidence_schema
 from tests.migration_fixtures import _config
 
 pytestmark = pytest.mark.postgres_schema_contract
@@ -42,14 +40,11 @@ async def test_lifecycle_upgrade_preserves_sources(tmp_path, isolated_database_e
         finally:
             await connection.close()
         await asyncio.to_thread(command.upgrade, _config(), "0015_contribution_awards")
-        original_columns = await add_current_art_seed_column(isolated_database_env)
         async with historical_contribution_source(
             tmp_path,
             isolated_database_env,
             paid=True,
-            completed_source_factory=historical_completed_source,
         ) as h:
-            await restore_predecessor_evidence_schema(isolated_database_env, original_columns)
             async with h.factory() as session:
                 for record in (h.reviewer_record, h.submitter_record):
                     await insert_record(session, record)
@@ -131,7 +126,6 @@ async def test_transition_upgrade_preserves_genesis_and_retained_sources(
             tmp_path,
             isolated_database_env,
             paid=True,
-            completed_source_factory=historical_completed_source,
         ):
             await asyncio.to_thread(command.upgrade, _config(), "0027_markdown_guide_media")
             connection = await asyncpg.connect(url)

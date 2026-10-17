@@ -18,6 +18,24 @@ from app.modules.outbox.models import OutboxDeliveryAttempt, OutboxEvent
 from app.modules.outbox.registry import HandlerRegistry
 
 
+@pytest.mark.parametrize("hours", [-1, 168])
+async def test_not_before_cannot_be_claimed_until_database_time(delivery_harness, hours):
+    h = delivery_harness
+    async with h.factory() as session:
+        now = await database_time(session)
+    event = await h.append(not_before_at=now + timedelta(hours=hours))
+    claim = await h.delivery.claim(event.event_id, h.project, "scheduled-worker")
+    assert (claim is not None) == (hours < 0)
+    async with h.factory() as session:
+        stored = await session.get(OutboxEvent, event.event_id)
+        assert stored.attempt_count == (1 if hours < 0 else 0)
+        assert stored.not_before_at == event.not_before_at
+    if hours > 0:
+        assert not h.prepared and not h.consumed and not h.handled
+    else:
+        assert claim.claimed_at >= event.not_before_at
+
+
 async def test_claim_race_commits_one_generation(delivery_harness):
     h = delivery_harness
     event = await h.append()
@@ -185,6 +203,10 @@ async def test_diagnostic_annotation_follows_committed_invocation_envelope(
     delivery_harness, monkeypatch
 ):
     h = delivery_harness
+    # This checks diagnostic ordering, with independent reads before invocation.
+    # Lease expiry itself is exercised by the explicit lock-wait tests above.
+    h.options = h.options.model_copy(update={"lease_seconds": 30, "handler_timeout_seconds": 20})
+    h.delivery = h.build()
     event = await h.append()
     claim = await h.delivery.claim(event.event_id, h.project, "worker")
     assert claim is not None

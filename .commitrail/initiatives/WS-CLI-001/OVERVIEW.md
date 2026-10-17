@@ -23,7 +23,16 @@
   [WS-CLI-001-16](WS-CLI-001-16.md), deliberate evaluation-policy correction with one saved unified successor;
   [WS-CLI-001-17](WS-CLI-001-17.md), exact guide-proposal correction and explicit saved-successor dispatch;
   [WS-CLI-001-18](WS-CLI-001-18.md), separate exact complete-guide activation and immutable receipt replay;
-  [PILOT-13](../../changes/pilot13-assigned-task-guide-documents.md), assigned-task locked-guide listing/download.
+  [WS-CLI-001-19](WS-CLI-001-19.md), separate manager draft creation, screening and release;
+  [WS-CLI-001-20](WS-CLI-001-20.md), explicit exact-project Submitter/Reviewer issuance and revocation;
+  [WS-CLI-001-21](WS-CLI-001-21.md), filtered grant browsing and exact qualification/revocation history;
+  [WS-CLI-001-22](WS-CLI-001-22.md), Finance current policy discovery and exact retained-version inspection;
+  [WS-CLI-001-23](WS-CLI-001-23.md), Finance draft creation, rule replacement, publication and retirement;
+  [WS-CLI-001-24](WS-CLI-001-24.md), self/project contribution evidence and exact private CSV export;
+  [WS-CLI-001-25](WS-CLI-001-25.md), explicit public ZIP preparation, Submission replay/history and contributor checker findings;
+  [PILOT-13](../../changes/pilot13-assigned-task-guide-documents.md), assigned-task locked-guide listing/download;
+  [PILOT-02](../../changes/pilot02-bulk-transitions-cli.md), explicit CSV conversion,
+  source custody, atomic import, batch status and whole-batch screen/release.
 
 ## Current boundary
 
@@ -46,7 +55,8 @@ contributor writes, with server-owned fresh authority, assignment and lineage.
 Exact caller keys support manual replay; uncertainty never triggers automatic retries.
 `task context TASK_ID` and `task requirements TASK_ID` read governing guide,
 policy selectors, server action hints and locked intake rules. Hints are not
-authority; these reads do not expose the hidden submission intake.
+authority; intake uses the separate public `task prepare` and `task submit`
+commands. Submission history and checker findings have separate bounded reads.
 `project create --name TEXT --slug TEXT --idempotency-key UUID` creates a draft
 shell through the public POST. The API owns system-scoped creation authority
 and committed recovery; guide upload, approval and activation are not added.
@@ -93,6 +103,38 @@ It observes backend diagnostic status, not completion, approval or activation.
 separately submits exact approved policy selections and validates the immutable
 activation receipt. It does not publish contribution policy, approve missing
 inputs or infer readiness; the backend owns authority and supersession.
+`project task create PROJECT_ID --input FILE --idempotency-key UUID`,
+`project task screen PROJECT_ID TASK_ID --idempotency-key UUID [--reason TEXT]`
+and `project task release PROJECT_ID TASK_ID --idempotency-key UUID --reason TEXT`
+prepare individual work through three deliberate public writes. Workstream owns
+active-guide locking, readiness, lifecycle and fresh-authority replay; management
+receipts do not enlarge contributor disclosure.
+`project role-grant issue PROJECT_ID --input FILE --idempotency-key UUID` and
+`project role-grant revoke PROJECT_ID GRANT_ID --input FILE --idempotency-key UUID`
+submit caller-prepared contributor-role decisions to public AUTH. Qualification
+capture, exact-project manager authority and fresh-authorized replay stay backend
+owned; no role cache, automatic grant or AdminRole command is added.
+`project role-grant list PROJECT_ID` observes one filtered count-free page with
+explicit opaque continuation; `project role-grant show PROJECT_ID GRANT_ID`
+observes exact public qualification, provenance and revocation history. Neither
+read grants authority or verifies permission for a later write.
+`project contribution-policy current PROJECT_ID` and
+`project contribution-policy show PROJECT_ID POLICY_ID [--version UUID]` expose
+the complete authorized Finance policy graph and current selectors. The backend
+selects the published version ahead of an open draft unless explicitly overridden
+by a version selector; current Finance authority governs historical reads too.
+PM-only authority does not suffice. These reads never publish, retire or pay.
+`project contribution-policy create`, `update`, `publish` and `retire` provide
+separate public Finance mutations with exact selectors and explicit retry keys.
+Original event receipts survive later lifecycle changes, with current authority
+required on replay. Guide activation remains a separate manager operation.
+`project task-batch` provides PILOT-02's separate local CSV conversion, source
+declaration/upload/status, atomic DRAFT import, batch status and explicit atomic
+screen/release. It shares this binary and public API client, not a second CLI.
+Batch writes use their own bounded request budget; ordinary contribution reads
+retain their existing read deadline. `contributions` and `project contributions`
+read existing authorized evidence and optionally save exact private server CSV;
+neither requires batch-origin Tasks or activates a lifecycle writer.
 All have text/JSON
 output and built-binary integration proof. Mutations preserve omitted/null
 semantics and explicitly report uncertain outcomes without automatic retries.
@@ -176,11 +218,33 @@ CLIs. Keep the package independent of backend and MCP runtime dependencies.
 18. **WS-CLI-001-18:** Activate explicitly selected, separately approved guide
     policies through the public POST. Validate the immutable command/receipt
     binding; leave readiness, authorization and supersession to the backend.
-19. **Later governed-work commands:** Add further project setup, submission,
-   review, revision, and contribution reads/writes only as their actual public
-   contracts and authority boundaries become available. Split by user journey,
-   not one PR per endpoint or one giant catalogue PR.
-20. **Optional TUI:** Add a focused public queue/evidence view after its API
+19. **WS-CLI-001-19:** Prepare individual tasks through separate manager draft
+    create, screen and release calls. Validate full management receipts and
+    explicit replay; do not import, automatically release or choose policies.
+20. **WS-CLI-001-20:** Explicit Submitter/Reviewer issuance and revocation with
+    supplied qualifications/reasons, full receipt binding and fresh-authorized
+    replay. No grant discovery or automatic eligibility.
+21. **WS-CLI-001-21:** Filtered project-grant pagination and exact grant history
+   through public GETs, complete qualification/provenance disclosure and fresh
+   authority on each call. No actor discovery or automatic decisions.
+22. **WS-CLI-001-22:** Current Finance policy discovery and backend-selected or
+   exact retained-version inspection, including empty drafts and complete award
+   definitions. No Finance mutation, publication or local readiness decisions.
+23. **WS-CLI-001-23:** Finance draft creation, complete rule replacement,
+   publication and retirement through existing public operations, with explicit
+   caller keys, immutable event receipts and no automatic retries.
+24. **WS-CLI-001-24:** Self and authorized project contribution-evidence reads,
+   exact decimals, recorded-time/type filters and private server CSV export.
+   No local recognition, payment decision or lifecycle activation.
+   Remaining commands are selected only from currently public, usable API
+   contracts not already owned by another initiative. PILOT-02 batch CLI is
+   delivered in this package; reuse it rather than duplicate it.
+25. **WS-CLI-001-25 / PILOT-12:** Public ZIP preparation with exact caller key,
+   separate admission-backed creation/replay, and bounded submission/checker
+   history. No automatic retry/polling or inferred acceptance. Revision-change
+   summary awaits #495's public field; full public setup integration is #552.
+   Unfinished human review/revision is not current CLI implementation scope.
+26. **Optional TUI:** Add a focused public queue/evidence view after its API
    workflow is complete. Never require a TUI for agents or scripts.
 
 ## Risks and proof

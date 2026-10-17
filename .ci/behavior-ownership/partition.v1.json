@@ -117,6 +117,10 @@
       "target": "backend/app/api/deps/rate_controls.py"
     },
     {
+      "group": "lifecycle",
+      "target": "backend/app/api/deps/task_batch_transitions.py"
+    },
+    {
       "group": "shared",
       "target": "backend/app/api/router.py"
     },
@@ -378,14 +382,6 @@
     },
     {
       "group": "artifacts",
-      "target": "backend/app/modules/artifacts/pre_submit_attempts.py"
-    },
-    {
-      "group": "artifacts",
-      "target": "backend/app/modules/artifacts/pre_submit_evidence.py"
-    },
-    {
-      "group": "artifacts",
       "target": "backend/app/modules/artifacts/preparation.py"
     },
     {
@@ -399,6 +395,14 @@
     {
       "group": "artifacts",
       "target": "backend/app/modules/artifacts/schemas.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/modules/artifacts/selected_pre_submit_admission.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/modules/artifacts/selected_pre_submit_execution.py"
     },
     {
       "group": "artifacts",
@@ -566,6 +570,10 @@
     },
     {
       "group": "auth",
+      "target": "backend/app/modules/authorization/checker_retry_authorization.py"
+    },
+    {
+      "group": "auth",
       "target": "backend/app/modules/authorization/contribution_policy_authorization.py"
     },
     {
@@ -599,6 +607,10 @@
     {
       "group": "auth",
       "target": "backend/app/modules/authorization/domain/checker_registry.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/domain/checker_retry.py"
     },
     {
       "group": "auth",
@@ -654,6 +666,10 @@
     },
     {
       "group": "auth",
+      "target": "backend/app/modules/authorization/domain/pre_submit.py"
+    },
+    {
+      "group": "auth",
       "target": "backend/app/modules/authorization/domain/prepared_adapter_bindings.py"
     },
     {
@@ -698,6 +714,14 @@
     },
     {
       "group": "auth",
+      "target": "backend/app/modules/authorization/domain/revision_expiry.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/domain/revision_recovery.py"
+    },
+    {
+      "group": "auth",
       "target": "backend/app/modules/authorization/domain/submission_history.py"
     },
     {
@@ -707,6 +731,10 @@
     {
       "group": "auth",
       "target": "backend/app/modules/authorization/domain/task_queues.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/fixed_service_revalidation.py"
     },
     {
       "group": "auth",
@@ -774,6 +802,10 @@
     },
     {
       "group": "auth",
+      "target": "backend/app/modules/authorization/pre_submit_authorization.py"
+    },
+    {
+      "group": "auth",
       "target": "backend/app/modules/authorization/pre_submit_materialization.py"
     },
     {
@@ -783,6 +815,10 @@
     {
       "group": "auth",
       "target": "backend/app/modules/authorization/prepared_admin_authority.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/prepared_checker_retry_replay.py"
     },
     {
       "group": "auth",
@@ -831,6 +867,14 @@
     {
       "group": "auth",
       "target": "backend/app/modules/authorization/review_contracts.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/revision_expiry_authorization.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/revision_recovery_authorization.py"
     },
     {
       "group": "auth",
@@ -886,6 +930,18 @@
     },
     {
       "group": "artifacts",
+      "target": "backend/app/modules/checkers/api/canonical_values.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/modules/checkers/api/default_checker.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/modules/checkers/api/evaluation_contract.py"
+    },
+    {
+      "group": "artifacts",
       "target": "backend/app/modules/checkers/api/execution.py"
     },
     {
@@ -894,7 +950,15 @@
     },
     {
       "group": "artifacts",
+      "target": "backend/app/modules/checkers/api/external_policy.py"
+    },
+    {
+      "group": "artifacts",
       "target": "backend/app/modules/checkers/api/history.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/modules/checkers/api/material.py"
     },
     {
       "group": "artifacts",
@@ -906,39 +970,31 @@
     },
     {
       "group": "artifacts",
-      "target": "backend/app/modules/checkers/api/policy_compilation.py"
+      "target": "backend/app/modules/checkers/api/policy_custody.py"
     },
     {
       "group": "artifacts",
-      "target": "backend/app/modules/checkers/api/post_submit.py"
+      "target": "backend/app/modules/checkers/api/pre_submit_material.py"
     },
     {
       "group": "artifacts",
-      "target": "backend/app/modules/checkers/api/post_submit_catalogue.py"
+      "target": "backend/app/modules/checkers/api/selected_post_submit.py"
     },
     {
       "group": "artifacts",
-      "target": "backend/app/modules/checkers/api/pre_submit.py"
+      "target": "backend/app/modules/checkers/api/selected_pre_submit.py"
     },
     {
       "group": "artifacts",
-      "target": "backend/app/modules/checkers/api/pre_submit_catalogue.py"
+      "target": "backend/app/modules/checkers/checker_retry.py"
     },
     {
       "group": "artifacts",
-      "target": "backend/app/modules/checkers/catalogue.py"
-    },
-    {
-      "group": "artifacts",
-      "target": "backend/app/modules/checkers/compiler.py"
+      "target": "backend/app/modules/checkers/default_checker.py"
     },
     {
       "group": "artifacts",
       "target": "backend/app/modules/checkers/delivery_authority.py"
-    },
-    {
-      "group": "artifacts",
-      "target": "backend/app/modules/checkers/effective_plan.py"
     },
     {
       "group": "artifacts",
@@ -970,23 +1026,7 @@
     },
     {
       "group": "artifacts",
-      "target": "backend/app/modules/checkers/post_submit_catalogue.py"
-    },
-    {
-      "group": "artifacts",
-      "target": "backend/app/modules/checkers/post_submit_contracts.py"
-    },
-    {
-      "group": "artifacts",
-      "target": "backend/app/modules/checkers/post_submit_implementations.py"
-    },
-    {
-      "group": "artifacts",
       "target": "backend/app/modules/checkers/pre_submit_defaults.py"
-    },
-    {
-      "group": "artifacts",
-      "target": "backend/app/modules/checkers/pre_submit_execution.py"
     },
     {
       "group": "artifacts",
@@ -994,7 +1034,15 @@
     },
     {
       "group": "artifacts",
-      "target": "backend/app/modules/checkers/runner.py"
+      "target": "backend/app/modules/checkers/selected_post_submit_execution.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/modules/checkers/selected_pre_submit_coordination.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/modules/checkers/selected_pre_submit_execution.py"
     },
     {
       "group": "lifecycle",
@@ -1107,6 +1155,10 @@
     {
       "group": "lifecycle",
       "target": "backend/app/modules/contributions/records/models.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/contributions/records/pagination.py"
     },
     {
       "group": "lifecycle",
@@ -1458,10 +1510,6 @@
     },
     {
       "group": "lifecycle",
-      "target": "backend/app/modules/projects/post_submit_policy.py"
-    },
-    {
-      "group": "lifecycle",
       "target": "backend/app/modules/projects/repository.py"
     },
     {
@@ -1582,6 +1630,10 @@
     },
     {
       "group": "lifecycle",
+      "target": "backend/app/modules/tasks/api/assignment_outcome.py"
+    },
+    {
+      "group": "lifecycle",
       "target": "backend/app/modules/tasks/api/audit_evidence.py"
     },
     {
@@ -1610,6 +1662,22 @@
     },
     {
       "group": "lifecycle",
+      "target": "backend/app/modules/tasks/api/revision.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/api/revision_exhaustion.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/api/revision_expiry.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/api/revision_recovery.py"
+    },
+    {
+      "group": "lifecycle",
       "target": "backend/app/modules/tasks/api/routing_outcome.py"
     },
     {
@@ -1630,11 +1698,19 @@
     },
     {
       "group": "lifecycle",
+      "target": "backend/app/modules/tasks/api/task_batch_transition.py"
+    },
+    {
+      "group": "lifecycle",
       "target": "backend/app/modules/tasks/api/task_detail.py"
     },
     {
       "group": "lifecycle",
       "target": "backend/app/modules/tasks/api/task_import.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/api/task_import_membership.py"
     },
     {
       "group": "lifecycle",
@@ -1698,11 +1774,67 @@
     },
     {
       "group": "lifecycle",
+      "target": "backend/app/modules/tasks/post_submit_routing/terminal_replay.py"
+    },
+    {
+      "group": "lifecycle",
       "target": "backend/app/modules/tasks/queue_router.py"
     },
     {
       "group": "lifecycle",
       "target": "backend/app/modules/tasks/repository.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/revision/blocked_notice.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/revision/exhausted_notice.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/revision/exhaustion.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/revision/exhaustion_event.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/revision/exhaustion_recovery.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/revision/expired_notice.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/revision/expiry.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/revision/expiry_event.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/revision/models.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/revision/recovery.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/revision/recovery_scan.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/revision/service.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/revision/terminal_read.py"
     },
     {
       "group": "lifecycle",
@@ -1718,7 +1850,15 @@
     },
     {
       "group": "lifecycle",
+      "target": "backend/app/modules/tasks/submission_attempts.py"
+    },
+    {
+      "group": "lifecycle",
       "target": "backend/app/modules/tasks/submission_composition.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/submission_context.py"
     },
     {
       "group": "lifecycle",
@@ -1739,6 +1879,26 @@
     {
       "group": "lifecycle",
       "target": "backend/app/modules/tasks/submitted_bundle.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/task_batch_transition/models.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/task_batch_transition_router.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/task_batch_transitions.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/task_import_batches.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/task_import_membership.py"
     },
     {
       "group": "auth",
@@ -1779,6 +1939,10 @@
     {
       "group": "lifecycle",
       "target": "backend/app/workers/project_setup.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/app/workers/revision_recovery.py"
     },
     {
       "group": "lifecycle",
@@ -1878,6 +2042,10 @@
     },
     {
       "group": "shared",
+      "target": "backend/scripts/select_ci_scope.py"
+    },
+    {
+      "group": "shared",
       "target": "backend/scripts/test_lane_catalogue.py"
     },
     {
@@ -1889,7 +2057,7 @@
       "target": "backend/scripts/validate_test_lane_evidence.py"
     }
   ],
-  "authority_digest": "f735dc65412c3c09d4d06ff704d5a44d885385dd42d2cb06dddc9c4492e21675",
+  "authority_digest": "1cc62386c25ee7702dbc9b828a08b55fe95a7a07d4c1fb3ece7da002e2740366",
   "protected_base_commit": "7676ce4347db0c9694962a9b587a20765e16eac6",
   "schema": "workstream.behavior-ownership-partition.v1"
 }

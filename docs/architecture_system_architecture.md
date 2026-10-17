@@ -18,8 +18,10 @@ The review components and diagrams below describe the human branch. The versione
 existing ReviewPolicy boolean `human_review_required` defaults true; false
 permits separately authorized automated FinalAcceptance and submitter
 contribution, with no human queue/lease/Review or reviewer contribution. This
-does not make checker output acceptance authority. Its detailed source/CON
-runtime remains pending after the [policy-setting handoff](../.commitrail/changes/pre-review-plan-reconciliation.md#product-builder-handoff-implement-the-setting-next).
+does not make checker output acceptance authority. Selected production request
+and completion handlers route the false branch through the shared acceptance
+operation. New false/pass effects require an Operator-authorized live REV
+generation; a typed pre-effect non-live refusal rolls back and uses bounded retry.
 The separate ReviewPolicy field `requires_second_review` is fixed to `false` at
 typed input, locked lineage, and database boundaries. Second-review and
 adjudication behavior remain deferred.
@@ -80,6 +82,70 @@ Execution
   Async checker/background workers
   Optional future agent runtime
 ```
+
+## Future Intelligent Orchestration Boundary
+
+Intelligent orchestration is a research hypothesis for a later provider-neutral
+adapter around the stable Workstream lifecycle. It is not part of the current
+v0.1 release boundary. The canonical hypothesis and proposed experiment live in
+the [Product Brief](product_brief.md#future-research-hypothesis-accountable-orchestration).
+
+```text
+Requester / Source Application
+  Authorized outcome, acceptance evidence, optional commercial constraints
+
+Possible Future Orchestration Adapter
+  Proposed task/dependency inputs
+  Contributor candidate shortlist and rationale
+
+Workstream Core
+  Versioned tasks and assignments
+  Immutable submissions and artifacts
+  Policy-governed checks and supported evaluators
+  Authorized Reviews and revisions
+  ContributionRecords and conditional compensation evidence
+
+Source Application / External Execution Host
+  Human and agent workspaces
+  Tools, repositories, models, machines, and connectors
+
+Downstream Projections
+  Separately governed reputation/economic interpretation
+  Outcome, cost, quality, and orchestration research
+```
+
+### Boundary rules
+
+- The orchestration adapter may propose; Workstream services enforce lifecycle
+  and authorization.
+- Proposed dependency and assignment inputs cannot mutate released tasks,
+  submissions, Reviews, FinalAcceptance, or contribution records.
+- Deterministic policy gates precede probabilistic matching.
+- The matcher receives the minimum task-specific capability evidence needed and
+  returns a shortlist with reasons, uncertainty, alternatives, and conflicts.
+- Workstream remains the system of record for task, assignment, artifact,
+  check, Review, revision, and contribution truth.
+- A source application such as Garden or another external host remains the
+  execution and integration environment. Workstream does not become an agent
+  runtime, IDE, chat system, or machine controller.
+- Every agent resolves to an accountable principal and receives scoped,
+  expiring authority. Delegation cannot exceed the parent grant.
+- Every valid human Review creates the reviewer contribution. FinalAcceptance
+  comes only from an `accept` Review or, where the locked ReviewPolicy sets
+  `human_review_required: false`, an authorized automated acceptance decision.
+  Only FinalAcceptance can source the submitter accepted contribution.
+  Orchestration output cannot create these facts.
+- Material adverse consequences and appeals remain human-authorized.
+- Missing orchestration services degrade to manual queueing and review rather
+  than corrupting the canonical lifecycle.
+
+Any later adapter must reuse Task screening, Authorization, TaskAssignment,
+Submission, Checker, Review, FinalAcceptance, ContributionRecord, audit,
+outbox, reputation-projection, and ExternalServiceAdapter boundaries. It cannot
+introduce a parallel task graph or contribution-truth path. No adapter becomes
+an implementation commitment until a separately approved initiative defines
+its consumer, contract, allowed files, gates, threat model, privacy assessment,
+and rollback behavior.
 
 ## v0.1 Stack
 
@@ -288,8 +354,11 @@ hosted v0.1 uses AWS S3 and local/CI integration uses MinIO without changing
 submission or evidence semantics.
 
 Submission artifacts are hash-locked during successful submission creation.
-Automatic post-submit execution is a pending integration boundary; the removed
-alternate checker worker is not dispatched. Any changed artifact requires a new
+Selected request/completion handlers are registered for durable post-submit
+execution and governed outcomes under exact service authority. The bounded local
+public API and Celery service drill starts from public guide inputs with recorded
+inference; the removed alternate
+checker worker is not dispatched. Any changed artifact requires a new
 submission version instead of mutating the old one.
 
 Every important lifecycle action creates an append-only audit event. State is readable from current records, and audit history explains how the system got there.

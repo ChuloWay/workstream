@@ -65,6 +65,10 @@ class TaskLifecycleFacts(Protocol):
     def generation(self) -> int:
         ...
 
+    @property
+    def new_effects_enabled(self) -> bool:
+        ...
+
 
 class TaskAcceptedEffectsFence(Protocol):
     """Acquire the canonical externally owned lifecycle fence."""

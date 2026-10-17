@@ -82,6 +82,17 @@ async def _definition(database_url: str, name: str) -> str:
         await connection.close()
 
 
+async def _audit_snapshot(database_url: str):
+    connection = await asyncpg.connect(database_url.replace("+asyncpg", ""))
+    try:
+        return (
+            await connection.fetchval("select version_num from public.alembic_version"),
+            await connection.fetch("select to_jsonb(r)::text from public.audit_events r order by id"),
+        )
+    finally:
+        await connection.close()
+
+
 def test_contribution_read_upgrade_closes_exact_pairs_and_preserves_predecessors(
     isolated_database_env: str,
     migration_lock,
@@ -95,7 +106,7 @@ def test_contribution_read_upgrade_closes_exact_pairs_and_preserves_predecessors
         assert all(action not in before_evidence for action in ACTIONS)
 
         template = asyncio.run(_seed_template(isolated_database_env))
-        command.upgrade(config(), "head")
+        command.upgrade(config(), "0033_contribution_reads")
         after_evidence = asyncio.run(_definition(isolated_database_env, EVIDENCE_CONSTRAINT))
         after_registry = asyncio.run(_definition(isolated_database_env, REGISTRY_CONSTRAINT))
         for token in (
@@ -129,5 +140,8 @@ def test_contribution_read_upgrade_closes_exact_pairs_and_preserves_predecessors
                 assert failure.value.constraint_name == EVIDENCE_CONSTRAINT
         assert after_registry == before_registry
 
+        retained = asyncio.run(_audit_snapshot(isolated_database_env))
+        assert retained[0] == "0033_contribution_reads"
         with pytest.raises(RuntimeError, match="retained evidence"):
             command.downgrade(config(), "0032_checker_remediation")
+        assert asyncio.run(_audit_snapshot(isolated_database_env)) == retained

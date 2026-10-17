@@ -2,14 +2,28 @@
 
 ## Workstream
 
-Source-agnostic governed contribution infrastructure for coordinating,
-verifying, and recording work performed by humans, AI agents, or both.
+A shared protocol for governed work and the software that implements it,
+independent of the source application or execution client.
 Workstream binds project-defined tasks, locked rules, immutable submission
 artifacts, policy-governed checks, and authorized acceptance into trusted
 `ContributionRecord` facts. Source applications and downstream economic or
 reporting systems may consume those facts but do not control Workstream's
 identity, authorization, submission, review, or contribution truth. Flow
 Identity is the current v0.1 external authentication provider.
+
+## Workstream Protocol
+
+The shared contracts for valid lifecycle actions, authorization, evidence,
+review, acceptance, and contribution records. A standalone versioned protocol
+specification and conformance suite remain to be formalized; the name does
+not imply a released interoperability standard or decentralized runtime.
+
+## Workstream Implementation
+
+The software that enforces the protocol contracts and maintains canonical
+lifecycle state and evidence. Multiple clients can use this implementation
+without being independent implementations of the protocol. See
+[Protocol And Implementation](protocol-and-implementation.md).
 
 ## Repository-Native Human-Agent SDLC
 
@@ -234,7 +248,7 @@ The deterministic merge of Workstream's default submission artifact policy and t
 
 ## Pre-Submit Checker Policy
 
-The server-generated project checker matrix produced from the effective project submission artifact policy and one immutable default-catalogue snapshot. The compiled bundle embeds the catalogue version, canonical manifest digest, ordered entry ID/version/configuration hashes, and enabled/disabled state. Its compiled bundle hash therefore commits transitively to that exact snapshot, and each task locks that hash before entering the contributor pipeline. Runtime uses the same snapshot to derive the effective-plan hash. It runs against the uploaded ZIP in bounded scratch before Workstream creates a submission. ART retains bounded check results; the mounted authorized hidden preparation route returns `pre_submission_checker_failed` with those exact ordered bounded results in the same request. The route remains absent from OpenAPI, and public intake remains pending. POL-07B connects the internal phase service and removes the standalone JSON precheck; broader Submission caller migration remains WS-ARCH-001-02I. Results never use review decision values: `accept`, `needs_revision`, or `reject`.
+The server-generated project checker matrix produced from the effective project submission artifact policy and one immutable default-catalogue snapshot. The compiled bundle embeds the catalogue version, canonical manifest digest, ordered entry ID/version/configuration hashes, and enabled/disabled state. Its compiled bundle hash therefore commits transitively to that exact snapshot, and each task locks that hash before entering the contributor pipeline. Runtime uses the same snapshot to derive the effective-plan hash. It runs against the uploaded ZIP in bounded scratch before Workstream creates a submission. ART retains bounded check results; the public authorized ZIP preparation route returns `pre_submission_checker_failed` with those exact ordered bounded results in the same request. ARCH-02I-B publishes that route and admission-backed Submission creation in OpenAPI. POL-07B connects the internal phase service and removes the standalone JSON precheck; the bounded local public API and Celery service drill starts from public guide inputs with recorded inference. Results never use review decision values: `accept`, `needs_revision`, or `reject`.
 
 The hidden 04B2 Workstream-default execution slice and the hidden 04B3 complete
 effective execution use the closed entry statuses
@@ -245,7 +259,7 @@ one immutable ordered platform-plus-project evidence set after scratch cleanup.
 
 ## pre_submission_checker_failed
 
-The contributor-facing domain error code returned when submission-bundle preparation is blocked by pre-submit checks. The mounted authorized hidden route returns this code with the exact ordered bounded results in the same request. It remains absent from OpenAPI, and public intake activation remains pending. The code is not a review decision. It must not be stored as `accept`, `needs_revision`, or `reject`.
+The contributor-facing domain error code returned when submission-bundle preparation is blocked by pre-submit checks. The public authorized ZIP preparation route returns this code with the exact ordered bounded results in the same request. It is published in OpenAPI; the bounded local public API and Celery service drill starts from public guide inputs with recorded inference. The code is not a review decision. It must not be stored as `accept`, `needs_revision`, or `reject`.
 
 ## Task
 
@@ -255,8 +269,10 @@ A unit of work inside a project.
 
 The contributor-safe API projection of a task's guide, project summary, review
 policy, revision policy, and lifecycle state. Initial work reads the task's
-locked context. Human-review revision reads the validated immutable
-RevisionContextPreparation head and digest, not a moving active-guide pointer.
+locked context. Checker remediation reads the current immutable
+TaskRevisionPreparation head/digest, eligibility and change summary; planned
+human-review revision uses its genuine Review-rooted preparation. Both read a
+frozen context rather than a moving active-guide pointer.
 It does not expose source snapshot
 hashes, private source/import refs, compiled checker bundles, checker configs,
 Celery ids, or setup errors.
@@ -369,6 +385,31 @@ submitter ContributionPolicy versions; context digest; change summary; and
 or backward direction where applicable and publishes one complete next-attempt
 context without rewriting prior work.
 
+## TaskRevisionPreparation
+
+The implemented immutable checker-rooted next-attempt context. TASK retains
+its exact routing manifest, prior Submission, assignment, complete prior/target
+context, PostgreSQL running/paused clock and remaining allowance, local round/cap, head digest and
+repair lineage. Contributor context exposes its bounded change summary and
+current eligibility; intake and creation bind the exact acknowledgement.
+Human Review integration remains separate work under the same revision policy.
+
+## TaskRevisionExhaustion
+
+The immutable TASK rejection receipt when the last allowed attempt fails.
+The assignment closes immediately and the task returns to ready. No further
+preparation or deadline is created. History exposes `revision_limit_reached`;
+any eligible claimant can start a separate assignment at round 0.
+
+## TaskRevisionExpiration
+
+The immutable TASK rejection receipt for an outstanding revision deadline.
+It retains exact source/root/head, effective running deadline, expiration timestamp,
+AUTH/audit/outbox references and released assignment. TASK returns to `ready`;
+history projects the original Submission as rejected without editing its row.
+Timeout creates no Review or economic facts. Only committed immutable
+resubmission ends a window; replay, upload and repair cannot reset it.
+
 ## FinalAcceptance
 
 The internal immutable accept-only fact and sole source of a submitter's
@@ -474,10 +515,10 @@ TASK routing after required checks pass, without a Review, ReviewLease or
 reviewer contribution. The [canonical shared contract](spec_review_lifecycle.md#finalacceptance)
 defines the exclusive Review/routing-manifest provenance and atomic CON effects.
 The source flag records which trigger was used, not a second acceptance system.
-REV-04C supplies the hidden mechanical participant for both sources. False
-runtime activation remains unavailable until mandatory AUTH receipt, database
-closure, currentness race, audit/outbox and activation proof land; raw checker
-success is not authority.
+The selected production request and completion handlers route the false branch
+through the shared participant. A new false/pass effect requires an
+Operator-authorized live REV generation; a typed pre-effect non-live refusal
+rolls back and uses bounded OUTBOX retry. Raw checker success is not authority.
 
 ## Human Owner
 

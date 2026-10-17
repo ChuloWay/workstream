@@ -5,16 +5,15 @@ from pydantic import ValidationError
 
 from app.core.identifiers import new_record_id
 from app.modules.checkers.api.execution import EvaluationCompletion, VerifiedEvaluationCompletion, VerifiedMaterialFacts
-from app.modules.checkers.api.post_submit import PostSubmitCurrentResultReference
-from tests.checkers.post_submit.support import request
-from tests.checkers.post_submit.test_result_contract import result
+from app.modules.checkers.api.selected_post_submit import SelectedPostSubmitCurrentResultReference
+from tests.checkers.execution.support import selected_request, selected_result
 
 
 def test_verified_completion_rejects_mismatched_result():
-    source = request()
-    completed = result(source)
-    reference = PostSubmitCurrentResultReference(**completed.model_dump(
-        include=set(PostSubmitCurrentResultReference.model_fields) - {"schema_version"},
+    source = selected_request()
+    completed = selected_result(source)
+    reference = SelectedPostSubmitCurrentResultReference(**completed.model_dump(
+        include=set(SelectedPostSubmitCurrentResultReference.model_fields) - {"schema_version"},
     ))
     fields = dict(
         completion=EvaluationCompletion(
@@ -33,9 +32,9 @@ def test_verified_completion_rejects_mismatched_result():
     )
     value = VerifiedEvaluationCompletion(**fields)
     assert VerifiedEvaluationCompletion.model_validate_json(value.model_dump_json()) == value
-    other = result(source)
+    other = selected_result(source)
     assert other.result_digest != completed.result_digest
-    infrastructure = result(source, outcome="infrastructure_failed", member_results=(),
+    infrastructure = selected_result(source, outcome="infrastructure_failed", execution=None,
                             infrastructure_failure_code="material_unavailable")
     for invalid in (other, infrastructure):
         with pytest.raises(ValidationError, match="current reference result mismatch"):

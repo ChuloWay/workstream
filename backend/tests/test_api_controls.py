@@ -513,20 +513,49 @@ def test_openapi_documents_request_error_and_response_context() -> None:
         method, path = route.split(" ", 1)
         assert schema["paths"][path][method.lower()]["x-workstream-action-id"] == action
     new_manager_reads |= source_actions.keys()
-    assert len(route_inventory) == 100
-    retained_routes = sorted(set(route_inventory) - proposal_routes - post_policy_routes - queue_routes - new_manager_reads - guide_read - contribution_reads.keys())
-    retained_protected = sorted(set(protected_inventory) - proposal_routes - post_policy_routes - queue_routes - new_manager_reads - guide_read - contribution_reads.keys())
+    public_entry_actions = {
+        "POST /api/v1/tasks/{task_id}/submission-bundle-preparations": "artifact.submission_bundle.prepare",
+        "POST /api/v1/tasks/{task_id}/submissions": "submission.create",
+    }
+    assert public_entry_actions.keys() <= set(protected_inventory)
+    for route, action in public_entry_actions.items():
+        method, path = route.split(" ", 1)
+        operation = schema["paths"][path][method.lower()]
+        assert operation["x-workstream-action-id"] == action
+        assert operation["security"]
+    batch_prefix = "/api/v1/projects/{project_id}/task-import-batches"
+    batch_actions = {
+        f"POST {batch_prefix}": "project.task.import",
+        f"GET {batch_prefix}/{{batch_id}}": "project.task.import_batch.read",
+        f"POST {batch_prefix}/{{batch_id}}/screen": "project.task.screen",
+        f"POST {batch_prefix}/{{batch_id}}/release": "project.task.release",
+    }
+    for route, action in batch_actions.items():
+        assert route in protected_inventory
+        method, path = route.split(" ", 1)
+        assert schema["paths"][path][method.lower()]["x-workstream-action-id"] == action
+    new_manager_reads |= batch_actions.keys()
+    revision_repair = "POST /api/v1/projects/{project_id}/tasks/{task_id}/revision-context/repair"
+    assert revision_repair in protected_inventory
+    repair_operation = schema["paths"][revision_repair.split(" ", 1)[1]]["post"]
+    assert repair_operation["x-workstream-action-id"] == "project.task.revision.repair"
+    assert repair_operation["security"]
+    new_manager_reads.add(revision_repair)
+    assert len(route_inventory) == 107
+    retained_routes = sorted(set(route_inventory) - proposal_routes - post_policy_routes - queue_routes - new_manager_reads - guide_read - contribution_reads.keys() - public_entry_actions.keys())
+    retained_protected = sorted(set(protected_inventory) - proposal_routes - post_policy_routes - queue_routes - new_manager_reads - guide_read - contribution_reads.keys() - public_entry_actions.keys())
     assert sha256("\n".join(retained_routes).encode()).hexdigest() == (
         "793237012e9256d308dd5d1e9c1a65e41381cf6306888fdd175dc9794b118444"
     )
-    assert len(protected_inventory) == 98
+    assert len(protected_inventory) == 105
     assert sha256("\n".join(retained_protected).encode()).hexdigest() == (
         "0953ae6392b81a4a7ba7c9f6b7fccc17768f34cd1f958572fdc553cd204ec82e"
     )
     assert "/api/v1/tasks/{task_id}/submission-precheck" not in schema["paths"]
     assert "/api/v1/workers/me/profile" not in schema["paths"]
-    assert "post" not in schema["paths"]["/api/v1/tasks/{task_id}/submissions"]
+    assert "post" in schema["paths"]["/api/v1/tasks/{task_id}/submissions"]
     assert "GET /api/v1/tasks/{task_id}/submissions" in protected_inventory
+    assert public_entry_actions.keys() <= set(protected_inventory)
     assert "POST /api/v1/operations/tasks/{task_id}/start" in protected_inventory
     assert "GET /api/v1/projects/{project_id}/tasks/{task_id}/work-context" in protected_inventory
     assert set(schema["paths"]["/health"]["get"]["responses"]) == {"200", "400", "500"}
@@ -547,8 +576,11 @@ def test_openapi_documents_request_error_and_response_context() -> None:
         if method in methods and "x-workstream-action-id" in operation
     }
     assert action_declarations == {
+        revision_repair: "project.task.revision.repair",
         **contribution_reads,
         **source_actions,
+        **public_entry_actions,
+        **batch_actions,
         "GET /api/v1/tasks/{task_id}/submissions": "task.submission.list",
         "GET /api/v1/submissions/{submission_id}": "submission.read",
         "GET /api/v1/submissions/{submission_id}/checker-runs": "submission.checker_run.list",

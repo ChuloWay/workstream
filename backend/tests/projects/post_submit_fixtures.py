@@ -61,9 +61,9 @@ def crossed_post_policy_read(policy_id):
     def loaded(_session, row):
         if isinstance(row, PostSubmitCheckerPolicy) and row.id == policy_id:
             seen.append(row.id)
-            set_committed_value(row, 'required_checkers', [
-                *row.required_checkers, 'check_acceptance_criteria_present',
-            ])
+            set_committed_value(row, 'policy_body', {
+                **row.policy_body, 'policy_sha256': 'sha256:' + '0' * 64,
+            })
 
     event.listen(Session, 'loaded_as_persistent', loaded)
     try:

@@ -4,12 +4,16 @@ An independent Go client for Workstream's public REST API, for humans and
 agents using the terminal. It provides human self-profile reads and editing,
 plus draft project/guide declaration and original upload, exact-project inspection, authority reads, manager task browsing and
 contributor work discovery, claim/start, locked guide documents and governing
-context/intake requirements:
+context/intake requirements, explicit batch import/screen/release, Finance
+policy management, explicit ZIP preparation/submission, checker findings and
+contribution-evidence exports:
 
 | Command | Public API |
 |---|---|
 | `workstream whoami` | `GET /api/v1/actors/me` |
 | `workstream profile update` | `PATCH /api/v1/actors/me` |
+| `workstream contributions [--project UUID]` | `GET /api/v1/actors/me/contributions` |
+| `workstream project contributions PROJECT_ID` | `GET /api/v1/projects/PROJECT_ID/contributions/export` |
 | `workstream project access PROJECT_ID` | `GET /api/v1/actors/me/authorization-context?project_id=PROJECT_ID` |
 | `workstream project show PROJECT_ID` | `GET /api/v1/projects/PROJECT_ID` |
 | `workstream project create --name TEXT --slug TEXT --idempotency-key UUID` | `POST /api/v1/projects` |
@@ -26,7 +30,34 @@ context/intake requirements:
 | `workstream project guide activate PROJECT_ID GUIDE_ID --input FILE --idempotency-key UUID` | `POST /api/v1/projects/PROJECT_ID/guides/GUIDE_ID/activate` |
 | `workstream project tasks PROJECT_ID` | `GET /api/v1/projects/PROJECT_ID/tasks` |
 | `workstream project task PROJECT_ID TASK_ID` | `GET /api/v1/projects/PROJECT_ID/tasks/TASK_ID` |
+| `workstream project task create PROJECT_ID --input FILE --idempotency-key UUID` | `POST /api/v1/projects/PROJECT_ID/tasks` |
+| `workstream project task screen PROJECT_ID TASK_ID --idempotency-key UUID [--reason TEXT]` | `POST /api/v1/tasks/TASK_ID/screen` |
+| `workstream project task release PROJECT_ID TASK_ID --idempotency-key UUID --reason TEXT` | `POST /api/v1/tasks/TASK_ID/release` |
+| `workstream project task-batch convert-csv --input FILE --out FILE` | Local CSV-to-JSON conversion; no API call |
+| `workstream project task-batch source-declare PROJECT_ID --input FILE --idempotency-key UUID` | `POST /api/v1/projects/PROJECT_ID/task-import-sources` |
+| `workstream project task-batch source-upload PROJECT_ID SOURCE_ID --input FILE` | `PUT /api/v1/projects/PROJECT_ID/task-import-sources/SOURCE_ID/content` |
+| `workstream project task-batch source-status PROJECT_ID SOURCE_ID` | `GET /api/v1/projects/PROJECT_ID/task-import-sources/SOURCE_ID` |
+| `workstream project task-batch import PROJECT_ID SOURCE_ID --idempotency-key UUID` | `POST /api/v1/projects/PROJECT_ID/task-import-batches` |
+| `workstream project task-batch status PROJECT_ID BATCH_ID` | `GET /api/v1/projects/PROJECT_ID/task-import-batches/BATCH_ID` |
+| `workstream project task-batch screen PROJECT_ID BATCH_ID --idempotency-key UUID [--reason TEXT]` | `POST /api/v1/projects/PROJECT_ID/task-import-batches/BATCH_ID/screen` |
+| `workstream project task-batch release PROJECT_ID BATCH_ID --idempotency-key UUID --reason TEXT` | `POST /api/v1/projects/PROJECT_ID/task-import-batches/BATCH_ID/release` |
+| `workstream project role-grant issue PROJECT_ID --input FILE --idempotency-key UUID` | `POST /api/v1/projects/PROJECT_ID/role-grants` |
+| `workstream project role-grant revoke PROJECT_ID GRANT_ID --input FILE --idempotency-key UUID` | `POST /api/v1/projects/PROJECT_ID/role-grants/GRANT_ID/revoke` |
+| `workstream project role-grant list PROJECT_ID [--status active\|revoked] [--role submitter\|reviewer]` | `GET /api/v1/projects/PROJECT_ID/role-grants` |
+| `workstream project role-grant show PROJECT_ID GRANT_ID` | `GET /api/v1/projects/PROJECT_ID/role-grants/GRANT_ID` |
+| `workstream project contribution-policy current PROJECT_ID` | `GET /api/v1/projects/PROJECT_ID/contribution-policies/current` |
+| `workstream project contribution-policy show PROJECT_ID POLICY_ID [--version UUID]` | `GET /api/v1/projects/PROJECT_ID/contribution-policies/POLICY_ID` with optional `version_id` |
+| `workstream project contribution-policy create PROJECT_ID --input FILE --idempotency-key UUID` | `POST /api/v1/projects/PROJECT_ID/contribution-policies/drafts` |
+| `workstream project contribution-policy update PROJECT_ID POLICY_ID VERSION_ID --input FILE --idempotency-key UUID` | `PUT /api/v1/projects/PROJECT_ID/contribution-policies/POLICY_ID/versions/VERSION_ID` |
+| `workstream project contribution-policy publish PROJECT_ID POLICY_ID VERSION_ID --idempotency-key UUID` | `POST /api/v1/projects/PROJECT_ID/contribution-policies/POLICY_ID/versions/VERSION_ID/publication` |
+| `workstream project contribution-policy retire PROJECT_ID POLICY_ID VERSION_ID --idempotency-key UUID` | `POST /api/v1/projects/PROJECT_ID/contribution-policies/POLICY_ID/versions/VERSION_ID/retirement` |
 | `workstream task ready PROJECT_ID` | `GET /api/v1/projects/PROJECT_ID/tasks/ready` |
+| `workstream task prepare TASK_ID --assignment UUID --file ZIP --idempotency-key UUID` (revision: add predecessor and exact preparation ID/SHA-256) | `POST /api/v1/tasks/TASK_ID/submission-bundle-preparations` |
+| `workstream task submit TASK_ID --assignment UUID --admission UUID` | `POST /api/v1/tasks/TASK_ID/submissions` |
+| `workstream task submissions TASK_ID [--limit N] [--cursor TOKEN]` | `GET /api/v1/tasks/TASK_ID/submissions` |
+| `workstream submission show SUBMISSION_ID` | `GET /api/v1/submissions/SUBMISSION_ID` |
+| `workstream submission findings SUBMISSION_ID [--limit N] [--cursor TOKEN]` | `GET /api/v1/submissions/SUBMISSION_ID/checker-runs` |
+| `workstream submission findings SUBMISSION_ID --run UUID` | `GET /api/v1/submissions/SUBMISSION_ID/checker-runs/UUID` |
 | `workstream task show TASK_ID` | `GET /api/v1/tasks/TASK_ID` |
 | `workstream task claim TASK_ID --idempotency-key UUID` | `POST /api/v1/tasks/TASK_ID/claim` |
 | `workstream task start TASK_ID --idempotency-key UUID` | `POST /api/v1/tasks/TASK_ID/start` |
@@ -38,6 +69,61 @@ Workstream verifies the caller's Flow bearer and owns identity resolution,
 authorization and lifecycle decisions. Reading a profile can admit a first-time
 caller and update server-owned last-seen/audit data. Project access is a current
 snapshot; each later API operation must independently authorize the caller.
+
+## Read and export contribution evidence
+
+```sh
+workstream contributions --output json
+workstream contributions --project PROJECT_ID --type accepted_submission
+workstream project contributions PROJECT_ID --recorded-from 2026-01-01T00:00:00Z --recorded-before 2027-01-01T00:00:00Z --output json
+workstream project contributions PROJECT_ID --csv earned.csv
+```
+
+Self reads bind the current human on the server; there is no actor selector.
+Project exports require a covering Project Manager or exact-project Finance
+Authority. Every invocation calls the public API with fresh authority; owning a
+Submitter/Reviewer grant alone does not authorize project export.
+
+Both commands accept `--type accepted_submission|completed_review` and aware
+RFC3339 `--recorded-from` (inclusive) / `--recorded-before` (exclusive) filters.
+Times are normalized to UTC microsecond precision before dispatch. Omitted
+filters select all authorized records. The paginated REST change exposes JSON
+`next_cursor` and CSV `X-Workstream-Next-Cursor` for selections through 100,000.
+The CLI follows either continuation internally with the same normalized filters
+and a 1,000-contribution page limit. Cursors are transport details: the complete
+JSON result retains `exported_at` from page one plus `items`, without exposing a
+cursor or adding pagination flags.
+
+Text and JSON retain every public source/acceptance identity and award, including
+exact decimal strings and unpaid empty award sets. These are **earned facts,
+not payment status**. A completed-review record is evidence of an actual Review;
+reading existing records does not activate unfinished human review or its
+revision workflow.
+
+`--csv FILE` requests the server's formula-neutralized CSV, one row per award
+or one row for an unpaid contribution. It preserves those exact bytes after
+validation across every page, emits the server header once, writes a new 0600
+file in an existing directory and refuses existing files or destination
+symlinks. It never writes raw CSV to the terminal or reconstructs CSV from a
+separate JSON read. `--output json` with `--csv` returns only
+`{"format":"csv","saved":true}` after successful publication. JSON and CSV
+are staged privately until traversal completes; later-page failures leave no
+successful stdout or published/temporary export. Keep exported personal data
+private.
+Invalid destinations or empty explicit flags exit 2 (`invalid_arguments`);
+local file creation/write/persistence/publication failures exit 1
+(`file_io_error`). Text errors explain the failure without echoing paths.
+
+Responses are bounded at 32 MiB with the existing 12-second read deadline.
+Oversized, malformed, wrong-scope or credential-reflecting responses are errors,
+not partial exports. Backend authorization errors and over-limit refusals remain
+distinct from client response validation failures.
+
+The table above is the delivered command inventory. PILOT-02 supplies the
+[batch conversion/import/screen/release commands](#prepare-a-task-import-json-source)
+in the same CLI; contribution-evidence reads do not depend on using batch import.
+Submission preparation, creation and history commands are described below;
+manager revision repair and human-review commands are outside this CLI inventory.
 
 ## Build and use
 
@@ -84,7 +170,7 @@ and preserving the successful API JSON.
 Exit status is `0` for success, `1` for API/network/response failure, and `2`
 for invalid arguments or configuration. JSON requests time out after 12 seconds;
 JSON responses default to a 64 KiB bound (guide declaration and document-bearing
-work context use 2 MiB wire bounds; exact guide proposals use 8 MiB). Original downloads stream to private files,
+work context and grant history use 2 MiB wire bounds; exact guide proposals use 8 MiB). Original downloads stream to private files,
 bounded by the advertised byte count and ART's 512 MiB hard ceiling. Downloads
 and original uploads allow up to two minutes for response headers and ten minutes overall,
 including transfer; connection/TLS timeouts and redirect/proxy refusal remain.
@@ -111,6 +197,167 @@ invalid timestamps or mismatched identity. JSON output preserves that API
 object; text escapes terminal controls. Foreign or revoked authority remains
 a server denial with empty stdout, not an empty successful project.
 This command does not list projects, edit setup, activate guides or claim tasks.
+
+## Explicit contributor-role decisions
+
+```sh
+workstream project role-grant issue PROJECT_ID --input issue.json --idempotency-key ISSUE_UUID -o json
+workstream project role-grant revoke PROJECT_ID GRANT_ID --input revoke.json --idempotency-key REVOKE_UUID -o json
+```
+
+Issuance requires the exact public decision, including qualification evidence:
+
+```json
+{
+  "target_actor_profile_id": "019f79b0-1111-7000-8000-000000000001",
+  "role": "submitter",
+  "qualification": {
+    "skills_snapshot": {
+      "availability": "available",
+      "reference_ids": ["skill:analysis"],
+      "unavailable_reason": null
+    },
+    "reputation_snapshot": {
+      "availability": "unavailable",
+      "reference_ids": [],
+      "unavailable_reason": "no_record"
+    },
+    "prior_project_work_refs": [],
+    "external_expertise_refs": []
+  },
+  "reason": "Approved project contribution"
+}
+```
+
+Use `reviewer` for an independent Reviewer grant. The caller supplies real
+evidence, including unavailable reasons; the CLI does not collect, score or
+default it. Both availability objects require `unavailable_reason`, even when
+null. Available evidence requires references and null reason; unavailable evidence
+requires an empty reference list and `not_collected`, `source_unavailable` or
+`no_record`. Reference lists are bounded to 20; prior-work references are UUIDs,
+other references are the public bounded tokens, not URLs. Revocation accepts
+only `{"reason":"Project participation ended"}`. Reasons are nonempty, at most
+500 UTF-8 bytes, with no edge whitespace or control characters. Input is a
+regular UTF-8 JSON file bounded to 1 MiB; unknown/duplicate members and malformed
+required fields fail before sending. Original JSON is forwarded unchanged.
+
+Each invocation sends one POST, not a preflight or a retry loop. AUTH verifies
+current admission, exact-project manager authority, eligible targets and
+self-protection, including on replay; the CLI never derives permission from a
+receipt. Project Manager is an AdminRole, not a contributor role. Issuing a
+Reviewer grant alone does not authorize claim/start or activate human review.
+
+The complete seven-field receipt identifies the grant, qualification snapshot,
+project, actor, role, status and version. Issue expects HTTP 201 with active/1
+and binds project/target/role; revoke expects HTTP 200 with revoked/2 and binds
+project/grant. No earlier read is used to infer the revoked grant's actor or role.
+JSON preserves the exact valid response; text escapes terminal controls. Missing,
+malformed, substituted or credential-reflecting success is `outcome_unknown`
+with empty stdout. Retry only manually with unchanged selectors, file contents
+and key. A read is observation, not rollback proof; an old issue replay after
+revocation is denied by the backend's retained-state check. No actor discovery,
+automatic role assignment or AdminRole mutation is added.
+
+### Inspect retained contributor grants
+
+```sh
+workstream project role-grant list PROJECT_ID --status active --role submitter --limit 50 -o json
+workstream project role-grant show PROJECT_ID GRANT_ID -o json
+```
+
+List returns exactly one count-free page: `items` and nullable `next_cursor`.
+Continue explicitly with `--cursor` and the same project, status, role and limit.
+Omit status/role to include both supported values; `all` is not a filter token.
+These are live keyset pages, not a fixed-membership export. The CLI never follows
+a cursor automatically or interprets/signs it; the backend rejects invalid or
+query-mismatched cursors and rechecks current authority for each request.
+
+Show reads the exact grant under its project. Both commands retain the complete
+public qualification snapshot, grant provenance/reason and nullable revocation
+facts, with no count, private contact data or identity-provider subjects. JSON
+preserves the authorized response; text escapes terminal controls. Malformed or
+substituted responses, normalized duplicate grant IDs, filter contradictions
+and credential reflection fail with empty stdout. These reads require the
+backend's covered Project Manager or Audit Authority, not a contributor grant.
+They do not cache permission, authorize a later write, or establish rollback.
+
+## Inspect contribution policies
+
+```sh
+workstream project contribution-policy current PROJECT_ID -o json
+workstream project contribution-policy show PROJECT_ID POLICY_ID -o json
+workstream project contribution-policy show PROJECT_ID POLICY_ID --version VERSION_ID -o json
+```
+
+These are Finance Authority reads, not Project Manager permissions. Workstream
+requires current covering Finance authority and active admission for each call;
+PM-only, foreign-project or withdrawn authority remains a concealed server denial.
+Each command sends one public GET, without a preflight or automatic selector fetch.
+
+`current` returns the aggregate ID and nullable published/open-draft version IDs.
+`show` without `--version` uses backend selection: the published version takes
+precedence over an open successor draft. Supply `--version` to inspect that draft
+or an exact retained historical version. Retired aggregates are excluded from
+current discovery but exact historical inspection remains authorized separately.
+An explicitly empty or invalid selector fails before HTTP; UUID spelling is
+preserved in the request and compared by identity in the response.
+
+Both output formats retain all authorized fields: policy/version identity and
+status, positive integer version number, complete rules and award definitions,
+including binding IDs and exact decimal-string quantities. Empty drafts are
+valid observations, not readiness. JSON preserves the API object; complete text
+escapes terminal controls. Missing, null, unknown, duplicate, substituted or
+credential-reflecting facts fail with empty stdout. These commands never publish,
+retire, pay, activate a guide or authorize a later write.
+
+## Manage contribution policies
+
+Finance Authority can make four separate decisions:
+
+```sh
+workstream project contribution-policy create PROJECT_ID --input name.json --idempotency-key CREATE_UUID
+workstream project contribution-policy update PROJECT_ID POLICY_ID VERSION_ID --input rules.json --idempotency-key UPDATE_UUID
+workstream project contribution-policy publish PROJECT_ID POLICY_ID VERSION_ID --idempotency-key PUBLISH_UUID
+workstream project contribution-policy retire PROJECT_ID POLICY_ID VERSION_ID --idempotency-key RETIRE_UUID
+```
+
+`name.json` contains `{"name":"Project contributions"}`. A successor draft keeps
+the aggregate's existing name. `rules.json` replaces the complete draft graph:
+
+```json
+{"rules":[
+  {"contribution_type":"accepted_submission","compensation_mode":"unpaid","definitions":[]},
+  {"contribution_type":"completed_review","compensation_mode":"unpaid","definitions":[]}
+]}
+```
+
+For a compensated rule, each definition contains `instrument_type` (`money` or
+`project_points`), `unit_code`, exact string `quantity`, and `adapter_binding_id`.
+Workstream checks currency/unit registration, binding eligibility and the complete
+graph. The CLI preserves supplied quantities without rounding. Omitted
+`definitions` retains the API's empty default. Input files are limited to 1 MiB;
+unknown fields and malformed types fail before dispatch.
+
+Use selectors from the returned receipt or an explicit policy read. Publication
+replaces the previously published version; retirement ends the selected current
+policy. Guide activation remains a separate manager decision. Each command sends
+one request and requires current backend authority. No command automatically
+fetches selectors, retries, activates a guide or issues payment.
+
+Save the action, exact selectors, input contents and key together. If the outcome
+is unknown, manually replay only that unchanged request. Reusing a key for changed
+intent conflicts. Replay returns the original immutable event, even after later
+publication/retirement, subject to current authorization. Both output formats
+retain all receipt fields; malformed or mismatched success is an unknown outcome,
+and a subsequent read cannot prove rollback.
+
+Native proof extends the existing public guide-activation journey with empty
+drafts, unpaid publication, simultaneous published/draft selection, exact history,
+foreign stored policies/versions, and public Finance suspension/revocation with
+restored positive controls. Policy/guide SQL snapshots remain unchanged by the
+reads; legitimate AUTH read evidence is excluded. Compensated precision and
+malformed nested definitions are process-boundary proof, not a new native payout
+or compensated-policy certification. Full backend integration proof remains in CI.
 
 ## Declare a guide and its setup inputs
 
@@ -392,6 +639,91 @@ including stored foreign-project concealment. Canonical retained prerequisites
 and Celery publication to an in-memory test broker do not prove distributed
 delivery, worker completion, live setup inference or deployed Flow behavior.
 
+## Prepare, submit and inspect contributor work
+
+```sh
+workstream task prepare TASK_ID --assignment ASSIGNMENT_ID --file work.zip \
+  --idempotency-key CALLER_UUID --summary 'Completed work' --attestation 'My attestation'
+# If still pending, wait for server verification and explicitly repeat the same
+# preparation command, key, file bytes and packet. There is no polling GET.
+workstream task submit TASK_ID --assignment ASSIGNMENT_ID --admission READY_ADMISSION_ID \
+  --summary 'Completed work' --attestation 'My attestation'
+# For a checker-requested revision, inspect the current task context first.
+workstream task context TASK_ID --output json
+workstream task prepare TASK_ID --assignment ASSIGNMENT_ID --file revision.zip \
+  --predecessor SOURCE_SUBMISSION_ID --revision-preparation-id PREPARATION_ID \
+  --revision-preparation-sha256 "$PREPARATION_SHA256" \
+  --idempotency-key REVISION_KEY --summary 'Revised work'
+workstream task submit TASK_ID --assignment ASSIGNMENT_ID --admission READY_REVISION_ADMISSION_ID \
+  --predecessor SOURCE_SUBMISSION_ID --summary 'Revised work'
+workstream task submissions TASK_ID --limit 25
+workstream submission show SUBMISSION_ID
+workstream submission findings SUBMISSION_ID --limit 25
+workstream submission findings SUBMISSION_ID --run CHECKER_RUN_ID
+```
+
+Preparation streams one nonempty regular ZIP (at most 512MiB) to the public
+authenticated API. Server project limits can be smaller. It never creates a
+Submission, automatically retries or polls. A `ready` receipt supplies the
+admission for the separate submit command. Other statuses must not be interpreted
+as readiness. Before confirming a successful upload, the CLI checks file size,
+modification time and SHA-256 again; a changed source reports an uncertain outcome.
+
+Both commands accept optional `--summary`, `--attestation` and `--predecessor`.
+Revision preparation additionally requires the exact `revision_context.preparation_id`
+and `revision_context.preparation_sha256` from the authorized task context as
+`--revision-preparation-id` and `--revision-preparation-sha256`. Both flags are
+forbidden for initial preparation and are sent as preparation headers only; they
+are not part of the Submission JSON. Keep the pair unchanged for explicit
+preparation replay. A fresh server check rejects a stale pair after a rebase,
+deadline or source change; the CLI never selects a replacement automatically.
+Use the same packet for preparation, creation and explicit replay. The current
+preparation API transports text in headers: printable ASCII only, at most 64KiB
+per text field, with no leading/trailing whitespace. Unsupported text is rejected
+before dispatch, not rewritten. Omitted or explicitly empty text is supported;
+the server supplies warning-only defaults where applicable. The API owns all
+policy checks, predecessor/currentness rules and authorization.
+
+Submission creation is keyed by the exact admission and packet; there is no
+additional client-generated creation key. A lost or malformed write response
+exits 1 with `outcome_unknown: true`, empty stdout and a text-mode recovery hint.
+Inspect task history and explicitly replay only unchanged inputs. Do not generate
+a new preparation key simply because a response was lost. Each replay requires
+fresh server authority, including after a CLI restart.
+
+Blocked pre-submission intake prints the validated contributor findings in error
+`details`; it creates no Submission. Infrastructure failures are not quality
+findings. After creation, `submission findings` reads contributor-visible durable
+checker runs/results. Run status is not human review or final acceptance, and the
+CLI never follows finding paths or exposes provider/private management fields.
+History and findings lists fetch one page only; use the returned opaque cursor
+explicitly (up to 1024 characters; no local decoding). `--run` cannot be combined with pagination flags. Revision change
+summary is available through `task context` as `revision_context.changes`,
+not in the current public history rows.
+History projects `rejected` with `status_reason=revision_limit_reached` after
+immediate exhaustion, or `revision_deadline_expired` after timeout. Both come
+from immutable TASK receipts without editing the original Submission.
+`task show` and PM task reads expose `last_assignment_outcome`; the contributor
+view includes only that actor's closed work. `next_action=none` applies to that
+closed assignment, while the task is ready for a fresh claim.
+
+The cap comes from the task's locked project RevisionPolicy. N=2 permits
+attempts 0, 1 and 2; N=0 permits only attempt 0. Final-attempt failure immediately
+closes the assignment and returns the task to ready, without another window.
+A fixable failure with revisions remaining starts a fresh PostgreSQL-time
+allowance. Setup-blocked revision contexts show `clock_state=paused`, a null
+`deadline_at` and the frozen `remaining_microseconds`. Repair resumes that
+remainder; running repair preserves its deadline. Only immutable resubmission
+ends a running opportunity. Timeout also returns the task to ready. Anyone
+eligible may claim a new assignment at round 0, including a previous claimant;
+there is no contributor-count limit. Human decision integration remains #554.
+
+
+The native process test uses real HTTP, PostgreSQL and local ART custody, with
+approved-policy/assignment prerequisites arranged by fixtures. It drives the real
+independent verifier directly; it does not certify distributed scheduling, S3 or
+the complete public guide-setup journey owned by PILOT #552.
+
 ## Inspect an exact derived post-submission policy
 
 After backend derivation, the proposal read supplies `post_submit_policy_id`:
@@ -472,6 +804,93 @@ foreign projects and unauthenticated/unauthorized callers are also denied.
 Explicit worker application is not queued broker-delivery, live setup inference
 or deployment proof.
 
+## Prepare a task-import JSON source
+
+```sh
+workstream project task-batch convert-csv --input briefs.csv --out briefs.json --label 'Evaluation briefs' --output json
+workstream project task-batch source-declare PROJECT_ID --input briefs.json --idempotency-key SOURCE_UUID --output json
+workstream project task-batch source-upload PROJECT_ID SOURCE_ID --input briefs.json --output json
+workstream project task-batch source-status PROJECT_ID SOURCE_ID --output json
+```
+
+Conversion is local and needs no token or API configuration. It accepts quoted
+UTF-8 CSV, including embedded commas/newlines and one optional UTF-8 BOM. It
+requires 1..500 task rows and bounds both input CSV and generated JSON to 8MiB.
+Invalid input produces no JSON file. `--out` must name a new file; an existing
+file is never overwritten. The report names the SHA-256 and byte count of the
+complete generated JSON, including its final newline. Upload those exact bytes.
+Workstream retains the converted JSON source; this does not retain the original
+CSV. Retain that original separately if your own workflow requires it.
+
+| CSV header | JSON task field | Conversion |
+| --- | --- | --- |
+| `external_task_id` or `source_id` | `external_task_id` | Required exact, case-sensitive source identifier |
+| `title`, `description` | Same names | Required nonblank instruction text, preserved without trimming |
+| `task_type` or `category` | `task_type` | Optional category, preserved |
+| `skill_tags`, `languages`, `tools` | `skill_tags` | Semicolon segments concatenate in this order; trim segments and omit blank segments |
+| `difficulty`, `acceptance_criteria`, `rejection_criteria` | Same names | Optional text, preserved |
+| `estimated_time_minutes` | Same name | Optional whole minutes in 1..525600 |
+
+Unknown/duplicate headers, simultaneous alias/canonical headers, duplicate IDs,
+padded/control-character IDs, invalid UTF-8/NUL, malformed quoting and row/field
+limits are refused. No Task identities, guide locks or creator authority can be
+supplied through CSV. The canonical JSON contract is
+[`contracts/task-import.schema.json`](../contracts/task-import.schema.json).
+JSON files also receive bounded canonical validation before declaration/upload,
+including duplicate object members, strict field types and exact external IDs.
+Their original whitespace/bytes are preserved for the commitment and upload.
+
+Declaration, upload and status are separate operations under current covered-PM
+authority. Declaration sends only the exact JSON SHA/count with the caller's
+UUID key and returns a source ID. Upload sends one raw `application/json` PUT
+to that explicit project/source and carries no separate idempotency key; retained
+source custody controls its replay. Status reads the actual retained ART state.
+The CLI verifies returned selectors and, for writes, the exact file commitment.
+A returned source/status establishes byte custody only; it does not create,
+screen or release Tasks.
+
+Continue with explicit batch operations after source verification:
+
+```sh
+workstream project task-batch import PROJECT_ID SOURCE_ID --idempotency-key IMPORT_UUID --output json
+workstream project task-batch status PROJECT_ID BATCH_ID --output json
+workstream project task-batch screen PROJECT_ID BATCH_ID --idempotency-key SCREEN_UUID --reason 'Briefs meet the approved guide' --output json
+workstream project task-batch release PROJECT_ID BATCH_ID --idempotency-key RELEASE_UUID --reason 'All members are ready for work' --output json
+```
+
+Import returns the complete original ordered DRAFT creation facts. Status keeps
+those originals separate from the current member states. SCREEN and RELEASE
+select every member from immutable native membership and return ordered compact
+Task IDs, statuses and locked lineage. Normal guide/policy prerequisites still
+apply; release requires a nonblank reason. Each write requires its own retained
+caller UUID. No command combines upload/import/screen/release or chooses per-row
+retry keys. Responses are limited to 1..500 complete members: original/status
+JSON is bounded to 16MiB and compact transition JSON to 2MiB. Invalid, crossed,
+duplicate or partial responses are refused without partial output.
+
+A different verified source with identical SHA and byte count can recover the
+original batch with a new import key. The response retains the original source
+ID and rows; the CLI checks the selected source's public verified status before
+displaying it. Changing the source selector under an existing key conflicts.
+If the verification read fails after import, the write outcome remains unknown.
+
+Batch writes never retry automatically. An unknown outcome requires inspection
+of `status` as an observation, followed by manual replay of the unchanged project,
+source/batch, action, reason and key. SCREEN/RELEASE replay also requires every
+member to retain its original post-state, locked context and unassigned custody;
+later Task changes or revoked authority can prevent recovery with the same key.
+Import, SCREEN and RELEASE wait up to three minutes for their complete atomic
+response. Status and source operations retain the normal twelve-second deadline.
+These are request budgets; an interrupted or timed-out write can still require
+the same manual recovery above.
+
+Source writes never retry automatically, including after HTTP/2 GOAWAY. If a
+declaration outcome is unknown, manually replay only the unchanged project,
+JSON file bytes and caller key. For an uncertain upload, inspect `source-status`
+and then manually replay the unchanged project/source/file if appropriate.
+Server storage recovery can remain pending; inspect the actual returned status
+instead of treating every successful HTTP response as verified storage.
+
 ## Create a draft project shell
 
 ```sh
@@ -550,8 +969,10 @@ plus one, timezone-bearing effective time and prior project status. Integer
 fields retain the backend range and UUIDs compare by identity, not spelling.
 JSON returns the validated API object; text renders every field with terminal
 escaping. A replay receipt proves that operation, not that its guide is still
-current after later supersession. The current backend still rejects activation
-with `human_review_required=false`; this CLI does not change that readiness gate.
+current after later supersession. Supported `human_review_required=false` guides
+can activate when their approved inventory has no `human_review` disposition;
+new false/pass effects still require a live REV generation. The CLI does not
+change those backend-owned readiness gates.
 
 Malformed or substituted receipts, lost responses and other uncertain writes
 exit 1 with empty stdout and `outcome_unknown: true`. Retain the original input
@@ -566,6 +987,57 @@ executes the real derivation task explicitly, approves and publishes through
 public APIs, then proves activation/replay against SQL and denial after grant
 revocation or suspension. It is not live setup inference, broker-delivery or
 deployment certification.
+
+## Prepare tasks as a project manager
+
+```sh
+workstream project task create PROJECT_ID --input task.json --idempotency-key CREATE_KEY --output json
+workstream project task screen PROJECT_ID TASK_ID --idempotency-key SCREEN_KEY --reason "Guide requirements inspected" --output json
+workstream project task release PROJECT_ID TASK_ID --idempotency-key RELEASE_KEY --reason "Ready for contribution" --output json
+```
+
+The input is the public `TaskCreate` JSON, for example:
+
+```json
+{
+  "title": "Assess the supplied evidence",
+  "description": "Produce the deliverables specified by the project guide.",
+  "task_type": "evaluation",
+  "skill_tags": ["analysis"],
+  "acceptance_criteria": "Complete, attributable evidence for every conclusion."
+}
+```
+
+All public declaration fields are supported; omitted/null values retain their
+API semantics. Creation requires a canonical hyphenated project UUID, as does
+the backend create route. Inputs are bounded to 1MiB; management responses to
+2MiB. Transition selectors accept supported UUID spellings without changing the
+supplied task selector on the wire. The project selector binds the returned
+project, not a client-side grant check or an additional backend request.
+
+Creation returns a draft. Screening locks the backend-selected active guide and
+policies; release checks those locks and installed plans and requires an explicit
+nonblank decision reason. These are three independent calls, never automatic
+steps. Only Workstream decides authority, readiness and lifecycle transitions.
+Text and JSON output retain the complete authorized management receipt, not
+the narrower contributor projection. Supply deadlines as RFC3339 timestamps;
+creation binds the returned instant, allowing timezone normalization and the
+backend's microsecond precision. Import-batch identifiers are nullable text,
+not Workstream record UUIDs.
+
+Keep each key with its unchanged request. Immediate replay returns the original
+receipt only while current authority, lifecycle and locked context permit it;
+for example, a draft-create key cannot replay after screening changes its locks.
+Malformed success or transport uncertainty exits 1 with empty stdout. Text errors
+include deliberate unchanged-input/key recovery; JSON sets `outcome_unknown`.
+Do not substitute a new key because a task read appears unchanged.
+
+Built-process tests cover exact bodies/keys, complete response binding, malformed
+lineage, credential/terminal safety and no automatic replay. The existing real
+socket/Flow/PREP/PostgreSQL journey prepares a task using these commands, verifies
+stored locks and single command/audit facts, tests foreign-project, suspension and
+revocation denials, then exercises contributor discovery/claim/start. Canonical
+guide setup fixtures are not live inference or deployed-service certification.
 
 ## Browse tasks as a project manager
 
@@ -660,6 +1132,11 @@ server's current assignment/action hints and `guide_documents`. An active own
 assignment receives the exact locked originals' IDs, order, labels, media types,
 sizes, SHA-256 commitments and task-scoped read references; ready unassigned
 browsing receives an empty document list. Task examples are never included.
+For a task awaiting revision, the optional `revision_context` gives the current
+preparation ID and digest, source Submission, deadline, eligibility disposition
+and bounded change summary. It may be absent or null on other tasks. Use its
+exact preparation pair for a revision ZIP preparation; the read does not reserve
+or authorize later intake.
 Hints are observations, not authority
 or a claimability guarantee. The CLI never recomputes them or automatically
 executes a hinted action. Claim/start independently authorize their requests.
@@ -668,7 +1145,7 @@ Requirements expose the task's locked guide and intake rules: packet fields,
 artifact/evidence requirements, forbidden patterns, attestation, hash/manifest
 requirements, storage-reference restrictions, size/entry limits and packaging.
 They are not a current-guide lookup, a checker verdict or permission to upload.
-Submission intake is still hidden; these commands do not expose it. Described
+These reads do not invoke the separate `task prepare`/`task submit` commands. Described
 paths and storage references are displayed only, never read, downloaded or executed.
 
 ### Read the assigned guide
@@ -683,7 +1160,12 @@ This requires an active assignment and current exact-project Submitter authority
 Each download reauthorizes independently; neither a cached list nor a read
 reference grants access. Workstream reads the task's locked snapshot, not the
 latest guide or drafts. A successor activation alone never changes its documents.
-The task rebase operation remains separate planned work.
+Checker-requested revision preparation can atomically rebase the complete task
+and assignment context for the next attempt. Inspect `task context` for its
+frozen change summary and acknowledge the exact preparation pair when running
+`task prepare`; this guide download does not initiate a rebase. Covered-manager
+repair is a separate backend operation with no CLI command. Genuine human
+Review revision integration remains #554 work.
 
 The API verifies the complete original against retained ART size/SHA-256 before
 responding. Missing, corrupt or wrong-namespace originals fail with
@@ -732,8 +1214,8 @@ contributor-safe task in progress. The CLI validates the requested task identity
 assignment/task/project/policy consistency, claim contributor/assigner identity,
 active/unreleased assignment and required timestamps before output. It rejects
 management-only fields. JSON preserves the API object; text prints every public
-field with escaped terminal controls. This does not expose submission or review
-commands, or activate unfinished product lifecycle work.
+field with escaped terminal controls. Separate submission commands are described
+below; claim/start does not invoke them or activate unfinished human review.
 
 The API scopes keys by actor and action, and checks current authority before
 recovering a committed result. An exact retry can recover the same result only
@@ -818,6 +1300,16 @@ state. Process tests prove the exact POST/key/body, strict claim/start response
 identity, safe text, canonical errors and uncertain/no-retry behavior.
 Local Flow-compatible tokens are test fixtures, not deployed-provider proof.
 No coverage percentage or test-count target is used.
+
+Batch proof covers the built CLI's CSV conversion, source upload, atomic import,
+status, screen and release against real PostgreSQL/MinIO. Contribution-export
+proof covers self and authorized project reads, exact server CSV, fresh grant
+and lifecycle denials, and safe local publication failures. These are separate
+journeys in one binary, not proof of a complete public setup-to-acceptance journey.
+Hosted CLI verification partitions the complete integration directory into
+task/general HTTP, guide HTTP, native API, native self-service and native batch
+groups. The contribution HTTP and native API tests remain included; no group
+replaces or skips another. Local conversion rule tests supplement process tests.
 
 ```sh
 go mod verify

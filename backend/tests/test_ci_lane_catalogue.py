@@ -8,7 +8,6 @@ import hashlib
 import json
 import os
 from pathlib import Path
-import re
 import subprocess
 import sys
 
@@ -17,6 +16,7 @@ import pytest
 import scripts.run_test_lanes as runner
 from scripts import test_lane_catalogue as catalogue
 from scripts.run_test_lanes import LANES, LaneError
+from scripts.select_ci_scope import ALL_LANES
 
 
 def test_committed_lanes_cover_recursive_inventory_exactly_once() -> None:
@@ -24,7 +24,7 @@ def test_committed_lanes_cover_recursive_inventory_exactly_once() -> None:
     runner.validate_lane_inventory(discovered)
 
     assigned = [module for lane in LANES for module in lane.modules]
-    assert len(LANES) == 10
+    assert len(LANES) == 16
     assert all(lane.requires_postgres for lane in LANES)
     assert Counter(assigned)[catalogue.SCHEMA_MODULE] == 1
     assert all(
@@ -42,24 +42,56 @@ def test_committed_lanes_cover_recursive_inventory_exactly_once() -> None:
     )
 
 
+def test_architecture_inspections_share_capacity_without_losing_nodes() -> None:
+    modules = {
+        "tests/test_artifact_architecture.py",
+        "tests/architecture/test_module_boundaries.py",
+        "tests/architecture/test_test_structure_boundary.py",
+    }
+    schema = next(lane for lane in LANES if lane.name == "schema_contracts")
+    assert modules.isdisjoint(schema.modules)
+    for module in modules:
+        assert catalogue.PARTITION_LANES_BY_MODULE[module] == catalogue.PARTITIONED_SHARED_LANES
+        assert (
+            tuple(lane.name for lane in LANES if module in lane.modules)
+            == catalogue.PARTITIONED_SHARED_LANES
+        )
+    nodes = [f"{module}::test_inspection[{index}]" for module in modules for index in range(256)]
+    manifest = runner.build_manifest("a" * 40, list(reversed(nodes)))
+    assert Counter(row["nodeid"] for row in manifest["nodes"]) == Counter(nodes)
+    assert {row["lane"] for row in manifest["nodes"]} == set(catalogue.PARTITIONED_SHARED_LANES)
+    assert runner.build_manifest("a" * 40, nodes) == manifest
+
+
 def test_checker_delivery_and_routing_preparation_partition_every_node_once() -> None:
     delivery = {
+        "tests/checkers/default/test_contract.py",
+        "tests/checkers/default/test_execution.py",
         "tests/checkers/external/test_contracts.py",
         "tests/checkers/external/test_migration.py",
         "tests/checkers/external/test_postgresql.py",
         "tests/checkers/external/test_registry.py",
         "tests/checkers/external/test_runtime.py",
-        "tests/checkers/execution/test_results.py",
+        "tests/checkers/external/test_policy.py",
+        "tests/checkers/external/test_selected_post_submit.py",
+        "tests/checkers/external/test_selected_pre_submit.py",
+        "tests/checkers/external/test_selected_pre_submit_coordination.py",
+        "tests/checkers/external/test_selected_pre_submit_service.py",
+        "tests/checkers/external/test_selected_preparation_command.py",
         "tests/checkers/execution/test_execution.py",
+        "tests/checkers/execution/test_completion_evidence.py",
         "tests/checkers/execution/test_coordination.py",
         "tests/checkers/execution/test_concurrency.py",
         "tests/checkers/execution/test_storage.py",
         "tests/checkers/execution/test_migration.py",
         "tests/checkers/execution/test_material_lineage.py",
         "tests/checkers/execution/test_material_migration.py",
+        "tests/checkers/execution/test_checker_retry.py",
+        "tests/checkers/execution/test_checker_retry_authority.py",
+        "tests/checkers/execution/test_checker_retry_history_replay.py",
+        "tests/checkers/execution/test_checker_retry_migration.py",
         "tests/test_post_submit_materialization.py",
         "tests/test_post_submit_selection.py",
-        "tests/test_submission_evaluation_capacity.py",
         "tests/test_checker_output_custody.py",
         "tests/test_checker_output_storage.py",
     }
@@ -88,343 +120,101 @@ def test_checker_delivery_and_routing_preparation_partition_every_node_once() ->
         )
 
 
-def test_measured_project_modules_partition_between_project_a_and_c() -> None:
+def test_project_intake_partitions_across_the_project_family() -> None:
     expected = {
         "tests/test_guide_document_intake.py",
         "tests/test_projects.py",
     }
-    assert set(catalogue.PROJECT_AC_PARTITION_MODULES) == expected
+    assert set(catalogue.PROJECT_INTAKE_MODULES) == expected
     assert not expected & set(catalogue.PROJECT_MODULES)
-    assert all(
-        catalogue.PARTITION_LANES_BY_MODULE[module] == catalogue.PARTITIONED_PROJECT_AC_LANES
-        for module in expected
+    assert catalogue.PARTITION_LANES_BY_MODULE["tests/test_guide_document_intake.py"] == (
+        catalogue.PARTITIONED_PROJECT_LANES
+    )
+    assert catalogue.PARTITION_LANES_BY_MODULE["tests/test_projects.py"] == (
+        "project_lifecycle_c",
+        "project_lifecycle_b",
+        "project_lifecycle_g",
+        "project_lifecycle_f",
     )
 
     for module in expected:
-        assert tuple(lane.name for lane in LANES if module in lane.modules) == (
-            "project_lifecycle_a",
-            "project_lifecycle_c",
+        assert {lane.name for lane in LANES if module in lane.modules} == set(
+            catalogue.PARTITION_LANES_BY_MODULE[module]
         )
 
     nodes = [f"{module}::test_owned[{index}]" for module in expected for index in range(256)]
     manifest = runner.build_manifest("a" * 40, list(reversed(nodes)))
     assert {row["nodeid"] for row in manifest["nodes"]} == set(nodes)
-    assert {row["lane"] for row in manifest["nodes"]} == set(catalogue.PARTITIONED_PROJECT_AC_LANES)
+    assert {row["lane"] for row in manifest["nodes"]} == set(catalogue.PARTITIONED_PROJECT_LANES)
 
 
-def test_measured_hotspots_have_explicit_semantic_owners() -> None:
-    """Keep lane balance tied to subsystem ownership and measured schema cost."""
+def test_expanded_lane_families_keep_exact_semantic_owners() -> None:
+    """Every capacity lane retains its exact semantic-family ownership."""
     modules_by_lane = {lane.name: set(lane.modules) for lane in LANES}
 
-    partitioned_project_modules = (
-        set(catalogue.CHECKER_DELIVERY_MODULES)
-        | set(catalogue.ROUTING_AUTH_PREPARATION_MODULES)
-        | {
-            "tests/contributions/test_export_csv.py",
-            "tests/contributions/test_export_projection.py",
-            "tests/authorization/test_contribution_read_scope.py",
-            "tests/authorization/test_contribution_read_kernel.py",
-            "tests/contributions/exports/test_source_reads.py",
-            "tests/contributions/exports/test_public_reads.py",
-            "tests/contributions/exports/test_failures.py",
-            "tests/contributions/exports/test_concurrency.py",
-            "tests/tasks/evaluation_delivery/test_custody.py",
-            "tests/tasks/evaluation_delivery/test_delivery.py",
-            "tests/tasks/evaluation_delivery/test_isolation.py",
-            "tests/tasks/submission_dispatch/test_composition.py",
-            "tests/tasks/submission_dispatch/test_concurrency.py",
-            "tests/tasks/submission_dispatch/test_migration.py",
-            "tests/tasks/submission_dispatch/test_replay.py",
-            "tests/tasks/submission_dispatch/test_rollback.py",
-            "tests/tasks/submission_dispatch/test_storage.py",
-            "tests/reviews/acceptance/test_prepared.py",
-            "tests/tasks/post_submit_routing/test_outcome_concurrency.py",
-            "tests/tasks/post_submit_routing/test_outcome.py",
-            "tests/tasks/post_submit_routing/test_outcome_storage.py",
-            "tests/tasks/post_submit_routing/test_outcome_migration.py",
-            "tests/reviews/acceptance/test_participant_contracts.py",
-            "tests/reviews/acceptance/test_participation.py",
-            "tests/reviews/acceptance/test_participation_transactions.py",
-            "tests/reviews/lifecycle/test_participant_control.py",
-            "tests/tasks/post_submit_routing/test_evaluation_guard.py",
-            "tests/tasks/post_submit_routing/test_evaluation_currentness.py",
-            "tests/tasks/post_submit_routing/test_review_admission_currentness.py",
-            "tests/tasks/post_submit_routing/test_source_preparation.py",
-            "tests/tasks/accepted_effects/test_contracts.py",
-            "tests/tasks/accepted_effects/test_postgresql.py",
-            "tests/contributions/records/test_contracts.py",
-            "tests/contributions/records/test_storage.py",
-            "tests/contributions/records/test_migration.py",
-            "tests/contributions/participation/test_contracts.py",
-            "tests/contributions/participation/test_postgresql.py",
-            "tests/contributions/participation/test_transactions.py",
-            "tests/projects/guide_activation/test_admission.py",
-            "tests/projects/guide_activation/test_audit_contract.py",
-            "tests/projects/guide_activation/test_concurrency.py",
-            "tests/projects/guide_activation/test_contracts.py",
-            "tests/projects/guide_activation/test_custody.py",
-            "tests/projects/guide_activation/test_direct_sql.py",
-            "tests/projects/guide_activation/test_postgresql.py",
-            "tests/projects/guide_activation/test_rejections.py",
-            "tests/projects/guide_activation/test_successor.py",
-            "tests/projects/test_active_guide_repository.py",
-            "tests/projects/guide_compilation/test_capability_growth.py",
-            "tests/projects/guide_compilation/test_capability_growth_postgresql.py",
-            "tests/projects/guide_compilation/test_compilation_storage_limit.py",
-            "tests/projects/guide_compilation/finalization/test_authorization_concurrency_postgresql.py",
-            "tests/projects/guide_compilation/finalization/test_authorization_postgresql.py",
-            "tests/projects/guide_compilation/finalization/test_concurrency_postgresql.py",
-            "tests/projects/guide_compilation/finalization/test_contracts.py",
-            "tests/projects/guide_compilation/finalization/test_guards_postgresql.py",
-            "tests/projects/guide_compilation/finalization/test_lineage.py",
-            "tests/projects/guide_compilation/finalization/test_schema_postgresql.py",
-            "tests/projects/guide_compilation/finalization/test_postgresql.py",
-            "tests/projects/guide_compilation/finalization/test_replay.py",
-            "tests/projects/guide_compilation/finalization/test_service.py",
-            "tests/projects/guide_compilation/finalization/test_structure.py",
-            "tests/projects/guide_compilation/proposals/test_approved_tip.py",
-            "tests/projects/guide_compilation/proposals/test_artifact_paths.py",
-            "tests/projects/guide_compilation/proposals/test_selected_checks.py",
-            "tests/projects/guide_compilation/proposals/test_authority_contract.py",
-            "tests/projects/guide_compilation/proposals/test_contracts.py",
-            "tests/projects/guide_compilation/proposals/test_audit_schema.py",
-            "tests/projects/guide_compilation/proposals/test_inventory.py",
-            "tests/projects/guide_compilation/proposals/test_postgresql.py",
-            "tests/projects/guide_compilation/proposals/test_public_api.py",
-            "tests/projects/guide_compilation/proposals/test_public_dispatch.py",
-            "tests/projects/guide_compilation/proposals/test_delivery_custody.py",
-            "tests/projects/public_activation/test_concurrency.py",
-            "tests/projects/public_activation/test_contracts.py",
-            "tests/projects/public_activation/test_failures.py",
-            "tests/projects/public_activation/test_workflow.py",
-            "tests/projects/post_policy/test_authority.py",
-            "tests/projects/post_policy/test_compiler.py",
-            "tests/projects/post_policy/test_public_api.py",
-            "tests/projects/post_policy/test_public_recovery.py",
-            "tests/projects/post_policy/test_delivery_worker.py",
-            "tests/projects/post_policy/test_concurrency.py",
-            "tests/projects/post_policy/test_correction.py",
-            "tests/projects/post_policy/test_direct_sql.py",
-            "tests/projects/post_policy/test_guards.py",
-            "tests/projects/post_policy/test_inventory.py",
-            "tests/projects/post_policy/test_schema.py",
-            "tests/projects/post_policy/test_postgresql.py",
-            "tests/projects/post_policy/test_replacement.py",
-            "tests/projects/guide_compilation/test_authorized_concurrency_postgresql.py",
-            "tests/projects/guide_compilation/test_authorized_execution_service.py",
-            "tests/projects/guide_compilation/test_authorized_recovery_postgresql.py",
-            "tests/projects/guide_compilation/test_authorized_request_service.py",
-            "tests/projects/guide_compilation/test_automatic_request.py",
-            "tests/projects/guide_compilation/test_contracts.py",
-            "tests/projects/guide_compilation/test_context_builder.py",
-            "tests/projects/guide_compilation/test_document_access_postgresql.py",
-            "tests/projects/guide_compilation/test_document_file_custody_postgresql.py",
-            "tests/projects/guide_compilation/test_runtime_cleanup_postgresql.py",
-            "tests/projects/guide_compilation/test_document_scope_contracts.py",
-            "tests/projects/guide_compilation/test_task_examples_postgresql.py",
-            "tests/projects/guide_compilation/test_database_guards.py",
-            "tests/projects/guide_compilation/test_durable_dispatch_handoff.py",
-            "tests/projects/guide_compilation/test_hidden_call_graph.py",
-            "tests/projects/guide_compilation/test_hidden_orchestrator.py",
-            "tests/projects/guide_compilation/test_hidden_orchestrator_postgresql.py",
-            "tests/projects/guide_compilation/test_live_cutover_postgresql.py",
-            "tests/projects/guide_compilation/test_live_worker.py",
-            "tests/projects/guide_compilation/test_runtime_configuration_schema.py",
-            "tests/projects/guide_compilation/test_runtime_configuration_postgresql.py",
-            "tests/projects/guide_compilation/test_schema_contract.py",
-            "tests/projects/guide_compilation/test_public_authorization.py",
-            "tests/projects/guide_compilation/test_projection_call_graph.py",
-            "tests/projects/guide_compilation/test_projection_contracts.py",
-            "tests/projects/guide_compilation/test_projection_schema.py",
-            "tests/projects/guide_compilation/test_projection_policy.py",
-            "tests/projects/guide_compilation/test_projection_postgresql.py",
-            "tests/projects/guide_compilation/test_projection_authorization_postgresql.py",
-            "tests/projects/guide_compilation/test_projection_service.py",
-            "tests/projects/guide_compilation/test_request_operation_postgresql.py",
-            "tests/projects/guide_compilation/test_repository_attempts.py",
-            "tests/projects/guide_compilation/test_repository_persistence.py",
-            "tests/projects/test_locked_policy_context.py",
-            "tests/projects/test_locked_policy_custody.py",
-            "tests/projects/test_locked_policy_concurrency.py",
-            "tests/projects/test_locked_policy_contract.py",
-            "tests/projects/test_activation_readiness.py",
-            "tests/projects/test_policy_read_composition.py",
-            "tests/projects/test_active_guide_read_composition.py",
-            "tests/projects/test_diagnostic_read_composition.py",
-            "tests/projects/test_diagnostic_read_rejections.py",
-            "tests/projects/sufficiency_mutations/test_authority.py",
-            "tests/projects/sufficiency_mutations/test_lineage.py",
-            "tests/projects/sufficiency_mutations/test_report_create.py",
-            "tests/projects/sufficiency_mutations/test_acknowledgement.py",
-            "tests/projects/sufficiency_mutations/test_acknowledgement_postgresql.py",
-            "tests/projects/sufficiency_mutations/test_replay.py",
-            "tests/projects/sufficiency_mutations/test_replay_repository.py",
-            "tests/projects/sufficiency_mutations/test_public_routes.py",
-            "tests/projects/submission_policy_mutations/test_authority.py",
-            "tests/projects/submission_policy_mutations/test_commands.py",
-            "tests/projects/submission_policy_mutations/test_lineage.py",
-            "tests/projects/submission_policy_mutations/test_replay.py",
-            "tests/projects/submission_policy_mutations/test_repository.py",
-            "tests/projects/submission_policy_mutations/test_public_routes.py",
-            "tests/projects/submission_policy_mutations/test_public_routes_postgresql.py",
-            "tests/projects/test_retired_submission_derivation_route.py",
-            "tests/test_api_drill_repairs.py",
-        }
+    expected_families = (
+        (
+            (
+                "shared_foundations_a",
+                "shared_foundations_b",
+                "shared_foundations_c",
+            ),
+            catalogue.SHARED_FOUNDATION_MODULES,
+        ),
+        (
+            (
+                "project_lifecycle_a",
+                "project_lifecycle_b",
+                "project_lifecycle_c",
+                "project_lifecycle_d",
+                "project_lifecycle_e",
+                "project_lifecycle_f",
+                "project_lifecycle_g",
+            ),
+            catalogue.PROJECT_PARTITIONED_MODULES,
+        ),
+        (
+            (
+                "task_lifecycle_a",
+                "task_lifecycle_b",
+                "task_lifecycle_c",
+                "task_lifecycle_d",
+                "task_lifecycle_e",
+            ),
+            catalogue.TASK_MODULES,
+        ),
     )
-    assert modules_by_lane["project_lifecycle_b"] == partitioned_project_modules
-    assert modules_by_lane["project_lifecycle_d"] == partitioned_project_modules
-    project_ac_modules = partitioned_project_modules | set(catalogue.PROJECT_AC_PARTITION_MODULES)
-    assert modules_by_lane["project_lifecycle_a"] == project_ac_modules
-    assert modules_by_lane["project_lifecycle_c"] == project_ac_modules
-    assert (
-        modules_by_lane["task_lifecycle_a"]
-        == modules_by_lane["task_lifecycle_b"]
-        == modules_by_lane["task_lifecycle_c"]
-        == {
-            "tests/checkers/execution/test_completion_evidence.py",
-            "tests/checkers/execution/test_completion_contract.py",
-            "tests/tasks/post_submit_routing/test_failure_completion.py",
-            "tests/tasks/post_submit_routing/test_remediation.py",
-            "tests/tasks/post_submit_routing/test_remediation_storage.py",
-            "tests/tasks/post_submit_routing/test_remediation_currentness.py",
-            "tests/tasks/post_submit_routing/test_remediation_migration.py",
-            "tests/tasks/evaluation_delivery/test_completion.py",
-            "tests/tasks/evaluation_delivery/test_completion_contracts.py",
-            "tests/tasks/evaluation_delivery/test_completion_custody.py",
-            "tests/authorization/submission_history/test_reads.py",
-            "tests/authorization/submission_history/test_privacy.py",
-            "tests/authorization/submission_history/test_storage.py",
-            "tests/authorization/submission_history/test_isolation.py",
-            "tests/authorization/submission_history/test_migration.py",
-            "tests/authorization/submission_history/test_absence.py",
-            "tests/authorization/submission_history/test_failures.py",
-            "tests/reviews/decision/test_contracts.py",
-            "tests/reviews/decision/test_storage.py",
-            "tests/reviews/decision/test_migration.py",
-            "tests/reviews/packet/test_repository.py",
-            "tests/reviews/packet/test_migration.py",
-            "tests/tasks/post_submit_routing/test_contracts.py",
-            "tests/tasks/post_submit_routing/test_storage.py",
-            "tests/tasks/post_submit_routing/test_migration.py",
-            "tests/tasks/test_contribution_lineage.py",
-            "tests/tasks/test_project_display.py",
-            "tests/tasks/test_ready_queue.py",
-            "tests/tasks/test_public_queues.py",
-            "tests/tasks/test_locked_compensation.py",
-            "tests/tasks/test_task_import_contract.py",
-            "tests/authorization/task_queues/test_authority.py",
-            "tests/authorization/task_queues/test_contracts.py",
-            "tests/authorization/task_queues/test_transactions.py",
-            "tests/authorization/task_queues/test_concurrency.py",
-            "tests/authorization/task_reads/test_authority.py",
-            "tests/authorization/task_reads/test_contracts.py",
-            "tests/authorization/task_reads/test_transactions.py",
-            "tests/authorization/task_reads/test_visibility.py",
-            "tests/authorization/task_reads/test_concurrency.py",
-            "tests/authorization/task_locked_context/test_authority.py",
-            "tests/authorization/task_locked_context/test_contracts.py",
-            "tests/authorization/task_locked_context/test_transactions.py",
-            "tests/authorization/task_locked_context/test_visibility.py",
-            "tests/authorization/task_locked_context/test_concurrency.py",
-            "tests/authorization/task_audit_evidence/test_contracts.py",
-            "tests/authorization/task_audit_evidence/test_authority.py",
-            "tests/authorization/task_audit_evidence/test_history.py",
-            "tests/authorization/task_audit_evidence/test_transactions_concurrency.py",
-            "tests/tasks/test_management_queue.py",
-            "tests/tasks/test_task_detail.py",
-            "tests/tasks/test_work_context.py",
-            "tests/tasks/test_guide_documents.py",
-            "tests/tasks/test_locked_context.py",
-            "tests/tasks/test_submission_requirements.py",
-            "tests/tasks/test_audit_evidence.py",
-            "tests/tasks/test_assignment_invalidation.py",
-            "tests/tasks/test_assignment_invalidation_targets.py",
-            "tests/tasks/test_assignment_invalidation_authority.py",
-            "tests/tasks/test_assignment_invalidation_causes.py",
-            "tests/tasks/test_assignment_invalidation_races.py",
-            "tests/tasks/test_command_replay.py",
-            "tests/tasks/test_payment_policy_removal.py",
-            "tests/tasks/test_payment_policy_migration.py",
-            "tests/tasks/test_contribution_claim_races.py",
-            "tests/tasks/test_submission_lineage.py",
-            "tests/checkers/post_submit/test_catalogue.py",
-            "tests/checkers/post_submit/test_compiled_policy.py",
-            "tests/checkers/post_submit/test_configuration.py",
-            "tests/checkers/post_submit/test_conformance.py",
-            "tests/checkers/post_submit/test_input_bounds.py",
-            "tests/checkers/post_submit/test_public_boundary.py",
-            "tests/checkers/post_submit/test_request.py",
-            "tests/checkers/post_submit/test_requirement_dispositions.py",
-            "tests/checkers/post_submit/test_result_contract.py",
-            "tests/checkers/test_effective_intake_rules.py",
-            "tests/test_blocked_pre_submit_feedback_postgresql.py",
-            "tests/test_checker_catalogue.py",
-            "tests/test_checkers.py",
-            "tests/test_default_pre_submit_execution.py",
-            "tests/test_approved_guide_intake.py",
-            "tests/test_pre_submit_attempt_recovery.py",
-            "tests/test_pre_submit_attempt_contracts.py",
-            "tests/test_pre_submit_attempt_authority_integration.py",
-            "tests/test_pre_submit_attempt_lock_order.py",
-            "tests/test_pre_submit_role_issue_lock_order.py",
-            "tests/test_pre_submit_related_lock_order.py",
-            "tests/test_pre_submit_attempt_schema.py",
-            "tests/test_effective_pre_submit_execution.py",
-            "tests/test_project_guide_compilation_contracts.py",
-            "tests/test_review_lease_persistence.py",
-            "tests/test_review_queue_persistence.py",
-            "tests/test_tasks.py",
-        }
+    assert catalogue.PARTITION_GROUPS == tuple(
+        (lane_names, modules) for lane_names, modules in expected_families
     )
-    shared_a = modules_by_lane[catalogue.PARTITIONED_SHARED_LANES[0]]
-    shared_b = modules_by_lane[catalogue.PARTITIONED_SHARED_LANES[1]]
-    assert shared_a == shared_b == set(catalogue.SHARED_FOUNDATION_MODULES)
-    assert "tests/tasks/evaluation_delivery/test_worker_materialization.py" in shared_a
-    assert "tests/artifacts/test_review_packet_contract.py" in shared_a
-    assert {
-        "tests/test_task_import_sources.py",
-        "tests/authorization/post_submit/test_atomicity.py",
-        "tests/authorization/post_submit/test_concurrency.py",
-        "tests/authorization/post_submit/test_live_authority.py",
-        "tests/authorization/post_submit/test_principals.py",
-        "tests/authorization/post_submit/test_timeout.py",
-        "tests/authorization/post_policy/test_concurrency.py",
-        "tests/authorization/post_policy/test_context.py",
-        "tests/authorization/post_policy/test_prepared.py",
-        "tests/authorization/post_policy/test_postgresql.py",
-        "tests/authorization/guide_proposals/test_concurrency.py",
-        "tests/authorization/guide_proposals/test_context.py",
-        "tests/authorization/guide_proposals/test_prepared.py",
-        "tests/authorization/guide_proposals/test_postgresql.py",
-        "tests/authorization/setup_finalization/test_adapter.py",
-        "tests/authorization/setup_finalization/test_catalogue.py",
-        "tests/authorization/setup_finalization/test_prepared.py",
-        "tests/authorization/setup_finalization/test_replay.py",
-        "tests/authorization/setup_finalization/test_resource_context.py",
-        "tests/authorization/setup_finalization/test_structure.py",
-    }.issubset(shared_a)
-    post_submit_storage_contracts = {
-        "tests/authorization/post_submit/test_receipt_custody.py",
-        "tests/authorization/post_submit/test_migration.py",
-    }
-    assert post_submit_storage_contracts.isdisjoint(shared_a | shared_b)
-    static_contracts = {
-        "tests/test_artifact_architecture.py",
-        "tests/architecture/test_module_boundaries.py",
-        "tests/architecture/test_authorization_boundary.py",
-        "tests/architecture/test_test_structure_boundary.py",
-        "tests/test_identifier_inventory.py",
-        "tests/test_record_id_collection.py",
+    for lane_names, modules in expected_families:
+        for name in lane_names:
+            assert modules_by_lane[name] == {
+                module for module in modules if name in catalogue.PARTITION_LANES_BY_MODULE[module]
+            }
+        assert all(catalogue.PARTITION_LANES_BY_MODULE[module] for module in modules)
+        assert all(
+            set(catalogue.PARTITION_LANES_BY_MODULE[module]) <= set(lane_names)
+            for module in modules
+        )
+
+    schema_static_contracts = {
         "tests/test_ci_lane_catalogue.py",
+        "tests/test_ci_scope_selection.py",
         "tests/test_ci_test_lanes.py",
         "tests/test_test_lane_evidence.py",
         "tests/test_merge_test_lane_evidence.py",
     }
-    assert static_contracts.isdisjoint(shared_a | shared_b)
+    partitioned_modules = set().union(*(set(modules) for _, modules in expected_families))
+    assert set(catalogue.STATIC_FOUNDATION_MODULES) <= set(catalogue.SHARED_FOUNDATION_MODULES)
+    assert schema_static_contracts.isdisjoint(partitioned_modules)
     assert {
         "tests/test_alembic.py",
+        "tests/migrations/test_contribution_export_snapshots.py",
         "tests/migrations/test_contribution_read_audit.py",
         "tests/test_database_reset.py",
+        "tests/authorization/post_submit/test_receipt_custody.py",
+        "tests/authorization/post_submit/test_migration.py",
         "tests/reviews/packet/test_storage.py",
         "tests/reviews/lifecycle/test_contracts.py",
         "tests/reviews/lifecycle/test_storage.py",
@@ -435,31 +225,201 @@ def test_measured_hotspots_have_explicit_semantic_owners() -> None:
         "tests/reviews/acceptance/test_storage.py",
         "tests/reviews/acceptance/test_migration.py",
         runner.ADMIN_RUNNER_MODULE,
-    } | static_contracts | post_submit_storage_contracts | set(
-        catalogue.OBSERVABILITY_MODULES
-    ) | set(catalogue.TASK_ROUTING_REQUEST_MODULES) == modules_by_lane["schema_contracts"]
-    assert {
-        "tests/authorization/admin_access/test_bootstrap_cli.py",
-        "tests/authorization/admin_access/test_api_journey.py",
-        "tests/authorization/admin_access/test_bootstrap_postgresql.py",
-        "tests/authorization/admin_access/test_admin_reads_postgresql.py",
-        "tests/authorization/admin_access/test_grant_api_postgresql.py",
-        "tests/authorization/admin_access/test_grant_reads_postgresql.py",
-        "tests/authorization/admin_access/test_grant_validation_postgresql.py",
-        "tests/authorization/admin_access/test_failure_atomicity_postgresql.py",
-        "tests/authorization/admin_access/test_grant_concurrency_postgresql.py",
-        "tests/authorization/admin_access/test_timestamp_concurrency_postgresql.py",
-        "tests/authorization/admin_access/test_read_concurrency_postgresql.py",
-        "tests/authorization/service_actors/test_provisioning_atomicity.py",
-        "tests/actors/test_first_access_postgresql.py",
-        "tests/authorization/guide_compilation_projections/test_replay_evidence.py",
-        "tests/test_auth_concurrency_observer.py",
-        "tests/test_artifact_admission.py",
-        "tests/test_submission_bundle_admission.py",
-        "tests/test_authorization.py",
-        "tests/test_guide_artifacts.py",
-        "tests/test_mutation_policy.py",
-    } <= shared_a
+    } | schema_static_contracts | set(catalogue.OBSERVABILITY_MODULES) | set(
+        catalogue.TASK_ROUTING_REQUEST_MODULES
+    ) == modules_by_lane["schema_contracts"]
+
+
+def test_static_architecture_inventory_partitions_only_in_shared_foundations() -> None:
+    expected = {
+        "tests/test_artifact_architecture.py",
+        "tests/architecture/test_module_boundaries.py",
+        "tests/architecture/test_authorization_boundary.py",
+        "tests/architecture/test_test_structure_boundary.py",
+        "tests/test_identifier_inventory.py",
+        "tests/test_record_id_collection.py",
+    }
+    assert set(catalogue.STATIC_FOUNDATION_MODULES) == expected
+    assert all(
+        catalogue.PARTITION_LANES_BY_MODULE[module] == catalogue.PARTITIONED_SHARED_LANES
+        for module in expected
+    )
+    assert all(
+        tuple(lane.name for lane in LANES if module in lane.modules)
+        == catalogue.PARTITIONED_SHARED_LANES
+        for module in expected
+    )
+
+    nodes = [f"{module}::test_owned[{index}]" for module in expected for index in range(256)]
+    rows = runner.build_manifest("a" * 40, list(reversed(nodes)))["nodes"]
+
+    assert Counter(row["nodeid"] for row in rows) == Counter(nodes)
+    assert {row["lane"] for row in rows} == set(catalogue.PARTITIONED_SHARED_LANES)
+
+
+def test_semantic_family_membership_has_an_independent_fingerprint() -> None:
+    """A catalogue-internal move across semantic families must fail this contract."""
+    expected = {
+        "shared": (
+            237,
+            "980cbd9fb01c7f8c870ef348cb2f56d2cfc200d810ec1e25c841338d4ae83be1",
+        ),
+        "project": (
+            196,
+            "22c5c14b692cf39c879be2f520721b302cb92fc5a29949e48c1281b8e497f349",
+        ),
+        "task": (
+            78,
+            "176f9e790672591101fef1a9c8278532ffea684a5ff7a814610a24ee560061f2",
+        ),
+    }
+    actual = {
+        "shared": catalogue.SHARED_FOUNDATION_MODULES,
+        "project": catalogue.PROJECT_PARTITIONED_MODULES,
+        "task": catalogue.TASK_MODULES,
+    }
+    for family, modules in actual.items():
+        count, digest = expected[family]
+        canonical = "\n".join(sorted(modules)) + "\n"
+        assert len(modules) == len(set(modules)) == count
+        assert hashlib.sha256(canonical.encode()).hexdigest() == digest
+
+
+def test_project_module_lane_overrides_are_exact_and_bounded() -> None:
+    expected = {
+        "tests/test_projects.py": (
+            "project_lifecycle_c",
+            "project_lifecycle_b",
+            "project_lifecycle_g",
+            "project_lifecycle_f",
+        ),
+        "tests/tasks/test_task_batch_transitions.py": (
+            "project_lifecycle_e",
+            "project_lifecycle_d",
+            "project_lifecycle_a",
+            "project_lifecycle_b",
+            "project_lifecycle_c",
+        ),
+        "tests/tasks/submission_dispatch/test_revision_clock_sql.py": ("project_lifecycle_f",),
+        "tests/tasks/submission_dispatch/test_revision_retained_pause.py": (
+            "project_lifecycle_a",
+            "project_lifecycle_c",
+            "project_lifecycle_g",
+        ),
+        "tests/tasks/submission_dispatch/test_revision_pause_races.py": (
+            "project_lifecycle_a",
+            "project_lifecycle_c",
+            "project_lifecycle_e",
+            "project_lifecycle_f",
+        ),
+        "tests/tasks/submission_dispatch/test_revision_exhaustion.py": ("project_lifecycle_g",),
+        "tests/tasks/submission_dispatch/test_revision_expiry.py": (
+            "project_lifecycle_a",
+            "project_lifecycle_e",
+            "project_lifecycle_c",
+            "project_lifecycle_b",
+            "project_lifecycle_d",
+        ),
+    }
+    assert catalogue.PROJECT_MODULE_LANE_OVERRIDES == expected
+    assert set(expected) <= set(catalogue.PROJECT_PARTITIONED_MODULES)
+    assert all(
+        catalogue.PARTITION_LANES_BY_MODULE[module]
+        == expected.get(module, catalogue.PARTITIONED_PROJECT_LANES)
+        for module in catalogue.PROJECT_PARTITIONED_MODULES
+    )
+
+
+def test_project_lane_ownership_has_an_independent_fingerprint() -> None:
+    canonical = (
+        "\n".join(
+            f"{module}:{','.join(catalogue.PARTITION_LANES_BY_MODULE[module])}"
+            for module in sorted(catalogue.PROJECT_PARTITIONED_MODULES)
+        )
+        + "\n"
+    )
+    assert len(catalogue.PROJECT_PARTITIONED_MODULES) == 196
+    assert hashlib.sha256(canonical.encode()).hexdigest() == (
+        "1af35702d873709f8404e0b21c7a5bef706d7483d8a6ef4db87b34a1aec463de"
+    )
+
+
+def test_project_lane_override_nodes_execute_exactly_once_in_owned_lanes() -> None:
+    nodes = [
+        f"{module}::test_owned_{index}"
+        for module in catalogue.PROJECT_MODULE_LANE_OVERRIDES
+        for index in range(256)
+    ]
+    rows = runner.build_manifest("a" * 40, list(reversed(nodes)))["nodes"]
+
+    assert Counter(row["nodeid"] for row in rows) == Counter(nodes)
+    assert len(rows) == len(nodes)
+    for module, lane_names in catalogue.PROJECT_MODULE_LANE_OVERRIDES.items():
+        assert {row["lane"] for row in rows if row["module"] == module} == set(lane_names)
+    pause_module = "tests/tasks/submission_dispatch/test_revision_pause_races.py"
+    retained_module = "tests/tasks/submission_dispatch/test_revision_retained_pause.py"
+    expected = {
+        f"{pause_module}::test_due_old_timer_cannot_expire_paused_or_resumed_head[False]": (
+            "project_lifecycle_e"
+        ),
+        f"{pause_module}::test_due_old_timer_cannot_expire_paused_or_resumed_head[True]": (
+            "project_lifecycle_c"
+        ),
+        f"{pause_module}::test_expiry_beats_real_pm_repair_waiting_for_task_past_deadline": (
+            "project_lifecycle_f"
+        ),
+        f"{retained_module}::test_retained_blocked_clock_pauses_once_or_stays_due[False]": (
+            "project_lifecycle_a"
+        ),
+        f"{retained_module}::test_retained_blocked_clock_pauses_once_or_stays_due[True]": (
+            "project_lifecycle_g"
+        ),
+        "tests/tasks/submission_dispatch/test_revision_expiry.py::test_due_expiry_and_ready_final_submission_wait_for_task_lock": (
+            "project_lifecycle_b"
+        ),
+        "tests/tasks/submission_dispatch/test_revision_expiry.py::test_final_submission_commit_boundary_serializes_expiry[False]": (
+            "project_lifecycle_a"
+        ),
+        "tests/tasks/submission_dispatch/test_revision_expiry.py::test_final_submission_commit_boundary_serializes_expiry[True]": (
+            "project_lifecycle_c"
+        ),
+        "tests/tasks/test_task_batch_transitions.py::test_public_source_import_screen_release_complete_journey[500]": (
+            "project_lifecycle_a"
+        ),
+        "tests/tasks/test_task_batch_transitions.py::test_public_source_import_screen_release_complete_journey[200]": (
+            "project_lifecycle_b"
+        ),
+        "tests/test_projects.py::test_submission_artifact_policy_removed_agent_route_performs_no_runtime_calls": (
+            "project_lifecycle_g"
+        ),
+        "tests/test_projects.py::test_submission_artifact_policy_update_conceals_foreign_policy_id": (
+            "project_lifecycle_g"
+        ),
+        "tests/test_projects.py::test_submission_artifact_policy_update_fault_rolls_back_replacement": (
+            "project_lifecycle_c"
+        ),
+        "tests/test_projects.py::test_sufficiency_report_rejects_unknown_request_fields": (
+            "project_lifecycle_f"
+        ),
+        "tests/test_projects.py::test_unified_warnings_do_not_use_the_manual_report_acknowledgement_path": (
+            "project_lifecycle_f"
+        ),
+        "tests/test_projects.py::test_worker_cannot_create_project_records": (
+            "project_lifecycle_b"
+        ),
+        "tests/tasks/submission_dispatch/test_revision_clock_sql.py::test_direct_sql_cannot_supply_authoritative_clock_values": (
+            "project_lifecycle_f"
+        ),
+        "tests/tasks/submission_dispatch/test_revision_clock_sql.py::test_large_revision_allowance_preserves_every_microsecond": (
+            "project_lifecycle_f"
+        ),
+        "tests/tasks/submission_dispatch/test_revision_clock_sql.py::test_pause_cannot_commit_after_running_parent_deadline": (
+            "project_lifecycle_f"
+        ),
+    }
+    rows = runner.build_manifest("a" * 40, list(reversed(expected)))["nodes"]
+
+    assert {row["nodeid"]: row["lane"] for row in rows} == expected
 
 
 def test_discovery_is_recursive_and_lexically_canonical(tmp_path: Path) -> None:
@@ -507,8 +467,8 @@ def test_inventory_fails_closed(mutation: str, error: str) -> None:
     lanes = list(LANES)
     first = lanes[0]
     if mutation == "missing":
-        lanes[0] = replace(first, modules=first.modules[1:])
-        lanes[1] = replace(lanes[1], modules=lanes[1].modules[1:])
+        for index in range(len(catalogue.PARTITIONED_SHARED_LANES)):
+            lanes[index] = replace(lanes[index], modules=lanes[index].modules[1:])
     elif mutation == "duplicate":
         lanes[0] = replace(first, modules=(*first.modules, lanes[1].modules[0]))
     elif mutation == "foreign":
@@ -557,14 +517,14 @@ def test_schema_nodes_share_one_lane() -> None:
 @pytest.mark.parametrize(
     ("names", "modules"),
     catalogue.PARTITION_GROUPS,
-    ids=("shared", "project", "project-ac", "task"),
+    ids=("shared", "project", "task"),
 )
 def test_owner_nodes_partition_deterministically(names, modules) -> None:
     module = modules[0]
     nodes = [f"{module}::test_shared_{index}" for index in range(100)]
 
     first = runner.build_manifest("a" * 40, nodes)
-    second = runner.build_manifest("a" * 40, list(reversed(nodes)))
+    second = runner.build_manifest("b" * 40, list(reversed(nodes)))
     first_by_node = {row["nodeid"]: row["lane"] for row in first["nodes"]}
     second_by_node = {row["nodeid"]: row["lane"] for row in second["nodes"]}
 
@@ -706,6 +666,66 @@ def test_partition_rejects_wrong_owner_pair(monkeypatch: pytest.MonkeyPatch) -> 
         runner.build_manifest("a" * 40, [f"{project.modules[0]}::test_one"])
 
 
+def test_partition_accepts_exact_noncanonical_owner_order() -> None:
+    module = "tests/tasks/test_task_batch_transitions.py"
+    declared = catalogue.PARTITION_LANES_BY_MODULE[module]
+    attached = tuple(lane.name for lane in LANES if module in lane.modules)
+
+    assert declared == (
+        "project_lifecycle_e",
+        "project_lifecycle_d",
+        "project_lifecycle_a",
+        "project_lifecycle_b",
+        "project_lifecycle_c",
+    )
+    assert attached == catalogue.PARTITIONED_PROJECT_LANES[:5]
+    node = f"{module}::test_public_source_import_screen_release_complete_journey[500]"
+    assert runner.build_manifest("a" * 40, [node])["nodes"][0]["lane"] == declared[2]
+
+
+@pytest.mark.parametrize("mutation", ("missing", "duplicate", "foreign"))
+def test_partition_rejects_inexact_ordered_owners(
+    monkeypatch: pytest.MonkeyPatch,
+    mutation: str,
+) -> None:
+    module = catalogue.PROJECT_MODULES[0]
+    owners = catalogue.PARTITION_LANES_BY_MODULE[module]
+    changed = {
+        "missing": owners[:-1],
+        "duplicate": (*owners[:-1], owners[0]),
+        "foreign": (*owners[:-1], "schema_contracts"),
+    }[mutation]
+    monkeypatch.setitem(runner.PARTITION_LANES_BY_MODULE, module, changed)
+
+    with pytest.raises(LaneError, match="invalid_partition_lanes"):
+        runner.build_manifest("a" * 40, [f"{module}::test_one"])
+
+
+def test_partition_rejects_coordinated_duplicate_owners(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = "tests/tasks/submission_dispatch/test_revision_retained_pause.py"
+    duplicate_owners = (
+        "project_lifecycle_a",
+        "project_lifecycle_a",
+        "project_lifecycle_c",
+    )
+    changed = tuple(
+        replace(
+            lane,
+            modules=tuple(item for item in lane.modules if item != module)
+            + (module,) * duplicate_owners.count(lane.name),
+        )
+        for lane in LANES
+    )
+    monkeypatch.setitem(runner.PARTITION_LANES_BY_MODULE, module, duplicate_owners)
+    monkeypatch.setattr(runner, "LANES", changed)
+    runner.validate_lane_inventory(runner.discover_test_modules(), lanes=changed)
+
+    with pytest.raises(LaneError, match="invalid_partition_lanes"):
+        runner.build_manifest("a" * 40, [f"{module}::test_one"])
+
+
 def test_direct_runner_cli_remains_runnable(tmp_path: Path) -> None:
     env = os.environ.copy()
     env.pop("PYTHONPATH", None)
@@ -724,10 +744,8 @@ def test_direct_runner_cli_remains_runnable(tmp_path: Path) -> None:
 
 def test_workflow_lane_inventory_matches_catalogue() -> None:
     source = (runner.ROOT.parent / ".github/workflows/backend.yml").read_text()
-    expected = Counter(lane.name for lane in LANES)
-    matrix = re.search(r"        lane:\n((?:          - [a-z_]+\n)+)", source)
-    assert matrix is not None
-    assert Counter(re.findall(r"- ([a-z_]+)", matrix[1])) == expected
+    assert ALL_LANES == tuple(lane.name for lane in LANES)
+    assert source.count("matrix: ${{ fromJSON(needs.scope.outputs.lane_matrix) }}") == 1
     assert (
         source.count(
             "name: backend-lane-${{ github.sha }}-${{ matrix.lane }}-attempt-${{ github.run_attempt }}"
@@ -738,8 +756,8 @@ def test_workflow_lane_inventory_matches_catalogue() -> None:
     assert source.count("path: backend/.ci/download\n          merge-multiple: false") == 1
     assert '--expected-head "${GITHUB_SHA}"' in source
     assert '--run-attempt "${GITHUB_RUN_ATTEMPT}"' in source
-    assert 'test "${#coverage_files[@]}" -eq 10' in source
-    assert "len(lanes) != 10" in source
+    assert 'test "${#coverage_files[@]}" -eq 16' in source
+    assert "len(lanes) != 16" in source
     assert 'Path(".ci/download"), expected_head, int(os.environ["GITHUB_RUN_ATTEMPT"])' in source
     assert 'timing_path = bundle / "job-start-epoch.txt"' in source
     assert (
@@ -755,7 +773,7 @@ def test_workflow_requires_the_locked_external_checker_workspace() -> None:
     assert "cargo fmt --all --check" in source
     assert "cargo test --workspace --locked" in source
     assert "EXTERNAL_CHECKER_RESULT: ${{ needs.external-checker-runtime.result }}" in source
-    assert 'test "${EXTERNAL_CHECKER_RESULT}" = success' in source
+    assert 'require_expected "${EXTERNAL_EXPECTED}" "${EXTERNAL_CHECKER_RESULT}"' in source
 
 
 def test_former_coverage_reruns_remain_in_full_suite_lanes() -> None:
@@ -900,14 +918,11 @@ def test_routing_authorization_proofs_use_the_project_partition():
         "tests/authorization/post_submit_routing/test_prepared.py",
     }
     assert set(catalogue.ROUTING_AUTH_PREPARATION_MODULES) == expected
-    for lane in LANES:
-        assert set(lane.modules) & expected == (
-            expected if lane.name in catalogue.PARTITIONED_PROJECT_LANES else set()
+    for module in expected:
+        assert catalogue.PARTITION_LANES_BY_MODULE[module] == catalogue.PARTITIONED_PROJECT_LANES
+        assert tuple(lane.name for lane in LANES if module in lane.modules) == (
+            catalogue.PARTITIONED_PROJECT_LANES
         )
-    assert all(
-        catalogue.PARTITION_LANES_BY_MODULE[module] == catalogue.PARTITIONED_PROJECT_LANES
-        for module in expected
-    )
 
 
 def test_shared_acceptance_owner_proofs_are_in_partitioned_project_lanes():

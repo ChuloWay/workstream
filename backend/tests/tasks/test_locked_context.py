@@ -38,7 +38,7 @@ def test_locked_context_contracts():
         for field in REFERENCE_FIELDS
     }
     summary = PostSubmitPolicyBodySummary(schema_version="1", default_checkers=(),
-                                         required_checkers=("check_acceptance_criteria_present",),
+                                         required_checkers=("test.project_quality",),
                                          warning_checkers=(), execution_checkers=(), blocking_severities=("high",))
     for cls in MODELS:
         kwargs = {**values, **({SUMMARY: summary} if cls is ManagementTaskLockedContext else {})}

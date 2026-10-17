@@ -115,7 +115,6 @@ def test_source_rejects_equal_phase_receipts(successor: bool) -> None:
             "predecessor_submission_id": new_record_id(),
             "predecessor_submission_version": 1,
         },
-        {"submission_version": 2},
         {
             "submission_version": 3,
             "predecessor_submission_id": new_record_id(),
@@ -142,6 +141,12 @@ def test_source_accepts_exact_immediate_predecessor() -> None:
 
     assert source.predecessor_submission_id == predecessor_id
     assert source.predecessor_submission_version == source.submission_version - 1
+
+
+def test_source_accepts_new_assignment_initial_after_prior_task_versions() -> None:
+    source = TaskPostSubmitManifestFacts(**_source_values(submission_version=5))
+    assert source.predecessor_submission_id is None
+    assert source.predecessor_submission_version is None
 
 
 def test_source_rejects_its_own_submission_as_predecessor() -> None:
@@ -177,7 +182,7 @@ def test_routing_authority_has_no_public_or_delivery_entry() -> None:
     assert post_submit_routing.__all__ == (
         "TaskPostSubmitSourceProposal", "TaskPostSubmitManifestFacts", "task_post_submit_source_digest",
         "TaskRoutingSelection", "TaskRoutingRequestFacts", "task_routing_request_digest",
-        "TaskRoutingSourcePreparation",
+        "TaskRoutingSourcePreparation", "TaskRevisionExhaustionFacts",
     )
     for name in post_submit_routing.__all__:
         assert getattr(task_api, name) is getattr(post_submit_routing, name)
@@ -186,7 +191,7 @@ def test_routing_authority_has_no_public_or_delivery_entry() -> None:
         name
         for name, value in vars(post_submit_routing).items()
         if isclass(value) and value.__module__ == post_submit_routing.__name__
-    } == {"TaskPostSubmitSourceProposal", "TaskPostSubmitManifestFacts", "TaskRoutingSelection", "TaskRoutingRequestFacts", "TaskRoutingSourcePreparation"}
+    } == {"TaskPostSubmitSourceProposal", "TaskPostSubmitManifestFacts", "TaskRoutingSelection", "TaskRoutingRequestFacts", "TaskRoutingSourcePreparation", "TaskRevisionExhaustionFacts"}
     assert not hasattr(task_api, "TaskRoutingRequests")
     action = ActionId.TASK_POST_SUBMIT_ROUTE
     assert ACTION_BY_ID[action].permission_id is PermissionId.TASK_POST_SUBMIT_ROUTE

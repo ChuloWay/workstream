@@ -8,6 +8,7 @@ from app.core.identifiers import new_record_id
 import pytest
 from pydantic import ValidationError
 from sqlalchemy import select, text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.tasks import task_service
@@ -238,15 +239,30 @@ async def test_requirement_custody_and_caller_transaction(task_client):
     async with factory() as session:
         with pytest.raises(TaskLockedContextInvalid, match="incomplete"):
             await read_requirements(task_service(session, settings=get_settings()), READS[1][0], project["id"], draft["id"], contributor)
-    async with factory() as session, session.begin():
-        row = await session.get(WorkstreamTask, task["id"])
-        row.locked_post_submit_checker_policy_body = {**row.locked_post_submit_checker_policy_body, "blocking_severities": []}
+    with pytest.raises(IntegrityError, match="task revision context lacks current preparation"):
+        async with factory() as session, session.begin():
+            row = await session.get(WorkstreamTask, task["id"])
+            row.locked_post_submit_checker_policy_body = {**row.locked_post_submit_checker_policy_body, "blocking_severities": []}
     for method, _ in READS:
         async with factory() as session:
-            assert (await session.get(WorkstreamTask, task["id"])).locked_post_submit_checker_policy_body["blocking_severities"] == []
-            with pytest.raises(TaskLockedContextInvalid, match="custody is invalid") as error:
-                await read_requirements(task_service(session, settings=get_settings()), method, project["id"], task["id"], contributor)
+            stored = await session.get(WorkstreamTask, task["id"])
+            original_body = dict(stored.locked_post_submit_checker_policy_body)
+            service = task_service(session, settings=get_settings())
+            original_lock = service._repo.lock_project_task
+
+            async def corrupt_read(*args, **kwargs):
+                row = await original_lock(*args, **kwargs)
+                # Simulate a bad storage read after real TASK locking. The
+                # protected canonical row remains unchanged and cannot flush.
+                session.expunge(row)
+                row.locked_post_submit_checker_policy_body = {**original_body, "blocking_severities": []}
+                return row
+
+            with patch.object(service._repo, "lock_project_task", side_effect=corrupt_read):
+                with pytest.raises(TaskLockedContextInvalid, match="custody is invalid") as error:
+                    await read_requirements(service, method, project["id"], task["id"], contributor)
             assert error.value.code == "task_locked_context_invalid"
+            assert (await session.get(WorkstreamTask, task["id"])).locked_post_submit_checker_policy_body == original_body
 
 
 async def test_requirement_waits_for_task_before_projects(task_client):
@@ -255,12 +271,12 @@ async def test_requirement_waits_for_task_before_projects(task_client):
     factory, name = db_session.get_session_factory(), "requirements-" + new_record_id().hex
     async with factory() as writer, factory() as reader:
         stored = await reader.get(WorkstreamTask, task["id"])
-        original_body = stored.locked_post_submit_checker_policy_body.copy()
+        original_title = stored.title
         await reader.execute(text("select set_config('application_name', :name, true)"), {"name": name})
         reader_pid = await reader.scalar(text("select pg_backend_pid()"))
         row = await writer.scalar(select(WorkstreamTask).where(WorkstreamTask.id == task["id"]).with_for_update())
         writer_pid = await writer.scalar(text("select pg_backend_pid()"))
-        row.locked_post_submit_checker_policy_body = {**original_body, "blocking_severities": []}
+        row.title = "requirements-task-lock-marker"
         await writer.flush()
         service = task_service(reader, settings=get_settings())
         order = MagicMock()
@@ -273,14 +289,14 @@ async def test_requirement_waits_for_task_before_projects(task_client):
                     expected_waiter_pid=reader_pid, expected_blocker_pid=writer_pid), timeout=10)
                 visibility.assert_not_awaited()
                 resolve.assert_not_awaited()
-                assert not pending.done() and stored.locked_post_submit_checker_policy_body == original_body
+                assert not pending.done() and stored.title == original_title
                 await writer.commit()
-                with pytest.raises(TaskLockedContextInvalid, match="custody is invalid"):
-                    await asyncio.wait_for(pending, timeout=10)
+                result = await asyncio.wait_for(pending, timeout=10)
+                assert type(result) is ContributorTaskSubmissionRequirements
                 visibility.assert_awaited_once()
                 resolve.assert_awaited_once()
                 assert [call[0] for call in order.mock_calls] == ["visibility", "projects"]
-                assert stored.locked_post_submit_checker_policy_body["blocking_severities"] == []
+                assert stored.title == "requirements-task-lock-marker"
             finally:
                 if not pending.done():
                     pending.cancel()

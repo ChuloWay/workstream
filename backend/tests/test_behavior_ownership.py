@@ -1951,6 +1951,27 @@ def test_arch03a_partition_transition_accepts_only_exact_policy_lineage_relocati
             ownership._validate_additive_partition_transition(_partition(after), _partition(before))
 
 
+def test_pilot04_partition_allows_only_the_selected_flow_and_retired_catalogues() -> None:
+    """The selected checker cutover admits its exact owners and retirements."""
+    retained = "backend/app/core/config.py"
+    retired = ownership.PILOT_04_RETIRED_CATALOGUE_TARGETS
+    trusted = _partition(sorted({retained, *retired}))
+    selected = ownership.PILOT_04_SELECTED_FLOW_TARGETS
+    assert retired.isdisjoint(selected)
+    ownership._validate_additive_partition_transition(
+        _partition(sorted({retained, *selected})), trusted
+    )
+    with pytest.raises(ownership.BehaviorOwnershipError, match="untrusted_partition_change"):
+        ownership._validate_additive_partition_transition(
+            _partition(sorted(selected)), trusted
+        )
+    with pytest.raises(ownership.BehaviorOwnershipError, match="untrusted_partition_change"):
+        ownership._validate_additive_partition_transition(
+            _partition(sorted({*selected, "backend/app/modules/checkers/unreviewed.py"})),
+            trusted,
+        )
+
+
 def test_command_replay_partition_addition_does_not_authorize_neighbors() -> None:
     """Admit the exact replay owner without opening adjacent unreviewed paths."""
     retained = "backend/app/core/config.py"
@@ -2478,4 +2499,50 @@ def test_completion_delivery_ownership_does_not_allow_registration():
     with pytest.raises(ownership.BehaviorOwnershipError, match="untrusted_partition_change"):
         ownership._validate_additive_partition_transition(_partition(sorted({
             retained, *targets, "backend/app/workers/evaluation_completion_delivery.py",
+        })), trusted)
+
+
+def test_replacement_context_ownership_does_not_allow_a_second_writer():
+    targets = ownership.ARCH_04F3_REPLACEMENT_TARGETS
+    assert targets == {"backend/app/modules/tasks/submission_context.py"}
+    retained = "backend/app/core/config.py"
+    trusted = _partition([retained])
+    ownership._validate_additive_partition_transition(
+        _partition(sorted({retained, *targets})), trusted,
+    )
+    with pytest.raises(ownership.BehaviorOwnershipError, match="untrusted_partition_change"):
+        ownership._validate_additive_partition_transition(_partition(sorted({
+            retained, *targets, "backend/app/modules/tasks/replacement_submission.py",
+        })), trusted)
+
+
+def test_retry_ownership_does_not_allow_a_parallel_checker_runner():
+    targets = ownership.ARCH_04F4_RETRY_TARGETS
+    assert targets == {
+        "backend/app/modules/checkers/checker_retry.py",
+        "backend/app/modules/authorization/checker_retry_authorization.py",
+        "backend/app/modules/authorization/domain/checker_retry.py",
+        "backend/app/modules/authorization/prepared_checker_retry_replay.py",
+    }
+    retained = "backend/app/core/config.py"
+    trusted = _partition([retained])
+    ownership._validate_additive_partition_transition(
+        _partition(sorted({retained, *targets})), trusted,
+    )
+    with pytest.raises(ownership.BehaviorOwnershipError, match="untrusted_partition_change"):
+        ownership._validate_additive_partition_transition(_partition(sorted({
+            retained, *targets, "backend/app/modules/checkers/retry_runner.py",
+        })), trusted)
+
+
+def test_revision_ownership_does_not_allow_a_parallel_exhaustion_writer():
+    retained = "backend/app/core/config.py"
+    trusted = _partition([retained])
+    targets = ownership.PILOT_08_REVISION_TARGETS
+    ownership._validate_additive_partition_transition(
+        _partition(sorted({retained, *targets})), trusted,
+    )
+    with pytest.raises(ownership.BehaviorOwnershipError, match="untrusted_partition_change"):
+        ownership._validate_additive_partition_transition(_partition(sorted({
+            retained, *targets, "backend/app/workers/assignment_exhaustion.py",
         })), trusted)

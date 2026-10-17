@@ -74,12 +74,117 @@ async def _execute(database_url: str, statement: str, *arguments: object) -> Non
         await connection.close()
 
 
+async def _seed_export_resume_rows(database_url: str):
+    """Retain real main-owned export membership and its required identity custody."""
+    from app.core.identifiers import new_record_id
+
+    actor, link, snapshot = new_record_id(), new_record_id(), new_record_id()
+    connection = await asyncpg.connect(database_url.replace("+asyncpg", ""))
+    try:
+        async with connection.transaction():
+            await connection.execute("""
+                INSERT INTO public.actor_profiles
+                  (id,actor_kind,status,provisioning_method,created_by)
+                VALUES ($1,'human','active','automatic_first_access','migration-resume-test')
+            """, actor)
+            await connection.execute("""
+                INSERT INTO public.actor_identity_links
+                  (id,actor_profile_id,issuer,subject,subject_kind,status,linked_by,last_verified_at)
+                VALUES ($1,$2,'https://identity.flowresearch.tech',$3,'human','active',
+                        'migration-resume-test',clock_timestamp())
+            """, link, actor, str(actor))
+            await connection.execute("""
+                INSERT INTO public.contribution_export_snapshots
+                  (id,actor_profile_id,allocation_slot,query_digest,member_ids,created_at,expires_at)
+                VALUES ($1,$2,1,$3,$4,statement_timestamp(),statement_timestamp()+interval '1 hour')
+            """, snapshot, actor, "sha256:" + "a" * 64, [new_record_id(), new_record_id()])
+        return snapshot
+    finally:
+        await connection.close()
+
+
+async def _migration_resume_custody(database_url: str, snapshot_id) -> dict[str, object]:
+    """Compare retained row bytes and table identities, including the sentinel."""
+    connection = await asyncpg.connect(database_url.replace("+asyncpg", ""))
+    try:
+        sentinel = await connection.fetchrow(
+            "select value,tableoid::bigint,xmin::text from migration_resume_sentinel where id=1"
+        )
+        assert sentinel is not None
+        export = None
+        if snapshot_id is not None:
+            export = await connection.fetchrow("""
+                SELECT to_jsonb(s)::text,to_jsonb(a)::text,to_jsonb(l)::text,
+                       s.tableoid::bigint,a.tableoid::bigint,l.tableoid::bigint,
+                       s.xmin::text,a.xmin::text,l.xmin::text
+                FROM public.contribution_export_snapshots s
+                JOIN public.actor_profiles a ON a.id=s.actor_profile_id
+                JOIN public.actor_identity_links l ON l.actor_profile_id=a.id
+                WHERE s.id=$1
+            """, snapshot_id)
+            assert export is not None
+        return {"sentinel": tuple(sentinel.values()),
+                "export": tuple(export.values()) if export is not None else None}
+    finally:
+        await connection.close()
+
+
 def test_v01_graph_has_one_root_and_head() -> None:
     config = _alembic_config()
     script = ScriptDirectory.from_config(config)
     revisions = list(script.walk_revisions())
 
-    assert [revision.revision for revision in revisions] == [HEAD_REVISION, "0032_checker_remediation", "0031_task_import_source", "0030_routing_outcomes", "0029_external_checker_registry", "0028_lifecycle_transitions", "0027_markdown_guide_media", "0026_task_guide_read", "0025_submission_dispatch", "0024_require_second_review_false", "0023_remove_task_payment_policy", "0022_submission_packet_custody", "0021_submission_manifest", "0020_review_admission_lock_order", "0019_submitter_awards", "0018_task_routing_request", "0017_acceptance_source_contracts", "0016_review_lifecycle_fence", "0015_contribution_awards", "0014_final_acceptance", "0013_review_source", "0012_review_packet", "0011_task_routing_source", "0010_post_submit_authority", "0009_checker_material_lineage", "0008_checker_execution", "0007_checker_output_custody", "0006_history_read_authority", "0005_task_evidence_authority", "0004_task_context_authority", "0003_task_read_authority", "0002_task_queue_authority", BASELINE_REVISION]
+    assert [revision.revision for revision in revisions] == [
+        HEAD_REVISION,
+        "0048_revision_exhaustion",
+        "0047_revision_recovery",
+        "0046_revision_expiry_retry",
+        "0045_task_revision_expiry",
+        "0044_outbox_not_before",
+        "0043_revision_preparation",
+        "0042_revision_lineage",
+        "0041_checker_revision_cap",
+        "0040_contribution_export_page",
+        "0039_false_guide_activation",
+        "0038_task_batch_transitions",
+        "0037_task_import_batches",
+        "0036_selected_checker_flow",
+        "0035_checker_retry",
+        "0034_checker_replacement",
+        "0033_contribution_reads",
+        "0032_checker_remediation",
+        "0031_task_import_source",
+        "0030_routing_outcomes",
+        "0029_external_checker_registry",
+        "0028_lifecycle_transitions",
+        "0027_markdown_guide_media",
+        "0026_task_guide_read",
+        "0025_submission_dispatch",
+        "0024_require_second_review_false",
+        "0023_remove_task_payment_policy",
+        "0022_submission_packet_custody",
+        "0021_submission_manifest",
+        "0020_review_admission_lock_order",
+        "0019_submitter_awards",
+        "0018_task_routing_request",
+        "0017_acceptance_source_contracts",
+        "0016_review_lifecycle_fence",
+        "0015_contribution_awards",
+        "0014_final_acceptance",
+        "0013_review_source",
+        "0012_review_packet",
+        "0011_task_routing_source",
+        "0010_post_submit_authority",
+        "0009_checker_material_lineage",
+        "0008_checker_execution",
+        "0007_checker_output_custody",
+        "0006_history_read_authority",
+        "0005_task_evidence_authority",
+        "0004_task_context_authority",
+        "0003_task_read_authority",
+        "0002_task_queue_authority",
+        BASELINE_REVISION,
+    ]
     assert revisions[-1].down_revision is None
     assert script.get_heads() == [HEAD_REVISION]
 
@@ -202,6 +307,247 @@ def test_repeated_upgrade_head_preserves_current_database(
         command.upgrade(config, "head")
         after = asyncio.run(_database_snapshot(isolated_database_env))
     assert after == before
+
+
+@pytest.mark.parametrize("installed_revision", [
+    "0038_task_batch_transitions",
+    "0040_contribution_export_page",
+    "0041_checker_revision_cap",
+    "0042_revision_lineage",
+    "0043_revision_preparation",
+    "0044_outbox_not_before",
+    "0045_task_revision_expiry",
+    "0046_revision_expiry_retry",
+    "0047_revision_recovery",
+    "0048_revision_exhaustion",
+])
+def test_preceding_head_upgrades_to_current_without_recreation(
+    isolated_database_env: str, migration_lock, installed_revision: str,
+) -> None:
+    """Each supported installed predecessor resumes without recreation or data loss."""
+    config = _alembic_config()
+    with migration_lock():
+        asyncio.run(
+            _execute(isolated_database_env, "drop schema public cascade; create schema public")
+        )
+        command.upgrade(config, installed_revision)
+        asyncio.run(_execute(
+            isolated_database_env,
+            "create table migration_resume_sentinel(id integer primary key, value text not null); "
+            "insert into migration_resume_sentinel values (1,'preserve-me')",
+        ))
+        snapshot_id = (
+            asyncio.run(_seed_export_resume_rows(isolated_database_env))
+            if installed_revision != "0038_task_batch_transitions" else None
+        )
+        retained = asyncio.run(_migration_resume_custody(isolated_database_env, snapshot_id))
+        assert retained["sentinel"][0] == "preserve-me"
+        before = asyncio.run(_database_snapshot(isolated_database_env))
+        assert before["versions"] == [installed_revision]
+        command.upgrade(config, HEAD_REVISION)
+        after = asyncio.run(_database_snapshot(isolated_database_env))
+        command.upgrade(config, "head")
+        repeated = asyncio.run(_database_snapshot(isolated_database_env))
+        assert asyncio.run(
+            _migration_resume_custody(isolated_database_env, snapshot_id)
+        ) == retained
+        asyncio.run(_execute(isolated_database_env, "drop table migration_resume_sentinel"))
+    assert after["versions"] == [HEAD_REVISION]
+    assert after["reference_rows"] == before["reference_rows"]
+    assert repeated == after
+
+
+async def test_revision_upgrade_retains_policy_source_and_running_window(
+    tmp_path, isolated_database_env, migration_lock, monkeypatch,
+):
+    """A genuine guarded 0047 window survives and remains usable on the new head."""
+    from sqlalchemy import select, text
+    from app.adapters.tasks import task_post_submit_outcome
+    from app.modules.tasks.revision.models import TaskRevisionPreparation
+    from app.modules.tasks.revision.service import project_current_revision
+    from tests.migration_revision_fixtures import (
+        enter_predecessor_owner_shape, insert_0047_preparation, leave_predecessor_owner_shape,
+        retained_revision_rows,
+    )
+    from tests.tasks.post_submit_routing.remediation_support import remediation_source
+    from tests.tasks.post_submit_routing.support import revision_archive
+    from tests.tasks.submission_dispatch.test_replacement_creation import (
+        _create, _creation_request, _ready_replacement,
+    )
+
+    with migration_lock():
+        await _execute(isolated_database_env, "drop schema public cascade; create schema public")
+        await asyncio.to_thread(command.upgrade, _alembic_config(), "0047_revision_recovery")
+        shape = pytest.MonkeyPatch()
+        await enter_predecessor_owner_shape(_execute, isolated_database_env, shape)
+        async with remediation_source(tmp_path, isolated_database_env) as h:
+            with monkeypatch.context() as patch:
+                patch.setattr("app.modules.tasks.post_submit_routing.outcome.prepare_revision", insert_0047_preparation)
+                async with h.factory() as session, session.begin():
+                    outcome = await task_post_submit_outcome(session, h.factory).apply(
+                        h.envelope, current_generation=None,
+                    )
+            async with h.factory() as session:
+                assert await session.scalar(text(
+                    "SELECT count(*) FROM pg_trigger t JOIN pg_class c ON c.oid=t.tgrelid "
+                    "JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' "
+                    "AND NOT t.tgisinternal AND t.tgenabled='D'"
+                )) == 0
+                before = await retained_revision_rows(session, outcome.routing_manifest_id)
+                source = before["task_revision_preparations"][0][0]
+                assert "remaining_microseconds" not in source
+            shape.undo()
+            await leave_predecessor_owner_shape(_execute, isolated_database_env)
+            await asyncio.to_thread(command.upgrade, _alembic_config(), HEAD_REVISION)
+            async with h.factory() as session:
+                assert await retained_revision_rows(session, outcome.routing_manifest_id) == before
+                preparation = await session.scalar(select(TaskRevisionPreparation))
+                assert preparation.clock_observed_at is None
+                assert preparation.remaining_microseconds is None and preparation.deadline_at is not None
+                view = await project_current_revision(session, preparation)
+                assert view.disposition == "ready" and view.outcome == "kept"
+                assert view.preparation_sha256 == json.loads(source)["preparation_sha256"]
+                assert view.deadline_at == preparation.deadline_at
+                h.revision_preparation_id = preparation.id
+                h.revision_preparation_sha256 = preparation.preparation_sha256
+            prepared, admission_id = await _ready_replacement(h, revision_archive(h.data))
+            creation = _creation_request(h, prepared, admission_id)
+            successor = await _create(h, creation)
+            assert successor.submission_version == 2
+            assert successor.submission_id != h.created.submission_id
+            async with h.factory() as session:
+                retained = await retained_revision_rows(session, outcome.routing_manifest_id)
+                for owner in ("revision_policies", "submissions", "task_revision_preparations", "outbox_events"):
+                    assert retained[owner] == before[owner], owner
+
+
+def test_current_head_installs_selected_only_checker_custody(
+    isolated_database_env: str, migration_lock
+) -> None:
+    """Current writers reject missing schemas and contain no executable catalogue tail."""
+    config = _alembic_config()
+    with migration_lock():
+        asyncio.run(
+            _execute(isolated_database_env, "drop schema public cascade; create schema public")
+        )
+        command.upgrade(config, HEAD_REVISION)
+
+    async def installed_functions() -> dict[str, str]:
+        from tests.conftest import _assert_canonical_test_schema
+
+        connection = await asyncpg.connect(isolated_database_env.replace("+asyncpg", ""))
+        transaction = connection.transaction()
+        await transaction.start()
+        try:
+            await connection.execute("set local check_function_bodies = true")
+            installed = await connection.fetch(
+                "select p.oid,p.oid::regprocedure::text as identity "
+                "from pg_proc p join pg_namespace n on n.oid=p.pronamespace "
+                "join pg_language l on l.oid=p.prolang "
+                "where n.nspname='public' and l.lanname='plpgsql' order by p.oid"
+            )
+            assert installed
+            for row in installed:
+                try:
+                    await connection.fetchval(
+                        "select pg_catalog.plpgsql_validator($1::oid)", row["oid"]
+                    )
+                except asyncpg.PostgresError as error:
+                    raise AssertionError(
+                        f"installed function does not compile: {row['identity']}"
+                    ) from error
+            rows = await connection.fetch(
+                "select p.proname,pg_get_functiondef(p.oid) as definition "
+                "from pg_proc p join pg_namespace n on n.oid=p.pronamespace "
+                "where n.nspname='public' and p.proname=any($1::text[])",
+                [
+                    "protect_checker_run_custody",
+                    "protect_checker_result_custody",
+                    "validate_checker_terminal_custody",
+                    "submission_dispatch_valid",
+                    "external_checker_locked_policies_valid",
+                    "require_guide_proposal_approval",
+                    "require_post_policy_operation",
+                    "guard_pre_submit_attempt",
+                    "guard_pre_submit_evidence_set_creation",
+                    "guard_pre_submit_evidence_result_membership",
+                    "require_pre_submit_attempt_evidence",
+                    "require_pre_submit_result_reconstruction",
+                ],
+            )
+            await _assert_canonical_test_schema(connection)
+            return {row["proname"]: row["definition"] for row in rows}
+        finally:
+            await transaction.rollback()
+            await connection.close()
+
+    definitions = asyncio.run(installed_functions())
+    assert set(definitions) == {
+        "protect_checker_run_custody",
+        "protect_checker_result_custody",
+        "validate_checker_terminal_custody",
+        "submission_dispatch_valid",
+        "external_checker_locked_policies_valid",
+        "require_guide_proposal_approval",
+        "require_post_policy_operation",
+        "guard_pre_submit_attempt",
+        "guard_pre_submit_evidence_set_creation",
+        "guard_pre_submit_evidence_result_membership",
+        "require_pre_submit_attempt_evidence",
+        "require_pre_submit_result_reconstruction",
+    }
+    for name in (
+        "protect_checker_run_custody",
+        "protect_checker_result_custody",
+        "validate_checker_terminal_custody",
+    ):
+        assert "schema_version' IS DISTINCT FROM" in definitions[name]
+    assert "check_submission_packet" not in definitions["protect_checker_result_custody"]
+    assert "member_results' IS DISTINCT FROM members" not in definitions[
+        "validate_checker_terminal_custody"
+    ]
+    assert "workstream.selected_post_submit_request.v1" in definitions[
+        "submission_dispatch_valid"
+    ]
+    assert "selected_pre_submit_run_id IS NOT NULL" in definitions[
+        "submission_dispatch_valid"
+    ]
+    assert "external_plan" not in definitions["require_guide_proposal_approval"]
+    assert "->'catalogue'" not in definitions["require_guide_proposal_approval"]
+    assert "catalogue_manifest_sha256" not in definitions["require_post_policy_operation"]
+    assert "external_post_submit_policy.v1" in definitions[
+        "require_post_policy_operation"
+    ]
+    assert "checker terminal selected policy differs" in definitions[
+        "validate_checker_terminal_custody"
+    ]
+    assert "result_registry_entry_id" in definitions[
+        "validate_checker_terminal_custody"
+    ]
+    assert "platform_manifest_digest" in definitions[
+        "validate_checker_terminal_custody"
+    ]
+    assert "is distinct from 'external_checker_policies.v1'" in definitions[
+        "external_checker_locked_policies_valid"
+    ].lower()
+    retired = {
+        "guard_pre_submit_attempt": "retained pre-submit attempts are immutable",
+        "guard_pre_submit_evidence_set_creation": (
+            "retained pre-submit evidence is immutable"
+        ),
+        "guard_pre_submit_evidence_result_membership": (
+            "retained pre-submit evidence results are immutable"
+        ),
+        "require_pre_submit_attempt_evidence": (
+            "retained pre-submit evidence is immutable"
+        ),
+        "require_pre_submit_result_reconstruction": (
+            "retained pre-submit evidence results are immutable"
+        ),
+    }
+    for name, message in retired.items():
+        assert message in definitions[name]
+        assert " select " not in definitions[name].lower()
 
 
 def test_current_head_installs_submission_lineage_contract(

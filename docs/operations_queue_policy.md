@@ -2,9 +2,11 @@
 
 ## Status
 
-Review and revision lanes below are the planned v0.1 operating contract. Their
-routes and jobs remain unavailable until the owning REV chunks, exact AUTH
-activation, and REV-13 joint release complete.
+Human review and revision lanes below are the planned v0.1 operating contract.
+Their routes and jobs remain unavailable until the owning REV chunks, exact
+AUTH activation, and REV-13 joint release complete. Checker-remediation
+replacement is implemented through the public preparation and admission-backed
+Submission operations; it does not make human revision available.
 
 ## Purpose
 
@@ -28,7 +30,8 @@ Owner:
 Exit requirement:
 
 - project guide attached
-- acceptance criteria present
+- nonblank task title and description
+- acceptance requirements defined by the project guide
 - required output defined
 
 ### Screening
@@ -45,7 +48,7 @@ Exit requirement:
 
 - project guide version locked
 - immutable guide source snapshot id/hash locked
-- acceptance criteria are concrete
+- locked guide acceptance requirements are concrete
 - effective project submission artifact policy hash locked
 - project `PreSubmitCheckerPolicy` compiled bundle hash locked
 - approved generated project `PostSubmitCheckerPolicy` is locked with matching
@@ -161,7 +164,7 @@ Contributor-facing lane for fixable issues from automated checks, pre-review gat
 
 Policy:
 
-- after a human `needs_revision` Review, Workstream compares the prior
+- after a committed checker or human `needs_revision`, Workstream compares the prior
   Submission's complete governing context with the currently active applicable
   guide/source, submission/checker, review, revision, task-execution, and
   submitter ContributionPolicy context
@@ -174,15 +177,32 @@ Policy:
 Owner:
 
 - contributor
-- covered Project Manager for planned repair/obligation closure; Operator only
-  for evidence-linked legacy recovery
+- covered Project Manager for context repair; TASK's exact authorized durable
+  service for timeout rejection/release; Operator only for evidence-linked
+  historical human-context recovery
 
 Policy:
 
 - checker-caused remediation carries CheckerResult lineage; human-review
   revision carries an immutable Review and at least one blocking finding
+- checker-caused remediation freezes a TASK-owned checker-rooted preparation,
+  applies a guarded complete-context rebase when applicable, and reruns full
+  pre-submit intake with the exact preparation acknowledgement; it needs no
+  human-Review-rooted preparation or finding response
 - human-review resubmission includes one immutable response per unresolved
-  blocking finding
+  blocking finding; live human decision integration remains #554 work
+- the project policy requires an explicit integer maximum revision count `N >= 0`
+  and positive revision-deadline hours; each assignment starts at round 0 with
+  its own allowance
+- each committed `needs_revision` with another revision remaining freezes the
+  next preparation under the failed attempt's locked policy, with either a
+  running PostgreSQL deadline or a paused remaining allowance while setup is
+  blocked; only immutable resubmission ends that revision opportunity
+- failure on the final permitted attempt immediately records rejection and
+  exhaustion, closes the assignment as `revision_exhausted`, and returns the
+  Task to `ready` without another preparation or window
+- expiry of a running window retains rejection evidence, releases the assignment
+  and returns the Task to `ready` without economic facts
 
 ### Accepted
 
@@ -251,10 +271,14 @@ Every operating day starts with:
 
 ## Transition Guards
 
+Task-local acceptance and rejection criteria are optional supplementary text,
+not required Task fields for SCREEN or RELEASE. Omission/null does not waive
+the locked project guide or its approved policy requirements.
+
 | Transition | Required Records |
 | --- | --- |
-| `DRAFT -> SCREENING` | project id, locked guide candidate, task source/description fields, acceptance and rejection criteria |
-| `SCREENING -> READY` | screening decision, guide version lock, guide source snapshot id/hash lock, acceptance criteria, effective project submission artifact policy hash lock, project `PreSubmitCheckerPolicy` compiled bundle hash lock, approved generated project `PostSubmitCheckerPolicy` with matching provenance, review policy, revision policy, and immutable task-locked ContributionPolicyVersion |
+| `DRAFT -> SCREENING` | project id, locked guide candidate, nonblank task title/description and task source fields |
+| `SCREENING -> READY` | screening decision, guide version lock, guide source snapshot id/hash lock, guide-defined acceptance requirements, effective project submission artifact policy hash lock, project `PreSubmitCheckerPolicy` compiled bundle hash lock, approved generated project `PostSubmitCheckerPolicy` with matching provenance, review policy, revision policy, and immutable task-locked ContributionPolicyVersion |
 | `READY -> CLAIMED` | TaskAssignment copies the task's exact `locked_contribution_policy_version_id`; no active-policy lookup |
 | `IN_PROGRESS -> SUBMITTED` | blocking pre-submit checks passed against the exact outer ZIP, submission packet, server-generated submission-bundle manifest and verified admission binding, evidence references, contributor attestation |
 | `SUBMITTED -> EVALUATION_PENDING` | immutable submission version, locked post-submit checker policy id/version/hash/body copied from the task context |
@@ -263,8 +287,10 @@ Every operating day starts with:
 | `REVIEW_PENDING -> NEEDS_REVISION` | immutable Review, at least one blocking ReviewFinding, reviewer `completed_review` under the completed lease freeze, atomic complete-context kept/rebased/blocked preparation for the next attempt; no FinalAcceptance or submitter contribution |
 | `REVIEW_PENDING -> ACCEPTED` | immutable accepting Review, FinalAcceptance, reviewer `completed_review`, submitter `accepted_submission` sourced from FinalAcceptance, applicable awards |
 | `REVIEW_PENDING -> REJECTED` | immutable rejected Review, bounded reason, same-task assignment block, reviewer `completed_review`; no FinalAcceptance or submitter contribution |
-| `NEEDS_REVISION -> SUBMITTED` | exact complete-context preparation head/digest, replacement Submission stamped with its selected guide/policy context, response for every unresolved blocking finding, policy limit/deadline not reached |
-| `NEEDS_REVISION -> CANCELLED` | covered manager limit/deadline closure or Operator legacy-context closure, bounded canonical reason, assignment release; no synthetic Review or contribution |
+| `NEEDS_REVISION -> SUBMITTED` after checker remediation | Exact current authorized checker-remediation cause for the immediate predecessor, exact current TASK preparation head/digest and frozen complete target context, changed full ZIP passing pre-submit intake before its deadline and within the assignment cap, verified ART admission and atomic Submission/dispatch with exact AUTH receipts; no human-Review-rooted preparation or finding response |
+| `NEEDS_REVISION -> SUBMITTED` after human Review (planned) | Exact complete-context preparation head/digest, replacement Submission stamped with its selected guide/policy context, response for every unresolved blocking finding, policy limit/deadline not reached |
+| `NEEDS_REVISION -> READY` at timeout | Exact outstanding immutable source and original PostgreSQL-policy deadline, immutable rejection receipt, assignment `revision_expired` and release timestamp, atomic AUTH/audit/outbox effects; no Review or economic effects. Checker path implemented; human trigger integration remains #554 |
+| `NEEDS_REVISION -> CANCELLED` for unrecoverable historical human context (planned) | evidence-linked Operator legacy-context closure, bounded canonical reason, assignment release; no synthetic Review or contribution |
 | compensation `pending -> fulfilled` | immutable fulfillment receipt, external reference, and audit event |
 
 ## Lane Capacity

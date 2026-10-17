@@ -1,6 +1,8 @@
-# Revision Replay Template
+# Human Review Revision Replay Template
 
-> Planned contract; unavailable until REV/AUTH release gates complete.
+> Planned human-Review response/resolution contract; genuine decision integration
+> remains #554 work. Implemented checker remediation acknowledges its TASK
+> preparation and requires no ReviewFinding response or FindingResolution.
 
 ## Episode
 
@@ -9,6 +11,18 @@
 - prior Submission ID/version:
 - source TaskAssignment ID:
 - target TaskAssignment ID:
+- assignment-local revision round/limit:
+- original PostgreSQL requested-at/deadline:
+
+Each assignment starts at round 0. Each fixable failure with another revision remaining starts a
+fresh window under the failed attempt's locked RevisionPolicy. Only a committed
+immutable successor Submission ends it; upload, admission, repair and replay do
+not. A setup block pauses the allowance; repair resumes only the remainder.
+Final-attempt failure immediately records rejection and releases the assignment
+without another window. There is no contributor-count limit.
+At expiry, the intended shared policy retains immutable rejection evidence,
+releases the assignment and returns TASK to `ready` without synthetic Review or
+new economic facts. Human integration must use genuine Review provenance.
 
 ## Revision Context Preparation
 

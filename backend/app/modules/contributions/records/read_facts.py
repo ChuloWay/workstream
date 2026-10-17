@@ -1,6 +1,7 @@
 """CON-private stored source/rule facts used by its actual evidence reader."""
 
 from decimal import Decimal
+from dataclasses import dataclass
 from typing import Literal, Protocol, Self
 from uuid import UUID
 
@@ -45,8 +46,16 @@ class ContributionReadFacts(ContributionRecordInput):
 
 
 class ContributionReadRepositoryPort(Protocol):
-    """Load at most the complete fixed-limit set; never silently truncate."""
+    """Load an exact fixed-membership page after caller authorization."""
 
-    async def read(self, request: ContributionReadRequest) -> tuple[ContributionReadFacts, ...]:
-        """Pre-filter audience/project/date/type before the over-limit probe."""
+    async def read(self, request: ContributionReadRequest) -> "ContributionReadPage":
+        """Pre-filter a first selection or use only its retained continuation IDs."""
         ...
+
+
+@dataclass(frozen=True)
+class ContributionReadPage:
+    """One ordered evidence page and its optional signed continuation."""
+
+    records: tuple[ContributionReadFacts, ...]
+    next_cursor: str | None

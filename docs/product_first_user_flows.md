@@ -4,20 +4,22 @@
 
 These flows describe the target v0.1 behavior, not a list of active endpoints.
 Use the [capability ledger](roadmap_status.md) for delivered and remaining work.
-The review and revision portions are the planned v0.1 contract and remain
-unavailable until their owning REV chunks, exact AUTH activation, and REV-13
-joint release complete. Earlier project/task/submission/checker behavior keeps
+Human review and its revision integration remain planned until the owning REV
+chunks, exact AUTH activation and joint release complete. Checker-triggered
+revision preparation, acknowledgement, PM repair and timeout rejection/release
+are implemented through TASK. Earlier project/task/submission/checker behavior keeps
 its separately recorded implementation status.
 
 The detailed review flow below describes `human_review_required=true`, the
-default in the existing versioned ReviewPolicy setting. False is a separately
-planned post-check TASK handoff to authorized FinalAcceptance and CON, without
-human queues, leases, Reviews or reviewer contributions. Required checks and
-exact immutable evidence still apply. The [shared acceptance contract](spec_review_lifecycle.md#finalacceptance)
-defines both triggers. Runtime remains unavailable until the same participant
-input/schema requires verified authority/evidence and gains routing/currentness and exact
-shared release proof. REV-04C supplies only the hidden mechanical
-FinalAcceptance/TASK/CON participant.
+default in the existing versioned ReviewPolicy setting. The selected backend
+composition implements the false-policy post-check TASK handoff to authorized
+FinalAcceptance and CON, without human queues, leases, Reviews or reviewer
+contributions. Required checks and exact immutable evidence still apply. The
+[shared acceptance contract](spec_review_lifecycle.md#finalacceptance) defines
+both triggers. New false/pass effects require an Operator-authorized live REV
+generation and verified authority, currentness and evidence through the shared
+FinalAcceptance/TASK/CON participant. The bounded local public durable-worker
+drill starts from public guide inputs with recorded inference; this is not a deployment claim.
 
 The first user flows prove that Workstream can run real work from intake to acceptance. These flows come before any advanced routing or settlement.
 
@@ -104,7 +106,10 @@ Acceptance:
 ## Flow 2: Project Manager Creates A Task
 
 1. A covered Project Manager selects the active project.
-2. The Project Manager creates a task with title, description, source reference, acceptance criteria, rejection criteria, deadline, and difficulty.
+2. The Project Manager creates a draft with title and description, plus any
+   applicable source reference, task-local acceptance/rejection criteria,
+   deadline and difficulty. Task-local criteria are optional supplementary text;
+   the project guide supplies governed acceptance requirements.
 3. Workstream validates the task source and reviewability fields, then confirms the task fits the active project guide and policy bundle.
 4. Task enters `SCREENING`.
 5. Screening locks the guide source snapshot id/hash, effective project
@@ -116,8 +121,10 @@ Acceptance:
 
 Acceptance:
 
-- Missing required fields block `SCREENING`.
-- Missing required fields block `READY`.
+- Blank title/description or missing active-guide custody blocks `SCREENING`.
+- Missing required policy locks or release validation blocks `READY`.
+- Omitted/null task-local acceptance criteria do not block either transition;
+  this does not waive the locked guide or its approved policies.
 - Task shows project guide, required artifacts, generated project pre-submit
   checker policy summary, permission-appropriate post-submit checker policy
   summary, review policy, and revision policy. After claim, the contributor sees
@@ -147,10 +154,15 @@ Acceptance:
 1. Checker runner validates the submission-stamped locked `PostSubmitCheckerPolicy` id/version/hash/body.
 2. Runner executes enabled checks from that locked policy body.
 3. Results are saved with `passed`, `warning`, or `failed`, plus severity, message, and evidence.
-4. Contributor-fixable checker failures route the Task to `NEEDS_REVISION` with
-   `CheckerResult` lineage and no Review or reviewer contribution.
-5. Setup or provenance defects keep the Task `evaluation_pending` on the
-   internal `task_setup_blocked` repair route.
+4. Contributor-fixable checker failures route the Task to `NEEDS_REVISION` only
+   when another revision is allowed by the locked project RevisionPolicy.
+   Failure of the final allowed attempt records rejection, closes the Assignment
+   as `revision_exhausted`, and returns the Task to `ready` atomically, without a
+   revision preparation or deadline. Both outcomes retain `CheckerResult`
+   lineage and create no Review or reviewer contribution.
+5. A manager-visible hold for setup faults is planned safety work, not a
+   current route: the selected completion classifier cannot emit
+   `task_setup_blocked`. It is not a prerequisite for this first journey.
 6. For locked `human_review_required=true`, only a durable, final, current `CheckerRun` outcome of `allow_review` admits
    the exact immutable Submission with verified binding facts and moves the
    Task to `REVIEW_PENDING`.
@@ -221,12 +233,29 @@ Acceptance:
 - Context changes are visible before the contributor revises.
 - Each required finding has an immutable response and later resolution.
 - Revision count is tracked against the locked revision policy.
-- A reached limit/deadline blocks resubmission but never auto-rejects or
-  auto-closes the task; manager cancellation is a separate planned command.
+- Each assignment starts at round 0 with its own revision allowance.
+- Every fixable failure with a revision remaining starts a fresh PostgreSQL-time window from
+  the failed attempt's locked policy; only immutable resubmission ends it.
+  Upload, replay and infrastructure retry cannot reset the window. A setup block
+  pauses it and records durable PM attention, visible in the covered PM task
+  detail; repair resumes only the remaining allowance.
+- A post-submit coverage gap with no error goes to human review when the
+  locked ReviewPolicy requires it; otherwise it returns to the contributor
+  without spending a round, so the next attempt keeps its current round and
+  the gap never exhausts the assignment. Consecutive coverage returns keep the
+  first return's window, so the same gap cannot return the work forever.
+- Successful preparation and its exact replay return the bounded intake
+  results, so nonblocking findings such as coverage gaps stay visible; the CLI
+  prints them. Intake feedback never decides acceptance.
+- Final-attempt failure immediately records exhaustion and returns the task to
+  ready without another window. At expiry, an immutable rejection
+  receipt, assignment release and return to `ready` commit atomically with
+  AUTH/audit/outbox evidence and no new economic facts. Checker expiry is
+  implemented; #554 owns the future genuine human trigger under the same policy.
 
 ## Flow 7: Accepted Work, FinalAcceptance, And Submitter Contribution
 
-Both planned triggers invoke one shared acceptance operation. The human branch:
+Both triggers use one shared acceptance operation. The planned human branch:
 
 1. Reviewer accepts task.
 2. The reviewer `completed_review` contribution created after the Review
@@ -251,8 +280,11 @@ reviewer award. Checker output remains evidence, not a human decision.
 
 Correctable checker failures follow ARCH-04F under the locked attempt context;
 infrastructure/setup uncertainty never accepts or invents a human revision.
-This false branch is planned, not currently enabled. Fulfillment remains
-post-commit for either trigger and cannot change accepted work.
+The selected backend composition enables this branch only under an
+Operator-authorized live REV generation; a typed pre-effect non-live refusal
+rolls back and uses bounded retry. The bounded local public drill starts from public
+guide inputs with recorded inference.
+Fulfillment remains post-commit for either trigger and cannot change accepted work.
 
 Acceptance:
 

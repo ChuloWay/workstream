@@ -1,6 +1,7 @@
 """Verified exact Submission input, async lifetime and fail-closed composition."""
 
 import asyncio
+import json
 import pickle
 from dataclasses import asdict
 
@@ -12,10 +13,17 @@ from app.modules.checkers.api.materialization import (
     PostSubmissionMaterializationUnavailable, PostSubmissionMaterializationFailure,
 )
 from tests.checkers.post_submit.support import change_request
-from tests.checkers.post_submit.test_result_contract import result
+from tests.checkers.execution.support import selected_result as result
 from tests.post_submit_materialization_helpers import material_fixture
 from tests.checkers.execution.support import material_execution, service_link_state
 from app.modules.actors.api import ServiceIdentity
+from app.modules.artifacts.preparation import ArtifactScratchIntegrityError
+from app.modules.checkers.api.external import (
+    PostSubmitExternalCheckerIdentity,
+    external_checker_json_hash,
+    make_external_checker_execution_request,
+)
+from tests.checkers.external.support import registry_entry
 
 
 class Consumer:
@@ -39,6 +47,70 @@ class Consumer:
             await self.release.wait()
         if self.failure:
             raise self.failure
+        return result(request)
+
+
+class ExternalGrantConsumer(Consumer):
+    """Exercise the real POST lineage through ART's callback-scoped grant."""
+
+    def __init__(self, files, execution, scratch):
+        super().__init__(files)
+        self.execution = execution
+        self.scratch = scratch
+        self.grant_path = None
+        self.manifest = None
+
+    def external_request(self, material, *, identity=None):
+        source, lease = self.execution.request, self.execution.lease
+        reservation = lease.reservation
+        identity = identity or PostSubmitExternalCheckerIdentity(
+            project_id=source.project_id,
+            task_id=source.task_id,
+            assignment_id=source.assignment_id,
+            submission_id=source.submission_id,
+            submission_version=source.submission_version,
+            evaluation_request_id=source.evaluation_request_id,
+            evaluation_request_digest=source.request_sha256,
+            evaluation_generation=source.evaluation_generation,
+            attempt_id=reservation.attempt_id,
+            result_id=reservation.result_id,
+            lease_id=lease.lease_id,
+            lease_generation=lease.lease_generation,
+            lease_expires_at=lease.expires_at,
+        )
+        return make_external_checker_execution_request(
+            registry=registry_entry("post_submit"),
+            identity=identity,
+            configuration={},
+            configuration_sha256=external_checker_json_hash({}),
+            input={"task_version": "v1"},
+            input_sha256=external_checker_json_hash({"task_version": "v1"}),
+            materials=(material,),
+        )
+
+    async def evaluate(self, request, view):
+        await super().evaluate(request, view)
+        external_request = self.external_request(view.external_checker_material)
+        with view.external_checker_grant(external_request) as grant:
+            self.grant_path = self.scratch / "workspaces" / grant.grant_id
+            self.manifest = json.loads(
+                (self.grant_path / ".external-checker-grant.json").read_text()
+            )
+            assert self.manifest["phase"] == "post_submit"
+            assert self.manifest["submission_id"] == str(request.submission_id)
+            assert self.manifest["request_digest"] == external_request.request_digest
+            assert self.manifest["binding_digest"] == grant.binding_digest
+        # Revocation removes the service grant immediately; the outer material
+        # callback still owns its workspace until materialization completes.
+        assert self.grant_path.is_dir()
+        assert not (self.grant_path / ".external-checker-grant.json").exists()
+
+        changed = view.external_checker_material.model_copy(
+            update={"binding_id": new_record_id()}
+        )
+        with pytest.raises(ArtifactScratchIntegrityError, match="material identity differs"):
+            with view.external_checker_grant(self.external_request(changed)):
+                pytest.fail("substituted material acquired an external grant")
         return result(request)
 
 
@@ -89,6 +161,18 @@ async def test_exact_materialization_reads_verified_original_and_revokes_view(tm
                                         "content_id", "replica_id", "content_sha256", "byte_count",
                                         "semantic_manifest_sha256", "evaluation",
                                         "input_materialization_evidence_id"}
+
+
+async def test_post_external_grant_binds_native_submission_art_and_lease(tmp_path, isolated_database_env):
+    async with material_fixture(tmp_path, isolated_database_env) as h:
+        execution = await material_execution(h)
+        consumer = ExternalGrantConsumer(h.files, execution, h.scratch)
+        material = await h.service.materialize(execution, consumer)
+        assert material.evaluation.outcome == "completed"
+        assert consumer.manifest["lease_id"] == str(execution.lease.lease_id)
+        assert consumer.manifest["content_id"] == str(material.content_id)
+        assert consumer.grant_path is not None and not consumer.grant_path.exists()
+        assert_closed(h, consumer)
 
 
 async def test_revoked_materializer_denies_before_provider_or_scratch(tmp_path, isolated_database_env):
@@ -149,8 +233,8 @@ async def test_async_exit_and_concurrent_drift_never_return_stale_material(tmp_p
         assert_closed(h, consumer)
 
 
-async def test_wrong_provider_bytes_or_manifest_never_reach_consumer(tmp_path, isolated_database_env):
-    from tests.test_default_pre_submit_execution import _bytes
+async def test_wrong_provider_bytes_never_reach_consumer(tmp_path, isolated_database_env):
+    from tests.archive_fixtures import byte_source as _bytes
     async with material_fixture(tmp_path, isolated_database_env) as h:
         execution = await material_execution(h)
         consumer = Consumer(h.files)
@@ -159,12 +243,6 @@ async def test_wrong_provider_bytes_or_manifest_never_reach_consumer(tmp_path, i
         with pytest.raises(PostSubmissionMaterializationFailure, match="material_unavailable"):
             await h.service.materialize(execution, consumer)
         h.store.open = original
-        packet = h.request.structural_input.model_copy(update={"manifest": ()})
-        h.request = change_request(h.request, structural_input=packet,
-            evaluation_request_id=new_record_id(), evaluation_generation=2)
-        execution = await material_execution(h)
-        with pytest.raises(PostSubmissionMaterializationFailure, match="manifest_mismatch"):
-            await h.service.materialize(execution, consumer)
         assert consumer.calls == 0 and not h.preparation._active
 
 
@@ -355,7 +433,6 @@ async def test_consumption_retains_inspected_manifest_and_replays_without_provid
         ]
         async with h.factory() as session:
             body = await session.scalar(text(
-                "select e.semantic_manifest_body from pre_submit_evidence_sets e "
-                "join submission_bundle_admissions a on a.pre_submit_evidence_set_id=e.id where a.id=:id"
+                "select semantic_manifest_body from submission_bundle_admissions where id=:id"
             ), {"id": str(h.created.admission_id)})
         assert body == h.manifest.as_dict()

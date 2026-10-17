@@ -1,6 +1,7 @@
 """Exact shared kernel action classifications; these sets grant no authority."""
 from app.modules.authorization.catalogue import GUIDE_PROPOSAL_ACTION_IDS, POST_POLICY_HUMAN_ACTION_IDS, POST_POLICY_MUTATION_ACTION_IDS
 
+from app.modules.authorization.domain.task_authority import TASK_IMPORT_BATCH_ACTIONS, TaskImportBatchResourceContext
 from app.modules.authorization.catalogue import ActionId
 from app.modules.authorization.domain import adapter_bindings, contribution_policies
 from app.modules.authorization.runtime import PROJECT_SUBMISSION_POLICY_TARGET_KIND_BY_ACTION
@@ -40,9 +41,12 @@ CONTEXT_DIGEST_ACTIONS = frozenset(
     {
         ActionId.CONTRIBUTION_READ_SELF, ActionId.CONTRIBUTION_READ_PROJECT,
         ActionId.ARTIFACT_GUIDE_SOURCE_INGEST,
+        *TASK_IMPORT_BATCH_ACTIONS,
         ActionId.ARTIFACT_TASK_IMPORT_SOURCE_DECLARE,
         ActionId.ARTIFACT_TASK_IMPORT_SOURCE_UPLOAD,
         ActionId.ARTIFACT_TASK_IMPORT_SOURCE_READ,
+        ActionId.CHECKER_PRE_SUBMIT_EXECUTE,
+        ActionId.CHECKER_PRE_SUBMIT_FINALIZE,
         ActionId.TASK_QUEUE_READ, ActionId.PROJECT_TASK_QUEUE_READ, ActionId.OPERATIONS_TASK_QUEUE_READ,
         ActionId.PROJECT_CREATE,
         *GUIDE_BOUND_PROJECT_MANAGER_ACTIONS,
@@ -71,6 +75,7 @@ def supports_prepared_denial(action_id: ActionId, resource_context: object) -> b
         )
         or
         (action_id in TASK_ACTIONS and isinstance(resource_context, TaskAuthorityResourceContext))
+        or (action_id in TASK_IMPORT_BATCH_ACTIONS and type(resource_context) is TaskImportBatchResourceContext)
         or (
             action_id in {ActionId.ARTIFACT_TASK_IMPORT_SOURCE_DECLARE, ActionId.ARTIFACT_TASK_IMPORT_SOURCE_UPLOAD,
                           ActionId.ARTIFACT_TASK_IMPORT_SOURCE_READ}

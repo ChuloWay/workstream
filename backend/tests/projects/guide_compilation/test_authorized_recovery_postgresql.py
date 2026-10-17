@@ -6,15 +6,21 @@ from tests.projects.guide_compilation.helpers import runtime_configuration
 
 from app.modules.authorization.api import ProjectGuideCompilationRequestOrigin
 from dataclasses import replace
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from uuid import UUID
+
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import (
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
 import pytest
 from .runtime_fixtures import record_attempt_document_access
 
-from app.modules.authorization.api import ActorIdentityFacts, ActorKind
+from app.modules.authorization.api import ActorIdentityFacts, ActorKind, AuthorizationDenied
 from app.modules.projects.guide_compilation.contracts import (
     CompilationRecoveryClassification,
 )
-from app.modules.projects.guide_compilation.service import GuideCompilationService
 from app.modules.projects.guide_compilation.repository import (
     GuideCompilationIntegrityError,
     GuideCompilationRepository,
@@ -25,14 +31,39 @@ from .test_authorized_execution_service import _execution_service, _preflight
 from .test_authorized_request_service import _authorized_service, _request, _seed_human
 
 
-class _NoAuthorityOrProvider:
-    """Fail if uncertain recovery reaches AUTH or any external operation."""
-
-    calls = 0
-
-    def __getattr__(self, name: str):
-        type(self).calls += 1
-        raise AssertionError(f"uncertain recovery reached {name}")
+async def _recovery_snapshot(
+    factory: async_sessionmaker[AsyncSession], attempt_id: UUID
+) -> tuple[int, int, int, int, int, str]:
+    """Return the retained facts that an uncertain replay must not change."""
+    async with factory() as session:
+        row = (
+            await session.execute(
+                text(
+                    "select "
+                    "(select count(*) from project_guide_compilation_request_operations) "
+                    "as operation_count,"
+                    "(select count(*) from project_guide_compilation_attempts) "
+                    "as attempt_count,"
+                    "(select count(*) from project_guide_compilations) "
+                    "as compilation_count,"
+                    "(select count(*) from audit_events where action_id="
+                    "'project.guide_compilation.execute') as execute_audit_count,"
+                    "(select count(*) from outbox_events) as outbox_count,"
+                    "(select status from project_guide_compilation_attempts where id=:id) "
+                    "as attempt_status"
+                ),
+                {"id": attempt_id},
+            )
+        ).one()
+        await session.rollback()
+    return (
+        int(row.operation_count),
+        int(row.attempt_count),
+        int(row.compilation_count),
+        int(row.execute_audit_count),
+        int(row.outbox_count),
+        str(row.attempt_status),
+    )
 
 
 @pytest.mark.asyncio
@@ -59,19 +90,85 @@ async def test_uncertain_restart_returns_unresolved_without_redispatch(
             first = await _execution_service(session, service).fence_dispatch(
                 actor=service, facts=facts
             )
-        _NoAuthorityOrProvider.calls = 0
+        before_replay = await _recovery_snapshot(factory, requested.attempt_id)
         async with factory() as restarted_session:
-            recovered = await GuideCompilationService(
-                restarted_session,
-                _NoAuthorityOrProvider(),  # type: ignore[arg-type]
-            ).fence_dispatch(actor=service, facts=facts)
+            recovered = await _execution_service(restarted_session, service).fence_dispatch(
+                actor=service, facts=facts
+            )
+        after_replay = await _recovery_snapshot(factory, requested.attempt_id)
         assert first.dispatch_permitted is True
         assert recovered.dispatch_permitted is False
         assert recovered.model_dump(exclude={"dispatch_permitted"}) == first.model_dump(
             exclude={"dispatch_permitted"}
         )
         assert recovered.classification is CompilationRecoveryClassification.PROVIDER_UNCERTAIN
-        assert _NoAuthorityOrProvider.calls == 0
+        assert before_replay == (
+            1,
+            1,
+            0,
+            0,
+            0,
+            "compilation_provider_uncertain",
+        )
+        assert after_replay == before_replay
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_uncertain_restart_requires_current_service_authority(
+    clean_postgres_database: str,
+) -> None:
+    values = await seed_database(clean_postgres_database)
+    human, link, _grant = await _seed_human(clean_postgres_database, values)
+    human_actor = ActorIdentityFacts(human, link, ActorKind.HUMAN)
+    service = service_actor(values)
+    engine = create_async_engine(clean_postgres_database)
+    factory = async_sessionmaker(engine, expire_on_commit=False)
+    try:
+        async with factory() as session:
+            requested = await _authorized_service(session, human_actor).authorize_request(
+                origin=ProjectGuideCompilationRequestOrigin(trigger="project_manager"),
+                actor=human_actor,
+                facts=_request(values),
+                identity=identity(context(values)),
+                runtime_configuration=runtime_configuration(),
+            )
+        facts = _preflight(values, requested.attempt_id, requested.operation_id)
+        async with factory() as session:
+            first = await _execution_service(session, service).fence_dispatch(
+                actor=service, facts=facts
+            )
+        assert first.dispatch_permitted is True
+        before_revocation = await _recovery_snapshot(factory, requested.attempt_id)
+
+        async with engine.begin() as connection:
+            await connection.execute(text("alter table actor_identity_links disable trigger user"))
+            await connection.execute(
+                text(
+                    "update actor_identity_links set status='revoked',revoked_by='test',"
+                    "revoked_at=clock_timestamp(),revoked_reason='test revocation' "
+                    "where id=:id"
+                ),
+                {"id": str(service.identity_link_id)},
+            )
+            await connection.execute(text("alter table actor_identity_links enable trigger user"))
+
+        async with factory() as restarted_session:
+            with pytest.raises(AuthorizationDenied):
+                await _execution_service(restarted_session, service).fence_dispatch(
+                    actor=service, facts=facts
+                )
+        after_denial = await _recovery_snapshot(factory, requested.attempt_id)
+        assert before_revocation == (
+            1,
+            1,
+            0,
+            0,
+            0,
+            "compilation_provider_uncertain",
+        )
+        assert after_denial == before_revocation
     finally:
         await engine.dispose()
 

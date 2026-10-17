@@ -97,13 +97,13 @@ context from changing silently after a submission has been recorded.
 
 ## API Contract
 
-POL-07B removes the standalone draft JSON precheck. Hidden ZIP preparation uses
+POL-07B removes the standalone draft JSON precheck. Public ZIP preparation uses
 one internal pre-submit phase command and ART-owned canonical evidence. The
-hidden route returns `pre_submission_checker_failed` for blocking failures;
-structured public intake feedback remains pending.
+route returns structured `pre_submission_checker_failed` feedback for blocking
+failures in the same request.
 
-The former packet-creation POST is also removed. Canonical admission-backed
-Submission creation remains hidden until the broader WS-ARCH-001-02I cutover.
+The former packet-creation POST is also removed. ARCH-02I-B now exposes canonical admission-backed Submission creation for
+initial work and exact checker remediation.
 Clients cannot supply a manifest, checker result or policy pointer as a substitute
 for verified ART admission and locked Task lineage.
 
@@ -224,7 +224,7 @@ Chunk 5 writes task audit events with submission identifiers in `event_payload`.
 - Contributor-provided checker names, checker outcomes, evidence ids, and
   checker run ids are rejected by the API schema
 - no standalone JSON precheck route or response schema remains
-- blocking hidden ZIP preparation returns `pre_submission_checker_failed`, creates no submission row or version, and emits no submission-created event; structured public feedback remains pending
+- blocking public ZIP preparation returns `pre_submission_checker_failed` with bounded structured feedback, creates no submission row or version, and emits no submission-created event
 - Workstream stamps locked guide source snapshot ids/hashes, effective project submission artifact policy ids/hashes, project pre-submit checker policy ids/bundle hashes, and guide/checker/review/revision/contribution policy versions from task context
 - task moves to `SUBMITTED`
 - submitted packet is automatically locked and enters the current post-submit checker gate

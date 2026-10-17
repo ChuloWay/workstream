@@ -34,14 +34,14 @@ _ENTITY_TYPES = frozenset(
     }
 )
 _RESOURCE_TYPES = frozenset(
-    """task_post_submit_routing_manifest joint_lifecycle_control checker_run outbox_event actor_profile actor_identity_link admin_role_grant project qualification_snapshot project_role_grant task
+    """task_post_submit_routing_manifest joint_lifecycle_control checker_run selected_pre_submit_run outbox_event actor_profile actor_identity_link admin_role_grant project qualification_snapshot project_role_grant task
     submission submission_creation submission_binding review contribution compensation_award compensation_delivery compensation_adapter_binding contribution_policy operations
     audit_event project_create_operation project_submission_artifact_policy_mutation
     project_guide_activation pre_submit_checker_input project_guide_compilation_request
     project_guide_compilation_attempt project_guide_sufficiency_projection
     project_submission_artifact_policy_projection project_guide_setup_finalization
     project_guide_compilation_review_package project_guide_compilation_correction
-    project_post_submit_checker_policy_mutation external_checker_registry_entry task_import_source""".split()
+    project_post_submit_checker_policy_mutation external_checker_registry_entry task_import_source task_import_batch""".split()
 )
 _UUID_TARGET_KINDS = frozenset(
     {
@@ -53,6 +53,7 @@ _UUID_TARGET_KINDS = frozenset(
         "project_role_grant",
         "external_checker_registry_entry",
         "task_import_source",
+        "task_import_batch",
     }
 )
 _TARGET_REF_KINDS = _UUID_TARGET_KINDS | {"project"}
@@ -79,6 +80,7 @@ _FACT_VALUES: dict[str, frozenset[str]] = {
     "scope_type": frozenset({"system", "project"}),
     "future_obligation": frozenset({"auth13_assignment", "rev_reviewer_obligation", "none"}),
 }
+_TASK_MANAGER_AUTHORITY_FACTS_MAX_BYTES = 8192
 
 
 def _task_policy_lineage(value: Mapping[str, object]) -> dict[str, object]:
@@ -125,7 +127,17 @@ def _manager_authority_facts(event: LifecycleAuditEventInput) -> dict[str, objec
                 'identity_link_id', 'task_status', 'assigned_to', 'assignment_id',
                 'assignment_contributor_id', 'locked_context_hash', 'reason',
                 'idempotency_key', 'replay_assignment_id', 'request_digest', 'replay_command_id'}
-    if set(facts) != required or len(json.dumps(facts).encode()) > 4096:
+    try:
+        encoded = json.dumps(
+            facts,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+            allow_nan=False,
+        )
+    except (TypeError, ValueError):
+        raise ValueError('invalid bounded manager authority facts') from None
+    if set(facts) != required or len(encoded.encode("utf-8")) > _TASK_MANAGER_AUTHORITY_FACTS_MAX_BYTES:
         raise ValueError('invalid bounded manager authority facts')
     for key in ('resource_id', 'scope_project_id', 'actor_profile_id', 'identity_link_id', 'idempotency_key'):
         value = facts[key]
@@ -147,13 +159,14 @@ def _manager_authority_facts(event: LifecycleAuditEventInput) -> dict[str, objec
     digest = canonical_json_hash({'resource_context': {key: value for key, value in facts.items() if value is not None}})
     if digest != event.authorization_resource_digest:
         raise ValueError('manager authority digest mismatch')
-    return json.loads(json.dumps(facts))
+    return json.loads(encoded)
 
 
 class LifecycleAuditEntityType(StrEnum):
     """Closed product-fact namespaces admitted by the shared participant."""
 
     TASK = "task"
+    CHECKER_RUN = "checker_run"
     REVIEW_QUEUE_ENTRY = "review_queue_entry"
     REVIEW_LEASE = "review_lease"
     REVIEW = "review"
@@ -167,7 +180,9 @@ class LifecycleAuditEntityType(StrEnum):
 class LifecycleAuditEventType(StrEnum):
     """Canonical REV/CON lifecycle facts admitted by the shared participant."""
 
+    TASK_REVISION_CONTEXT_REPAIRED = "TaskRevisionContextRepaired"
     TASK_POST_SUBMIT_ROUTED = "TaskPostSubmitRouted"
+    CHECKER_RETRY_REQUESTED = "CheckerRetryRequested"
     TASK_CREATED = "TaskCreated"
     TASK_SCREENED = "TaskScreened"
     TASK_RELEASED = "TaskReleased"
@@ -175,6 +190,8 @@ class LifecycleAuditEventType(StrEnum):
     TASK_STARTED = "TaskStarted"
     TASK_START_OVERRIDDEN = "TaskStartOverridden"
     TASK_ASSIGNMENT_AUTHORITY_REVOKED = "TaskAssignmentAuthorityRevoked"
+    TASK_REVISION_EXPIRED = "TaskRevisionExpired"
+    TASK_REVISION_EXHAUSTED = "TaskRevisionExhausted"
     REVIEW_QUEUE_ENTRY_CREATED = "ReviewQueueEntryCreated"
     REVIEW_ROUTED_TO_PREFERRED_REVIEWER = "ReviewRoutedToPreferredReviewer"
     REVIEWER_PREFERENCE_EXPIRED = "ReviewerPreferenceExpired"
@@ -222,12 +239,17 @@ class LifecycleAuditReferenceKind(StrEnum):
     TASK = "task_id"
     ASSIGNMENT = "assignment_id"
     SUBMISSION = "submission_id"
+    CHECKER_RUN = "checker_run_id"
+    SOURCE_CHECKER_RUN = "source_checker_run_id"
+    OUTBOX_EVENT = "outbox_event_id"
     REVIEW = "review_id"
     REVIEW_QUEUE_ENTRY = "review_queue_entry_id"
     REVIEW_LEASE = "review_lease_id"
     REVIEW_FINDING = "review_finding_id"
     FINDING_RESOLUTION = "finding_resolution_id"
     SUBMISSION_FINDING_RESPONSE = "submission_finding_response_id"
+    REVISION_PREPARATION = "revision_preparation_id"
+    REVISION_EXHAUSTION = "revision_exhaustion_id"
     ROUTING_MANIFEST = "routing_manifest_id"
     FINAL_ACCEPTANCE = "final_acceptance_id"
     CONTRIBUTION_RECORD = "contribution_record_id"
@@ -235,8 +257,10 @@ class LifecycleAuditReferenceKind(StrEnum):
 
 
 _LIFECYCLE_EVENT_ENTITY = {
+    LifecycleAuditEventType.CHECKER_RETRY_REQUESTED: LifecycleAuditEntityType.CHECKER_RUN,
     **dict.fromkeys(
         (
+            LifecycleAuditEventType.TASK_REVISION_CONTEXT_REPAIRED,
             LifecycleAuditEventType.TASK_POST_SUBMIT_ROUTED,
             LifecycleAuditEventType.TASK_CREATED,
             LifecycleAuditEventType.TASK_SCREENED,
@@ -245,6 +269,8 @@ _LIFECYCLE_EVENT_ENTITY = {
             LifecycleAuditEventType.TASK_STARTED,
             LifecycleAuditEventType.TASK_START_OVERRIDDEN,
             LifecycleAuditEventType.TASK_ASSIGNMENT_AUTHORITY_REVOKED,
+            LifecycleAuditEventType.TASK_REVISION_EXPIRED,
+            LifecycleAuditEventType.TASK_REVISION_EXHAUSTED,
         ),
         LifecycleAuditEntityType.TASK,
     ),
@@ -295,6 +321,21 @@ _LIFECYCLE_EVENT_ENTITY = {
 }
 
 _LIFECYCLE_EVENT_REQUIRED_REFERENCES = {
+    LifecycleAuditEventType.TASK_REVISION_CONTEXT_REPAIRED: frozenset({
+        LifecycleAuditReferenceKind.ASSIGNMENT,
+        LifecycleAuditReferenceKind.SUBMISSION,
+        LifecycleAuditReferenceKind.AUTHORIZATION_DECISION,
+        LifecycleAuditReferenceKind.ROUTING_MANIFEST,
+        LifecycleAuditReferenceKind.REVISION_PREPARATION,
+    }),
+    LifecycleAuditEventType.CHECKER_RETRY_REQUESTED: frozenset({
+        LifecycleAuditReferenceKind.TASK,
+        LifecycleAuditReferenceKind.ASSIGNMENT,
+        LifecycleAuditReferenceKind.SUBMISSION,
+        LifecycleAuditReferenceKind.SOURCE_CHECKER_RUN,
+        LifecycleAuditReferenceKind.AUTHORIZATION_DECISION,
+        LifecycleAuditReferenceKind.OUTBOX_EVENT,
+    }),
     LifecycleAuditEventType.TASK_POST_SUBMIT_ROUTED: frozenset(
         {
             LifecycleAuditReferenceKind.ASSIGNMENT,
@@ -318,6 +359,22 @@ _LIFECYCLE_EVENT_REQUIRED_REFERENCES = {
             LifecycleAuditReferenceKind.AUTHORITY_INVALIDATION,
         }
     ),
+    LifecycleAuditEventType.TASK_REVISION_EXPIRED: frozenset({
+        LifecycleAuditReferenceKind.ASSIGNMENT,
+        LifecycleAuditReferenceKind.SUBMISSION,
+        LifecycleAuditReferenceKind.ROUTING_MANIFEST,
+        LifecycleAuditReferenceKind.REVISION_PREPARATION,
+        LifecycleAuditReferenceKind.AUTHORIZATION_DECISION,
+        LifecycleAuditReferenceKind.OUTBOX_EVENT,
+    }),
+    LifecycleAuditEventType.TASK_REVISION_EXHAUSTED: frozenset({
+        LifecycleAuditReferenceKind.ASSIGNMENT,
+        LifecycleAuditReferenceKind.SUBMISSION,
+        LifecycleAuditReferenceKind.ROUTING_MANIFEST,
+        LifecycleAuditReferenceKind.REVISION_EXHAUSTION,
+        LifecycleAuditReferenceKind.AUTHORIZATION_DECISION,
+        LifecycleAuditReferenceKind.OUTBOX_EVENT,
+    }),
     **dict.fromkeys(
         (
             LifecycleAuditEventType.TASK_CLAIMED,
@@ -367,14 +424,16 @@ class LifecycleAuditEventInput(BaseModel):
     event_type: LifecycleAuditEventType
     actor_id: UUID
     reason: LifecycleAuditReason
-    source_type: Literal["manual", "markdown_import", "csv_import"] | None = None
+    source_type: Literal["manual", "markdown_import", "csv_import", "json_import"] | None = None
     locked_lineage: dict[str, object] | None = None
     task_reason: Annotated[str, Field(min_length=1, max_length=1000)] | None = None
+    operator_reason: Annotated[str, Field(min_length=1, max_length=500)] | None = None
     from_status: Annotated[str, Field(pattern=r"^[a-z][a-z0-9_]{0,29}$")] | None = None
     to_status: Annotated[str, Field(pattern=r"^[a-z][a-z0-9_]{0,29}$")] | None = None
     references: dict[LifecycleAuditReferenceKind, UUID] = Field(default_factory=dict)
     manager_authority_facts: dict[str, object] | None = None
     assignment_invalidation_facts: dict[str, object] | None = None
+    revision_expiry_facts: dict[str, object] | None = None
     authorization_resource_digest: Annotated[str, Field(pattern=r"^sha256:[0-9a-f]{64}$")] | None = None
 
     @model_validator(mode="before")
@@ -405,8 +464,32 @@ class LifecycleAuditEventInput(BaseModel):
             raise ValueError("manager event requires exact authority facts")
         if manager:
             self.manager_authority_facts = _manager_authority_facts(self)
-        if (manager or self.event_type is LifecycleAuditEventType.TASK_ASSIGNMENT_AUTHORITY_REVOKED) != (self.authorization_resource_digest is not None):
+        requires_resource_digest = manager or self.event_type in {
+            LifecycleAuditEventType.TASK_ASSIGNMENT_AUTHORITY_REVOKED,
+            LifecycleAuditEventType.TASK_REVISION_EXPIRED,
+            LifecycleAuditEventType.TASK_REVISION_EXHAUSTED,
+            LifecycleAuditEventType.CHECKER_RETRY_REQUESTED,
+        }
+        optional_recovery_digest = (
+            self.event_type is LifecycleAuditEventType.TASK_REVISION_CONTEXT_REPAIRED
+        )
+        if optional_recovery_digest and (
+            (self.authorization_resource_digest is None)
+            != (LifecycleAuditReferenceKind.OUTBOX_EVENT not in self.references)
+        ):
+            raise ValueError("revision recovery requires paired authority and expiry event")
+        if ((requires_resource_digest and self.authorization_resource_digest is None)
+                or (not requires_resource_digest and not optional_recovery_digest
+                    and self.authorization_resource_digest is not None)):
             raise ValueError("release requires its exact authorization digest")
+        retry = self.event_type is LifecycleAuditEventType.CHECKER_RETRY_REQUESTED
+        if retry != (self.operator_reason is not None):
+            raise ValueError("checker retry requires one Operator reason")
+        if self.operator_reason is not None and (
+            not self.operator_reason.strip()
+            or any(ord(character) < 32 or ord(character) == 127 for character in self.operator_reason)
+        ):
+            raise ValueError("invalid Operator reason")
         if (self.event_type is LifecycleAuditEventType.TASK_ASSIGNMENT_AUTHORITY_REVOKED) != (self.assignment_invalidation_facts is not None):
             raise ValueError("assignment facts restricted to release")
         if self.assignment_invalidation_facts is not None:
@@ -417,6 +500,16 @@ class LifecycleAuditEventInput(BaseModel):
                 self.assignment_invalidation_facts = json.loads(encoded)
             except (TypeError, ValueError):
                 raise ValueError("invalid bounded assignment facts") from None
+        if (self.event_type is LifecycleAuditEventType.TASK_REVISION_EXPIRED) != (self.revision_expiry_facts is not None):
+            raise ValueError("revision expiry facts restricted to expiry")
+        if self.revision_expiry_facts is not None:
+            try:
+                encoded = json.dumps(self.revision_expiry_facts, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False)
+                if len(encoded.encode("utf-8")) > 4096:
+                    raise ValueError("oversized revision expiry facts")
+                self.revision_expiry_facts = json.loads(encoded)
+            except (TypeError, ValueError):
+                raise ValueError("invalid bounded revision expiry facts") from None
         if (self.event_type is LifecycleAuditEventType.TASK_CREATED) != (self.source_type is not None):
             raise ValueError("source type is required only for task creation")
         if (self.event_type in {LifecycleAuditEventType.TASK_SCREENED, LifecycleAuditEventType.TASK_RELEASED}) != (self.locked_lineage is not None):
@@ -435,11 +528,17 @@ class LifecycleAuditEventInput(BaseModel):
             if self.event_type is LifecycleAuditEventType.TASK_POST_SUBMIT_ROUTED:
                 expected = (
                     ("evaluation_pending", self.to_status)
-                    if self.to_status in {"review_pending", "accepted", "needs_revision"}
+                    if self.to_status in {"review_pending", "accepted", "needs_revision", "ready"}
                     else None
                 )
             if self.event_type is LifecycleAuditEventType.TASK_ASSIGNMENT_AUTHORITY_REVOKED:
                 expected = (self.from_status, "ready") if self.from_status in {"claimed", "in_progress"} else None
+            if self.event_type in {LifecycleAuditEventType.TASK_REVISION_EXPIRED, LifecycleAuditEventType.TASK_REVISION_EXHAUSTED}:
+                expected = ("needs_revision", "ready")
+            if self.event_type is LifecycleAuditEventType.TASK_REVISION_CONTEXT_REPAIRED:
+                expected = (None, None)
+                if self.task_reason is None or self.reason is not LifecycleAuditReason.FACT_RECORDED:
+                    raise ValueError("revision repair requires a reason and immutable fact")
             if expected != (self.from_status, self.to_status):
                 raise ValueError("task event requires its exact transition")
             if self.task_reason is not None and not self.task_reason.strip():
@@ -459,6 +558,7 @@ class LifecycleAuditEventInput(BaseModel):
             raise ValueError("fact recording cannot carry lifecycle states")
         entity_reference = {
             LifecycleAuditEntityType.TASK: LifecycleAuditReferenceKind.TASK,
+            LifecycleAuditEntityType.CHECKER_RUN: LifecycleAuditReferenceKind.CHECKER_RUN,
             LifecycleAuditEntityType.REVIEW_QUEUE_ENTRY: LifecycleAuditReferenceKind.REVIEW_QUEUE_ENTRY,
             LifecycleAuditEntityType.REVIEW_LEASE: LifecycleAuditReferenceKind.REVIEW_LEASE,
             LifecycleAuditEntityType.REVIEW: LifecycleAuditReferenceKind.REVIEW,
@@ -484,6 +584,8 @@ class LifecycleAuditEventInput(BaseModel):
             entity_reference,
             *required_references,
         }
+        if optional_recovery_digest and self.authorization_resource_digest is not None:
+            allowed_references.add(LifecycleAuditReferenceKind.OUTBOX_EVENT)
         if set(self.references) != allowed_references:
             raise ValueError("lifecycle event requires exact canonical references")
         return self

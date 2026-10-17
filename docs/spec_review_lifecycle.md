@@ -63,19 +63,20 @@ enum, policy entity or adjudication setting is introduced. The
 [shared acceptance contract](#finalacceptance) below defines both triggers;
 queue, lease and human-decision sections apply only to the human branch. The
 [policy setting](../.commitrail/changes/pre-review-plan-reconciliation.md#delivered-policy-setting-implementation)
-is persisted and versioned; false activation remains unavailable.
+is persisted and versioned. A false guide can activate when its approved
+requirements have supported exact PRE/POST registrations and no `human_review`
+disposition. Activation does not enable REV; false/pass acceptance later requires
+an Operator-authorized live REV generation.
 The distinct `requires_second_review` field is fixed to `false` at policy input,
 immutable lineage and PostgreSQL boundaries. It does not activate another
 review decision or adjudication path.
-The hidden source-neutral CON submitter participant and complete frozen award-set
-port are delivered. REV-04C now composes one source-neutral FinalAcceptance,
-TASK accepted/completed effects and that CON outcome inside the caller's root
-transaction. This is a hidden mechanical participant, not the complete
-authorized `SharedFinalAcceptanceOperation`: no production authority, routing
-handler, currentness guarantee or route is implemented or enabled. In particular,
-`allow_review` retains its human-admission meaning, and a checker pass alone
-does not authorize FinalAcceptance. No synthetic human Review or ReviewLease
-may be used for the false branch.
+The source-neutral CON submitter participant and complete frozen award-set port
+are delivered. REV-04C composes one source-neutral FinalAcceptance, TASK
+accepted/completed effects and that CON outcome inside the caller's root
+transaction. Selected production routing binds the current CheckerRun and
+locked policy to the authorized `SharedFinalAcceptanceOperation` for the false
+branch. A checker pass alone does not authorize FinalAcceptance. No synthetic
+human Review or ReviewLease may be used for the false branch.
 
 The human-review shipping branch is:
 
@@ -266,18 +267,19 @@ Rows migrated from the pre-lineage schema are retained as
 `legacy_incomplete`. They remain readable for historical explanation but cannot
 satisfy readiness or activate future review behavior because no lease or
 preference semantics are invented from the removed `sla_hours` field. Policy
-rows reject update, delete, and truncate at the database boundary. The removed
-`auto_reject_after_limit` value is not lifecycle authority: reaching a revision
-limit or deadline blocks preparation and never auto-rejects or auto-closes a
-Task.
+rows reject update, delete, and truncate at the database boundary. The removed `auto_reject_after_limit` field grants no lifecycle authority.
+The project RevisionPolicy requires an explicit nonnegative revision allowance
+and a positive deadline duration. Exhaustion immediately rejects the final
+attempt, closes its assignment and returns the task to ready; zero allows only
+the initial attempt. The task has no separate cap override.
 
 Project Guide activation binds one `ContributionPolicyVersion`; task readiness
 locks it before claimability. TaskAssignment copies that lock, Submission
 stamps the exact attempt value, and ReviewLease copies the Submission stamp
 without claim-time selection. Project Guide or policy
 publication alone changes no existing task, assignment, Submission, or lease.
-After a human `needs_revision`, complete-context preparation may atomically
-rebase the continuing Task and TaskAssignment for the next submission attempt;
+After a committed checker or human `needs_revision`, complete-context preparation
+may atomically rebase the continuing Task and TaskAssignment for the next submission attempt;
 earlier Submission and ReviewLease lineage remains immutable.
 
 ## Checker Admission
@@ -285,7 +287,8 @@ earlier Submission and ReviewLease lineage remains immutable.
 Only a durable, final, current post-submit CheckerRun outcome of `allow_review`
 may admit the exact immutable Submission to human review. Admission records the
 exact CheckerRun ID and verified binding facts through the authority-hardened TASK-owned canonical `allow_review` manifest
-delivered by ARCH-04E2-B; B8 supplies hidden completion delivery; automatic production delivery remains pending. The manifest binds the
+delivered by ARCH-04E2-B; selected production completion delivery invokes that
+outcome. The manifest binds the
 current evaluation generation/result and immutable Submission; it does not
 replace CHECKERS truth or grant review authority. REV validates the current
 TASK handoff through its public port before recording admission. A retry, supersession, or
@@ -297,16 +300,35 @@ entry or make REV admission a prerequisite of the TASK transition. Its false
 branch instead binds the exact `TaskAcceptedEffectsRequest` for the future shared
 FinalAcceptance operation, with no Review, ReviewLease or reviewer contribution.
 ARCH-04E2-B now authorizes both branches through the complete hidden outcome
-operation. B8 supplies hidden completion delivery; production registration remains unavailable.
+operation. Selected production request and completion delivery are registered;
+false/pass still requires an Operator-authorized live REV generation.
 
 Checker routing is not human judgment. A final needs-remediation CHECKER result
 is consumed by the TASK-owned ARCH-04F handler, which moves the Task to
-contributor-readable `needs_revision` in its own authorized transaction while
-retaining the Task's locked context. CHECKERS does not mutate TASK directly.
-This creates no Review,
-ReviewFinding, RevisionContextPreparation, reviewer contribution, or synthetic
-human actor, consumes no human revision round/deadline, and does not use D6
-closure. Checker remediation follows that exact CheckerRun lineage and must pass
+contributor-readable `needs_revision` and creates a TASK-owned checker-rooted
+preparation when another revision remains. On the final allowed failed attempt,
+it records immediate exhaustion and returns the Task to `ready` instead. The preparation freezes
+the complete next-attempt context, including a guarded complete-context rebase
+when applicable, or records why revision is blocked. CHECKERS does not mutate
+TASK directly. This creates no Review, ReviewFinding, human-Review-rooted
+preparation, reviewer contribution or synthetic human actor, and does not use
+D6 closure. Checker replacements share the locked
+assignment-scoped revision allowance: the initial Submission is round 0; max_revision_rounds=2
+permits rounds 1 and 2, for three Submissions total. Infrastructure retries and
+replay create no Submission and consume no round. ART preparation and new TASK
+creation refuse revision_limit_reached with HTTP 409 before new effects; SQL
+also rejects over-cap inserts. Final-attempt failure immediately records
+`TaskRevisionExhaustion`, closes its assignment and returns the task to ready;
+it creates no preparation or deadline window. A fixable failure with a revision
+remaining freezes a fresh policy allowance from PostgreSQL time. A setup block
+publishes durable PM attention and pauses that allowance; repair resumes the
+remaining time, while a running-context repair keeps its deadline. Only a
+committed immutable successor ends the opportunity. At its effective deadline,
+TASK records `TaskRevisionExpiration`, releases the assignment and returns the
+task to ready with audit and outbox evidence. Any eligible claimant, including
+the previous contributor, may start a new assignment at round 0. There is no
+contributor-count limit or repeated-failure hold. Global Submission versions stay
+consecutive. Checker remediation follows that exact CheckerRun lineage and must pass
 the normal submission/checker spine before human review.
 
 Queue schema migration performs no blanket historical backfill. A later audited
@@ -513,9 +535,16 @@ effects, FinalAcceptance, contributions, awards, audit, and outbox together.
 `FinalAcceptance` is one internal immutable REV fact, created by one shared
 acceptance operation. There is no public/manual creation API, independent
 materialization action, second decision entity or automated acceptance engine.
-The hidden REV-04C participant writes this fact and composes TASK/CON effects.
-ARCH-04E2-B invokes it in the complete hidden authorized false-policy outcome.
-Production routing/acceptance and human decision runtime remain unavailable.
+The REV-04C participant writes this fact and composes TASK/CON effects.
+ARCH-04E2-B invokes it in the authorized false-policy outcome. Selected
+production completion delivery can invoke that outcome while the reviewed REV
+generation is live. Human decision runtime remains unavailable.
+If a false/pass completion reaches a held REV generation that is disabled,
+shadow or draining before any routing effects, delivery returns the shared
+OUTBOX bounded retry disposition after transaction rollback. Operators should
+make REV live before false-policy production work. Exhausted attempts dead-letter;
+this contract adds no automatic dead-letter reopening. Uncertain handler effects
+retain OUTBOX's UNKNOWN disposition.
 
 | Trigger | Required source | Result |
 |---|---|---|
@@ -618,10 +647,10 @@ its future composition must verify the actual `review.decision` authority.
 The migration refusal and preservation proof is in
 `tests/tasks/post_submit_routing/test_outcome_migration.py`.
 
-ARCH-04E2-B proves the complete hidden false-policy outcome using explicitly
-seeded, internally valid false guide lineage and real routing AUTH. It creates no
-Review. B8 supplies hidden completion delivery. The public guide guard still denies
-false; remediation and production composition must pass before it can admit false.
+ARCH-04E2-B proves the complete false-policy outcome with real routing AUTH. It
+creates no Review. Selected production completion delivery invokes that outcome.
+The public guide guard admits a supported approved false guide with exact
+checker coverage; a new false/pass acceptance still requires live REV custody.
 
 ### Shared transaction and dependency direction
 
@@ -684,8 +713,9 @@ Extract foundations from existing owner work, not a new initiative:
    accepted-effects Protocol are delivered after CHECKERS-04C facts, without a
    general routing publication writer/reader, current pointer or handler. Its
    bounded exact-source verifier is used by REV-04C. One manifest stores the locked `human_review_required` branch; it is
-   not restricted to human admission. False proof is scalar transport only
-   while activation remains unavailable. This schema precedes the REV source FK.
+   not restricted to human admission. False activation is admitted only for a
+   complete approved requirement inventory and supported exact checkers. This
+   schema precedes the REV source FK.
 2. [ART-07A1](../.commitrail/initiatives/WS-ART-001/WS-ART-001-07A1.md) supplies
    the metadata-only packet contract. REV-03B normalized packet persistence is
    delivered. REV-04A immutable Review-source storage and REV-04B shared FinalAcceptance
@@ -724,9 +754,12 @@ Extract foundations from existing owner work, not a new initiative:
    acquires the existing REV fence before TASK and later AUTH; true acquires no
    REV/CON participant. Exact replay retains IDs and cannot repair partial facts.
    Pre-authority outcomes are refused on upgrade without rewriting them.
-   The hidden ARCH-04E1B-B8 completion handler consumes this operation and
-   acknowledges only after commit. Prove 04F remediation before 04E3 registers
-   the connected production runtime and enables false-guide readiness. Live
+   The ARCH-04E1B-B8 completion handler consumes this operation and acknowledges
+   only after commit. Remediation is delivered, selected request/completion
+   handlers are registered in production composition, and a complete supported
+   false guide can activate when its approved inventory contains no `human_review`
+   disposition. New false/pass effects require a live REV generation; a typed
+   pre-effect non-live refusal rolls back and uses bounded retry. Live
    human review/revision and fulfillment remain separate work.
 
 These are dependency slices of existing work, expanded into bounded records
@@ -745,7 +778,7 @@ Remaining implementation tests:
 | AUTH `test_post_submit_route_acceptance_custody` | Wrong service/action/resource, unavailable authority, copied event and wrong transaction deny before product effects |
 | REV/AUTH `test_shared_acceptance_lifecycle_activation_and_drain` | Same registered Operator command establishes a generation through legal adjacent transitions; real enabled-writer observations, cutoff races, restart and safe stop; fabricated zero observations, unlisted writer or human-surface exposure denies |
 | CON `test_shared_acceptance_atomic_rollback` | Fail after staged task/acceptance/contribution/award/audit/outbox writes; every row/effect rolls back in both branches; valid control commits once |
-| PROJECTS `test_false_activation_requires_supported_acceptance` | An approved human_review requirement disposition, missing required output contract or unavailable shared composition blocks activation; no silent reclassification; supported complete configuration activates only after runtime proof |
+| PROJECTS false activation and locked-context tests | An approved `human_review` requirement disposition, missing exact checker coverage or unavailable activation authority blocks activation; no silent reclassification; a complete supported guide activates through the real authority and PostgreSQL custody path. At false/pass execution, the locked approved inventory is rechecked and economic effects still require a live REV generation |
 
 Proposed test homes are `backend/tests/test_shared_final_acceptance.py` (REV),
 `backend/tests/test_task_post_submit_routing.py` (TASK),
@@ -805,14 +838,17 @@ transaction does not write a reputation side effect.
 
 ADR 0010 is additive to immutable revised submissions. The task pipeline owns
 the single Project Guide context used for both task execution and human review.
-TaskAssignment stores only `task_id`; it does not duplicate a guide/context
-lock. Each Submission stamps the exact guide ID, version, immutable per-project
+TaskAssignment retains task/contributor/status attribution and its frozen
+submitter ContributionPolicyVersion; the Task owns the complete governing
+context. Each Submission stamps the exact guide ID, version, immutable per-project
 activation sequence, source snapshot, and task-execution policy IDs, versions,
 and hashes used for that attempt.
 
-Controlled revision preparation applies only after an immutable human
-`Review(needs_revision)`. Checker-caused remediation remains the distinct
-CheckerRun-rooted path above and performs no guide rebase or human finding replay.
+Human revision preparation is rooted in an immutable `Review(needs_revision)`;
+its decision integration remains separate work. Checker-caused remediation uses
+the distinct CheckerRun-rooted TASK preparation described above. Both use the
+complete-context comparison; checker remediation never replays human findings
+or fabricates a Review.
 
 Revision preparation compares the prior Submission's complete stamped context
 with the project's complete currently active applicable guide and policy
@@ -874,12 +910,16 @@ only bounded contributor-safe CheckerResult messages/suggested fixes, requires
 no fabricated ReviewFinding/response/resolution, and returns to open routing
 after corrected checker admission.
 
-A human-Review Submission N+1 links its immediate predecessor, exact preparation
-head, required bounded response text, and target TaskAssignment. A
-checker-remediation Submission N+1 instead binds the exact final needs-revision
-CheckerRun through its server-derived immutable
-`remediation_source_checker_run_id` and retains the Task's existing locked
-context; it has no preparation or ReviewFinding response. Both paths rerun the
+A planned human-Review Submission N+1 links its immediate predecessor, exact
+preparation head, required bounded response text, and target TaskAssignment.
+The checker-remediation Submission N+1 instead uses the exact authorized
+needs-revision routing manifest for the predecessor's current completed
+CheckerRun. Its `checker_remediation_manifest_id` is retained by ART evidence and
+admission, TASK dispatch and exact AUTH receipts; Submission links the admission
+and predecessor without a duplicate cause column. It acknowledges the exact
+current checker-rooted preparation ID and digest and stamps its frozen target
+context, including an authorized rebase. It requires no ReviewFinding response.
+Both paths rerun the
 existing finalization and checker spine. A new current `allow_review` creates a
 queue entry preferred to the reviewer who issued the prior human revision
 request. Corrected checker work enters ordinary open routing.
@@ -895,25 +935,41 @@ covered manager may assign a replacement against the durable human revision
 episode and append one preparation successor whose target TaskAssignment is the
 replacement. The old contributor cannot submit.
 
-## Revision Limits, Repair, And Legacy Recovery
+## Revision Limits, Repair, And Retained-Source Recovery
 
-Exact human Review revision-round counting, deadline anchor, and boundary require
-separate human approval before implementation. They are not inferred from
-checker retries, task SLA, current time, or archival examples. Approved values
-freeze on the Review-rooted episode and use database time.
+Checker and human `needs_revision` share one intended deadline and cap policy.
+Each assignment starts at round 0; a limit of 2 permits revisions 1 and 2.
+Each committed contributor-fixable failure with another revision remaining
+starts a fresh window using PostgreSQL time and the failed attempt's exact locked RevisionPolicy. The
+checker-rooted path implements this policy. Genuine human Review decision
+integration remains #554 work; its future trigger must use the same policy with
+Review provenance rather than fabricate a checker cause.
 
-Reaching a revision limit or deadline blocks new revision preparation and
-`submission.create` with a stable policy error. It does not automatically reject
-or close the task. The task remains `needs_revision` and its assignment remains
-active until an authorized explicit command.
+A committed immutable successor Submission ends the predecessor's window.
+Upload, pre-submit checks, ready admission, duplicate delivery, exact replay,
+infrastructure retry and context repair do not end or reset it. The next
+committed `needs_revision` starts another window under that attempt's lock.
+Final-attempt failure records immediate exhaustion, closes the assignment and
+returns the task to ready without a next preparation or window. A setup-blocked
+rebase pauses the clock and publishes durable PM-attention outbox evidence,
+visible in the covered PM task detail; repair resumes only the remaining allowance. Running-window expiry refuses new work at the exact PostgreSQL
+boundary. There is no contributor-count limit or repeated-failure hold.
 
-A covered Project Manager may use the planned, reason-bound, idempotent
-`review.revision_obligation.close` command only after server-proven limit or
-deadline exhaustion. It sets the task to canonical `cancelled`, releases the
-assignment at database time, clears active-assignee projection, and closes any
-queue entry as administratively cancelled. It creates no Review,
-FinalAcceptance, ContributionRecord, award, fulfillment instruction, or
-reputation effect.
+At expiry, the TASK-owned durable operation appends an immutable rejection
+receipt for the outstanding attempt, marks its assignment `revision_expired`
+with a release timestamp, clears the assignee and returns the Task to `ready`.
+Task/assignment changes, AUTH evidence, audit and outbox intent commit atomically.
+It does not rewrite Submission or Review evidence, fabricate a reject Review,
+or create FinalAcceptance, ContributionRecord, award, fulfillment or reputation
+effects. A new claimant receives their own round-0 allowance while task-global
+Submission versions remain consecutive. TASK-first revalidation fences
+resubmission, duplicate expiry deliveries and stale delivery after reclaim. The recurring
+retained-source scan recovers the exact running or paused opportunity after
+downtime without choosing a new rebase or adding time.
+
+Normal revision timeout uses TASK service authority. A fixable failure on the
+last permitted attempt closes the assignment immediately as exhausted, with no
+next preparation or deadline. The task returns to ready for a fresh claim.
 
 Blocked/revoked/invalid context preparation is repaired only through the
 planned `review.revision_context.repair` command. A covered Project Manager
@@ -948,8 +1004,12 @@ actions:
 
 - registered planned `submission.create`;
 - 19 registered planned review actions; and
-- four then-unregistered approved REV actions, now registered but unavailable,
-  defined below.
+- four then-unregistered approved REV recovery/lifecycle actions.
+
+02C subsequently registered all four. PILOT-08 removes the superseded planned
+manager-closure action; three remain in the manifest below. Context repair and
+historical-context closure remain planned; `review.lifecycle.activation.manage`
+is active internally through REV-12A4A, with no public route.
 
 The registered planned `artifact.review_evidence.binding.create ->
 artifact.binding.create` service action is separate, unavailable, and not one
@@ -971,14 +1031,16 @@ review rows without changing availability, and `WS-AUTH-001-PREP` supplied the
 prepared mutation protocol. Historical aliases `WS-AUTH-001-REV-REG`,
 `WS-AUTH-001-REV-05/06/07/08/09A/11/12`, and
 `WS-AUTH-001-REV-LIFECYCLE` are superseded as delivery authority by canonical
-WS-XINT-003 custody. 02C registers the four additions unavailable; 02D publishes
-their fail-closed contracts; later exact XINT waves activate only merged hidden
-behavior. REV-13C alone exposes the coherent product surface.
+WS-XINT-003 custody. Historically, 02C registered four additions unavailable and
+02D published their fail-closed contracts; later exact XINT waves activate only
+merged hidden behavior. PILOT-08 retires the superseded planned manager-closure
+registration. REV-13C alone exposes the coherent product surface.
 
-## Four-Action Registration Manifest
+## Three-Action Recovery And Lifecycle Manifest
 
-Registration adds no PermissionId, activates nothing, and claims no hidden
-behavior already exists. All human actors below are canonical ActorProfile IDs;
+The three retained actions add no PermissionId. Their original registration did
+not activate behavior; lifecycle control now has its separately delivered
+internal activation, while both revision-context actions remain planned. All human actors below are canonical ActorProfile IDs;
 all mutations use AUTH PREP, final-fact recomposition, route/service-command
 transaction ownership, one commit, exact idempotency, and transaction-time
 revalidation.
@@ -1015,22 +1077,6 @@ revalidation.
 - Effects: task cancelled, assignment released, queue administratively closed;
   no synthetic Review, FinalAcceptance, or CON record.
 - Hidden behavior dependency: `WS-REV-001-11D`.
-
-### `review.revision_obligation.close`
-
-- Permission: existing `project.task.manage`.
-- Candidate: active covered Project Manager grant only; Operator authority does
-  not substitute.
-- Planned surface:
-  `POST /api/v1/tasks/{task_id}/revision-obligation/close`.
-- Resource facts: exact project, task, assignment, originating human
-  `needs_revision` Review, current preparation head, approved frozen
-  limit/deadline facts, and server proof of the selected reached cause.
-- CheckerRun-rooted remediation is not an eligible resource for this command.
-- Guards: exact current head/cause, task still `needs_revision`, and terminal
-  reason exactly `revision_limit_reached` or `revision_deadline_expired`;
-  missing, not-reached, stale, arbitrary, crossed, or cross-project input denies.
-- Hidden behavior dependency: `WS-REV-001-11B`.
 
 ### `review.lifecycle.activation.manage`
 

@@ -94,7 +94,7 @@ async def test_pending_exact_delivery_compiles_once_and_replays_finalization(
     monkeypatch.setattr(
         worker, "project_guide_runtime_configuration", lambda settings: runtime_configuration()
     )
-    coordinator = worker._coordinator(factory)
+    coordinator = await worker._coordinator(factory)
     first = await coordinator.run(delivery)
     assert first["status"] == (
         "sufficiency_blocked" if status == "guide_blocked" else "policy_draft_ready"
@@ -141,7 +141,7 @@ async def test_pending_exact_delivery_compiles_once_and_replays_finalization(
 
     monkeypatch.setattr(worker, "create_project_guide_runtime", forbidden)
     monkeypatch.setattr(worker, "project_guide_runtime_configuration", forbidden)
-    replay = await worker._coordinator(factory).run(delivery)
+    replay = await (await worker._coordinator(factory)).run(delivery)
     assert replay == first
     assert runtime.calls == 1
     async with factory() as session:
@@ -157,9 +157,89 @@ async def test_pending_exact_delivery_compiles_once_and_replays_finalization(
     from app.modules.projects.api import ProjectGuideSetupFinalizationError
 
     with pytest.raises(ProjectGuideSetupFinalizationError) as denied:
-        await worker._coordinator(factory).run(delivery)
+        await (await worker._coordinator(factory)).run(delivery)
     assert denied.value.code == "service_authority_denied"
     assert runtime.calls == 1
+
+
+@pytest.mark.parametrize("phase", ["compilation", "sufficiency", "finalization"])
+async def test_compilation_phase_and_public_setup_read_share_parent_lock_order(
+    automatic_source, project_client, project_database_env, monkeypatch, phase
+):
+    """A status read during a phase's child INSERT cannot deadlock its parent FK."""
+    import asyncio
+    from sqlalchemy.ext.asyncio import AsyncSession
+    from app.core.config import get_settings
+    from app.modules.projects import router
+    from app.modules.projects.guide_compilation.models import (
+        ProjectGuideCompilation, ProjectGuideSetupFinalization,
+    )
+    from app.modules.projects.models import GuideSufficiencyReport
+    from app.workers import project_setup as worker
+    from tests.auth_concurrency_support import wait_for_named_database_lock
+    from tests.projects.client_fixtures import auth_headers
+
+    monkeypatch.setenv("WORKSTREAM_CELERY_TASK_ALWAYS_EAGER", "true")
+    get_settings.cache_clear()
+    factory, _actor, setup_id, snapshot = automatic_source
+    await create_committed_document_fixture(snapshot["id"])
+    delivery = await _delivery(factory, setup_id)
+    runtime = ScriptedGuideRuntime()
+    monkeypatch.setattr(worker, "create_project_guide_runtime", lambda configuration: runtime)
+    monkeypatch.setattr(worker, "project_guide_runtime_configuration", lambda settings: runtime_configuration())
+    coordinator = await worker._coordinator(factory)
+    target = {"compilation": ProjectGuideCompilation, "sufficiency": GuideSufficiencyReport,
+              "finalization": ProjectGuideSetupFinalization}[phase]
+    held, release = asyncio.Event(), asyncio.Event()
+    waiter_name, pids = "guide-phase-read-" + uuid4().hex, {}
+    flush, diagnostic = AsyncSession.flush, router.authorize_project_diagnostic_read
+
+    async def paused_flush(session, *args, **kwargs):
+        if not held.is_set() and any(isinstance(row, target) for row in session.new):
+            connection = await session.connection()
+            pids["worker"] = await connection.scalar(text("select pg_backend_pid()"))
+            held.set()
+            await release.wait()
+        return await flush(session, *args, **kwargs)
+
+    async def named_diagnostic(**kwargs):
+        session = kwargs["repository"]._session
+        pids["read"] = await session.scalar(text("select pg_backend_pid()"))
+        await session.execute(text("select set_config('application_name', :name, true)"),
+                              {"name": waiter_name})
+        return await diagnostic(**kwargs)
+
+    monkeypatch.setattr(AsyncSession, "flush", paused_flush)
+    monkeypatch.setattr(router, "authorize_project_diagnostic_read", named_diagnostic)
+    tasks = [asyncio.create_task(coordinator.run(delivery))]
+    try:
+        await asyncio.wait_for(held.wait(), timeout=60)
+        tasks.append(asyncio.create_task(project_client.get(
+            f"/api/v1/projects/{delivery.project_id}/guides/{delivery.guide_id}/setup-runs/latest",
+            headers=auth_headers(),
+        )))
+        await asyncio.wait_for(wait_for_named_database_lock(
+            project_database_env, waiter_name, expected_blocker_pid=pids["worker"],
+        ), timeout=15)
+        assert pids["read"] != pids["worker"]
+        assert not tasks[1].done()
+        release.set()
+        outcome, response = await asyncio.wait_for(asyncio.gather(*tasks), timeout=60)
+        assert response.status_code == 200, response.text
+        assert response.json()["id"] == str(setup_id)
+        assert outcome["status"] == "policy_draft_ready"
+        assert runtime.calls == 1
+    finally:
+        release.set()
+        for task in tasks:
+            if not task.done():
+                task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+    async with factory() as session:
+        for table, count in (("project_guide_compilations", 1),
+                             ("project_guide_component_projection_operations", 2),
+                             ("project_guide_setup_finalizations", 1)):
+            assert await session.scalar(text(f"select count(*) from {table}")) == count
 
 
 @pytest.mark.parametrize(
@@ -188,7 +268,7 @@ async def test_stale_delivery_rejects_before_any_compilation_effect(
     async with factory() as session:
         before = await session.scalar(text("select count(*) from audit_events"))
     with pytest.raises(ProjectGuideCompilationDeliveryError, match="^stale compilation delivery$"):
-        await worker._coordinator(factory).run(changed)
+        await (await worker._coordinator(factory)).run(changed)
     async with factory() as session:
         assert await session.scalar(text("select count(*) from audit_events")) == before
         for table in [
@@ -229,7 +309,7 @@ async def test_invalid_or_uncertain_attempt_reports_durable_diagnostics_without_
     monkeypatch.setattr(
         worker, "project_guide_runtime_configuration", lambda settings: runtime_configuration()
     )
-    coordinator = worker._coordinator(factory)
+    coordinator = await worker._coordinator(factory)
     # Beat selects the exact delivery before terminal provider custody exists.
     await _select_stale_delivery(factory, delivery)
     first = await coordinator.run(delivery)
@@ -300,7 +380,7 @@ async def test_finalized_receipt_excludes_every_recovery_shape(automatic_source,
         worker, "project_guide_runtime_configuration", lambda settings: runtime_configuration()
     )
     await _select_stale_delivery(factory, delivery)
-    receipt = await worker._coordinator(factory).run(delivery)
+    receipt = await (await worker._coordinator(factory)).run(delivery)
     assert receipt["status"] == "policy_draft_ready"
     async with factory() as session:
         evidence = await session.scalar(
@@ -432,7 +512,7 @@ async def test_publisher_acknowledgement_cannot_overwrite_worker_finalization(
     publisher = asyncio.create_task(dispatch())
     try:
         assert await asyncio.to_thread(published.wait, 10)
-        receipt = await worker._coordinator(factory).run(delivery)
+        receipt = await (await worker._coordinator(factory)).run(delivery)
         assert receipt["status"] == "policy_draft_ready"
         async with factory() as session:
             before = await session.scalar(
@@ -475,7 +555,7 @@ async def test_phase_crash_recovers_same_attempt_without_reinference(
     monkeypatch.setattr(
         worker, "project_guide_runtime_configuration", lambda settings: runtime_configuration()
     )
-    coordinator = worker._coordinator(factory)
+    coordinator = await worker._coordinator(factory)
     projections = coordinator._projections
 
     class Crash(Exception):
@@ -572,7 +652,7 @@ async def test_each_phase_rechecks_service_authority_and_restoration_reuses_atte
     monkeypatch.setattr(
         worker, "project_guide_runtime_configuration", lambda settings: runtime_configuration()
     )
-    coordinator = worker._coordinator(factory)
+    coordinator = await worker._coordinator(factory)
 
     async def revoke():
         async with factory() as session, session.begin():
@@ -673,17 +753,19 @@ async def test_concurrent_live_deliveries_share_one_provider_and_finalization(
     monkeypatch.setattr(
         worker, "project_guide_runtime_configuration", lambda settings: runtime_configuration()
     )
-    first = asyncio.create_task(worker._coordinator(factory).run(delivery))
+    first = asyncio.create_task((await worker._coordinator(factory)).run(delivery))
     try:
         await asyncio.wait_for(entered.wait(), timeout=20)
-        duplicate = await asyncio.wait_for(worker._coordinator(factory).run(delivery), timeout=20)
+        duplicate = await asyncio.wait_for(
+            (await worker._coordinator(factory)).run(delivery), timeout=20
+        )
         assert duplicate["error_code"] == "provider_outcome_unresolved"
     finally:
         release.set()
     receipt = await asyncio.wait_for(first, timeout=30)
     assert receipt["status"] == "policy_draft_ready"
     assert runtime.calls == 1
-    assert await worker._coordinator(factory).run(delivery) == receipt
+    assert await (await worker._coordinator(factory)).run(delivery) == receipt
     async with factory() as session:
         for table in [
             "project_guide_compilation_attempts",
@@ -727,7 +809,7 @@ async def test_dirty_setup_rejects_before_request_or_provider(
     monkeypatch.setattr(worker, "create_project_guide_runtime", forbidden)
     monkeypatch.setattr(worker, "project_guide_runtime_configuration", forbidden)
     with pytest.raises(ProjectGuideCompilationDeliveryError):
-        await worker._coordinator(factory).run(delivery)
+        await (await worker._coordinator(factory)).run(delivery)
     async with factory() as session:
         for table in (
             "project_guide_compilation_request_operations",
@@ -757,7 +839,7 @@ async def test_stale_queued_configuration_failure_is_reclaimed_and_finishes_same
     monkeypatch.setattr(worker, "project_guide_runtime_configuration", unavailable)
     for _ in range(4):
         with pytest.raises(ValueError, match="missing runtime configuration"):
-            await worker._coordinator(factory).run(delivery)
+            await (await worker._coordinator(factory)).run(delivery)
     async with factory() as session:
         assert (
             await session.scalar(text("select count(*) from project_guide_compilation_attempts"))
@@ -769,9 +851,9 @@ async def test_stale_queued_configuration_failure_is_reclaimed_and_finishes_same
         worker, "project_guide_runtime_configuration", lambda settings: runtime_configuration()
     )
     monkeypatch.setattr(worker, "create_project_guide_runtime", lambda configuration: runtime)
-    first = await worker._coordinator(factory).run(delivery)
+    first = await (await worker._coordinator(factory)).run(delivery)
     assert first["status"] == "policy_draft_ready"
-    assert await worker._coordinator(factory).run(delivery) == first
+    assert await (await worker._coordinator(factory)).run(delivery) == first
     assert runtime.calls == 1
     assert delivery.source_snapshot_id not in await _published_continuation_snapshots(factory)
 
@@ -864,10 +946,7 @@ async def _published_continuation_snapshots(factory):
     async def publish(put_id):
         published.append(str(put_id))
 
-    from unittest.mock import patch
-
-    with patch("app.adapters.artifacts.internal_workers.get_session_factory", return_value=factory):
-        count = await scan_guide_setup_continuations(publish)
+    count = await scan_guide_setup_continuations(publish)
     assert count == len(published)
     snapshots = set()
     async with factory() as session:

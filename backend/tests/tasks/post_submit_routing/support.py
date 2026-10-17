@@ -7,6 +7,7 @@ from uuid import UUID
 from sqlalchemy import select, text
 
 from app.adapters.checkers import evaluation_coordinator
+from app.adapters.tasks import task_submission_context_port
 from app.api.deps.authorization import compose_hidden_submission_creation_command
 from app.core.identifiers import new_record_id
 from app.modules.actors.models import ActorIdentityLink
@@ -16,7 +17,7 @@ from app.modules.checkers.models import CheckerRun
 from app.modules.projects.models import (
     ReviewPolicy,
 )
-from app.modules.tasks.api import SubmissionCreationRequest
+from app.modules.tasks.api import SubmissionCreationRequest, TaskSubmissionContextRequest
 from app.modules.tasks.api.post_submit_routing import TaskPostSubmitManifestFacts
 from app.modules.tasks.api.transition_audit import TaskPolicyLineage
 from app.modules.tasks.models import Submission, SubmissionDispatch, TaskAssignment, WorkstreamTask
@@ -26,7 +27,7 @@ from tests.post_submit_materialization_helpers import material_fixture
 from tests.tasks.lineage_fixtures import seed_started_task_for_artifact_test
 from tests.tasks.submission_lineage_support import _verified_admission
 from tests.test_artifact_admission import _context
-from tests.test_default_pre_submit_execution import _bytes
+from tests.archive_fixtures import byte_source as _bytes
 
 
 SOURCE_COLUMNS = (
@@ -78,13 +79,12 @@ async def source_rows(session) -> list[dict]:
     )
 
 
-async def next_request(h, *, structural_input=None):
+async def next_request(h):
     """Build a genuine later generation for the same immutable Submission."""
     request = change_request(
         h.request,
         evaluation_request_id=new_record_id(),
         evaluation_generation=h.request.evaluation_generation + 1,
-        **({"structural_input": structural_input} if structural_input is not None else {}),
     )
     h.request = request
     return request
@@ -215,6 +215,8 @@ async def completed_source(
     storage_settings=None,
     contribution_awards=(),
     human_review_required=True,
+    max_revision_rounds=2,
+    post_submit_registry_spec=None,
 ):
     """Yield one real authorized allow-review run and its valid source scalars."""
     async with material_fixture(
@@ -224,6 +226,8 @@ async def completed_source(
         storage_settings=storage_settings,
         contribution_awards=contribution_awards,
         human_review_required=human_review_required,
+        max_revision_rounds=max_revision_rounds,
+        post_submit_registry_spec=post_submit_registry_spec,
     ) as h:
         await reserve(h)
         result = await live_executor(h).evaluate_post_submission(h.request)
@@ -240,6 +244,15 @@ async def completed_source(
 
 async def _create_submission(h, context, task_id, assignment_id, predecessor_id=None):
     """Admit the ZIP and create exact Submission lineage through owner services."""
+    async with h.factory() as session, session.begin():
+        current = await task_submission_context_port(session).lock_submission_context(
+            TaskSubmissionContextRequest(
+                task_id=task_id, assignment_id=assignment_id,
+                contributor_id=context.actor_profile_id,
+                predecessor_submission_id=predecessor_id,
+            )
+        )
+        revision = current.revision_context
     preparation = SubmissionBundlePreparationRequest(
         actor=ActorIdentityFacts(
             context.actor_profile_id,
@@ -251,9 +264,11 @@ async def _create_submission(h, context, task_id, assignment_id, predecessor_id=
         task_id=task_id,
         assignment_id=assignment_id,
         predecessor_submission_id=predecessor_id,
+        revision_preparation_id=str(revision.preparation_id) if revision else None,
+        revision_preparation_sha256=revision.preparation_sha256 if revision else None,
         idempotency_key=new_record_id(),
-        summary=h.request.structural_input.summary,
-        contributor_attestation=h.request.structural_input.worker_attestation,
+        summary=h.creation_request.summary,
+        contributor_attestation=h.creation_request.contributor_attestation,
         media_type="application/zip",
         byte_source=_bytes(h.data),
     )
@@ -344,12 +359,13 @@ async def source_count(session) -> int:
     )
 
 
-async def activate_successor_guide(h):
-    """Activate a genuine v2 guide in the source Submission's project."""
+async def activate_successor_guide(h, *, max_revision_rounds=2, version="v2"):
+    """Activate a genuine successor guide in the source Submission's project."""
     from uuid import uuid4
 
     from sqlalchemy import select
 
+    from app.adapters.checkers import external_checker_registry_reader
     from app.interfaces.project_agents import SubmissionArtifactPolicyProposal
     from app.modules.actors.models import ActorIdentityLink, ActorProfile
     from app.modules.projects.api.post_policy import PostPolicyApproval
@@ -383,6 +399,11 @@ async def activate_successor_guide(h):
                 )
             )
         ).one()
+        registry_entries = await external_checker_registry_reader(session).list_entries()
+    pre_entries = tuple(entry for entry in registry_entries if entry.phase == "pre_submit")
+    post_entries = tuple(entry for entry in registry_entries if entry.phase == "post_submit")
+    assert len(registry_entries) == len(pre_entries) + len(post_entries)
+    assert len(pre_entries) <= 1 and len(post_entries) <= 1
     values.update(actor=as_uuid(setup_actor), link=as_uuid(setup_link))
     manager, grant = await seed_review_actor(h.factory, h.request.project_id)
     proposal = SubmissionArtifactPolicyProposal(
@@ -396,10 +417,14 @@ async def activate_successor_guide(h):
         h.factory,
         values,
         manager,
-        version="v2",
+        version=version,
         artifact_proposal=proposal,
+        pre_submit_registry_entry=pre_entries[0] if pre_entries else None,
+        post_submit_registry_entry=post_entries[0] if post_entries else None,
     )
-    await seed_selected_review_revision_inputs(h.factory, finalization, manager)
+    await seed_selected_review_revision_inputs(
+        h.factory, finalization, manager, max_revision_rounds=max_revision_rounds,
+    )
     _, derived = await prepare_post_policy(
         h.factory,
         finalization,
@@ -436,13 +461,13 @@ async def activate_successor_guide(h):
 def completion_for(h):
     """Build the actual completed publication from retained fixture facts."""
     from app.modules.checkers.api.execution import EvaluationCompletion
-    from app.modules.checkers.api.post_submit import PostSubmitCurrentResultReference
+    from app.modules.checkers.api.selected_post_submit import SelectedPostSubmitCurrentResultReference
 
     return EvaluationCompletion(
         project_id=h.request.project_id, task_id=h.request.task_id,
         submission_id=h.request.submission_id,
-        reference=PostSubmitCurrentResultReference(
-            **h.result.model_dump(include=set(PostSubmitCurrentResultReference.model_fields) - {"schema_version"})
+        reference=SelectedPostSubmitCurrentResultReference(
+            **h.result.model_dump(include=set(SelectedPostSubmitCurrentResultReference.model_fields) - {"schema_version"})
         ),
         routing_recommendation="allow_review", output_binding_ids=(),
         execute_evidence_id=h.source["execute_evidence_id"],
@@ -482,19 +507,17 @@ async def insert_request(session, values):
 
 
 async def successor_submission(h):
-    """Use the hidden real intake writer after seeding the future revision precondition.
+    """Create a successor only after the real authorized checker-remediation outcome."""
+    from app.adapters.tasks import evaluation_completion_handler
+    from app.modules.outbox.api import HandlerOutcome
 
-    This proves retained Submission ordering, not a live Review/revision operation.
-    """
-    from sqlalchemy import text
+    assert await evaluation_completion_handler(sessions=h.factory)(h.envelope) is HandlerOutcome.ACKNOWLEDGE
     async with h.factory() as session, session.begin():
         original = await session.get(Submission, str(h.request.submission_id))
         identity_link_id = await session.scalar(select(ActorIdentityLink.id).where(
             ActorIdentityLink.actor_profile_id == original.contributor_id,
             ActorIdentityLink.status == "active",
         ))
-        await session.execute(text("UPDATE public.workstream_tasks SET status='needs_revision' WHERE id=:id"),
-                              {"id": h.request.task_id})
         context = _context(actor_profile_id=as_uuid(original.contributor_id), identity_link_id=as_uuid(identity_link_id))
     successor = SimpleNamespace(**(vars(h) | {"data": revision_archive(h.data)}))
     return await _create_submission(successor, context, h.request.task_id, h.request.assignment_id, h.request.submission_id)

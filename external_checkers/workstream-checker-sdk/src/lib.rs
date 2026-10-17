@@ -39,10 +39,48 @@ pub struct ValidatedRequest {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Finding {
+    pub check_id: String,
     pub code: String,
     pub level: String,
     pub message: String,
     pub path: Option<String>,
+    pub line: Option<u64>,
+}
+
+/// Mirrors Python `safe_finding_path`: a relative archive path with no control,
+/// formatting, traversal or absolute forms. Python revalidates every result.
+fn is_safe_finding_path(path: &str) -> bool {
+    let formatting = |item: char| {
+        matches!(item as u32,
+            0x0080..=0x009F | 0x2028 | 0x2029 | 0x00AD | 0x0600..=0x0605 | 0x061C | 0x06DD | 0x070F | 0x0890..=0x0891 | 0x08E2
+            | 0x180E | 0x200B..=0x200F | 0x202A..=0x202E | 0x2060..=0x2064 | 0x2066..=0x206F
+            | 0xFEFF | 0xFFF9..=0xFFFB | 0x110BD | 0x110CD | 0x13430..=0x1343F
+            | 0x1BCA0..=0x1BCA3 | 0x1D173..=0x1D17A | 0xE0001 | 0xE0020..=0xE007F)
+    };
+    let parts: Vec<&str> = path.split('/').collect();
+    !path.is_empty()
+        && path.chars().count() <= 1000
+        && !path.contains('\\')
+        && !path.starts_with('/')
+        && !path
+            .chars()
+            .any(|item| (item as u32) < 32 || item as u32 == 127 || formatting(item))
+        && !parts.iter().any(|part| {
+            matches!(*part, "" | "." | "..") || part.ends_with(' ') || part.ends_with('.')
+        })
+        && !parts[0].contains(':')
+}
+
+/// Mirrors the Python `Identifier`: lowercase start, then `[a-z0-9_.-]`, at most 100.
+fn is_identifier(value: &str) -> bool {
+    let mut characters = value.chars();
+    value.len() <= 100
+        && characters
+            .next()
+            .is_some_and(|first| first.is_ascii_lowercase())
+        && characters.all(|item| {
+            item.is_ascii_lowercase() || item.is_ascii_digit() || matches!(item, '_' | '.' | '-')
+        })
 }
 
 pub fn canonical_json(value: &Value) -> Result<String, ContractError> {
@@ -116,29 +154,87 @@ pub fn parse_request(bytes: &[u8]) -> Result<ValidatedRequest, ContractError> {
         .get("materials")
         .and_then(Value::as_array)
         .ok_or(ContractError("request materials are invalid"))?;
-    if materials.len() > 32 {
+    if materials.is_empty() || materials.len() > 32 {
         return Err(ContractError("request materials are unbounded"));
     }
     let mut roles = BTreeSet::new();
     for material in materials {
-        let material = exact_object(
-            material,
-            &[
-                "role",
-                "content_id",
-                "replica_id",
-                "sha256",
-                "byte_count",
-                "media_type",
-            ],
-        )?;
-        if !roles.insert(string(material, "role")?)
-            || unsigned(material, "byte_count")? > i64::MAX as u64
+        let material = material
+            .as_object()
+            .ok_or(ContractError("request material is invalid"))?;
+        if string(material, "phase")? != phase
+            || !roles.insert(string(material, "role")?)
             || !string(material, "media_type")?.contains('/')
         {
             return Err(ContractError("request material is invalid"));
         }
-        digest(material, "sha256")?;
+        if phase == "pre_submit" {
+            exact_map(
+                material,
+                &[
+                    "phase",
+                    "role",
+                    "prepared_generation_id",
+                    "attempt_id",
+                    "attempt_request_digest",
+                    "archive_sha256",
+                    "archive_byte_count",
+                    "semantic_manifest_sha256",
+                    "media_type",
+                ],
+            )?;
+            if unsigned(material, "archive_byte_count")? > i64::MAX as u64 {
+                return Err(ContractError("request material is invalid"));
+            }
+            digest(material, "attempt_request_digest")?;
+            digest(material, "archive_sha256")?;
+            digest(material, "semantic_manifest_sha256")?;
+            if string(material, "prepared_generation_id")?
+                != string(identity, "prepared_generation_id")?
+                || string(material, "attempt_id")? != string(identity, "attempt_id")?
+                || digest(material, "attempt_request_digest")?
+                    != digest(identity, "attempt_request_digest")?
+            {
+                return Err(ContractError("request material identity differs"));
+            }
+        } else {
+            exact_map(
+                material,
+                &[
+                    "phase",
+                    "role",
+                    "submission_id",
+                    "submission_version",
+                    "binding_id",
+                    "content_id",
+                    "replica_id",
+                    "content_sha256",
+                    "byte_count",
+                    "media_type",
+                    "evidence_id",
+                    "verification_receipt_id",
+                    "verification_job_id",
+                    "verification_generation",
+                    "namespace_fingerprint",
+                    "semantic_manifest_sha256",
+                ],
+            )?;
+            if unsigned(material, "byte_count")? > i64::MAX as u64
+                || unsigned(material, "submission_version")? == 0
+                || unsigned(material, "verification_generation")? == 0
+            {
+                return Err(ContractError("request material is invalid"));
+            }
+            digest(material, "content_sha256")?;
+            digest(material, "namespace_fingerprint")?;
+            digest(material, "semantic_manifest_sha256")?;
+            if string(material, "submission_id")? != string(identity, "submission_id")?
+                || unsigned(material, "submission_version")?
+                    != unsigned(identity, "submission_version")?
+            {
+                return Err(ContractError("request material identity differs"));
+            }
+        }
     }
     let resources = registry
         .get("resources")
@@ -379,17 +475,30 @@ pub fn validate_result(value: &Value, request: &ValidatedRequest) -> Result<(), 
             return Err(ContractError("completed result is invalid"));
         }
         let has_error = findings.iter().try_fold(false, |found, item| {
+            // Python always serializes both optional location keys before hashing.
+            let keys = item
+                .as_object()
+                .ok_or(ContractError("finding is invalid"))?;
+            if !keys.contains_key("path") || !keys.contains_key("line") {
+                return Err(ContractError("finding is invalid"));
+            }
             let finding: Finding = serde_json::from_value(item.clone())
                 .map_err(|_| ContractError("finding is invalid"))?;
-            if finding.code.is_empty()
-                || finding.code.len() > 100
+            if !is_identifier(&finding.check_id)
+                || !is_identifier(&finding.code)
                 || finding.message.is_empty()
                 || finding.message.chars().count() > 4096
-                || !matches!(finding.level.as_str(), "info" | "warning" | "error")
+                || !matches!(
+                    finding.level.as_str(),
+                    "info" | "warning" | "error" | "coverage_incomplete"
+                )
                 || finding
                     .path
                     .as_ref()
-                    .is_some_and(|path| path.is_empty() || path.chars().count() > 1000)
+                    .is_some_and(|path| !is_safe_finding_path(path))
+                || finding
+                    .line
+                    .is_some_and(|line| finding.path.is_none() || !(1..=10_000_000).contains(&line))
             {
                 return Err(ContractError("finding is invalid"));
             }
@@ -654,7 +763,7 @@ mod tests {
             .expect("Python request fixture must satisfy the Rust contract");
         assert_eq!(
             request.request_digest,
-            "sha256:81adbc8a7cc0e13b4221ac06ecdd2f95850d6215c3a336d932ad14f8988a70b7"
+            "sha256:a06707b14348ffe5ef22a55de8d4ec4845c9029da7180d5731fb2c120b5591f3"
         );
         let result: Value = serde_json::from_slice(include_bytes!("../../fixtures/result.json"))
             .expect("result fixture is JSON");
@@ -677,10 +786,12 @@ mod tests {
         let mut unicode_result = result.clone();
         unicode_result["verdict"] = Value::String("failed".into());
         unicode_result["findings"] = serde_json::json!([{
+            "check_id": "unicode",
             "code": "unicode",
             "level": "error",
             "message": "汉".repeat(2_000),
             "path": "路".repeat(500),
+            "line": 7,
         }]);
         let mut body = unicode_result.as_object().unwrap().clone();
         body.remove("result_digest");
@@ -688,5 +799,57 @@ mod tests {
             Value::String(canonical_hash(&Value::Object(body)).unwrap());
         validate_result(&unicode_result, &request)
             .expect("character ceilings must match Python rather than UTF-8 bytes");
+
+        let resign = |mut value: Value| {
+            let mut body = value.as_object().unwrap().clone();
+            body.remove("result_digest");
+            value["result_digest"] = Value::String(canonical_hash(&Value::Object(body)).unwrap());
+            value
+        };
+        let mut coverage = result.clone();
+        coverage["findings"] = serde_json::json!([{
+            "check_id": "coverage.files",
+            "code": "coverage.unreadable",
+            "level": "coverage_incomplete",
+            "message": "one file could not be evaluated",
+            "path": "src/main.rs",
+            "line": null,
+        }]);
+        validate_result(&resign(coverage.clone()), &request)
+            .expect("coverage gaps alone keep a passed verdict");
+        let mut orphan_line = coverage.clone();
+        orphan_line["findings"][0]["path"] = Value::Null;
+        orphan_line["findings"][0]["line"] = serde_json::json!(3);
+        assert!(validate_result(&resign(orphan_line), &request).is_err());
+        let mut missing_check = coverage.clone();
+        missing_check["findings"][0]
+            .as_object_mut()
+            .unwrap()
+            .remove("check_id");
+        assert!(validate_result(&resign(missing_check), &request).is_err());
+        for unsafe_path in [
+            "../x",
+            "/etc/passwd",
+            "a//b",
+            "bidi\u{202e}exe",
+            "c:/x",
+            "dir/ ",
+        ] {
+            let mut traversal = coverage.clone();
+            traversal["findings"][0]["path"] = Value::String(unsafe_path.into());
+            assert!(
+                validate_result(&resign(traversal), &request).is_err(),
+                "{unsafe_path}"
+            );
+        }
+        let mut missing_line = coverage.clone();
+        missing_line["findings"][0]
+            .as_object_mut()
+            .unwrap()
+            .remove("line");
+        assert!(validate_result(&resign(missing_line), &request).is_err());
+        let mut uppercase_check = coverage;
+        uppercase_check["findings"][0]["check_id"] = Value::String("Coverage".into());
+        assert!(validate_result(&resign(uppercase_check), &request).is_err());
     }
 }

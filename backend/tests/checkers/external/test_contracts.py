@@ -14,7 +14,7 @@ from app.modules.checkers.api.external import (
     RESULT_SCHEMA_ID,
     ExternalCheckerContractError,
     ExternalCheckerFinding,
-    ExternalCheckerMaterial,
+    PreSubmitExternalCheckerMaterial,
     ExternalCheckerSchema,
     external_checker_json_hash,
     make_external_checker_execution_request,
@@ -24,6 +24,7 @@ from app.modules.checkers.api.external import (
 from tests.checkers.external.support import (
     SHA,
     execution_identity,
+    execution_material,
     registry_entry,
     registry_spec,
     schema,
@@ -121,23 +122,15 @@ def test_registration_request_digest_is_derived_and_substitution_fails() -> None
 @pytest.mark.parametrize("phase", ["pre_submit", "post_submit"])
 def test_execution_request_binds_existing_phase_lineage_and_materials(phase: str) -> None:
     entry = registry_entry(phase)
+    identity = execution_identity(phase)
     request = make_external_checker_execution_request(
         registry=entry,
-        identity=execution_identity(phase),
+        identity=identity,
         configuration={},
         configuration_sha256=external_checker_json_hash({}),
         input={"task_version": "v3"},
         input_sha256=external_checker_json_hash({"task_version": "v3"}),
-        materials=(
-            ExternalCheckerMaterial(
-                role="submission_archive",
-                content_id=uuid4(),
-                replica_id=uuid4(),
-                sha256=SHA,
-                byte_count=4,
-                media_type="application/zip",
-            ),
-        ),
+        materials=(execution_material(identity),),
     )
     assert request.identity.phase == phase
     with pytest.raises(ValidationError, match="input digest mismatch"):
@@ -161,35 +154,39 @@ def test_execution_identity_does_not_accept_cross_phase_or_unknown_fields() -> N
 
 
 def test_execution_request_rejects_duplicate_material_roles() -> None:
-    material = ExternalCheckerMaterial(
+    identity = execution_identity()
+    material = PreSubmitExternalCheckerMaterial(
         role="submission_archive",
-        content_id=uuid4(),
-        replica_id=uuid4(),
-        sha256=SHA,
-        byte_count=4,
+        prepared_generation_id=identity.prepared_generation_id,
+        attempt_id=identity.attempt_id,
+        attempt_request_digest=identity.attempt_request_digest,
+        archive_sha256=SHA,
+        archive_byte_count=4,
+        semantic_manifest_sha256=SHA,
         media_type="application/zip",
     )
     with pytest.raises(ValidationError, match="role is duplicated"):
         make_external_checker_execution_request(
             registry=registry_entry(),
-            identity=execution_identity(),
+            identity=identity,
             configuration={},
             configuration_sha256=external_checker_json_hash({}),
             input={"task_version": "v3"},
             input_sha256=external_checker_json_hash({"task_version": "v3"}),
-            materials=(material, material.model_copy(update={"content_id": uuid4()})),
+            materials=(material, material.model_copy(update={"archive_sha256": "sha256:" + "b" * 64})),
         )
 
 
 def test_completed_and_infrastructure_results_are_closed_and_request_bound() -> None:
+    identity = execution_identity()
     request = make_external_checker_execution_request(
         registry=registry_entry(),
-        identity=execution_identity(),
+        identity=identity,
         configuration={},
         configuration_sha256=external_checker_json_hash({}),
         input={"task_version": "v3"},
         input_sha256=external_checker_json_hash({"task_version": "v3"}),
-        materials=(),
+        materials=(execution_material(identity),),
     )
     completed = make_external_checker_execution_result(
         request_digest=request.request_digest,
@@ -200,10 +197,12 @@ def test_completed_and_infrastructure_results_are_closed_and_request_bound() -> 
         verdict="failed",
         findings=(
             ExternalCheckerFinding(
+                check_id="archive.paths",
                 code="archive.unsafe_path",
                 level="error",
                 message="archive contains an unsafe path",
-                path="../escape",
+                path="src/escape.txt",
+                line=3,
             ),
         ),
         infrastructure_failure_code=None,
@@ -248,14 +247,15 @@ def test_completed_and_infrastructure_results_are_closed_and_request_bound() -> 
             infrastructure_failure_code="network_error",
         )
 
+    bounded_identity = execution_identity()
     bounded_request = make_external_checker_execution_request(
         registry=registry_entry(maximum_output_bytes=256),
-        identity=execution_identity(),
+        identity=bounded_identity,
         configuration={},
         configuration_sha256=external_checker_json_hash({}),
         input={"task_version": "v3"},
         input_sha256=external_checker_json_hash({"task_version": "v3"}),
-        materials=(),
+        materials=(execution_material(bounded_identity),),
     )
     oversized_infrastructure = make_external_checker_execution_result(
         request_digest=bounded_request.request_digest,
@@ -272,6 +272,7 @@ def test_completed_and_infrastructure_results_are_closed_and_request_bound() -> 
 
     oversized_findings = tuple(
         ExternalCheckerFinding(
+            check_id="archive.size",
             code=f"archive.finding_{index}",
             level="warning",
             message="x" * 4096,
@@ -289,3 +290,50 @@ def test_completed_and_infrastructure_results_are_closed_and_request_bound() -> 
             findings=oversized_findings,
             infrastructure_failure_code=None,
         )
+
+
+def test_findings_carry_check_location_and_coverage_level() -> None:
+    finding = ExternalCheckerFinding(
+        check_id="coverage.files",
+        code="coverage.unreadable",
+        level="coverage_incomplete",
+        message="one file could not be evaluated",
+        path="src/main.rs",
+        line=12,
+    )
+    assert finding.model_dump(mode="json") == {
+        "check_id": "coverage.files",
+        "code": "coverage.unreadable",
+        "level": "coverage_incomplete",
+        "message": "one file could not be evaluated",
+        "path": "src/main.rs",
+        "line": 12,
+    }
+    with pytest.raises(ValidationError, match="line requires a path"):
+        ExternalCheckerFinding(
+            check_id="coverage.files", code="coverage.unreadable",
+            level="warning", message="m", line=4,
+        )
+    with pytest.raises(ValidationError):
+        ExternalCheckerFinding(code="coverage.unreadable", level="warning", message="m")
+    with pytest.raises(ValidationError):
+        ExternalCheckerFinding(
+            check_id="coverage.files", code="c", level="warning", message="m",
+            path="a", line=0,
+        )
+
+
+@pytest.mark.parametrize("path", [
+    "../x", "/etc/passwd", "a//b", "a/./b", "src\\main.rs", "dir/ ", "dir/.",
+    "c:/x", "line\nbreak", "bidi\u202eexe.txt", "tab\tname", "",
+    "next\x85line", "para\u2029graph", "line\u2028sep",
+])
+def test_finding_paths_must_be_safe_relative_archive_paths(path) -> None:
+    with pytest.raises(ValidationError):
+        ExternalCheckerFinding(
+            check_id="paths.check", code="paths.code", level="warning", message="m", path=path,
+        )
+    assert ExternalCheckerFinding(
+        check_id="paths.check", code="paths.code", level="warning", message="m",
+        path="src/naïve/main.rs",
+    ).path == "src/naïve/main.rs"

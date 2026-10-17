@@ -1,5 +1,5 @@
 {
-  "canonical_sha256": "083310034d72651d6936c869f0888d8c871330d3d8e3d2f3b7cb88f40edb0a76",
+  "canonical_sha256": "848b53dfc7e18cee10df67bac79612aefe2e4dd0c217b110e50980dd12b804c9",
   "components": {
     "schemas": {
       "ActorProfileAdminResponse": {
@@ -222,7 +222,9 @@
           "workstream.artifact.materializer",
           "workstream.artifact.checker_output",
           "workstream.task.assignment_reconciler",
+          "workstream.task.revision_expirer",
           "workstream.task.post_submit_router",
+          "workstream.checker.pre_submit",
           "workstream.checker.post_submit",
           "workstream.outbox.dispatcher",
           "workstream.project.setup",
@@ -504,7 +506,7 @@
   "schema_version": 1,
   "source": {
     "action_id": "actor.profile.read",
-    "backend_git_sha": "2134c7be05d10c381649872d423e957f9c18caff",
+    "backend_git_sha": "7326dc95e59f59fc9f6dee438857091e73c370aa",
     "method": "GET",
     "openapi_version": "3.1.0",
     "path": "/api/v1/actors/{actor_profile_id}"

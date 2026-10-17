@@ -34,7 +34,7 @@ from app.modules.artifacts.submission_archive import (
 )
 from app.modules.artifacts.submission_manifest import build_submission_manifest
 from app.modules.checkers.api.external import (
-    ExternalCheckerMaterial,
+    PreSubmitExternalCheckerMaterial,
     ExternalCheckerRegistryEntry,
     ExternalCheckerResourceLimits,
     ExternalCheckerSchema,
@@ -212,17 +212,6 @@ async def run(reference: str, service_binary: Path) -> dict[str, object]:
             created_at=datetime.now(timezone.utc),
         )
         input_value = {"task_version": "v3"}
-        materials = (
-            ExternalCheckerMaterial(
-                role="submission_archive",
-                content_id=uuid4(),
-                replica_id=uuid4(),
-                sha256=prepared.commitment.sha256,
-                byte_count=prepared.commitment.byte_count,
-                media_type="application/zip",
-            ),
-        )
-
         def request_for(mode: str):
             identity = PreSubmitExternalCheckerIdentity(
                 project_id=uuid4(),
@@ -234,6 +223,18 @@ async def run(reference: str, service_binary: Path) -> dict[str, object]:
                 effective_plan_sha256="sha256:" + "3" * 64,
             )
             configuration = {"mode": mode}
+            materials = (
+                PreSubmitExternalCheckerMaterial(
+                    role="submission_archive",
+                    prepared_generation_id=identity.prepared_generation_id,
+                    attempt_id=identity.attempt_id,
+                    attempt_request_digest=identity.attempt_request_digest,
+                    archive_sha256=prepared.commitment.sha256,
+                    archive_byte_count=prepared.commitment.byte_count,
+                    semantic_manifest_sha256=manifest.sha256,
+                    media_type="application/zip",
+                ),
+            )
             return make_external_checker_execution_request(
                 registry=registry,
                 identity=identity,

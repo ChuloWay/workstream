@@ -64,6 +64,47 @@ async def test_create_draft_without_guide(task_client):
         assert UUID(event.event_payload["references"]["authorization_decision_id"])
 
 
+@pytest.mark.parametrize("phase", ["authorize", "stage"])
+async def test_creation_preparation_cannot_move_to_a_later_root(task_client, phase):
+    """Rolled-back preparation and ALLOW evidence cannot authorize another root."""
+    from app.adapters.audit import task_transition_audit
+    from app.adapters.tasks import task_commands
+    from app.core.config import get_settings
+    from app.modules.authorization.task_authorization import PreparedTaskAuthorization
+    from app.modules.tasks.schemas import TaskCreate
+    from tests.authorization.task_authority.test_concurrency import actor_context
+
+    project = await task_client.post("/api/v1/projects", headers=auth_headers(),
+                                     json={"name": "Preparation root", "slug": "create-root-" + uuid4().hex})
+    assert project.status_code == 201, project.text
+    async with db_session.get_session_factory()() as observer:
+        from app.modules.actors.models import ActorIdentityLink
+        actor_id = await observer.scalar(select(ActorIdentityLink.actor_profile_id).where(
+            ActorIdentityLink.subject == "project-manager-subject",
+        ))
+    context = await actor_context(actor_id)
+    async with db_session.get_session_factory()() as session:
+        commands = task_commands(session, authorization=PreparedTaskAuthorization(session, context),
+                                 audit=task_transition_audit(session), actor_profile_id=context.actor_profile_id,
+                                 settings=get_settings())
+        async with session.begin():
+            prepared = await commands.prepare_creation(UUID(project.json()["id"]), TaskCreate(**complete_task_payload()),
+                                                       idempotency_key=uuid4())
+            decision = await commands.authorize_creation(prepared)
+            receipt_id = prepared.receipt.id
+            await session.rollback()
+        async with session.begin():
+            with pytest.raises(RuntimeError, match="original caller transaction"):
+                if phase == "authorize":
+                    await commands.authorize_creation(prepared)
+                else:
+                    await commands.stage_creation(prepared, decision)
+        async with session.begin():
+            assert await session.get(WorkstreamTask, str(prepared.task_id)) is None
+            assert await session.get(TaskCommandReceipt, receipt_id) is None
+            assert await session.get(AuditEvent, str(decision.decision_id)) is None
+
+
 async def test_screen_and_release_lock_approved_context(task_client):
     project = await create_active_project(task_client)
     task = await create_draft_task(task_client, project["id"])

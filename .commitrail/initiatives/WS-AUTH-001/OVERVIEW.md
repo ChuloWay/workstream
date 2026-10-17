@@ -1,6 +1,6 @@
 # WS-AUTH-001 — Workstream authorization service
 
-[REV-12A4A](../WS-REV-001/WS-REV-001-12A4A.md) adds internal Operator-controlled lifecycle transitions and current-generation terminal replay. New acceptance effects require LIVE; 04E2-B supplies hidden source AUTH custody, while production routing remains unavailable. Conditional award facts stay atomic, while fulfillment admission, payment delivery and their root/cutoff machinery remain deferred until a successor manifest enables them.
+[REV-12A4A](../WS-REV-001/WS-REV-001-12A4A.md) adds internal Operator-controlled lifecycle transitions and current-generation terminal replay. New acceptance effects require LIVE; 04E2-B supplies hidden source AUTH custody, while PILOT-04 now registers selected production routing. Conditional award facts stay atomic, while fulfillment admission, payment delivery and their root/cutoff machinery remain deferred until a successor manifest enables them.
 
 Delivery priority follows the [first complete contributor milestone](../WS-ARCH-001/planning/PLAN.md#first-complete-contributor-milestone): contribute only prerequisites of that public backend path; live human review/revision and external integrations remain later work.
 
@@ -16,10 +16,13 @@ complete tuple. No Review or reviewer contribution is fabricated.
 B8 supplies hidden completion delivery with commit-before-ACK.
 [ARCH-04F2](../WS-ARCH-001/WS-ARCH-001-04F2.md) extends the same hidden TASK/AUTH
 operation so an exact current contributor-correctable result reaches
-`needs_revision` under either policy mode, with no REV/CON effect. Exact-cause
-replacement intake, setup-fault/Operator recovery, 04E3 production composition,
-public intake and the first-layer drill remain. False-guide activation, live
-human review/revision and payment delivery remain unavailable.
+`needs_revision` under either policy mode, with no REV/CON effect. ARCH-04F3
+binds that exact current cause through hidden ART preparation, binding and TASK
+creation AUTH resources. ARCH-04F4 activates the separate hidden reason-bound system-Operator checker retry action with exact prepared/decision/audit and historical replay custody. Selected production composition, ARCH-02I-B public entry and ARCH-04E3-B
+supported false-guide activation are delivered. New false/pass effects still
+require LIVE REV; a known pre-effect non-live refusal retries within the OUTBOX
+budget, then dead-letters if exhausted. The bounded local public/worker drill passed; human
+review/revision, payment delivery and setup-fault handling stay later work.
 
 Latest completed activation: [AUTH-18 public manager activation](WS-AUTH-001-18.md),
 using [AUTH-12H complete-guide authority](WS-AUTH-001-12H.md),
@@ -56,7 +59,7 @@ Historical pre-cutover work records: [`STATUS.md`](pre-cutover/STATUS.md),
   and accepted-effects contracts follow
   [ARCH-04D2](../WS-ARCH-001/WS-ARCH-001-04D2.md) exact input, execute and
   finalize authority. REV-04C supplies the hidden effects participant, and ARCH-04E2-B supplies
-  the authorized outcome operation. No production routing handler is registered. Output-file authority remains unavailable for the zero-output
+  the authorized outcome operation. PILOT-04 registers selected production routing handlers. Output-file authority remains unavailable for the zero-output
   catalogue. [AUTH-18](../WS-AUTH-001/WS-AUTH-001-18.md) delivers
   public manager activation context and exact guide activation.
   [CP05A](../WS-ARCH-001/WS-ARCH-001-CP05A.md) delivers public Finance
@@ -72,8 +75,8 @@ Historical pre-cutover work records: [`STATUS.md`](pre-cutover/STATUS.md),
   CON-02B delivery mechanics. This follows
   completed ARCH-03B8 hidden task audit evidence and ARCH-03B7 requirements projections and ARCH-03B6 locked-context projections and ARCH-03B5 current work context and ARCH-03B4 hidden contributor/management task detail, ARCH-03B3 hidden management/operational queues and ARCH-03B2 contributor-ready queue facts, ARCH-03B1 detached metadata and CP08 lineage
   and minimal writers and ARCH-03A internal guide context. POL-07B internal phase composition is delivered.
-  The dispatcher registers only exact assignment invalidation. Automatic checker
-  routing has hidden B8 completion delivery but still requires production registration.
+  The dispatcher registers exact assignment invalidation and PILOT-04 selected
+  checker request/completion delivery with distinct feature authority.
 - Delivered routing preparation: [ARCH-04E2-A](../WS-ARCH-001/WS-ARCH-001-04E2A.md)
   adds the strict exact routing resource, request matcher, digest dispatch and
   fixed-router adapter through canonical PREP. ARCH-04E2-B consumes that
@@ -81,9 +84,11 @@ Historical pre-cutover work records: [`STATUS.md`](pre-cutover/STATUS.md),
 - Delivered storage: [REV-03B](../WS-REV-001/WS-REV-001-03B.md) freezes exact
   lease packets with normalized live guide ingests; no resolver or byte authority.
   [REV-04A](../WS-REV-001/WS-REV-001-04A.md) adds complete immutable Review, findings, resolutions and completed request storage; no decision runtime.
-- Next usable boundary: complete 04F exact-cause replacement intake and recovery,
-  04E3 live composition and false-guide readiness, public intake and the
-  first-layer drill. The delivered remediation handoff is independent of REV/CON;
+- Local proof: the first-layer public/worker drill passed across the delivered
+  public entry, supported false-guide activation and selected production delivery
+  under scripted approved-guide preconditions and local Flow-compatible auth.
+  Next usable boundary: intended hosted identity and infrastructure operation.
+  Setup-fault handling is later safety work. The delivered remediation handoff is independent of REV/CON;
   live human review/revision and payment delivery stay deferred.
 - Governing source: `docs/spec_authorization_service.md`, authorization code,
   migrations, and tests.
@@ -93,10 +98,11 @@ Historical pre-cutover work records: [`STATUS.md`](pre-cutover/STATUS.md),
 
 REV-12A4A supplies scoped lifecycle transitions on the existing REV fence.
 04E2-B supplies exact source AUTH custody and complete database/effect closure.
-Production composition and false-guide activation remain separate work.
+PILOT-04 selected production composition and ARCH-04E3-B supported
+false-guide activation are delivered; the bounded local public/worker drill passed; hosted operation remains.
 
 This is delivery priority, not a prerequisite of true human admission. Both
-routing branches have delivered request reservation 04E1B-A → delivered AUTH preparation 04E2-A → delivered authorized outcomes 04E2-B → completion delivery 04E1B-B → live 04E3; true routing
+routing branches have delivered request reservation 04E1B-A → delivered AUTH preparation 04E2-A → delivered authorized outcomes 04E2-B → completion delivery 04E1B-B → PILOT-04 selected production registration; true routing
 can proceed after its own prerequisites without CON/shared acceptance or
 scoped lifecycle activation. False routing adds those requirements. Human final
 acceptance later uses the same authorized shared acceptance/CON operation.
@@ -131,5 +137,5 @@ manager proposal review, pre-submit approval and manual correction dispatch.
    AUTH-OUTBOX-01/02 bracket hidden CON-02B dispatch; ARCH-04E2 activates only
    the proven TASK routing handler before ARCH-04E3 live composition.
    TASK queue/read exposure is complete through ARCH-03C7. AUTH-18 public
-   manager guide activation/context is delivered; ARCH-03D hidden intake, hidden exact post-submit materialization and ARCH-04B2 output custody are delivered; ARCH-04C hidden execution is delivered; ARCH-04D1 canonical material custody is delivered; ARCH-04D2 exact input/execution/finalization authority, ARCH-04E1A source-only facts/types and ARCH-04E2-A hidden strict preparation are delivered. 04E2-B authorized outcomes, B8 completion delivery and the 04F2 hidden remediation handoff are delivered; replacement intake/recovery and live 04E3 remain. Shared acceptance foundations additionally gate false routing, not true admission.
+   manager guide activation/context is delivered; ARCH-03D hidden intake, hidden exact post-submit materialization and ARCH-04B2 output custody are delivered; ARCH-04C hidden execution is delivered; ARCH-04D1 canonical material custody is delivered; ARCH-04D2 exact input/execution/finalization authority, ARCH-04E1A source-only facts/types and ARCH-04E2-A hidden strict preparation are delivered. 04E2-B authorized outcomes, B8 completion delivery and the 04F2 hidden remediation handoff are delivered; 04F3 hidden replacement intake and 04F4 hidden Operator retry are delivered; selected production delivery, public entry and supported false-guide activation are delivered; the bounded local public/worker drill passed. Shared acceptance foundations additionally gate false routing, not true admission.
    Remaining work must use its exact owner, not the superseded broad designs.

@@ -4,7 +4,7 @@ import json
 
 from app.modules.authorization.domain.post_submit_routing import (
     AutomatedAcceptanceConsequence,
-    CheckerRemediationConsequence,
+    CheckerRemediationConsequence, CheckerExhaustionConsequence,
     HumanAdmissionConsequence,
     PostSubmitRoutingResourceContext,
 )
@@ -70,6 +70,12 @@ def task_import_source_authorization(
 ) -> PreparedTaskImportSourceAuthorization:
     """Compose exact source authority in AUTH's registered owner root."""
     return PreparedTaskImportSourceAuthorization(session, context)
+
+
+def checker_retry_authorization(session: AsyncSession, context: AuthorizationContext):
+    """Compose one hidden retry through canonical prepared Operator authority."""
+    from app.modules.authorization.checker_retry_authorization import PreparedCheckerRetryAuthorization
+    return PreparedCheckerRetryAuthorization(session, context)
 
 
 def guide_sufficiency_projection_authorization(
@@ -238,6 +244,20 @@ def assignment_invalidation_authorization(session: AsyncSession):
     return AssignmentInvalidationAuthorizationAdapter(session)
 
 
+def revision_expiry_authorization(session: AsyncSession):
+    """Bind TASK's deadline effect to canonical fixed-service AUTH."""
+    from app.modules.authorization.revision_expiry_authorization import RevisionExpiryAuthorizationAdapter
+
+    return RevisionExpiryAuthorizationAdapter(session)
+
+
+def revision_recovery_authorization(session: AsyncSession):
+    """Bind retained-window recovery to canonical fixed-service AUTH."""
+    from app.modules.authorization.revision_recovery_authorization import RevisionRecoveryAuthorizationAdapter
+
+    return RevisionRecoveryAuthorizationAdapter(session)
+
+
 def actor_lifecycle_service(session: AsyncSession):
     """Compose lifecycle evidence and exact assignment publication together."""
     from app.modules.authorization.lifecycle_service import ActorLifecycleService
@@ -274,6 +294,15 @@ def post_submit_execution_authority(session):
     return PostSubmitExecutionAuthorization(session)
 
 
+def selected_pre_submit_authority(session):
+    """Compose fixed selected-PRE execute/finalize authority."""
+    from app.modules.authorization.pre_submit_authorization import (
+        SelectedPreSubmitAuthorization,
+    )
+
+    return SelectedPreSubmitAuthorization(session)
+
+
 def post_submit_materialization_authority(session):
     """Compose the separate fixed ART materializer principal."""
     from app.modules.authorization.post_submit_authorization import PostSubmitMaterializationAuthorization
@@ -292,7 +321,9 @@ def _routing_resource(source, claim, effects, authorized_generation, actor_id, l
     if accepts != (effects is not None) or accepts != (authorized_generation is not None):
         raise PreparedAuthorizationHandleInvalid("routing consequence unavailable")
     consequence = (
-        CheckerRemediationConsequence()
+        CheckerExhaustionConsequence(**source.exhaustion.model_dump())
+        if source.exhaustion is not None and not source.recovered_exhaustion
+        else CheckerRemediationConsequence()
         if source.source.routing_recommendation == "needs_revision"
         else HumanAdmissionConsequence()
         if effects is None

@@ -18,91 +18,45 @@ It does not define pre-submit intake. `PreSubmitCheckerPolicy` is generated from
 
 Revision closure, readiness, and lifecycle movement are lifecycle guards in v0.1. Do not add them as checker policy names unless they are present in the registered checker list.
 
-## Blocking Rule
+## Required Project Checks
 
-Critical- and high-severity failed checks block human review.
+Select registered external POST images against the acceptance requirements in
+this project's guide. Every approved POST binding is required; an empty approved
+binding set is valid. Checker results are evidence for the authorized outcome
+owner, not checker-owned acceptance or a human review decision.
 
-Medium and low severities are visible to reviewers unless this policy overrides them.
-
-## Required Checkers
-
-Task setup and post-submit checks must stay separated from contributor-fixable submission intake checks.
-
-| Checker | Severity | Blocks Review | Purpose |
+| Requirement | Registry entry and digest | Configuration | Purpose |
 | --- | --- | --- | --- |
-| `check_policy_context_present` | high | yes | Task must have locked guide snapshot, effective project submission artifact policy hash, pre-submit checker bundle hash, post-submit checker policy id/version/hash, review policy, and revision policy context. |
-| `check_submission_packet` | high | yes | Submission must include required packet fields. |
-| `check_required_files` | high | yes | Submission must include artifacts required by the locked effective project policy and project pre-submit checker bundle. |
-| `check_forbidden_files` | high | yes | Submission must not include forbidden file paths. |
-| `check_evidence_present` | high | yes | Submission must include audit evidence. |
-| `check_evidence_integrity` | high | yes | Evidence and checker runs must bind to submitted artifacts. |
-| `check_confidentiality_attestation` | high | yes | Contributor attestation must address confidentiality and credential handling. |
-| `check_low_quality_generated_artifacts` | medium/high | policy-dependent | Placeholder signals warn by default; the locked blocking severities may require contributor revision. |
+| `<guide requirement ID>` | `<exact registered POST entry and digest>` | `<schema-valid configuration>` | `<what evidence this image supplies>` |
 
-Task setup checks:
-
-| Checker | Severity | Blocks Review | Owner |
-| --- | --- | --- | --- |
-| `check_acceptance_criteria_present` | high | yes | Project manager repair, not contributor revision. |
+Task-local `acceptance_criteria` is optional and may be omitted or null. The
+project guide must still define acceptance requirements. Do not select the removed
+`check_acceptance_criteria_present` checker or treat missing optional task-local
+text alone as a setup defect.
 
 ## Compiler Contract
 
-One compiler creates the canonical ordered `PostSubmitCheckerPolicy` body.
-All eight platform defaults are mandatory and nonselectable. Default-only
-projects have no project-specific required or warning entries but execute all
-defaults. `check_acceptance_criteria_present` is the sole selectable structural
-addition; it proves presence, not substantive satisfaction of task criteria.
+The trusted compiler projects the exact approved external POST bindings into the
+canonical `PostSubmitCheckerPolicy` body and hash. The body contains
+`schema_version: external_post_submit_policy.v1`, ordered `entries` and
+`policy_sha256`. Each binding identifies its requirement, POST stage, immutable
+registry publication, configuration and configuration digest. Validation rejects
+substituted identities, invalid configuration, wrong stages and stale hashes.
 
-Required/warning/execution lists are derived from canonical entries. Persisted
-summaries must agree with that body and its exact hash. Unknown identities,
-unsupported configuration, conflicting classifications, altered mandatory
-entries and stale hashes reject. No earlier development body has a fallback
-reader. A new project policy version records changed rules within this one
-current software contract.
+The removed built-in catalogue and its eight defaults are not executable policy
+options. Stored predecessor bodies retain immutable provenance only; they do not
+provide a runtime decoder or fallback execution path. See the current
+[post-submit compiler contract](architecture_checker_framework.md#post-submit-compiler-boundary)
+and [external registry contract](architecture_checker_framework.md#external-checker-registry-and-selected-policies).
 
 ## Pre-Submit Boundary
 
-Pre-submit checker policy is generated from:
-
-```text
-EffectiveProjectSubmissionArtifactPolicy =
-  WorkstreamDefaultSubmissionArtifactPolicy
-  + SubmissionArtifactPolicy
-
-PreSubmitCheckerPolicy =
-  trusted compiler output from EffectiveProjectSubmissionArtifactPolicy
-```
-
-Failed preparation returns `pre_submission_checker_failed` with ART's exact
-ordered bounded results through the mounted authorized hidden route. The route
-remains absent from OpenAPI, and public intake activation remains pending. POL-07B connects
-the internal checker phase service and removes the standalone JSON precheck. WS-ARCH-001-02I retains the broader Submission caller
-cutover. Pre-submit failures do not create durable
-`CheckerRun` records and do not return review decision values: `accept`,
-`needs_revision`, or `reject`.
-
-The hidden platform/default phase uses `passed`, `warning`, `failed`,
-`advisory_disabled`, and `dependency_not_run`. It authorizes and destroys one
-callback-scoped sealed ART tree before returning these non-durable results.
-Project-policy primitives execute in the later phase of the same effective
-plan.
-
-## Checker Registry Fields
-
-Each checker definition specifies:
-
-- checker id
-- phase
-- version
-- default severity
-- default blocking behavior
-- contributor-visible message policy
-
-## Project-Specific Checkers
-
-| Checker | Severity | Blocks Review | Purpose |
-| --- | --- | --- | --- |
-| `<checker name>` | `<low/medium/high>` | `<yes/no>` | `<why it exists>` |
+Pre-submit intake remains separate: Workstream defaults run first, followed by
+approved external PRE images on ART-verified read-only files. A failed required
+check returns bounded findings before Submission creation. The exact approved
+PRE and POST policies are separately locked; a POST image cannot replace intake
+custody or grant acceptance authority. See the
+[current checker framework](architecture_checker_framework.md).
 
 ## Contributor-Visible Messages
 
@@ -125,8 +79,11 @@ Contributors must not see:
 
 ## Recovery Contract
 
-Blocking checker outcomes are not overridden into review readiness. Registered
-Operator retry or covered Project Manager repair is allowed only with:
+Blocking checker outcomes are not overridden into review readiness. Current
+selected completed results are `allow_review` or `needs_revision`; infrastructure
+failure is `not_evaluated` and may use the implemented authorized Operator retry.
+The classifier cannot emit `task_setup_blocked`; manager-visible setup-fault hold
+and repair remain future safety work. Existing Operator retry requires:
 
 - actor
 - matched grant and permission
@@ -136,8 +93,7 @@ Operator retry or covered Project Manager repair is allowed only with:
 - reason
 - evidence
 
-Recovery creates a new attempt or repaired setup state and preserves every
-prior checker result. It cannot create a human review decision.
+Operator retry creates a new attempt and preserves every prior checker result. It cannot create a human review decision.
 
 ## Review Cadence
 

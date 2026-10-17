@@ -45,13 +45,20 @@ type ReadyTaskPage struct {
 // ContributorTaskDetail excludes management-only source and actor metadata.
 type ContributorTaskDetail struct {
 	TaskSummary
-	Description        string            `json:"description"`
-	AcceptanceCriteria *string           `json:"acceptance_criteria"`
-	RejectionCriteria  *string           `json:"rejection_criteria"`
-	Compensation       CompensationTerms `json:"compensation"`
+	Description           string             `json:"description"`
+	AcceptanceCriteria    *string            `json:"acceptance_criteria"`
+	RejectionCriteria     *string            `json:"rejection_criteria"`
+	Compensation          CompensationTerms  `json:"compensation"`
+	LastAssignmentOutcome *AssignmentOutcome `json:"last_assignment_outcome,omitempty"`
 }
 
 var exactQuantity = regexp.MustCompile(`^(0|[1-9][0-9]*)(\.[0-9]+)?$`)
+
+func validCompensationAward(award CompensationAward) bool {
+	return (award.Instrument == "money" || award.Instrument == "project_points") &&
+		award.Unit != "" && exactQuantity.MatchString(award.Quantity) &&
+		strings.ContainsAny(award.Quantity, "123456789")
+}
 
 func compensationAwards(raw json.RawMessage) ([]CompensationAward, bool) {
 	var unpaid string
@@ -64,9 +71,7 @@ func compensationAwards(raw json.RawMessage) ([]CompensationAward, bool) {
 	}
 	seen := make(map[string]bool)
 	for _, award := range awards {
-		validInstrument := award.Instrument == "money" || award.Instrument == "project_points"
-		if !validInstrument || award.Unit == "" || !exactQuantity.MatchString(award.Quantity) ||
-			!strings.ContainsAny(award.Quantity, "123456789") || seen[award.Instrument] {
+		if !validCompensationAward(award) || seen[award.Instrument] {
 			return nil, false
 		}
 		seen[award.Instrument] = true

@@ -22,7 +22,10 @@ from app.modules.authorization.domain.audit import (
 from app.modules.authorization.domain.contribution_policies import ContributionPolicyReadResourceContext, ContributionPolicyMutationResourceContext
 from app.modules.authorization.domain.adapter_bindings import AdapterBindingMutationResourceContext, AdapterBindingReadResourceContext
 from app.modules.authorization.domain.project_create import ProjectCreateResourceContext
-from app.modules.authorization.domain import checker_registry, task_authority, task_queues, submission_history, contribution_reads
+from app.modules.authorization.domain import (
+    checker_registry, checker_retry, contribution_reads, submission_history,
+    task_authority, task_queues,
+)
 from app.modules.authorization.domain.guide_mutations import (
     ProjectGuideMutationResourceContext, ProjectGuideMutationPrepareDenialResourceContext,
     ProjectGuideSourceSnapshotMutationResourceContext, validate_policy_mutation_identity,
@@ -30,9 +33,12 @@ from app.modules.authorization.domain.guide_mutations import (
 from app.modules.actors.api import ServiceIdentity
 from app.modules.authorization.domain.post_policy import PostPolicyResourceContext
 from app.modules.authorization.domain.assignment_invalidation import AssignmentInvalidationResourceContext
+from app.modules.authorization.domain.revision_expiry import RevisionExpiryResourceContext
+from app.modules.authorization.domain.revision_recovery import RevisionRecoveryResourceContext
 from app.modules.authorization.domain.outbox_dispatch import OutboxDispatchResourceContext
 from app.modules.authorization.domain.post_submit_routing import PostSubmitRoutingResourceContext
 from app.modules.authorization.domain.post_submit import PostSubmitResourceContext
+from app.modules.authorization.domain.pre_submit import PreSubmitResourceContext
 from app.modules.authorization.domain.guide_activation import ProjectGuideActivationResourceContext
 from app.modules.authorization.domain.lifecycle import ReviewLifecycleActivationContract
 from app.modules.authorization.service_actor_schemas import ServiceActorProvisionResourceContext
@@ -48,6 +54,8 @@ from app.modules.authorization.domain.artifact_storage import (
 from app.modules.authorization.schemas import AdminRole, AdminScope, ProjectRole
 from app.modules.authorization.submission_preparation import SubmissionBundlePreparationPreflightResourceContext, SubmissionBundlePreparationResourceContext
 from app.modules.authorization.submission_consumption import SubmissionBindingResourceContext, SubmissionCreationResourceContext
+from app.modules.authorization.domain.task_authority import TaskImportBatchResourceContext as TaskImportBatchResourceContext
+
 _STRICT_FROZEN = ConfigDict(extra="forbid", frozen=True, strict=True)
 PROJECT_DIAGNOSTIC_TARGET_KIND_BY_ACTION = {
     ActionId.PROJECT_SETUP_RUN_READ: "setup_run",
@@ -1060,7 +1068,10 @@ AuthorizationResourceContext = (
     | ProjectSubmissionArtifactPolicyMutationResourceContext
     | PostPolicyResourceContext
     | AssignmentInvalidationResourceContext
+    | RevisionExpiryResourceContext
+    | RevisionRecoveryResourceContext
     | OutboxDispatchResourceContext
+    | PreSubmitResourceContext
     | PostSubmitResourceContext
     | PostSubmitRoutingResourceContext
     | ProjectSetupRunMutationResourceContext
@@ -1090,6 +1101,7 @@ AuthorizationResourceContext = (
     | ProjectRoleGrantRevokeResourceContext
     | GuideSourceIngestResourceContext
     | TaskImportSourceResourceContext
+    | TaskImportBatchResourceContext
     | ArtifactPutAttemptResourceContext
     | ArtifactVerificationJobResourceContext
     | ArtifactPendingWorkResourceContext
@@ -1100,4 +1112,5 @@ AuthorizationResourceContext = (
     | SubmissionBundlePreparationResourceContext
     | AdapterBindingReadResourceContext | AdapterBindingMutationResourceContext
     | ContributionPolicyReadResourceContext | ContributionPolicyMutationResourceContext | checker_registry.ExternalCheckerRegistryResourceContext
+    | checker_retry.CheckerRetryResourceContext
 )

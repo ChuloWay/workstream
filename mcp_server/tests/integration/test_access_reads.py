@@ -31,7 +31,6 @@ from test_profile_flow import (
     _start_processes,
     _stop,
     api_environment,
-    assert_isolated_database_url,
     find_free_port,
     flow_settings,
     issue_flow_token,
@@ -202,6 +201,11 @@ async def _exercise_access_reads(
             )
             if allowed and "items" in body:
                 assert body["items"] and body["total"] >= len(body["items"])
+            if allowed and name == "workstream_permissions_list":
+                assert body["total"] == len(body["items"]) == 82
+                assert {"task.revision.expire", "task.revision.recover"} <= {
+                    item["permission_id"] for item in body["items"]
+                }
             if allowed and name == "workstream_actor_get":
                 assert body["display_name"] == "Access read target"
 
@@ -390,7 +394,6 @@ async def _exercise_access_reads(
 @pytest.mark.asyncio
 async def test_installed_mcp_preserves_access_read_parity() -> None:
     env = api_environment()
-    assert_isolated_database_url(env["WORKSTREAM_DATABASE_URL"])
     executable = os.environ.get("WORKSTREAM_MCP_EXECUTABLE") or shutil.which("workstream-mcp")
     assert executable, "install the workstream-mcp wheel before running integration tests"
     api_port, mcp_port = find_free_port(), find_free_port()

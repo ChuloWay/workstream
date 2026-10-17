@@ -1,6 +1,8 @@
 """Additive custody never manufactures dispatch or authority for retained data."""
 
 import asyncio
+import json
+from datetime import datetime
 
 import asyncpg
 import pytest
@@ -34,9 +36,84 @@ async def test_upgrade_preserves_retained_owners_without_backfill(tmp_path, isol
             try:
                 before = await snapshot()
                 await asyncio.to_thread(command.upgrade, _config(), current_schema_revision())
-                assert await snapshot() == before
+                after = await snapshot()
+                added_columns = {
+                    "outbox_events": {"not_before_at"},
+                    "submissions": {
+                        "selected_post_submit_policy_sha256", "selected_post_submit_policy_body",
+                        "attempt_status", "status_reason", "decided_at", "updated_at",
+                    },
+                    "task_assignments": {"started_at", "updated_at"},
+                    "checker_runs": {
+                        "selected_post_submit_policy_sha256", "selected_post_submit_policy_body",
+                    },
+                    "submission_bundle_admissions": {
+                        "checker_remediation_manifest_id", "selected_pre_submit_run_id",
+                        "guide_id", "guide_version", "source_snapshot_id", "source_snapshot_sha256",
+                        "effective_policy_id", "effective_policy_sha256", "pre_submit_policy_id",
+                        "pre_submit_policy_sha256", "effective_plan_sha256", "selected_rules_sha256",
+                        "selected_post_submit_policy_sha256", "selected_post_submit_policy_body",
+                        "packet_sha256", "semantic_manifest_body",
+                        "revision_preparation_id", "revision_preparation_sha256",
+                    },
+                }
+                for table, columns_added in added_columns.items():
+                    identity = "event_id" if table == "outbox_events" else "id"
+                    retained_rows = sorted(json.loads(before.pop(table)), key=lambda row: row[identity])
+                    upgraded_rows = sorted(json.loads(after.pop(table)), key=lambda row: row[identity])
+                    assert len(upgraded_rows) == len(retained_rows)
+                    for retained, upgraded in zip(retained_rows, upgraded_rows, strict=True):
+                        assert set(upgraded) == set(retained) | columns_added
+                        # 0048 backfills from retained owner evidence only: an unrouted
+                        # attempt stays pending and its stamps come from its own facts.
+                        backfilled = {
+                            "attempt_status": "evaluation_pending",
+                            "updated_at": retained.get("submitted_at"),
+                        } if table == "submissions" else {}
+                        if table == "task_assignments":
+                            started = upgraded.pop("started_at")
+                            stamps = [retained["assigned_at"], started, retained["released_at"]]
+                            assert started is None or datetime.fromisoformat(
+                                started
+                            ) >= datetime.fromisoformat(retained["assigned_at"])
+                            assert upgraded.pop("updated_at") == max(
+                                (stamp for stamp in stamps if stamp is not None),
+                                key=datetime.fromisoformat,
+                            )
+                        for column in columns_added - {"started_at", "updated_at"} if (
+                            table == "task_assignments"
+                        ) else columns_added:
+                            assert upgraded.pop(column) == backfilled.get(column), column
+                        assert upgraded == retained
+                assert after == before
+                columns = await connection.fetch("""
+                    SELECT table_name,data_type,is_nullable
+                    FROM information_schema.columns
+                    WHERE table_schema='public'
+                      AND table_name=ANY($1::text[])
+                      AND column_name='checker_remediation_manifest_id'
+                    ORDER BY table_name
+                """, [
+                    "pre_submit_evidence_sets",
+                    "submission_bundle_admissions",
+                    "submission_dispatches",
+                ])
+                assert [tuple(row) for row in columns] == [
+                    ("pre_submit_evidence_sets", "uuid", "YES"),
+                    ("submission_bundle_admissions", "uuid", "YES"),
+                    ("submission_dispatches", "uuid", "YES"),
+                ]
+                for table in (
+                    "pre_submit_evidence_sets",
+                    "submission_bundle_admissions",
+                    "submission_dispatches",
+                ):
+                    assert await connection.fetchval(
+                        f"SELECT count(*) FROM public.{table} "
+                        "WHERE checker_remediation_manifest_id IS NOT NULL"
+                    ) == 0
                 assert await connection.fetchval("SELECT count(*) FROM public.submission_dispatches") == 0
                 assert await connection.fetchval("SELECT count(*) FROM public.submission_binding_receipts") == 0
-                assert await connection.fetchval("SELECT status FROM public.submission_bundle_admissions WHERE id=$1", h.created.admission_id) == "consumed"
+                assert await connection.fetchval("SELECT status FROM public.submission_bundle_admissions WHERE id=$1", h.created["admission_id"]) == "consumed"
             finally:
                 await connection.close()

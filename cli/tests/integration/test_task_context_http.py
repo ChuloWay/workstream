@@ -31,6 +31,52 @@ CONTEXT = {
     "lifecycle": {"assigned_to_current_actor": False, "next_actions": ["claim"]},
     "guide_documents": [],
 }
+REVISION_LINEAGE = {
+    "locked_guide_version": "guide-1",
+    "locked_guide_source_snapshot_id": ACTOR,
+    "locked_guide_source_snapshot_hash": "sha256:" + "a" * 64,
+    "locked_effective_project_submission_artifact_policy_id": ACTOR,
+    "locked_effective_project_submission_artifact_policy_hash": "sha256:" + "a" * 64,
+    "locked_pre_submit_checker_policy_id": ACTOR,
+    "locked_pre_submit_checker_bundle_hash": "sha256:" + "a" * 64,
+    "locked_post_submit_checker_policy_id": ACTOR,
+    "locked_post_submit_checker_policy_version": "post-1",
+    "locked_post_submit_checker_policy_hash": "sha256:" + "a" * 64,
+    "locked_review_policy_id": ACTOR,
+    "locked_review_policy_generation": 1,
+    "locked_review_policy_hash": "sha256:" + "a" * 64,
+    "locked_revision_policy_id": ACTOR,
+    "locked_revision_policy_generation": 1,
+    "locked_revision_policy_hash": "sha256:" + "a" * 64,
+    "locked_contribution_policy_version_id": ACTOR,
+}
+REVISION_SNAPSHOT = {
+    "guide_id": ACTOR,
+    "activation_operation_id": ACTOR,
+    "activation_generation": 1,
+    "activated_at": "2026-10-01T00:00:00Z",
+    "lineage": REVISION_LINEAGE,
+}
+REVISION_CONTEXT = {
+    "preparation_id": ACTOR,
+    "preparation_sha256": "sha256:" + "b" * 64,
+    "predecessor_preparation_id": None,
+    "source_submission_id": ACTOR,
+    "source_routing_manifest_id": ACTOR,
+    "sequence": 1,
+    "next_revision_round": 1,
+    "max_revision_rounds": 2,
+    "requested_at": "2026-10-14T10:00:00Z",
+    "deadline_at": "2026-10-15T10:00:00Z",
+    "clock_state": "running",
+    "remaining_microseconds": None,
+    "outcome": "kept",
+    "disposition": "ready",
+    "direction": "kept",
+    "prior": REVISION_SNAPSHOT,
+    "target": REVISION_SNAPSHOT,
+    "changes": [],
+}
 REQUIREMENTS = {
     "task_id": TASK,
     "project_id": PROJECT,
@@ -211,6 +257,57 @@ def test_context_reads_preserve_wire_complete_output_and_optional_fields(cli):
         response["body"] = json.dumps(requirements).encode()
         result = cli(origin, TOKEN, "task", "requirements", TASK, "-o", "json")
         assert result.returncode == 0 and json.loads(result.stdout) == requirements
+
+
+def test_revision_context_accepts_absent_null_and_valid_projection_but_rejects_bad_lineage(
+    cli,
+):
+    with http_fixture() as (origin, response, _):
+        paused = REVISION_CONTEXT | {
+            "deadline_at": None,
+            "remaining_microseconds": 1800000000,
+            "clock_state": "paused",
+            "outcome": "blocked",
+            "disposition": "context_blocked",
+        }
+        for revision in (None, REVISION_CONTEXT, paused):
+            value = deepcopy(CONTEXT)
+            value["revision_context"] = deepcopy(revision)
+            response["body"] = json.dumps(value).encode()
+            result = cli(origin, TOKEN, "task", "context", TASK, "-o", "json")
+            assert result.returncode == 0 and json.loads(result.stdout) == value, (
+                result.stderr
+            )
+            text_result = cli(origin, TOKEN, "task", "context", TASK)
+            assert text_result.returncode == 0, text_result.stderr
+            if revision is None:
+                assert "Revision context:" not in text_result.stdout
+            else:
+                assert (
+                    json.loads(text_result.stdout.split("Revision context: ", 1)[1])
+                    == revision
+                )
+        for change in (
+            {"preparation_sha256": "sha256:" + "B" * 64},
+            {"sequence": 0},
+            {"clock_state": "paused"},
+            {"clock_state": "unknown"},
+            {"remaining_microseconds": 1},
+            {"deadline_at": None},
+            {"disposition": "accepted"},
+            {
+                "prior": REVISION_SNAPSHOT
+                | {"lineage": REVISION_LINEAGE | {"unknown": "secret"}}
+            },
+            {"changes": [{"component": "unknown", "before": "a", "after": "b"}]},
+        ):
+            value = deepcopy(CONTEXT)
+            value["revision_context"] = deepcopy(REVISION_CONTEXT) | change
+            response["body"] = json.dumps(value).encode()
+            assert_failure(
+                cli(origin, TOKEN, "task", "context", TASK, "-o", "json"),
+                "invalid_api_response",
+            )
 
 
 @pytest.mark.parametrize(

@@ -1,7 +1,13 @@
 # Task Lifecycle Sequence
 
-This sequence shows the v0.1 operating loop from project guide to reviewer and
-submitter contributions, conditional compensation awards, and fulfillment.
+This sequence illustrates the v0.1 human-review branch from project guide to
+reviewer and submitter contributions, conditional compensation awards, and
+fulfillment. With locked `human_review_required=false`, passing required checks
+instead invokes shared authorized FinalAcceptance and the submitter contribution
+without a Review or reviewer contribution; see the
+[current checker flow](../architecture_checker_framework.md#checker-run-flow--target-contract).
+Implemented behavior and hosted readiness are tracked in the
+[capability ledger](../roadmap_status.md).
 
 It is intentionally separate from the future identity and settlement diagram.
 v0.1 records immutable awards and fulfillment receipts/projections; reputation
@@ -79,7 +85,8 @@ sequenceDiagram
   Checks->>Artifacts: Read exact authorized artifacts
   Checks->>DB: Persist checker run and results
   Checks->>DB: Keep task EVALUATION_PENDING while pre-review gate runs
-  Checks->>DB: Move to REVIEW_PENDING, NEEDS_REVISION, or internal task_setup_blocked
+  Checks->>DB: Record current result for authorized TASK routing
+  Note over Checks,DB: Setup-fault hold is future work; current classifier cannot emit task_setup_blocked
 
   Reviewer->>UI: Request current work
   UI->>API: GET current work

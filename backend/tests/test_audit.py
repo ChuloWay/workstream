@@ -16,10 +16,12 @@ import pytest
 from sqlalchemy import delete, text
 from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.ext.asyncio import (  # type: ignore[import-not-found]
+    AsyncSession,
     async_sessionmaker,
     create_async_engine,
 )
 
+from app.adapters.audit import task_transition_audit
 from app.modules.audit.repository import AuditRepository, LifecycleAuditConflict
 from app.modules.audit.schemas import (
     ActorReferenceKind,
@@ -32,6 +34,8 @@ from app.modules.audit.schemas import (
     LifecycleAuditReferenceKind,
 )
 from app.modules.audit.service import AuditService, LifecycleAuditParticipant
+from app.modules.tasks.api.authorization import TaskAuthorityDecision
+from app.modules.tasks.api.revision_exhaustion import TaskRevisionExhaustionAuditFacts
 from app.modules.tasks.models import AuditEvent
 from tests.assertion_helpers import assert_secret_not_retained
 
@@ -1199,10 +1203,60 @@ def _lifecycle_input(**overrides) -> LifecycleAuditEventInput:
     return LifecycleAuditEventInput(**values)
 
 
+async def test_revision_exhaustion_adapter_stages_authorization_digest(monkeypatch) -> None:
+    ids = {key: new_record_id() for key in (
+        "event", "project", "task", "assignment", "submission", "routing_manifest",
+        "exhaustion_receipt", "actor", "outbox_event", "decision", "identity_link",
+    )}
+    digest = "sha256:" + "a" * 64
+    staged: list[AuditEvent] = []
+
+    async def stage(_repository: AuditRepository, event: AuditEvent) -> AuditEvent:
+        staged.append(event)
+        return event
+
+    monkeypatch.setattr(AuditRepository, "_add_validated_lifecycle_event", stage)
+    await task_transition_audit(cast(AsyncSession, object())).record_revision_exhaustion(
+        TaskRevisionExhaustionAuditFacts(
+            event_id=ids["event"],
+            project_id=ids["project"],
+            task_id=ids["task"],
+            assignment_id=ids["assignment"],
+            submission_id=ids["submission"],
+            routing_manifest_id=ids["routing_manifest"],
+            exhaustion_receipt_id=ids["exhaustion_receipt"],
+            actor_profile_id=ids["actor"],
+            outbox_event_id=ids["outbox_event"],
+            authority=TaskAuthorityDecision(
+                decision_id=ids["decision"],
+                identity_link_id=ids["identity_link"],
+                resource_context_digest=digest,
+                resource_context_json="{}",
+            ),
+        )
+    )
+
+    assert len(staged) == 1
+    assert staged[0].event_payload == {
+        "references": {
+            "project_id": str(ids["project"]),
+            "task_id": str(ids["task"]),
+            "assignment_id": str(ids["assignment"]),
+            "submission_id": str(ids["submission"]),
+            "routing_manifest_id": str(ids["routing_manifest"]),
+            "revision_exhaustion_id": str(ids["exhaustion_receipt"]),
+            "authorization_decision_id": str(ids["decision"]),
+            "outbox_event_id": str(ids["outbox_event"]),
+        },
+        "authorization_resource_digest": digest,
+    }
+
+
 
 
 def test_lifecycle_input_covers_every_canonical_event_entity_pair() -> None:
     event_groups = {
+        LifecycleAuditEntityType.CHECKER_RUN: {LifecycleAuditEventType.CHECKER_RETRY_REQUESTED},
         LifecycleAuditEntityType.TASK: {
             LifecycleAuditEventType.TASK_CREATED,
             LifecycleAuditEventType.TASK_SCREENED,
@@ -1212,6 +1266,9 @@ def test_lifecycle_input_covers_every_canonical_event_entity_pair() -> None:
             LifecycleAuditEventType.TASK_START_OVERRIDDEN,
             LifecycleAuditEventType.TASK_ASSIGNMENT_AUTHORITY_REVOKED,
             LifecycleAuditEventType.TASK_POST_SUBMIT_ROUTED,
+            LifecycleAuditEventType.TASK_REVISION_CONTEXT_REPAIRED,
+            LifecycleAuditEventType.TASK_REVISION_EXPIRED,
+            LifecycleAuditEventType.TASK_REVISION_EXHAUSTED,
         },
         LifecycleAuditEntityType.REVIEW_QUEUE_ENTRY: {
             LifecycleAuditEventType.REVIEW_QUEUE_ENTRY_CREATED,
@@ -1261,6 +1318,7 @@ def test_lifecycle_input_covers_every_canonical_event_entity_pair() -> None:
     }
     assert set().union(*event_groups.values()) == set(LifecycleAuditEventType)
     entity_references = {
+        LifecycleAuditEntityType.CHECKER_RUN: LifecycleAuditReferenceKind.CHECKER_RUN,
         LifecycleAuditEntityType.TASK: LifecycleAuditReferenceKind.TASK,
         LifecycleAuditEntityType.REVIEW_QUEUE_ENTRY: LifecycleAuditReferenceKind.REVIEW_QUEUE_ENTRY,
         LifecycleAuditEntityType.REVIEW_LEASE: LifecycleAuditReferenceKind.REVIEW_LEASE,
@@ -1306,6 +1364,16 @@ def test_lifecycle_input_covers_every_canonical_event_entity_pair() -> None:
             elif event_type is LifecycleAuditEventType.COMPENSATION_AWARD_CREATED:
                 references[LifecycleAuditReferenceKind.CONTRIBUTION_RECORD] = new_record_id()
             transition = {}
+            if event_type is LifecycleAuditEventType.CHECKER_RETRY_REQUESTED:
+                references.update({reference: new_record_id() for reference in (
+                    LifecycleAuditReferenceKind.TASK, LifecycleAuditReferenceKind.ASSIGNMENT,
+                    LifecycleAuditReferenceKind.SUBMISSION, LifecycleAuditReferenceKind.SOURCE_CHECKER_RUN,
+                    LifecycleAuditReferenceKind.AUTHORIZATION_DECISION, LifecycleAuditReferenceKind.OUTBOX_EVENT,
+                )})
+                transition.update(
+                    authorization_resource_digest="sha256:" + "a" * 64,
+                    operator_reason="Retry known infrastructure failure",
+                )
             if entity_type is LifecycleAuditEntityType.TASK:
                 references.update({
                     LifecycleAuditReferenceKind.ASSIGNMENT: new_record_id(),
@@ -1323,6 +1391,57 @@ def test_lifecycle_input_covers_every_canonical_event_entity_pair() -> None:
                     LifecycleAuditReferenceKind.ROUTING_MANIFEST: new_record_id(),
                 })
                 transition.update(from_status="evaluation_pending", to_status="review_pending")
+            if event_type is LifecycleAuditEventType.TASK_REVISION_EXHAUSTED:
+                references.update({reference: new_record_id() for reference in (
+                    LifecycleAuditReferenceKind.SUBMISSION,
+                    LifecycleAuditReferenceKind.ROUTING_MANIFEST,
+                    LifecycleAuditReferenceKind.REVISION_EXHAUSTION,
+                    LifecycleAuditReferenceKind.OUTBOX_EVENT,
+                )})
+                transition.update(from_status="needs_revision", to_status="ready",
+                                  authorization_resource_digest="sha256:" + "a" * 64)
+            if event_type in {
+                LifecycleAuditEventType.TASK_REVISION_CONTEXT_REPAIRED,
+                LifecycleAuditEventType.TASK_REVISION_EXPIRED,
+            }:
+                references.update({reference: new_record_id() for reference in (
+                    LifecycleAuditReferenceKind.SUBMISSION,
+                    LifecycleAuditReferenceKind.ROUTING_MANIFEST,
+                    LifecycleAuditReferenceKind.REVISION_PREPARATION,
+                )})
+                if event_type is LifecycleAuditEventType.TASK_REVISION_CONTEXT_REPAIRED:
+                    transition.update(reason=LifecycleAuditReason.FACT_RECORDED,
+                                      from_status=None, to_status=None)
+                else:
+                    from datetime import UTC, datetime
+                    from app.modules.tasks.api.revision_expiry import (
+                        TaskRevisionExpiryAuthorityFacts, TaskRevisionExpiryTarget,
+                        revision_expiry_resource_digest,
+                    )
+                    references[LifecycleAuditReferenceKind.OUTBOX_EVENT] = new_record_id()
+                    facts = TaskRevisionExpiryAuthorityFacts(
+                        target=TaskRevisionExpiryTarget(
+                            project_id=references[LifecycleAuditReferenceKind.PROJECT],
+                            task_id=entity_id,
+                            assignment_id=references[LifecycleAuditReferenceKind.ASSIGNMENT],
+                            contributor_id=new_record_id(),
+                            source_submission_id=references[LifecycleAuditReferenceKind.SUBMISSION],
+                            routing_manifest_id=references[LifecycleAuditReferenceKind.ROUTING_MANIFEST],
+                            root_preparation_id=references[LifecycleAuditReferenceKind.REVISION_PREPARATION],
+                            root_preparation_sha256="sha256:" + "a" * 64,
+                            deadline_at=datetime.now(UTC),
+                        ),
+                        head_preparation_id=references[LifecycleAuditReferenceKind.REVISION_PREPARATION],
+                        head_preparation_sha256="sha256:" + "a" * 64,
+                        delivery_event_id=references[LifecycleAuditReferenceKind.OUTBOX_EVENT],
+                        delivery_generation=1, invocation_digest="sha256:" + "b" * 64,
+                        task_status="needs_revision", assignment_status="active",
+                    )
+                    transition.update(
+                        from_status="needs_revision", to_status="ready",
+                        revision_expiry_facts=facts.model_dump(mode="json"),
+                        authorization_resource_digest=revision_expiry_resource_digest(facts),
+                    )
             if event_type is LifecycleAuditEventType.TASK_ASSIGNMENT_AUTHORITY_REVOKED:
                 references[LifecycleAuditReferenceKind.AUTHORITY_INVALIDATION] = new_record_id()
                 transition["to_status"] = "ready"

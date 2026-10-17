@@ -1,6 +1,5 @@
 """Fixed SQL projections and live grant privacy over retained checker results."""
 
-import json
 from uuid import uuid4
 
 import pytest
@@ -11,6 +10,7 @@ from app.db import session as db_session
 from app.modules.tasks.models import AuditEvent, Submission
 from app.modules.tasks.submission_history import SubmissionHistoryRepository
 from app.modules.checkers.history import CheckerHistoryRepository
+from tests.checkers.external.support import post_registry_spec
 from tests.submission_fixtures import seed_retained_submission, seed_retained_checker_run
 from tests.test_tasks import (create_active_project, create_started_task, complete_submission_payload,
                              set_dev_actor, auth_headers, actor_id)
@@ -19,16 +19,14 @@ from .test_absence import (SUBMISSION_FIELDS, MANAGER_SUBMISSION_FIELDS, RUN_FIE
                            RESULT_FIELDS, MANAGER_RESULT_FIELDS, EVIDENCE_FIELDS)
 
 
-@pytest.mark.parametrize("state,failures", [("completed", ()), ("completed", ("check_policy_context_present",)), ("infrastructure_failed", ())])
-async def test_fixed_projection_and_selected_columns(task_client, monkeypatch, state, failures):
-    project = await create_active_project(task_client)
+@pytest.mark.parametrize("state,verdict", [("completed", "passed"), ("completed", "failed"), ("infrastructure_failed", "passed")])
+async def test_fixed_projection_and_selected_columns(task_client, monkeypatch, state, verdict):
+    project = await create_active_project(task_client, post_submit_registry_spec=post_registry_spec())
     task = await create_started_task(task_client, project["id"], monkeypatch)
     submission = await seed_retained_submission(task["id"], complete_submission_payload())
-    run = await seed_retained_checker_run(submission, state=state, failures=failures)
-    from app.modules.checkers.models import CheckerRun
+    run = await seed_retained_checker_run(submission, state=state, verdict=verdict)
     async with db_session.get_session_factory()() as session:
-        stored = await session.get(CheckerRun, run)
-        private_attestation = json.loads(stored.request_json)["structural_input"]["worker_attestation"]
+        private_attestation = (await session.get(Submission, submission)).worker_attestation
         assert private_attestation
     captured = []
     def capture(conn, cursor, statement, parameters, context, executemany):
@@ -54,7 +52,9 @@ async def test_fixed_projection_and_selected_columns(task_client, monkeypatch, s
                 nested_fields = (MANAGER_RESULT_FIELDS if manager else RESULT_FIELDS) if checker else EVIDENCE_FIELDS
                 assert all(set(nested) == nested_fields for nested in item[nested_key])
                 if checker:
-                    assert bool(item["results"]) == (state == "completed" and (manager or not failures))
+                    assert bool(item["results"]) == (state == "completed")
+                else:
+                    assert item["status_reason"] is None
                 # Actual selected columns, rather than searching predicates that
                 # legitimately compute a boolean inside PostgreSQL. No raw body,
                 # URI/hash, aggregate count, or receipt is loaded into Python.
@@ -101,22 +101,30 @@ async def test_denied_read_never_loads_private_rows(task_client, monkeypatch):
 @pytest.mark.parametrize("manager", [False, True])
 async def test_nested_values_match_exact_stored_parents(task_client, monkeypatch, manager):
     from app.modules.tasks.models import EvidenceItem
-    from app.modules.checkers.models import CheckerResult
-    from app.modules.checkers.execution_results import RESULT_MESSAGES
-    project = await create_active_project(task_client)
+    from app.modules.checkers.models import CheckerResult, CheckerResultFinding
+    from app.modules.checkers.execution_results import RESULT_STATUS_MESSAGES
+    project = await create_active_project(task_client, post_submit_registry_spec=post_registry_spec())
     task = await create_started_task(task_client, project["id"], monkeypatch)
     submission = await seed_retained_submission(task["id"], complete_submission_payload())
     run = await seed_retained_checker_run(submission)
-    sibling = await seed_retained_checker_run(submission, generation=2, failures=("check_submission_packet",))
+    sibling = await seed_retained_checker_run(submission, generation=2, verdict="failed")
     foreign_task = await create_started_task(task_client, project["id"], monkeypatch, subject="foreign-nested-owner")
     payload = complete_submission_payload()
     for item in payload["evidence_items"]:
         item["label"] = "Foreign " + item["label"]
     foreign_submission = await seed_retained_submission(foreign_task["id"], payload)
-    foreign_run = await seed_retained_checker_run(foreign_submission, failures=("check_evidence_present",))
+    foreign_run = await seed_retained_checker_run(foreign_submission, verdict="failed")
     async with db_session.get_session_factory()() as session:
         evidence = list(await session.scalars(select(EvidenceItem).order_by(EvidenceItem.id)))
         rows = list(await session.scalars(select(CheckerResult).order_by(CheckerResult.member_order)))
+        findings = {}
+        for finding in await session.scalars(select(CheckerResultFinding).order_by(
+            CheckerResultFinding.finding_order,
+        )):
+            findings.setdefault(str(finding.checker_result_id), []).append(finding)
+        level_status = {"info": ("passed", "info"), "warning": ("warning", "low"),
+                        "error": ("failed", "error"),
+                        "coverage_incomplete": ("coverage_incomplete", "medium")}
         assert {str(row.checker_run_id) for row in rows} == {run, sibling, foreign_run}
         expected_evidence = [{field: str(getattr(row, field)) if field == "id" else getattr(row, field)
                               for field in EVIDENCE_FIELDS} for row in evidence if row.submission_id == submission]
@@ -127,12 +135,25 @@ async def test_nested_values_match_exact_stored_parents(task_client, monkeypatch
                 if row.checker_run_id != run_id:
                     continue
                 assert row.task_id == task["id"] and row.submission_id == submission
-                message, fix = RESULT_MESSAGES[row.code]
-                entry = {field:getattr(row,field) for field in ("id","checker_name","status","severity")}
-                entry.update(worker_message=message, worker_suggested_fix=fix)
-                if manager:
-                    entry.update(message=message, blocks_review=row.status=="failed" and row.severity in {"high","critical"})
-                expected_results[run_id].append(entry)
+                # One entry per stored finding; a member without findings keeps one entry.
+                for finding in findings.get(str(row.id)) or [None]:
+                    status, severity = (
+                        (row.status, row.severity) if finding is None
+                        else level_status[finding.level]
+                    )
+                    message, fix = RESULT_STATUS_MESSAGES[status]
+                    entry = {
+                        "id": row.id if finding is None else finding.id,
+                        "checker_name": row.checker_name,
+                        "check_id": None if finding is None else finding.check_id,
+                        "path": None if finding is None else finding.path,
+                        "line": None if finding is None else finding.line,
+                        "status": status, "severity": severity,
+                        "worker_message": message, "worker_suggested_fix": fix,
+                    }
+                    if manager:
+                        entry.update(message=message, blocks_review=status == "failed")
+                    expected_results[run_id].append(entry)
         assert expected_results[run] != expected_results[sibling] and expected_evidence
     set_dev_actor(monkeypatch, roles="", subject="project-manager-subject" if manager else "worker-one")
     for action, path in history_paths(project["id"],task["id"],submission,run,manager=manager).items():

@@ -11,12 +11,7 @@ from app.modules.projects.api.guide_documents import (
     GuideDocumentManifestPort,
     GuideDocumentManifestRequest,
 )
-from app.modules.checkers.api.pre_submit_catalogue import (
-    PreSubmissionCapabilityProjection,
-)
-from app.modules.checkers.api.post_submit_catalogue import (
-    PostSubmitCatalogue,
-)
+from app.modules.checkers.api.external import ExternalCheckerCapabilityProjection
 from app.modules.authorization.api import (
     ProjectGuideCompilationRequestFacts,
     ProjectGuideCompilationRequestOrigin,
@@ -42,8 +37,7 @@ class CompilationRequestInputs:
     """Composition supplies material access and canonical CHECKERS projections, never a runtime."""
 
     material: GuideDocumentManifestPort
-    pre_submission_capabilities: PreSubmissionCapabilityProjection
-    post_submission_capabilities: PostSubmitCatalogue
+    checker_capabilities: ExternalCheckerCapabilityProjection
     runtime_configuration: ProjectGuideRuntimeConfiguration | None
 
     async def resolve(
@@ -137,8 +131,7 @@ class CompilationRequestInputs:
             loaded=loaded,
             setup_run_id=setup_run_id,
             setup_generation=setup.setup_generation,
-            pre_submission_capabilities=self.pre_submission_capabilities,
-            post_submission_capabilities=self.post_submission_capabilities,
+            checker_capabilities=self.checker_capabilities,
             runtime_configuration=self.runtime_configuration,
             correction_feedback=await load_correction_feedback(session, setup_run_id),
         )

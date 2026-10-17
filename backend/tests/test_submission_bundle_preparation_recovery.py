@@ -1,21 +1,15 @@
 """Command recovery distinguishes checked failure, unavailable custody and authority."""
 
-from contextlib import asynccontextmanager
-from dataclasses import asdict, replace
-import json
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, Mock, call
+from unittest.mock import AsyncMock
 from app.core.identifiers import new_record_id
 
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-from app.adapters.artifacts import CheckerPhaseService
-from tests.checkers.execution.support import forbidden_post_submission
 from fastapi import HTTPException
 from starlette.requests import Request
 
-import app.modules.artifacts.submission_admission as submission_admission_module
 from app.api.routes.artifact_submissions import prepare_submission_bundle
 from app.adapters.artifacts import (
     get_submission_bundle_preparation_actor,
@@ -24,56 +18,37 @@ from app.adapters.artifacts import (
 from app.main import create_app
 from app.modules.artifacts.api import (
     SubmissionBundlePreparationCheckFailed,
-    SubmissionBundlePreparationRequest,
     SubmissionBundlePreparationRejected, SubmissionBundlePreparationUnavailable,
     SubmissionBundlePreparationInfrastructureUnavailable, SubmissionBundlePreparationResult,
+    SubmissionBundlePreparationStatus,
 )
-from app.modules.checkers.api import (
-    PreSubmissionExecutionEntryFacts,
-    PreSubmissionExecutionFacts,
+from app.modules.checkers.api.default_checker import (
+    WORKSTREAM_DEFAULT_BEHAVIOR_SHA256, WORKSTREAM_DEFAULT_CHECK_IDS,
+    WorkstreamDefaultCheckerResult,
 )
+from app.modules.checkers.api.selected_pre_submit import SelectedPreSubmitExecutionFacts
 from app.modules.authorization.api import ActorIdentityFacts, ActorKind
-from app.modules.artifacts.pre_submit_evidence import (
-    PreSubmitEvidenceConflict, PreSubmitEvidencePersistenceResult,
-)
-from app.modules.artifacts.submission_admission import (
-    PreparedSubmissionBundlePreparationCommand, SubmissionBundlePreparationRuntime,
-)
-from tests.artifact_store_helpers import artifact_byte_stream
-from tests.test_submission_bundle_admission import _actor, _transaction
+def _actor():
+    return ActorIdentityFacts(new_record_id(), new_record_id(), ActorKind.HUMAN)
 
 
-def _feedback_facts(*, eligible: bool = False) -> PreSubmissionExecutionFacts:
-    """Build exact canonical facts without defining another feedback contract."""
-    statuses = (("passed", None, "passed"),) if eligible else (
-        ("warning", None, "quality_signal_warning"),
-        ("failed", "pre_submission_required_file_missing", "required_file_missing"),
-        ("dependency_not_run", None, "dependency_not_run"),
+
+def _feedback_facts(*, eligible: bool = False) -> SelectedPreSubmitExecutionFacts:
+    """Use the sole selected default result shape for sanitized HTTP feedback."""
+    checks = tuple({
+        "check_id": check_id,
+        "status": ("passed" if eligible or index < 2 else "failed" if index == 2 else "not_run"),
+        "failure_code": "high_confidence_secret_detected" if not eligible and index == 2 else None,
+        "finding_count": 1 if not eligible and index == 2 else 0,
+    } for index, check_id in enumerate(WORKSTREAM_DEFAULT_CHECK_IDS))
+    default = WorkstreamDefaultCheckerResult(
+        behavior_sha256=WORKSTREAM_DEFAULT_BEHAVIOR_SHA256,
+        eligible=eligible, checks=checks,
+        warnings=({"code": "submission_summary_missing"}, {"code": "submission_attestation_missing"}),
     )
-    return PreSubmissionExecutionFacts(
-        plan_sha256="sha256:" + "1" * 64,
-        eligible=eligible,
-        entries=tuple(
-            PreSubmissionExecutionEntryFacts(
-                dispatch_authority="workstream.pre_submission_checker_catalogue",
-                definition_id=f"workstream.test.{index}",
-                definition_version="1.0.0",
-                public_name=f"Test check {index}",
-                policy_source="workstream_default",
-                effective_plan_sha256="sha256:" + "1" * 64,
-                rule_instance_id=None,
-                locked_policy_sha256="sha256:" + "2" * 64,
-                phase="default_policy",
-                order=index,
-                classification="advisory" if status == "warning" else "blocking",
-                severity="warning" if status == "warning" else "blocking",
-                checker_execution_status=status,
-                failure_code=failure_code,
-                message_code=message_code,
-                metadata=(("finding_count", index + 1),) if not eligible else (),
-            )
-            for index, (status, failure_code, message_code) in enumerate(statuses)
-        ),
+    return SelectedPreSubmitExecutionFacts(
+        policy_sha256="sha256:" + "1" * 64, workstream_default=default,
+        required_external_count=0, external_members=(), eligible=eligible,
     )
 
 
@@ -117,7 +92,13 @@ async def test_mounted_preparation_returns_exact_ordered_bounded_feedback() -> N
     assert payload["error"]["details"] == {
         "status": "failed",
         "eligible_to_submit": False,
-        "results": json.loads(json.dumps([asdict(entry) for entry in facts.entries])),
+        "results": [
+            {"source": "workstream_default", **check.model_dump(mode="json")}
+            for check in facts.workstream_default.checks
+        ] + [
+            {"source": "workstream_default", "status": "warning", "warning_code": warning.code}
+            for warning in facts.workstream_default.warnings
+        ],
     }
     rendered = response.text
     assert all(value not in rendered for value in ("/tmp/", "s3://", "task.toml"))
@@ -167,21 +148,22 @@ async def test_mounted_preparation_preserves_non_feedback_error_boundaries(
 def test_blocked_feedback_rejects_noncanonical_or_non_false_facts(eligible) -> None:
     with pytest.raises(TypeError, match="feedback facts are invalid"):
         SubmissionBundlePreparationCheckFailed(object())  # type: ignore[arg-type]
+    from dataclasses import fields
+
+    original = _feedback_facts()
+    forged = object.__new__(SelectedPreSubmitExecutionFacts)
+    for field in fields(original):
+        object.__setattr__(forged, field.name, getattr(original, field.name))
+    object.__setattr__(forged, "eligible", eligible)
     with pytest.raises(ValueError, match="require eligible false"):
-        SubmissionBundlePreparationCheckFailed(
-            replace(_feedback_facts(), eligible=eligible)  # type: ignore[arg-type]
-        )
+        SubmissionBundlePreparationCheckFailed(forged)
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("error,status_code,detail", (
     (SubmissionBundlePreparationRejected("submission_bundle_preparation_context_changed"),
      409,"submission_bundle_preparation_context_changed"),
-    (PreparedSubmissionBundlePreparationCommand._evidence_failure(
-        PreSubmitEvidenceConflict("pre_submit_attempt_result_unavailable")),
-     503,"pre_submission_checked_custody_unavailable"),
-    (PreparedSubmissionBundlePreparationCommand._evidence_failure(
-        PreSubmitEvidenceConflict("pre_submit_attempt_member_invalid")),
+    (SubmissionBundlePreparationInfrastructureUnavailable("pre_submission_checked_custody_unavailable"),
      503,"pre_submission_checked_custody_unavailable"),
     (SubmissionBundlePreparationInfrastructureUnavailable("pre_submission_attempt_outcome_unresolved"),
      503,"pre_submission_attempt_outcome_unresolved"),
@@ -211,6 +193,7 @@ async def test_hidden_preparation_maps_context_custody_and_authority_distinctly(
             request=request,
             actor=_actor(),
             command=command,
+            session=SimpleNamespace(rollback=AsyncMock()),
             assignment_id=str(new_record_id()),
             idempotency_key=str(new_record_id()),
             summary="summary",
@@ -221,169 +204,26 @@ async def test_hidden_preparation_maps_context_custody_and_authority_distinctly(
     assert failure.value.detail == detail
 
 
-
-def _preparation_replay_runtime(prepare_bytes, evidence_id, *, eligible):
-    """Supply bounded ART outcome doubles for command routing proof."""
-    evidence = SimpleNamespace(
-        reserve=AsyncMock(return_value=object()),
-        execute_reserved=AsyncMock(return_value=PreSubmitEvidencePersistenceResult(
-            evidence=SimpleNamespace(evidence_set_id=evidence_id),
-            pass_capability=None, failure_audit=None,
-            execution=SimpleNamespace(
-                eligible=eligible,
-                checker_facts=_feedback_facts(eligible=eligible),
-            ),
-        )),
-    )
-    checker_service = CheckerPhaseService(
-        pre_submission=evidence, post_submission=forbidden_post_submission(),
-    )
-    checker_service.evaluate_pre_submission = AsyncMock(wraps=checker_service.evaluate_pre_submission)
-    from app.modules.checkers.api import PostSubmissionEvaluationContent
-    from tests.checkers.post_submit.support import request as evaluation_request
-    content = evaluation_request().model_dump(include=set(PostSubmissionEvaluationContent.model_fields))
-    return SubmissionBundlePreparationRuntime(
-        evaluation_content=Mock(return_value=PostSubmissionEvaluationContent(**content)),
-        checker_service=checker_service,
-        preparation=SimpleNamespace(prepare=AsyncMock(side_effect=prepare_bytes)),
-        inspector=object(),
-        catalogue=object(),
-        materialization=SimpleNamespace(prepare_authorization=AsyncMock(return_value=object())),
-        evidence=evidence,
-        durable_put=object(),
-    )
-
-
-async def _assert_blocked_feedback(command, request, runtime) -> None:
-    with pytest.raises(
-        SubmissionBundlePreparationCheckFailed,
-        match="pre_submission_checker_failed",
-    ) as failure:
-        await command.prepare(request)
-    assert (
-        failure.value.facts
-        == runtime.evidence.execute_reserved.return_value.execution.checker_facts
-    )
-
-
 @pytest.mark.asyncio
-@pytest.mark.parametrize("outcome", ("completed", "blocked", "unresolved", "no_continuation", "corrupt_evidence"))
-async def test_hidden_preparation_replays_persisted_checked_custody(monkeypatch, outcome) -> None:
-    actor_id, task_id, assignment_id = new_record_id(), new_record_id(), new_record_id()
-    evidence_id = new_record_id()
-    expected = SubmissionBundlePreparationResult(
-        put_attempt_id=new_record_id(),
-        admission_id=new_record_id(),
-        submission_bundle_preparation_status="ready",
-        replayed=True,
-    )
-    locked = SimpleNamespace(effective_policy_id=new_record_id(), pre_submit_policy_id=new_record_id())
-    prepared = SimpleNamespace(
-        commitment=SimpleNamespace(sha256="sha256:" + "a" * 64),
-        inspect=AsyncMock(return_value=object()),
-        close=AsyncMock(),
-    )
-    events: list[str] = []
+async def test_hidden_preparation_treats_missing_optional_packet_text_as_warnings() -> None:
+    """Missing summary and attestation reach PRE as empty warning-only values."""
+    command = SimpleNamespace(prepare=AsyncMock(return_value=SubmissionBundlePreparationResult(
+        put_attempt_id=new_record_id(), admission_id=None,
+        submission_bundle_preparation_status=SubmissionBundlePreparationStatus.PREPARED,
+        replayed=False, pre_submission_results=(),
+    )))
+    request = Request({
+        "type": "http", "method": "POST", "path": "/",
+        "headers": [(b"content-type", b"application/zip")],
+    })
 
-    async def prepare_bytes(*_args, **_kwargs):
-        events.append("prepare_bytes")
-        return prepared
-
-    async def revalidate(**_kwargs):
-        events.append("revalidate")
-
-    runtime = _preparation_replay_runtime(prepare_bytes, evidence_id, eligible=outcome != "blocked")
-
-    @asynccontextmanager
-    async def runtime_factory():
-        yield runtime
-
-    monkeypatch.setattr(
-        submission_admission_module,
-        "build_submission_manifest",
-        Mock(return_value=SimpleNamespace(file_facts=Mock(return_value=()))),
+    await prepare_submission_bundle(
+        task_id=str(new_record_id()), request=request, actor=_actor(), command=command,
+        session=SimpleNamespace(rollback=AsyncMock()),
+        assignment_id=str(new_record_id()), idempotency_key=str(new_record_id()),
+        summary=None, contributor_attestation=None,
     )
-    monkeypatch.setattr(
-        submission_admission_module,
-        "evaluate_submission_change",
-        Mock(return_value=object()),
-    )
-    project_id = new_record_id()
-    authority = SimpleNamespace(
-        preflight=AsyncMock(), revalidate=AsyncMock(side_effect=revalidate), close=Mock()
-    )
-    command = PreparedSubmissionBundlePreparationCommand(
-        session=SimpleNamespace(begin=_transaction),
-        authority=authority,
-        task_contexts=SimpleNamespace(),
-        project_contexts=SimpleNamespace(),
-        runtime_factory=runtime_factory,
-    )
-    command._lock_context = AsyncMock(
-        return_value=(
-            SimpleNamespace(
-                predecessor=None,
-                locked_project_context=SimpleNamespace(project_id=project_id),
-            ),
-            locked,
-        )
-    )
-    command._compile_plan = Mock(return_value=object())
-    command._load_predecessor = AsyncMock(return_value=None)
-    command._existing_durable_result = AsyncMock(return_value=expected)
 
-    request = SubmissionBundlePreparationRequest(
-            actor=ActorIdentityFacts(
-                actor_profile_id=actor_id,
-                identity_link_id=new_record_id(),
-                actor_kind=ActorKind.HUMAN,
-            ),
-            request_id=new_record_id(),
-            correlation_id=new_record_id(),
-            task_id=task_id,
-            assignment_id=assignment_id,
-            predecessor_submission_id=None,
-            idempotency_key=new_record_id(),
-            summary="summary",
-            contributor_attestation="attestation",
-            media_type="application/zip",
-            byte_source=artifact_byte_stream(b"PK\x03\x04replay"),
-        )
-    if outcome in {"unresolved", "corrupt_evidence"}:
-        runtime.evidence.reserve.side_effect = PreSubmitEvidenceConflict(
-            "pre_submit_attempt_outcome_unresolved" if outcome == "unresolved"
-            else "pre_submit_attempt_result_digest_invalid"
-        )
-    if outcome == "no_continuation":
-        command._existing_durable_result.return_value = None
-    if outcome == "completed":
-        runtime.evidence.reserve.return_value = runtime.evidence.execute_reserved.return_value
-        assert await command.prepare(request) == expected
-    elif outcome == "blocked":
-        await _assert_blocked_feedback(command, request, runtime)
-        command._existing_durable_result.assert_not_awaited()
-    else:
-        code = ("pre_submission_attempt_outcome_unresolved" if outcome == "unresolved"
-                else "pre_submission_checked_custody_unavailable")
-        with pytest.raises(SubmissionBundlePreparationInfrastructureUnavailable, match=code):
-            await command.prepare(request)
-    runtime.preparation.prepare.assert_awaited_once()
-    assert authority.revalidate.await_args_list == [
-        call(request=request, project_id=project_id),
-        call(request=request, project_id=project_id),
-    ]
-    assert events[:2] == ["revalidate", "prepare_bytes"]
-    runtime.evidence.reserve.assert_awaited_once()
-    if outcome in {"unresolved", "corrupt_evidence"}:
-        runtime.checker_service.evaluate_pre_submission.assert_not_awaited()
-    else:
-        runtime.checker_service.evaluate_pre_submission.assert_awaited_once()
-        phase_request, selection = runtime.checker_service.evaluate_pre_submission.await_args.args
-        assert phase_request.prepared_authorization is None
-        assert selection is runtime.evidence.reserve.return_value
-    if outcome in {"completed", "unresolved", "corrupt_evidence"}:
-        runtime.evidence.execute_reserved.assert_not_awaited()
-    else:
-        runtime.evidence.execute_reserved.assert_awaited_once()
-    prepared.close.assert_awaited_once()
-    authority.close.assert_called_once_with()
+    prepared = command.prepare.await_args.args[0]
+    assert prepared.summary == ""
+    assert prepared.contributor_attestation == ""

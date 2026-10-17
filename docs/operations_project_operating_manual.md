@@ -69,11 +69,16 @@ remaining setup/activation work:
 - each task locks the guide snapshot, effective project submission artifact policy hash, and pre-submit checker bundle hash before entering `READY`
 
 The existing versioned ReviewPolicy setting `human_review_required` defaults
-true. False may be configured in draft, but CP07 currently rejects false guide
-activation: automated acceptance is unavailable. B8 connects hidden completion delivery to the authorized FinalAcceptance/CON
-operation. Supporting false activation still requires remediation, production
-readiness and adequate configured checks.
-The setting is never silently switched to true. See the [implementation handoff](../.commitrail/changes/pre-review-plan-reconciliation.md#product-builder-handoff-implement-the-setting-next).
+true. False can activate when the approved guide has supported exact PRE/POST
+checkers and no `human_review` requirement disposition. The selected production
+completion route uses the authorized FinalAcceptance/CON operation after passing
+required checks; new economic effects require an Operator-authorized live REV
+generation. Activation itself does not start REV or silently switch the setting
+to true.
+Make REV live before false-policy production completion. A known non-live refusal
+before routing effects uses the shared OUTBOX bounded retry after rollback;
+attempt exhaustion dead-letters and has no automatic reopening. Other uncertain
+delivery failures remain UNKNOWN.
 
 Guide creation freezes the declared document set internally; there is no separate
 public source-snapshot creation step. The internal guide source snapshot freezes the declared document metadata and
@@ -222,7 +227,7 @@ PROJECTS context port. New work selects the active guide; frozen work keeps its
 exact guide and approved policy identities after a successor is activated.
 Retiring a contribution policy does not silently replace that binding. This is
 an internal contract, not a new manager API. Screening now records that exact
-contribution-policy version; claim and hidden Submission creation retain it through
+contribution-policy version; claim and public admission-backed Submission creation retain it through
 the assignment. Screening and release check that the installed pre/post policies
 are supported; historical reads do not rerun availability. No superseded economic configuration is
 required. Task display now comes from detached values supplied by PROJECTS,
@@ -268,8 +273,12 @@ delivered. ARCH-04C adds hidden durable execution and exact zero-slot reservatio
 ARCH-04D2 supplies exact execution/finalization authority and durable receipts.
 Output-file authority remains unavailable. B7 supplies hidden request delivery and
 04E2-B supplies complete hidden authorized outcomes. B8 supplies hidden completion
-delivery; production registration remains pending. Public intake remains deferred
-to ARCH-02I after evaluation and remediation prerequisites.
+delivery; PILOT-04 registers the selected request and completion handlers in
+production composition. ARCH-02I-B exposes public ZIP preparation and admission-backed
+initial/checker-remediation Submission creation. The bounded local public API
+and Celery service drill starts from public guide inputs with recorded inference.
+ARCH-04F4 supplies hidden reason-bound Operator retry of an exact terminal
+checker infrastructure failure; it has no public retry route.
 
 The intended unified flow uses one compilation result for sufficiency and
 artifact/pre-submit/post-submit proposals. Once finalized, its `ProjectSetupRun`,
@@ -412,33 +421,36 @@ missing and unauthorized requests return 404; malformed cursors or invalid
 stored evidence return sanitized 422. The old `/tasks/{task_id}/audit-events`
 route is removed. Submission recovery retains its separate internal evidence reader.
 
-### Submission Quality Gate — Target Contract
+### Submission Quality Gate — Current Boundary
 
-Hidden durable post-submit execution and unfinished-attempt recovery are
-implemented with exact input, execute and finalize service authority. Automatic
-dispatch/routing and authorized terminal retry remain unavailable.
-`operations.checker.retry` is planned; the removed alternate Celery worker and repair
-route do not provide it. The required future behavior is:
-
-A submission cannot move to human review until required checkers run against
-the exact submission version and artifact hashes. Critical- or high-severity
-failures return to the contributor when submission-caused; platform infrastructure
-failures remain in checker retry handling through
-`operations.checker.retry` or covered setup repair and never move directly to
-human review.
+Hidden durable post-submit execution and unfinished-attempt recovery use exact
+input, execute and finalize authority. PILOT-04 registers selected production
+request and completion delivery. Required checks run against the exact Submission
+version and artifact hashes before a passing result routes to `review_pending`
+under a true ReviewPolicy or the shared authorized FinalAcceptance under a false
+ReviewPolicy. Contributor-correctable failures retain the exact remediation cause.
+ARCH-04F4 provides a hidden, reason-bound `operations.checker.retry` command for
+an exact current terminal `infrastructure_failed` run; it creates a new CHECKERS
+generation through the existing request handler without changing the failed run.
+There is no public checker-retry route. Infrastructure failure does not move a
+Submission directly to human review.
 
 External origin qualification and webhook drop notifications are future adapter concerns, not v0.1 gates.
 
 ## Task Release Checklist
 
 This is the target release checklist, not an inventory of current runtime guards.
-The contribution-policy lock described above is already enforced.
+The contribution-policy lock described above is already enforced. Task-local
+acceptance/rejection criteria are optional supplementary text; SCREEN and
+RELEASE accept omission/null while retaining required title/description, guide
+custody and policy locks.
 
 Before moving a task to `READY`:
 
 - task belongs to project
 - active guide version attached
-- acceptance criteria exist
+- nonblank task title and description exist
+- acceptance requirements are defined by the project guide
 - required output is explicit
 - submission artifact requirements are clear
 - the task has locked the guide-bound ContributionPolicyVersion, containing
@@ -460,7 +472,7 @@ The ready gate confirms:
 
 - guide version is active
 - task fits project scope
-- acceptance criteria are objective enough to review
+- the guide-defined acceptance requirements are objective enough to review
 - submission artifact requirements are clear
 - the task has locked the guide-bound, complete, binding-valid
   `ContributionPolicyVersion`; either role rule may be explicitly unpaid
@@ -471,31 +483,36 @@ If the ready gate fails, the task remains `DRAFT`.
 
 ## Submission Intake Checklist
 
-This is the target contributor handoff. The obsolete public packet-creation POST
-has been removed; canonical admission-backed creation remains hidden and does
-not yet finalize or enqueue evaluation automatically. Do not use these intended
-steps as a public API availability claim.
+Public ZIP preparation and canonical admission-backed Submission creation
+are available for initial work and exact checker remediation. A contributor
+uploads one ZIP to `POST /api/v1/tasks/{task_id}/submission-bundle-preparations`;
+after ART returns a ready admission,
+`POST /api/v1/tasks/{task_id}/submissions` consumes it through the canonical
+atomic writer and creates the immutable Submission and initial evaluation
+request event. The bounded local public API and Celery service drill passed;
+live human-review revision is separate. The obsolete client-owned packet POST
+is removed.
 
 Before locking a submission packet:
 
 - task is assigned to submitter
-- summary exists
+- summary is optional; missing text produces a default-check warning
 - exactly one outer ZIP is uploaded through submission-bundle preparation
 - every project-required output/evidence file exists inside that ZIP
-- contributor attestation exists
-- revision replay exists when task was previously `NEEDS_REVISION`
+- contributor attestation is optional; missing text produces a default-check warning
+- checker-remediation replacement binds the exact authorized predecessor; human-review revision remains separate
 - effective project submission artifact policy is loaded
 - generated project pre-submit checker policy runs
 - failed preparation returns `pre_submission_checker_failed` with ART's exact
-  ordered bounded results through the mounted authorized hidden route; the route
-  remains absent from OpenAPI and public intake activation remains pending
-- POL-07B removes the standalone JSON precheck; the hidden preparation
+  ordered bounded results through the public ZIP preparation route published in OpenAPI
+- POL-07B removes the standalone JSON precheck; the preparation
   flow uses one internal pre-submit phase command with ART-owned evidence.
-  Broader public Submission caller migration remains WS-ARCH-001-02I
+- ARCH-02I-B exposes the public Submission operation, which consumes only a fresh ready admission
 - no submission row is created until blocking pre-submit checks pass
-- ARCH-04C implements hidden durable post-submit execution with exact ARCH-04D2
-  service authority. B6 commits the initial reservation and request event with
-  each hidden Submission; automatic request delivery and routing remain unavailable
+- ARCH-04C implements durable post-submit execution with exact ARCH-04D2 service
+  authority. B6 commits the initial reservation and request event with each
+  Submission; selected request and completion handlers are registered in the
+  production composition
 - the obsolete `/submissions/{submission_id}/finalize` repair and manual
   `POST /submissions/{submission_id}/checker-runs` routes are removed. Planned
   exact-authority recovery must not use them.
@@ -530,7 +547,7 @@ Before review decision:
 
 - read the Project Guide identity/version/activation sequence stamped on the
   exact leased Submission; no guide rebase occurs during review
-- read task acceptance criteria
+- read locked guide acceptance requirements and any supplied task-local criteria
 - inspect checker results
 - inspect evidence
 - inspect prior findings if resubmission

@@ -3,14 +3,14 @@
 from __future__ import annotations
 
 from app.modules.tasks.api.transition_audit import TaskPolicyLineage
+from app.modules.tasks.api.revision import ContributorRevisionContext
 from app.modules.tasks.api import ReadyTaskSummary, ManagementTaskSummary, OperationalTaskSummary
 
 from datetime import datetime
-from typing import Any, Literal
+from typing import Literal
 from uuid import UUID
-from urllib.parse import unquote, urlparse
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.modules.projects.api.guide_activation_context import GuidePolicySelection
 from app.modules.projects.api.locked_policy import GuideDisplayFacts, ProjectDisplayFacts
@@ -52,6 +52,7 @@ class ContributorTaskWorkContext(_TaskWorkContext):
     task: ContributorTaskDetail
     lifecycle: ContributorTaskLifecycle
     guide_documents: tuple[ContributorGuideDocument, ...]
+    revision_context: ContributorRevisionContext | None = None
 
     @model_validator(mode="after")
     def exact_task(self):
@@ -72,64 +73,6 @@ class ManagementTaskWorkContext(_TaskWorkContext):
         if type(self.task) is not ManagementTaskDetail or self.task.project_id != self.project.id:
             raise ValueError("management work context task is invalid")
         return self
-
-
-ALLOWED_STORAGE_URI_PREFIXES = ("local://", "s3://", "r2://")
-FORBIDDEN_URI_FRAGMENTS = (
-    "?",
-    "#",
-    "@",
-    "authorization=",
-    "credential=",
-    "password=",
-    "secret=",
-    "signature=",
-    "token=",
-    "x-amz-",
-)
-
-
-def validate_storage_reference(value: str | None) -> str | None:
-    """Validate a storage URI/reference accepted by submission packets.
-
-    Args:
-        value: Optional storage reference supplied by the client.
-
-    Returns:
-        Normalized value when it is a safe storage reference.
-
-    Raises:
-        ValueError: If the value is not an allowed storage reference.
-    """
-    if value is None:
-        return value
-    normalized = value.strip()
-    parsed = urlparse(normalized)
-    matching_prefix = next(
-        (prefix for prefix in ALLOWED_STORAGE_URI_PREFIXES if parsed.scheme == prefix[:-3]),
-        None,
-    )
-    if matching_prefix is None:
-        raise ValueError("uri must be a local, R2, or S3 object reference")
-    lowered_auth_components = f"{parsed.query}&{parsed.fragment}".lower()
-    has_signed_or_credential_fragment = any(
-        fragment in lowered_auth_components
-        for fragment in FORBIDDEN_URI_FRAGMENTS
-        if fragment not in {"?", "#", "@"}
-    )
-    if parsed.username or parsed.password or "@" in parsed.netloc:
-        raise ValueError("uri must not include credentials, query strings, or signed URL data")
-    if parsed.query or parsed.fragment or has_signed_or_credential_fragment:
-        raise ValueError("uri must not include credentials, query strings, or signed URL data")
-    reference = f"{parsed.netloc}{parsed.path}"
-    if not reference.strip("/"):
-        raise ValueError("uri must include an object reference")
-    if matching_prefix in {"s3://", "r2://"} and (not parsed.netloc or not parsed.path.strip("/")):
-        raise ValueError("uri must include a bucket and object key")
-    decoded_segments = unquote(reference).replace("\\", "/").split("/")
-    if any(segment in {"", ".", ".."} for segment in decoded_segments):
-        raise ValueError("uri must not include empty or traversal path segments")
-    return normalized
 
 
 class TaskCreate(BaseModel):
@@ -153,6 +96,13 @@ class TaskCreate(BaseModel):
     deadline_at: datetime | None = None
 
 
+class ImportedTaskCreate(TaskCreate):
+    """Server-stamped JSON creation values; not a public manual-create request."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    source_type: Literal["json_import"] = "json_import"
+
+
 class TaskTransitionRequest(BaseModel):
     """Optional request body for task lifecycle transitions."""
 
@@ -161,53 +111,51 @@ class TaskTransitionRequest(BaseModel):
     reason: str | None = Field(default=None, max_length=1000)
 
 
-class EvidenceItemCreate(BaseModel):
-    """Request schema for one evidence item in a submission packet."""
+class TaskRevisionRepairRequest(BaseModel):
+    """Exact frozen parent and PM explanation for one controlled repair."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    parent_preparation_id: UUID | None = None
+    parent_preparation_sha256: str | None = Field(default=None, pattern=r"^sha256:[0-9a-f]{64}$")
+    routing_manifest_id: UUID | None = None
+    reason: str = Field(min_length=1, max_length=1000)
+
+    @model_validator(mode="after")
+    def meaningful_reason(self):
+        if not self.reason.strip() or len(self.reason.strip().encode("utf-8")) > 1000:
+            raise ValueError("revision repair reason is required")
+        if not (
+            (self.parent_preparation_id is not None and self.parent_preparation_sha256 is not None
+             and self.routing_manifest_id is None)
+            or (self.parent_preparation_id is None and self.parent_preparation_sha256 is None
+                and self.routing_manifest_id is not None)
+        ):
+            raise ValueError("revision repair requires one exact parent or missing-root source")
+        return self
+
+
+class AdmissionBackedSubmissionCreate(BaseModel):
+    """Contributor packet and selectors for the canonical ready-admission POST."""
 
     model_config = ConfigDict(extra="forbid")
 
-    type: Literal[
-        "log",
-        "screenshot",
-        "test_result",
-        "package",
-        "diff",
-        "note",
-        "external_reference",
-    ]
-    label: str = Field(min_length=1, max_length=200)
-    uri: str | None = Field(default=None, max_length=1000)
-    hash: str | None = Field(default=None, max_length=128)
-    size_bytes: int | None = Field(default=None, ge=0)
-    metadata: dict[str, Any] = Field(default_factory=dict)
-
-    _validate_uri = field_validator("uri")(validate_storage_reference)
+    admission_id: UUID
+    assignment_id: UUID
+    predecessor_submission_id: UUID | None = None
+    summary: str | None = None
+    contributor_attestation: str | None = None
 
 
-class ArtifactHashEntry(BaseModel):
-    """Structured artifact hash entry supplied by a Contributor."""
+class AdmissionBackedSubmissionResponse(BaseModel):
+    """Stable Workstream result without provider or scratch coordinates."""
 
     model_config = ConfigDict(extra="forbid")
 
-    artifact: str = Field(min_length=1, max_length=1000)
-    hash: str = Field(min_length=1, max_length=128)
-    size_bytes: int | None = Field(default=None, ge=0)
-    notes: str | None = None
-
-
-class SubmissionCreate(BaseModel):
-    """Shared packet value used by retained checker feedback and evaluation."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    summary: str = Field(min_length=1)
-    package_uri: str | None = Field(default=None, max_length=1000)
-    package_hash: str = Field(min_length=1, max_length=128)
-    artifact_hash_manifest: list[ArtifactHashEntry] = Field(min_length=1)
-    worker_attestation: str = Field(min_length=1)
-    evidence_items: list[EvidenceItemCreate] = Field(default_factory=list)
-
-    _validate_package_uri = field_validator("package_uri")(validate_storage_reference)
+    submission_id: UUID
+    submission_version: int
+    admission_id: UUID
+    evaluation_request_id: UUID
 
 
 class TaskResponse(BaseModel):
@@ -250,6 +198,76 @@ class TaskResponse(BaseModel):
     assigned_to: str | None
     created_at: datetime
     updated_at: datetime
+
+
+class TaskImportBatchRequest(BaseModel):
+    """Select one native verified source; all Task provenance is server-stamped."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    source_id: UUID
+
+
+class TaskImportBatchResponse(BaseModel):
+    """Immutable original ordered creation facts, also returned after Tasks advance."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    batch_id: UUID
+    project_id: UUID
+    source_id: UUID
+    sha256: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
+    byte_count: int = Field(ge=1, le=8388608)
+    schema_version: Literal["workstream.task_import.v1"]
+    mapping_version: Literal["workstream.task_import.draft_mapping.v1"]
+    label: str | None = Field(default=None, min_length=1, max_length=255)
+    row_count: int = Field(ge=1, le=500)
+    created_at: datetime
+    tasks: tuple[TaskResponse, ...] = Field(min_length=1, max_length=500)
+
+    @model_validator(mode="after")
+    def original_creation_custody(self):
+        """Reject foreign, duplicate or relabelled original Task creation responses."""
+        if len(self.tasks) != self.row_count or len({task.id for task in self.tasks}) != self.row_count:
+            raise ValueError("batch creation result has invalid membership")
+        external_ids = {task.external_task_id for task in self.tasks}
+        if None in external_ids or len(external_ids) != self.row_count:
+            raise ValueError("batch creation result has invalid external IDs")
+        for task in self.tasks:
+            if (task.project_id != str(self.project_id) or task.status != "draft"
+                    or task.source_type != "json_import"
+                    or task.source_ref != f"task-import-source:{self.source_id}"
+                    or task.source_payload_hash != self.sha256 or task.import_batch_id != str(self.batch_id)):
+                raise ValueError("batch creation result differs from original custody")
+        return self
+
+
+class TaskImportBatchCurrentTask(BaseModel):
+    """Current lifecycle state selected solely by immutable native membership."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    task_id: UUID
+    row_index: int = Field(ge=0, le=499)
+    status: str = Field(pattern=r"^[a-z][a-z0-9_]{0,29}$")
+
+
+class TaskImportBatchStatus(BaseModel):
+    """Separate original creation facts from the current member lifecycle states."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    creation: TaskImportBatchResponse
+    current_tasks: tuple[TaskImportBatchCurrentTask, ...] = Field(min_length=1, max_length=500)
+
+    @model_validator(mode="after")
+    def exact_current_membership(self):
+        """Keep the current projection in the same original document row order."""
+        if (len(self.current_tasks) != self.creation.row_count
+                or any(row.row_index != index or str(row.task_id) != self.creation.tasks[index].id
+                       for index, row in enumerate(self.current_tasks))):
+            raise ValueError("current Task projection differs from native membership")
+        return self
 
 
 class RequiredArtifactRequirement(BaseModel):

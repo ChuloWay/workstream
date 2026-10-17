@@ -164,9 +164,10 @@ retired_at
 
 Draft content may be edited through the authorized policy service. Published
 and retired content is immutable. Publishing a later version affects a work
-attempt only when a future guide activation or human `needs_revision`
-preparation deliberately adopts the complete changed context. Existing
-Submissions, admissions, ReviewLeases, Reviews, ContributionRecords, and awards
+attempt only when guide activation or controlled checker/human `needs_revision`
+preparation deliberately adopts the complete changed context. Checker
+preparation is implemented; genuine human Review integration remains #554 work.
+Existing Submissions, admissions, ReviewLeases, Reviews, ContributionRecords, and awards
 never change; only the continuing Task and TaskAssignment may rebase at that
 controlled boundary for the next attempt.
 
@@ -446,9 +447,11 @@ owns the single FinalAcceptance schema, exclusive human/checker-policy source
 shapes, same-chain constraints, actor/authority provenance, currentness and
 transaction sequence. Both triggers use the same CON submitter operation; no
 new contribution type, synthetic Review or automatic reviewer award is added.
-REV-04C delivers the hidden mechanical transaction participant. The authority,
-currentness, audit/outbox and activation behavior is still planned runtime
-behavior, not enabled false-policy activation.
+REV-04C supplies the transaction participant. Selected production request and
+completion handlers route a supported false-policy result through its authority,
+currentness, audit/outbox and atomic outcome controls. A new false/pass effect
+requires a live REV generation; a pre-effect non-live refusal rolls back and uses
+bounded OUTBOX retry.
 
 CON MUST create `accepted_submission` only from the supplied locked
 FinalAcceptance and exact TaskAssignment. It MUST NOT infer submitter acceptance
@@ -532,18 +535,23 @@ status, policy status, or other Finance administration facts. It does not create
 an award, promise fulfillment, or change publication, locking, retirement,
 payment, reconciliation, or delivery behavior.
 
-After a human `needs_revision`, task-owned preparation locks the complete
-current next-attempt context. If policy changed, it validates the newly active
-guide-bound version through CON and atomically rebases the continuing Task and
-TaskAssignment for the next submission attempt, recording exact prior/next
-lineage. Missing, incomplete, crossed-project, ambiguous, or binding-ineligible
-context blocks the whole preparation. Publication alone never performs an
+After a committed checker or human `needs_revision`, TASK-owned preparation
+freezes the complete next-attempt context. Checker preparation implements this
+boundary; #554 owns genuine human Review integration under the same intended
+policy. If policy changed, preparation validates the newly active guide-bound
+version through CON and atomically rebases the continuing Task and TaskAssignment
+for the next immutable Submission, recording exact prior/next lineage. The next
+committed Submission stamps that frozen target version. Missing, incomplete,
+crossed-project, ambiguous or binding-ineligible context blocks the whole
+preparation. Publication alone never performs an
 update. CP06’s distinct revision-adoption purpose checks only the supplied
 version and current resource eligibility, allowing immutable published or
 retired versions without requiring current-selector equality. It does not
 verify a complete guide, authorize a revision, or write attempt lineage. The
-future TASK/PROJECTS composition must derive those IDs from its locked complete
-guide context and cannot use revision-purpose facts to activate a new guide.
+TASK/PROJECTS composition derives those IDs from the exact complete guide
+context and cannot use revision-purpose facts to activate a new guide. Human
+source integration remains future work; checker-rooted preparation already
+consumes the owner-validated context.
 An unchanged attempt makes no CON reselection call.
 
 ### Reviewer inheritance
@@ -560,7 +568,7 @@ ReviewLease.reviewer_contribution_policy_version_id
 Review claim performs no CON lookup or current-policy selection.
 
 REV owns ReviewLease schema, claim composition, and status effects. CON owns
-policy validation at guide activation and the controlled human-revision rebase,
+policy validation at guide activation and the controlled checker/human revision rebase,
 not ordinary review-claim selection.
 
 ### Freeze invariants
@@ -570,8 +578,8 @@ not ordinary review-claim selection.
   ContributionRecord, or CompensationAward.
 - Suspension races MUST be resolved with explicit locks and both-order tests.
 - Missing, draft, ambiguous, crossed-project, or incomplete policy state blocks
-  guide activation/task readiness or the controlled human-revision rebase.
-- Human revision preparation MUST rebase changed award eligibility with every
+  guide activation/task readiness or the controlled checker/human revision rebase.
+- Controlled revision preparation MUST rebase changed award eligibility with every
   changed applicable context component on the continuing Task/TaskAssignment
   for the next attempt. The completed Review and reviewer contribution keep the
   prior ReviewLease version; the next Submission and ReviewLease use the
@@ -960,8 +968,9 @@ Missing or ungranted project
 selectors are concealed and absent from target audit evidence. Historical project
 status does not erase immutable contribution facts.
 
-Both routes accept `format=json|csv`, an optional exact `contribution_type`, and
-timezone-aware `recorded_from` (inclusive) and `recorded_before` (exclusive).
+Both routes accept `format=json|csv`, `limit` from 1 through 1,000, an opaque
+`cursor`, an optional exact `contribution_type`, and timezone-aware
+`recorded_from` (inclusive) and `recorded_before` (exclusive).
 Self reads also accept an optional `project_id` filter. `recorded_at` is the
 ContributionRecord's immutable creation time for both contribution types.
 `accepted_at` is the actual FinalAcceptance time for accepted-submission records
@@ -969,19 +978,22 @@ and null for completed-review records. Separate `acceptance_review_id` and
 `acceptance_routing_manifest_id` retain the acceptance's exclusive trigger source;
 they never replace the contribution's own exclusive source references.
 
-The response includes contribution, contributor, project, task, Submission,
-artifact hash, policy-version and source identities, task source/display facts,
-and every immutable award ID, instrument, unit and exact decimal quantity. An
-unpaid record has `awards: []`. No field asserts payout, payment or fulfillment;
-adapter bindings and provider credentials are not exported. Quantity strings
-preserve exact decimal values without binary floats or rounding.
+The JSON response envelope contains `exported_at`, `items`, and nullable
+`next_cursor`. A present, non-null cursor means another page exists; null ends
+the traversal. Each item includes contribution, contributor, project, task,
+Submission, artifact hash, policy-version and source identities, task
+source/display facts, and every immutable award ID, instrument, unit and exact
+decimal quantity. An unpaid record has `awards: []`. No field asserts payout,
+payment or fulfillment; adapter bindings and provider credentials are not
+exported. Quantity strings preserve exact decimal values without binary floats
+or rounding.
 
-Each response uses one fresh PostgreSQL REPEATABLE READ transaction selected
+Each page uses one fresh PostgreSQL REPEATABLE READ transaction selected
 before the first AUTH query. Current human profile/link, selected grant and
 authorized Project locks remain held through complete projection, response-byte
 serialization and canonical audit commit. An evidenced denial commits only its
 denial evidence. Selection, projection, serialization and SQL failures roll back
-the response transaction. A PostgreSQL serialization refusal (SQLSTATE 40001)
+the page transaction. A PostgreSQL serialization refusal (SQLSTATE 40001)
 permits one new response attempt after full rollback, with fresh canonical AUTH
 and a new repeatable-read snapshot for the identical query. Only the successful
 attempt's evidence and bytes survive. Denials, other SQL errors and serialization
@@ -989,19 +1001,52 @@ errors are not retried; a second 40001 remains unavailable. This bounded read
 recovery does not retry product mutations. Export reads mutate no recognition
 or economic facts.
 
-The maximum is 1,000 selected contributions. Filters apply before the repository
-probes the 1,001st row; excess selection returns 422
-`contribution_export_too_large` with no partial export. Empty selections succeed.
-Rows sort by `(recorded_at, contribution_id)` for display, not commit order.
-There is no continuation cursor or snapshot retained across requests. Fixed
-membership pagination and CLI consumption remain separate implementation work.
+The supported fixed membership is at most 100,000 selected contributions.
+Filters apply before the repository probes the 100,001st row; excess selection
+returns 422 `contribution_export_too_large` with no cursor, retained state or
+partial body. Empty selections succeed. Rows sort by
+`(recorded_at, contribution_id)` for display, not commit order. Page one stores
+only that first transaction's ordered contribution IDs in one CON-owned
+short-lived snapshot when continuation is required. This retained membership
+prevents later commits from entering the traversal; every member appears once.
 
-CSV uses the same validated projection, quotes every UTF-8 cell and retains one
-row for an unpaid contribution or one row per award (at most 2,000 data rows).
+The HMAC-signed cursor binds action, current actor, audience, exact project,
+normalized type/time filters, output format, page limit, ordering, snapshot,
+next offset and database expiry. Raw contribution, award, source, label and grant
+facts are absent. Every continuation freshly authorizes before cursor decoding
+or snapshot lookup, so revocation is concealed under the existing read contract.
+Malformed, forged, substituted, access-expired, or missing-state cursors receive one
+generic 422 response after successful scope authorization. Cursors can replay
+the same membership page until access expiry; failed later pages leave the
+already committed snapshot available for retry.
+
+Snapshot access expires one hour after database creation. At most five snapshot
+slots may exist for one actor; a database unique actor/slot constraint is the
+concurrency fence. Initial allocation at capacity returns a generic 429, while
+continuations allocate no slot. Both routes consume the existing authorization-
+read rate allowance. Requests prune only a bounded batch of expired rows, so
+physical deletion is opportunistic and no product fact or immutable evidence is
+deleted. First-page projection or serialization failure rolls back snapshot
+state with its staged ALLOW evidence.
+
+CSV uses the same validated page projection, quotes every UTF-8 cell and retains
+one row for an unpaid contribution or one row per award (at most 2,000 data rows
+per page). `X-Workstream-Next-Cursor` carries continuation when another page
+exists; flattened CSV row counts never determine contribution membership.
 Untrusted display/source/unit text is neutralized with an apostrophe for formula
 triggers, including whitespace-prefixed and full-width variants. Embedded CSV
 delimiters remain inside one quoted cell. This mitigation applies to the generated
 CSV; external spreadsheet save/re-export behavior can change its interpretation.
+
+The contribution CLI consumes these pages as one bounded export without adding
+cursor or page flags. It sends the same normalized filters and explicit
+1,000-contribution limit on every request, rejects cursor cycles, cross-page
+identity/order violations and changed CSV headers, and preserves page one's
+`exported_at` in the existing complete JSON shape. JSON is staged in a private
+file before safe terminal rendering. CSV preserves the validated server bytes,
+emits the header once, and uses its existing confined 0600 sync and no-overwrite
+publication path. A failure on any page publishes neither a successful JSON
+result nor a destination CSV.
 
 These mappings do not authorize protected handler execution. Before delivery,
 reconciliation, projection rebuild, or callback implementation, the human and
@@ -1060,10 +1105,19 @@ There is no default handler. Registration requires a coroutine function, bound
 async method or async callable instance; synchronous handlers and factories reject
 before invocation. Claim expiry before invocation can retry with bounded
 exponential backoff; an explicit safe handler retry can also create another attempt.
-An exception, timeout, cancellation or crash after the invocation marker commits
-has unknown effects and stops in dead-letter on finalization/recovery. This includes
-a crash before the handler actually starts. The dispatcher neither silently retries
-unknown effects nor promises unconditional at-least-once handler entry. The deadline
+By default, an exception, timeout, cancellation or crash after the invocation marker
+commits has unknown effects and stops in dead-letter on finalization/recovery. This
+includes a crash before the handler actually starts. The enabled exceptions are
+`TaskRevisionExpiryRequested` and its read-only `TaskRevisionExpired` outcome notice,
+both version 1. Their explicitly replay-safe registrations permit bounded retries
+because TASK commits the effect and an immutable receipt
+atomically, fences each invocation, and replays that receipt without repeating the
+effect. The delivery receipt retains `invocation_unknown=true`; it does not claim
+the earlier call failed. PostgreSQL restricts unknown retryable outcomes to that
+exact pair of event types and version. Exhausting the attempt budget still dead-letters the
+request and remains an operational failure requiring resolution. Other handlers
+retain the default; the dispatcher does not promise unconditional at-least-once
+handler entry. The deadline
 is independent of handler cancellation cooperation: a timed-out call may still run
 physically, but its later result cannot replace the recorded unknown outcome.
 
@@ -1144,8 +1198,9 @@ REV-12A1 delivers its disabled generation-zero persistence and caller-root
 mutation fence. The [shared acceptance order](spec_review_lifecycle.md#implementation-order-and-required-proof)
 includes delivered hidden AUTH preparation, CON-07 participation, REV-04C
 FinalAcceptance/TASK/CON composition and ARCH-04E2-B mandatory persisted receipt
-custody and complete authorized outcomes. B8 supplies hidden completion delivery. Remediation and
-production composition remain pending. Actual CON root
+custody and complete authorized outcomes. B8 supplies completion delivery and the
+selected request/completion handlers are registered in production composition.
+False/pass effects require a live REV generation. Actual CON root
 storage and ordinal allocation remain required before either trigger creates
 fulfillment obligations; neither awards nor generic outbox rows substitute. REV-12A4A adds internal Operator transitions for the atomic-participant manifest.
 Later fulfillment drain work extends this same controller; it is not a prerequisite on live human
@@ -1183,11 +1238,10 @@ repository; all communication is through typed ports.
 
 Contribution and award reads use PostgreSQL canonical truth directly. They do
 not depend on ART, optional evidence, provider availability, balances, or
-settlement ledgers. The public contribution reads use the bounded single-response
-contract above, with no continuation cursor, exact self/project scope,
-pre-filtering, and concealment. Stable fixed-membership pagination remains later
-issue #497 work. Provider references, credentials, and secret routes are never
-returned.
+settlement ledgers. The public contribution reads use the fixed-membership page
+contract above with exact self/project scope, pre-filtering, fresh page authority
+and generic cursor concealment. Provider references, credentials, and secret
+routes are never returned.
 
 CP05A exposes only ContributionPolicy administration, using the existing CP05
 Finance authority and caller-owned transaction. Under the project-scoped
@@ -1283,9 +1337,10 @@ are delivered. The latter requires the actual AUTH decision on the same strict
 input, validates stored source authority, and stages FinalAcceptance, TASK/CON,
 applicable awards and audit/outbox together. Database closure rejects orphan
 allows and incomplete outcomes. The authorized acceptance/successor race is
-covered; B8 supplies hidden completion delivery with invocation, generation and
-commit-before-acknowledgment proof. Next prove remediation, then enable production
-composition and false-guide readiness. Conditional award facts remain atomic for paid and unpaid policies.
+covered; B8 supplies completion delivery with invocation, generation and
+commit-before-acknowledgment proof. Remediation and selected production composition
+are delivered. A complete supported false guide can activate when the approved
+inventory contains no `human_review` disposition. Conditional award facts remain atomic for paid and unpaid policies.
 The first-contribution manifest keeps fulfillment admission, dispatch and callbacks
 unavailable; obligation/root/ordinal/cutoff storage is required before a reviewed
 successor manifest enables fulfillment, not before this contribution path.
@@ -1304,8 +1359,8 @@ not wait for contribution/award persistence or REV decisions.
 
 PILOT-10's bounded reads consume existing immutable CON/award facts after their
 own exact AUTH/audit activation and snapshot proof. They do not wait for CON-08B
-fulfillment or the historical CON-10A ordering below. The later fixed-membership
-list and CLI remain separately scoped under issue 497.
+fulfillment or the historical CON-10A ordering below. Fixed-membership REST
+pages and their CLI traversal are delivered independently of fulfillment.
 
 ```text
 CON-01 -> CON-02A

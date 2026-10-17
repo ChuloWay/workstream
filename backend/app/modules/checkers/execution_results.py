@@ -2,9 +2,10 @@
 
 from dataclasses import dataclass
 
-from app.modules.checkers.api.post_submit import (
-    PostSubmissionEvaluationRequest,
-    PostSubmissionEvaluationResult,
+from app.modules.checkers.api.evaluation_contract import (
+    PostSubmissionExecutionRequest,
+    PostSubmissionExecutionResult,
+    coverage_gap_without_failure,
 )
 
 
@@ -20,57 +21,36 @@ class ResultClassification:
 
 
 def classify_result(
-    request: PostSubmissionEvaluationRequest, result: PostSubmissionEvaluationResult
+    request: PostSubmissionExecutionRequest, result: PostSubmissionExecutionResult,
+    *, human_review_required: bool,
 ) -> ResultClassification:
-    """Validate every selected member before deriving policy-governed routing."""
+    """Validate every selected member before deriving policy-governed routing.
+
+    A coverage gap (``coverage_incomplete`` without errors) never auto-accepts:
+    with human review it goes to a reviewer, otherwise it returns to the
+    contributor. TASK records that return without spending a revision round.
+    """
     result.validate_request(request)
     if result.outcome == "infrastructure_failed":
         return ResultClassification("not_evaluated", 0, 0, 0, 0)
-    members = result.member_results
-    blocking = tuple(
-        m
-        for m in members
-        if m.status != "passed" and m.severity in request.policy.blocking_severities
-    )
-    if any(m.failure_category == "task_configuration" for m in blocking):
-        routing = "task_setup_blocked"
-    elif blocking:
-        routing = "needs_revision"
-    else:
-        routing = "allow_review"
+    members = result.execution.external_members if result.execution else ()
+    failed = sum(member.result.verdict == "failed" for member in members)
+    returned = failed or (coverage_gap_without_failure(result) and not human_review_required)
     return ResultClassification(
-        routing,
-        sum(m.status == "passed" for m in members),
-        sum(m.status == "warning" for m in members),
-        sum(m.status == "failed" for m in members),
-        len(blocking),
+        "needs_revision" if returned else "allow_review",
+        sum(member.result.verdict == "passed" for member in members),
+        0,
+        failed,
+        failed,
     )
 
 
-RESULT_MESSAGES = {
+RESULT_STATUS_MESSAGES = {
     "passed": ("Check passed.", None),
-    "packet_fields_missing": (
-        "Required submission fields are missing.",
-        "Complete the required submission fields.",
+    "warning": ("Check reported a warning.", "Review the project guide and check findings."),
+    "failed": ("Project check failed.", "Review the project guide and check findings."),
+    "coverage_incomplete": (
+        "Check could not evaluate part of the submission.",
+        "Make the listed files readable by the project checks, then resubmit.",
     ),
-    "policy_context_invalid": ("The locked policy context is inconsistent.", None),
-    "evidence_missing": ("Required evidence is missing.", "Include the required evidence."),
-    "evidence_structure_invalid": (
-        "Evidence references are invalid.",
-        "Correct the evidence references.",
-    ),
-    "required_files_missing": ("Required files are missing.", "Include the required files."),
-    "forbidden_path_present": (
-        "The submission includes a forbidden path.",
-        "Remove the forbidden content.",
-    ),
-    "attestation_missing": (
-        "Required attestation is missing.",
-        "Complete the required attestation.",
-    ),
-    "placeholder_signal": (
-        "A possible placeholder needs attention.",
-        "Check the flagged submission structure.",
-    ),
-    "acceptance_criteria_missing": ("Task acceptance criteria are missing.", None),
 }

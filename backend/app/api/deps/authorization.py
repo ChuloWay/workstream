@@ -60,7 +60,7 @@ def compose_hidden_submission_creation_command(
     request_id: UUID,
     correlation_id: UUID,
 ):
-    """Wire the active hidden TASK/ART transaction without exposing a route."""
+    """Wire the sole admission-backed TASK/ART transaction for internal and HTTP callers."""
     from app.adapters.artifacts import submission_admission_consumption_port
     from app.adapters.tasks import TransactionalSubmissionCreationCommand
     from app.modules.authorization.prepared import (
@@ -112,6 +112,68 @@ async def get_authorization_actor(
 ) -> ResolvedActor:
     """Resolve an exact human or fixed-service target before kernel lifecycle denial."""
     return await resolve_authorization_actor(request, result, session, rate_control)
+
+
+async def get_task_import_batch_commands(
+    request: Request,
+    resolved: Annotated[ResolvedActor, Depends(get_authorization_actor)],
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> AsyncIterator[object]:
+    """Compose one root and restage denials only through their actual issuing owner."""
+    from app.adapters.artifacts import task_import_source_commands
+    from app.adapters.audit import task_transition_audit
+    from app.adapters.auth import task_authorization
+    from app.adapters.tasks import task_import_batch_commands
+    from app.modules.artifacts.api.task_import_source import TaskImportSourceAuthorityDenied, TaskImportSourceError
+    from app.modules.tasks.api import TaskAuthorityDenied
+    from app.modules.tasks.api.task_import import TaskImportBatchAuthorityDenied
+
+    request_id, correlation_id = (UUID(value) for value in request_ids(request))
+    context = _authorization_context(resolved, request_id, correlation_id)
+    await session.rollback()
+    authority = task_authorization(session, context)
+    source = task_import_source_commands(session, settings=request.app.state.settings, context=context)
+    try:
+        yield task_import_batch_commands(
+            session, settings=request.app.state.settings, authorization=authority,
+            audit=task_transition_audit(session), actor_profile_id=context.actor_profile_id,
+            identity_link_id=context.identity_link_id, source=source,
+        )
+    except (TaskAuthorityDenied, TaskImportBatchAuthorityDenied, TaskImportSourceAuthorityDenied) as exc:
+        await session.rollback()
+        try:
+            if isinstance(exc, TaskImportSourceAuthorityDenied):
+                await source.restage_denial(exc)
+            else:
+                await authority.restage_denial(exc)
+            await session.commit()
+        except (AuthorizationEvidenceUnavailable, SQLAlchemyError) as evidence_error:
+            await session.rollback()
+            raise StructuredHTTPException(
+                status_code=503, detail="Task import authority unavailable", error_code="task_import_authority_unavailable",
+                error_message="Task import authority unavailable", retryable=True,
+            ) from evidence_error
+        concealed = request.method == "GET"
+        raise StructuredHTTPException(
+            status_code=404 if concealed else 403,
+            detail="Task import batch not found" if concealed else "Task import authority denied",
+            error_code="task_import_batch_not_found" if concealed else "permission_not_granted",
+            error_message="Task import batch not found" if concealed else "Task import authority denied",
+        ) from exc
+    except TaskImportSourceError as exc:
+        raise StructuredHTTPException(
+            status_code=exc.status_code, detail=exc.code, error_code=exc.code,
+            error_message=exc.code.replace("_", " "), retryable=exc.status_code == 503,
+        ) from exc
+    except (AuthorizationEvidenceUnavailable, SQLAlchemyError) as exc:
+        await session.rollback()
+        raise StructuredHTTPException(
+            status_code=503, detail="Task import authority unavailable", error_code="task_import_authority_unavailable",
+            error_message="Task import authority unavailable", retryable=True,
+        ) from exc
+    finally:
+        if session.in_transaction():
+            await session.rollback()
 
 
 async def get_task_commands(
@@ -188,6 +250,23 @@ async def get_authorization_actor_identity(
             else PublicActorKind.HUMAN
         ),
         service_identity=service_identity,
+    )
+
+
+async def get_submission_creation_command(
+    request: Request,
+    resolved: Annotated[ResolvedActor, Depends(get_authorization_actor)],
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+):
+    """Bind the existing atomic writer after actor resolution releases its read root."""
+    request_id, correlation_id = (UUID(value) for value in request_ids(request))
+    context = _authorization_context(resolved, request_id, correlation_id)
+    await session.rollback()
+    return compose_hidden_submission_creation_command(
+        session,
+        context,
+        request_id=request_id,
+        correlation_id=correlation_id,
     )
 
 

@@ -9,6 +9,8 @@ from app.core.identifiers import new_record_id
 
 import pytest
 from sqlalchemy import select
+from sqlalchemy.sql.schema import Table
+from sqlalchemy.sql.visitors import iterate
 
 from app.db import session as db_session
 from app.adapters.contributions import locked_compensation_terms_port
@@ -19,6 +21,7 @@ from app.modules.tasks.api import (
     TaskCompensationTerms,
 )
 from app.modules.tasks.lifecycle import ALLOWED_TASK_TRANSITIONS
+from app.modules.tasks.api.assignment_outcome import TaskAssignmentOutcome
 from app.modules.tasks.models import TaskAssignment, WorkstreamTask
 from app.modules.tasks.repository import TaskRepository
 from tests.test_tasks import (
@@ -35,6 +38,33 @@ COMMON = {
     "deadline_at", "created_at", "updated_at",
 }
 MANAGEMENT = {"source_type", "source_ref", "source_payload_hash", "import_batch_id", "external_task_id", "created_by", "assigned_to"}
+TERMINAL = {"assignment_id", "submission_id", "status", "status_reason", "closed_at"}
+
+
+def _detail_fields(method):
+    return COMMON | {"last_assignment_outcome"} | (
+        MANAGEMENT | {"revision_context"} if method == READS[1] else {"compensation"}
+    )
+
+
+def _assert_terminal_query(statement, request):
+    """The extra read is bounded, audience-scoped and contains no finance projection."""
+    assert set(statement.selected_columns.keys()) == TERMINAL
+    assert {node.name for node in iterate(statement) if isinstance(node, Table)} == {
+        "task_assignments", "task_revision_exhaustions", "task_revision_expirations",
+    }
+    compiled = statement.compile()
+    sql = str(compiled)
+    for column, value in (("project_id", request.project_id), ("task_id", request.task_id)):
+        assert f"task_assignments.{column} =" in sql
+        assert str(value) in compiled.params.values()
+    own = isinstance(request, ContributorTaskDetailRequest)
+    assert ("task_assignments.contributor_id =" in sql) is own
+    if own:
+        assert str(request.contributor_id) in compiled.params.values()
+    assert statement._limit_clause.value == 1
+    assert "ORDER BY task_assignments.released_at DESC, task_assignments.id DESC" in sql
+    assert statement._for_update_arg is None
 
 
 def request_for(method, project_id, task_id, contributor_id=None):
@@ -48,7 +78,11 @@ async def read_once(session, method, request):
         result = await getattr(
             TaskRepository(session, compensation_terms=locked_compensation_terms_port(session)), method
         )(request)
-    assert execute.await_count == (2 if method == READS[0] and result is not None else 1)
+    expected_queries = 1 if result is None else (3 if method == READS[0] else 2)
+    assert execute.await_count == expected_queries
+    if result is not None:
+        _assert_terminal_query(execute.await_args_list[-1].args[0], request)
+        assert result.last_assignment_outcome is None
     return result
 
 
@@ -70,9 +104,16 @@ def test_task_detail_contracts():
         **values, source_type="manual", source_ref=None, source_payload_hash=None, import_batch_id=None,
         external_task_id=None, created_by="creator", assigned_to=None,
     )):
-        assert set(asdict(item)) == COMMON | (
-            MANAGEMENT if type(item) is ManagementTaskDetail else {"compensation"}
+        method = READS[1] if type(item) is ManagementTaskDetail else READS[0]
+        assert set(asdict(item)) == _detail_fields(method)
+        assert item.last_assignment_outcome is None
+        if method == READS[1]:
+            assert item.revision_context is None
+        terminal = TaskAssignmentOutcome(
+            assignment_id=new_record_id(), submission_id=new_record_id(), closed_at=now,
+            status="revision_exhausted", status_reason="revision_limit_reached",
         )
+        assert replace(item, last_assignment_outcome=terminal).last_assignment_outcome == terminal
         for field, value in asdict(item).items():
             with pytest.raises(ValueError, match="facts are invalid"):
                 replace(item, **{field: []})
@@ -190,25 +231,30 @@ async def test_task_detail_management_states(task_client):
 
 async def test_task_detail_owned_states(task_client, monkeypatch):
     project = await create_active_project(task_client)
-    task = await create_ready_task(task_client, project["id"])
+    tasks = {state: await create_ready_task(task_client, project["id"]) for state in sorted(STATES)}
     grant = await admit_and_grant_project_submitter(task_client, monkeypatch, project["id"], "detail-states")
-    claimed = await task_client.post(f"/api/v1/tasks/{task['id']}/claim", headers=auth_headers())
-    assert claimed.status_code == 200, claimed.text
     factory, seen = db_session.get_session_factory(), set()
-    for state in STATES:
+    seen_tasks = set()
+    for state in ("needs_revision", "ready", *sorted(STATES - {"needs_revision", "ready"})):
+        task = tasks[state]
+        claimed = await task_client.post(f"/api/v1/tasks/{task['id']}/claim", headers=auth_headers())
+        assert claimed.status_code == 200, claimed.text
+        assignment_id = claimed.json()["assignment"]["id"]
+        seen_tasks.add(task["id"])
         async with factory() as session, session.begin():
             row = await session.get(WorkstreamTask, task["id"])
             assert row.locked_contribution_policy_version_id is not None
             row.status = state  # Includes locked draft; ordinary unassigned draft is tested separately.
         async with factory() as session:
             row = await session.get(WorkstreamTask, task["id"])
-            assignment = await session.scalar(select(TaskAssignment).where(TaskAssignment.task_id == row.id))
+            assignment = await session.get(TaskAssignment, assignment_id)
             assert row.status == state and assignment.status == "active"
+            assert assignment.task_id == row.id
             assert row.assigned_to == assignment.contributor_id == grant["actor_profile_id"]
             result = await read_once(session, READS[0], request_for(READS[0], project["id"], row.id, UUID(row.assigned_to)))
             assert result is not None and (result.task_id, result.status) == (UUID(row.id), state)
             seen.add(result.status)
-    assert seen == STATES and len(seen) == 9
+    assert seen == STATES and len(seen) == len(seen_tasks) == 9
 
 
 @pytest.mark.parametrize("method", READS)
@@ -225,9 +271,11 @@ async def test_task_detail_projection(task_client, method):
         assert row.deadline_at == deadline and row.assigned_to is None
         expected = {name: getattr(row, name) for name in COMMON - {"task_id", "project_id", "skill_tags"}}
         expected |= dict(task_id=UUID(row.id), project_id=UUID(row.project_id), skill_tags=tuple(row.skill_tags))
-        fields = COMMON | (MANAGEMENT if method == READS[1] else {"compensation"})
+        fields = _detail_fields(method)
+        expected["last_assignment_outcome"] = None
         if method == READS[1]:
             expected |= {name: getattr(row, name) for name in MANAGEMENT}
+            expected["revision_context"] = None
         else:
             expected["compensation"] = asdict(
                 TaskCompensationTerms(
@@ -235,24 +283,31 @@ async def test_task_detail_projection(task_client, method):
                 )
             )
         execute = session.execute
+        request = request_for(method, project["id"], row.id)
+        projections = [COMMON | MANAGEMENT if method == READS[1] else COMMON | {
+            "locked_contribution_policy_version_id"
+        }]
+        if method == READS[0]:
+            projections.append({
+                "version_id", "rule_id", "contribution_type", "compensation_mode",
+                "instrument_type", "unit_code", "quantity",
+            })
+        projections.append(TERMINAL)
 
         async def checked_execute(statement, *args, **kwargs):
             result = await execute(statement, *args, **kwargs)  # Actual database query, not a canned result.
             selected = set(statement.selected_columns.keys())
-            expected_selected = fields if method == READS[1] else (fields - {"compensation"}) | {
-                "locked_contribution_policy_version_id"
-            }
-            assert selected == expected_selected or selected == {
-                "version_id", "rule_id", "contribution_type", "compensation_mode",
-                "instrument_type", "unit_code", "quantity",
-            }
+            assert projections and selected == projections.pop(0)
+            if selected == TERMINAL:
+                _assert_terminal_query(statement, request)
             return result
 
         with patch.object(session, "execute", wraps=checked_execute) as observed:
             detail = await getattr(
                 TaskRepository(session, compensation_terms=locked_compensation_terms_port(session)), method
-            )(request_for(method, project["id"], row.id))
-        assert observed.await_count == (2 if method == READS[0] else 1)
+            )(request)
+        assert not projections
+        assert observed.await_count == (3 if method == READS[0] else 2)
         assert type(detail) is (ManagementTaskDetail if method == READS[1] else ContributorTaskDetail)
         assert asdict(detail) == expected
         assert set(asdict(detail)) == fields

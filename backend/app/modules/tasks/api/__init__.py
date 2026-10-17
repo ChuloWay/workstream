@@ -9,7 +9,7 @@ from app.modules.tasks.api.accepted_effects import (
     TaskAcceptedEffectsUnavailable,
 )
 from app.modules.tasks.api.post_submit_routing import (
-    TaskPostSubmitManifestFacts, TaskPostSubmitSourceProposal, TaskRoutingSourcePreparation,
+    TaskPostSubmitManifestFacts, TaskPostSubmitSourceProposal, TaskRoutingSourcePreparation, TaskRevisionExhaustionFacts,
     task_post_submit_source_digest,
     TaskRoutingSelection, TaskRoutingRequestFacts, task_routing_request_digest,
 )
@@ -37,6 +37,7 @@ from app.modules.tasks.api.submission_context import (
     TaskSubmissionContextRequest,
     TaskSubmissionContextStatus,
     TaskSubmissionContextUnavailable,
+    TaskRetainedSubmissionParentsRequest,
 )
 from app.modules.tasks.api.submission_command import (
     SubmissionCreationAuthorizationPort,
@@ -46,6 +47,7 @@ from app.modules.tasks.api.submission_command import (
     SubmissionCreationRequest,
     SubmissionCreationResult,
     SubmissionCreationUnavailable,
+    SubmissionCreationAdmissionError,
 )
 
 from app.modules.tasks.api.ready_queue import (
@@ -113,7 +115,7 @@ __all__ = (
     "TaskAcceptedEffectsResult",
     "TaskAcceptedEffectsUnavailable",
     "TaskPolicyLineage",
-    "TaskPostSubmitManifestFacts", "TaskPostSubmitSourceProposal", "TaskRoutingSourcePreparation",
+    "TaskPostSubmitManifestFacts", "TaskPostSubmitSourceProposal", "TaskRoutingSourcePreparation", "TaskRevisionExhaustionFacts",
     "task_post_submit_source_digest",
     "TaskRoutingSelection",
     "TaskRoutingRequestFacts",
@@ -142,6 +144,7 @@ __all__ = (
     "TaskSubmissionContextRequest",
     "TaskSubmissionContextStatus",
     "TaskSubmissionContextUnavailable",
+    "TaskRetainedSubmissionParentsRequest",
     "SubmissionCreationAuthorizationPort",
     "SubmissionCreationAuthorityFacts",
     "SubmissionCreationPreparationFacts",
@@ -149,4 +152,5 @@ __all__ = (
     "SubmissionCreationRequest",
     "SubmissionCreationResult",
     "SubmissionCreationUnavailable",
+    "SubmissionCreationAdmissionError",
 )

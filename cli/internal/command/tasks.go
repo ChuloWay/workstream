@@ -44,7 +44,7 @@ func addTaskReads(project *cobra.Command, client func() (*api.Client, error), ou
 	tasks.Flags().IntVar(&limit, "limit", 50, "Page size (1–100; keep unchanged when continuing)")
 	tasks.Flags().StringVar(&cursor, "cursor", "", "Opaque next cursor from the previous page")
 	project.AddCommand(tasks)
-	project.AddCommand(&cobra.Command{
+	task := &cobra.Command{
 		Use: "task PROJECT_ID TASK_ID", Short: "Inspect a task under project-manager authority", Args: cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			apiClient, err := client()
@@ -62,13 +62,23 @@ func addTaskReads(project *cobra.Command, client func() (*api.Client, error), ou
 			if err := writeTaskSummary(stdout, t.TaskSummary); err != nil {
 				return err
 			}
+			if err := writeAssignmentOutcome(stdout, t.LastAssignmentOutcome); err != nil {
+				return err
+			}
+			if t.RevisionContext != nil {
+				if err := writeTaskContextFields(stdout, []contextField{{"Revision context", t.RevisionContext}}); err != nil {
+					return err
+				}
+			}
 			_, err = fmt.Fprintf(stdout,
 				"Description: %s\nAcceptance criteria: %s\nRejection criteria: %s\nSource type: %s\nSource reference: %s\nSource hash: %s\nImport batch: %s\nExternal task: %s\nCreated by: %s\nAssigned to: %s\n",
 				safeText(t.Description), optional(t.AcceptanceCriteria), optional(t.RejectionCriteria), safeText(t.SourceType),
 				optional(t.SourceRef), optional(t.SourcePayloadHash), optional(t.ImportBatchID), optional(t.ExternalTaskID), safeText(t.CreatedBy), optional(t.AssignedTo))
 			return err
 		},
-	})
+	}
+	addManagerTaskWrites(task, client, output, stdout)
+	project.AddCommand(task)
 }
 
 func writeTaskSummary(w io.Writer, t api.TaskSummary) error {

@@ -23,8 +23,8 @@ from app.core.hashing import canonical_json_hash
 
 from app.interfaces.artifacts import (
     ArtifactInputMismatchError,
-    ArtifactIntegrityError,
     ArtifactLimitExceededError,
+    ArtifactScratchIntegrityError,
     ArtifactStoreUnavailableError,
 )
 from app.core.cancellation import (
@@ -80,12 +80,6 @@ class ArtifactPreparationDeadlineError(ArtifactStoreUnavailableError):
     code = "artifact_preparation_deadline_exceeded"
 
 
-class ArtifactScratchIntegrityError(ArtifactIntegrityError):
-    """Raised when private scratch state violates its filesystem contract."""
-
-    code = "artifact_scratch_integrity_failure"
-
-
 @dataclass(frozen=True, slots=True)
 class ExternalMaterialFile:
     """One server-inspected file identity published to an external checker."""
@@ -108,6 +102,31 @@ class ExternalMaterialFile:
             or type(self.executable) is not bool
         ):
             raise ValueError("external material file identity is invalid")
+
+
+def _validate_external_material_tree(
+    directories: tuple[str, ...], files: tuple[ExternalMaterialFile, ...]
+) -> None:
+    """Validate the shared closed path inventory without fabricating phase facts."""
+    if (
+        type(files) is not tuple
+        or type(directories) is not tuple
+        or any(type(item) is not ExternalMaterialFile for item in files)
+        or any(
+            type(path) is not str
+            or not path
+            or path.startswith("/")
+            or any(part in {"", ".", ".."} for part in path.split("/"))
+            or "\x00" in path
+            for path in directories
+        )
+        or tuple(sorted(directories)) != directories
+        or len(set(directories)) != len(directories)
+        or tuple(sorted(files, key=lambda item: item.normalized_path)) != files
+        or len({item.normalized_path for item in files}) != len(files)
+        or set(directories) & {item.normalized_path for item in files}
+    ):
+        raise ValueError("external material tree is invalid")
 
 
 @dataclass(frozen=True, slots=True)
@@ -141,24 +160,125 @@ class ExternalMaterialGrantRequest:
             )
             or type(self.archive_byte_count) is not int
             or not 0 <= self.archive_byte_count <= HARD_MAXIMUM_ARTIFACT_BYTES
-            or type(self.files) is not tuple
-            or type(self.directories) is not tuple
-            or any(type(item) is not ExternalMaterialFile for item in self.files)
-            or any(
-                type(path) is not str
-                or not path
-                or path.startswith("/")
-                or any(part in {"", ".", ".."} for part in path.split("/"))
-                or "\x00" in path
-                for path in self.directories
-            )
-            or tuple(sorted(self.directories)) != self.directories
-            or len(set(self.directories)) != len(self.directories)
-            or tuple(sorted(self.files, key=lambda item: item.normalized_path)) != self.files
-            or len({item.normalized_path for item in self.files}) != len(self.files)
-            or set(self.directories) & {item.normalized_path for item in self.files}
         ):
             raise ValueError("external material grant request is invalid")
+        _validate_external_material_tree(self.directories, self.files)
+
+    def manifest_identity(self) -> dict[str, object]:
+        """Return the exact PRE lineage written into the private grant manifest."""
+        return {
+            "phase": "pre_submit",
+            "prepared_generation_id": self.prepared_generation_id,
+            "attempt_id": self.attempt_id,
+            "attempt_request_digest": self.attempt_request_digest,
+            "archive_sha256": self.archive_sha256,
+            "archive_byte_count": self.archive_byte_count,
+            "semantic_manifest_sha256": self.semantic_manifest_sha256,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class PostExternalMaterialGrantRequest:
+    """Exact verified Submission, ART and lease facts for one POST callback."""
+
+    request_digest: str
+    submission_id: str
+    submission_version: int
+    evaluation_request_id: str
+    evaluation_request_digest: str
+    evaluation_generation: int
+    attempt_id: str
+    result_id: str
+    lease_id: str
+    lease_generation: int
+    lease_expires_at: str
+    binding_id: str
+    content_id: str
+    replica_id: str
+    content_sha256: str
+    byte_count: int
+    evidence_id: str
+    verification_receipt_id: str
+    verification_job_id: str
+    verification_generation: int
+    namespace_fingerprint: str
+    semantic_manifest_sha256: str
+    directories: tuple[str, ...]
+    files: tuple[ExternalMaterialFile, ...]
+
+    def __post_init__(self) -> None:
+        """Reject a partial POST lineage before publishing any scratch path."""
+        digests = (
+            self.request_digest,
+            self.evaluation_request_digest,
+            self.content_sha256,
+            self.namespace_fingerprint,
+            self.semantic_manifest_sha256,
+        )
+        identifiers = (
+            self.submission_id,
+            self.evaluation_request_id,
+            self.attempt_id,
+            self.result_id,
+            self.lease_id,
+            self.binding_id,
+            self.content_id,
+            self.replica_id,
+            self.evidence_id,
+            self.verification_receipt_id,
+            self.verification_job_id,
+        )
+        if (
+            any(not re.fullmatch(r"sha256:[0-9a-f]{64}", value) for value in digests)
+            or any(
+                not re.fullmatch(
+                    r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}",
+                    value,
+                )
+                for value in identifiers
+            )
+            or any(
+                type(value) is not int or value <= 0
+                for value in (
+                    self.submission_version,
+                    self.evaluation_generation,
+                    self.lease_generation,
+                    self.verification_generation,
+                )
+            )
+            or type(self.byte_count) is not int
+            or not 0 <= self.byte_count <= HARD_MAXIMUM_ARTIFACT_BYTES
+            or not self.lease_expires_at.endswith(("Z", "+00:00"))
+        ):
+            raise ValueError("external POST material grant request is invalid")
+        _validate_external_material_tree(self.directories, self.files)
+
+    def manifest_identity(self) -> dict[str, object]:
+        """Return complete POST custody without storage-provider coordinates."""
+        return {
+            "phase": "post_submit",
+            "submission_id": self.submission_id,
+            "submission_version": self.submission_version,
+            "evaluation_request_id": self.evaluation_request_id,
+            "evaluation_request_digest": self.evaluation_request_digest,
+            "evaluation_generation": self.evaluation_generation,
+            "attempt_id": self.attempt_id,
+            "result_id": self.result_id,
+            "lease_id": self.lease_id,
+            "lease_generation": self.lease_generation,
+            "lease_expires_at": self.lease_expires_at,
+            "binding_id": self.binding_id,
+            "content_id": self.content_id,
+            "replica_id": self.replica_id,
+            "content_sha256": self.content_sha256,
+            "byte_count": self.byte_count,
+            "evidence_id": self.evidence_id,
+            "verification_receipt_id": self.verification_receipt_id,
+            "verification_job_id": self.verification_job_id,
+            "verification_generation": self.verification_generation,
+            "namespace_fingerprint": self.namespace_fingerprint,
+            "semantic_manifest_sha256": self.semantic_manifest_sha256,
+        }
 
 
 @dataclass(frozen=True, slots=True)
@@ -177,8 +297,8 @@ class ArtifactPreparationLimits:
     maximum_files: int = 8
     maximum_concurrency: int = 4
     minimum_free_bytes: int = HARD_MAXIMUM_ARTIFACT_BYTES
-    reservation_ttl_seconds: float = 2400.0
-    total_deadline_seconds: float = 1800.0
+    reservation_ttl_seconds: float = 3900.0
+    total_deadline_seconds: float = 3400.0
     cleanup_margin_seconds: float = 300.0
     stream_buffer_bytes: int = 1024 * 1024
     maximum_source_bytes: int = HARD_MAXIMUM_ARTIFACT_BYTES
@@ -579,10 +699,13 @@ class ArtifactScratchManager:
     def _external_material_grant(
         self,
         workspace: Path,
-        request: ExternalMaterialGrantRequest,
+        request: ExternalMaterialGrantRequest | PostExternalMaterialGrantRequest,
     ) -> Iterator[ExternalMaterialGrant]:
         """Publish one sealed request-bound workspace for the callback lifetime."""
-        if type(request) is not ExternalMaterialGrantRequest:
+        if type(request) not in {
+            ExternalMaterialGrantRequest,
+            PostExternalMaterialGrantRequest,
+        }:
             raise ValueError("external material grant request is invalid")
         with self._tracked_operation():
             grant = self._publish_external_grant_sync(workspace, request)
@@ -594,7 +717,7 @@ class ArtifactScratchManager:
     def _publish_external_grant_sync(
         self,
         workspace: Path,
-        request: ExternalMaterialGrantRequest,
+        request: ExternalMaterialGrantRequest | PostExternalMaterialGrantRequest,
     ) -> ExternalMaterialGrant:
         """Move the projected tree below a fixed mount and seal its exact manifest."""
         try:
@@ -684,12 +807,7 @@ class ArtifactScratchManager:
                     "protocol_version": _EXTERNAL_GRANT_PROTOCOL,
                     "grant_id": grant_id,
                     "request_digest": request.request_digest,
-                    "prepared_generation_id": request.prepared_generation_id,
-                    "attempt_id": request.attempt_id,
-                    "attempt_request_digest": request.attempt_request_digest,
-                    "archive_sha256": request.archive_sha256,
-                    "archive_byte_count": request.archive_byte_count,
-                    "semantic_manifest_sha256": request.semantic_manifest_sha256,
+                    **request.manifest_identity(),
                     "directories": list(observed_directories),
                     "files": list(observed),
                 }
@@ -1049,7 +1167,7 @@ class ArtifactScratchManager:
             os.fsync(self._root_fd)
 
     def _validate_existing_root_marker(self) -> None:
-        """Require exact limits, with a safe-empty upgrade from the prior marker."""
+        """Require the exact current scratch limits marker."""
         descriptor = os.open(
             _ROOT_MARKER,
             os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0),
@@ -1060,25 +1178,8 @@ class ArtifactScratchManager:
             marker = os.read(descriptor, max(len(self._root_marker_content), 256) + 1)
         finally:
             os.close(descriptor)
-        if marker == self._root_marker_content:
-            return
-        if marker != self._legacy_marker_content(self._limits):
+        if marker != self._root_marker_content:
             raise ValueError("artifact scratch root marker is invalid")
-        ledger = self._read_ledger_optional()
-        if ledger is None or ledger["reservations"] or ledger["workspaces"]:
-            raise ValueError("artifact scratch root marker cannot migrate while in use")
-        descriptor = os.open(
-            _ROOT_MARKER,
-            os.O_WRONLY | os.O_TRUNC | getattr(os, "O_NOFOLLOW", 0),
-            dir_fd=self._root_fd,
-        )
-        try:
-            self._assert_private_file_descriptor(descriptor, expected_mode=0o600)
-            self._write_all(descriptor, memoryview(self._root_marker_content))
-            os.fsync(descriptor)
-        finally:
-            os.close(descriptor)
-        os.fsync(self._root_fd)
 
     @staticmethod
     def _marker_content(limits: ArtifactPreparationLimits) -> bytes:
@@ -1103,27 +1204,6 @@ class ArtifactScratchManager:
         ).encode("utf-8")
         return _ROOT_MARKER_PREFIX + hashlib.sha256(canonical).hexdigest().encode("ascii") + b"\n"
 
-    @staticmethod
-    def _legacy_marker_content(limits: ArtifactPreparationLimits) -> bytes:
-        """Reconstruct the pre-04B2 marker for one safe-empty local upgrade."""
-        payload = {
-            "aggregate_reserved_bytes": limits.aggregate_reserved_bytes,
-            "cleanup_margin_seconds": float(limits.cleanup_margin_seconds),
-            "maximum_concurrency": limits.maximum_concurrency,
-            "maximum_files": limits.maximum_files,
-            "maximum_source_bytes": limits.maximum_source_bytes,
-            "minimum_free_bytes": limits.minimum_free_bytes,
-            "reservation_ttl_seconds": float(limits.reservation_ttl_seconds),
-            "stream_buffer_bytes": limits.stream_buffer_bytes,
-            "total_deadline_seconds": float(limits.total_deadline_seconds),
-        }
-        canonical = json.dumps(
-            payload,
-            allow_nan=False,
-            separators=(",", ":"),
-            sort_keys=True,
-        ).encode("utf-8")
-        return _ROOT_MARKER_PREFIX + hashlib.sha256(canonical).hexdigest().encode("ascii") + b"\n"
 
     @staticmethod
     def _validate_layout_entries(
@@ -1522,22 +1602,6 @@ class ArtifactScratchManager:
             ledger = json.loads(raw.decode("utf-8"))
         except (UnicodeDecodeError, json.JSONDecodeError) as exc:
             raise ArtifactScratchIntegrityError("artifact scratch ledger is invalid") from exc
-        if isinstance(ledger, dict) and ledger.get("version") == 2:
-            if set(ledger) == {"version", "reservations"}:
-                ledger = {**ledger, "workspaces": []}
-            if set(ledger) == {"version", "reservations", "workspaces"}:
-                ledger = {
-                    **ledger,
-                    "version": _LEDGER_VERSION,
-                    "workspaces": [
-                        {
-                            **entry,
-                            "reserved_bytes": 0,
-                            "maximum_entries": self._limits.maximum_workspace_entries,
-                        }
-                        for entry in ledger["workspaces"]
-                    ],
-                }
         self._validate_ledger(ledger)
         return ledger
 
@@ -1990,7 +2054,7 @@ class ArtifactPreparationService:
         self,
         prepared: PreparedArtifact,
         workspace: Path,
-        request: ExternalMaterialGrantRequest,
+        request: ExternalMaterialGrantRequest | PostExternalMaterialGrantRequest,
     ) -> Iterator[ExternalMaterialGrant]:
         """Issue one grant from the live prepared source and current callback only."""
         if type(prepared) is not PreparedArtifact or prepared._owner is not self:
@@ -2002,9 +2066,20 @@ class ArtifactPreparationService:
             or not active.handle_issued
             or active.stream_claimed
             or self._external_grant_workspaces.get(binding) != workspace
-            or request.prepared_generation_id != str(prepared.generation_id)
+        ):
+            raise ArtifactScratchIntegrityError("external material provenance differs")
+        pre_mismatch = type(request) is ExternalMaterialGrantRequest and (
+            request.prepared_generation_id != str(prepared.generation_id)
             or request.archive_sha256 != active.commitment.sha256
             or request.archive_byte_count != active.commitment.byte_count
+        )
+        post_mismatch = type(request) is PostExternalMaterialGrantRequest and (
+            request.content_sha256 != active.commitment.sha256
+            or request.byte_count != active.commitment.byte_count
+        )
+        if (
+            pre_mismatch
+            or post_mismatch
         ):
             raise ArtifactScratchIntegrityError("external material provenance differs")
         with self._manager._external_material_grant(workspace, request) as grant:

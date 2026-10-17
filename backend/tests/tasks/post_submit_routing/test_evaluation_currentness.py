@@ -91,9 +91,7 @@ async def _acceptance_wins(tmp_path, database_url):
                                       {"id": original.attempt_id})
                 await session.execute(text("SET LOCAL lock_timeout='250ms'"))
                 assert await evaluation_coordinator(session).reserve_current_evaluation(h.request) == original
-            changed = change_request(h.request, structural_input=h.request.structural_input.model_copy(
-                update={"summary": "Changed envelope, unchanged immutable TASK lineage."},
-            ))
+            changed = change_request(h.request, byte_count=h.request.byte_count + 1)
             with pytest.raises(CheckerRequestConflict, match="checker_request_conflict"):
                 await evaluation_coordinator(session).reserve_current_evaluation(changed)
             fence = await session.get(CheckerSubmissionFence, str(h.request.submission_id))

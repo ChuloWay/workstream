@@ -28,8 +28,17 @@ def proposal_http_error(exc: GuideProposalError) -> StructuredHTTPException:
         code, status, message = exc.code, 503, "Guide proposal storage unavailable"
     else:
         code, status, message = exc.code, 409, "Guide proposal conflicts with current state"
+    details = None
+    if exc.code == "approval_blocked" and exc.missing_capabilities:
+        message = "Guide requires unavailable checker capabilities"
+        details = {
+            "missing_capabilities": [
+                item.model_dump(mode="json") for item in exc.missing_capabilities
+            ]
+        }
     return StructuredHTTPException(
         status_code=status, detail=code, error_code=code, error_message=message,
+        error_details=details,
         retryable=status == 503,
     )
 

@@ -31,6 +31,7 @@ from tests.conftest import (  # noqa: E402
 )
 from tests.projects.guide_activation.source_fixtures import source_case  # noqa: E402
 from tests.projects.guide_compilation.proposals.pg_support import seed_review_actor  # noqa: E402
+from tests.checkers.external.support import post_registry_spec  # noqa: E402
 
 
 @pytest.mark.asyncio
@@ -55,7 +56,10 @@ async def test_post_policy_public_socket_history_and_fresh_authority(
         )
 
     # Canonical retained source/compilation prerequisites, not a provider-inference claim.
-    async with source_case(clean_postgres_database) as (
+    async with source_case(
+        clean_postgres_database,
+        post_submit_registry_spec=post_registry_spec(),
+    ) as (
         _,
         factory,
         command,
@@ -195,6 +199,32 @@ async def test_post_policy_public_socket_history_and_fresh_authority(
                 assert response.status_code == 200, response.text
                 compiled = success(read(policy_id))
                 assert compiled == response.json()
+                assert compiled["policy"]["schema_version"] == (
+                    "external_post_submit_policy.v1"
+                )
+                assert (
+                    compiled["policy"]["policy_sha256"]
+                    == (compiled["target"]["policy_hash"])
+                )
+                assert len(compiled["policy"]["entries"]) == 1
+                selected = compiled["policy"]["entries"][0]
+                assert (
+                    selected["stage"] == selected["registry"]["phase"] == "post_submit"
+                )
+                assert selected["registry"]["input_schema"]["schema_id"] == (
+                    "external_checker_post_submit_input"
+                )
+                assert selected["registry"]["output_schema"]["schema_id"] == (
+                    "external_checker_result"
+                )
+                assert (
+                    not {
+                        "catalogue_id",
+                        "catalogue_source_version",
+                        "blocking_severities",
+                    }
+                    & compiled["policy"].keys()
+                )
                 assert (
                     compiled["lifecycle_status"] == "compiled"
                     and compiled["current"] is True

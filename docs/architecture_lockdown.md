@@ -4,6 +4,12 @@ Last updated: 2026-08-11
 
 ## Purpose
 
+Workstream defines a shared protocol for governed work and provides its
+software implementation. This lockdown governs the current implementation;
+the protocol framing does not change its runtime, authority, or v0.1 scope.
+See [Protocol And Implementation](protocol-and-implementation.md) for the
+distinction and the remaining specification and conformance work.
+
 This note locks the Workstream v0.1 architecture around a source-agnostic,
 governed contribution core: project guide discipline, task contracts, human
 accountability for agent-assisted work, immutable artifact custody,
@@ -65,10 +71,17 @@ authorized automated FinalAcceptance and submitter contribution after required
 post-submit checks pass, without human admission, a synthetic Review or a
 reviewer contribution. Its source/authority/CON design is defined in the
 [shared acceptance contract](spec_review_lifecycle.md#finalacceptance);
-REV-04C supplies its hidden FinalAcceptance/TASK/CON transaction participant,
+REV-04C supplies its FinalAcceptance/TASK/CON transaction participant,
 and ARCH-04E2-B binds actual routing authority, immutable evidence and complete
-atomic outcomes under currentness custody. B8 supplies hidden completion delivery. Remediation and
-production composition remain before false-guide activation and public intake.
+atomic outcomes under currentness custody. B8 supplies completion delivery;
+selected request/completion handlers are registered. ARCH-02I-B exposes public
+ZIP preparation and admission-backed initial/checker-remediation Submission
+creation in OpenAPI. A complete supported false guide activates only when its
+approved requirement inventory contains no
+`human_review` disposition. New false/pass effects still require a live REV
+generation; a pre-effect non-live refusal rolls back and uses bounded retry.
+The bounded local public API and Celery service drill starts from public guide inputs
+with recorded inference; this does not establish hosted deployment.
 This amendment does not enable raw checker results to create acceptance or
 change the existing human branch's implementation contract.
 The ReviewPolicy field `requires_second_review` is fixed to `false` in v0.1.
@@ -185,41 +198,42 @@ Project Manager approves the internal policy bundle
 before guide activation. Project owners do not approve Workstream's internal
 submission policy schema.
 
-`SubmissionArtifactPolicy` defines project-level intake rules. Workstream combines it with the non-bypassable Workstream default submission artifact policy to create `EffectiveProjectSubmissionArtifactPolicy`. Workstream then generates, persists, and locks project `PreSubmitCheckerPolicy` with a compiled bundle hash from that effective project submission artifact policy. Tasks lock the applicable guide snapshot, effective project submission artifact policy hash, and pre-submit checker bundle hash before entering the contributor pipeline.
+Tasks lock the approved guide and its exact PRE/POST image policies before
+entering the contributor pipeline. Workstream provides one versioned default
+checker: safe ZIP/resource bounds, server-verified digest and manifest,
+high-confidence secret rejection, and unchanged-work rejection unless locked
+rules changed. Missing summary or attestation produces warnings only. All
+project checks are approved, digest-pinned external images; there is no built-in
+project-rule catalogue or alternate checker runtime.
 
-Blocking pre-submit failures prevent submission creation. The mounted
-authorized hidden preparation route returns `pre_submission_checker_failed`
-with exact ordered bounded results in the same request. It remains absent from
-OpenAPI, and public intake activation remains pending. Failures create no submission
+Blocking pre-submit failures prevent submission creation. The public authorized ZIP preparation route returns
+`pre_submission_checker_failed` with exact ordered bounded results in the same
+request. It is published in OpenAPI alongside admission-backed Submission creation. Failures create no submission
 row, no submission version, no task transition to `submitted`, and no
 submission-created audit event. ART constructs a bounded audit-ready projection;
 publication as a task event named `pre_submission_check_failed` remains pending.
 That event must contain only this closed, path-redacted projection: actor-profile ID, project ID, task ID, preparation
 attempt ID, effective-plan hash, terminal status, pass/warning/failure counts,
-and a bounded ordered list of catalogue ID/version plus stable outcome code.
+and bounded ordered default or registered-image identities plus stable outcome codes.
 It excludes filenames, archive paths, scratch/provider references, credentials,
 raw checker output, evidence content, and free-form or unbounded messages. This
-is audit evidence, not a product review decision. POL-07B removes the independently invocable
-JSON precheck. The internal pre-submit phase command uses ART's existing
-execution or completed-evidence recovery after reservation commits. WS-ARCH-001-02I retains the
-broader Submission caller migration and its downstream prerequisites.
+is audit evidence, not a product review decision.
 
-Hidden ART-04B2 uses XINT-06A's two-stage fixed-materializer PREP. It locks the
-service/action and scalar lineage before ZIP inspection, then consumes the same
-process-local handle with the server-computed semantic-manifest identity before
-workspace reservation or checker execution. It reserves the complete expanded
-workspace budget, verifies one canonical sealed tree against the 04A identities,
-and runs only platform/default catalogue entries. The callback-scoped tree and
-all paths are destroyed before bounded results return. Hidden ART-04B3 extends
-that same plan and sealed-tree callback
-to the locked project-policy entries, then reloads the exact task context and
-persists one immutable platform-plus-project evidence set after scratch cleanup.
-It creates no provider object, admission, Submission, or lifecycle effect;
-AUTH activation remains XINT-06A. POL-07A commits an ART execution reservation
-before invoking checks, then obtains fresh materialization authority; a prepared
-AUTH handle never crosses that commit. Completed replay freshly authorizes the
-stored original generation and returns evidence without another checker run or
-pass capability.
+ART safely expands the ZIP in bounded private scratch and independently verifies
+the bytes and manifest. The default checker runs before any project PRE image.
+Each image receives verified files read-only through the Rust service and its
+callback-scoped grant. CHECKERS commits its execution lease before material work;
+TASK custody precedes CHECKERS locks, and no authority transaction stays open
+through image execution. Scratch is destroyed before finalization revalidates
+the exact assignment, locked policy, material and lease.
+
+Only a complete PRE pass permits the existing caller-owned atomic transaction to
+consume admission and commit an immutable Submission, `evaluation_pending`, and
+the initial POST dispatch together. Work failures return bounded findings,
+create no Submission, and leave the task `in_progress`. Infrastructure failures
+remain recoverable. POST images evaluate immutable Submission material and
+produce evidence for the existing governed routing operation. Exact replay
+requires fresh authority and returns original immutable facts.
 
 Tasks lock to the active guide version at creation or screening time before entering `READY`. Material guide changes require a new guide version.
 
@@ -227,7 +241,7 @@ For guide and context resolution, TaskAssignment contributes only its `task_id`;
 it still retains required contributor, assignment, status, and frozen submitter
 contribution-policy attribution. Each immutable Submission stamps the exact
 Project Guide identity, version, and activation sequence used by that attempt.
-After a human `needs_revision` Review, preparation compares the complete prior
+After a committed checker or human `needs_revision`, preparation compares the complete prior
 stamped context with all applicable current guide and policy selectors. Exact
 component matches keep; every changed valid component rebases together;
 incomplete, inconsistent, revoked, or unsafe context blocks for manager repair.
@@ -258,8 +272,8 @@ is part of the complete governing work context. Guide activation binds one
 `ContributionPolicyVersion`; task readiness locks it before claimability, and
 TaskAssignment copies it, Submission stamps the attempt value, and ReviewLease
 copies that stamp without claim-time selection.
-Publication never silently changes existing work. A human `needs_revision`
-may atomically rebase the continuing Task and TaskAssignment for the next
+Publication never silently changes existing work. Checker or human
+`needs_revision` preparation may atomically rebase the continuing Task and TaskAssignment for the next
 submission attempt while the completed lease and prior history remain
 immutable. Either rule may be
 explicitly unpaid and therefore create no award.
@@ -274,8 +288,9 @@ In v0.1, this is enforced through:
 - contributor attestation
 - immutable submission versions
 - checker results bound to artifact hashes
-- human review before acceptance when the locked policy requires it; the
-  planned false branch requires separately authorized acceptance evidence
+- human review before acceptance when the locked policy requires it; the false
+  branch requires separately authorized acceptance evidence and a live REV
+  generation for new effects
 - immutable Review, finding, response, and resolution history on the human branch
 
 An explicit owner-agent execution workspace is later work.
@@ -317,19 +332,17 @@ metadata only. Decision and contribution creation perform no ART call.
 
 ### Pre-Submission Checker Boundary
 
-CHECKERS owns the single deterministic effective pre-submission plan. The 02C
-boundary exposes its public planning port and bounded result facts and migrates
-the touched TASK and ART admission call path away from the catalogue, compiler,
-and executor internals. ART retains exclusive ownership of byte custody,
-storage scheme, evidence persistence, pass capability, and admission attachment.
+CHECKERS owns the default-plus-external PRE contract, exact approved image
+bindings and durable run/lease/result custody. ART owns verified bytes, bounded
+scratch, immutable storage and admission attachment. Callers use typed public
+ports through application composition. Both executable catalogues and their
+old request/result decoders are removed.
 
-Public CHECKER results contain the plan identity, eligibility outcome, and
-bounded per-definition facts only. They never expose prepared-artifact custody,
-scratch state, provider details, or durable evidence identity. Concrete
-catalogue and executor implementations remain CHECKER-private and meet callers
-only through application composition. Existing ART materialization and evidence
-imports that have not yet migrated remain frozen private-edge debt; the next
-ART boundary chunk must move those exact consumers to this public surface.
+Contributor feedback contains bounded default/image findings and eligibility.
+It conceals scratch state, provider coordinates, credentials and raw checker
+output. Public contributor ZIP preparation and admission-backed Submission creation
+are implemented. CLI submit/status remains separate; the bounded local public API
+and Celery service drill starts from public guide inputs with recorded inference.
 
 ### Contribution Records
 
@@ -339,12 +352,12 @@ On the human branch, every valid recorded human Review creates an immutable revi
 FinalAcceptance only for `accept`; that fact, not direct inspection of
 `Review.decision`, sources one submitter `accepted_submission` contribution
 record. `needs_revision`, `reject`, and automated checker outcomes create no
-FinalAcceptance or submitter contribution by themselves. On the planned false
+FinalAcceptance or submitter contribution by themselves. On the false
 branch, an authorized automated decision creates FinalAcceptance and the
 submitter contribution through the shared atomic participant, never a reviewer
 contribution. The [shared acceptance contract](spec_review_lifecycle.md#finalacceptance)
-defines both triggers and their source/authority constraints. Runtime proof is
-required before activation; it is not a checker-owned write or fabricated Review.
+defines both triggers and their source/authority constraints. It is not a
+checker-owned write or fabricated Review.
 
 Contribution records are separate from compensation status. Each record freezes
 its exact review, submission, actor, policy, and artifact-hash lineage.
@@ -374,11 +387,24 @@ These ideas remain architecture-compatible, but they are not part of the first b
 - marketplace discovery
 - adjudication lifecycle, queues, leases, decisions, and actions
 
+A future research hypothesis for assistive task/dependency proposals and
+contributor matching is documented in the
+[Product Brief](product_brief.md#future-research-hypothesis-accountable-orchestration).
+It does not alter this lockdown, create a Planned capability, or authorize an
+implementation. Any experiment must enter through a separately approved
+initiative and reuse the existing source/import, Task screening, Authorization,
+TaskAssignment, Review, FinalAcceptance, ContributionRecord, reputation, and
+external-adapter boundaries.
+
 ## Canonical Names
+
+Task-local `acceptance_criteria` is optional and may be omitted or null. The
+project guide must still define acceptance requirements; tasks retain their
+locked guide and policy identities. A missing optional task field alone is not
+a setup defect.
 
 Use these names consistently:
 
-- `check_acceptance_criteria_present`
 - `ContributionRecord`
 - `ContributionPolicyVersion`
 - `CompensationAward`

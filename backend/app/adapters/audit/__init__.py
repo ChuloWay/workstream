@@ -20,7 +20,13 @@ from app.modules.tasks.api.assignment_invalidation import (
     AssignmentInvalidationAuthorityFacts,
     assignment_invalidation_resource_digest,
 )
+from app.modules.tasks.api.revision_expiry import (
+    TaskRevisionExpiryAuthorityFacts, TaskRevisionExpiryAuditPort,
+    TaskRevisionExpiryEvidence, TaskRevisionExpiryReceiptSnapshot, TaskRevisionExpiryUnavailable,
+    revision_expiry_resource_digest,
+)
 from app.modules.tasks.api import TaskAuthorityOperation, TaskTransitionAuditPort, TaskTransitionFacts
+from app.modules.tasks.api.transition_audit import TaskRevisionRepairAuditFacts
 
 
 class _TaskTransitionAudit:
@@ -60,9 +66,85 @@ class _TaskTransitionAudit:
         ))
 
 
+    async def record_revision_repair(self, facts: TaskRevisionRepairAuditFacts) -> None:
+        await self._participant.add_event(LifecycleAuditEventInput(
+            event_id=facts.event_id, entity_type=LifecycleAuditEntityType.TASK,
+            entity_id=facts.task_id, event_type=LifecycleAuditEventType.TASK_REVISION_CONTEXT_REPAIRED,
+            actor_id=facts.actor_profile_id, reason=LifecycleAuditReason.FACT_RECORDED,
+            task_reason=facts.reason,
+            authorization_resource_digest=facts.authorization_resource_digest,
+            references={
+                LifecycleAuditReferenceKind.PROJECT: facts.project_id,
+                LifecycleAuditReferenceKind.TASK: facts.task_id,
+                LifecycleAuditReferenceKind.ASSIGNMENT: facts.assignment_id,
+                LifecycleAuditReferenceKind.SUBMISSION: facts.submission_id,
+                LifecycleAuditReferenceKind.ROUTING_MANIFEST: facts.routing_manifest_id,
+                LifecycleAuditReferenceKind.REVISION_PREPARATION: facts.preparation_id,
+                LifecycleAuditReferenceKind.AUTHORIZATION_DECISION: facts.authorization_decision_id,
+                **({LifecycleAuditReferenceKind.OUTBOX_EVENT: facts.outbox_event_id}
+                   if facts.outbox_event_id is not None else {}),
+            },
+        ))
+
+    async def record_revision_exhaustion(self, facts) -> None:
+        """Bind retained-source exhaustion to its own consumed recovery authority."""
+        await self._participant.add_event(LifecycleAuditEventInput(
+            event_id=facts.event_id, entity_type=LifecycleAuditEntityType.TASK,
+            entity_id=facts.task_id, event_type=LifecycleAuditEventType.TASK_REVISION_EXHAUSTED,
+            actor_id=facts.actor_profile_id, reason=LifecycleAuditReason.STATE_CHANGED,
+            from_status="needs_revision", to_status="ready",
+            authorization_resource_digest=facts.authority.resource_context_digest,
+            references={
+                LifecycleAuditReferenceKind.PROJECT: facts.project_id,
+                LifecycleAuditReferenceKind.TASK: facts.task_id,
+                LifecycleAuditReferenceKind.ASSIGNMENT: facts.assignment_id,
+                LifecycleAuditReferenceKind.SUBMISSION: facts.submission_id,
+                LifecycleAuditReferenceKind.ROUTING_MANIFEST: facts.routing_manifest_id,
+                LifecycleAuditReferenceKind.REVISION_EXHAUSTION: facts.exhaustion_receipt_id,
+                LifecycleAuditReferenceKind.AUTHORIZATION_DECISION: facts.authority.decision_id,
+                LifecycleAuditReferenceKind.OUTBOX_EVENT: facts.outbox_event_id,
+            },
+        ))
+
+
 def task_transition_audit(session: AsyncSession) -> TaskTransitionAuditPort:
     """Use the existing participant in the same caller-owned transaction."""
     return _TaskTransitionAudit(session)
+
+
+class _CheckerRetryAudit:
+    """Use the shared AUDIT lifecycle participant for a retry initiation fact."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._participant = LifecycleAuditParticipant(session)
+
+    async def record(self, preparation, successor, authority) -> None:
+        source = preparation.source
+        await self._participant.add_event(LifecycleAuditEventInput(
+            event_id=successor.audit_event_id,
+            entity_type=LifecycleAuditEntityType.CHECKER_RUN,
+            entity_id=successor.run_id,
+            event_type=LifecycleAuditEventType.CHECKER_RETRY_REQUESTED,
+            actor_id=preparation.actor_profile_id,
+            reason=LifecycleAuditReason.FACT_RECORDED,
+            operator_reason=preparation.reason,
+            authorization_resource_digest=authority.resource_digest,
+            references={
+                LifecycleAuditReferenceKind.PROJECT: source.project_id,
+                LifecycleAuditReferenceKind.TASK: source.task_id,
+                LifecycleAuditReferenceKind.ASSIGNMENT: source.assignment_id,
+                LifecycleAuditReferenceKind.SUBMISSION: source.submission_id,
+                LifecycleAuditReferenceKind.CHECKER_RUN: successor.run_id,
+                LifecycleAuditReferenceKind.SOURCE_CHECKER_RUN: source.source_run_id,
+                LifecycleAuditReferenceKind.AUTHORIZATION_DECISION: authority.decision_id,
+                LifecycleAuditReferenceKind.OUTBOX_EVENT: successor.event_id,
+            },
+        ))
+
+
+def checker_retry_audit(session: AsyncSession):
+    """Compose the existing transaction-bound AUDIT participant."""
+    return _CheckerRetryAudit(session)
 
 
 def committed_authority_invalidation(session_factory) -> AuthorityInvalidationPort:
@@ -152,6 +234,91 @@ def assignment_invalidation_audit(session: AsyncSession) -> AssignmentInvalidati
     return _AssignmentInvalidationAudit(session)
 
 
+class _TaskRevisionExpiryAudit:
+    def __init__(self, session):
+        self._repo = AuditRepository(session)
+        self._participant = LifecycleAuditParticipant(session)
+
+    async def read_expiry(self, receipt: TaskRevisionExpiryReceiptSnapshot):
+        event = await self._repo.get_lifecycle_event(str(receipt.audit_event_id))
+        authority = await self._repo.get_authority_event(str(receipt.authorization_decision_id))
+        try:
+            facts = TaskRevisionExpiryAuthorityFacts.model_validate_json(
+                json.dumps(receipt.authority_context))
+            expected = {
+                "project_id": str(facts.target.project_id),
+                "task_id": str(facts.target.task_id),
+                "assignment_id": str(facts.target.assignment_id),
+                "submission_id": str(facts.target.source_submission_id),
+                "routing_manifest_id": str(facts.target.routing_manifest_id),
+                "revision_preparation_id": str(facts.head_preparation_id),
+                "authorization_decision_id": str(receipt.authorization_decision_id),
+                "outbox_event_id": str(facts.delivery_event_id),
+            }
+            digest = revision_expiry_resource_digest(facts)
+            if (event is None or authority is None
+                    or event.event_type != LifecycleAuditEventType.TASK_REVISION_EXPIRED.value
+                    or event.entity_type != "task" or event.entity_id != str(facts.target.task_id)
+                    or event.from_status != "needs_revision" or event.to_status != "ready"
+                    or event.event_payload != {
+                        "references": expected, "authorization_resource_digest": digest,
+                        "revision_expiry_facts": facts.model_dump(mode="json"),
+                    }
+                    or authority.event_type != "SensitiveAuthorizationAllowed"
+                    or authority.action_id != "task.revision.expire"
+                    or authority.permission_id != "task.revision.expire"
+                    or authority.actor_id != event.actor_id
+                    or authority.resource_type != "task"
+                    or authority.resource_id != str(facts.target.task_id)
+                    or authority.project_id != str(facts.target.project_id)
+                    or authority.request_id != str(facts.delivery_event_id)
+                    or authority.correlation_id != str(facts.target.routing_manifest_id)
+                    or authority.after_facts != {"allowed": True, "resource_context_digest": digest}
+                    or receipt.routing_manifest_id != facts.target.routing_manifest_id
+                    or receipt.source_submission_id != facts.target.source_submission_id
+                    or receipt.head_preparation_id != facts.head_preparation_id
+                    or receipt.expired_at < facts.target.deadline_at):
+                raise ValueError("invalid revision expiry evidence")
+            from app.modules.tasks.api.revision_expiry import TaskRevisionExpiryAuthority
+            return TaskRevisionExpiryEvidence(
+                facts, TaskRevisionExpiryAuthority(UUID(event.actor_id), UUID(authority.id), digest),
+                receipt.receipt_id, receipt.audit_event_id, receipt.expired_at,
+            )
+        except (AttributeError, KeyError, TypeError, ValueError):
+            raise TaskRevisionExpiryUnavailable("revision expiry evidence unavailable") from None
+
+    async def record_expiry(self, evidence: TaskRevisionExpiryEvidence):
+        facts = TaskRevisionExpiryAuthorityFacts.model_validate_json(evidence.facts.model_dump_json())
+        if revision_expiry_resource_digest(facts) != evidence.authority.resource_context_digest:
+            raise TaskRevisionExpiryUnavailable("revision expiry authority differs")
+        target = facts.target
+        await self._participant.add_event(LifecycleAuditEventInput(
+            event_id=evidence.audit_event_id,
+            entity_type=LifecycleAuditEntityType.TASK, entity_id=target.task_id,
+            event_type=LifecycleAuditEventType.TASK_REVISION_EXPIRED,
+            actor_id=evidence.authority.actor_profile_id,
+            reason=LifecycleAuditReason.STATE_CHANGED,
+            from_status="needs_revision", to_status="ready",
+            references={
+                LifecycleAuditReferenceKind.PROJECT: target.project_id,
+                LifecycleAuditReferenceKind.TASK: target.task_id,
+                LifecycleAuditReferenceKind.ASSIGNMENT: target.assignment_id,
+                LifecycleAuditReferenceKind.SUBMISSION: target.source_submission_id,
+                LifecycleAuditReferenceKind.ROUTING_MANIFEST: target.routing_manifest_id,
+                LifecycleAuditReferenceKind.REVISION_PREPARATION: facts.head_preparation_id,
+                LifecycleAuditReferenceKind.AUTHORIZATION_DECISION: evidence.authority.decision_id,
+                LifecycleAuditReferenceKind.OUTBOX_EVENT: facts.delivery_event_id,
+            },
+            authorization_resource_digest=evidence.authority.resource_context_digest,
+            revision_expiry_facts=facts.model_dump(mode="json"),
+        ))
+        return evidence.audit_event_id
+
+
+def task_revision_expiry_audit(session: AsyncSession) -> TaskRevisionExpiryAuditPort:
+    return _TaskRevisionExpiryAudit(session)
+
+
 class _TaskRoutingAudit:
     def __init__(self, session):
         self._session = session
@@ -170,7 +337,9 @@ class _TaskRoutingAudit:
                 reason=LifecycleAuditReason.STATE_CHANGED,
                 from_status="evaluation_pending",
                 to_status=(
-                    "needs_revision"
+                    "ready"
+                    if source.exhaustion is not None and not source.recovered_exhaustion
+                    else "needs_revision"
                     if s.routing_recommendation == "needs_revision"
                     else "review_pending"
                     if s.human_review_required

@@ -11,6 +11,7 @@ from app.core.identifiers import new_record_id
 from app.modules.checkers.api.execution import (
     CheckerRequestConflict,
     CheckerExecutionUnavailable,
+    CheckerRetryDelivery,
     CompletedEvaluation,
     EvaluationReservation,
     ReservedEvaluation,
@@ -19,9 +20,12 @@ from app.modules.checkers.api.execution import (
     VerifiedMaterialFacts,
     VerifiedEvaluationCompletion,
 )
-from app.modules.checkers.api.post_submit import (
-    PostSubmissionEvaluationRequest,
-    PostSubmitCurrentResultReference,
+from app.modules.checkers.api.evaluation_contract import (
+    PostSubmissionExecutionRequest,
+    validate_execution_request,
+)
+from app.modules.checkers.api.selected_post_submit import (
+    SelectedPostSubmitCurrentResultReference,
 )
 from app.modules.checkers.api.output_custody import (
     CheckerOutputReservation,
@@ -36,7 +40,6 @@ from app.modules.checkers.execution_repository import (
     stored_result,
     stored_request,
 )
-from app.modules.checkers.execution_results import classify_result
 from app.modules.checkers.models import CheckerRun, CheckerSubmissionFence
 
 
@@ -49,10 +52,10 @@ class EvaluationCoordinator:
         self._tasks = tasks
 
     async def reserve_current_evaluation(
-        self, request: PostSubmissionEvaluationRequest
+        self, request: PostSubmissionExecutionRequest
     ) -> EvaluationReservation:
         """Serialize initial creation, exact replay and the next current generation."""
-        request = PostSubmissionEvaluationRequest.model_validate(request)
+        request = validate_execution_request(request)
         with self._session.no_autoflush:
             can_create = await self._lock_task_scope(request)
             if not can_create:
@@ -60,6 +63,13 @@ class EvaluationCoordinator:
                 if replay is None:
                     raise CheckerExecutionUnavailable("checker_reservation_scope_unavailable")
                 return reservation(replay)
+        return await self._reserve_after_task_lock(request)
+
+    async def _reserve_after_task_lock(
+        self, request: PostSubmissionExecutionRequest, *, terminal_source_id: UUID | None = None,
+    ) -> EvaluationReservation:
+        """Use the existing CHECKERS locks after the caller has retained TASK custody."""
+        require_transaction(self._session)
         # Every new generation takes TASK custody before this key, fence and run.
         await self._session.execute(
             text("select pg_advisory_xact_lock(hashtextextended(:key, 0))"),
@@ -86,6 +96,16 @@ class EvaluationCoordinator:
                 .with_for_update()
                 .execution_options(populate_existing=True)
             )
+        if terminal_source_id is not None:
+            if (
+                prior is None or prior.id != str(terminal_source_id)
+                or prior.status != "infrastructure_failed"
+                or prior.finalize_evidence_id is None
+                or prior.result_json is None or prior.result_digest is None
+                or prior.completion_event_id is not None
+                or stored_result(prior).outcome != "infrastructure_failed"
+            ):
+                raise CheckerExecutionUnavailable("checker_retry_source_unavailable")
         expected = 1 if prior is None else prior.evaluation_generation + 1
         if request.evaluation_generation != expected:
             raise CheckerRequestConflict("checker_generation_conflict")
@@ -110,8 +130,12 @@ class EvaluationCoordinator:
             supersedes_checker_run_id=prior.id if prior else None,
             locked_guide_version=context.guide_version,
             locked_post_submit_checker_policy_id=str(context.post_policy_id),
-            locked_post_submit_checker_policy_version=context.post_policy_version,
+            locked_post_submit_checker_policy_version=(
+                context.post_policy_version
+            ),
             locked_post_submit_checker_policy_hash=context.post_policy_hash,
+            selected_post_submit_policy_sha256=request.policy.policy_sha256,
+            selected_post_submit_policy_body=request.policy.model_dump(mode="json"),
             locked_review_policy_id=str(context.review_policy_id),
             locked_review_policy_generation=context.review_generation,
             locked_review_policy_hash=context.review_hash,
@@ -158,7 +182,18 @@ class EvaluationCoordinator:
             raise CheckerExecutionUnavailable("checker_reservation_unavailable")
         return ReservedEvaluation(request=request, reservation=reservation(run))
 
-    async def _lock_task_scope(self, request: PostSubmissionEvaluationRequest) -> bool:
+    async def read_retry_delivery(
+        self, *, project_id: UUID, submission_id: UUID, event_id: UUID,
+    ) -> CheckerRetryDelivery | None:
+        """Expose exact CHECKERS retry receipt facts without a private TASK import."""
+        from app.modules.checkers.checker_retry import read_retry_delivery
+        require_transaction(self._session)
+        return await read_retry_delivery(
+            self._session, self, project_id=project_id,
+            submission_id=submission_id, event_id=event_id,
+        )
+
+    async def _lock_task_scope(self, request: PostSubmissionExecutionRequest) -> bool:
         """Retain root-transaction TASK custody before any coordination fence lock."""
         require_transaction(self._session)
         connection = await self._session.connection()
@@ -176,7 +211,7 @@ class EvaluationCoordinator:
             raise CheckerExecutionUnavailable("checker_reservation_scope_unavailable")
         return can_create
 
-    async def _replay(self, request: PostSubmissionEvaluationRequest) -> CheckerRun | None:
+    async def _replay(self, request: PostSubmissionExecutionRequest) -> CheckerRun | None:
         """Read an exact stored envelope; never repair or restore its current fence."""
         replay = await self._session.scalar(select(CheckerRun).where(
             CheckerRun.evaluation_request_id == str(request.evaluation_request_id),
@@ -190,25 +225,26 @@ class EvaluationCoordinator:
         return replay
 
     async def read_current_result(
-        self, request: PostSubmissionEvaluationRequest
+        self, request: PostSubmissionExecutionRequest
     ) -> CompletedEvaluation:
         """Return only a locked completed result matching the entire current request."""
-        request = PostSubmissionEvaluationRequest.model_validate(request)
+        request = validate_execution_request(request)
         with self._session.no_autoflush:
             await self._lock_task_scope(request)
             run = await ExecutionRepository(self._session).lock_current(request)
         if run.status != "completed":
             raise CheckerExecutionUnavailable("checker_current_result_unavailable")
         result = stored_result(run)
-        reference = PostSubmitCurrentResultReference(
+        reference = SelectedPostSubmitCurrentResultReference(
             **result.model_dump(
-                include=set(PostSubmitCurrentResultReference.model_fields) - {"schema_version"}
+                include=set(SelectedPostSubmitCurrentResultReference.model_fields) - {"schema_version"}
             )
         )
         reference.validate_result(result)
-        classification = classify_result(request, result)
+        result.validate_request(request)
+        # Terminal custody already recomputed this routing under the locked policy.
         return CompletedEvaluation(
-            reference=reference, routing_recommendation=classification.routing, result=result
+            reference=reference, routing_recommendation=run.routing_recommendation, result=result
         )
 
     async def require_current_completion(
@@ -287,7 +323,7 @@ class CurrentExecution:
 
 
 class CheckerOutputReservations:
-    """Current structural handlers have exactly zero output slots."""
+    """Selected evidence-only checker executions have no artifact output slots."""
 
     def __init__(self, session: AsyncSession):
         """Resolve output custody within the supplied CHECKERS session."""

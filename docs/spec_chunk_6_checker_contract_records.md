@@ -199,7 +199,7 @@ Normalization rules:
 ## Pre-Submit Intake Evidence Contract
 
 Pre-submit checks run against the uploaded ZIP before a Submission exists.
-Hidden preparation invokes the internal phase service under ART custody.
+Public ZIP preparation invokes the internal phase service under ART custody.
 ART retains bounded results tied to the exact task/assignment, locked guide
 and policy hashes, verified ZIP commitment, semantic manifest, prepared
 generation and execution attempt. Completed replay returns the canonical
@@ -211,9 +211,9 @@ public precheck response schema is defined here. Pre-submit evidence is not a
 post-submit CheckerRun and does not require a finalized Submission ID/version.
 
 Blocking pre-submit failures prevent submission creation. POL-07B removes the
-standalone JSON precheck and its response schema. Hidden ZIP preparation
-returns `pre_submission_checker_failed`, while ART retains bounded evidence.
-Structured public feedback remains pending the canonical intake cutover.
+standalone JSON precheck and its response schema. The public authorized ZIP preparation route returns
+`pre_submission_checker_failed` with ART's bounded ordered evidence in the same
+request. ARCH-02I-B publishes this route in OpenAPI.
 Failure creates no Submission row or version, task transition to `submitted`,
 or submission-created audit event.
 
@@ -319,7 +319,7 @@ Internal services may only create new runs/results or transition a run status th
 - artifact manifest hash follows the canonical SHA-256 JSON algorithm
 - equivalent manifests with different entry or key order hash identically
 - duplicate artifact names are rejected
-- hidden ZIP preparation rejects invalid intake without creating a Submission; ART retains bounded evidence and public structured feedback remains pending
+- public ZIP preparation rejects invalid intake with bounded structured feedback and no Submission; ART retains canonical evidence
 - pre-submit result cannot be reused as post-submit gate proof
 - checker results are tied to one checker run
 - canonical status/severity values are enforced by schemas/service constants

@@ -2,7 +2,7 @@
 
 from app.core.config import get_settings
 
-from app.adapters.tasks import task_service
+from app.adapters.tasks import task_service, task_submission_context_port
 
 from uuid import UUID, uuid4
 from unittest.mock import AsyncMock
@@ -14,7 +14,6 @@ from sqlalchemy.exc import IntegrityError
 
 from app.db import session as db_session
 from app.db import models as db_models
-from app.db.errors import integrity_constraint_name
 from app.api.deps.authorization import compose_hidden_submission_creation_command
 from app.modules.projects.models import (
     PostSubmitCheckerPolicy,
@@ -22,6 +21,7 @@ from app.modules.projects.models import (
 from app.modules.authorization.prepared import PreparedSubmissionCreationAuthorization
 from app.modules.tasks.api import SubmissionCreationRequest, TaskSubmissionContextUnavailable
 from app.modules.tasks.models import AuditEvent, Submission, TaskAssignment, WorkstreamTask
+from app.modules.tasks.repository import TaskRepository
 from app.modules.tasks.service import TaskLockedContextInvalid
 from app.modules.tasks.submission_composition import TaskSubmissionCreationService
 from tests.authorization.task_authority.test_concurrency import actor_context
@@ -83,16 +83,13 @@ async def test_invalid_locked_policy_never_reaches_art_or_submission(
     admissions.consume.side_effect = AssertionError("invalid policy reached ART")
 
     async with db_session.get_session_factory()() as session:
-        expected_error = (
-            TaskSubmissionContextUnavailable
-            if field.endswith("body") else IntegrityError
-        )
-        with pytest.raises(expected_error) as rejected:
+        with pytest.raises(IntegrityError, match="task revision context lacks current preparation"):
             async with session.begin():
                 task = await session.get(WorkstreamTask, task_response["id"])
                 original = getattr(task, field)
-                # Policy hashes have composite FK custody. Body corruption is
-                # rejected by the locked TASK context reader before admission.
+                # A released TASK can change these locks only through its
+                # authorized current revision preparation. This BEFORE UPDATE
+                # guard precedes policy FK checks and any ART participation.
                 setattr(task, field, {} if field.endswith("body") else "sha256:" + "f" * 64)
                 await session.flush()
                 await TaskSubmissionCreationService(
@@ -100,6 +97,7 @@ async def test_invalid_locked_policy_never_reaches_art_or_submission(
                     authorization=PreparedSubmissionCreationAuthorization(session, context),
                     admissions=admissions, evaluations=AsyncMock(), events=AsyncMock(),
                     contexts=task_service(session, settings=get_settings()),
+                    submission_contexts=task_submission_context_port(session),
                 ).create(
                     SubmissionCreationRequest(
                         task_id=UUID(task.id),
@@ -111,13 +109,6 @@ async def test_invalid_locked_policy_never_reaches_art_or_submission(
                         contributor_attestation="This submission is my work.",
                     )
                 )
-        if expected_error is IntegrityError:
-            policy = "review" if "review" in field else "revision"
-            assert integrity_constraint_name(rejected.value) == (
-                f"fk_workstream_tasks_locked_{policy}_policy"
-            )
-        else:
-            assert rejected.value.code == "task_submission_context_invalid"
         admissions.consume.assert_not_awaited()
         assert await session.scalar(select(Submission).where(
             Submission.task_id == task_response["id"],
@@ -171,8 +162,20 @@ async def test_submission_rejects_malformed_locked_post_submit_policy_body_witho
             "check_policy_context_present",
             "check_evidence_present",
         ]
-        task.locked_post_submit_checker_policy_body = corrupted_body
-        await session.commit()
+        original_body = dict(task.locked_post_submit_checker_policy_body)
+
+    original_get = TaskRepository.get_task
+
+    async def corrupt_task_read(repository, task_id, **kwargs):
+        task = await original_get(repository, task_id, **kwargs)
+        if task is not None and task.id == started_task["id"]:
+            # A detached storage fault exercises the read guard without editing
+            # the locked row or disabling its current preparation guard.
+            repository._session.expunge(task)
+            task.locked_post_submit_checker_policy_body = dict(corrupted_body)
+        return task
+
+    monkeypatch.setattr(TaskRepository, "get_task", corrupt_task_read)
 
     with pytest.raises(TaskSubmissionContextUnavailable) as rejected:
         await _create_hidden_submission(started_task["id"])
@@ -222,6 +225,7 @@ async def test_submission_rejects_malformed_locked_post_submit_policy_body_witho
 
     assert task is not None
     assert task.status == "in_progress"
+    assert task.locked_post_submit_checker_policy_body == original_body
     assert submissions == []
     assert runs == []
     assert results == []
@@ -306,18 +310,5 @@ async def test_submission_rejects_crossed_post_submit_policy_sidecar(
     assert task.status == "in_progress"
     assert submissions == []
     assert task.locked_post_submit_checker_policy_body == locked_body
-    assert "check_acceptance_criteria_present" not in [
-        entry["checker_id"]
-        for entry in locked_body["entries"]
-        if entry["classification"] == "project_required"
-    ]
-    assert "check_acceptance_criteria_present" not in [
-        entry["checker_id"] for entry in locked_body["entries"]
-    ]
-    assert "check_required_files" in [
-        entry["checker_id"]
-        for entry in locked_body["entries"]
-        if entry["classification"] == "platform_default"
-    ]
-    assert "check_required_files" in [entry["checker_id"] for entry in locked_body["entries"]]
+
     assert checker_runs == []

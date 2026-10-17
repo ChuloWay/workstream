@@ -6,6 +6,7 @@ from app.adapters.compensation import contribution_award_read_port
 from app.adapters.reviews import final_acceptance_read_port
 from app.adapters.tasks import contribution_task_evidence_port
 from app.modules.contributions.api.records import ContributionReadRequest
+from app.modules.contributions.records.pagination import ContributionExportCursorCodec
 from app.modules.contributions.records.read_repository import ContributionReadRepository
 from tests.contributions.records.support import authorized_submitter_source, rows
 
@@ -21,9 +22,13 @@ async def test_projection_reads_actual_immutable_source_and_complete_awards(
             await session.connection(execution_options={"isolation_level": "REPEATABLE READ"})
             before = {table: await rows(session, table) for table in
                       ("contribution_records", "compensation_awards", "final_acceptances")}
-            record, = await ContributionReadRepository(session).read(ContributionReadRequest(
+            page = await ContributionReadRepository(
+                session, cursor_codec=ContributionExportCursorCodec(b"r" * 32),
+            ).read(ContributionReadRequest(
                 audience="self", actor_profile_id=h.actor_context.actor_profile_id,
             ))
+            record, = page.records
+            assert page.next_cursor is None
             assert record.id == h.submitter_record.id
             assert record.source_final_acceptance_id == h.acceptance.id
             assert {definition.instrument for definition in record.award_definitions} == set(instruments)

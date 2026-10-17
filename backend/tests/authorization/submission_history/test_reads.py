@@ -10,6 +10,7 @@ from app.core.hashing import canonical_json_hash
 from app.modules.tasks.models import AuditEvent, Submission
 from app.modules.checkers.models import CheckerRun
 from app.modules.authorization.models import ProjectRoleGrant, AdminRoleGrant
+from tests.checkers.external.support import post_registry_spec
 from tests.submission_fixtures import seed_retained_submission, seed_retained_checker_run
 from tests.test_tasks import (
     create_active_project, create_started_task, complete_submission_payload,
@@ -18,7 +19,7 @@ from tests.test_tasks import (
 
 
 async def history_case(client, monkeypatch, *, run_status="completed"):
-    project = await create_active_project(client)
+    project = await create_active_project(client, post_submit_registry_spec=post_registry_spec())
     task = await create_started_task(client, project["id"], monkeypatch)
     submission = await seed_retained_submission(task["id"], complete_submission_payload())
     run = await seed_retained_checker_run(submission, state=run_status)
@@ -73,8 +74,14 @@ async def test_exact_route_action_and_grant(task_client, monkeypatch, audience):
         item = value["items"][0] if action.endswith("list") else value
         assert item["task_id"] == task
         assert ("contributor_id" in item) is (manager and action in {"task.submission.list", "submission.read"})
-        persisted = run_original if "checker" in action else original
-        nested = {"results", "evidence_items"}
+        # The public status is the stored attempt outcome, not the intake fact.
+        persisted = run_original if "checker" in action else original | {
+            "status": original["attempt_status"],
+        }
+        nested = {"results", "evidence_items", "finding_counts"}
+        if "checker" not in action:
+            assert item["status"] == "evaluation_pending" and item["decided_at"] is None
+            assert item["finding_counts"] == {"blocking": 0, "warning": 0, "coverage_incomplete": 0}
         for field, returned in item.items():
             if field in nested:
                 continue

@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any
-from uuid import UUID
+from uuid import NAMESPACE_URL, UUID, uuid5
 
 from app.core.hashing import canonical_json_hash
 from app.modules.artifacts.api.submission_admission import SubmissionBundleFile
@@ -20,6 +20,15 @@ from app.modules.artifacts.submission_archive import (
 
 
 SUBMISSION_MANIFEST_SCHEMA_VERSION = "workstream.submission_bundle_manifest.v1"
+
+
+def semantic_manifest_identity(semantic_manifest_sha256: str) -> UUID:
+    """Derive one provider-neutral identity from the canonical manifest digest."""
+    ArtifactCommitment.validate_sha256(semantic_manifest_sha256)
+    return uuid5(
+        NAMESPACE_URL,
+        f"workstream:submission-semantic-manifest:v1:{semantic_manifest_sha256}",
+    )
 
 
 class SubmissionChangeFailureCode(StrEnum):
@@ -44,6 +53,7 @@ class SubmissionChangeOutcome(StrEnum):
 
     FIRST_SUBMISSION = "first_submission"
     CHANGED = "changed"
+    UNCHANGED = "unchanged"
 
 
 @dataclass(frozen=True, slots=True)
@@ -240,6 +250,33 @@ def evaluate_submission_change(
     current_predecessor: SubmissionCanonicalPredecessor | None = None,
 ) -> SubmissionChangeGateResult:
     """Compare server-owned identities without performing any durable effect."""
+    result = bind_submission_change(
+        commitment=commitment,
+        manifest=manifest,
+        predecessor=predecessor,
+        predecessor_exists=predecessor_exists,
+        current_predecessor=current_predecessor,
+    )
+    if result.outcome is SubmissionChangeOutcome.UNCHANGED:
+        assert predecessor is not None
+        code = (
+            SubmissionChangeFailureCode.ARCHIVE_UNCHANGED
+            if commitment.sha256 == predecessor.archive_sha256
+            else SubmissionChangeFailureCode.MANIFEST_UNCHANGED
+        )
+        raise SubmissionChangeRejectedError(code)
+    return result
+
+
+def bind_submission_change(
+    *,
+    commitment: ArtifactCommitment,
+    manifest: SubmissionManifest,
+    predecessor: SubmissionCanonicalPredecessor | None,
+    predecessor_exists: bool,
+    current_predecessor: SubmissionCanonicalPredecessor | None = None,
+) -> SubmissionChangeGateResult:
+    """Bind exact predecessor and byte facts without deciding the default check."""
     if predecessor is not None and not predecessor_exists:
         raise ValueError("submission predecessor existence is inconsistent")
     if predecessor is None:
@@ -256,14 +293,18 @@ def evaluate_submission_change(
         )
     if current_predecessor is None or current_predecessor != predecessor:
         raise SubmissionChangeRejectedError(SubmissionChangeFailureCode.PREDECESSOR_STALE)
-    if commitment.sha256 == predecessor.archive_sha256:
-        raise SubmissionChangeRejectedError(SubmissionChangeFailureCode.ARCHIVE_UNCHANGED)
-    if manifest.sha256 == predecessor.semantic_manifest_sha256:
-        raise SubmissionChangeRejectedError(SubmissionChangeFailureCode.MANIFEST_UNCHANGED)
+    unchanged = (
+        commitment.sha256 == predecessor.archive_sha256
+        or manifest.sha256 == predecessor.semantic_manifest_sha256
+    )
     return SubmissionChangeGateResult(
         commitment.sha256,
         commitment.byte_count,
         manifest,
-        SubmissionChangeOutcome.CHANGED,
+        (
+            SubmissionChangeOutcome.UNCHANGED
+            if unchanged
+            else SubmissionChangeOutcome.CHANGED
+        ),
         predecessor,
     )

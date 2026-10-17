@@ -6,9 +6,10 @@ from datetime import datetime, timezone
 from enum import StrEnum
 from typing import Any, NoReturn, Protocol, Self
 import re
+import json
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, GetCoreSchemaHandler, field_validator, model_validator
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, GetCoreSchemaHandler, field_validator, model_validator
 from pydantic_core import SchemaValidator, core_schema
 
 
@@ -366,6 +367,7 @@ class OutboxAppendInput(BaseModel):
     causation_event_id: UUID | None = None
     idempotency_key: str = Field(pattern=r"^[A-Za-z0-9._:-]{1,200}$")
     payload: dict[str, Any]
+    not_before_at: AwareDatetime | None = None
 
     @field_validator("payload", mode="before")
     @classmethod
@@ -393,11 +395,14 @@ class OutboxAppendInput(BaseModel):
             """Preserve validation mode while detaching every rejected input."""
             admitted = None
             try:
-                admitted = (
-                    string_validator.validate_strings(value)
-                    if info.mode == "string"
-                    else validator(value)
-                )
+                if info.mode == "string":
+                    admitted = string_validator.validate_strings(value)
+                elif info.mode == "json":
+                    # Preserve JSON datetime/UUID semantics through the privacy
+                    # wrapper instead of revalidating decoded JSON as Python.
+                    admitted = string_validator.validate_json(json.dumps(value))
+                else:
+                    admitted = validator(value)
             except Exception:  # noqa: BLE001 - rejected input must not escape diagnostics
                 admitted = None
             if admitted is None:
@@ -427,8 +432,8 @@ class OutboxAppendResult(BaseModel):
 
 
 class OutboxAppendPort(Protocol):
-    async def require_existing(self, event_id: UUID, value: OutboxAppendInput) -> None:
-        """Require exact retained custody without appending or repairing an event."""
+    async def require_existing(self, event_id: UUID | None, value: OutboxAppendInput) -> UUID:
+        """Require exact retained custody by logical key and optional record ID."""
         ...
 
     async def append(self, value: OutboxAppendInput) -> OutboxAppendResult:

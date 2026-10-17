@@ -3,15 +3,17 @@
 This folder contains the shareable Workstream architecture brief.
 
 - Source: [workstream_architecture_brief.md](workstream_architecture_brief.md)
-- PDF: [current target-architecture brief](workstream_architecture_brief.pdf)
+- PDF: [retained prior render](workstream_architecture_brief.pdf)
 - Render script: [render_pdf.sh](render_pdf.sh)
 
 The brief uses the C4-PlantUML diagrams from `docs/diagrams/` and packages them into a single PDF for team review.
 
-The source, PDF and images distinguish delivered canonical history reads and
-exact-authorized hidden post-submit execution from unavailable automatic request delivery,
-routing and public recovery. Lifecycle diagrams are
-target views; the [roadmap](../roadmap_status.md) owns capability status.
+The Markdown source describes current public ZIP preparation,
+admission-backed Submission entry and the bounded local public/Celery drill.
+The PDF is a retained prior render because
+the pinned PlantUML renderer is unavailable in this workspace; use the
+[roadmap](../roadmap_status.md) for current capability status. Lifecycle
+diagrams remain target views.
 
 ## Render
 

@@ -3,29 +3,22 @@
 from __future__ import annotations
 
 import asyncio
-from dataclasses import replace
-from pathlib import Path
 from uuid import UUID, uuid4
 
 import pytest
-from sqlalchemy import select, text
+from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.adapters.auth import (
-    compensation_adapter_binding_authorization, contribution_policy_authorization,
+    compensation_adapter_binding_authorization,
 )
-from app.adapters.contributions import contribution_policy_service, contribution_policy_validation_port
+from app.adapters.contributions import contribution_policy_validation_port
 from app.db import session as db_session
-from app.modules.artifacts.models import PreSubmitEvidenceSet
 from app.modules.authorization.repository import AdminAuthorizationRepository
-from app.modules.authorization.runtime import (
-    ActorKind, ActorStatus, HumanAuthorizationContext, IdentityLinkStatus,
-)
 from app.modules.compensation.api import AdapterBindingSuspendRequest
 from app.modules.compensation.service import AdapterBindingService
 from app.modules.contributions.api import (
-    ContributionPolicyCreateDraftRequest, ContributionPolicyValidationPurpose,
+    ContributionPolicyValidationPurpose,
     ContributionPolicyValidationRequest,
 )
 from app.modules.projects.contribution_policy import ProjectContributionPolicyEligibility
@@ -34,13 +27,6 @@ from tests.authorization.contribution_policies.postgresql_support import world
 from tests.authorization.contribution_policies.test_selected_validation_postgresql import (
     published_world,
 )
-from tests.authorization.test_pre_submit_attempt_authority import _seed_materializer
-from tests.test_pre_submit_attempt_authority_integration import _reserve_with_real_materializer
-from tests.test_pre_submit_attempt_recovery import _harness
-from tests.test_pre_submit_related_lock_order import (
-    _PauseBeforeProject, _assert_row_locked, _ready_workflow,
-)
-from project_create_fixtures import grant_fixture_admin_role
 
 
 def _role_body(target_id: UUID) -> dict:
@@ -253,112 +239,3 @@ async def test_validation_role_issue_and_binding_suspension_complete_in_lock_ord
     finally:
         release.set()
         await asyncio.gather(*tasks, return_exceptions=True)
-
-
-class _ObservedBeforeProject(_PauseBeforeProject):
-    def __init__(self, repository, session, entered, release):
-        super().__init__(repository, entered, release)
-        self.session = session
-        self.backend_pid: int | None = None
-
-    async def lock_locked_policy_context(self, request):
-        self.backend_pid = int(await self.session.scalar(text("select pg_backend_pid()")))
-        return await super().lock_locked_policy_context(request)
-
-
-@pytest.mark.asyncio
-async def test_dual_finance_submitter_profile_precedes_policy_project_lock(
-    tmp_path: Path, isolated_database_env: str, monkeypatch,
-) -> None:
-    import tests.test_default_pre_submit_execution as default_tests
-
-    original_limits = default_tests._limits
-    monkeypatch.setattr(default_tests, "_limits", lambda: replace(
-        original_limits(), total_deadline_seconds=90, reservation_ttl_seconds=120,
-        aggregate_reserved_bytes=4 * default_tests.HARD_MAXIMUM_ARTIFACT_BYTES,
-    ))
-    harness = await _harness(tmp_path, isolated_database_env)
-    con_engine = None
-    art_task = con_task = None
-    release_art = asyncio.Event()
-    try:
-        await _seed_materializer(harness.factory)
-        project_id = harness.request.effective_plan.lineage.project_id
-        async with harness.factory.begin() as setup:
-            await grant_fixture_admin_role(
-                setup, harness.actor_id, role="finance_authority",
-                scope="project", project_id=project_id,
-            )
-        con_name = f"cp07a-dual-finance-{uuid4().hex[:10]}"
-        con_engine = create_async_engine(
-            isolated_database_env,
-            connect_args={"server_settings": {"application_name": con_name}},
-        )
-        con_factory = async_sessionmaker(con_engine, expire_on_commit=False)
-        draft = ContributionPolicyCreateDraftRequest(
-            actor_profile_id=harness.actor_id, project_id=project_id,
-            operation_id=uuid4(), name="Dual role lock order",
-        )
-        async with harness.factory() as art_session, con_factory() as con_session:
-            calls: list[int] = []
-            workflow, materializer = await _ready_workflow(harness, art_session, calls)
-            reservation = await _reserve_with_real_materializer(
-                workflow, harness.request, harness.preparation_request,
-            )
-            art_before_project = asyncio.Event()
-            paused = _ObservedBeforeProject(
-                workflow._project_contexts, art_session,
-                art_before_project, release_art,
-            )
-            workflow._project_contexts = paused
-            context = HumanAuthorizationContext(
-                actor_profile_id=harness.actor_id, actor_kind=ActorKind.HUMAN,
-                actor_status=ActorStatus.ACTIVE, identity_link_id=harness.identity_link_id,
-                identity_link_status=IdentityLinkStatus.ACTIVE,
-                request_id=uuid4(), correlation_id=uuid4(),
-            )
-
-            async def create_draft():
-                async with con_session.begin():
-                    authority = contribution_policy_authorization(con_session, context)
-                    return await contribution_policy_service(
-                        con_session, read_authorization=authority,
-                        mutation_authorization=authority,
-                    ).create_draft(draft)
-
-            try:
-                art_task = asyncio.create_task(workflow.execute_reserved(
-                    harness.request, reservation,
-                    preparation_request=harness.preparation_request,
-                ))
-                await asyncio.wait_for(art_before_project.wait(), timeout=30)
-                assert paused.backend_pid is not None
-                await _assert_row_locked(harness.engine, "actor_profiles", harness.actor_id)
-                await _assert_row_locked(
-                    harness.engine, "actor_identity_links", harness.identity_link_id,
-                )
-                con_task = asyncio.create_task(create_draft())
-                await _wait_edge(
-                    isolated_database_env, con_name, None, paused.backend_pid,
-                )
-                release_art.set()
-                art_result, policy_result = await asyncio.wait_for(
-                    asyncio.gather(art_task, con_task), timeout=60,
-                )
-                assert art_result.pass_capability is not None
-                assert policy_result.operation_id == draft.operation_id
-                assert calls == [1]
-            finally:
-                release_art.set()
-                await asyncio.gather(
-                    *(task for task in (art_task, con_task) if task is not None),
-                    return_exceptions=True,
-                )
-                materializer.close()
-        async with harness.factory() as check:
-            assert await check.scalar(select(PreSubmitEvidenceSet.id).limit(1)) is not None
-    finally:
-        release_art.set()
-        if con_engine is not None:
-            await con_engine.dispose()
-        await harness.close()
