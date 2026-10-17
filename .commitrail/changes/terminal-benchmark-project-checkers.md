@@ -390,10 +390,13 @@ root is atomically installed only when the target is absent, remains root-owned
 `0755`, and carries a root-owned `0600` no-follow marker bound to the head and
 run. The service and wrapper child directories use the exact service UID/GID
 and `0700` modes. Cleanup validates the marker, owner and modes before touching
-the control tree and refuses an ambiguous preexisting or substituted path. The
-trusted service executes directly from the exact Cargo output in the checked-out
-head. Preparation checks execute permission and create/remove access as the
-service owner in both child control directories and the ART scratch root;
+the control tree and refuses an ambiguous preexisting or substituted path.
+Because the hosted checkout is not executable by the fixed service UID, the
+atomic control-tree installation no-follow copies the exact Cargo output into a
+root-owned `0555` file, binds its SHA-256 in the custody marker and rehashes it
+at every custody check. The trusted service therefore executes the verified
+byte-exact copy. Preparation checks execute permission and create/remove access
+as the service owner in both child control directories and the ART scratch root;
 the run entry and each service start revalidate custody before touching control
 files, and runtime socket readiness proves that the service actually executed
 before POST starts.

@@ -39,7 +39,10 @@ before deleting the run-named `/run` service control directory, unmounts XFS,
 detaches the loop device, deletes raw state, and adds a verified cleanup receipt before
 upload. A preexisting, substituted or ambiguously owned control path is never
 deleted and makes cleanup fail. The matrix validates the same custody before
-its first control-file access and again before each service start.
+its first control-file access and again before each service start. The atomic
+installation also no-follow copies the exact Cargo service output to a
+root-owned `0555` file under `/run`; the marker binds its SHA-256 and every
+custody check rehashes it before use.
 
 The evidence, launch-source and matrix-reducer tests require no Docker
 resources:

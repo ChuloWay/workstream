@@ -33,7 +33,8 @@ readonly CONTROL_OWNER="${CONTROL_ROOT}/.owner.json"
 readonly SERVICE_ROOT="${CONTROL_ROOT}/service"
 readonly SOCKET_PATH="${SERVICE_ROOT}/checker.sock"
 readonly WRAPPER_WORK="${CONTROL_ROOT}/wrapper"
-readonly SERVICE_BINARY="${REPOSITORY_ROOT}/external_checkers/target/release/workstream-checker-service"
+readonly SERVICE_BUILD_OUTPUT="${REPOSITORY_ROOT}/external_checkers/target/release/workstream-checker-service"
+readonly SERVICE_BINARY="${CONTROL_ROOT}/workstream-checker-service"
 readonly SERVICE_CONFIG="${SERVICE_ROOT}/config.json"
 readonly SERVICE_PID_FILE="${WRAPPER_WORK}/service.pid"
 readonly BARRIER_ENABLE="${WRAPPER_WORK}/barrier.enable"
@@ -91,20 +92,65 @@ PY
 }
 
 create_control_custody() {
-  python3 - "${CONTROL_ROOT}" "${CONTROL_OWNER}" "${EXPECTED_HEAD}" "${RUN_ID}" <<'PY'
+  python3 - "${CONTROL_ROOT}" "${CONTROL_OWNER}" "${EXPECTED_HEAD}" "${RUN_ID}" \
+    "${SERVICE_BUILD_OUTPUT}" "${SERVICE_BINARY}" <<'PY'
 import ctypes
+import hashlib
 import json
 import os
 import shutil
+import stat
 import sys
 import tempfile
 
-root, owner_path, head_sha, run_id = sys.argv[1:]
+root, owner_path, head_sha, run_id, source_path, binary_path = sys.argv[1:]
 parent = os.path.dirname(root)
 temporary = tempfile.mkdtemp(prefix=f".{os.path.basename(root)}.", dir=parent)
 renamed = False
 try:
     os.chmod(temporary, 0o755)
+    source_stat = os.lstat(source_path)
+    if not stat.S_ISREG(source_stat.st_mode) or not 0 < source_stat.st_size <= 134_217_728:
+        raise SystemExit("service build output metadata differs")
+    source = os.open(source_path, os.O_RDONLY | os.O_NOFOLLOW)
+    copied_path = os.path.join(temporary, os.path.basename(binary_path))
+    destination = os.open(
+        copied_path,
+        os.O_CREAT | os.O_EXCL | os.O_WRONLY | os.O_NOFOLLOW,
+        0o555,
+    )
+    digest = hashlib.sha256()
+    try:
+        while True:
+            chunk = os.read(source, 1024 * 1024)
+            if not chunk:
+                break
+            digest.update(chunk)
+            view = memoryview(chunk)
+            while view:
+                written = os.write(destination, view)
+                if written <= 0:
+                    raise OSError("service copy made no progress")
+                view = view[written:]
+        os.fchmod(destination, 0o555)
+        os.fsync(destination)
+        opened_source = os.fstat(source)
+        if (
+            opened_source.st_dev,
+            opened_source.st_ino,
+            opened_source.st_size,
+            opened_source.st_mtime_ns,
+        ) != (
+            source_stat.st_dev,
+            source_stat.st_ino,
+            source_stat.st_size,
+            source_stat.st_mtime_ns,
+        ):
+            raise SystemExit("service build output changed")
+    finally:
+        os.close(destination)
+        os.close(source)
+    service_sha256 = digest.hexdigest()
     marker = os.path.join(temporary, os.path.basename(owner_path))
     payload = (
         json.dumps(
@@ -112,6 +158,7 @@ try:
                 "head_sha": head_sha,
                 "run_id": run_id,
                 "schema_version": "workstream.ws493.control-owner.v1",
+                "service_sha256": service_sha256,
             },
             sort_keys=True,
             separators=(",", ":"),
@@ -148,13 +195,15 @@ PY
 }
 
 control_custody_valid() {
-  python3 - "${CONTROL_ROOT}" "${CONTROL_OWNER}" "${EXPECTED_HEAD}" "${RUN_ID}" <<'PY'
+  python3 - "${CONTROL_ROOT}" "${CONTROL_OWNER}" "${EXPECTED_HEAD}" "${RUN_ID}" \
+    "${SERVICE_BINARY}" <<'PY'
+import hashlib
 import json
 import os
 import stat
 import sys
 
-root, owner_path, head_sha, run_id = sys.argv[1:]
+root, owner_path, head_sha, run_id, binary_path = sys.argv[1:]
 root_stat = os.lstat(root)
 if not stat.S_ISDIR(root_stat.st_mode) or stat.S_IMODE(root_stat.st_mode) != 0o755:
     raise SystemExit("control root type or mode differs")
@@ -173,13 +222,38 @@ try:
     payload = os.read(descriptor, 4097)
 finally:
     os.close(descriptor)
+value = json.loads(payload)
+service_sha256 = value.get("service_sha256")
+if not isinstance(service_sha256, str) or len(service_sha256) != 64:
+    raise SystemExit("control service digest differs")
 expected = {
     "head_sha": head_sha,
     "run_id": run_id,
     "schema_version": "workstream.ws493.control-owner.v1",
+    "service_sha256": service_sha256,
 }
 if payload != (json.dumps(expected, sort_keys=True, separators=(",", ":")) + "\n").encode():
     raise SystemExit("control owner binding differs")
+binary_stat = os.lstat(binary_path)
+if not stat.S_ISREG(binary_stat.st_mode) or stat.S_IMODE(binary_stat.st_mode) != 0o555:
+    raise SystemExit("control service type or mode differs")
+if (binary_stat.st_uid, binary_stat.st_gid) != (0, 0) or not 0 < binary_stat.st_size <= 134_217_728:
+    raise SystemExit("control service metadata differs")
+binary = os.open(binary_path, os.O_RDONLY | os.O_NOFOLLOW)
+try:
+    opened_binary = os.fstat(binary)
+    if (opened_binary.st_dev, opened_binary.st_ino) != (binary_stat.st_dev, binary_stat.st_ino):
+        raise SystemExit("control service changed")
+    digest = hashlib.sha256()
+    while True:
+        chunk = os.read(binary, 1024 * 1024)
+        if not chunk:
+            break
+        digest.update(chunk)
+finally:
+    os.close(binary)
+if digest.hexdigest() != service_sha256:
+    raise SystemExit("control service digest differs")
 PY
 }
 
