@@ -12,11 +12,15 @@ import json
 import os
 from pathlib import Path
 import shutil
+import sys
 
 from app.adapters.checkers import external_checker_execution_factory
 from app.core.hashing import canonical_json_hash
 from app.core.identifiers import new_record_id
-from app.interfaces.external_checker_execution import ExternalCheckerMaterialGrant
+from app.interfaces.external_checker_execution import (
+    ExternalCheckerExecutionResponse,
+    ExternalCheckerMaterialGrant,
+)
 from app.interfaces.external_services import ExternalServiceUnavailableError
 from app.modules.artifacts.preparation import (
     HARD_MAXIMUM_ARTIFACT_BYTES,
@@ -33,6 +37,10 @@ from app.modules.checkers.api.external import (
     external_checker_json_hash,
     make_external_checker_execution_request,
 )
+
+
+_UNEXPECTED_RESPONSE_PREFIX = "ws493_unexpected_complete="
+_MAX_DIAGNOSTIC_LINE_BYTES = 65_536
 
 
 def _inventory(
@@ -114,6 +122,49 @@ def _registry_entry_from_json(value: object) -> ExternalCheckerRegistryEntry:
     return ExternalCheckerRegistryEntry.model_validate_json(
         json.dumps(value, sort_keys=True, separators=(",", ":"))
     )
+
+
+def _report_unexpected_response(response: ExternalCheckerExecutionResponse) -> None:
+    try:
+        result = response.result
+        isolation = response.isolation
+        payload = json.dumps(
+            {
+                "isolation": asdict(isolation) if isolation is not None else None,
+                "result": result.model_dump(mode="json"),
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        payload_bytes = payload.encode()
+        maximum_payload_bytes = (
+            _MAX_DIAGNOSTIC_LINE_BYTES
+            - len(_UNEXPECTED_RESPONSE_PREFIX.encode())
+            - 1
+        )
+        if len(payload_bytes) > maximum_payload_bytes:
+            payload = json.dumps(
+                {
+                    "byte_count": len(payload_bytes),
+                    "sha256": hashlib.sha256(payload_bytes).hexdigest(),
+                },
+                sort_keys=True,
+                separators=(",", ":"),
+            )
+        print(
+            f"{_UNEXPECTED_RESPONSE_PREFIX}{payload}",
+            file=sys.stderr,
+            flush=True,
+        )
+    except Exception:
+        try:
+            print(
+                f"{_UNEXPECTED_RESPONSE_PREFIX}diagnostic_failed",
+                file=sys.stderr,
+                flush=True,
+            )
+        except Exception:
+            pass
 
 
 async def _execute(arguments: argparse.Namespace) -> None:
@@ -242,6 +293,7 @@ async def _execute(arguments: argparse.Namespace) -> None:
                     }
                 else:
                     if arguments.expect != "complete":
+                        _report_unexpected_response(response)
                         raise RuntimeError("interrupted request unexpectedly completed")
                     if (
                         response.result.outcome != "completed"
