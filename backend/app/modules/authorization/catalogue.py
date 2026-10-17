@@ -274,6 +274,16 @@ class ActionId(StrEnum):
     ACTOR_WORK_SUMMARY_READ = "actor.work_summary.read"
     TASK_SUBMISSION_BUNDLE_PREPARATION_LIST = "task.submission_bundle_preparation.list"
     TASK_SUBMISSION_BUNDLE_PREPARATION_READ = "task.submission_bundle_preparation.read"
+    PROJECT_GUIDE_LIST = "project.guide.list"
+    PROJECT_GUIDE_READ = "project.guide.read"
+    PROJECT_GUIDE_ACTIVATION_READINESS_READ = "project.guide.activation_readiness.read"
+    PROJECT_GUIDE_DOCUMENT_READ = "project.guide.document.read"
+    PROJECT_SUBMISSION_LIST = "project.submission.list"
+    PROJECT_ASSIGNMENT_LIST = "project.assignment.list"
+    PROJECT_SUMMARY_READ = "project.summary.read"
+    PROJECT_TASK_IMPORT_BATCH_LIST = "project.task.import_batch.list"
+    PROJECT_SUBMISSION_BUNDLE_PREPARATION_LIST = "project.submission_bundle_preparation.list"
+    CONTRIBUTION_POLICY_LIST = "contribution.policy.list"
 
 
 CONTRIBUTION_READ_ACTIONS = frozenset({ActionId.CONTRIBUTION_READ_SELF, ActionId.CONTRIBUTION_READ_PROJECT})
@@ -286,6 +296,13 @@ CONTRIBUTOR_WORK_READ_ACTIONS = frozenset({
     ActionId.TASK_SUBMISSION_BUNDLE_PREPARATION_READ,
 })
 CONTRIBUTOR_READ_ACTIONS = CONTRIBUTOR_WORK_READ_ACTIONS | {ActionId.ACTOR_PROJECT_LIST}
+# Project-wide Project Manager reads; the Finance policy version list shares their evaluator.
+PROJECT_GUIDE_READ_ACTIONS = frozenset({ActionId.PROJECT_GUIDE_LIST, ActionId.PROJECT_GUIDE_READ,
+    ActionId.PROJECT_GUIDE_ACTIVATION_READINESS_READ, ActionId.PROJECT_GUIDE_DOCUMENT_READ})
+PROJECT_WORK_READ_ACTIONS = frozenset({ActionId.PROJECT_SUBMISSION_LIST, ActionId.PROJECT_ASSIGNMENT_LIST,
+    ActionId.PROJECT_SUMMARY_READ, ActionId.PROJECT_TASK_IMPORT_BATCH_LIST,
+    ActionId.PROJECT_SUBMISSION_BUNDLE_PREPARATION_LIST})
+PROJECT_MANAGEMENT_READ_ACTIONS = PROJECT_GUIDE_READ_ACTIONS | PROJECT_WORK_READ_ACTIONS | {ActionId.CONTRIBUTION_POLICY_LIST}
 
 HISTORY_READ_ACTIONS = frozenset({
     ActionId.TASK_SUBMISSION_LIST,
@@ -325,6 +342,7 @@ class ActionOwner(StrEnum):
     PILOT_08 = "PILOT-08"
     PILOT_10 = "PILOT-10"
     PILOT_READ_2 = "PILOT-READ-2"
+    PILOT_READ_3 = "PILOT-READ-3"
 
     AUTH_07B = "WS-AUTH-001-07B"
     AUTH_08 = "WS-AUTH-001-08"
@@ -430,6 +448,9 @@ ACTION_DEFINITIONS = (
         _active(action, PermissionId.SUBMISSION_READ_OWN, ActionOwner.PILOT_READ_2)
         for action in sorted(CONTRIBUTOR_WORK_READ_ACTIONS)
     ),
+    *(_active(a, PermissionId.PROJECT_GUIDE_MANAGE, ActionOwner.PILOT_READ_3) for a in sorted(PROJECT_GUIDE_READ_ACTIONS)),
+    *(_active(a, PermissionId.PROJECT_TASK_MANAGE, ActionOwner.PILOT_READ_3) for a in sorted(PROJECT_WORK_READ_ACTIONS)),
+    _active(ActionId.CONTRIBUTION_POLICY_LIST, PermissionId.COMPENSATION_POLICY_MANAGE, ActionOwner.PILOT_READ_3),
     _active(ActionId.CONTRIBUTION_READ_SELF, PermissionId.CONTRIBUTION_READ_SELF, ActionOwner.PILOT_10),
     _active(ActionId.CONTRIBUTION_READ_PROJECT, PermissionId.CONTRIBUTION_READ_PROJECT, ActionOwner.PILOT_10),
     _active(ActionId.TASK_POST_SUBMIT_ROUTE, PermissionId.TASK_POST_SUBMIT_ROUTE, ActionOwner.ARCH_04E2),
@@ -622,21 +643,9 @@ ACTION_DEFINITIONS = (
         ActionOwner.AUTH_14,
     ),
     _active(ActionId.OPERATIONS_CHECKER_RETRY, PermissionId.OPERATIONS_CHECKER_RETRY, ActionOwner.AUTH_14),
-    _active(
-        ActionId.OPERATIONS_CHECKER_RETRY_SOURCE_LIST,
-        PermissionId.OPERATIONS_STATUS_READ,
-        ActionOwner.AUTH_14,
-    ),
-    _active(
-        ActionId.CHECKER_REGISTRY_READ,
-        PermissionId.OPERATIONS_STATUS_READ,
-        ActionOwner.PILOT_04,
-    ),
-    _active(
-        ActionId.CHECKER_REGISTRY_REGISTER,
-        PermissionId.OPERATIONS_RECONCILE_RUN,
-        ActionOwner.PILOT_04,
-    ),
+    _active(ActionId.OPERATIONS_CHECKER_RETRY_SOURCE_LIST, PermissionId.OPERATIONS_STATUS_READ, ActionOwner.AUTH_14),
+    _active(ActionId.CHECKER_REGISTRY_READ, PermissionId.OPERATIONS_STATUS_READ, ActionOwner.PILOT_04),
+    _active(ActionId.CHECKER_REGISTRY_REGISTER, PermissionId.OPERATIONS_RECONCILE_RUN, ActionOwner.PILOT_04),
     _active(ActionId.SUBMISSION_CREATE, PermissionId.SUBMISSION_CREATE, ActionOwner.AUTH_14),
     _planned(ActionId.REVIEW_QUEUE_READ, PermissionId.REVIEW_QUEUE_READ, ActionOwner.AUTH_REV_05),
     _planned(ActionId.REVIEW_QUEUE_INSPECT, PermissionId.REVIEW_QUEUE_INSPECT, ActionOwner.AUTH_REV_05),
@@ -671,11 +680,7 @@ ACTION_DEFINITIONS = (
         PermissionId.OPERATIONS_RECONCILE_RUN,
         ActionOwner.XINT_003_08A,
     ),
-    _active(
-        ActionId.REVIEW_LIFECYCLE_ACTIVATION_MANAGE,
-        PermissionId.OPERATIONS_RECONCILE_RUN,
-        ActionOwner.XINT_003_08B,
-    ),
+    _active(ActionId.REVIEW_LIFECYCLE_ACTIVATION_MANAGE, PermissionId.OPERATIONS_RECONCILE_RUN, ActionOwner.XINT_003_08B),
     _planned(ActionId.ARTIFACT_BINDING_READ, PermissionId.ARTIFACT_BINDING_READ, ActionOwner.AUTH_ART_02D_OPERATOR),
     _planned(ActionId.ARTIFACT_REPLICA_READ, PermissionId.ARTIFACT_REPLICA_READ, ActionOwner.AUTH_ART_02D_OPERATOR),
     _planned(ActionId.ARTIFACT_RECEIPT_READ, PermissionId.ARTIFACT_RECEIPT_READ, ActionOwner.AUTH_ART_02D_OPERATOR),
@@ -829,7 +834,7 @@ HISTORICAL_PERMISSION_IDS = PERMISSION_IDS - NEW_PERMISSION_IDS
 
 def _require_catalogue_counts() -> None:
     """Keep the closed action inventory and permission boundary exact."""
-    if len(PERMISSION_IDS) != 82 or len(ACTION_IDS) != 164:
+    if len(PERMISSION_IDS) != 82 or len(ACTION_IDS) != 174:
         raise RuntimeError("authorization catalogue count mismatch")
     if len(HISTORICAL_PERMISSION_IDS) != 49 or len(NEW_PERMISSION_IDS) != 33:
         raise RuntimeError("authorization permission boundary mismatch")
@@ -980,7 +985,7 @@ def _index_actions(definitions: tuple[ActionDefinition, ...]) -> MappingProxyTyp
         ActionId.PROJECT_TASK_READ, ActionId.PROJECT_TASK_SUBMISSION_REQUIREMENTS_READ,
         ActionId.AUDIT_TASK_EVIDENCE_READ, ActionId.OPERATIONS_CHECKER_RETRY,
         ActionId.OPERATIONS_CHECKER_RETRY_SOURCE_LIST,
-    } | TASK_LOCKED_CONTEXT_READ_ACTIONS | HISTORY_READ_ACTIONS:
+    } | TASK_LOCKED_CONTEXT_READ_ACTIONS | HISTORY_READ_ACTIONS | PROJECT_MANAGEMENT_READ_ACTIONS:
         raise RuntimeError("authorization active action boundary mismatch")
     _validate_action_definitions(definitions)
     return MappingProxyType(indexed)

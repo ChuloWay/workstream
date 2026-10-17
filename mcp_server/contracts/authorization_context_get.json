@@ -1,5 +1,5 @@
 {
-  "canonical_sha256": "a5279e3bd16fd7acd536923072de3f48e32aad61bb49dcac511b6844e7e31be6",
+  "canonical_sha256": "6fcdbc4acff9016baaecc84876367b035218ad03addb29e494ad79478effd209",
   "components": {
     "schemas": {
       "ActionId": {
@@ -168,7 +168,17 @@
           "actor.submission.list",
           "actor.work_summary.read",
           "task.submission_bundle_preparation.list",
-          "task.submission_bundle_preparation.read"
+          "task.submission_bundle_preparation.read",
+          "project.guide.list",
+          "project.guide.read",
+          "project.guide.activation_readiness.read",
+          "project.guide.document.read",
+          "project.submission.list",
+          "project.assignment.list",
+          "project.summary.read",
+          "project.task.import_batch.list",
+          "project.submission_bundle_preparation.list",
+          "contribution.policy.list"
         ],
         "title": "ActionId",
         "description": "Closed action identifiers reserved by approved owner chunks."
