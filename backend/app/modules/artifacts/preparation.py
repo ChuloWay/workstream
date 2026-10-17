@@ -57,6 +57,7 @@ _ROOT_MARKER_PREFIX = b"workstream-artifact-scratch-v1:"
 _EXTERNAL_GRANT_MANIFEST = ".external-checker-grant.json"
 _EXTERNAL_RUNTIME_DIRECTORY = "runtime"
 _EXTERNAL_GRANT_PROTOCOL = "workstream.external_checker_material_grant.v1"
+_TERMINAL_BENCHMARK_CAPABILITY = ("workstream.terminal_benchmark_project", "v1")
 
 
 class PreparedSubmissionProcessor(Protocol[_InspectionResultCo]):
@@ -204,6 +205,8 @@ class PostExternalMaterialGrantRequest:
     verification_generation: int
     namespace_fingerprint: str
     semantic_manifest_sha256: str
+    registry_capability_id: str
+    registry_capability_version: str
     directories: tuple[str, ...]
     files: tuple[ExternalMaterialFile, ...]
 
@@ -250,9 +253,22 @@ class PostExternalMaterialGrantRequest:
             or type(self.byte_count) is not int
             or not 0 <= self.byte_count <= HARD_MAXIMUM_ARTIFACT_BYTES
             or not self.lease_expires_at.endswith(("Z", "+00:00"))
+            or type(self.registry_capability_id) is not str
+            or type(self.registry_capability_version) is not str
+            or re.fullmatch(r"[a-z][a-z0-9_.-]{0,99}", self.registry_capability_id) is None
+            or re.fullmatch(r"[a-z0-9][a-z0-9_.-]{0,49}", self.registry_capability_version)
+            is None
         ):
             raise ValueError("external POST material grant request is invalid")
         _validate_external_material_tree(self.directories, self.files)
+
+    @property
+    def requires_runtime_scratch(self) -> bool:
+        """Select bounded scratch from the immutable registered capability identity."""
+        return (
+            self.registry_capability_id,
+            self.registry_capability_version,
+        ) == _TERMINAL_BENCHMARK_CAPABILITY
 
     def manifest_identity(self) -> dict[str, object]:
         """Return complete POST custody without storage-provider coordinates."""
@@ -778,6 +794,7 @@ class ArtifactScratchManager:
             post_maximum_entries = (
                 self._expand_post_workspace_reservation_sync(grant_id)
                 if type(request) is PostExternalMaterialGrantRequest
+                and request.requires_runtime_scratch
                 else None
             )
             # The trusted archive inspector seals this directory before its

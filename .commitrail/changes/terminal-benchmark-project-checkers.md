@@ -783,7 +783,15 @@ Conventional grants keep their former reservation and omit runtime scratch; an
 exact service-authorized terminal request without that scratch fails grant
 verification rather than downgrading. Terminal-profile configuration also
 fails before readiness unless the service reports `gvisor` plus `runsc`.
-Architecture and security must approve this owner boundary before product edits.
+Architecture, QA and security approved this owner-boundary plan before product
+edits. The implementation now maps the locked registry capability into ART's
+existing grant request, leaves conventional POST reservations unchanged and
+requires the exact service-authorized terminal profile before accepting the
+runtime sibling. Focused local ART tests pass for the expanded aggregate hold,
+failure without residue, reuse after release and concurrent conventional
+reservations. The exact service grant and gVisor regressions still require the
+hosted locked Rust workspace gate because local memory and swap cannot safely
+support another Rust compile.
 
 ## Reconciliation
 

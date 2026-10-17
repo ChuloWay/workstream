@@ -61,6 +61,42 @@ impl TerminalBenchmarkProfile {
             && self.registry_entry_digest == request.registry_entry_digest
             && self.checker_image_digest == request.image_digest
     }
+
+    #[cfg(test)]
+    pub(super) fn authorization_fixture(request: &ValidatedRequest) -> Self {
+        let image = |repository: &str, manifest: &str, config: char| CacheEntry {
+            repository: repository.into(),
+            platform_manifest_digest: manifest.into(),
+            platform_manifest_media_type: "application/vnd.oci.image.manifest.v1+json".into(),
+            platform_manifest_byte_count: 1,
+            operating_system: "linux".into(),
+            architecture: "amd64".into(),
+            config_image_id: format!("sha256:{}", config.to_string().repeat(64)),
+        };
+        Self {
+            profile_version: PROFILE_VERSION.into(),
+            registry_entry_id: request.registry_entry_id.clone(),
+            registry_entry_digest: request.registry_entry_digest.clone(),
+            checker_image_digest: request.image_digest.clone(),
+            builder: image(
+                "registry.example/workstream/builder",
+                &format!("sha256:{}", "3".repeat(64)),
+                '4',
+            ),
+            approved_base: image("docker.io/library/python", BASE_MANIFEST, '5'),
+            sealed_cache: SealedCache {
+                root: PathBuf::from("/tmp/cache"),
+                uid: 1,
+                gid: 1,
+                mode: 0o555,
+                entries: Vec::new(),
+                total_count: 0,
+                total_bytes: 0,
+                inventory_digest: canonical_hash(&serde_json::json!([])).unwrap(),
+            },
+            temporary_repository: TEMPORARY_REPOSITORY.into(),
+        }
+    }
 }
 
 pub(super) fn cleanup_stale_resources(
@@ -229,6 +265,9 @@ pub(super) fn validate_profile(
     config: &ServiceConfig,
     profile: &TerminalBenchmarkProfile,
 ) -> Result<(), String> {
+    if config.isolation_mode != "gvisor" || config.runtime != "runsc" {
+        return Err("terminal benchmark profile requires gvisor".into());
+    }
     if profile.profile_version != PROFILE_VERSION
         || !valid_grant_id_value(&profile.registry_entry_id)
         || !valid_digest(&profile.registry_entry_digest)
@@ -1524,6 +1563,21 @@ exit 2
         substituted = post;
         substituted.registry_entry_digest = format!("sha256:{}", "8".repeat(64));
         assert!(!profile.authorizes(&substituted));
+    }
+
+    #[test]
+    fn terminal_profile_refuses_docker_dev_before_cache_or_runtime_use() {
+        let request = request("post_submit");
+        let profile = TerminalBenchmarkProfile::authorization_fixture(&request);
+        let config = test_service_config(
+            Path::new("/tmp/workstream-terminal-profile-test"),
+            PathBuf::from("/bin/false"),
+        );
+
+        assert_eq!(
+            validate_profile(&config, &profile).unwrap_err(),
+            "terminal benchmark profile requires gvisor"
+        );
     }
 
     #[test]

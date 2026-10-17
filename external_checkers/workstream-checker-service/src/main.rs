@@ -985,8 +985,13 @@ fn verify_grant(
     if observed.files != manifest.files || observed.directories != manifest.directories {
         return Err("grant material differs".into());
     }
+    let terminal_runtime_required = config
+        .terminal_benchmark
+        .as_ref()
+        .is_some_and(|profile| profile.authorizes(request));
     let runtime = match (&manifest.identity, &manifest.runtime_scratch) {
         (GrantIdentity::PreSubmit { .. }, None) => None,
+        (GrantIdentity::PostSubmit { .. }, None) if !terminal_runtime_required => None,
         (GrantIdentity::PostSubmit { .. }, Some(runtime)) => {
             let path = grant_root.join("runtime");
             let metadata = fs::symlink_metadata(&path).map_err(|_| "runtime scratch missing")?;
@@ -3147,7 +3152,46 @@ exit 2
         };
         assert!(grant_matches_request(&manifest, &request));
 
-        let (root, config) = test_config();
+        let (root, mut config) = test_config();
+        let bind = |manifest: &mut GrantManifest| {
+            let mut binding_body = serde_json::to_value(&*manifest).unwrap();
+            binding_body
+                .as_object_mut()
+                .unwrap()
+                .remove("binding_digest");
+            manifest.binding_digest = canonical_hash(&binding_body).unwrap();
+        };
+        let mut conventional_manifest = manifest.clone();
+        bind(&mut conventional_manifest);
+        let grant_root = config
+            .material_root
+            .join("workspaces")
+            .join(&conventional_manifest.grant_id);
+        let workspace = grant_root.join("workspace");
+        let runtime = grant_root.join("runtime");
+        fs::create_dir_all(&workspace).unwrap();
+        fs::set_permissions(&grant_root, fs::Permissions::from_mode(0o700)).unwrap();
+        fs::set_permissions(&workspace, fs::Permissions::from_mode(0o500)).unwrap();
+        let manifest_path = grant_root.join(".external-checker-grant.json");
+        fs::write(
+            &manifest_path,
+            serde_json::to_vec(&conventional_manifest).unwrap(),
+        )
+        .unwrap();
+        fs::set_permissions(&manifest_path, fs::Permissions::from_mode(0o400)).unwrap();
+        let conventional_reference = GrantReference {
+            grant_id: conventional_manifest.grant_id.clone(),
+            binding_digest: conventional_manifest.binding_digest.clone(),
+        };
+
+        let verified = verify_grant(&config, &request, &conventional_reference).unwrap();
+        assert!(verified.runtime.is_none());
+        config.terminal_benchmark = Some(TerminalBenchmarkProfile::authorization_fixture(&request));
+        assert_eq!(
+            verify_grant(&config, &request, &conventional_reference).unwrap_err(),
+            "grant runtime phase differs"
+        );
+
         let mut zero_allowance_manifest = manifest.clone();
         zero_allowance_manifest.runtime_scratch = Some(RuntimeScratchGrant {
             byte_allowance: 0,
@@ -3156,36 +3200,21 @@ exit 2
             gid: config.sandbox_gid,
             mode: 0o700,
         });
-        let mut binding_body = serde_json::to_value(&zero_allowance_manifest).unwrap();
-        binding_body
-            .as_object_mut()
-            .unwrap()
-            .remove("binding_digest");
-        zero_allowance_manifest.binding_digest = canonical_hash(&binding_body).unwrap();
-        let grant_root = config
-            .material_root
-            .join("workspaces")
-            .join(&zero_allowance_manifest.grant_id);
-        let workspace = grant_root.join("workspace");
-        let runtime = grant_root.join("runtime");
-        fs::create_dir_all(&workspace).unwrap();
+        bind(&mut zero_allowance_manifest);
+        fs::remove_file(&manifest_path).unwrap();
         fs::create_dir(&runtime).unwrap();
-        fs::set_permissions(&grant_root, fs::Permissions::from_mode(0o700)).unwrap();
-        fs::set_permissions(&workspace, fs::Permissions::from_mode(0o500)).unwrap();
         fs::set_permissions(&runtime, fs::Permissions::from_mode(0o700)).unwrap();
-        let manifest_path = grant_root.join(".external-checker-grant.json");
         fs::write(
             &manifest_path,
             serde_json::to_vec(&zero_allowance_manifest).unwrap(),
         )
         .unwrap();
         fs::set_permissions(&manifest_path, fs::Permissions::from_mode(0o400)).unwrap();
-        let reference = GrantReference {
+        let zero_reference = GrantReference {
             grant_id: zero_allowance_manifest.grant_id.clone(),
             binding_digest: zero_allowance_manifest.binding_digest.clone(),
         };
-
-        let verified = verify_grant(&config, &request, &reference).unwrap();
+        let verified = verify_grant(&config, &request, &zero_reference).unwrap();
         let (_, runtime_grant) = verified.runtime.unwrap();
         assert_eq!(runtime_grant.byte_allowance, 0);
         assert_eq!(runtime_grant.entry_allowance, 0);

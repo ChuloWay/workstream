@@ -255,6 +255,8 @@ async def _execute(arguments: argparse.Namespace) -> None:
         verification_generation=material.verification_generation,
         namespace_fingerprint=material.namespace_fingerprint,
         semantic_manifest_sha256=material.semantic_manifest_sha256,
+        registry_capability_id=registry.capability_id,
+        registry_capability_version=registry.capability_version,
         directories=directories,
         files=files,
     )
