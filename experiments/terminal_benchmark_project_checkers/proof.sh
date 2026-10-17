@@ -1145,6 +1145,7 @@ commands = records("command-results.ndjson")
 launches = records("launches.ndjson")
 os.close(directory)
 start_statuses = []
+command_trace = []
 for command in commands:
     argv = command.get("argv")
     status = command.get("status")
@@ -1155,9 +1156,18 @@ for command in commands:
         or type(status) is not int
     ):
         raise SystemExit(1)
+    if argv[0] in {"create", "info", "inspect", "kill", "load", "ps", "rm", "start"}:
+        kind = argv[0]
+    elif len(argv) >= 2 and argv[0] == "image" and argv[1] in {"inspect", "ls", "rm"}:
+        kind = "image_" + argv[1]
+    elif len(argv) >= 2 and argv[0] == "container" and argv[1] in {"inspect", "ls"}:
+        kind = "container_" + argv[1]
+    else:
+        raise SystemExit(1)
+    command_trace.append({"kind": kind, "status": status})
     if len(argv) >= 2 and argv[0] == "start":
         start_statuses.append(status)
-if len(start_statuses) > 8:
+if len(command_trace) > 256 or len(start_statuses) > 8:
     raise SystemExit(1)
 launch_kinds = Counter()
 for launch in launches:
@@ -1169,6 +1179,7 @@ print(
     "ws493_matrix_diagnostic="
     + json.dumps(
         {
+            "command_trace": command_trace,
             "launch_kind_counts": dict(sorted(launch_kinds.items())),
             "start_statuses": start_statuses,
         },
