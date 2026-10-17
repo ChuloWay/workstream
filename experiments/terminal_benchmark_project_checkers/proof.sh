@@ -28,10 +28,12 @@ readonly DIND_STATE="${STATE_ROOT}/dind"
 readonly CACHE_ROOT="${STATE_ROOT}/cache/content"
 readonly RAW_DIR="${STATE_ROOT}/evidence/raw"
 readonly ART_ROOT="${STATE_ROOT}/art"
-readonly SERVICE_ROOT="${STATE_ROOT}/service"
+readonly CONTROL_ROOT="${RUNNER_TEMP_ROOT}/${PROOF_PREFIX}-control"
+readonly CONTROL_OWNER="${CONTROL_ROOT}/.owner.json"
+readonly SERVICE_ROOT="${CONTROL_ROOT}/service"
 readonly SOCKET_PATH="${SERVICE_ROOT}/checker.sock"
-readonly WRAPPER_WORK="${STATE_ROOT}/wrapper"
-readonly SERVICE_BINARY="${STATE_ROOT}/bin/workstream-checker-service"
+readonly WRAPPER_WORK="${CONTROL_ROOT}/wrapper"
+readonly SERVICE_BINARY="${REPOSITORY_ROOT}/external_checkers/target/release/workstream-checker-service"
 readonly SERVICE_CONFIG="${SERVICE_ROOT}/config.json"
 readonly SERVICE_PID_FILE="${WRAPPER_WORK}/service.pid"
 readonly BARRIER_ENABLE="${WRAPPER_WORK}/barrier.enable"
@@ -86,6 +88,99 @@ finally:
     os.close(descriptor)
 PY
   chown "${OWNER_UID}:${DOCKER_GID}" "${destination}"
+}
+
+create_control_custody() {
+  python3 - "${CONTROL_ROOT}" "${CONTROL_OWNER}" "${EXPECTED_HEAD}" "${RUN_ID}" <<'PY'
+import ctypes
+import json
+import os
+import shutil
+import sys
+import tempfile
+
+root, owner_path, head_sha, run_id = sys.argv[1:]
+parent = os.path.dirname(root)
+temporary = tempfile.mkdtemp(prefix=f".{os.path.basename(root)}.", dir=parent)
+renamed = False
+try:
+    os.chmod(temporary, 0o755)
+    marker = os.path.join(temporary, os.path.basename(owner_path))
+    payload = (
+        json.dumps(
+            {
+                "head_sha": head_sha,
+                "run_id": run_id,
+                "schema_version": "workstream.ws493.control-owner.v1",
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        + "\n"
+    ).encode()
+    descriptor = os.open(
+        marker,
+        os.O_CREAT | os.O_EXCL | os.O_WRONLY | os.O_NOFOLLOW,
+        0o600,
+    )
+    try:
+        os.write(descriptor, payload)
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+    directory = os.open(temporary, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        os.fsync(directory)
+    finally:
+        os.close(directory)
+
+    renameat2 = ctypes.CDLL(None, use_errno=True).renameat2
+    renameat2.argtypes = [ctypes.c_int, ctypes.c_char_p, ctypes.c_int, ctypes.c_char_p, ctypes.c_uint]
+    renameat2.restype = ctypes.c_int
+    if renameat2(-100, os.fsencode(temporary), -100, os.fsencode(root), 1) != 0:
+        error = ctypes.get_errno()
+        raise OSError(error, os.strerror(error), root)
+    renamed = True
+finally:
+    if not renamed:
+        shutil.rmtree(temporary)
+PY
+}
+
+control_custody_valid() {
+  python3 - "${CONTROL_ROOT}" "${CONTROL_OWNER}" "${EXPECTED_HEAD}" "${RUN_ID}" <<'PY'
+import json
+import os
+import stat
+import sys
+
+root, owner_path, head_sha, run_id = sys.argv[1:]
+root_stat = os.lstat(root)
+if not stat.S_ISDIR(root_stat.st_mode) or stat.S_IMODE(root_stat.st_mode) != 0o755:
+    raise SystemExit("control root type or mode differs")
+if (root_stat.st_uid, root_stat.st_gid) != (0, 0):
+    raise SystemExit("control root owner differs")
+owner_stat = os.lstat(owner_path)
+if not stat.S_ISREG(owner_stat.st_mode) or stat.S_IMODE(owner_stat.st_mode) != 0o600:
+    raise SystemExit("control owner type or mode differs")
+if (owner_stat.st_uid, owner_stat.st_gid) != (0, 0) or owner_stat.st_size > 4096:
+    raise SystemExit("control owner metadata differs")
+descriptor = os.open(owner_path, os.O_RDONLY | os.O_NOFOLLOW)
+try:
+    opened = os.fstat(descriptor)
+    if (opened.st_dev, opened.st_ino) != (owner_stat.st_dev, owner_stat.st_ino):
+        raise SystemExit("control owner changed")
+    payload = os.read(descriptor, 4097)
+finally:
+    os.close(descriptor)
+expected = {
+    "head_sha": head_sha,
+    "run_id": run_id,
+    "schema_version": "workstream.ws493.control-owner.v1",
+}
+if payload != (json.dumps(expected, sort_keys=True, separators=(",", ":")) + "\n").encode():
+    raise SystemExit("control owner binding differs")
+PY
 }
 
 assert_source_head() {
@@ -393,9 +488,15 @@ PY
 }
 
 prepare_contract() {
+  create_control_custody
   install -d -m 0700 -o "${OWNER_UID}" -g "${DOCKER_GID}" "${ART_ROOT}" "${SERVICE_ROOT}" "${WRAPPER_WORK}"
-  install -d -m 0755 "$(dirname "${SERVICE_BINARY}")"
-  install -m 0555 "${REPOSITORY_ROOT}/external_checkers/target/release/workstream-checker-service" "${SERVICE_BINARY}"
+  chown "${OWNER_UID}:${DOCKER_GID}" "${ART_ROOT}" "${SERVICE_ROOT}" "${WRAPPER_WORK}"
+  chmod 0700 "${ART_ROOT}" "${SERVICE_ROOT}" "${WRAPPER_WORK}"
+  [[ -x "${SERVICE_BINARY}" ]]
+  setpriv --reuid "${OWNER_UID}" --regid "${DOCKER_GID}" --clear-groups \
+    sh -c 'test -x "$1"; : >"$2"; : >"$3"; : >"$4"; rm -f "$2" "$3" "$4"' sh \
+    "${SERVICE_BINARY}" "${WRAPPER_WORK}/owner-write-probe" \
+    "${SERVICE_ROOT}/owner-write-probe" "${ART_ROOT}/owner-write-probe"
   "${BACKEND_PYTHON}" "${SCRIPT_DIR}/prepare_contract.py" \
     --facts "${RAW_DIR}/image-facts.json" --cache-root "${CACHE_ROOT}" \
     --material-root "${ART_ROOT}" --socket "${SOCKET_PATH}" \
@@ -497,6 +598,7 @@ service_environment() {
 
 start_service() {
   local log="$1"
+  control_custody_valid
   rm -f "${SERVICE_PID_FILE}"
   printf 'service_start_head=%s\n' "${EXPECTED_HEAD}" >"${log}"
   chown "${OWNER_UID}:${DOCKER_GID}" "${log}"
@@ -539,6 +641,7 @@ positive_owned_absence() {
 run_matrix() {
   [[ "$(id -u)" -eq 0 ]]
   assert_source_head
+  control_custody_valid
   local event_since
   event_since="$(date +%s)"
   local control="${PROOF_PREFIX}-unowned-control"
@@ -630,7 +733,16 @@ stage_evidence() {
 
 cleanup() {
   [[ "$(id -u)" -eq 0 ]]
-  if [[ -f "${SERVICE_PID_FILE}" && ! -L "${SERVICE_PID_FILE}" ]]; then
+  local control_owned=false control_safe=true
+  if [[ -e "${CONTROL_ROOT}" || -L "${CONTROL_ROOT}" ]]; then
+    if control_custody_valid; then
+      control_owned=true
+    else
+      control_safe=false
+      printf '%s\n' 'refusing ambiguous WS493 control root cleanup' >&2 || true
+    fi
+  fi
+  if [[ "${control_owned}" == true && -f "${SERVICE_PID_FILE}" && ! -L "${SERVICE_PID_FILE}" ]]; then
     local pid
     pid="$(cat "${SERVICE_PID_FILE}")"
     if [[ "${pid}" =~ ^[1-9][0-9]*$ ]] && [[ -e "/proc/${pid}/exe" ]] \
@@ -638,7 +750,7 @@ cleanup() {
       kill -TERM "${pid}" || true
     fi
   fi
-  if [[ -d "${WRAPPER_WORK}" ]]; then
+  if [[ "${control_owned}" == true && -d "${WRAPPER_WORK}" && ! -L "${WRAPPER_WORK}" ]]; then
     printf '%s\n' "${BARRIER_TOKEN}" >"${BARRIER_RELEASE}" || true
     chown "${OWNER_UID}:${DOCKER_GID}" "${BARRIER_RELEASE}" 2>/dev/null || true
   fi
@@ -670,6 +782,9 @@ cleanup() {
   rm -f "${RUNNER_TEMP_ROOT}/xfsprogs_${XFS_PROGS_VERSION}_amd64.deb"
   rm -rf "${CRANE_ROOT}"
   rm -f "${CRANE_ARCHIVE}"
+  if [[ "${control_owned}" == true ]]; then
+    rm -rf "${CONTROL_ROOT}"
+  fi
   rmdir "${MOUNT_ROOT}" 2>/dev/null || true
   if [[ ! -e "${RAW_DEVICE_FILE}" && ! -e "${STATE_ROOT}" ]]; then deleted=true; fi
   rm -f "${CLEANUP_RECEIPT}"
@@ -695,8 +810,9 @@ PY
     python3 "${SCRIPT_DIR}/verify_evidence.py" add-cleanup \
       "${STAGING_DIR}" "${CLEANUP_RECEIPT}" "${EXPECTED_HEAD}" 0
   fi
-  [[ "${outer_absent}" == true && "${unmounted}" == true && "${detached}" == true && "${deleted}" == true \
-    && ! -e "${CRANE_ROOT}" && ! -e "${CRANE_ARCHIVE}" ]]
+  [[ "${control_safe}" == true && "${outer_absent}" == true && "${unmounted}" == true \
+    && "${detached}" == true && "${deleted}" == true \
+    && ! -e "${CRANE_ROOT}" && ! -e "${CRANE_ARCHIVE}" && ! -e "${CONTROL_ROOT}" ]]
 }
 
 final_evidence() {

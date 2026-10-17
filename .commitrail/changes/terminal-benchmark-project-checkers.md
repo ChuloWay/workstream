@@ -381,6 +381,21 @@ residue. If the Python ART owner
 also dies, the existing TTL plus dead-owner reaper cleans the workspace. No
 service-to-ART callback or second cleanup dependency is introduced.
 
+The proof keeps only quota-subject cache, Docker state, evidence and ART scratch
+on the XFS mount. Its socket, PID and one-use barrier files live in a separate
+run-named control directory under the ephemeral runner temporary root. That
+root is atomically installed only when the target is absent, remains root-owned
+`0755`, and carries a root-owned `0600` no-follow marker bound to the head and
+run. The service and wrapper child directories use the exact service UID/GID
+and `0700` modes. Cleanup validates the marker, owner and modes before touching
+the control tree and refuses an ambiguous preexisting or substituted path. The
+trusted service executes directly from the exact Cargo output in the checked-out
+head. Preparation checks execute permission and create/remove access as the
+service owner in both child control directories and the ART scratch root;
+the run entry and each service start revalidate custody before touching control
+files, and runtime socket readiness proves that the service actually executed
+before POST starts.
+
 Every service-created Docker container has exact trusted labels for deployment
 owner, request digest, grant ID, attempt nonce and resource kind. The temporary
 image tag uses only the fixed administrator-configured repository plus the
