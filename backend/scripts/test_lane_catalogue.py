@@ -486,6 +486,7 @@ CHECKER_DELIVERY_MODULES = (
     "tests/checkers/execution/test_checker_retry.py",
     "tests/checkers/execution/test_checker_retry_authority.py",
     "tests/checkers/execution/test_checker_retry_history_replay.py",
+    "tests/checkers/execution/test_checker_retry_http.py",
     "tests/checkers/execution/test_checker_retry_migration.py",
     "tests/test_post_submit_materialization.py",
     "tests/test_post_submit_selection.py",

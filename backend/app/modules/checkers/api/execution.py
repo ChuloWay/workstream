@@ -5,9 +5,9 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from contextlib import AbstractAsyncContextManager
 from datetime import UTC
-from typing import Literal, Protocol
+from typing import Annotated, Literal, Protocol
 
-from pydantic import AwareDatetime, Field, field_validator, model_validator
+from pydantic import AfterValidator, AwareDatetime, Field, model_validator
 
 from app.core.hashing import canonical_json_hash
 
@@ -35,19 +35,50 @@ class CheckerRequestConflict(CheckerExecutionUnavailable):
     """A request key or generation already belongs to different facts."""
 
 
+class CheckerRetrySourceUnavailable(CheckerExecutionUnavailable):
+    """Conceal an absent, foreign, stale or ineligible retry source."""
+
+
+class CheckerRetryOperationUnavailable(CheckerExecutionUnavailable):
+    """Fail closed when retained retry or authority evidence is inconsistent."""
+
+
+class CheckerRetryAuthorityDenied(CheckerExecutionUnavailable):
+    """An exact retry authority denial available for canonical HTTP restaging."""
+
+
+class CheckerRetryCursorInvalid(ValueError):
+    """The presented recovery cursor does not match its exact signed query."""
+
+
+def _checker_retry_reason(value: str) -> str:
+    if not value.strip() or any(
+        ord(character) < 32 or ord(character) == 127 for character in value
+    ):
+        raise ValueError("checker retry reason is invalid")
+    return value
+
+
+CheckerRetryReason = Annotated[
+    str,
+    Field(min_length=1, max_length=500),
+    AfterValidator(_checker_retry_reason),
+]
+
+
 class CheckerRetryCommand(CheckerValue):
     """Operator's exact source, reason and replay key; no caller-selected successor."""
 
+    project_id: ResourceId
     source_run_id: ResourceId
     request_key: ResourceId
-    reason: str = Field(min_length=1, max_length=500)
+    reason: CheckerRetryReason
 
-    @field_validator("reason")
-    @classmethod
-    def nonblank_reason(cls, value: str) -> str:
-        if not value.strip() or any(ord(character) < 32 or ord(character) == 127 for character in value):
-            raise ValueError("checker retry reason is invalid")
-        return value
+
+class CheckerRetryRequest(CheckerValue):
+    """Public body for one exact project/run retry command."""
+
+    reason: CheckerRetryReason
 
 
 class CheckerRetrySource(CheckerValue):
@@ -73,15 +104,8 @@ class CheckerRetryPreparation(CheckerValue):
 
     actor_profile_id: ResourceId
     request_key: ResourceId
-    reason: str = Field(min_length=1, max_length=500)
+    reason: CheckerRetryReason
     source: CheckerRetrySource
-
-    @field_validator("reason")
-    @classmethod
-    def nonblank_reason(cls, value: str) -> str:
-        if not value.strip() or any(ord(character) < 32 or ord(character) == 127 for character in value):
-            raise ValueError("checker retry reason is invalid")
-        return value
 
 
 class CheckerRetrySuccessor(CheckerValue):
@@ -103,6 +127,123 @@ class CheckerRetryResult(CheckerValue):
     source: CheckerRetrySource
     successor: CheckerRetrySuccessor
     authorization_decision_id: ResourceId
+
+
+class CheckerRetrySourceQuery(CheckerValue):
+    """One project-bound page request for retained terminal retry sources."""
+
+    project_id: ResourceId
+    limit: int = Field(ge=1, le=100, strict=True)
+    cursor: str | None = Field(default=None, max_length=512)
+
+
+class CheckerRetrySourcePosition(CheckerValue):
+    """Stable keyset boundary returned only by the signed cursor authority."""
+
+    created_at: AwareDatetime
+    source_run_id: ResourceId
+
+
+class CheckerRetryDiscoverySource(CheckerValue):
+    """Bounded failed-run identity sufficient to select one recovery source."""
+
+    project_id: ResourceId
+    task_id: ResourceId
+    submission_id: ResourceId
+    submission_version: VersionNumber
+    source_run_id: ResourceId
+    source_request_id: ResourceId
+    source_request_digest: Sha256
+    source_result_id: ResourceId
+    source_result_digest: Sha256
+    source_finalize_evidence_id: ResourceId
+    source_generation: VersionNumber
+    failure_code: str = Field(min_length=1, max_length=100)
+
+
+class CheckerRetrySourceItem(CheckerValue):
+    """Privacy-bounded known terminal failure and its immutable retry state."""
+
+    source: CheckerRetryDiscoverySource
+    recovery_state: Literal["eligible", "retried", "not_current"]
+    created_at: AwareDatetime
+    completed_at: AwareDatetime
+    retry_receipt_id: ResourceId | None = None
+    successor: CheckerRetrySuccessor | None = None
+
+    @model_validator(mode="after")
+    def exact_retry_state(self):
+        retried = self.recovery_state == "retried"
+        retained = self.retry_receipt_id is not None and self.successor is not None
+        partial = (self.retry_receipt_id is None) != (self.successor is None)
+        if retried != retained or partial:
+            raise ValueError("checker retry source state is invalid")
+        return self
+
+
+class CheckerRetryPublicResult(CheckerValue):
+    """Privacy-bounded public projection of one retained retry result."""
+
+    receipt_id: ResourceId
+    source: CheckerRetryDiscoverySource
+    successor: CheckerRetrySuccessor
+    authorization_decision_id: ResourceId
+
+    @classmethod
+    def from_result(cls, result: CheckerRetryResult) -> CheckerRetryPublicResult:
+        result = CheckerRetryResult.model_validate(result)
+        return cls(
+            receipt_id=result.receipt_id,
+            source=CheckerRetryDiscoverySource(
+                project_id=result.source.project_id,
+                task_id=result.source.task_id,
+                submission_id=result.source.submission_id,
+                submission_version=result.source.submission_version,
+                source_run_id=result.source.source_run_id,
+                source_request_id=result.source.source_request_id,
+                source_request_digest=result.source.source_request_digest,
+                source_result_id=result.source.source_result_id,
+                source_result_digest=result.source.source_result_digest,
+                source_finalize_evidence_id=result.source.source_finalize_evidence_id,
+                source_generation=result.source.source_generation,
+                failure_code=result.source.failure_code,
+            ),
+            successor=result.successor,
+            authorization_decision_id=result.authorization_decision_id,
+        )
+
+
+class CheckerRetrySourcePage(CheckerValue):
+    """One bounded exact project page; a cursor conveys no authority."""
+
+    project_id: ResourceId
+    items: tuple[CheckerRetrySourceItem, ...]
+    next_cursor: str | None
+
+    @model_validator(mode="after")
+    def exact_project(self):
+        if len(self.items) > 100 or any(
+            item.source.project_id != self.project_id for item in self.items
+        ):
+            raise ValueError("checker retry source page is invalid")
+        return self
+
+
+class CheckerRetryDiscoveryAuthorizationPort(Protocol):
+    """Fresh system-Operator read authority and signed keyset custody."""
+
+    async def authorize_and_decode(
+        self, request: CheckerRetrySourceQuery,
+    ) -> CheckerRetrySourcePosition | None:
+        ...
+
+    def encode(
+        self, request: CheckerRetrySourceQuery, position: CheckerRetrySourcePosition,
+    ) -> str:
+        ...
+
+    async def restage_denial(self, error: Exception) -> bool:
+        ...
 
 
 class CheckerRetryEventExpectation(CheckerValue):
@@ -156,6 +297,9 @@ class CheckerRetryAuthorizationPort(Protocol):
         ...
 
     def close(self, handle: object) -> None:
+        ...
+
+    async def restage_denial(self, error: CheckerRetryAuthorityDenied) -> bool:
         ...
 
 

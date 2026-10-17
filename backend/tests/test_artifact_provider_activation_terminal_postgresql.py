@@ -87,15 +87,20 @@ async def _insert_soon_expiring_activation(
     )
 
     group_nonce = uuid4()
+    # The runtime challenge must complete before the denial probes start.
     principals = {
-        "readiness": settings.artifact_s3_readiness_role_arn,
         "runtime_immutability": settings.artifact_s3_runtime_role_arn,
+        "readiness": settings.artifact_s3_readiness_role_arn,
         "negative_access": settings.artifact_s3_negative_role_arn,
     }
     now = await artifact_provider_database_time(session)
-    started_at = now - timedelta(minutes=14, seconds=55)
     for probe_type, principal in principals.items():
         assert principal is not None
+        started_at = (
+            now - timedelta(minutes=14, seconds=55)
+            if probe_type == "runtime_immutability"
+            else await artifact_provider_database_time(session)
+        )
         await record_artifact_provider_probe_result(
             session,
             settings,

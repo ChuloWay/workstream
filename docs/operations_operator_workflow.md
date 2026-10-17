@@ -167,6 +167,28 @@ contribution. `closed/review_rejected` is not a canonical task state.
   historical human context. Operator authority never records a human Review
   or adjudication decision.
 
+## Terminal Checker Infrastructure Recovery
+
+1. Use
+   `GET /api/v1/operations/projects/{project_id}/checker-retry-sources` with an
+   active system Operator grant. Follow the signed cursor when present; each
+   page revalidates current authority.
+2. Select only an `eligible` finalized post-submit `infrastructure_failed`
+   source. `retried` identifies the retained successor. `not_current` is
+   historical evidence and cannot be retried.
+3. Confirm the named infrastructure problem is restored, then call
+   `POST /api/v1/operations/projects/{project_id}/checker-runs/{run_id}/retry`
+   with a bounded reason and a new UUID `Idempotency-Key`.
+4. On response loss, repeat the exact project, run, reason and key. Workstream
+   rechecks current Operator authority and returns the same immutable receipt
+   and successor without adding another run, retry event or initiation audit.
+
+This operation preserves the failed run and creates no Review, acceptance,
+contribution or award. It refuses queued, running, completed, stale and foreign
+sources. A dead-lettered delivery with an uncertain external effect is not a
+known terminal failure; keep it held until its source owner can prove whether
+the effect committed and defines a source-specific acknowledgement or retry.
+
 ## Lessons Learned
 
 Every project maintains lessons learned:
