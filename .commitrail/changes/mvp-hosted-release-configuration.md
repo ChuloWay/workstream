@@ -54,6 +54,9 @@ source mount, reload, development packages, local authentication and MinIO.
 - `deploy/hosted/preflight.py`
 - `deploy/hosted/README.md`
 - `scripts/test_hosted_release_config.py`
+- `scripts/verify_hosted_release_images.py` (bounded image inspection only)
+- `scripts/test_hosted_release_images.py` (discriminating verifier controls)
+- `.github/workflows/release-images.yml` (credential-free build proof only)
 - affected hosted-runtime claims only in `docs/roadmap_status.md`
 
 ### Prohibited changes
@@ -61,7 +64,7 @@ source mount, reload, development packages, local authentication and MinIO.
 - Product routes, lifecycle logic, authorization, database models or
   migrations, checker execution source, registry behavior, resource-limit
   ownership, Celery task behavior, or artifact-storage implementation.
-- Development Compose behavior, CI workflows, root README, CLI behavior or
+- Development Compose behavior, existing CI workflows/gates, root README, CLI behavior or
   frontend behavior.
 - AWS account, IAM, bucket, database, broker, collector, DNS, TLS, Docker daemon
   or host provisioning; credential access; billable resource creation; actual
@@ -135,16 +138,20 @@ values are unmeasured and do not assert a live result. Format, partition/account
 coherence, required distinct identities, eligibility math and runtime
 enforcement remain with #582's canonical application owner rather than being
 duplicated in preflight. That owner is not present on this branch: its current
-Settings ignores the eleven extra environment fields. A clean reviewed #582/PR
-#592 target must be merged before release images are built or used; only the
-combined source can make the startup-validation claim. The role-isolated
+Settings ignores the eleven extra environment fields. The clean reviewed #582/PR
+#592 implementation must be present in the candidate source before release images
+are built or used; a stacked candidate may supply that source before human merge,
+but #592 must merge before this PR. Only the combined source can make the
+startup-validation claim. The role-isolated
 proof-job profile remains pending the stable #493 integration and is not invented
 as another release service here.
 
 ## Acceptance criteria
 
 - [ ] Release build targets use digest-pinned bases and committed Python/Rust
-  locks, omit development dependencies and do not run Uvicorn reload.
+  locks, install exactly the default-plus-agents dependency closure, omit
+  dev-exclusive dependencies and do not run Uvicorn reload. A package also
+  required transitively in production, such as `jsonschema`, remains installed.
 - [x] Rendered release topology contains exactly the existing API, prefork
   worker, Beat and checker-service process roles, all from digest-qualified
   images, with no source mount, MinIO, embedded PostgreSQL or embedded Redis.
@@ -187,6 +194,32 @@ as another release service here.
 3. Build both release images from the committed locks. Inspect the backend image
    for production dependencies and commands and the checker-service image for
    the exact compiled binary and Docker client.
+   Run this proof on a disposable GitHub-hosted runner when local capacity is
+   insufficient. One scoped workflow checks out the exact PR head without stored
+   credentials, builds without publishing or cloud access, runs bounded
+   networkless inspection containers, and retains only image/source identity
+   evidence. It changes no existing CI gate. Build-time package downloads are
+   distinct from runtime access; the inspection cannot establish deployment,
+   active AWS identity or successful application operation.
+   Before building, run #592's canonical Settings tests
+   `tests/test_config.py::test_aws_s3_requires_every_exact_activation_binding`
+   and `tests/test_config.py::test_aws_factory_fails_with_live_proof_before_constructing_provider`.
+   Their absence or failure rejects a candidate missing that owner; this proof
+   does not duplicate Settings validation. The image verifier compares installed
+   distribution names/versions with the frozen default-plus-agents export and
+   runs `uv pip check`. Controls reject a missing agent dependency and an added
+   dev-only dependency while allowing legitimate production overlaps.
+   Backend custody compares the exact regular-file inventory and per-file
+   hashes read from the image's `app` and `alembic` trees, plus `uv.lock`,
+   `pyproject.toml` and `alembic.ini`, against the clean PR-head source. Inventory
+   traversal refuses symlinks and bounds file counts and total bytes. The checker
+   uses a clean, no-cache locked build of that same source; its binary must start
+   and return the exact missing-configuration failure, and its Docker CLI must
+   run. Negative verifier controls cover source/lock substitution, extra files,
+   metadata drift, missing/extra packages and altered checker failure behavior.
+   Upload only one fixed, schema-checked regular JSON evidence file of at most
+   64 KiB with source identity, lock hashes and local image IDs. Refuse symlink
+   output; do not upload logs, directory trees, images or repository-digest claims.
 4. Run repository formatting, Markdown-link, stale-wording and Commitrail
    checks. Assess local sheet constraints only if roadmap exports are present.
 5. Freeze one clean candidate and route architecture, security, product/ops,
