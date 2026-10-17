@@ -13,6 +13,7 @@ import os
 from pathlib import Path
 import shutil
 import sys
+from uuid import UUID
 
 from app.adapters.checkers import external_checker_execution_factory
 from app.core.hashing import canonical_json_hash
@@ -124,6 +125,34 @@ def _registry_entry_from_json(value: object) -> ExternalCheckerRegistryEntry:
     )
 
 
+def _post_material(
+    identity: PostSubmitExternalCheckerIdentity,
+    identifiers: list[UUID],
+    files: tuple[ExternalMaterialFile, ...],
+    semantic_digest: str,
+) -> PostSubmitExternalCheckerMaterial:
+    """Build the proof material with the production POST archive role."""
+    return PostSubmitExternalCheckerMaterial(
+        role="submission_archive",
+        submission_id=identity.submission_id,
+        submission_version=identity.submission_version,
+        binding_id=identifiers[8],
+        content_id=identifiers[9],
+        replica_id=identifiers[10],
+        content_sha256=external_checker_json_hash(
+            [{"path": item.normalized_path, "sha256": item.sha256} for item in files]
+        ),
+        byte_count=sum(item.byte_count for item in files),
+        media_type="application/vnd.workstream.submission-bundle",
+        evidence_id=identifiers[11],
+        verification_receipt_id=identifiers[12],
+        verification_job_id=identifiers[13],
+        verification_generation=1,
+        namespace_fingerprint="sha256:" + "2" * 64,
+        semantic_manifest_sha256=semantic_digest,
+    )
+
+
 def _report_unexpected_response(response: ExternalCheckerExecutionResponse) -> None:
     try:
         result = response.result
@@ -176,9 +205,6 @@ async def _execute(arguments: argparse.Namespace) -> None:
         "entries": manifest_entries,
     }
     semantic_digest = canonical_json_hash(semantic_body)
-    content_digest = external_checker_json_hash(
-        [{"path": item.normalized_path, "sha256": item.sha256} for item in files]
-    )
     identifiers = [new_record_id() for _ in range(14)]
     identity = PostSubmitExternalCheckerIdentity(
         project_id=identifiers[0],
@@ -195,23 +221,7 @@ async def _execute(arguments: argparse.Namespace) -> None:
         lease_generation=1,
         lease_expires_at=datetime.now(timezone.utc) + timedelta(hours=1),
     )
-    material = PostSubmitExternalCheckerMaterial(
-        role="submission_bundle",
-        submission_id=identity.submission_id,
-        submission_version=identity.submission_version,
-        binding_id=identifiers[8],
-        content_id=identifiers[9],
-        replica_id=identifiers[10],
-        content_sha256=content_digest,
-        byte_count=sum(item.byte_count for item in files),
-        media_type="application/vnd.workstream.submission-bundle",
-        evidence_id=identifiers[11],
-        verification_receipt_id=identifiers[12],
-        verification_job_id=identifiers[13],
-        verification_generation=1,
-        namespace_fingerprint="sha256:" + "2" * 64,
-        semantic_manifest_sha256=semantic_digest,
-    )
+    material = _post_material(identity, identifiers, files, semantic_digest)
     configuration = contract["configuration"]
     request = make_external_checker_execution_request(
         registry=registry,
