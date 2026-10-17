@@ -31,6 +31,7 @@ from app.modules.tasks.api import (
     OperationalTaskPage,
     OperationalTaskSummary,
     TaskQueueCursor,
+    TaskQueueFilters,
     ReadyTaskPage,
     TaskQueueRequest,
     ReadyTaskSummary,
@@ -53,6 +54,7 @@ from app.modules.tasks.models import (
     AuditEvent,
     Submission,
     TaskAssignment,
+    TaskImportBatchMember,
     WorkstreamTask,
 )
 from app.modules.tasks.post_submit_routing.models import TaskPostSubmitRoutingManifest
@@ -139,7 +141,7 @@ class TaskRepository:
         )).all()
         return tuple(UUID(str(identifier)) for identifier in identifiers)
 
-    async def _locked_compensation(
+    async def locked_compensation(
         self, project_id: UUID, version_ids: tuple[UUID, ...]
     ) -> dict[UUID, TaskCompensationTerms]:
         """Resolve every TASK-owned lock through CON's contributor-safe public port."""
@@ -244,7 +246,7 @@ class TaskRepository:
             task.locked_contribution_policy_version_id,
         ).where(_unassigned_ready_task())
         rows, continuation = await self._read_task_queue_rows(request, statement)
-        compensation = await self._locked_compensation(
+        compensation = await self.locked_compensation(
             request.project_id,
             tuple(row.locked_contribution_policy_version_id for row in rows),
         )
@@ -264,25 +266,36 @@ class TaskRepository:
         )
         return ReadyTaskPage(request.project_id, items, continuation)
 
-    async def read_management_tasks(self, request: TaskQueueRequest) -> ManagementTaskPage:
-        """Return all project tasks with fixed planning fields and no work content."""
+    async def read_management_tasks(
+        self, request: TaskQueueRequest, filters: TaskQueueFilters = TaskQueueFilters(),
+    ) -> ManagementTaskPage:
+        """Return project tasks with fixed planning fields and no work content."""
         task = WorkstreamTask
-        rows, cursor = await self._read_task_queue_rows(
-            request,
-            select(
-                task.id,
-                task.project_id,
-                task.title,
-                task.task_type,
-                task.difficulty,
-                task.skill_tags,
-                task.estimated_time_minutes,
-                task.status,
-                task.deadline_at,
-                task.created_at,
-                task.updated_at,
-            ),
+        statement = select(
+            task.id,
+            task.project_id,
+            task.title,
+            task.task_type,
+            task.difficulty,
+            task.skill_tags,
+            task.estimated_time_minutes,
+            task.status,
+            task.deadline_at,
+            task.created_at,
+            task.updated_at,
         )
+        if filters.status is not None:
+            statement = statement.where(task.status == filters.status)
+        if filters.assignee_actor_id is not None:
+            statement = statement.where(task.assigned_to == str(filters.assignee_actor_id))
+        if filters.import_batch_id is not None:
+            statement = statement.where(task.id.in_(select(TaskImportBatchMember.task_id).where(
+                TaskImportBatchMember.batch_id == str(filters.import_batch_id),
+                TaskImportBatchMember.project_id == str(request.project_id),
+            )))
+        if filters.updated_since is not None:
+            statement = statement.where(task.updated_at >= filters.updated_since)
+        rows, cursor = await self._read_task_queue_rows(request, statement)
         items = tuple(
             ManagementTaskSummary(
                 task_id=UUID(row.id),
@@ -390,7 +403,7 @@ class TaskRepository:
         if values is None:
             return None
         version_id = values.pop("locked_contribution_policy_version_id")
-        compensation = await self._locked_compensation(request.project_id, (version_id,))
+        compensation = await self.locked_compensation(request.project_id, (version_id,))
         from app.modules.tasks.revision.terminal_read import latest_assignment_outcome
         return ContributorTaskDetail(
             **values, compensation=compensation[version_id],

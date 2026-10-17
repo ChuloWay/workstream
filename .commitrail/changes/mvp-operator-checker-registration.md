@@ -50,7 +50,7 @@ identity and system Operator grant to perform startup registration.
 - `backend/app/api/deps/api_controls.py`: describe the existing administrative
   mutation limiter now attached to the registration route without changing its
   policy or adding a new rate-control path.
-- `backend/alembic/versions/0050_operational_read_audit.py` and
+- `backend/alembic/versions/0051_operational_read_audit.py` and
   `backend/alembic/env.py`: extend the existing closed AUTH audit vocabulary
   with exactly the current registry-read and retry-source-read action pairs.
   The registry's signed PostgreSQL readback exposed this concrete prerequisite;
@@ -79,11 +79,11 @@ identity and system Operator grant to perform startup registration.
   focused service and signed public-API/PostgreSQL proof.
 - `backend/tests/conftest.py`: refresh the exact canonical public-schema
   fingerprint measured from a fresh real PostgreSQL graph through revision
-  `0050_operational_read_audit`; the graph delta is limited to the existing
+  `0051_operational_read_audit`; the graph delta after main's contributor-read revision is limited to the existing
   audit constraint's two allowed operational-read pairs.
 - `backend/tests/test_alembic.py`: retain the exact single-root migration graph
-  through merged revision `0049_attempt_outcome_findings` and this change's
-  `0050_operational_read_audit` head.
+  through main revision `0050_contributor_reads` and this change's
+  `0051_operational_read_audit` head.
 - `backend/tests/authorization/catalogue_fixtures.py`,
   `backend/tests/authorization/test_catalogue.py`, and
   `backend/tests/authorization/setup_finalization/test_catalogue.py`, plus
@@ -268,9 +268,15 @@ of this corrected clean plan is required before implementation.
 
 ## Reconciliation
 
-- Current-source reconciliation: base `34501cd64`; open PRs #575 and #577 own
-  result/read surfaces and are excluded. #585 owns CI work and #586 owns README
-  work. Neither is needed to expose this existing registry owner.
+- Current-source reconciliation: implementation started from `34501cd64` and
+  now follows merged main `d5bac1313`. Main's contributor reads own revision
+  `0050_contributor_reads`; this change's exact operational-read audit pairs are
+  the sole `0051_operational_read_audit` successor. The registry surface remains
+  separate from contributor/result reads, CI and README ownership.
+- Shared migration order: recovery and S3 consume this byte-identical `0051`
+  prerequisite before adding their later revisions. Other open read work must
+  rechain after the revisions that actually merge; this PR does not duplicate
+  those migrations or depend on their unmerged product surfaces.
 - Next usable boundary: issue #580's separate authenticated REV lifecycle
   state/readback and guarded `disabled -> shadow -> live` controls, followed by
   the parent #555 real-project drill combining actual checker images.

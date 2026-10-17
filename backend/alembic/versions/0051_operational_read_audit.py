@@ -4,8 +4,8 @@ from alembic import op
 from sqlalchemy import text
 
 
-revision = "0050_operational_read_audit"
-down_revision = "0049_attempt_outcome_findings"
+revision = "0051_operational_read_audit"
+down_revision = "0050_contributor_reads"
 branch_labels = None
 depends_on = None
 

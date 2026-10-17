@@ -1,5 +1,5 @@
 {
-  "canonical_sha256": "97f042b73538633a6f994b3acb8395b152c158f33eb5ddd65ebf8759ba85ffb0",
+  "canonical_sha256": "a5279e3bd16fd7acd536923072de3f48e32aad61bb49dcac511b6844e7e31be6",
   "components": {
     "schemas": {
       "ActionId": {
@@ -162,7 +162,13 @@
           "contribution.policy.publish",
           "contribution.policy.retire",
           "contribution.read_self",
-          "contribution.read_project"
+          "contribution.read_project",
+          "actor.project.list",
+          "actor.assignment.list",
+          "actor.submission.list",
+          "actor.work_summary.read",
+          "task.submission_bundle_preparation.list",
+          "task.submission_bundle_preparation.read"
         ],
         "title": "ActionId",
         "description": "Closed action identifiers reserved by approved owner chunks."
@@ -549,7 +555,7 @@
   "schema_version": 1,
   "source": {
     "action_id": "actor.authorization_context.read",
-    "backend_git_sha": "596b3c3b2d4327e795ba62e1e66d1d3a56e51984",
+    "backend_git_sha": "640e66660d2f9e83fffd4a592857430cab45e522",
     "method": "GET",
     "openapi_version": "3.1.0",
     "path": "/api/v1/actors/me/authorization-context"

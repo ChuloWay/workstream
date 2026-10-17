@@ -69,6 +69,8 @@ from app.modules.tasks.api.management_queue import (
     OperationalTaskPage,
     OperationalTaskQueuePort,
     OperationalTaskSummary,
+    TaskQueueFilters,
+    TaskStatus,
 )
 
 from app.modules.tasks.api.task_detail import (
@@ -90,6 +92,8 @@ from app.modules.tasks.api.audit_evidence import (
 )
 
 __all__ = (
+    "TaskQueueFilters",
+    "TaskStatus",
     "AuditTaskEvidence",
     "AuditTaskEvidencePage",
     "AuditTaskEvidencePort",

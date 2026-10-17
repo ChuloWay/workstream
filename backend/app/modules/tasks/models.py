@@ -104,6 +104,10 @@ class WorkstreamTask(Base):
     __table_args__ = (
         CheckConstraint("(get_byte(uuid_send(id), 6) >> 4) = 7 and (get_byte(uuid_send(id), 8) & 192) = 128", name="id_uuid7"),
         CheckConstraint(
+            "status in ('draft','screening','ready','claimed','in_progress','submitted','evaluation_pending','review_pending','needs_revision','accepted')",
+            name="status",
+        ),
+        CheckConstraint(
             "status = 'draft' or locked_contribution_policy_version_id is not null",
             name="contribution_policy_required",
         ),

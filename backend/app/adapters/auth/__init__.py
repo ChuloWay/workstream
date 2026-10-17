@@ -303,7 +303,6 @@ def checker_retry_discovery_authorization(session, context, secret):
         CheckerRetryDiscoveryAuthorization,
     )
     from app.modules.authorization.kernel import AuthorizationService
-    from app.modules.authorization.repository import AdminAuthorizationRepository
 
     repository = AdminAuthorizationRepository(session)
     return CheckerRetryDiscoveryAuthorization(
@@ -312,6 +311,12 @@ def checker_retry_discovery_authorization(session, context, secret):
         ),
         secret,
     )
+
+
+def contributor_read_authorization(kernel, session: AsyncSession, secret):
+    """Compose the caller's own-work AUTH adapter in the shared decision transaction."""
+    from app.modules.authorization.contributor_read import ContributorReadAuthorization
+    return ContributorReadAuthorization(kernel, AdminAuthorizationRepository(session), secret)
 
 
 def history_read_authorization(kernel):

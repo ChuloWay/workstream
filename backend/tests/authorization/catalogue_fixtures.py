@@ -266,6 +266,11 @@ new_permissions = frozenset(
 )
 
 expected = {
+    "actor.project.list": ("actor.profile.read_self", "PILOT-READ-2"),
+    **dict.fromkeys((
+        "actor.assignment.list", "actor.submission.list", "actor.work_summary.read",
+        "task.submission_bundle_preparation.list", "task.submission_bundle_preparation.read",
+    ), ("submission.read_own", "PILOT-READ-2")),
     "contribution.read_self": ("contribution.read_self", "PILOT-10"),
     "contribution.read_project": ("contribution.read_project", "PILOT-10"),
     "task.post_submit.route": ("task.post_submit.route", "WS-ARCH-001-04E2"),
@@ -464,6 +469,12 @@ AUDIT_ALLOWED_ACTION_VALUES = {
     "operations.checker_retry_source.list",
     "contribution.read_self",
     "contribution.read_project",
+    "actor.project.list",
+    "actor.assignment.list",
+    "actor.submission.list",
+    "actor.work_summary.read",
+    "task.submission_bundle_preparation.list",
+    "task.submission_bundle_preparation.read",
     "task.post_submit.route",
     "checker.registry.register",
     "checker.registry.read",
