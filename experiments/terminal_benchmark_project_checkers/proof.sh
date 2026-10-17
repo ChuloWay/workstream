@@ -46,11 +46,15 @@ readonly CLEANUP_RECEIPT="${RUNNER_TEMP_ROOT}/${PROOF_PREFIX}-cleanup-receipt.js
 readonly BACKEND_BOOTSTRAP_UV="${REPOSITORY_ROOT}/backend/.venv/bin/uv"
 readonly BACKEND_RUNTIME="${CONTROL_ROOT}/python"
 readonly BACKEND_PYTHON="${BACKEND_RUNTIME}/bin/python"
+readonly PYTHON_SOURCE_ROOT="${CONTROL_ROOT}/python-source"
+readonly BACKEND_SOURCE="${PYTHON_SOURCE_ROOT}/backend"
+readonly EXECUTE_POST="${PYTHON_SOURCE_ROOT}/scripts/execute_post.py"
+readonly MATRIX_BUILDER="${PYTHON_SOURCE_ROOT}/scripts/build_matrix.py"
 readonly REAL_DOCKER="$(readlink -f "$(command -v docker)")"
 readonly DOCKER_WRAPPER_SOURCE="$(readlink -f "${SCRIPT_DIR}/docker-wrapper.sh")"
 readonly DOCKER_WRAPPER="${CONTROL_ROOT}/docker-wrapper.sh"
 readonly PILOT_PROBE="${REPOSITORY_ROOT}/experiments/pilot00_gvisor_offline/probe.sh"
-readonly PACKAGE="${REPOSITORY_ROOT}/pilots/terminal_benchmark/packages/ledger-reconcile"
+readonly PACKAGE="${PYTHON_SOURCE_ROOT}/package"
 readonly CRANE_ROOT="${RUNNER_TEMP_ROOT}/ws493-crane"
 readonly CRANE_BINARY="${CRANE_ROOT}/crane"
 readonly CRANE_ARCHIVE="${RUNNER_TEMP_ROOT}/ws493-crane.tar.gz"
@@ -580,8 +584,345 @@ PY
   chmod 0600 "${RAW_DIR}/harness.json"
 }
 
+stage_python_sources() {
+  python3 - "${REPOSITORY_ROOT}" "${PYTHON_SOURCE_ROOT}" "${EXPECTED_HEAD}" <<'PY'
+import hashlib
+import json
+import os
+from pathlib import Path
+import stat
+import subprocess
+import sys
+
+repository = Path(sys.argv[1])
+destination = Path(sys.argv[2])
+expected_head = sys.argv[3]
+prefixes = (
+    "backend/app",
+    "experiments/terminal_benchmark_project_checkers/execute_post.py",
+    "experiments/terminal_benchmark_project_checkers/build_matrix.py",
+    "pilots/terminal_benchmark/packages/ledger-reconcile",
+)
+if (
+    len(expected_head) != 40
+    or any(character not in "0123456789abcdef" for character in expected_head)
+    or subprocess.check_output(
+        ["git", "-C", str(repository), "rev-parse", "HEAD"], text=True
+    ).strip()
+    != expected_head
+):
+    raise SystemExit("proof Python source head differs")
+listed = subprocess.check_output(
+    [
+        "git", "-C", str(repository), "ls-tree", "-rz", "--full-tree",
+        expected_head, "--", *prefixes,
+    ]
+).split(b"\0")
+tracked = []
+for record in listed:
+    if not record:
+        continue
+    metadata, raw_path = record.split(b"\t", 1)
+    mode, kind, raw_object_id = metadata.split(b" ")
+    object_id = raw_object_id.decode("ascii")
+    if (
+        kind != b"blob"
+        or mode not in (b"100644", b"100755")
+        or len(object_id) not in (40, 64)
+        or any(character not in "0123456789abcdef" for character in object_id)
+    ):
+        raise SystemExit("proof Python HEAD entry differs")
+    tracked.append((Path(os.fsdecode(raw_path)), object_id))
+tracked.sort(key=lambda item: item[0])
+paths = [path for path, _ in tracked]
+required = {
+    Path("experiments/terminal_benchmark_project_checkers/execute_post.py"),
+    Path("experiments/terminal_benchmark_project_checkers/build_matrix.py"),
+}
+package_prefix = Path("pilots/terminal_benchmark/packages/ledger-reconcile")
+if (
+    not required.issubset(paths)
+    or not any(path.parts[:2] == ("backend", "app") for path in paths)
+    or not any(path.is_relative_to(package_prefix) for path in paths)
+):
+    raise SystemExit("proof Python source inventory differs")
+if len(paths) > 4096:
+    raise SystemExit("proof Python source entry limit exceeded")
+os.mkdir(destination, 0o755)
+entries = []
+total_bytes = 0
+
+def target_for(relative: Path) -> Path:
+    if relative.parts[:2] == ("backend", "app"):
+        return destination / "backend" / Path(*relative.parts[1:])
+    if relative in required:
+        return destination / "scripts" / relative.name
+    try:
+        remainder = relative.relative_to(package_prefix)
+    except ValueError as error:
+        raise SystemExit("proof Python source path differs") from error
+    return destination / "package" / remainder
+
+for relative, object_id in tracked:
+    source = repository / relative
+    metadata = os.lstat(source)
+    if not stat.S_ISREG(metadata.st_mode):
+        raise SystemExit("proof Python source is not regular")
+    total_bytes += metadata.st_size
+    if total_bytes > 67_108_864:
+        raise SystemExit("proof Python source byte limit exceeded")
+    target = target_for(relative)
+    target.parent.mkdir(mode=0o755, parents=True, exist_ok=True)
+    source_descriptor = os.open(source, os.O_RDONLY | os.O_NOFOLLOW)
+    target_descriptor = os.open(
+        target,
+        os.O_CREAT | os.O_EXCL | os.O_WRONLY | os.O_NOFOLLOW,
+        0o444,
+    )
+    digest = hashlib.sha256()
+    head_digest = hashlib.sha1() if len(object_id) == 40 else hashlib.sha256()
+    head_digest.update(f"blob {metadata.st_size}\0".encode())
+    count = 0
+    try:
+        while True:
+            chunk = os.read(source_descriptor, 1024 * 1024)
+            if not chunk:
+                break
+            count += len(chunk)
+            digest.update(chunk)
+            head_digest.update(chunk)
+            view = memoryview(chunk)
+            while view:
+                written = os.write(target_descriptor, view)
+                if written <= 0:
+                    raise OSError("proof Python source copy made no progress")
+                view = view[written:]
+        os.fchmod(target_descriptor, 0o444)
+        os.fsync(target_descriptor)
+        opened = os.fstat(source_descriptor)
+    finally:
+        os.close(target_descriptor)
+        os.close(source_descriptor)
+    if (
+        opened.st_dev,
+        opened.st_ino,
+        opened.st_size,
+        opened.st_mtime_ns,
+    ) != (
+        metadata.st_dev,
+        metadata.st_ino,
+        metadata.st_size,
+        metadata.st_mtime_ns,
+    ) or count != metadata.st_size:
+        raise SystemExit("proof Python source changed")
+    expected_digest = digest.hexdigest()
+    if head_digest.hexdigest() != object_id:
+        raise SystemExit("proof Python source differs from HEAD")
+    entries.append(
+        {
+            "byte_count": count,
+            "git_blob_oid": object_id,
+            "path": target.relative_to(destination).as_posix(),
+            "sha256": expected_digest,
+        }
+    )
+
+entries.sort(key=lambda entry: entry["path"])
+inventory = {
+    "entries": entries,
+    "head_sha": expected_head,
+    "schema_version": "workstream.ws493.python-source.v1",
+    "total_bytes": total_bytes,
+    "total_count": len(entries),
+}
+inventory_path = destination / ".inventory.json"
+payload = (json.dumps(inventory, sort_keys=True, separators=(",", ":")) + "\n").encode()
+descriptor = os.open(
+    inventory_path,
+    os.O_CREAT | os.O_EXCL | os.O_WRONLY | os.O_NOFOLLOW,
+    0o444,
+)
+try:
+    view = memoryview(payload)
+    while view:
+        written = os.write(descriptor, view)
+        if written <= 0:
+            raise OSError("proof Python inventory write made no progress")
+        view = view[written:]
+    os.fchmod(descriptor, 0o444)
+    os.fsync(descriptor)
+finally:
+    os.close(descriptor)
+for current, directories, _ in os.walk(destination, topdown=False, followlinks=False):
+    if any((Path(current) / name).is_symlink() for name in directories):
+        raise SystemExit("proof Python source link rejected")
+    os.chmod(current, 0o555)
+PY
+}
+
+python_sources_valid() {
+  python3 - "${PYTHON_SOURCE_ROOT}" "${EXPECTED_HEAD}" <<'PY'
+import hashlib
+import json
+import os
+from pathlib import Path, PurePosixPath
+import stat
+import sys
+
+root = Path(sys.argv[1])
+expected_head = sys.argv[2]
+maximum_count = 4096
+maximum_bytes = 67_108_864
+maximum_inventory_bytes = 16_777_216
+
+root_metadata = os.lstat(root)
+if (
+    not stat.S_ISDIR(root_metadata.st_mode)
+    or stat.S_IMODE(root_metadata.st_mode) != 0o555
+    or (root_metadata.st_uid, root_metadata.st_gid) != (0, 0)
+):
+    raise SystemExit("proof Python source root metadata differs")
+
+inventory_path = root / ".inventory.json"
+inventory_metadata = os.lstat(inventory_path)
+if (
+    not stat.S_ISREG(inventory_metadata.st_mode)
+    or stat.S_IMODE(inventory_metadata.st_mode) != 0o444
+    or (inventory_metadata.st_uid, inventory_metadata.st_gid) != (0, 0)
+    or not 0 < inventory_metadata.st_size <= maximum_inventory_bytes
+):
+    raise SystemExit("proof Python inventory metadata differs")
+descriptor = os.open(inventory_path, os.O_RDONLY | os.O_NOFOLLOW)
+try:
+    opened = os.fstat(descriptor)
+    if (opened.st_dev, opened.st_ino) != (
+        inventory_metadata.st_dev,
+        inventory_metadata.st_ino,
+    ):
+        raise SystemExit("proof Python inventory changed")
+    payload = os.read(descriptor, maximum_inventory_bytes + 1)
+finally:
+    os.close(descriptor)
+if len(payload) != inventory_metadata.st_size:
+    raise SystemExit("proof Python inventory size differs")
+value = json.loads(payload)
+if set(value) != {
+    "entries", "head_sha", "schema_version", "total_bytes", "total_count",
+}:
+    raise SystemExit("proof Python inventory fields differ")
+entries = value.get("entries")
+if (
+    value.get("schema_version") != "workstream.ws493.python-source.v1"
+    or value.get("head_sha") != expected_head
+    or not isinstance(entries, list)
+    or not isinstance(value.get("total_count"), int)
+    or not isinstance(value.get("total_bytes"), int)
+    or not 0 < value["total_count"] <= maximum_count
+    or not 0 <= value["total_bytes"] <= maximum_bytes
+    or value["total_count"] != len(entries)
+):
+    raise SystemExit("proof Python inventory bounds differ")
+if payload != (json.dumps(value, sort_keys=True, separators=(",", ":")) + "\n").encode():
+    raise SystemExit("proof Python inventory encoding differs")
+
+expected_files = set()
+expected_directories = {"."}
+validated_bytes = 0
+previous_path = None
+for entry in entries:
+    if set(entry) != {"byte_count", "git_blob_oid", "path", "sha256"}:
+        raise SystemExit("proof Python inventory entry fields differ")
+    relative_value = entry.get("path")
+    byte_count = entry.get("byte_count")
+    git_blob_oid = entry.get("git_blob_oid")
+    expected_digest = entry.get("sha256")
+    if (
+        not isinstance(relative_value, str)
+        or not isinstance(byte_count, int)
+        or byte_count < 0
+        or not isinstance(expected_digest, str)
+        or len(expected_digest) != 64
+        or any(character not in "0123456789abcdef" for character in expected_digest)
+        or not isinstance(git_blob_oid, str)
+        or len(git_blob_oid) not in (40, 64)
+        or any(character not in "0123456789abcdef" for character in git_blob_oid)
+    ):
+        raise SystemExit("proof Python inventory entry differs")
+    relative = PurePosixPath(relative_value)
+    if (
+        relative.is_absolute()
+        or relative.as_posix() != relative_value
+        or not relative.parts
+        or any(part in ("", ".", "..") for part in relative.parts)
+        or relative_value == ".inventory.json"
+        or previous_path is not None and relative_value <= previous_path
+    ):
+        raise SystemExit("proof Python inventory path differs")
+    previous_path = relative_value
+    expected_files.add(relative_value)
+    for parent in relative.parents:
+        expected_directories.add(parent.as_posix())
+
+    path = root.joinpath(*relative.parts)
+    metadata = os.lstat(path)
+    if (
+        not stat.S_ISREG(metadata.st_mode)
+        or stat.S_IMODE(metadata.st_mode) != 0o444
+        or (metadata.st_uid, metadata.st_gid) != (0, 0)
+        or metadata.st_size != byte_count
+    ):
+        raise SystemExit("proof Python source metadata differs")
+    descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+    digest = hashlib.sha256()
+    count = 0
+    try:
+        opened = os.fstat(descriptor)
+        if (opened.st_dev, opened.st_ino) != (metadata.st_dev, metadata.st_ino):
+            raise SystemExit("proof Python source changed")
+        while True:
+            chunk = os.read(descriptor, 1024 * 1024)
+            if not chunk:
+                break
+            count += len(chunk)
+            digest.update(chunk)
+    finally:
+        os.close(descriptor)
+    if count != byte_count or digest.hexdigest() != expected_digest:
+        raise SystemExit("proof Python source content differs")
+    validated_bytes += count
+    if validated_bytes > maximum_bytes:
+        raise SystemExit("proof Python source byte limit exceeded")
+
+actual_files = set()
+actual_directories = {"."}
+for current, directories, files in os.walk(root, topdown=True, followlinks=False):
+    current_path = Path(current)
+    for name in directories:
+        path = current_path / name
+        metadata = os.lstat(path)
+        if (
+            not stat.S_ISDIR(metadata.st_mode)
+            or stat.S_IMODE(metadata.st_mode) != 0o555
+            or (metadata.st_uid, metadata.st_gid) != (0, 0)
+        ):
+            raise SystemExit("proof Python source directory differs")
+        actual_directories.add(path.relative_to(root).as_posix())
+    for name in files:
+        path = current_path / name
+        relative_value = path.relative_to(root).as_posix()
+        if relative_value != ".inventory.json":
+            actual_files.add(relative_value)
+if actual_files != expected_files or actual_directories != expected_directories:
+    raise SystemExit("proof Python source tree differs")
+if validated_bytes != value["total_bytes"]:
+    raise SystemExit("proof Python source total differs")
+PY
+}
+
 prepare_contract() {
   create_control_custody
+  stage_python_sources
+  python_sources_valid
   [[ -x /usr/bin/python3 && -x "${BACKEND_BOOTSTRAP_UV}" ]]
   [[ "$(/usr/bin/python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')" == 3.12 ]]
   /usr/bin/python3 -m venv --copies "${BACKEND_RUNTIME}"
@@ -595,11 +936,12 @@ prepare_contract() {
   chmod 0700 "${ART_ROOT}" "${SERVICE_ROOT}" "${WRAPPER_WORK}"
   [[ -x "${SERVICE_BINARY}" ]]
   setpriv --reuid "${OWNER_UID}" --regid "${DOCKER_GID}" --clear-groups \
-    sh -c 'test -x "$1"; test -x "$2"; : >"$3"; : >"$4"; : >"$5"; rm -f "$3" "$4" "$5"' sh \
-    "${SERVICE_BINARY}" "${DOCKER_WRAPPER}" "${WRAPPER_WORK}/owner-write-probe" \
-    "${SERVICE_ROOT}/owner-write-probe" "${ART_ROOT}/owner-write-probe"
+    sh -c 'test -x "$1"; test -x "$2"; test -r "$3"; test -r "$4"; test -d "$5"; : >"$6"; : >"$7"; : >"$8"; rm -f "$6" "$7" "$8"' sh \
+    "${SERVICE_BINARY}" "${DOCKER_WRAPPER}" "${EXECUTE_POST}" "${MATRIX_BUILDER}" "${PACKAGE}" \
+    "${WRAPPER_WORK}/owner-write-probe" "${SERVICE_ROOT}/owner-write-probe" \
+    "${ART_ROOT}/owner-write-probe"
   setpriv --reuid "${OWNER_UID}" --regid "${DOCKER_GID}" --clear-groups \
-    env HOME="${STATE_ROOT}" PYTHONPATH="${REPOSITORY_ROOT}/backend" \
+    env HOME="${STATE_ROOT}" PYTHONPATH="${BACKEND_SOURCE}" \
     "${BACKEND_PYTHON}" -c \
     'import jsonschema; from app.modules.artifacts.preparation import ArtifactScratchManager'
   "${BACKEND_PYTHON}" "${SCRIPT_DIR}/prepare_contract.py" \
@@ -706,6 +1048,7 @@ service_environment() {
 start_service() {
   local log="$1"
   control_custody_valid
+  python_sources_valid
   rm -f "${SERVICE_PID_FILE}"
   printf 'service_start_head=%s\n' "${EXPECTED_HEAD}" >"${log}"
   chown "${OWNER_UID}:${DOCKER_GID}" "${log}"
@@ -735,7 +1078,7 @@ start_service() {
 
 run_as_owner() {
   setpriv --reuid "${OWNER_UID}" --regid "${DOCKER_GID}" --clear-groups \
-    env HOME="${STATE_ROOT}" PYTHONPATH="${REPOSITORY_ROOT}/backend" "$@"
+    env HOME="${STATE_ROOT}" PYTHONPATH="${BACKEND_SOURCE}" "$@"
 }
 
 positive_owned_absence() {
@@ -749,6 +1092,7 @@ run_matrix() {
   [[ "$(id -u)" -eq 0 ]]
   assert_source_head
   control_custody_valid
+  python_sources_valid
   local event_since
   event_since="$(date +%s)"
   local control="${PROOF_PREFIX}-unowned-control"
@@ -763,7 +1107,7 @@ run_matrix() {
   start_service "${RAW_DIR}/service-interrupt.log"
   printf 'ws493_matrix=interrupt_service_ready\n'
   local first_service_job="${SERVICE_JOB_PID}"
-  run_as_owner "${BACKEND_PYTHON}" "${SCRIPT_DIR}/execute_post.py" \
+  run_as_owner "${BACKEND_PYTHON}" "${EXECUTE_POST}" \
     --contract "${RAW_DIR}/contract.json" --package "${PACKAGE}" --scratch "${ART_ROOT}" \
     --socket "${SOCKET_PATH}" --expect interrupted --output "${RAW_DIR}/interrupt.json" \
     --art-output "${RAW_DIR}/art-interrupt.json" &
@@ -812,7 +1156,7 @@ PY
   [[ "$(inner_docker inspect "${control}" --format '{{index .Config.Labels "org.workstream.ws493.control"}}')" == "${RUN_ID}" ]]
   write_owned_json "${RAW_DIR}/restart-cleanup.json" \
     '{"owned_containers_absent":true,"owned_images_absent":true,"unowned_control_preserved":true}'
-  run_as_owner "${BACKEND_PYTHON}" "${SCRIPT_DIR}/execute_post.py" \
+  run_as_owner "${BACKEND_PYTHON}" "${EXECUTE_POST}" \
     --contract "${RAW_DIR}/contract.json" --package "${PACKAGE}" --scratch "${ART_ROOT}" \
     --socket "${SOCKET_PATH}" --expect complete --output "${RAW_DIR}/complete-result.json" \
     --art-output "${RAW_DIR}/art-complete.json"
@@ -827,7 +1171,7 @@ PY
     --filter 'label=workstream.owner=terminal-benchmark-checker-service-v1' \
     --format '{{json .}}' | head -c 262144 >"${RAW_DIR}/docker-events.ndjson"
   [[ -s "${RAW_DIR}/docker-events.ndjson" ]]
-  run_as_owner "${BACKEND_PYTHON}" "${SCRIPT_DIR}/build_matrix.py" \
+  run_as_owner "${BACKEND_PYTHON}" "${MATRIX_BUILDER}" \
     --raw "${RAW_DIR}" --head "${EXPECTED_HEAD}" --output "${RAW_DIR}/matrix.json"
   find "${RAW_DIR}" -maxdepth 1 -type f -exec chmod 0600 {} +
   [[ -z "$(find "${RAW_DIR}" -mindepth 1 -maxdepth 1 ! -type f -print -quit)" ]]

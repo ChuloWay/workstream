@@ -45,7 +45,12 @@ root-owned `0555` file under `/run` and does the same for the fixed Docker
 wrapper; the marker binds both SHA-256 values and every custody check rehashes
 both before use. Preparation also creates a copied-executable Python 3.12 venv
 inside the root-owned control tree, synchronizes the frozen backend dev lock
-with the pinned `uv`, and executes a fixed-UID import probe before POST.
+with the pinned `uv`, and executes a fixed-UID import probe before POST. Its
+Python sources are a read-only, no-follow copy of only the Git-tracked backend
+application, two fixed proof drivers and public package, bounded to 4,096 files
+and 64 MiB. The expected HEAD tree selects the files, and every copied source
+must match its HEAD blob. The proof revalidates the head-bound exact inventory,
+ownership, modes, sizes and hashes before the matrix and each service start.
 
 The evidence, launch-source and matrix-reducer tests require no Docker
 resources:

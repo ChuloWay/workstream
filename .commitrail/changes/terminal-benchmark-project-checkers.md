@@ -401,7 +401,14 @@ directories and the ART scratch root. The same control tree contains one
 root-owned Python 3.12 venv created with copied executables and populated by the
 existing version-pinned `uv` from the frozen backend dev lock during the
 networked preparation phase. An actual fixed-UID import probe proves that
-runtime before POST;
+runtime before POST. The proof copies only Git-tracked `backend/app`, the two
+fixed matrix driver scripts and the one public package into a root-owned,
+read-only control subtree. The expected HEAD tree selects the exact files, and
+each no-follow regular worktree source must retain its identity while copying
+and match the corresponding HEAD blob. The head-bound inventory is limited to
+4,096 files and 64 MiB. The fixed UID imports and reads only that staged
+inventory, whose exact file set, ownership, modes, sizes and hashes are
+revalidated before the matrix and each service start;
 the run entry and each service start revalidate custody before touching control
 files, and runtime socket readiness proves that the service actually executed
 before POST starts.
