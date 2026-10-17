@@ -290,3 +290,8 @@ of this corrected clean plan is required before implementation.
   preserves retained data. The `0051` downgrade follows the repository's
   standard refusal contract, with a focused one-step test proving the version
   and closed audit constraint remain unchanged.
+- Latest route-inventory reconciliation: the exact static production baseline
+  includes the six authorization-read-limited contributor routes already
+  present on merged main. Registry still adds only its POST/admin-mutation and
+  exact-entry GET/authorization-read bindings, and the recursive stray-route
+  probe continues to reject every unlisted attachment.
