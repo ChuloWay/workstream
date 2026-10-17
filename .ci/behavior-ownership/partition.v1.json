@@ -586,14 +586,6 @@
     },
     {
       "group": "auth",
-      "target": "backend/app/modules/authorization/catalogue.py"
-    },
-    {
-      "group": "auth",
-      "target": "backend/app/modules/authorization/catalogue.py"
-    },
-    {
-      "group": "auth",
       "target": "backend/app/modules/authorization/checker_registry_authorization.py"
     },
     {
@@ -2113,7 +2105,7 @@
       "target": "backend/scripts/validate_test_lane_evidence.py"
     }
   ],
-  "authority_digest": "fb1ec4d28bc6cc35300ecb0d6bc8adde1488d5a205a58ef3287c5fdfea005f2c",
+  "authority_digest": "72ede56f55522908d9102eaad07c05349bc6485c314d8fa9c57631b5e797641b",
   "protected_base_commit": "7676ce4347db0c9694962a9b587a20765e16eac6",
   "schema": "workstream.behavior-ownership-partition.v1"
 }
