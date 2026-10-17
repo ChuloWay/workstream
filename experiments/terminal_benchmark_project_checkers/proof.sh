@@ -507,7 +507,18 @@ start_service() {
   SERVICE_JOB_PID=$!
   for _ in $(seq 1 300); do
     [[ -S "${SOCKET_PATH}" ]] && return 0
-    kill -0 "${SERVICE_JOB_PID}" 2>/dev/null || { wait "${SERVICE_JOB_PID}"; return 1; }
+    if ! kill -0 "${SERVICE_JOB_PID}" 2>/dev/null; then
+      local status=0
+      wait "${SERVICE_JOB_PID}" || status=$?
+      (( status != 0 )) || status=1
+      printf 'ws493_matrix=service_start_failed status=%s\n' "${status}" >&2 || true
+      if [[ -f "${log}" && ! -L "${log}" ]]; then
+        if ! head -c 65536 "${log}" >&2; then
+          printf 'ws493_matrix=service_log_read_failed\n' >&2 || true
+        fi
+      fi
+      return "${status}"
+    fi
     sleep 0.2
   done
   return 1
@@ -535,19 +546,29 @@ run_matrix() {
   approved_base="$(recorded_image_reference approved_base)"
   inner_docker create --pull=never --name "${control}" --runtime runsc --network none \
     --label "org.workstream.ws493.control=${RUN_ID}" "${approved_base}" true >/dev/null
+  printf 'ws493_matrix=control_created\n'
   printf '%s\n' enabled >"${BARRIER_ENABLE}"
   chown "${OWNER_UID}:${DOCKER_GID}" "${BARRIER_ENABLE}"
   chmod 0600 "${BARRIER_ENABLE}"
   start_service "${RAW_DIR}/service-interrupt.log"
+  printf 'ws493_matrix=interrupt_service_ready\n'
   local first_service_job="${SERVICE_JOB_PID}"
   run_as_owner "${BACKEND_PYTHON}" "${SCRIPT_DIR}/execute_post.py" \
     --contract "${RAW_DIR}/contract.json" --package "${PACKAGE}" --scratch "${ART_ROOT}" \
     --socket "${SOCKET_PATH}" --expect interrupted --output "${RAW_DIR}/interrupt.json" \
     --art-output "${RAW_DIR}/art-interrupt.json" &
   local executor_pid=$!
+  printf 'ws493_matrix=interrupt_executor_started\n'
   for _ in $(seq 1 600); do
     [[ -f "${BARRIER_READY}" && ! -L "${BARRIER_READY}" ]] && break
-    kill -0 "${executor_pid}" 2>/dev/null || { wait "${executor_pid}"; return 1; }
+    if ! kill -0 "${executor_pid}" 2>/dev/null; then
+      local executor_status=0
+      wait "${executor_pid}" || executor_status=$?
+      (( executor_status != 0 )) || executor_status=1
+      printf 'ws493_matrix=interrupt_executor_failed status=%s\n' \
+        "${executor_status}" >&2 || true
+      return "${executor_status}"
+    fi
     sleep 0.2
   done
   [[ -f "${BARRIER_READY}" && ! -L "${BARRIER_READY}" ]]
