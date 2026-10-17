@@ -364,7 +364,7 @@ cannot be reused as post-submission review-gate evidence. See the
 | Contribution evidence reads | **Public fixed-membership REST and complete CLI export** | PILOT-10A exposes current human self-read and one-project JSON/CSV export for covering Project Managers or exact-project Finance Authorities. Each page has fresh authority and one repeatable-read response transaction; selections through 100,000 contributions retain page-one membership behind signed scope/filter/format/limit-bound cursors, with complete zero/one/two immutable awards, exact decimals, recorded-time filters and formula-neutralized CSV. The CLI follows JSON or CSV continuation internally with unchanged filters, validates cross-page order/identity, and publishes only the complete JSON result or one private no-overwrite CSV | No recognition mutation, fulfillment, payout, deployed-service or published-binary claim |
 | Fulfillment, reconciliation, and audit | **Planned** | Shared audit foundations, provider-neutral adapter convention, AUTH-OUTBOX-02 live dispatcher authority, retained phase audit decisions, Celery delivery/recovery scans and CON-02B custody | Feature-specific handlers and authority, conditional award fulfillment, callbacks, idempotent recovery, reconciliation, bounded operational reads, and release controls |
 | Runtime diagnostics | **Implemented foundation** | Closed structured logging, explicit API/Celery tracing, bounded metrics, safe correlation and optional typed OTLP export | Restrict broker publishers; configure and secure collector/log access, egress, encryption and finite deletion; prove diagnostics during the release drill; no deployed monitoring claim |
-| Frontend and pilot | **Local runtime foundation; product pilot planned** | Checkout-isolated Docker Compose API, prefork Celery process, beat, PostgreSQL, Redis and MinIO stack with local Flow-HMAC identities, existing authority bootstrap/grants, configurable loopback ports and project-scoped state; a pinned offline sample image build and separate oracle were proved under gVisor; React + Vite + TypeScript stack decision | Benchmark representative project checker images and prove hosted isolation before choosing production limits; complete provider-backed guide compilation and activated-guide scoped task-denial proof on the base stack, implement only stable backed frontend surfaces, run the real internal pilot, repair findings, and complete release drills; Docker Desktop/macOS runtime proof remains |
+| Frontend and pilot | **Local runtime foundation; product pilot planned** | Original terminal benchmark project guide, five native task-authoring briefs and reference/negative packages provide shareable real-project inputs; native corpus calibration is separate from sandbox and hosted proof. Checkout-isolated Docker Compose API, prefork Celery process, beat, PostgreSQL, Redis and MinIO stack with local Flow-HMAC identities, existing authority bootstrap/grants, configurable loopback ports and project-scoped state; a pinned offline sample image build and separate oracle were proved under gVisor; React + Vite + TypeScript stack decision | Benchmark representative project checker images and prove hosted isolation before choosing production limits; complete provider-backed guide compilation and activated-guide scoped task-denial proof on the base stack, implement only stable backed frontend surfaces, run the real internal pilot, repair findings, and complete release drills; Docker Desktop/macOS runtime proof remains |
 
 ## What Has Been Completed
 
@@ -1180,6 +1180,16 @@ The [local pilot stack record](../.commitrail/changes/pilot-local-stack.md) and
 [runbook](engineering/local-pilot.md) define the checkout-isolated runtime,
 authority bootstrap, retained-data boundary and remaining platform/journey
 proof.
+
+The [terminal benchmark pilot corpus](../pilots/terminal_benchmark/README.md)
+provides a shareable guide, five native task-authoring briefs and independently
+checkable reference/negative packages. Trusted native calibration distinguishes
+working references, failing starters and plausible incorrect solutions. It does
+not establish registered project evaluation, sandbox execution or a hosted
+journey. [#493](https://github.com/Flow-Research/workstream/issues/493) owns real
+project checker images; [#555](https://github.com/Flow-Research/workstream/issues/555)
+combines these inputs with live setup, authorized activation and the complete
+public automated contribution drill.
 
 The [offline gVisor build spike](engineering/pilot00-gvisor-offline-build-spike.md)
 selects a sealed-cache Kaniko builder plus a separate gVisor oracle sandbox for
