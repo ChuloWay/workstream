@@ -1143,6 +1143,7 @@ def records(name):
 
 commands = records("command-results.ndjson")
 launches = records("launches.ndjson")
+arguments = records("argv.ndjson")
 os.close(directory)
 start_statuses = []
 command_trace = []
@@ -1169,6 +1170,31 @@ for command in commands:
         start_statuses.append(status)
 if len(command_trace) > 256 or len(start_statuses) > 8:
     raise SystemExit(1)
+allowed_rejection_checks = {
+    "cap_add", "cap_drop", "cpu", "destinations", "kind", "memory", "name",
+    "network", "pids", "read_only_root", "read_write", "runtime", "security",
+    "socket_destination", "socket_source", "source", "storage", "tmpfs", "user",
+}
+launch_rejections = []
+for argument in arguments:
+    argv = argument.get("argv")
+    if not isinstance(argv, list) or not all(isinstance(item, str) for item in argv):
+        raise SystemExit(1)
+    if len(argv) != 1 or not argv[0].startswith("launch_rejection:"):
+        continue
+    parts = argv[0].split(":")
+    if len(parts) != 3 or parts[1] not in {"builder", "candidate", "checker", "reference", "unknown"}:
+        raise SystemExit(1)
+    checks = parts[2].split(",")
+    if (
+        not checks
+        or checks != sorted(set(checks))
+        or any(check not in allowed_rejection_checks for check in checks)
+    ):
+        raise SystemExit(1)
+    launch_rejections.append({"kind": parts[1], "failed_checks": checks})
+if len(launch_rejections) > 8:
+    raise SystemExit(1)
 launch_kinds = Counter()
 for launch in launches:
     kind = launch.get("kind")
@@ -1181,6 +1207,7 @@ print(
         {
             "command_trace": command_trace,
             "launch_kind_counts": dict(sorted(launch_kinds.items())),
+            "launch_rejections": launch_rejections,
             "start_statuses": start_statuses,
         },
         separators=(",", ":"),

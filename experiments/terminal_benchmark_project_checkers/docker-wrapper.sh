@@ -198,60 +198,67 @@ elif terminal_owned and source_valid:
 else:
     source_valid = False
 
-common = (
-    valid_name
-    and source_valid
-    and host.get("Runtime") == "runsc"
-    and host.get("NetworkMode") == "none"
-    and host.get("CapDrop") == ["ALL"]
-    and bool({"no-new-privileges", "no-new-privileges:true"} & security)
-    and not any(destination in {"/var/run/docker.sock", "/run/docker.sock"} for destination in destinations)
-    and not ({"/var/run/docker.sock", "/run/docker.sock"} & set(sources.values()))
-)
+checks = {
+    "name": valid_name,
+    "source": source_valid,
+    "runtime": host.get("Runtime") == "runsc",
+    "network": host.get("NetworkMode") == "none",
+    "cap_drop": host.get("CapDrop") == ["ALL"],
+    "security": bool({"no-new-privileges", "no-new-privileges:true"} & security),
+    "socket_destination": not any(
+        destination in {"/var/run/docker.sock", "/run/docker.sock"}
+        for destination in destinations
+    ),
+    "socket_source": not (
+        {"/var/run/docker.sock", "/run/docker.sock"} & set(sources.values())
+    ),
+}
 if kind == "builder":
-    valid = (
-        common
-        and config.get("User") == "0:0"
-        and sorted(host.get("CapAdd") or []) == ["CHOWN", "DAC_OVERRIDE", "FOWNER", "SYS_CHROOT"]
-        and destinations == ["/cache", "/out/candidate.tar", "/project"]
-        and read_write == {"/cache": False, "/out/candidate.tar": True, "/project": False}
-        and host.get("ReadonlyRootfs") is False
-        and host.get("PidsLimit") == 128
-        and host.get("Memory") == 536870912
-        and host.get("NanoCpus") == 1000000000
-        and host.get("StorageOpt") == {"size": "402653184"}
-    )
+    checks.update({
+        "user": config.get("User") == "0:0",
+        "cap_add": sorted(host.get("CapAdd") or [])
+        == ["CHOWN", "DAC_OVERRIDE", "FOWNER", "SYS_CHROOT"],
+        "destinations": destinations == ["/cache", "/out/candidate.tar", "/project"],
+        "read_write": read_write
+        == {"/cache": False, "/out/candidate.tar": True, "/project": False},
+        "read_only_root": host.get("ReadonlyRootfs") is False,
+        "pids": host.get("PidsLimit") == 128,
+        "memory": host.get("Memory") == 536870912,
+        "cpu": host.get("NanoCpus") == 1000000000,
+        "storage": host.get("StorageOpt") == {"size": "402653184"},
+    })
 elif kind in {"candidate", "reference"}:
     expected_mounts = ["/tests"] if kind == "candidate" else ["/tests", "/workspace/program.py"]
-    valid = (
-        common
-        and config.get("User") == "65532:65532"
-        and not (host.get("CapAdd") or [])
-        and destinations == expected_mounts
-        and all(read_write[destination] is False for destination in expected_mounts)
-        and host.get("ReadonlyRootfs") is True
-        and host.get("PidsLimit") == 32
-        and host.get("Memory") == 536870912
-        and host.get("NanoCpus") == 1000000000
-        and "/tmp" in (host.get("Tmpfs") or {})
-    )
+    checks.update({
+        "user": config.get("User") == "65532:65532",
+        "cap_add": not (host.get("CapAdd") or []),
+        "destinations": destinations == expected_mounts,
+        "read_write": all(read_write.get(destination) is False for destination in expected_mounts),
+        "read_only_root": host.get("ReadonlyRootfs") is True,
+        "pids": host.get("PidsLimit") == 32,
+        "memory": host.get("Memory") == 536870912,
+        "cpu": host.get("NanoCpus") == 1000000000,
+        "tmpfs": "/tmp" in (host.get("Tmpfs") or {}),
+    })
 elif kind == "checker":
-    valid = (
-        common
-        and config.get("User") == sys.argv[3]
-        and not (host.get("CapAdd") or [])
-        and destinations == ["/work/input"]
-        and read_write == {"/work/input": False}
-        and host.get("ReadonlyRootfs") is True
-        and host.get("PidsLimit") == 32
-        and host.get("Memory") == 536870912
-        and host.get("NanoCpus") == 1000000000
-        and "/tmp" in (host.get("Tmpfs") or {})
-    )
+    checks.update({
+        "user": config.get("User") == sys.argv[3],
+        "cap_add": not (host.get("CapAdd") or []),
+        "destinations": destinations == ["/work/input"],
+        "read_write": read_write == {"/work/input": False},
+        "read_only_root": host.get("ReadonlyRootfs") is True,
+        "pids": host.get("PidsLimit") == 32,
+        "memory": host.get("Memory") == 536870912,
+        "cpu": host.get("NanoCpus") == 1000000000,
+        "tmpfs": "/tmp" in (host.get("Tmpfs") or {}),
+    })
 else:
-    raise SystemExit(70)
-if not valid:
-    raise SystemExit(70)
+    print("launch_rejection:unknown:kind")
+    raise SystemExit(0)
+failed_checks = sorted(name for name, passed in checks.items() if not passed)
+if failed_checks:
+    print(f"launch_rejection:{kind}:{','.join(failed_checks)}")
+    raise SystemExit(0)
 record = {
     "attempt": attempt,
     "cap_add": sorted(host.get("CapAdd") or []),
@@ -272,6 +279,10 @@ with open(sys.argv[2], "a", encoding="utf-8") as stream:
 print(kind)
 PY
 )" || exit $?
+    if [[ "${launch_kind}" == launch_rejection:* ]]; then
+      append_json "${RAW_DIR}/argv.ndjson" "${launch_kind}" || exit 70
+      exit 70
+    fi
     if [[ "${launch_kind}" == builder && -f "${BARRIER_ENABLE}" && ! -L "${BARRIER_ENABLE}" ]]; then
       service_pid="$(cat "${SERVICE_PID_FILE}")" || exit 70
       [[ "${service_pid}" =~ ^[1-9][0-9]*$ ]] || exit 70

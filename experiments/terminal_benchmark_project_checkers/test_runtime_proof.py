@@ -401,6 +401,12 @@ class DockerWrapperSourceTests(unittest.TestCase):
         result = self._run(Path("/run"))
         self.assertEqual(result.returncode, 70)
         self.assertFalse((self.raw / "launches.ndjson").exists())
+        arguments = [
+            json.loads(line)["argv"]
+            for line in (self.raw / "argv.ndjson").read_text().splitlines()
+        ]
+        self.assertEqual(arguments[-1], ["launch_rejection:candidate:source"])
+        self.assertNotIn(str(self.root), arguments[-1][0])
 
     def test_checker_start_forwards_request_stdin_into_dind(self) -> None:
         capture = self.root / "checker-request.json"
