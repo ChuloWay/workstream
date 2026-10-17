@@ -413,6 +413,12 @@ async def _create_and_replay(admin_access, h, retry_path, headers, payload, item
                 AuditEvent.event_type == LifecycleAuditEventType.CHECKER_RETRY_REQUESTED.value
             )),
         }
+        original_allows = [entry for entry in await session.scalars(select(AuditEvent).where(
+            AuditEvent.actor_id == str(admin_access.target.id),
+            AuditEvent.action_id == ActionId.OPERATIONS_CHECKER_RETRY.value,
+        ).order_by(AuditEvent.id)) if entry.after_facts.get("allowed")]
+        assert len(original_allows) == 1
+        original_allow_ids = tuple(entry.id for entry in original_allows)
     replay = await admin_access.signed.client.post(retry_path, headers=headers, json=payload)
     assert replay.status_code == 201, replay.text
     assert replay.json() == result
@@ -432,7 +438,7 @@ async def _create_and_replay(admin_access, h, retry_path, headers, payload, item
             AuditEvent.action_id == ActionId.OPERATIONS_CHECKER_RETRY.value,
         ).order_by(AuditEvent.id)))
         allows = [entry for entry in allows if entry.after_facts.get("allowed")]
-        assert len(allows) == 2
+        assert tuple(entry.id for entry in allows) == original_allow_ids
         assert all(
             entry.matched_grant_id == grant
             and entry.permission_id == "operations.checker.retry"
