@@ -58,7 +58,7 @@ resources:
 ```bash
 cd experiments/terminal_benchmark_project_checkers
 python3 -m unittest -q test_verify_evidence test_runtime_proof
-PYTHONPATH=../../backend:. ../../backend/.venv/bin/python -m unittest -q \
+PYTHONPATH=../../backend:. ../../backend/.venv/bin/python -B -m unittest -q \
   test_execute_post_contract
 ```
 
