@@ -1,7 +1,7 @@
 # MVP Hosted Release Configuration
 
 - Initiative: None
-- Durable disposition: Planned
+- Durable disposition: Complete
 - Intended merge outcome: Provide one reviewable single-host Linux release
   configuration for the immutable Workstream API, prefork Celery worker, Beat
   scheduler and existing external-checker service without claiming deployment
@@ -146,7 +146,7 @@ as another release service here.
 
 ## Acceptance criteria
 
-- [ ] Release build targets use digest-pinned bases and committed Python/Rust
+- [x] Release build targets use digest-pinned bases and committed Python/Rust
   locks, install exactly the default-plus-agents dependency closure, omit
   dev-exclusive dependencies and do not run Uvicorn reload. A package also
   required transitively in production, such as `jsonschema`, remains installed.
@@ -326,11 +326,11 @@ locked production dependencies.
 
 Source/configuration candidate checks:
 
-- `python3 -m unittest -v scripts.test_hosted_release_config`: eleven focused
+- `python3 -m unittest -v scripts.test_hosted_release_config`: fifteen focused
   tests pass, including required AWS evidence custody in each rendered backend
   process environment, hostile ambient Compose rendering/operation and executed
   role-specific secret-loader failure/non-evaluation/non-disclosure cases. These
-  tests do not claim branch-local Settings validation for the eleven fields.
+  tests do not replace the canonical application Settings tests for those fields.
 - `uvx ruff@0.15.22 check deploy/hosted/preflight.py deploy/hosted/compose.py
   scripts/test_hosted_release_config.py`,
   `/bin/sh -n docker/backend/release-entrypoint.sh` and `git diff --check` pass.
@@ -345,9 +345,9 @@ Source/configuration candidate checks:
   binary. This is a local image ID, not a published repository digest or release
   identity.
 
-The earlier backend and checker image builds predate the latest merged backend
-and Rust SDK source plus this loader hardening and are historical evidence only.
-Exact-source rebuild and inspection remain queued behind the shared proof
-workload. AWS, Flow, runsc workload, selected
-checker-image, diagnostics, recovery and backup/restore proof remain unavailable
-by design; no deployment or hosted readiness is claimed.
+The credential-free scoped workflow built and inspected both release images
+from the integrated exact source; bounded evidence is retained with the PR.
+This establishes the build, dependency, source, loader, metadata and checker-start
+contracts only. AWS, Flow, runsc workload, selected checker-image, diagnostics,
+recovery and backup/restore proof require the approved hosted environment;
+no deployment or hosted readiness is claimed.
