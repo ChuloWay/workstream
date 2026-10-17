@@ -103,6 +103,7 @@ def do_run_migrations(connection: Connection) -> None:
             ("0047_revision_recovery",),
             ("0048_revision_exhaustion",),
             ("0049_attempt_outcome_findings",),
+            ("0050_contributor_reads",),
             (_CURRENT_HEAD_REVISION,),
         ):
             raise RuntimeError(_RECREATE_GUIDANCE)
