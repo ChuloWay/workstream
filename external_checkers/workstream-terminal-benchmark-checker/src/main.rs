@@ -737,7 +737,15 @@ mod tests {
             .iter()
             .filter(|item| item.code == "forbidden_path")
             .collect::<Vec<_>>();
-        assert_eq!(path_findings.len(), MAX_PATH_FINDINGS);
+        assert!(!path_findings.is_empty());
+        assert!(path_findings.len() < MAX_PATH_FINDINGS);
+        assert!(
+            path_findings
+                .iter()
+                .map(|item| serde_json::to_vec(item).unwrap().len())
+                .sum::<usize>()
+                <= MAX_PATH_FINDING_BYTES
+        );
         assert!(path_findings.iter().any(|item| item.path.is_some()));
         assert!(path_findings.iter().any(|item| item.path.is_none()));
         assert_eq!(
