@@ -6,6 +6,7 @@ from starlette.testclient import TestClient
 
 from workstream_mcp.schemas import (
     ACCESS_READ_INPUT_SCHEMAS,
+    ACTOR_LIFECYCLE_INPUT_SCHEMAS,
     ADMIN_GRANT_INPUT_SCHEMAS,
     AUTHORIZATION_CONTEXT_INPUT_SCHEMA,
     EMPTY_INPUT_SCHEMA,
@@ -65,6 +66,11 @@ def test_mcp_tool_listing_exposes_exactly_the_chunk_catalogue(
         "workstream_admin_grants_list",
         "workstream_admin_grants_issue",
         "workstream_admin_grants_revoke",
+        "workstream_actor_suspend",
+        "workstream_actor_reactivate",
+        "workstream_actor_deactivate",
+        "workstream_identity_link_revoke",
+        "workstream_identity_link_reactivate",
         "workstream_actor_admin_grants_list",
         "workstream_actor_get",
         "workstream_actor_identity_link_get",
@@ -75,6 +81,7 @@ def test_mcp_tool_listing_exposes_exactly_the_chunk_catalogue(
         AUTHORIZATION_CONTEXT_INPUT_SCHEMA,
         *list(ACCESS_READ_INPUT_SCHEMAS.values())[:3],
         *ADMIN_GRANT_INPUT_SCHEMAS.values(),
+        *ACTOR_LIFECYCLE_INPUT_SCHEMAS.values(),
         *list(ACCESS_READ_INPUT_SCHEMAS.values())[3:],
     ]
 

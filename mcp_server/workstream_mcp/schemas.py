@@ -163,6 +163,35 @@ ADMIN_GRANT_INPUT_SCHEMAS: dict[str, dict[str, Any]] = {
     },
 }
 
+_LIFECYCLE_BODY = {
+    "type": "object",
+    "properties": {"reason": _REASON_INPUT},
+    "required": ["reason"],
+    "additionalProperties": False,
+}
+
+
+def _lifecycle_input(resource_key: str) -> dict[str, Any]:
+    return {
+        "type": "object",
+        "properties": {
+            resource_key: _UUID_INPUT,
+            "body": _LIFECYCLE_BODY,
+            "idempotency_key": _IDEMPOTENCY_KEY_INPUT,
+        },
+        "required": [resource_key, "body", "idempotency_key"],
+        "additionalProperties": False,
+    }
+
+
+ACTOR_LIFECYCLE_INPUT_SCHEMAS: dict[str, dict[str, Any]] = {
+    "actor_suspend": _lifecycle_input("actor_profile_id"),
+    "actor_reactivate": _lifecycle_input("actor_profile_id"),
+    "actor_deactivate": _lifecycle_input("actor_profile_id"),
+    "identity_link_revoke": _lifecycle_input("identity_link_id"),
+    "identity_link_reactivate": _lifecycle_input("identity_link_id"),
+}
+
 
 class ContractError(RuntimeError):
     """The reviewed packaged contract is absent or invalid."""
@@ -212,7 +241,7 @@ def _selected_schema(document: dict[str, Any]) -> dict[str, Any]:
     raise ContractError("contract does not contain an output schema")
 
 
-@lru_cache(maxsize=11)
+@lru_cache(maxsize=16)
 def _contract_output_schema(name: str) -> dict[str, Any]:
     filename = f"{name}.json"
     resource = files("workstream_mcp").joinpath(f"contracts/{filename}")
@@ -248,7 +277,7 @@ def authorization_context_output_schema() -> dict[str, Any]:
     return _contract_output_schema("authorization_context_get")
 
 
-@lru_cache(maxsize=11)
+@lru_cache(maxsize=16)
 def _contract_output_validator(name: str) -> Draft202012Validator:
     return Draft202012Validator(
         _contract_output_schema(name),
@@ -291,4 +320,17 @@ def admin_grant_output_schema(name: str) -> dict[str, Any]:
 def admin_grant_output_validator(name: str) -> Draft202012Validator:
     """Validate one administrative mutation receipt, including formats."""
     admin_grant_output_schema(name)
+    return _contract_output_validator(name)
+
+
+def actor_lifecycle_output_schema(name: str) -> dict[str, Any]:
+    """Load one reviewed actor or identity-link lifecycle receipt."""
+    if name not in ACTOR_LIFECYCLE_INPUT_SCHEMAS:
+        raise ContractError("unknown actor lifecycle contract")
+    return _contract_output_schema(name)
+
+
+def actor_lifecycle_output_validator(name: str) -> Draft202012Validator:
+    """Validate one actor or identity-link lifecycle receipt."""
+    actor_lifecycle_output_schema(name)
     return _contract_output_validator(name)

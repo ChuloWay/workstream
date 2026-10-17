@@ -15,6 +15,7 @@ from workstream_mcp.config import Settings
 from workstream_mcp.errors import SafeFailure
 from workstream_mcp.schemas import (
     access_read_output_validator,
+    actor_lifecycle_output_validator,
     admin_grant_output_validator,
     authorization_context_output_validator,
     profile_output_validator,
@@ -29,10 +30,15 @@ _CORRELATION_HEADERS = ("x-request-id", "x-correlation-id")
 _PUBLIC_ERROR_CODES = frozenset(
     {
         "actor_deactivated",
+        "actor_deactivated_terminal",
+        "actor_already_suspended",
+        "actor_not_suspended",
         "actor_not_found",
         "actor_suspended",
         "actor_resource_not_found",
         "identity_link_revoked",
+        "identity_link_already_revoked",
+        "identity_link_not_revoked",
         "identity_verification_unavailable",
         "admin_role_grant_exists",
         "grant_not_found",
@@ -43,6 +49,8 @@ _PUBLIC_ERROR_CODES = frozenset(
         "missing_token",
         "permission_not_granted",
         "project_authorization_resource_not_found",
+        "resource_guard_denied",
+        "resource_not_found",
         "rate_limit_exceeded",
         "scope_not_authorized",
         "self_grant_forbidden",
@@ -62,6 +70,33 @@ ACCESS_READ_PATHS = {
     "actor_admin_grants_list": "/api/v1/actors/{actor_profile_id}/admin-role-grants",
     "actor_get": "/api/v1/actors/{actor_profile_id}",
     "actor_identity_link_get": "/api/v1/actors/{actor_profile_id}/identity-links",
+}
+ACTOR_LIFECYCLE_MUTATIONS = {
+    "actor_suspend": (
+        "/api/v1/actors/{resource_id}/suspend",
+        "actor_profile_id",
+        "actor_profile",
+    ),
+    "actor_reactivate": (
+        "/api/v1/actors/{resource_id}/reactivate",
+        "actor_profile_id",
+        "actor_profile",
+    ),
+    "actor_deactivate": (
+        "/api/v1/actors/{resource_id}/deactivate",
+        "actor_profile_id",
+        "actor_profile",
+    ),
+    "identity_link_revoke": (
+        "/api/v1/actor-identity-links/{resource_id}/revoke",
+        "identity_link_id",
+        "actor_identity_link",
+    ),
+    "identity_link_reactivate": (
+        "/api/v1/actor-identity-links/{resource_id}/reactivate",
+        "identity_link_id",
+        "actor_identity_link",
+    ),
 }
 
 
@@ -171,6 +206,34 @@ class WorkstreamGateway:
             expected_status=expected_status,
             expected_payload={"http_status": expected_status, "version": expected_version},
             expected_resource_id=(arguments["grant_id"] if name == "admin_grants_revoke" else None),
+            mutation=True,
+        )
+
+    async def actor_lifecycle_mutation(
+        self,
+        name: str,
+        bearer: str,
+        arguments: dict[str, Any],
+        correlation_id: str | None = None,
+    ) -> GatewayResult:
+        """Dispatch one fixed actor-profile or identity-link lifecycle mutation."""
+        path, resource_key, resource_type = ACTOR_LIFECYCLE_MUTATIONS[name]
+        resource_id = arguments[resource_key]
+        return await self._request(
+            "POST",
+            path.format(resource_id=quote(resource_id, safe="")),
+            bearer,
+            actor_lifecycle_output_validator(name),
+            correlation_id,
+            json_body=arguments["body"],
+            idempotency_key=arguments["idempotency_key"],
+            expected_status=200,
+            expected_payload={
+                "resource_type": resource_type,
+                "http_status": 200,
+                "version": None,
+            },
+            expected_resource_id=resource_id,
             mutation=True,
         )
 
