@@ -2,7 +2,8 @@
 
 This experiment supplies the real Docker/gVisor evidence required by the
 bounded WS493 checker change. The pull-request workflow is the supported proof
-environment: it creates an owned XFS project-quota backing file, starts the
+environment: it creates an owned XFS project-quota backing file, mounts it at a
+distinct run-named path under ephemeral host `/run`, starts the
 trusted networkless DIND harness, registers the pinned `runsc` runtime, builds
 the checker from the exact pull-request head, and runs only the public
 `ledger-reconcile` package.
@@ -34,8 +35,8 @@ allocated 400 MiB write fails. It stages only the fixed nonsecret evidence
 allowlist through no-follow file descriptors. Cleanup removes the exact DIND
 and run-owned checker/registry transfer image aliases, removes the crane
 archive and binary, validates the head-and-run-bound no-follow ownership marker
-before deleting the run-named `/run` service control directory, unmounts XFS, detaches
-the loop device, deletes raw state, and adds a verified cleanup receipt before
+before deleting the run-named `/run` service control directory, unmounts XFS,
+detaches the loop device, deletes raw state, and adds a verified cleanup receipt before
 upload. A preexisting, substituted or ambiguously owned control path is never
 deleted and makes cleanup fail. The matrix validates the same custody before
 its first control-file access and again before each service start.

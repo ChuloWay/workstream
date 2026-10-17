@@ -382,7 +382,9 @@ also dies, the existing TTL plus dead-owner reaper cleans the workspace. No
 service-to-ART callback or second cleanup dependency is introduced.
 
 The proof keeps only quota-subject cache, Docker state, evidence and ART scratch
-on the XFS mount. Its socket, PID and one-use barrier files live in a separate
+on the run-named XFS mount directly under ephemeral host `/run`; its backing
+file and loop record remain under runner temporary storage. Its socket, PID and
+one-use barrier files live in a separate
 run-named control directory directly under the ephemeral host `/run`. That
 root is atomically installed only when the target is absent, remains root-owned
 `0755`, and carries a root-owned `0600` no-follow marker bound to the head and
