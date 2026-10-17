@@ -193,3 +193,24 @@ async def test_each_guide_read_records_one_allowed_authorization_decision(task_c
         assert len(rows) == before + 1, action
         assert (rows[-1].event_type, rows[-1].permission_id) == ("SensitiveAuthorizationAllowed", "project.guide.manage")
         assert rows[-1].matched_grant_id is not None and UUID(str(rows[-1].project_id)) == UUID(project)
+
+
+async def test_guide_list_keeps_a_superseded_guide_after_its_successor_activates(task_client, monkeypatch):
+    from app.db import session as db_session
+    from tests.project_create_fixtures import seed_active_guide_for_downstream_test
+    from tests.test_tasks import create_policy_bundle_for_guide
+
+    project, first, draft = await _project_with_draft(task_client, monkeypatch, "guide-superseded")
+    await create_policy_bundle_for_guide(task_client, project, draft["id"])
+    await seed_active_guide_for_downstream_test(
+        db_session.get_session_factory(), project_id=project, guide_id=draft["id"],
+    )
+    listed = (await get_ok(task_client, _guides(project)))["items"]
+    assert [(item["guide_id"], item["status"]) for item in listed] == [(first, "superseded"), (draft["id"], "active")]
+    assert listed[0]["effective_at"] is not None
+    superseded = (await get_ok(task_client, _guides(project), status="superseded"))["items"]
+    assert [item["guide_id"] for item in superseded] == [first]
+    assert [item["guide_id"] for item in (await get_ok(task_client, _guides(project), status="active"))["items"]] == [
+        draft["id"]
+    ]
+    assert (await get_ok(task_client, _guides(project, f"/{first}")))["guide"]["status"] == "superseded"

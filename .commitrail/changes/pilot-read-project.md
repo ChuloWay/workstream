@@ -143,7 +143,7 @@ filters, and is the template this change follows).
     reported as `guide_not_draft` with the refusal code activation raises for
     it (the post-policy lock admits only drafts).
   - C5 closed assignments use the A2 own-facts rule: a closed claim projects
-    only the facts PR2 shows its contributor (see the OPEN item below).
+    only the facts PR2 shows its contributor (decided below).
   - C6 `award_totals` is null without a current exact-project Finance
     Authority grant (a system Finance grant does not add them; the PILOT-10
     precedent) and a list (possibly empty) with one. The closed evaluator
@@ -164,13 +164,17 @@ filters, and is the template this change follows).
   - C8 `outcome` accepts all four typed values (`pending`, `passed`,
     `failed`, `infrastructure_failed`).
   - The new actions are not listed in `/actors/me/authorization-context`.
-- OPEN, pending human decision:
-  - Whether C5 shows a Project Manager closed assignments, and with which
-    projection (PR2 projects only the contributor's own facts on a closed
-    assignment).
-  - The Project Manager award-read conflict: `policy.py` gives Project Manager
-    `compensation.award.read` while the roles table says Project Manager has
-    no compensation award read. C6 follows the roles table until decided.
+- Decided by the maintainer (2026-10-17):
+  - C5 lists a project's closed assignments with the A2 own-facts rule: a
+    closed claim projects only the facts PR2 shows its contributor.
+  - C6 award totals require an exact-project Finance Authority grant
+    alongside the Project Manager grant, as the roles table states. The
+    evaluator matches only a Finance Authority grant for this, so the
+    Project Manager's `compensation.award.read` entry in `policy.py` grants
+    nothing here; no current action consumes it, and aligning that role
+    matrix with the roles table is a separate authorization change.
+  - C3 readiness keeps activation's `FOR UPDATE` row locks for the length of
+    one read (Human review focus) so readiness and activation cannot disagree.
 - Latency budget: the PR2 budget applies, one list page or summary within
   1 second on 10,000 tasks and 20,000 submissions on the isolated PostgreSQL
   test database, with indexed queries and no per-row queries. C8 uses the new
@@ -210,7 +214,7 @@ filters, and is the template this change follows).
   the Finance-only policy list; award totals behind an exact-project Finance
   grant, resolved in the evaluator and evidenced in the decision digest
   through the read dispatch's returned resource (the one kernel line); the
-  two OPEN items; C3 sharing activation's conditions without side effects.
+  three maintainer decisions; C3 sharing activation's conditions without side effects.
   C3 row locks: readiness takes the same `FOR UPDATE` row locks as
   activation's checks (project, post policy and its lineage, active guide,
   review and revision policies, source snapshot items) and holds them until
@@ -264,8 +268,8 @@ documentation tracks at `b4b34a39a`.
   set holds one award per instrument); the docs said the evidence shows the
   disclosure (the decision digest binds the Finance grant and is recomputable
   from the request and the candidate grant; the grant id is not stored).
-- Recorded, not changed: the C3 `FOR UPDATE` row locks held until the
-  response commits (Human review focus).
+- Decided: the C3 `FOR UPDATE` row locks held until the response commits
+  (Human review focus), accepted by the maintainer.
 
 ## Reconciliation
 
@@ -274,7 +278,6 @@ documentation tracks at `b4b34a39a`.
   public schema fingerprint (`EXPECTED_PUBLIC_SCHEMA_SHA256`) is recomputed
   after the migration, including the new index, runs on PostgreSQL 16.
 - Next usable boundary: with this change the PILOT read-API issue's reads
-  are delivered; the issue closes once the two OPEN human decisions above
-  are made. Live human review and revision follow per the delivery priority.
+  are delivered, with the C5, C6 and C3 decisions made. Live human review and revision follow per the delivery priority.
 - Retained state needing explicit handling: none known beyond PR2's retained
   selected PRE body note.

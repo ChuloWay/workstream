@@ -9,13 +9,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps.project_management_reads import ProjectManagementReadRunner, ProjectManagementReads
 from app.db.session import get_db_session
 from app.modules.authorization.api.management_reads import ProjectManagementReadGrant
-from app.modules.contributions.api.policies import ContributionPolicyOperationsPort, ContributionPolicyVersionPage
+from app.modules.contributions.api.policies import ContributionPolicyVersionListPort, ContributionPolicyVersionPage
 
 
 class ContributionPolicyListRead:
     """D1: every stored version of the project's policies, oldest first, under a Finance grant."""
 
-    def __init__(self, runner: ProjectManagementReadRunner, policies: ContributionPolicyOperationsPort):
+    def __init__(self, runner: ProjectManagementReadRunner, policies: ContributionPolicyVersionListPort):
         """Compose the read runner with the CON policy owner."""
         self._runner, self._policies = runner, policies
 
@@ -42,6 +42,6 @@ async def get_contribution_policy_list(
     runner: ProjectManagementReads, session: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> ContributionPolicyListRead:
     """Build the policy version list from request-scoped owner adapters."""
-    from app.adapters.contributions import contribution_policy_service
+    from app.adapters.contributions import contribution_policy_version_list
 
-    return ContributionPolicyListRead(runner, contribution_policy_service(session))
+    return ContributionPolicyListRead(runner, contribution_policy_version_list(session))

@@ -109,3 +109,20 @@ async def test_each_read_commits_one_exact_decision(task_client, monkeypatch):
         ("SensitiveAuthorizationDenied", "compensation.policy.manage"),
     ]
     assert UUID(rows[0].project_id) == UUID(project) and rows[0].matched_grant_id is not None
+
+
+async def test_list_keeps_a_retired_version_with_its_retirement_instant(task_client, monkeypatch):
+    project = (await create_active_project(task_client))["id"]
+    await as_admin(task_client, monkeypatch, FINANCE, "finance_authority", project=project)
+    [published] = (await get_ok(task_client, _path(project)))["items"]
+    retired = await task_client.post(
+        _path(project, f"/{published['contribution_policy_id']}/versions/"
+                       f"{published['contribution_policy_version_id']}/retirement"),
+        json={}, headers=auth_headers() | {"Idempotency-Key": str(new_record_id())},
+    )
+    assert retired.status_code == 200, retired.text
+    [item] = (await get_ok(task_client, _path(project)))["items"]
+    assert item["contribution_policy_version_id"] == published["contribution_policy_version_id"]
+    assert (item["version_status"], item["policy_status"]) == ("retired", "retired")
+    assert item["published_at"] == published["published_at"] and item["retired_at"] is not None
+    assert item["retired_at"] >= item["published_at"]
