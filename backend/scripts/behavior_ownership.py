@@ -124,6 +124,7 @@ PILOT_READ_3_TARGETS = frozenset({
     "backend/app/modules/authorization/api/management_reads.py",
     "backend/app/modules/authorization/domain/management_reads.py",
     "backend/app/modules/authorization/management_read.py",
+    "backend/app/modules/contributions/policy_views.py",
     "backend/app/modules/projects/api/guide_reads.py",
     "backend/app/modules/projects/guide_reads.py",
     "backend/app/modules/tasks/api/project_reads.py",

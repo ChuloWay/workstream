@@ -5,7 +5,7 @@ from datetime import datetime
 from typing import Literal, Protocol, TypeAlias
 from uuid import UUID
 
-from pydantic import ConfigDict, with_config
+from pydantic import BaseModel, ConfigDict, with_config
 
 from app.modules.compensation.api import CompensationInstrumentType
 
@@ -183,9 +183,10 @@ class ContributionPolicyVersionListItem(ContributionPolicyView):
     retired_at: datetime | None
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class ContributionPolicyVersionPage:
+class ContributionPolicyVersionPage(BaseModel):
     """One page of every stored policy version in the project, oldest first."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
 
     items: tuple[ContributionPolicyVersionListItem, ...]
     next_cursor: str | None

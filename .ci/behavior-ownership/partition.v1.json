@@ -1222,6 +1222,10 @@
     },
     {
       "group": "lifecycle",
+      "target": "backend/app/modules/contributions/policy_views.py"
+    },
+    {
+      "group": "lifecycle",
       "target": "backend/app/modules/contributions/records/csv.py"
     },
     {
@@ -2161,7 +2165,7 @@
       "target": "backend/scripts/validate_test_lane_evidence.py"
     }
   ],
-  "authority_digest": "c296db8be356996e46c8f3d7301e67d0779b99ec1e65c17b5d8e94b25c109081",
+  "authority_digest": "97a247bd5fcb95d9298f60efb3b84532dbe2e15df528035add94d752959ba501",
   "protected_base_commit": "7676ce4347db0c9694962a9b587a20765e16eac6",
   "schema": "workstream.behavior-ownership-partition.v1"
 }
