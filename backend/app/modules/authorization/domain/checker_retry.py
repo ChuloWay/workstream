@@ -92,6 +92,21 @@ def checker_retry_resource_matches(
     )
 
 
+def checker_retry_denial_resource_matches(
+    preparation: CheckerRetryPreparation | None,
+    resource: object,
+    identity_link_id: UUID,
+) -> bool:
+    """Bind a prepare-time denial to the original source and current identity."""
+    return (
+        type(resource) is CheckerRetryPrepareDenialResourceContext
+        and preparation == resource.preparation
+        and resource.identity_link_id == identity_link_id
+        and resource.resource_id == resource.preparation.source.source_run_id
+        and resource.project_id == resource.preparation.source.project_id
+    )
+
+
 def checker_retry_resource_json(resource: CheckerRetryResourceContext) -> str:
     """The exact canonical AUTH digest input retained for SQL closure."""
     resource = CheckerRetryResourceContext.model_validate(resource)

@@ -41,7 +41,12 @@ from app.modules.authorization.domain.guide_compilation import (
 from app.modules.authorization.domain.guide_proposals import (
     GUIDE_PROPOSAL_RESOURCE_BY_ACTION,
 )
-from app.modules.authorization.domain.checker_retry import checker_retry_resource_matches, parse_checker_retry_prepare
+from app.modules.authorization.domain.checker_retry import (
+    CheckerRetryPrepareDenialResourceContext,
+    checker_retry_denial_resource_matches,
+    checker_retry_resource_matches,
+    parse_checker_retry_prepare,
+)
 from app.modules.checkers.api.execution import CheckerRetryPreparation
 from app.modules.authorization.domain.prepared_submission_policy import parse_submission_policy_prepare
 from app.modules.authorization.domain.prepared_compilation import prepared_compilation_matches
@@ -834,6 +839,14 @@ class PreparedAuthorizationService:
             final_resource_context, ProjectSubmissionArtifactPolicyMutationResourceContext
         ) and not _submission_policy_binding_matches(binding, final_resource_context):
             raise PreparedAuthorizationHandleInvalid("invalid prepared authorization handle")
+        if type(final_resource_context) is CheckerRetryPrepareDenialResourceContext and not (
+            checker_retry_denial_resource_matches(
+                binding.checker_retry_preparation,
+                final_resource_context,
+                self._context.identity_link_id,
+            )
+        ):
+            raise PreparedAuthorizationHandleInvalid("invalid prepared authorization handle")
         await self._authorization._complete_prepared_denial(
             self._consumer_token,
             action_id,
@@ -1060,6 +1073,11 @@ class PreparedAuthorizationService:
 
 def _admin_prepared_scope(action_id, resource):
     """Return the exact administrative prepared scope when applicable."""
+    if (
+        action_id is ActionId.OPERATIONS_CHECKER_RETRY
+        and type(resource) is CheckerRetryPrepareDenialResourceContext
+    ):
+        return PreparedAuthorityScope(kind=PreparedAuthorityScopeKind.SYSTEM)
     if action_id not in _ADMIN_MUTATIONS or not AuthorizationService._admin_resource_matches(
         action_id, resource
     ):

@@ -46,7 +46,8 @@ eligible source or call the retry through a bearer-authenticated public route.
   mapping and UUID `Idempotency-Key` parsing.
 - `backend/app/modules/authorization/catalogue.py`, the existing checker-retry
   authorization adapter, a focused CHECKERS recovery read domain/adapter,
-  the prepared-denial action registry, `backend/app/modules/authorization/kernel.py`,
+  the prepared-denial action registry and prepared-scope owner,
+  `backend/app/modules/authorization/kernel.py`,
   its closed audit-target mapper, `backend/app/modules/audit/schemas.py`, and only the minimum AUTH
   composition exports: activate an exact recovery-source read action backed by
   the existing system Operator `operations.status.read` permission and retain
