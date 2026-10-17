@@ -38,7 +38,7 @@ from app.modules.checkers.api import (
     ExternalCheckerRegistrySpec,
 )
 from app.modules.checkers.api.execution import (
-    CheckerRetryRequest, CheckerRetryResult, CheckerRetrySourcePage,
+    CheckerRetryPublicResult, CheckerRetryRequest, CheckerRetrySourcePage,
 )
 
 
@@ -119,7 +119,7 @@ async def list_checker_retry_sources(
 
 @router.post(
     "/operations/projects/{project_id}/checker-runs/{source_run_id}/retry",
-    response_model=CheckerRetryResult,
+    response_model=CheckerRetryPublicResult,
     status_code=201,
     dependencies=[
         Depends(enforce_admin_mutation_rate_limit),
@@ -135,9 +135,10 @@ async def retry_checker_infrastructure_failure(
     source_run_id: UUID,
     payload: CheckerRetryRequest,
     commands: Annotated[CheckerRetryCommands, Depends(get_checker_retry_commands)],
-) -> CheckerRetryResult:
+) -> CheckerRetryPublicResult:
     """Create or replay one exact reason-bound terminal checker retry."""
-    return await commands.retry(project_id, source_run_id, payload)
+    result = await commands.retry(project_id, source_run_id, payload)
+    return CheckerRetryPublicResult.from_result(result)
 
 
 @router.get("/submissions/{submission_id}/checker-runs", response_model=ContributorCheckerHistoryPage,

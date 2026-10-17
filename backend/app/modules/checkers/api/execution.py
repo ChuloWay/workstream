@@ -181,6 +181,38 @@ class CheckerRetrySourceItem(CheckerValue):
         return self
 
 
+class CheckerRetryPublicResult(CheckerValue):
+    """Privacy-bounded public projection of one retained retry result."""
+
+    receipt_id: ResourceId
+    source: CheckerRetryDiscoverySource
+    successor: CheckerRetrySuccessor
+    authorization_decision_id: ResourceId
+
+    @classmethod
+    def from_result(cls, result: CheckerRetryResult) -> CheckerRetryPublicResult:
+        result = CheckerRetryResult.model_validate(result)
+        return cls(
+            receipt_id=result.receipt_id,
+            source=CheckerRetryDiscoverySource(
+                project_id=result.source.project_id,
+                task_id=result.source.task_id,
+                submission_id=result.source.submission_id,
+                submission_version=result.source.submission_version,
+                source_run_id=result.source.source_run_id,
+                source_request_id=result.source.source_request_id,
+                source_request_digest=result.source.source_request_digest,
+                source_result_id=result.source.source_result_id,
+                source_result_digest=result.source.source_result_digest,
+                source_finalize_evidence_id=result.source.source_finalize_evidence_id,
+                source_generation=result.source.source_generation,
+                failure_code=result.source.failure_code,
+            ),
+            successor=result.successor,
+            authorization_decision_id=result.authorization_decision_id,
+        )
+
+
 class CheckerRetrySourcePage(CheckerValue):
     """One bounded exact project page; a cursor conveys no authority."""
 
