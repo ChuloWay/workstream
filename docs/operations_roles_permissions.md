@@ -150,7 +150,8 @@ Recovery is a separate, reasoned, audited path.
 | Normal covered task/setup repair | `project.task.manage` | Covered Project Manager |
 | Task start override | `operations.task.start_override` | Operator |
 | Submission gate repair (planned; unavailable) | `operations.submission_gate.repair` | Operator |
-| Checker retry (active internal operation; no public route) | `operations.checker.retry` | Operator under exact terminal-failure guards |
+| Checker recovery-source discovery (active public read) | `operations.status.read` via `operations.checker_retry_source.list` | System Operator for one exact project |
+| Checker terminal-failure retry (active public operation) | `operations.checker.retry` | System Operator under exact terminal-failure guards |
 | Review lease force release | `review.lease.force_release` | Operator under WS-REV-001 |
 | Checker revision-context repair (active public operation) | `project.task.manage` via `project.task.revision.repair` | Covered Project Manager |
 | Checker revision expiry (active internal operation) | `task.revision.expire` | Exact fixed service `workstream.task.revision_expirer` |
@@ -164,6 +165,18 @@ grant or fixed-service identity, project/resource, reason, bounded before/after 
 and immutable evidence. Recovery cannot erase checker results, rewrite
 submissions, create review decisions, alter contribution history, or bypass
 contribution award rules.
+
+An active system Operator lists known terminal failures at
+`GET /api/v1/operations/projects/{project_id}/checker-retry-sources`. The
+bounded page exposes immutable run/request/result/finalization identifiers,
+generation, failure code, timestamps and current retry state. It does not expose
+checker request/result bodies or artifact locations. The Operator retries one
+eligible source with a bounded reason and UUID `Idempotency-Key` at
+`POST /api/v1/operations/projects/{project_id}/checker-runs/{run_id}/retry`.
+Exact replay returns the retained receipt and successor under fresh authority.
+Queued, running, completed, non-current and foreign-project runs are not
+eligible. Dead-letter or otherwise uncertain delivery is not a terminal retry
+source and remains held for source-specific reconciliation.
 
 Checker revision repair uses
 `POST /api/v1/projects/{project_id}/tasks/{task_id}/revision-context/repair`

@@ -1017,6 +1017,15 @@ CHECKER_REGISTRY_RATE_BINDINGS = {
         enforce_authorization_read_rate_limit
     },
 }
+CHECKER_RECOVERY_RATE_BINDINGS = {
+    ("GET", "/operations/projects/{project_id}/checker-retry-sources"): {
+        enforce_authorization_read_rate_limit
+    },
+    (
+        "POST",
+        "/operations/projects/{project_id}/checker-runs/{source_run_id}/retry",
+    ): {enforce_admin_mutation_rate_limit},
+}
 
 
 def _dependency_calls(dependant) -> set:
@@ -1066,6 +1075,7 @@ def test_production_rate_dependencies_match_exact_route_allowlist() -> None:
             for route in ESTABLISHED_AUTHORIZATION_READ_RATE_ROUTES
         },
         **CHECKER_REGISTRY_RATE_BINDINGS,
+        **CHECKER_RECOVERY_RATE_BINDINGS,
     }
 
     assert _rate_dependency_bindings(create_app().routes) == expected

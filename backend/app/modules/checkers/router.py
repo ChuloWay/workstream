@@ -3,7 +3,10 @@
 from typing import Annotated
 from uuid import UUID
 from fastapi import APIRouter, Depends, Query, status
-from app.api.deps.api_controls import enforce_admin_mutation_rate_limit
+from app.api.deps.api_controls import (
+    enforce_admin_mutation_rate_limit,
+    enforce_authorization_read_rate_limit,
+)
 from app.api.deps.authorization import enforce_human_authorization_read
 from app.api.deps.checker_registry import (
     REGISTRY_IDEMPOTENCY_PARAMETER,
@@ -14,6 +17,11 @@ from app.api.deps.checker_registry import (
     require_registry_key,
 )
 from app.core.api_controls import ApiErrorResponse
+from app.api.deps.checker_recovery import (
+    CheckerRetryCommands, CheckerRetryReads,
+    get_checker_retry_commands, get_checker_retry_reads,
+    require_checker_retry_human,
+)
 
 from app.api.deps.history import HistoryReadOperation, get_history_reads
 
@@ -28,6 +36,9 @@ from app.modules.checkers.api import (
     ExternalCheckerRegistrationCommand,
     ExternalCheckerRegistryEntry,
     ExternalCheckerRegistrySpec,
+)
+from app.modules.checkers.api.execution import (
+    CheckerRetryPublicResult, CheckerRetryRequest, CheckerRetrySourcePage,
 )
 
 
@@ -79,6 +90,56 @@ async def read_external_checker(
         operation.actor_profile_id, registry_entry_id
     )
     return await commit_registry_response(operation, response)
+
+CHECKER_RETRY_KEY_PARAMETER = {
+    "name": "Idempotency-Key",
+    "in": "header",
+    "required": True,
+    "schema": {"type": "string", "format": "uuid"},
+}
+
+
+@router.get(
+    "/operations/projects/{project_id}/checker-retry-sources",
+    response_model=CheckerRetrySourcePage,
+    dependencies=[Depends(enforce_authorization_read_rate_limit)],
+    openapi_extra={
+        "x-workstream-action-id": "operations.checker_retry_source.list",
+    },
+)
+async def list_checker_retry_sources(
+    project_id: UUID,
+    reads: Annotated[CheckerRetryReads, Depends(get_checker_retry_reads)],
+    limit: Annotated[int, Query(ge=1, le=100)] = 50,
+    cursor: Annotated[str | None, Query(max_length=512)] = None,
+) -> CheckerRetrySourcePage:
+    """List exact finalized infrastructure failures for a system Operator."""
+    return await reads.discover(project_id, limit=limit, cursor=cursor)
+
+
+@router.post(
+    "/operations/projects/{project_id}/checker-runs/{source_run_id}/retry",
+    response_model=CheckerRetryPublicResult,
+    status_code=201,
+    dependencies=[
+        Depends(enforce_admin_mutation_rate_limit),
+        Depends(require_checker_retry_human),
+    ],
+    openapi_extra={
+        "x-workstream-action-id": "operations.checker.retry",
+        "parameters": [CHECKER_RETRY_KEY_PARAMETER],
+    },
+)
+async def retry_checker_infrastructure_failure(
+    project_id: UUID,
+    source_run_id: UUID,
+    payload: CheckerRetryRequest,
+    commands: Annotated[CheckerRetryCommands, Depends(get_checker_retry_commands)],
+) -> CheckerRetryPublicResult:
+    """Create or replay one exact reason-bound terminal checker retry."""
+    result = await commands.retry(project_id, source_run_id, payload)
+    return CheckerRetryPublicResult.from_result(result)
+
 
 @router.get("/submissions/{submission_id}/checker-runs", response_model=ContributorCheckerHistoryPage,
     dependencies=[Depends(enforce_human_authorization_read)],

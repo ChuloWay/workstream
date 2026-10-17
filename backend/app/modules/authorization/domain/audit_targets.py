@@ -21,6 +21,17 @@ from app.modules.authorization.domain.task_queues import QueueReadResourceContex
 from app.modules.authorization.domain.submission_history import HistoryReadResourceContext
 
 
+def _checker_retry_read_target(resource):
+    project_id = str(resource.scope_project_id)
+    return (
+        project_id,
+        "project",
+        project_id,
+        "project",
+        project_id,
+    )
+
+
 def project_authority_audit_target(
     resource: object, action_id: ActionId,
     *, matched_scope_project_id: UUID | None = None,
@@ -36,7 +47,8 @@ def project_authority_audit_target(
         AdapterBindingMutationResourceContext,
     )
     from app.modules.authorization.domain.checker_registry import ExternalCheckerRegistryResourceContext
-    from app.modules.authorization.domain.checker_retry import CheckerRetryResourceContext
+    from app.modules.authorization.domain.checker_retry import CheckerRetryPrepareDenialResourceContext, CheckerRetryResourceContext
+    from app.modules.authorization.domain.checker_retry_reads import CheckerRetrySourceReadResourceContext
     from app.modules.authorization.domain.guide_compilation import (
         ProjectGuideCompilationRequestResourceContext,
         ProjectGuideCompilationExecuteResourceContext,
@@ -83,9 +95,14 @@ def project_authority_audit_target(
     if isinstance(resource, ExternalCheckerRegistryResourceContext):
         entry_id = str(resource.resource_id)
         return None, resource.resource_type, entry_id, resource.resource_type, entry_id
-    if type(resource) is CheckerRetryResourceContext:
+    if type(resource) in {
+        CheckerRetryPrepareDenialResourceContext,
+        CheckerRetryResourceContext,
+    }:
         project_id = str(resource.project_id)
         return project_id, "checker_run", str(resource.resource_id), "project", project_id
+    if type(resource) is CheckerRetrySourceReadResourceContext:
+        return _checker_retry_read_target(resource)
     if action_id in SUBMISSION_POLICY_MUTATIONS and isinstance(
         resource, ProjectSubmissionArtifactPolicyMutationResourceContext,
     ):

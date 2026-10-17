@@ -9,9 +9,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.identifiers import new_record_id
 from app.modules.checkers.api.execution import (
-    CheckerRequestConflict,
     CheckerExecutionUnavailable,
+    CheckerRequestConflict,
     CheckerRetryDelivery,
+    CheckerRetrySourceUnavailable,
     CompletedEvaluation,
     EvaluationReservation,
     ReservedEvaluation,
@@ -105,7 +106,7 @@ class EvaluationCoordinator:
                 or prior.completion_event_id is not None
                 or stored_result(prior).outcome != "infrastructure_failed"
             ):
-                raise CheckerExecutionUnavailable("checker_retry_source_unavailable")
+                raise CheckerRetrySourceUnavailable("checker_retry_source_unavailable")
         expected = 1 if prior is None else prior.evaluation_generation + 1
         if request.evaluation_generation != expected:
             raise CheckerRequestConflict("checker_generation_conflict")
