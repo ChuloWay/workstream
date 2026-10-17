@@ -427,6 +427,14 @@ async def coordinate_artifact_provider_activation(
         for row in rows
     ):
         raise ArtifactProviderLiveProofRequiredError("AWS artifact proof results do not match")
+    runtime = by_type["runtime_immutability"]
+    if (
+        runtime.completed_at > by_type["readiness"].started_at
+        or runtime.completed_at > by_type["negative_access"].started_at
+    ):
+        raise ArtifactProviderLiveProofRequiredError(
+            "AWS artifact proof runtime challenge was not established first"
+        )
     now = await session.scalar(select(func.clock_timestamp()))
     if now is None:
         raise ArtifactProviderLiveProofRequiredError("database time is unavailable")

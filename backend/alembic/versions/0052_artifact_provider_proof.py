@@ -231,6 +231,8 @@ BEGIN
   OR readiness.expected_principal_arn<>readiness.observed_principal_arn
   OR runtime.expected_principal_arn<>runtime.observed_principal_arn
   OR negative.expected_principal_arn<>negative.observed_principal_arn
+  OR runtime.completed_at>readiness.started_at
+  OR runtime.completed_at>negative.started_at
   OR ROW(readiness.proof_version,readiness.release_id,readiness.namespace_fingerprint,
          readiness.aws_partition,readiness.aws_account_id,readiness.region,
          readiness.runtime_role_arn,readiness.runtime_trust_policy_sha256,
