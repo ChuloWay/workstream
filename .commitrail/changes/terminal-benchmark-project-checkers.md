@@ -392,11 +392,12 @@ run. The service and wrapper child directories use the exact service UID/GID
 and `0700` modes. Cleanup validates the marker, owner and modes before touching
 the control tree and refuses an ambiguous preexisting or substituted path.
 Because the hosted checkout is not executable by the fixed service UID, the
-atomic control-tree installation no-follow copies the exact Cargo output into a
-root-owned `0555` file, binds its SHA-256 in the custody marker and rehashes it
-at every custody check. The trusted service therefore executes the verified
-byte-exact copy. Preparation checks execute permission and create/remove access
-as the service owner in both child control directories and the ART scratch root;
+atomic control-tree installation no-follow copies the exact Cargo output and
+fixed Docker wrapper into root-owned `0555` files, binds both SHA-256 values in
+the custody marker and rehashes both at every custody check. The trusted service
+therefore executes the verified byte-exact copies. Preparation checks execute
+permission and create/remove access as the service owner in both child control
+directories and the ART scratch root;
 the run entry and each service start revalidate custody before touching control
 files, and runtime socket readiness proves that the service actually executed
 before POST starts.

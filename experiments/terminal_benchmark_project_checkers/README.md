@@ -41,8 +41,9 @@ upload. A preexisting, substituted or ambiguously owned control path is never
 deleted and makes cleanup fail. The matrix validates the same custody before
 its first control-file access and again before each service start. The atomic
 installation also no-follow copies the exact Cargo service output to a
-root-owned `0555` file under `/run`; the marker binds its SHA-256 and every
-custody check rehashes it before use.
+root-owned `0555` file under `/run` and does the same for the fixed Docker
+wrapper; the marker binds both SHA-256 values and every custody check rehashes
+both before use.
 
 The evidence, launch-source and matrix-reducer tests require no Docker
 resources:

@@ -45,7 +45,8 @@ readonly STAGING_DIR="${RUNNER_TEMP_ROOT}/${PROOF_PREFIX}-staging"
 readonly CLEANUP_RECEIPT="${RUNNER_TEMP_ROOT}/${PROOF_PREFIX}-cleanup-receipt.json"
 readonly BACKEND_PYTHON="${REPOSITORY_ROOT}/backend/.venv/bin/python"
 readonly REAL_DOCKER="$(readlink -f "$(command -v docker)")"
-readonly DOCKER_WRAPPER="$(readlink -f "${SCRIPT_DIR}/docker-wrapper.sh")"
+readonly DOCKER_WRAPPER_SOURCE="$(readlink -f "${SCRIPT_DIR}/docker-wrapper.sh")"
+readonly DOCKER_WRAPPER="${CONTROL_ROOT}/docker-wrapper.sh"
 readonly PILOT_PROBE="${REPOSITORY_ROOT}/experiments/pilot00_gvisor_offline/probe.sh"
 readonly PACKAGE="${REPOSITORY_ROOT}/pilots/terminal_benchmark/packages/ledger-reconcile"
 readonly CRANE_ROOT="${RUNNER_TEMP_ROOT}/ws493-crane"
@@ -93,7 +94,8 @@ PY
 
 create_control_custody() {
   python3 - "${CONTROL_ROOT}" "${CONTROL_OWNER}" "${EXPECTED_HEAD}" "${RUN_ID}" \
-    "${SERVICE_BUILD_OUTPUT}" "${SERVICE_BINARY}" <<'PY'
+    "${SERVICE_BUILD_OUTPUT}" "${SERVICE_BINARY}" \
+    "${DOCKER_WRAPPER_SOURCE}" "${DOCKER_WRAPPER}" <<'PY'
 import ctypes
 import hashlib
 import json
@@ -103,54 +105,59 @@ import stat
 import sys
 import tempfile
 
-root, owner_path, head_sha, run_id, source_path, binary_path = sys.argv[1:]
+(root, owner_path, head_sha, run_id, service_source, service_path,
+ wrapper_source, wrapper_path) = sys.argv[1:]
 parent = os.path.dirname(root)
 temporary = tempfile.mkdtemp(prefix=f".{os.path.basename(root)}.", dir=parent)
 renamed = False
 try:
     os.chmod(temporary, 0o755)
-    source_stat = os.lstat(source_path)
-    if not stat.S_ISREG(source_stat.st_mode) or not 0 < source_stat.st_size <= 134_217_728:
-        raise SystemExit("service build output metadata differs")
-    source = os.open(source_path, os.O_RDONLY | os.O_NOFOLLOW)
-    copied_path = os.path.join(temporary, os.path.basename(binary_path))
-    destination = os.open(
-        copied_path,
-        os.O_CREAT | os.O_EXCL | os.O_WRONLY | os.O_NOFOLLOW,
-        0o555,
-    )
-    digest = hashlib.sha256()
-    try:
-        while True:
-            chunk = os.read(source, 1024 * 1024)
-            if not chunk:
-                break
-            digest.update(chunk)
-            view = memoryview(chunk)
-            while view:
-                written = os.write(destination, view)
-                if written <= 0:
-                    raise OSError("service copy made no progress")
-                view = view[written:]
-        os.fchmod(destination, 0o555)
-        os.fsync(destination)
-        opened_source = os.fstat(source)
-        if (
-            opened_source.st_dev,
-            opened_source.st_ino,
-            opened_source.st_size,
-            opened_source.st_mtime_ns,
-        ) != (
-            source_stat.st_dev,
-            source_stat.st_ino,
-            source_stat.st_size,
-            source_stat.st_mtime_ns,
-        ):
-            raise SystemExit("service build output changed")
-    finally:
-        os.close(destination)
-        os.close(source)
-    service_sha256 = digest.hexdigest()
+    def copy_exact(source_path: str, target_path: str) -> str:
+        source_stat = os.lstat(source_path)
+        if not stat.S_ISREG(source_stat.st_mode) or not 0 < source_stat.st_size <= 134_217_728:
+            raise SystemExit("control executable source metadata differs")
+        source = os.open(source_path, os.O_RDONLY | os.O_NOFOLLOW)
+        copied_path = os.path.join(temporary, os.path.basename(target_path))
+        destination = os.open(
+            copied_path,
+            os.O_CREAT | os.O_EXCL | os.O_WRONLY | os.O_NOFOLLOW,
+            0o555,
+        )
+        digest = hashlib.sha256()
+        try:
+            while True:
+                chunk = os.read(source, 1024 * 1024)
+                if not chunk:
+                    break
+                digest.update(chunk)
+                view = memoryview(chunk)
+                while view:
+                    written = os.write(destination, view)
+                    if written <= 0:
+                        raise OSError("control executable copy made no progress")
+                    view = view[written:]
+            os.fchmod(destination, 0o555)
+            os.fsync(destination)
+            opened_source = os.fstat(source)
+            if (
+                opened_source.st_dev,
+                opened_source.st_ino,
+                opened_source.st_size,
+                opened_source.st_mtime_ns,
+            ) != (
+                source_stat.st_dev,
+                source_stat.st_ino,
+                source_stat.st_size,
+                source_stat.st_mtime_ns,
+            ):
+                raise SystemExit("control executable source changed")
+        finally:
+            os.close(destination)
+            os.close(source)
+        return digest.hexdigest()
+
+    service_sha256 = copy_exact(service_source, service_path)
+    wrapper_sha256 = copy_exact(wrapper_source, wrapper_path)
     marker = os.path.join(temporary, os.path.basename(owner_path))
     payload = (
         json.dumps(
@@ -159,6 +166,7 @@ try:
                 "run_id": run_id,
                 "schema_version": "workstream.ws493.control-owner.v1",
                 "service_sha256": service_sha256,
+                "wrapper_sha256": wrapper_sha256,
             },
             sort_keys=True,
             separators=(",", ":"),
@@ -196,14 +204,14 @@ PY
 
 control_custody_valid() {
   python3 - "${CONTROL_ROOT}" "${CONTROL_OWNER}" "${EXPECTED_HEAD}" "${RUN_ID}" \
-    "${SERVICE_BINARY}" <<'PY'
+    "${SERVICE_BINARY}" "${DOCKER_WRAPPER}" <<'PY'
 import hashlib
 import json
 import os
 import stat
 import sys
 
-root, owner_path, head_sha, run_id, binary_path = sys.argv[1:]
+root, owner_path, head_sha, run_id, service_path, wrapper_path = sys.argv[1:]
 root_stat = os.lstat(root)
 if not stat.S_ISDIR(root_stat.st_mode) or stat.S_IMODE(root_stat.st_mode) != 0o755:
     raise SystemExit("control root type or mode differs")
@@ -224,36 +232,45 @@ finally:
     os.close(descriptor)
 value = json.loads(payload)
 service_sha256 = value.get("service_sha256")
-if not isinstance(service_sha256, str) or len(service_sha256) != 64:
-    raise SystemExit("control service digest differs")
+wrapper_sha256 = value.get("wrapper_sha256")
+if not all(
+    isinstance(digest, str) and len(digest) == 64
+    for digest in (service_sha256, wrapper_sha256)
+):
+    raise SystemExit("control executable digest differs")
 expected = {
     "head_sha": head_sha,
     "run_id": run_id,
     "schema_version": "workstream.ws493.control-owner.v1",
     "service_sha256": service_sha256,
+    "wrapper_sha256": wrapper_sha256,
 }
 if payload != (json.dumps(expected, sort_keys=True, separators=(",", ":")) + "\n").encode():
     raise SystemExit("control owner binding differs")
-binary_stat = os.lstat(binary_path)
-if not stat.S_ISREG(binary_stat.st_mode) or stat.S_IMODE(binary_stat.st_mode) != 0o555:
-    raise SystemExit("control service type or mode differs")
-if (binary_stat.st_uid, binary_stat.st_gid) != (0, 0) or not 0 < binary_stat.st_size <= 134_217_728:
-    raise SystemExit("control service metadata differs")
-binary = os.open(binary_path, os.O_RDONLY | os.O_NOFOLLOW)
-try:
-    opened_binary = os.fstat(binary)
-    if (opened_binary.st_dev, opened_binary.st_ino) != (binary_stat.st_dev, binary_stat.st_ino):
-        raise SystemExit("control service changed")
-    digest = hashlib.sha256()
-    while True:
-        chunk = os.read(binary, 1024 * 1024)
-        if not chunk:
-            break
-        digest.update(chunk)
-finally:
-    os.close(binary)
-if digest.hexdigest() != service_sha256:
-    raise SystemExit("control service digest differs")
+def verify_exact(path: str, expected_digest: str) -> None:
+    metadata = os.lstat(path)
+    if not stat.S_ISREG(metadata.st_mode) or stat.S_IMODE(metadata.st_mode) != 0o555:
+        raise SystemExit("control executable type or mode differs")
+    if (metadata.st_uid, metadata.st_gid) != (0, 0) or not 0 < metadata.st_size <= 134_217_728:
+        raise SystemExit("control executable metadata differs")
+    descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+    try:
+        opened = os.fstat(descriptor)
+        if (opened.st_dev, opened.st_ino) != (metadata.st_dev, metadata.st_ino):
+            raise SystemExit("control executable changed")
+        digest = hashlib.sha256()
+        while True:
+            chunk = os.read(descriptor, 1024 * 1024)
+            if not chunk:
+                break
+            digest.update(chunk)
+    finally:
+        os.close(descriptor)
+    if digest.hexdigest() != expected_digest:
+        raise SystemExit("control executable digest differs")
+
+verify_exact(service_path, service_sha256)
+verify_exact(wrapper_path, wrapper_sha256)
 PY
 }
 
@@ -568,8 +585,8 @@ prepare_contract() {
   chmod 0700 "${ART_ROOT}" "${SERVICE_ROOT}" "${WRAPPER_WORK}"
   [[ -x "${SERVICE_BINARY}" ]]
   setpriv --reuid "${OWNER_UID}" --regid "${DOCKER_GID}" --clear-groups \
-    sh -c 'test -x "$1"; : >"$2"; : >"$3"; : >"$4"; rm -f "$2" "$3" "$4"' sh \
-    "${SERVICE_BINARY}" "${WRAPPER_WORK}/owner-write-probe" \
+    sh -c 'test -x "$1"; test -x "$2"; : >"$3"; : >"$4"; : >"$5"; rm -f "$3" "$4" "$5"' sh \
+    "${SERVICE_BINARY}" "${DOCKER_WRAPPER}" "${WRAPPER_WORK}/owner-write-probe" \
     "${SERVICE_ROOT}/owner-write-probe" "${ART_ROOT}/owner-write-probe"
   "${BACKEND_PYTHON}" "${SCRIPT_DIR}/prepare_contract.py" \
     --facts "${RAW_DIR}/image-facts.json" --cache-root "${CACHE_ROOT}" \
