@@ -1090,6 +1090,95 @@ positive_owned_absence() {
   [[ -z "${containers}" && -z "${images}" ]]
 }
 
+report_matrix_failure() {
+  python3 - "${RAW_DIR}" "${OWNER_UID}" "${DOCKER_GID}" 2>/dev/null <<'PY'
+from collections import Counter
+import json
+import os
+import stat
+import sys
+
+owner_uid = int(sys.argv[2])
+owner_gid = int(sys.argv[3])
+directory = os.open(
+    sys.argv[1],
+    os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC,
+)
+directory_metadata = os.fstat(directory)
+if (
+    not stat.S_ISDIR(directory_metadata.st_mode)
+    or stat.S_IMODE(directory_metadata.st_mode) != 0o700
+    or directory_metadata.st_uid != owner_uid
+    or directory_metadata.st_gid != owner_gid
+):
+    raise SystemExit(1)
+
+def records(name):
+    descriptor = os.open(
+        name,
+        os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC,
+        dir_fd=directory,
+    )
+    try:
+        metadata = os.fstat(descriptor)
+        if (
+            not stat.S_ISREG(metadata.st_mode)
+            or stat.S_IMODE(metadata.st_mode) != 0o600
+            or metadata.st_uid != owner_uid
+            or metadata.st_gid != owner_gid
+            or metadata.st_size > 1_048_576
+        ):
+            raise SystemExit(1)
+        payload = bytearray()
+        while chunk := os.read(descriptor, 65_536):
+            payload.extend(chunk)
+            if len(payload) > 1_048_576:
+                raise SystemExit(1)
+    finally:
+        os.close(descriptor)
+    lines = bytes(payload).decode("utf-8").splitlines()
+    if len(lines) > 256:
+        raise SystemExit(1)
+    return [json.loads(line) for line in lines]
+
+commands = records("command-results.ndjson")
+launches = records("launches.ndjson")
+os.close(directory)
+start_statuses = []
+for command in commands:
+    argv = command.get("argv")
+    status = command.get("status")
+    if (
+        not isinstance(argv, list)
+        or not argv
+        or not all(isinstance(argument, str) for argument in argv)
+        or type(status) is not int
+    ):
+        raise SystemExit(1)
+    if len(argv) >= 2 and argv[0] == "start":
+        start_statuses.append(status)
+if len(start_statuses) > 8:
+    raise SystemExit(1)
+launch_kinds = Counter()
+for launch in launches:
+    kind = launch.get("kind")
+    if kind not in {"builder", "candidate", "checker", "reference"}:
+        raise SystemExit(1)
+    launch_kinds[kind] += 1
+print(
+    "ws493_matrix_diagnostic="
+    + json.dumps(
+        {
+            "launch_kind_counts": dict(sorted(launch_kinds.items())),
+            "start_statuses": start_statuses,
+        },
+        separators=(",", ":"),
+        sort_keys=True,
+    )
+)
+PY
+}
+
 run_matrix() {
   [[ "$(id -u)" -eq 0 ]]
   assert_source_head
@@ -1123,6 +1212,8 @@ run_matrix() {
       (( executor_status != 0 )) || executor_status=1
       printf 'ws493_matrix=interrupt_executor_failed status=%s\n' \
         "${executor_status}" >&2 || true
+      report_matrix_failure >&2 || \
+        printf 'ws493_matrix_diagnostic=unavailable\n' >&2 || true
       return "${executor_status}"
     fi
     sleep 0.2
