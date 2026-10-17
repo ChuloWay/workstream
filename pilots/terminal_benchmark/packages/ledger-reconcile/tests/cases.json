@@ -1,0 +1,229 @@
+[
+  {
+    "name": "empty",
+    "steps": [
+      {
+        "input": {
+          "transactions": []
+        },
+        "expected": {
+          "balances": []
+        }
+      }
+    ]
+  },
+  {
+    "name": "decimal-and-global-dedup",
+    "steps": [
+      {
+        "input": {
+          "transactions": [
+            {
+              "id": "1",
+              "account": "a",
+              "currency": "USD",
+              "kind": "credit",
+              "status": "posted",
+              "amount": "0.10"
+            },
+            {
+              "id": "2",
+              "account": "a",
+              "currency": "USD",
+              "kind": "credit",
+              "status": "posted",
+              "amount": "0.20"
+            },
+            {
+              "id": "3",
+              "account": "a",
+              "currency": "USD",
+              "kind": "debit",
+              "status": "posted",
+              "amount": "0.30"
+            },
+            {
+              "id": "1",
+              "account": "b",
+              "currency": "USD",
+              "kind": "credit",
+              "status": "posted",
+              "amount": "99"
+            }
+          ]
+        },
+        "expected": {
+          "balances": [
+            {
+              "account": "a",
+              "currency": "USD",
+              "amount": "0.00"
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "name": "pending-does-not-consume-id",
+    "steps": [
+      {
+        "input": {
+          "transactions": [
+            {
+              "id": "x",
+              "account": "b",
+              "currency": "EUR",
+              "kind": "credit",
+              "status": "pending",
+              "amount": "100"
+            },
+            {
+              "id": "x",
+              "account": "b",
+              "currency": "EUR",
+              "kind": "debit",
+              "status": "posted",
+              "amount": "2.50"
+            },
+            {
+              "id": "y",
+              "account": "b",
+              "currency": "USD",
+              "kind": "credit",
+              "status": "posted",
+              "amount": "4"
+            }
+          ]
+        },
+        "expected": {
+          "balances": [
+            {
+              "account": "b",
+              "currency": "EUR",
+              "amount": "-2.50"
+            },
+            {
+              "account": "b",
+              "currency": "USD",
+              "amount": "4.00"
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "name": "invalid-exponent",
+    "steps": [
+      {
+        "input": {
+          "transactions": [
+            {
+              "id": "x",
+              "account": "a",
+              "currency": "USD",
+              "kind": "credit",
+              "status": "posted",
+              "amount": "1e2"
+            }
+          ]
+        },
+        "expected": {
+          "error": "invalid_input"
+        }
+      }
+    ]
+  },
+  {
+    "name": "invalid-fraction",
+    "steps": [
+      {
+        "input": {
+          "transactions": [
+            {
+              "id": "x",
+              "account": "a",
+              "currency": "USD",
+              "kind": "credit",
+              "status": "posted",
+              "amount": "0.001"
+            }
+          ]
+        },
+        "expected": {
+          "error": "invalid_input"
+        }
+      }
+    ]
+  },
+  {
+    "name": "large-exact-amount",
+    "steps": [
+      {
+        "input": {
+          "transactions": [
+            {
+              "id": "large",
+              "account": "a",
+              "currency": "USD",
+              "kind": "credit",
+              "status": "posted",
+              "amount": "9007199254740993.01"
+            },
+            {
+              "id": "small",
+              "account": "a",
+              "currency": "USD",
+              "kind": "debit",
+              "status": "posted",
+              "amount": "0.01"
+            }
+          ]
+        },
+        "expected": {
+          "balances": [
+            {
+              "account": "a",
+              "currency": "USD",
+              "amount": "9007199254740993.00"
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "name": "pending-still-validates-amount",
+    "steps": [
+      {
+        "input": {
+          "transactions": [
+            {
+              "id": "x",
+              "account": "a",
+              "currency": "USD",
+              "kind": "credit",
+              "status": "pending",
+              "amount": "0.001"
+            }
+          ]
+        },
+        "expected": {
+          "error": "invalid_input"
+        }
+      }
+    ]
+  },
+  {
+    "name": "non-object-input",
+    "steps": [
+      {
+        "input": [],
+        "expected": {
+          "error": "invalid_input"
+        }
+      }
+    ]
+  }
+]
