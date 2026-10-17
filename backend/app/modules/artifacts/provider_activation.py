@@ -40,6 +40,7 @@ ArtifactProviderProbeType = Literal[
 
 
 def _required(value: str | None, name: str) -> str:
+    """Reject an absent member of the exact activation binding tuple."""
     if value is None:
         raise ArtifactProviderLiveProofRequiredError(
             f"AWS artifact activation {name} is unavailable"
@@ -226,6 +227,7 @@ class SqlAlchemyArtifactProviderActivationGuard(ArtifactProviderActivationGuard)
         sessions: async_sessionmaker[AsyncSession],
         settings: Settings,
     ) -> None:
+        """Bind activation reads to isolated sessions and native AWS settings."""
         if settings.artifact_s3_provider_profile != "aws_s3":
             raise ValueError("AWS artifact activation guard requires native AWS settings")
         self._sessions = sessions
@@ -236,6 +238,7 @@ class SqlAlchemyArtifactProviderActivationGuard(ArtifactProviderActivationGuard)
         *,
         namespace_fingerprint: str,
     ) -> ArtifactProviderActivationLease:
+        """Select the deterministic eligible activation for a new AWS call."""
         statement = (
             self._eligible(namespace_fingerprint)
             .order_by(
@@ -253,6 +256,7 @@ class SqlAlchemyArtifactProviderActivationGuard(ArtifactProviderActivationGuard)
         *,
         namespace_fingerprint: str,
     ) -> ArtifactProviderActivationLease:
+        """Reload the same eligible activation immediately before an AWS call."""
         if type(activation_id) is not UUID:
             raise ArtifactProviderLiveProofRequiredError(
                 "AWS artifact activation identity is invalid"
@@ -264,6 +268,7 @@ class SqlAlchemyArtifactProviderActivationGuard(ArtifactProviderActivationGuard)
         )
 
     def _eligible(self, namespace_fingerprint: str) -> Select[tuple[ArtifactProviderActivation]]:
+        """Build the exact deployment-binding and remaining-validity query."""
         remaining = timedelta(seconds=_minimum_remaining_seconds(self._settings))
         return select(ArtifactProviderActivation).where(
             *_activation_filters(
@@ -277,6 +282,7 @@ class SqlAlchemyArtifactProviderActivationGuard(ArtifactProviderActivationGuard)
         self,
         statement: Select[tuple[ArtifactProviderActivation]],
     ) -> ArtifactProviderActivationLease:
+        """Resolve one activation in its own short database transaction."""
         async with self._sessions() as session, session.begin():
             activation = await session.scalar(statement)
         if activation is None:

@@ -70,9 +70,11 @@ class _LoopScopedArtifactProviderActivationGuard(ArtifactProviderActivationGuard
     """Resolve every worker activation through the current event loop's DB owner."""
 
     def __init__(self, settings: Settings) -> None:
+        """Retain validated settings while sessions remain loop-owned."""
         self._settings = settings
 
     def _delegate(self) -> ArtifactProviderActivationGuard:
+        """Create the canonical guard from the current event loop's sessions."""
         sessions = _loop_sessions.get()
         if sessions is None:
             raise ArtifactProviderLiveProofRequiredError(
@@ -90,6 +92,7 @@ class _LoopScopedArtifactProviderActivationGuard(ArtifactProviderActivationGuard
         *,
         namespace_fingerprint: str,
     ) -> ArtifactProviderActivationLease:
+        """Select an activation through the current event loop's DB owner."""
         return await self._delegate().select_for_call(
             namespace_fingerprint=namespace_fingerprint,
         )
@@ -100,6 +103,7 @@ class _LoopScopedArtifactProviderActivationGuard(ArtifactProviderActivationGuard
         *,
         namespace_fingerprint: str,
     ) -> ArtifactProviderActivationLease:
+        """Reload one activation through the current event loop's DB owner."""
         return await self._delegate().require_for_call(
             activation_id,
             namespace_fingerprint=namespace_fingerprint,
