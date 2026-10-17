@@ -48,7 +48,10 @@ from app.modules.artifacts.service import (
     ArtifactStorageOrchestrator,
 )
 from app.modules.artifacts.sources import PreparedArtifact
-from app.modules.artifacts.submission_archive import SubmissionArchiveInspector
+from app.modules.artifacts.submission_archive import (
+    SubmissionArchiveInspector,
+    SubmissionArchiveRejectedError,
+)
 from app.modules.artifacts.submission_authorization import (
     SubmissionBundlePreparationAuthorization,
 )
@@ -701,7 +704,10 @@ class PreparedSubmissionBundlePreparationCommand:
                             idempotency_key=request.idempotency_key,
                         )
                     )
-                    inspection = await prepared.inspect(runtime.inspector)
+                    try:
+                        inspection = await prepared.inspect(runtime.inspector)
+                    except SubmissionArchiveRejectedError as exc:
+                        raise SubmissionBundlePreparationRejected(exc.code.value) from exc
                     manifest = build_submission_manifest(inspection)
                     packet = SubmissionPacketView(
                         summary=request.summary,

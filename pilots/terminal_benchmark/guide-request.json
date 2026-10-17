@@ -1,0 +1,57 @@
+{
+  "version": "terminal-pilot-2026-10",
+  "change_summary": "Original bounded terminal benchmark task-authoring pilot; mechanical checks only.",
+  "task_examples": [
+    {
+      "title": "Author an exact-decimal ledger repair benchmark",
+      "content": "Create a terminal repair benchmark for a ledger reconciliation tool. Exercise posted credits and debits, duplicate transaction delivery, currency separation and decimal amounts. Supply a broken starter, precise instructions, independent tests and a reference solution under the project guide.",
+      "labels": [
+        "Python",
+        "testing",
+        "containers"
+      ]
+    },
+    {
+      "title": "Author a UTC event-rollup repair benchmark",
+      "content": "Create a benchmark that repairs daily service metrics over timestamped events. Include timezone offsets crossing midnight, duplicate IDs, error counting and nearest-rank latency percentiles. The guide defines the required package and verification rules.",
+      "labels": [
+        "Python",
+        "testing",
+        "containers"
+      ]
+    },
+    {
+      "title": "Author a transactional import repair benchmark",
+      "content": "Create a benchmark for an idempotent SQLite inventory importer. The repaired program must preserve committed rows, reject conflicting replays and roll back an entire invalid batch. Tests must inspect stored rows, not just reported success.",
+      "labels": [
+        "Python",
+        "testing",
+        "containers"
+      ]
+    },
+    {
+      "title": "Author a deterministic file-inventory repair benchmark",
+      "content": "Create a benchmark for a filesystem inventory program. Exercise nested directories, zero-byte files, UTF-8 bytes, deterministic ordering and temporary-file exclusion. All task fixture trees are regular files and directories; arbitrary host filesystem access is outside the project.",
+      "labels": [
+        "Python",
+        "testing",
+        "containers"
+      ]
+    },
+    {
+      "title": "Author a configuration-overlay repair benchmark",
+      "content": "Create a benchmark for a configuration merger with nested overrides, deletion, list replacement and false-valued options. Specify the semantics precisely and supply tests that discriminate deep merge from shallow update.",
+      "labels": [
+        "Python",
+        "testing",
+        "containers"
+      ]
+    }
+  ],
+  "documents": [
+    {
+      "label": "guide.md",
+      "media_type": "text/markdown"
+    }
+  ]
+}
