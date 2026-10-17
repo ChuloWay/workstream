@@ -888,7 +888,7 @@ RATE_DEPENDENCIES = {
     enforce_admin_mutation_rate_limit,
     enforce_authorization_read_rate_limit,
 }
-# These 61 bindings are the explicit unchanged production baseline from main.
+# These 67 bindings are the explicit unchanged production baseline from main.
 # Registry and recovery routes extend it through their owner-specific maps below.
 ESTABLISHED_ADMIN_MUTATION_RATE_ROUTES = {
     ("POST", "/actor-identity-links/{identity_link_id}/reactivate"),
@@ -904,7 +904,11 @@ ESTABLISHED_ADMIN_MUTATION_RATE_ROUTES = {
 }
 ESTABLISHED_AUTHORIZATION_READ_RATE_ROUTES = {
     ("GET", "/actors/me/authorization-context"),
+    ("GET", "/actors/me/assignments"),
     ("GET", "/actors/me/contributions"),
+    ("GET", "/actors/me/projects"),
+    ("GET", "/actors/me/submissions"),
+    ("GET", "/actors/me/summary"),
     ("GET", "/audit/projects/{project_id}/tasks/{task_id}/evidence"),
     ("GET", "/audit/projects/{project_id}/tasks/{task_id}/locked-context"),
     ("GET", "/operations/projects/{project_id}/tasks"),
@@ -963,6 +967,11 @@ ESTABLISHED_AUTHORIZATION_READ_RATE_ROUTES = {
     ("GET", "/submissions/{submission_id}/checker-runs"),
     ("GET", "/submissions/{submission_id}/checker-runs/{checker_run_id}"),
     ("GET", "/tasks/{task_id}"),
+    ("GET", "/tasks/{task_id}/submission-bundle-preparations"),
+    (
+        "GET",
+        "/tasks/{task_id}/submission-bundle-preparations/{preparation_id}",
+    ),
     ("GET", "/tasks/{task_id}/submission-requirements"),
     ("GET", "/tasks/{task_id}/submissions"),
     ("POST", "/projects/{project_id}/contribution-policies/drafts"),
