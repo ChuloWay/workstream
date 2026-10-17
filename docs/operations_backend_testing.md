@@ -137,10 +137,12 @@ unrelated client/documentation work, not the cost of every backend PR.
 Draft fan-in publishes `draft-test`, not required `test`. Marking ready starts
 the required check even on an unchanged commit; an older green draft result
 cannot satisfy it.
-Base-branch edits also start a fresh run bound to the new base. A title or
-description edit starts a separate run that neither cancels nor repeats proof:
-its required `test` job finds the newest other Backend run on the same head
-whose `scope` job ran. If that run's `test` job has finished, the edit run
+Base-branch edits also start a fresh run bound to the new base. On a PR from a
+branch in this repository, a title or description edit starts a separate run
+that neither cancels nor repeats proof. Its required `test` job finds the newest
+other Backend run for the same head, PR, base branch and base commit whose
+`scope` job ran. On a fork PR, the run has no PR binding to check, so an edit
+restarts full proof as before. If that run's `test` job has finished, the edit run
 reports its result. If that job does not exist yet, the edit run fails at once:
 the proof run creates its own `test` check later, and that newer check replaces
 the failure. The edit run waits only while that `test` job already exists but

@@ -106,6 +106,17 @@ Both edit runs timed out waiting and reported failure at 19:27 and 19:30; the
 proof's passing `test` at 20:17 then became the PR's current check. This led
 to the fail-fast rule above.
 
+The third hosted probe (head `bf22cc820`, 2026-10-17) edited the description
+at 07:25 UTC. The edit run's `test` failed after 5 seconds with "Proof run
+39013577213 is still running", without cancelling that run. The proof's own
+passing `test` completed at 08:10 and replaced the two edit-run failures as
+the PR's current check.
+
+Review of that version added three changes: the run lookup pages through all
+runs for the head, so more than 50 edits cannot hide the proof; a candidate
+must also match the PR's recorded base commit; and the operations document
+states the fork-PR exception.
+
 ## Reconciliation
 
 - Current-source reconciliation: based on `main` after #575 and #585.

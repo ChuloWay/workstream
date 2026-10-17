@@ -410,7 +410,8 @@ class LightweightAgentGateTests(unittest.TestCase):
         test_job = workflow.split("\n  test:\n", 1)[1]
         self.assertIn("Mirror the existing proof for a description-only edit", test_job)
         self.assertIn('select(.name == "scope")', test_job)
-        self.assertIn(".number == $pr and .base.ref == $base", test_job)
+        self.assertIn(".number == $pr and .base.ref == $base and .base.sha == $base_sha", test_job)
+        self.assertIn("gh api --paginate", test_job)
         self.assertIn("EXPECTED_JOB: ${{ github.event.pull_request.draft && 'draft-test' || 'test' }}", test_job)
         self.assertIn('test "${conclusion}" = success', test_job)
         # An unfinished proof must not hold a runner until its final check exists.

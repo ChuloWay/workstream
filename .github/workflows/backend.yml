@@ -823,18 +823,20 @@ jobs:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           BASE_REF: ${{ github.event.pull_request.base.ref }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
           EXPECTED_JOB: ${{ github.event.pull_request.draft && 'draft-test' || 'test' }}
           RUN_ID: ${{ github.run_id }}
         shell: bash
         run: |
           set -euo pipefail
           # The proof is the newest other Backend run for this exact head, this
-          # PR and this base branch whose scope job executed.
+          # PR, this base branch and base commit whose scope job did not skip.
           proof=""
-          for run in $(gh api "repos/${REPOSITORY}/actions/workflows/backend.yml/runs?head_sha=${HEAD_SHA}&event=pull_request&per_page=50" \
-              | jq -r --argjson self "${RUN_ID}" --argjson pr "${PR_NUMBER}" --arg base "${BASE_REF}" \
-                '.workflow_runs | sort_by(.created_at) | reverse | .[] | select(.id != $self)
-                 | select(any(.pull_requests[]?; .number == $pr and .base.ref == $base)) | .id'); do
+          for run in $(gh api --paginate "repos/${REPOSITORY}/actions/workflows/backend.yml/runs?head_sha=${HEAD_SHA}&event=pull_request&per_page=100" \
+                --jq '.workflow_runs[]' \
+              | jq -rs --argjson self "${RUN_ID}" --argjson pr "${PR_NUMBER}" --arg base "${BASE_REF}" --arg base_sha "${BASE_SHA}" \
+                'sort_by(.created_at) | reverse | .[] | select(.id != $self)
+                 | select(any(.pull_requests[]?; .number == $pr and .base.ref == $base and .base.sha == $base_sha)) | .id'); do
             scope=$(gh api "repos/${REPOSITORY}/actions/runs/${run}/jobs?per_page=100" \
               --jq '[.jobs[] | select(.name == "scope")][0].conclusion // "pending"')
             if [[ "${scope}" != skipped ]]; then
