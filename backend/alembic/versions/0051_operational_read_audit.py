@@ -53,11 +53,4 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    definition = _definition()
-    if definition.count(_ANCHOR) != 2 or any(
-        definition.count(pair) != 2 for pair in _READ_PAIRS
-    ):
-        raise RuntimeError("operational read audit downgrade constraint shape changed")
-    for pair in reversed(_READ_PAIRS):
-        definition = definition.replace(f" OR {pair}", "")
-    _replace(definition)
+    raise RuntimeError("Workstream v0.1 migrations cannot be downgraded; recreate the database")
