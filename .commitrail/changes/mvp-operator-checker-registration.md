@@ -268,9 +268,15 @@ of this corrected clean plan is required before implementation.
 
 ## Reconciliation
 
-- Current-source reconciliation: base `34501cd64`; open PRs #575 and #577 own
-  result/read surfaces and are excluded. #585 owns CI work and #586 owns README
-  work. Neither is needed to expose this existing registry owner.
+- Current-source reconciliation: implementation started from `34501cd64` and
+  now follows merged main `d5bac1313`. Main's contributor reads own revision
+  `0050_contributor_reads`; this change's exact operational-read audit pairs are
+  the sole `0051_operational_read_audit` successor. The registry surface remains
+  separate from contributor/result reads, CI and README ownership.
+- Shared migration order: recovery and S3 consume this byte-identical `0051`
+  prerequisite before adding their later revisions. Other open read work must
+  rechain after the revisions that actually merge; this PR does not duplicate
+  those migrations or depend on their unmerged product surfaces.
 - Next usable boundary: issue #580's separate authenticated REV lifecycle
   state/readback and guarded `disabled -> shadow -> live` controls, followed by
   the parent #555 real-project drill combining actual checker images.
