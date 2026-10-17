@@ -219,7 +219,11 @@ clean head `1be238145`. QA/test-delta replay then passed on clean head
 `667e5a053`, confirming that replay retains the exact original allow decision
 while freshly revalidating current Operator authority without adding a second
 allow event. The focused PostgreSQL proof passed at that exact head; hosted
-full-suite evidence remains pending.
+full-suite evidence remains pending. External review then found that a new-key
+retry of an already superseded source lost the reservation owner's exact stale
+source classification and became a retryable internal error. The coordinator
+now preserves the typed source-unavailable result through the existing public
+concealment path; the public journey requires `404` and unchanged retry facts.
 
 ## Reconciliation
 

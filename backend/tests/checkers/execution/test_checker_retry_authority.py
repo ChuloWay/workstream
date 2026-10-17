@@ -559,6 +559,15 @@ async def _create_and_replay(admin_access, h, retry_path, headers, payload, item
     replay = await admin_access.signed.client.post(retry_path, headers=headers, json=payload)
     assert replay.status_code == 201, replay.text
     assert replay.json() == result
+    before_stale_retry = await _retry_facts(h)
+    stale_retry = await admin_access.signed.client.post(
+        retry_path,
+        headers=admin_access.target.headers | {"Idempotency-Key": str(new_record_id())},
+        json=payload,
+    )
+    assert stale_retry.status_code == 404, stale_retry.text
+    assert stale_retry.json()["error"]["code"] == "checker_recovery_source_not_found"
+    assert await _retry_facts(h) == before_stale_retry
     async with h.factory() as session:
         assert committed == {
             "runs": await session.scalar(select(func.count()).select_from(CheckerRun)),

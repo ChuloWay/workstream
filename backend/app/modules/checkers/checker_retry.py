@@ -391,6 +391,8 @@ class CheckerRetryService:
                 reserved = await self._evaluations._reserve_after_task_lock(
                     next_request, terminal_source_id=source.source_run_id,
                 )
+            except CheckerRetrySourceUnavailable:
+                raise
             except CheckerExecutionUnavailable as exc:
                 raise CheckerRetryOperationUnavailable(
                     "checker_retry_reservation_unavailable"
