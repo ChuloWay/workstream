@@ -23,3 +23,10 @@ def contribution_award_read_port(session):
     from app.modules.compensation.awards.read_repository import ContributionAwardReadRepository
 
     return ContributionAwardReadRepository(session)
+
+
+def contributor_award_totals_port(session):
+    """Sum a contributor's immutable awards in the caller's snapshot."""
+    from app.modules.compensation.awards.read_repository import ContributionAwardReadRepository
+
+    return ContributionAwardReadRepository(session)

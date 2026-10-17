@@ -19,9 +19,14 @@ class TaskQueueReadRequest:
     project_id: UUID
     limit: int
     presented_cursor: str | None
+    # Normalized management filters; each cursor is signed for exactly these values.
+    filters: tuple[tuple[str, str | None], ...] = ()
 
     def __post_init__(self):
         if (self.action not in {READY_QUEUE_ACTION, MANAGEMENT_QUEUE_ACTION, OPERATIONAL_QUEUE_ACTION}
+                or (self.filters and self.action != MANAGEMENT_QUEUE_ACTION)
+                or any(not isinstance(key, str) or not isinstance(value, (str, type(None)))
+                       for key, value in self.filters)
                 or not isinstance(self.project_id, UUID) or type(self.limit) is not int
                 or not 1 <= self.limit <= 100
                 or (self.presented_cursor is not None and (

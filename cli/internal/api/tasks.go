@@ -61,7 +61,40 @@ func taskProjectPath(selector string) (string, error) {
 	return "/api/v1/projects/" + url.PathEscape(selector) + "/tasks", nil
 }
 
-func (c *Client) Tasks(ctx context.Context, project string, limit int, cursor *string) (Result[TaskPage], error) {
+// TaskFilters narrow the manager task list; each continuation keeps the same filters.
+type TaskFilters struct {
+	Status       *string
+	Assignee     *string
+	ImportBatch  *string
+	UpdatedSince *string
+}
+
+var taskStatuses = []string{
+	"draft", "screening", "ready", "claimed", "in_progress", "submitted",
+	"evaluation_pending", "review_pending", "needs_revision", "accepted",
+}
+
+func (f TaskFilters) encode(query string) (string, error) {
+	if (f.Status != nil && !oneOf(*f.Status, taskStatuses...)) || !optionalUUID(f.Assignee) ||
+		!optionalUUID(f.ImportBatch) || (f.UpdatedSince != nil && !validTime(*f.UpdatedSince)) {
+		return "", errors.New("--status must be a task status, --assignee and --import-batch UUIDs, --updated-since RFC 3339")
+	}
+	values, err := url.ParseQuery(query)
+	if err != nil {
+		return "", err
+	}
+	for name, value := range map[string]*string{
+		"status": f.Status, "assignee_actor_id": f.Assignee,
+		"import_batch_id": f.ImportBatch, "updated_since": f.UpdatedSince,
+	} {
+		if value != nil {
+			values.Set(name, *value)
+		}
+	}
+	return values.Encode(), nil
+}
+
+func (c *Client) Tasks(ctx context.Context, project string, limit int, cursor *string, filters TaskFilters) (Result[TaskPage], error) {
 	var result Result[TaskPage]
 	path, err := taskProjectPath(project)
 	if err != nil {
@@ -69,6 +102,9 @@ func (c *Client) Tasks(ctx context.Context, project string, limit int, cursor *s
 	}
 	query, err := taskPageQuery(limit, cursor)
 	if err != nil {
+		return result, err
+	}
+	if query, err = filters.encode(query); err != nil {
 		return result, err
 	}
 	raw, err := c.request(ctx, http.MethodGet, path, query, nil)
@@ -83,7 +119,8 @@ func (c *Client) Tasks(ctx context.Context, project string, limit int, cursor *s
 	seen := make(map[[16]byte]bool)
 	for _, item := range page.Items {
 		var task TaskSummary
-		if err := decodeTask(item, &task, false); err != nil || !validTask(task, project) {
+		if err := decodeTask(item, &task, false); err != nil || !validTask(task, project) ||
+			!oneOf(task.Status, taskStatuses...) || (filters.Status != nil && task.Status != *filters.Status) {
 			return result, &Failure{Code: "invalid_api_response"}
 		}
 		id, _ := uuidIdentity(task.TaskID)
