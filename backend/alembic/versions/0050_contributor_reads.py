@@ -1,4 +1,4 @@
-"""Admit the caller's own grant and work read decisions to the audit ledger."""
+"""Admit the caller's own grant and work read decisions to the audit ledger; close task status."""
 
 from alembic import op
 from sqlalchemy import text
@@ -7,6 +7,8 @@ revision = "0050_contributor_reads"
 down_revision = "0049_attempt_outcome_findings"
 branch_labels = None
 depends_on = None
+
+_TASK_STATUSES = "'draft','screening','ready','claimed','in_progress','submitted','evaluation_pending','review_pending','needs_revision','accepted'"
 
 _ACTIONS = (
     ("actor.project.list", "actor.profile.read_self"),
@@ -19,7 +21,7 @@ _ACTIONS = (
 
 
 def upgrade():
-    """Extend only the closed action/permission evidence vocabulary; no data changes."""
+    """Extend the closed audit vocabulary and enforce the closed stored task status; no data changes."""
     op.execute("SET LOCAL search_path=pg_catalog,public,pg_temp")
     op.execute("LOCK TABLE public.audit_events IN ACCESS EXCLUSIVE MODE")
     name = "ck_audit_events_authorization_action_evidence"
@@ -40,6 +42,9 @@ def upgrade():
     op.execute("ALTER TABLE public.audit_events DROP CONSTRAINT " + name)
     op.execute("ALTER TABLE public.audit_events ADD CONSTRAINT " + name + " "
                + definition.replace(anchor, anchor + addition))
+    # The read APIs project task status as a closed vocabulary; a row outside it fails here.
+    op.execute("ALTER TABLE public.workstream_tasks ADD CONSTRAINT ck_workstream_tasks_status "
+               f"CHECK (status in ({_TASK_STATUSES}))")
 
 
 def downgrade():

@@ -43,3 +43,12 @@ def test_revise_requires_a_ready_revision_of_a_returned_attempt():
         assert next_action("active", "needs_revision", "needs_revision", revision) == "none"
     assert next_action("active", "needs_revision", "evaluation_pending", "ready") == "none"
     assert next_action("closed", "needs_revision", "needs_revision", "ready") == "none"
+
+
+def test_stored_task_status_constraint_is_the_api_vocabulary():
+    from app.modules.tasks.api.management_queue import TASK_STATUSES as QUEUE_STATUSES
+    from app.modules.tasks.models import WorkstreamTask
+
+    [constraint] = [item for item in WorkstreamTask.__table__.constraints if item.name == "ck_workstream_tasks_status"]
+    stored = frozenset(value.strip("'") for value in str(constraint.sqltext).split("(", 1)[1].rstrip(")").split(","))
+    assert stored == QUEUE_STATUSES == frozenset(TASK_STATUSES)

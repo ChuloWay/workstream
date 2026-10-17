@@ -51,7 +51,10 @@ reads project; PR3 adds the Project Manager and Finance reads C1–C9 and D1).
   boundary, audit resource types, docs and the MCP contract snapshot that
   embeds the action enum. Migration `0050_contributor_reads` extends only the
   closed audit action/permission vocabulary so the decisions can be recorded
-  (the `0033_contribution_reads` precedent); it changes no data.
+  (the `0033_contribution_reads` precedent), and adds
+  `ck_workstream_tasks_status` so the stored task status is the closed
+  vocabulary the reads project; it changes no data, and a row outside the
+  vocabulary fails the migration rather than a later read.
 - Routes `GET /actors/me/projects`, `/actors/me/assignments`,
   `/actors/me/submissions`, `/actors/me/summary`,
   `/tasks/{task_id}/submission-bundle-preparations` and
@@ -226,6 +229,10 @@ test_delta, documentation and reuse_dedup tracks at `fcbfa9562`.
   Added focused proof for every preparation outcome and custody state, real
   non-empty award totals and their exact decimal wire form, and a second
   session committing findings during one snapshot read.
+- CodeRabbit (`203d0fb1`): the closed `TaskStatus` had no stored constraint.
+  Every task-status writer stays inside it; `ck_workstream_tasks_status` now
+  enforces it in PostgreSQL, and a test keeps the constraint equal to the API
+  vocabulary.
 
 ## Reconciliation
 
