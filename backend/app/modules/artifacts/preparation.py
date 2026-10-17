@@ -785,15 +785,16 @@ class ArtifactScratchManager:
             # the fixed mount child; projected members remain sealed.
             os.fchmod(root_fd, 0o700)
             names = os.listdir(root_fd)
+            workspace_staging = f".external-material-{grant_id}"
             if (
-                "workspace" in names
+                workspace_staging in names
                 or _EXTERNAL_GRANT_MANIFEST in names
                 or _EXTERNAL_RUNTIME_DIRECTORY in names
             ):
                 raise ArtifactScratchIntegrityError("external material workspace is invalid")
-            os.mkdir("workspace", mode=0o700, dir_fd=root_fd)
+            os.mkdir(workspace_staging, mode=0o700, dir_fd=root_fd)
             workspace_fd = os.open(
-                "workspace",
+                workspace_staging,
                 os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0),
                 dir_fd=root_fd,
             )
@@ -853,6 +854,12 @@ class ArtifactScratchManager:
                     raise ArtifactScratchIntegrityError(
                         "external material semantic manifest differs"
                     ) from exc
+                os.rename(
+                    workspace_staging,
+                    "workspace",
+                    src_dir_fd=root_fd,
+                    dst_dir_fd=root_fd,
+                )
                 body = {
                     "protocol_version": _EXTERNAL_GRANT_PROTOCOL,
                     "grant_id": grant_id,

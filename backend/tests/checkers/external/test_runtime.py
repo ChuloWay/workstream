@@ -587,3 +587,83 @@ def test_post_external_grant_uses_existing_workspace_byte_and_entry_ownership(
 
     assert list((tmp_path / "scratch" / "workspaces").iterdir()) == []
     manager.close()
+
+
+def test_post_external_grant_preserves_submitted_workspace_directory(
+    tmp_path: Path,
+) -> None:
+    """Keep a valid package workspace below ART's final grant mount directory."""
+    manager = ArtifactScratchManager(
+        root=tmp_path / "scratch",
+        limits=ArtifactPreparationLimits(
+            aggregate_reserved_bytes=HARD_MAXIMUM_ARTIFACT_BYTES,
+            minimum_free_bytes=0,
+            maximum_workspace_entries=16,
+        ),
+    )
+    payload = b"print('starter')\n"
+    file = ExternalMaterialFile(
+        normalized_path="workspace/program.py",
+        byte_count=len(payload),
+        sha256=f"sha256:{hashlib.sha256(payload).hexdigest()}",
+        executable=False,
+    )
+    semantic_manifest_sha256 = canonical_json_hash(
+        {
+            "schema_version": SUBMISSION_MANIFEST_SCHEMA_VERSION,
+            "entries": [
+                {"normalized_path": "workspace", "entry_type": "directory"},
+                {
+                    "normalized_path": file.normalized_path,
+                    "entry_type": "file",
+                    "byte_count": file.byte_count,
+                    "sha256": file.sha256,
+                    "executable": file.executable,
+                },
+            ],
+        }
+    )
+    identifiers = [str(uuid4()) for _ in range(11)]
+    request = PostExternalMaterialGrantRequest(
+        request_digest=SHA,
+        submission_id=identifiers[0],
+        submission_version=1,
+        evaluation_request_id=identifiers[1],
+        evaluation_request_digest=SHA,
+        evaluation_generation=1,
+        attempt_id=identifiers[2],
+        result_id=identifiers[3],
+        lease_id=identifiers[4],
+        lease_generation=1,
+        lease_expires_at="2026-10-16T00:00:00Z",
+        binding_id=identifiers[5],
+        content_id=identifiers[6],
+        replica_id=identifiers[7],
+        content_sha256=SHA,
+        byte_count=len(payload),
+        evidence_id=identifiers[8],
+        verification_receipt_id=identifiers[9],
+        verification_job_id=identifiers[10],
+        verification_generation=1,
+        namespace_fingerprint=SHA,
+        semantic_manifest_sha256=semantic_manifest_sha256,
+        directories=("workspace",),
+        files=(file,),
+    )
+
+    with manager.extraction_workspace(
+        reserved_bytes=len(payload), maximum_entries=3
+    ) as extraction:
+        submitted_workspace = extraction / "workspace"
+        submitted_workspace.mkdir()
+        (submitted_workspace / "program.py").write_bytes(payload)
+        with manager._external_material_grant(extraction, request) as grant:
+            grant_root = tmp_path / "scratch" / "workspaces" / grant.grant_id
+            assert (grant_root / "workspace/workspace/program.py").read_bytes() == payload
+            assert not any(
+                item.name.startswith(".external-material-")
+                for item in grant_root.iterdir()
+            )
+
+    assert list((tmp_path / "scratch" / "workspaces").iterdir()) == []
+    manager.close()

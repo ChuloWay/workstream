@@ -414,6 +414,10 @@ files, and runtime socket readiness proves that the service actually executed
 before POST starts. The POST driver restores the serialized registry entry
 through the strict JSON validation boundary; a focused round-trip regression
 requires all four registry authority identifiers to return as UUID values.
+ART assembles projected entries below a grant-specific temporary directory and
+renames that directory to the fixed published mount only after sealing, so a
+valid submitted top-level `workspace/` remains material inside the grant rather
+than colliding with ART's mount name.
 
 Every service-created Docker container has exact trusted labels for deployment
 owner, request digest, grant ID, attempt nonce and resource kind. The temporary
