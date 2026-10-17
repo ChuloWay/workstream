@@ -128,7 +128,6 @@ mounts = item.get("Mounts", [])
 destinations = sorted(mount.get("Destination") for mount in mounts)
 read_write = {mount.get("Destination"): mount.get("RW") for mount in mounts}
 bind_mounts = [mount for mount in mounts if mount.get("Type") == "bind"]
-tmpfs_mounts = [mount for mount in mounts if mount.get("Type") == "tmpfs"]
 sources = {mount.get("Destination"): mount.get("Source") for mount in bind_mounts}
 security = set(host.get("SecurityOpt") or [])
 
@@ -154,8 +153,7 @@ source_valid = (
     and canonical(cache_root)
     and len(mounts) == len(destinations) == len(set(destinations)) == len(read_write)
     and len(bind_mounts) == len(sources)
-    and (not tmpfs_mounts or kind == "builder")
-    and len(mounts) == len(bind_mounts) + len(tmpfs_mounts)
+    and len(mounts) == len(bind_mounts)
     and all(canonical(path) for path in source_paths.values())
 )
 
@@ -222,9 +220,6 @@ checks = {
 }
 if kind == "builder":
     cap_add = sorted(host.get("CapAdd") or [])
-    busybox_tmpfs = [
-        mount for mount in tmpfs_mounts if mount.get("Destination") == "/busybox"
-    ]
     tmpfs_options = set((host.get("Tmpfs") or {}).get("/busybox", "").split(","))
     checks.update({
         "user": config.get("User") == "0:0",
@@ -235,22 +230,12 @@ if kind == "builder":
         "cap_dac_override": "CAP_DAC_OVERRIDE" in cap_add,
         "cap_fowner": "CAP_FOWNER" in cap_add,
         "cap_sys_chroot": "CAP_SYS_CHROOT" in cap_add,
-        "destinations": destinations
-        == ["/busybox", "/cache", "/out/candidate.tar", "/project"],
+        "destinations": destinations == ["/cache", "/out/candidate.tar", "/project"],
         "read_write": read_write
-        == {
-            "/busybox": True,
-            "/cache": False,
-            "/out/candidate.tar": True,
-            "/project": False,
-        },
-        "mount_count": len(mounts) == 4,
+        == {"/cache": False, "/out/candidate.tar": True, "/project": False},
+        "mount_count": len(mounts) == 3,
         "bind_mount_count": len(bind_mounts) == 3,
-        "tmpfs_mount_count": len(tmpfs_mounts) == 1,
-        "busybox_tmpfs": len(busybox_tmpfs) == 1
-        and busybox_tmpfs[0].get("Source") == ""
-        and busybox_tmpfs[0].get("RW") is True,
-        "busybox_tmpfs_options": (host.get("Tmpfs") or {}).keys() == {"/busybox"}
+        "busybox_tmpfs": (host.get("Tmpfs") or {}).keys() == {"/busybox"}
         and tmpfs_options
         == {"rw", "noexec", "nosuid", "nodev", "size=16777216"},
         "cache_destination": "/cache" in destinations,

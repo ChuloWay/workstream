@@ -429,12 +429,6 @@ class DockerWrapperSourceTests(unittest.TestCase):
             },
             "Mounts": [
                 {
-                    "Type": "tmpfs",
-                    "Source": "",
-                    "Destination": "/busybox",
-                    "RW": True,
-                },
-                {
                     "Type": "bind",
                     "Source": str(self.cache),
                     "Destination": "/cache",
@@ -518,9 +512,39 @@ class DockerWrapperSourceTests(unittest.TestCase):
         )
         self.assertEqual(
             launch["mount_destinations"],
-            ["/busybox", "/cache", "/out/candidate.tar", "/project"],
+            ["/cache", "/out/candidate.tar", "/project"],
         )
         self.assertNotIn("/busybox", launch["mount_source_identities"])
+
+    def test_anonymous_builder_volume_is_rejected(self) -> None:
+        project = self.art / "workspaces" / GRANT_ID / "runtime" / "build-context"
+        project.mkdir(parents=True)
+        item = self._builder_item(project)
+        mounts = item["Mounts"]
+        assert isinstance(mounts, list)
+        mounts.append(
+            {
+                "Type": "volume",
+                "Source": "/var/lib/docker/volumes/unowned/_data",
+                "Destination": "/busybox",
+                "RW": True,
+            }
+        )
+
+        result = self._run_item(item, "ws-terminal-builder-abc")
+
+        self.assertEqual(result.returncode, 70, result.stderr)
+        self.assertFalse((self.raw / "launches.ndjson").exists())
+        arguments = [
+            json.loads(line)["argv"]
+            for line in (self.raw / "argv.ndjson").read_text().splitlines()
+        ]
+        [rejection] = arguments[-1]
+        self.assertTrue(rejection.startswith("launch_rejection:builder:"))
+        failed = rejection.split(":", 2)[2].split(",")
+        self.assertIn("source", failed)
+        self.assertIn("mount_count", failed)
+        self.assertNotIn(str(self.root), rejection)
 
     def test_checker_start_forwards_request_stdin_into_dind(self) -> None:
         capture = self.root / "checker-request.json"
