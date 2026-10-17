@@ -1,609 +1,214 @@
 # Workstream
 
-Workstream defines a shared protocol for governed work and provides the
-software that implements it. It coordinates, verifies, and records work
-performed by humans, AI agents, or both. It transforms
-project-defined tasks, immutable submissions, policy-governed checks, and
-policy-governed acceptance into trusted `ContributionRecord` facts that applications,
-organizations, and economic systems can consume.
+Workstream is software that manages work done by people, AI agents, or both.
+It checks submitted work and makes a permanent record of the result.
 
-The protocol defines valid lifecycle actions and records; the software
-enforces those rules. A standalone versioned protocol specification and
-conformance suite remain formalization work, not delivered interoperability
-claims. See [Protocol And Implementation](docs/protocol-and-implementation.md).
+A project sets the rules for its work. A contributor does a task and submits
+the result. Workstream checks the result against the project rules. When the
+work is accepted, Workstream makes a record that shows who did what, under
+which rules, and with what result. Other systems can then use that record.
+For example, a payment system can use it to pay the contributor.
 
-Workstream governs the work lifecycle; it does not need to own the system that
-requested the work, the tools used to complete it, the identity provider, or
-the consequence applied afterward. A project defines the rules, an authorized
-contributor performs the work, Workstream binds the exact submitted artifact to
-those rules and its verification evidence, and records the authorized outcome
-under the project's locked acceptance rules. The resulting immutable contribution lineage establishes who did
-what, under which rules, using which artifact, and with what verified result.
+Workstream is two things:
 
-## End-To-End Lifecycle
+- **A shared protocol.** The protocol is the set of rules for valid work. It
+  defines how tasks are assigned, how work is submitted, checked, and reviewed,
+  and which records are made.
+- **The software that applies those rules.** This repository contains that
+  software.
 
-The complete Workstream model is:
+The protocol does not yet have a separate, versioned specification or a
+conformance test suite. That work is still to be done. For more information,
+see [Protocol And Implementation](docs/protocol-and-implementation.md).
 
-```text
-Project Guide
--> Versioned Policies
--> Task Assignment Or Claim
--> Artifact Preparation And Pre-Submission Intake Checks
--> Immutable Submission
--> Post-Submission Work Evaluation
--> Policy-Governed Acceptance (Human Review When Required)
--> Accept / Needs Revision / Reject
--> Revision And Resubmission When Required
--> Immutable ContributionRecords
--> Optional Project-Specific Consequences
-```
+## How Workstream works
 
-The current submission contract normally receives one outer ZIP containing the
-complete work. Workstream computes canonical content identity, stores the bytes
-through its artifact boundary, verifies stored content before trusted use, and
-runs configured checks against the submitted package and its bounded recursive
-contents. After Submission creation, the contributor's submitted work,
-post-submission checkers, reviewers, and downstream projections are tied to the
-same immutable Submission lineage. Before creation, intake evidence refers to
-the prepared artifact and locked intake context, not an existing Submission.
+Each piece of work goes through these steps:
 
-Pre-submission and post-submission checking are different stages:
+1. **A project sets its rules.** A project manager uploads a project guide.
+   Workstream helps turn the guide into versioned policies. Approved policies
+   are locked, so later changes do not affect work that has already started.
+2. **A contributor gets a task.** A contributor claims a ready task.
+3. **The contributor prepares the work.** The contributor puts the work into
+   one ZIP file.
+4. **Workstream checks the package before it accepts the submission.** These
+   are the *pre-submission checks*. If the package has a problem, the
+   contributor gets feedback and no submission is made.
+5. **Workstream stores the submission.** After a submission is stored, nobody
+   can change it.
+6. **Workstream checks the submitted work.** These are the *post-submission
+   checks*. They compare the work with the project's requirements.
+7. **The work is accepted, sent back, or rejected.** By default, a project
+   requires a human reviewer to make this decision. Live human review is not
+   complete yet. A project can turn off human review. If it does, work that
+   passes all required checks is accepted automatically. Failed checks can
+   send the work back. On the last permitted attempt, failed checks reject
+   the work.
+8. **The contributor revises the work if necessary.** When the work is sent
+   back, the contributor can submit a new version. The project sets the
+   maximum number of revisions and a deadline.
+9. **Workstream makes permanent records.** Every valid human review makes a
+   reviewer contribution record. An accepted submission also makes a
+   `FinalAcceptance` record and a contribution record for the contributor.
 
-- **Pre-submission intake checks** assess whether the prepared package is fit
-  to submit: required outputs, packaging, evidence integrity, and configured
-  intake-quality rules. Blocking failures return feedback before a Submission
-  is created. Passing intake does not establish that the task was done correctly.
-- **Post-submission work evaluation** assesses the immutable submitted work
-  against the locked task/project requirements. Durable results determine
-  review eligibility, not final acceptance. Task-specific evaluation may use
-  deterministic rules or, when supported and registered, model/agent-based
-  evaluators such as a quality judge. These are not the setup agent that
-  proposes checker policies. Raw checker results are not acceptance authority;
-  when human review is required they do not replace that Review.
+Workstream keeps the full history. It does not overwrite submissions,
+findings, reviews, or records.
 
-The v0.1 project setting `human_review_required` defaults to `true` in the
-existing locked ReviewPolicy. After required post-submit checks pass, true
-requires human review; false uses an authorized automated FinalAcceptance and
-submitter ContributionRecord, with no reviewer contribution.
-The separate `requires_second_review` policy field is [fixed to `false`](.commitrail/changes/enforce-requires-second-review-false.md)
-at input, immutable lineage, and database boundaries; second-review and
-adjudication behavior remain deferred.
-The automated-acceptance branch is implemented in the selected backend
-composition: supported false-policy guides can activate, and selected completion
-routing uses the shared FinalAcceptance/TASK/CON operation. New false/pass effects
-require an Operator-authorized live REV generation whose immutable transition
-binds the current reviewed manifest. An older live authorization cannot enable
-expanded scope; a typed pre-effect refusal rolls back and uses bounded OUTBOX
-retry. The bounded local public API and Celery service drill starts from public guide
-inputs with recorded inference;
-this is not a deployment claim. Adjudication is excluded.
+### Key terms
 
-The stage describes the purpose and lifecycle boundary, not a promise that all
-checks are deterministic. Deterministic compilation and policy routing do not
-make model-based judgments reproducible. Only supported implementations run;
-the [roadmap](docs/roadmap_status.md#pre-submission-and-post-submission-checking)
-distinguishes existing foundations from remaining integration and does not
-claim a live agent judge.
+| Term | Meaning |
+|---|---|
+| Project guide | The document that describes the work a project wants. |
+| Policy | A versioned set of rules made from the project guide, for example the checks to run. |
+| Task | One unit of work that a contributor does. |
+| Submission | The work a contributor sends for a task. A submission cannot be changed. |
+| Pre-submission check | A check on the ZIP package before Workstream accepts it as a submission. |
+| Post-submission check | A check on the stored submission against the project requirements. |
+| Review | A decision by an authorized reviewer: `accept`, `needs_revision`, or `reject`. |
+| `FinalAcceptance` | The record that a submission is accepted, by a reviewer or automatically. Only this record can make a contribution record for accepted work. |
+| `ContributionRecord` | A permanent record of accepted work or of a valid human review. Nobody can create or edit it directly. |
 
-On the human-review branch, every valid Review creates a reviewer `completed_review`
-`ContributionRecord`. An `accept` decision also creates `FinalAcceptance` and a
-submitter `accepted_submission` `ContributionRecord`. These records cannot be
-created or edited directly by a person or downstream adapter. Together they are
-the central durable outcome of Workstream.
+The [glossary](docs/glossary.md) defines all Workstream terms.
 
-## How Workstream Establishes Trust
+### What Workstream does not do
 
-- **Identity is separate from authority.** External identity verification does
-  not grant product access. Explicit administrative or project-scoped grants,
-  resource ownership, lifecycle guards, and revocation determine authority.
-- **Project rules are versioned and locked.** Assignments, submissions,
-  Reviews, and contributions retain the guide and policy context that governed
-  them instead of silently adopting later rules.
-- **Artifacts are immutable and content-addressed.** Workstream derives identity
-  from server-computed SHA-256 and byte count, independently verifies stored
-  bytes, and binds trusted content facts to that identity.
-- **Checks have distinct, attributable evidence.** Pre-submit results refer to
-  the prepared artifact and locked intake context before Submission creation.
-  Post-submit results refer to the immutable Submission and locked evaluation
-  policy. Intake feedback cannot substitute for post-submit review-gate evidence;
-  recording an evaluation does not guarantee an identical judgment on rerun.
-- **Review is authorized and attributable.** A Review records the authorized
-  reviewer, exact artifact lineage, locked rules, findings, and one canonical
-  decision: `accept`, `needs_revision`, or `reject`.
-- **Separation of duties limits self-dealing.** Submitter and reviewer authority
-  are independent, self-review is prohibited, and narrower project conflict
-  rules may be enforced.
-- **History is preserved.** Submissions, findings, responses, resolutions,
-  Reviews, contribution records, awards, receipts, and audit evidence remain
-  linked rather than being overwritten.
+- **It does not do the work.** People and agents use their own tools.
+  Workstream receives and checks the result.
+- **It does not log users in.** An external service verifies who a user is.
+  For v0.1, that service is Flow Identity. Workstream itself decides what
+  each user is permitted to do.
+- **It does not send payments.** Workstream records the contributions that a
+  project can pay for. Payment delivery is planned, not available.
+- **It does not depend on one application.** Any application, organization,
+  or industry can use the same steps.
 
-## Source-Agnostic Core, Bounded v0.1 Intake
+## Current status
 
-Workstream does not require tasks to originate from one marketplace,
-application, organization, or industry. AI evaluation programs, government
-workforce initiatives, research programs, open-source projects, contractor
-pipelines, academic review, data-labeling operations, and legal, medical,
-engineering, creative, human-to-agent, or agent-to-agent workflows can use the
-same governed lifecycle while retaining their own user experience and operating
-model.
+Workstream is in development. Version 0.1 is not released.
 
-Source-agnostic does not mean every source adapter is already implemented.
-v0.1 remains manual-first. PILOT-02A provides Project Manager declaration, upload,
-inspection and verified download of canonical JSON task-import sources through the
-[public ART contract](docs/spec_artifact_storage_service.md#task-import-source-custody).
-Its public routes are covered by PostgreSQL/MinIO custody, authority, replay and
-recovery tests. PILOT-02B imports one verified JSON source into immutable native
-batch membership and 1..500 DRAFT Tasks atomically, with fresh-authority exact-file
-replay and batch status through the public TASK contract. Its actual 200-row and
-rollback/custody controls pass on PostgreSQL and MinIO. PILOT-02C adds explicit atomic batch screening
-and release and CLI source/import/status commands with local CSV conversion. A client-converted CSV retains
-its received JSON rather than claiming original CSV custody.
-External origin onboarding, external task-routing systems, and execution workspaces remain
-later adapters. Revision and reassignment belong to the governed lifecycle;
-adjudication remains a separately approved future capability rather than a
-claim about current v0.1 behavior.
+These parts work in a local test run:
 
-## Long-Term Intelligent Orchestration Direction
+- Set up a project from a guide, with separate approval of the pre-submission
+  and post-submission policies.
+- Create tasks, one at a time or in batches.
+- Claim a task, submit a ZIP file, and get check results.
+- Accept work automatically when a project turns off human review.
+- Make contribution records and conditional awards for accepted work.
 
-After the governed v0.1 lifecycle is proven, a future orchestration adapter may
-propose task dependencies and contributor matches for work distributed across
-humans and AI agents. Existing Workstream services would still authorize and
-version tasks and assignments, bind artifacts and checks, record Reviews and
-revisions, and create contribution facts under the canonical lifecycle.
+The local test run used recorded AI model output. It does not prove project
+setup with a live AI model.
 
-This is a research hypothesis, not current or planned runtime behavior.
-Execution remains in a source application such as Garden or another external
-host. See the [Product Brief](docs/product_brief.md#future-research-hypothesis-accountable-orchestration)
-for the canonical hypothesis. Current availability is governed only by
-[Current v0.1 Status](docs/roadmap_status.md).
+These parts are not complete:
 
-## Product Boundary
+- Live human review and revision after a human decision.
+- Reviewer contribution records, because live human review is not complete.
+- Proof of project setup with a live AI model.
+- Operation on a hosted server.
+- Payment delivery.
 
-Workstream determines what governed work occurred and whether the resulting
-contribution fact can be trusted. Payments, points, tokens, staking, slashing,
-reputation, eligibility, reporting, datasets, and model-training systems may
-consume that fact and apply project-specific consequences. They do not create,
-revise, or control Workstream identity, authorization, submission, review, or
-contribution truth.
+The [v0.1 Roadmap And Capability Status](docs/roadmap_status.md) gives the
+full, current status. Read it before you rely on a feature.
 
-That boundary allows one Workstream core to support centralized, sovereign,
-federated, and permissionless applications without coupling lifecycle truth to
-any one application's business or economic model.
+## Run Workstream on your computer
 
-Flow Identity is the current v0.1 external authentication provider. It is an
-adapter boundary, not the definition or ownership boundary of Workstream.
-Workstream is not an execution workspace and is not blockchain-first.
+This quick start uses Docker. For other setups, read the full
+[Developer Setup](docs/engineering/developer-setup.md) guide.
 
-## Core Invariants
+You need Git, Docker Engine, and Docker Compose v2.
 
-Different projects speak different domain languages, but Workstream preserves
-the same governing invariants across them:
+1. Copy the example configuration file:
 
-- project guides and policies are versioned before they govern work
-- tasks, assignments, submissions, checks, and Reviews retain their exact
-  project and actor lineage
-- invalid submission packets stop before trusted Submission creation
-- findings, responses, resolutions, Reviews, and contribution facts append to
-  history rather than rewriting it
-- `FinalAcceptance` is the sole source of an accepted submitter contribution
-- conditional compensation follows contribution truth and never controls it
+   ```bash
+   cp .env.example .env
+   ```
 
-These invariants turn project-specific operating knowledge into reusable
-infrastructure without narrowing the complete v0.1 lifecycle defined above.
+2. Make the file private:
 
-## Current v0.1 State
+   ```bash
+   chmod 600 .env
+   ```
 
-Workstream is under active v0.1 development. Progress is tracked by proven
-capabilities, not by calendar weeks or promised dates.
+   This command works on Linux, macOS, and Git Bash. On PowerShell, make the
+   file readable only by your Windows user before you add secrets.
 
-Implemented foundations include external Flow-token verification,
-canonical local actors and authorization, project guides and task records,
-submission packets, immutable artifact storage, pre-submit intake checks,
-and authorized retained submission/checker history. ARCH-04C implements hidden
-durable post-submit execution and unfinished-attempt recovery. ARCH-04D2 supplies
-exact service authority. ARCH-04E1A adds immutable route-neutral TASK source
-storage, detached source facts and accepted-effects contracts. B6 commits each
-new hidden Submission with its initial checker reservation and outbox request;
-selected production request/completion delivery now runs digest-pinned external
-images after the Workstream default checker and approved external PRE checks.
-Passing true-policy results reach `review_pending`; eligible false-policy results
-invoke shared authorized acceptance atomically after an Operator-authorized LIVE
-REV generation. ARCH-02I-B exposes public admission-backed Submission entry,
-and ARCH-04E3-B admits complete false-policy guides with supported approved
-checks. The bounded local public API and Celery service journey drill starts from public
-guide inputs with recorded inference;
-the bounded local run passed both policy outcomes, restart/replay, late
-authority revocation and cleanup. Recorded inference is not live-model or hosted
-deployment proof.
-Project-guide ingestion stores original documents,
-records immutable metadata and provides authorized exact-file reads to the
-unified setup agent. Accepted originals are PDF, DOCX, PPTX and byte-preserved
-UTF-8 Markdown (`.md`); HTML and documentation sites are not guide inputs. Guide
-metadata in PostgreSQL also holds at least one required task example; the agent
-assesses the examples with the uploaded guide documents.
+3. In `.env`, give `COMPOSE_PROJECT_NAME` a unique value.
 
-Default-only projects need no external-service configuration. The fixed Rust
-provider is resolved only when a required project image executes; missing
-configuration for that image produces recoverable infrastructure evidence.
-Findings and policy proposals retain document-access evidence.
+4. In `.env`, replace every `change-me` value with your own secret. The
+   [local pilot runbook](docs/engineering/local-pilot.md) tells you how to
+   make the secrets.
 
-[ART-07A1](.commitrail/initiatives/WS-ART-001/WS-ART-001-07A1.md) provides strict
-metadata-only reviewer packet types, not a resolver or byte-access capability.
-REV-03B persists immutable normalized packets using live guide ingest identities.
-REV-04A Review and REV-04B shared FinalAcceptance storage foundations are delivered; CON-03C contribution/award storage, REV-12A1's disabled controller/transaction
-fence, exact hidden AUTH preparation and CON-07 hidden source-neutral submitter
-participation with complete frozen award sets are delivered. REV-04C adds one
-hidden source-neutral participant that stages FinalAcceptance, TASK
-accepted/completed effects and the complete CON submitter outcome in the caller's
-transaction. ARCH-04E2-B binds its mandatory actual AUTH decision-event receipt,
-database complete-set enforcement, currentness custody and shared audit/outbox
-in one hidden authorized outcome operation. REV-12A4A supplies internal
-Operator-authorized transitions on the existing lifecycle controller. New
-participant effects require a live, nonzero generation; exact terminal replay
-remains read-only in stopped phases. The controller itself grants no routing
-authority; ARCH-04E2-B consumes the separate exact AUTH action. Payment delivery
-stays disabled.
-ARCH-04E1B-B1 requires TASK locking before checker reservation, current-result
-reads and review admission INSERTs, preserving exact read-only reservation replay
-after acceptance. ARCH-04E1B-B3 retains the inspected ZIP file metadata with immutable
-ART evidence and returns it on consumption without another storage read. ARCH-04E1B-B6 commits each new Submission, verified binding, exact AUTH receipts,
-generation-one evaluation reservation and one shared outbox request atomically.
-Fresh-authorized replay returns the original identities without recreating rows. ARCH-04E1B-B4 binds the
-Submission summary and attestation to the packet that passed intake, with
-service and database enforcement. ARCH-04E1B-B5 rejects evaluation content that
-exceeds the locked checker limits before any pre-check attempt or durable upload
-intent, using the same content contract required by later dispatch. ARCH-04E1B-B2 prepares exact source proposals from current
-CHECKERS custody and historical PROJECTS policy, without inserting a manifest
-or granting authority by itself. ARCH-04E2-B consumes this source in the complete
-authorized outcome. B8 supplies hidden completion delivery; 04F2 routes verified
-contributor-correctable failures to `needs_revision` under either policy mode.
-ARCH-04F3 admits a changed full replacement ZIP only for that exact current
-authorized checker-remediation source. The existing intake and atomic Submission
-writer retain its cause, predecessor and locked policy lineage while creating
-the successor evaluation request. This hidden path creates no Review or
-contribution on failure. ARCH-04F4 adds hidden reason-bound Operator retry for
-known terminal infrastructure failures using the existing CHECKERS coordinator
-and request handler, with exact AUTH, audit and outbox custody. Fresh-authorized
-replay validates the historical request. The current selected completion classifier has no `task_setup_blocked` path.
-A future setup-fault hold must preserve the Submission and locked rules without
-contributor penalty; changing or re-screening submitted-task rules remains
-deferred. PILOT-04 registers selected production request/completion delivery.
-ARCH-02I-B exposes public initial and checker-remediation intake, and
-ARCH-04E3-B admits supported false-policy guides with exact Python/PostgreSQL
-custody. A known pre-effect refusal while REV is non-live retries within the
-existing OUTBOX attempt budget; exhaustion dead-letters without automatic
-reopen. The bounded local public API and Celery service drill starts from public guide
-inputs with recorded inference.
+5. In `.env`, select host ports that no other program uses.
 
-Active work stays on that first contribution path. Live human review/revision,
-reviewer participation and fulfillment delivery follow separately.
-Contribution evidence remains the input for a separately implemented future
-reputation projection. Frontend product work follows stable and tested backend
-contracts for the surface it consumes.
+6. Build and start Workstream:
 
-The release bar is a verified end-to-end v0.1 lifecycle, not the completion of
-an old timeboxed plan. See the [v0.1 Roadmap And Capability Status](docs/roadmap_status.md)
-for the lifecycle scoreboard, current critical path, and complete release gates;
-reading internal engineering records is not required to understand product
-progress.
+   ```bash
+   docker compose --profile backend up --build --wait
+   ```
 
-## Start Here
+   This command starts the API, the background worker, the scheduler,
+   PostgreSQL, Redis, and MinIO (local file storage).
 
-- [Developer Quickstart](#developer-quickstart)
-- [Contribution Guide](CONTRIBUTING.md)
-- [v0.1 Roadmap And Capability Status](docs/roadmap_status.md)
-- [Product Principles](docs/product_principles.md)
-- [Product Brief](docs/product_brief.md)
-- [Architecture Lockdown](docs/architecture_lockdown.md)
-- [System Architecture](docs/architecture_system_architecture.md)
-- [Glossary](docs/glossary.md)
-- [Historical Planning Index](docs/historical_planning.md)
+7. Make sure the API is running. Replace `<WORKSTREAM_API_HOST_PORT>` with the
+   port that you selected in `.env`. On macOS, Linux, or Git Bash:
 
-## Product And Operations Documentation
+   ```bash
+   curl --fail http://127.0.0.1:<WORKSTREAM_API_HOST_PORT>/api/v1/health
+   ```
 
-- [Product Principles](docs/product_principles.md)
-- [Product Brief](docs/product_brief.md)
-- [First User Flows](docs/product_first_user_flows.md)
-- [Architecture Brief PDF — target architecture](docs/architecture_brief/workstream_architecture_brief.pdf)
-- [Architecture Diagrams](docs/diagrams/README.md)
-- [System Architecture](docs/architecture_system_architecture.md)
-- [Data Model](docs/architecture_data_model.md)
-- [Lifecycle State Machine](docs/architecture_lifecycle_state_machine.md)
-- [Checker Framework](docs/architecture_checker_framework.md)
-- [Operator Workflow](docs/operations_operator_workflow.md)
-- [Project Operating Manual](docs/operations_project_operating_manual.md)
-- [Queue Policy](docs/operations_queue_policy.md)
-- [Workspace And Packet Convention](docs/operations_workspace_packet_convention.md)
-- [Reviewer Workflow](docs/operations_reviewer_workflow.md)
-- [Revision Replay](docs/operations_revision_replay.md)
-- [Review And Revision Lifecycle](docs/spec_review_lifecycle.md)
-- [Roles And Permissions](docs/operations_roles_permissions.md)
-- [Authorization Service](docs/spec_authorization_service.md)
-- [Immutable Artifact Storage](docs/spec_artifact_storage_service.md)
-- [Contribution And Compensation](docs/spec_contribution_compensation.md)
-- [Authorization Operations](docs/operations_authorization_service.md)
-- [Compensation And Reputation](docs/operations_payment_reputation.md)
-- [Risk Register](docs/risk_register.md)
-- [Process Pattern Baseline](docs/process_pattern_baseline.md)
-- [Glossary](docs/glossary.md)
+   On PowerShell:
 
-## Historical Review Records
+   ```powershell
+   Invoke-RestMethod http://127.0.0.1:<WORKSTREAM_API_HOST_PORT>/api/v1/health
+   ```
 
-These records preserve earlier product, architecture, process, and adversarial
-reviews. They are evidence and design history, not current implementation
-status. Current changes receive review through [CONTRIBUTING.md](CONTRIBUTING.md).
+   The correct response is `{"status":"ok"}`.
 
-- [Process Baseline Operations Review](docs/review_process_baseline_operations_review.md)
-- [Final Product Strategy Review](docs/review_final_product_strategy_review.md)
-- [Final Architecture Review](docs/review_final_architecture_review.md)
-- [Final Adversarial Review](docs/review_final_adversarial_review.md)
-- [Adversarial Quality Review](docs/review_adversarial_quality_review.md)
-- [Process Pattern Baseline Review](docs/review_process_pattern_baseline_review.md)
-- [Review Closure](docs/review_closure.md)
+8. To stop Workstream:
 
-## Templates
+   ```bash
+   docker compose --profile backend down
+   ```
 
-- [Project Guide Template](docs/template_project_guide.md)
-- [Submission Artifact Policy Template](docs/template_submission_artifact_policy.md)
-- [Checker Policy Template](docs/template_checker_policy.md)
-- [Task Template](docs/template_task.md)
-- [Review Readiness Evidence Template](docs/template_preflight_evidence.md)
-- [Submission Packet Template](docs/template_submission_packet.md)
-- [Review Packet Template](docs/template_review_packet.md)
-- [Task Status Template](docs/template_task_status.md)
-- [Prior Feedback Checklist Template](docs/template_prior_feedback_checklist.md)
+## Use the command-line client
 
-## Decisions
+The [Workstream CLI](cli/README.md) is a terminal client for the public API.
+You can use it to set up projects, find and claim tasks, submit work, and
+export contribution records. It sends your Flow token, from
+`WORKSTREAM_TOKEN`, with each request.
 
-- [ADR 0001: Core Scope](docs/decision_0001_core_scope.md)
-- [ADR 0002: Database Ledger Before Blockchain Settlement](docs/decision_0002_db_first_not_blockchain_first.md)
-- [ADR 0003: Project Guides Are First-Class](docs/decision_0003_project_guides_are_first_class.md)
-- [ADR 0004: v0.1 Implementation Stack Is Locked](docs/decision_0004_v0_1_stack_is_locked.md)
-- [ADR 0005: Postgres Is The Record Database](docs/decision_0005_postgres_is_the_record_database.md)
-- [ADR 0006: Workstream Verifies External Flow Auth](docs/decision_0006_external_flow_auth_boundary.md)
-- [ADR 0007: Execution Is Async-First](docs/decision_0007_async_first_execution.md)
-- [ADR 0008: Files Use An Object-Storage Abstraction](docs/decision_0008_object_storage_abstraction.md)
-- [ADR 0009: Review Decisions Are Canonical](docs/decision_0009_review_decisions_are_canonical.md)
-- [ADR 0010: Revision Rebase Uses The Complete Active Project Context](docs/decision_0010_revision_context_rebase.md)
-- [ADR 0011: Submission Artifact Policy Drives Pre-Submit Intake](docs/decision_0011_submission_artifact_policy_drives_pre_submit.md)
-- [ADR 0012: Workstream Owns Product Authorization](docs/decision_0012_workstream_authorization_service.md)
-- [ADR 0013: Immutable Artifact Storage Boundary](docs/decision_0013_immutable_artifact_storage_boundary.md)
-- [ADR 0014: External Services Use One Adapter Convention](docs/decision_0014_external_service_adapter_convention.md)
-- [ADR 0015: Project Contributor Roles Are Independent](docs/decision_0015_project_contributor_roles_are_independent.md)
-- [ADR 0016: Contribution Recognition Precedes External Fulfillment](docs/decision_0016_contribution_compensation_boundary.md)
+## Repository layout
 
-## Authorization Baseline
+| Folder | Contents |
+|---|---|
+| `backend/` | The Workstream API and background workers (Python and FastAPI). |
+| `cli/` | The command-line client (Go). |
+| `mcp_server/` | An MCP (Model Context Protocol) adapter. AI agents can use it to read profile and permission data. |
+| `external_checkers/` | The service and SDK that run external checker images (Rust). |
+| `contracts/` | Shared data contracts. |
+| `docs/` | Product, architecture, and operations documents. |
+| `docker/` | Container files for local development. |
+| `scripts/` | Scripts that check the repository and its documents. |
+| `examples/` and `experiments/` | A sample benchmark project, and experiments that test features before they are built. |
+| `.commitrail/` | Engineering records about changes to this repository. |
 
-Workstream verifies externally issued Flow authentication tokens and owns its
-product authorization. Token role claims, email, display name, skills,
-reputation, and typed workflow profiles are not product authority. Canonical
-authority comes from local actor identity links, administrative grants,
-exact-project contributor grants, registered permissions, resource/lifecycle
-guards, revocation, and append-only evidence.
+## Learn more
 
-All public API documentation uses `/api/v1`. Imported reference specifications
-are immutable archival inputs. ADR 0012 and the canonical authorization service
-specification control authorization; ADR 0016 and the canonical contribution
-and compensation specification control contribution recognition, award
-eligibility, and fulfillment boundaries. Older chunk specifications remain
-implementation history until their owning migrations replace the runtime.
+| If you want to | Read |
+|---|---|
+| Understand the product | [Product Brief](docs/product_brief.md) and [Product Principles](docs/product_principles.md) |
+| Read the detailed lifecycle and implementation notes | [Workstream Technical Reference](docs/workstream_reference.md) |
+| Understand the architecture | [System Architecture](docs/architecture_system_architecture.md) and [Architecture Lockdown](docs/architecture_lockdown.md) |
+| See what works now | [v0.1 Roadmap And Capability Status](docs/roadmap_status.md) |
+| Find a term | [Glossary](docs/glossary.md) |
+| See all documents | [Documentation index](docs/README.md) |
 
-## Terminal Client
+## Contribute
 
-The independent [Go CLI](cli/README.md) provides `workstream whoami` and
-`workstream project access PROJECT_ID`, plus `workstream profile update` for
-caller-owned human display fields, through the currently public REST API.
-`workstream project show PROJECT_ID` inspects the project fields returned for
-the caller's current authority, preserving contributor-minimal disclosure.
-`workstream project tasks PROJECT_ID` and `project task PROJECT_ID TASK_ID`
-provide a paginated manager list-to-detail journey through public reads.
-`workstream task ready PROJECT_ID` and `task show TASK_ID` provide contributor
-discovery and instructions, with live Submitter authority and no task claim.
-`workstream task claim TASK_ID --idempotency-key UUID` and `task start` add
-contributor writes through existing public APIs, with server-owned authority,
-explicit caller retry keys and uncertain-outcome reporting without automatic retries.
-`workstream task context TASK_ID` and `task requirements TASK_ID` inspect the
-governing guide/policy selectors, server action hints and locked intake rules.
-Hints do not grant authority; these CLI reads do not invoke the separate public
-submission upload and creation operations.
-`workstream task prepare` streams the contributor ZIP once with an explicit
-caller key; `task submit` separately consumes its ready admission and exact
-packet. Preparation never creates a Submission or automatically polls/retries.
-`task submissions`, `submission show` and `submission findings` read bounded
-public history and contributor checker evidence, not inferred acceptance.
-See the [submission command contract](cli/README.md#prepare-submit-and-inspect-contributor-work)
-for replay, packet-header restrictions and proof boundaries.
-`workstream task guide TASK_ID [--download DIR]` lists or downloads the original
-documents of the task's locked guide for its currently authorized assignee.
-Downloaded bytes are verified against their retained hash and size; task examples
-remain private, and newer guide activation does not change existing task locks.
-`workstream project create --name TEXT --slug TEXT --idempotency-key UUID`
-creates a draft project shell through the public API, with explicit manual
-replay and uncertain-outcome handling; it does not approve or activate a guide.
-`workstream project guide create PROJECT_ID --input FILE --idempotency-key UUID`
-declares a draft guide, task examples and document upload targets. It does not
-upload documents or approve the guide; returned setup waits for those documents.
-`workstream project guide upload PROJECT_ID GUIDE_ID DOCUMENT_ID --file FILE
---media-type MIME --idempotency-key UUID` uploads a declared original. The CLI
-streams its bytes and validates the storage receipt against their hash and size.
-An upload receipt is not setup completion, policy approval or guide activation.
-`workstream project guide setup PROJECT_ID GUIDE_ID` reads the latest public
-setup status and compilation lineage. A successful diagnostic read is not
-approval or activation; there is no polling or setup execution in the CLI.
-`workstream project guide proposal PROJECT_ID GUIDE_ID COMPILATION_ID` reads
-the exact finalized proposal, findings, requirement inventory and proposed
-intake/evaluation bindings. It never substitutes the latest compilation or
-approves a policy; blocked and historical proposals remain observations.
-`workstream project guide approve-pre PROJECT_ID GUIDE_ID COMPILATION_ID --input
-FILE --idempotency-key UUID` submits the deliberately prepared public intake
-approval request. It preserves the exact target, ordered warning acknowledgments
-and prior-approval selectors with explicit manual replay. The backend owns fresh
-authority, currentness and policy validation; the receipt proves intake approval,
-not post-policy approval, post-policy job delivery or guide activation.
-`workstream project guide post-policy PROJECT_ID GUIDE_ID COMPILATION_ID POLICY_ID`
-reads the exact derived evaluation policy, upstream proposal/findings, activation
-selectors and saved correction through one public GET. Compiled, approved and
-superseded packages remain observations, not approval or activation.
-`workstream project guide approve-post PROJECT_ID GUIDE_ID COMPILATION_ID POLICY_ID
---input FILE --idempotency-key UUID` separately approves the inspected evaluation
-policy. It preserves the caller's exact target and retry key, validates the
-complete returned target, and never activates a guide or retries automatically.
-`workstream project guide correct-post PROJECT_ID GUIDE_ID COMPILATION_ID POLICY_ID
---input FILE --idempotency-key UUID` requests a unified setup successor for the
-inspected policy and supplied feedback. Its saved correction receipt does not
-dispatch setup, replace policy content or activate a guide.
-`workstream project guide correct PROJECT_ID GUIDE_ID COMPILATION_ID --input
-FILE --idempotency-key UUID` saves correction feedback for the exact finalized
-proposal. `workstream project guide dispatch-correction PROJECT_ID GUIDE_ID
-COMPILATION_ID --input FILE` explicitly dispatches the successor identified by
-that saved correction receipt (or the `correction` member from `correct-post`).
-It reports the backend's diagnostic status, not completed processing or activation;
-uncertain writes are never automatically retried.
-`workstream project guide activate PROJECT_ID GUIDE_ID --input FILE
---idempotency-key UUID` separately activates exactly selected, approved policies
-through the public manager API. It validates the immutable activation receipt;
-Workstream retains readiness, contribution-policy binding and supersession
-authority. It does not approve policies or bypass activation readiness: supported
-false-review guides use the same backend-owned activation checks.
-`workstream project task create PROJECT_ID --input FILE --idempotency-key UUID`
-creates a draft; separate `project task screen PROJECT_ID TASK_ID` and
-`project task release PROJECT_ID TASK_ID --reason TEXT` commands each require
-their own retry key. Workstream owns guide/policy locking and readiness; no
-command automatically prepares or releases work after another command.
-PILOT-02's `workstream project task-batch` commands add local CSV conversion,
-source declaration/upload/status, atomic import and separate whole-batch
-screen/release through public APIs. They share the same CLI; they neither
-replace individual-task commands nor form a prerequisite for evidence export.
-`workstream project role-grant issue PROJECT_ID --input FILE --idempotency-key UUID`
-and `project role-grant revoke PROJECT_ID GRANT_ID --input FILE --idempotency-key UUID`
-send deliberate Submitter/Reviewer decisions with explicit qualification evidence
-and reasons. AUTH retains exact-project manager authority, qualification capture
-and fresh-authorized replay; receipts are observations, not cached permission.
-`project role-grant list PROJECT_ID` reads one optionally filtered, count-free
-page; `project role-grant show PROJECT_ID GRANT_ID` inspects complete public
-qualification/provenance and revocation history. Pagination is explicit and
-fresh authority is backend-owned; a read never authorizes a later write.
-`project contribution-policy current PROJECT_ID` discovers the published and
-open-draft selectors; `project contribution-policy show PROJECT_ID POLICY_ID
-[--version UUID]` inspects backend-selected or exact historical policy versions,
-including complete rules and exact quantities. These read commands require
-current Finance Authority, not PM-only permission; they do not edit, publish,
-retire or pay.
-The `create`, `update`, `publish` and `retire` commands in that same group expose
-separate Finance decisions with explicit idempotency keys and exact version
-selectors. They return immutable event receipts; guide activation stays separate.
-All support human-readable and JSON output, using the caller's Flow token.
-`workstream contributions [--project UUID]` reads the caller's contribution
-evidence; `workstream project contributions PROJECT_ID` exports one authorized
-project. Both support recorded-time/type filters and `--csv FILE` for the exact
-server export, saved privately without overwrite. The backing REST reads use
-signed fixed-membership cursors for selections up to 100,000 contributions,
-freshly authorize every page, and expose continuation in JSON or the CSV
-response header. The CLI follows continuation internally with the same filters,
-retains its existing complete JSON output shape, and publishes CSV only after
-every page validates. A later-page denial or malformed response leaves no
-partial stdout result or destination file. Earned awards are not proof of
-payment; these reads do not activate unfinished lifecycle writers.
-The first source package is buildable; further workflow commands and published
-binaries remain planned.
-
-## Repository-Native Human-Agent SDLC
-
-Workstream uses a Repository-Native Human-Agent SDLC. Plans, tests, review, and
-durable decisions live with the code so humans and agents can collaborate
-without depending on chat history. GitHub permissions and branch protection
-remain the repository authority; process notes never create a second permission
-system.
+Read [CONTRIBUTING.md](CONTRIBUTING.md) before you change this repository.
+Each change follows this sequence:
 
 ```text
-Intent
--> Plan
--> Bounded Change
--> Evidence
--> Review
--> PR
--> Human Merge
-```
-
-Codex-discoverable skills live in `.agents/skills/`. Codex custom reviewer
-agents live in `.codex/agents/`. The smallest useful durable engineering
-records live in `.commitrail/`; start with its `README.md` and `INDEX.md`.
-
-This engineering loop is separate from Workstream product state. It governs how
-the repository is changed; it does not define runtime task or review records.
-Independent initiatives and branches may proceed concurrently. Start with
-[CONTRIBUTING.md](CONTRIBUTING.md) before proposing repository work.
-
-The shared outbox dispatcher uses the fixed service identity and phase-specific
-AUTH/PREP decisions for claim, invocation and finalization. AUTH-OUTBOX-02 binds
-those decisions to immutable delivery receipts and supplies Celery delivery and
-bounded recovery scans. ARCH-03C2 registers exact assignment invalidation,
-with atomic publication from supported authority mutations and separate fixed
-feature authority. The selected checker request and completion handlers are
-registered in production composition. ARCH-02I-B exposes ZIP preparation and
-admission-backed Submission creation for initial work and checker remediation
-through public backend APIs. Registration does not establish deployed sandbox readiness.
-Delivery consumes `workstream.outbox` only under a validated non-eager prefork
-Celery process; other queues can use their appropriate execution pool.
-
-## Developer Quickstart
-
-The supported backend setup uses CPython 3.11 or 3.12. The pinned Docker image
-provides the Linux environment for macOS and Windows contributors. Guide
-originals are stored in ArtifactStore and read by the configured agent runtime;
-the backend does not run a separate guide extractor.
-
-### Docker Workflow (Recommended)
-
-Prerequisites are Git, Docker Engine, and Docker Compose v2. From the repository
-root, create the ignored checkout-local configuration, give it a unique
-`COMPOSE_PROJECT_NAME`, replace every `change-me` value and select unused host
-ports. The [local pilot runbook](docs/engineering/local-pilot.md) documents
-secret generation, identities, grants, isolation and teardown.
-
-```bash
-cp .env.example .env
-chmod 600 .env
-```
-
-The `chmod` command applies to Linux, macOS and Git Bash. PowerShell users must
-restrict the copied file to their Windows user with an equivalent private NTFS
-ACL before adding secrets.
-
-Then build the native-architecture Linux images and start the API, prefork
-Celery process, scheduler, PostgreSQL, Redis and MinIO:
-
-```bash
-docker compose --profile backend up --build --wait
-```
-
-Then verify the API with the command for your shell:
-
-```bash
-# macOS, Linux, or Git Bash
-curl --fail http://127.0.0.1:<WORKSTREAM_API_HOST_PORT>/api/v1/health
-```
-
-```powershell
-# PowerShell
-Invoke-RestMethod http://127.0.0.1:<WORKSTREAM_API_HOST_PORT>/api/v1/health
-```
-
-Replace the placeholder with the port selected in root `.env`. The expected
-response is `{"status":"ok"}`. The backend applies Alembic migrations before
-serving and all published services bind only to host loopback. API, Celery process and
-beat use the same S3-compatible MinIO and local Flow-HMAC settings. Startup
-creates and verifies the checkout-local bucket; authority still comes only from
-the existing trust-root and grant operations.
-
-The pinned image supports Linux x86_64 and aarch64. On Docker Desktop, it runs
-inside the Docker VM.
-
-Run focused checks in the same containerized environment:
-
-```bash
-docker compose run --rm --no-deps backend python -m pytest -q tests/test_app.py tests/test_guide_formats.py tests/test_guide_runtime_workspace.py
-docker compose run --rm --no-deps backend ruff check app tests scripts
+Intent -> Plan -> Bounded Change -> Tests -> Review -> Pull Request -> Human Merge
 ```
 
 Dependency changes require a rebuild:
@@ -1034,7 +639,7 @@ even though they form one end-to-end v0.1 lifecycle.
 Workstream is licensed under the
 [GNU Affero General Public License v3.0 only](LICENSE) (`AGPL-3.0-only`).
 
-If you modify Workstream and let users interact with the modified version over
-a network, AGPLv3 requires offering those users the corresponding source under
-the license terms. Third-party packages and incorporated material remain under
-their respective licenses; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+You may change Workstream and let users use your changed version over a
+network. If you do, AGPLv3 requires you to offer those users the corresponding
+source code under the license terms. Third-party packages and included material stay
+under their own licenses. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
