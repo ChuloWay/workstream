@@ -22,14 +22,17 @@ class ExternalCheckerRegistryResourceContext(BaseModel):
     entry_digest: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
 
 
-CHECKER_REGISTRY_ACTIONS = frozenset({ActionId.CHECKER_REGISTRY_REGISTER})
+CHECKER_REGISTRY_READ_ACTIONS = frozenset({ActionId.CHECKER_REGISTRY_READ})
+CHECKER_REGISTRY_MUTATION_ACTIONS = frozenset({ActionId.CHECKER_REGISTRY_REGISTER})
+CHECKER_REGISTRY_ACTIONS = CHECKER_REGISTRY_READ_ACTIONS | CHECKER_REGISTRY_MUTATION_ACTIONS
 CHECKER_REGISTRY_RESOURCE_BY_ACTION = {
+    ActionId.CHECKER_REGISTRY_READ: ExternalCheckerRegistryResourceContext,
     ActionId.CHECKER_REGISTRY_REGISTER: ExternalCheckerRegistryResourceContext,
 }
 
 
 def checker_registry_grant_filters(action_id: ActionId) -> dict[str, object]:
-    """Confine external checker registration to a system Operator grant."""
+    """Confine external checker registry operations to a system Operator grant."""
     if action_id not in CHECKER_REGISTRY_ACTIONS:
         return {}
     return {"allowed_roles": frozenset({AdminRole.OPERATOR})}

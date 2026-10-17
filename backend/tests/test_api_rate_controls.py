@@ -3,7 +3,8 @@ from __future__ import annotations
 
 import asyncio
 from datetime import UTC, datetime, timedelta
-from fastapi import Depends  # type: ignore[import-not-found]
+from types import SimpleNamespace
+from fastapi import APIRouter, Depends  # type: ignore[import-not-found]
 from httpx import ASGITransport, AsyncClient
 from pydantic import SecretStr
 import pytest
@@ -882,22 +883,199 @@ async def test_rate_dependency_unavailability_is_private_503(
     assert subject not in response.text
 
 
-def test_rate_dependencies_are_not_attached_to_production_routes() -> None:
-    forbidden = {
-        enforce_first_access_rate_limit,
-        enforce_admin_mutation_rate_limit,
-        enforce_authorization_read_rate_limit,
+RATE_DEPENDENCIES = {
+    enforce_first_access_rate_limit,
+    enforce_admin_mutation_rate_limit,
+    enforce_authorization_read_rate_limit,
+}
+# These 61 bindings are the explicit unchanged production baseline from main.
+# Registry and recovery routes extend it through their owner-specific maps below.
+ESTABLISHED_ADMIN_MUTATION_RATE_ROUTES = {
+    ("POST", "/actor-identity-links/{identity_link_id}/reactivate"),
+    ("POST", "/actor-identity-links/{identity_link_id}/revoke"),
+    ("POST", "/actors/{actor_profile_id}/deactivate"),
+    ("POST", "/actors/{actor_profile_id}/reactivate"),
+    ("POST", "/actors/{actor_profile_id}/suspend"),
+    ("POST", "/admin-role-grants"),
+    ("POST", "/admin-role-grants/{grant_id}/revoke"),
+    ("POST", "/projects/{project_id}/role-grants"),
+    ("POST", "/projects/{project_id}/role-grants/{grant_id}/revoke"),
+    ("POST", "/service-actors"),
+}
+ESTABLISHED_AUTHORIZATION_READ_RATE_ROUTES = {
+    ("GET", "/actors/me/authorization-context"),
+    ("GET", "/actors/me/contributions"),
+    ("GET", "/audit/projects/{project_id}/tasks/{task_id}/evidence"),
+    ("GET", "/audit/projects/{project_id}/tasks/{task_id}/locked-context"),
+    ("GET", "/operations/projects/{project_id}/tasks"),
+    ("GET", "/operations/projects/{project_id}/tasks/{task_id}/locked-context"),
+    ("GET", "/projects/{project_id}"),
+    ("GET", "/projects/{project_id}/active-guide"),
+    ("GET", "/projects/{project_id}/contribution-policies/current"),
+    ("GET", "/projects/{project_id}/contribution-policies/{policy_id}"),
+    ("GET", "/projects/{project_id}/contributions/export"),
+    ("GET", "/projects/{project_id}/contributor-candidates"),
+    (
+        "GET",
+        "/projects/{project_id}/guides/{guide_id}/compilations/{compilation_id}/post-submission-policies/{policy_id}",
+    ),
+    (
+        "GET",
+        "/projects/{project_id}/guides/{guide_id}/compilations/{compilation_id}/proposal",
+    ),
+    (
+        "GET",
+        "/projects/{project_id}/guides/{guide_id}/effective-submission-artifact-policy",
+    ),
+    ("GET", "/projects/{project_id}/guides/{guide_id}/pre-submit-checker-policy"),
+    ("GET", "/projects/{project_id}/guides/{guide_id}/setup-runs/latest"),
+    (
+        "GET",
+        "/projects/{project_id}/guides/{guide_id}/submission-artifact-policies",
+    ),
+    (
+        "GET",
+        "/projects/{project_id}/guides/{guide_id}/submission-artifact-policies/{policy_id}",
+    ),
+    ("GET", "/projects/{project_id}/guides/{guide_id}/sufficiency-reports"),
+    (
+        "GET",
+        "/projects/{project_id}/guides/{guide_id}/sufficiency-reports/{report_id}",
+    ),
+    ("GET", "/projects/{project_id}/role-grants"),
+    ("GET", "/projects/{project_id}/role-grants/{grant_id}"),
+    ("GET", "/projects/{project_id}/submissions/{submission_id}"),
+    ("GET", "/projects/{project_id}/submissions/{submission_id}/checker-runs"),
+    (
+        "GET",
+        "/projects/{project_id}/submissions/{submission_id}/checker-runs/{checker_run_id}",
+    ),
+    ("GET", "/projects/{project_id}/task-import-batches/{batch_id}"),
+    ("GET", "/projects/{project_id}/task-import-sources/{source_id}"),
+    ("GET", "/projects/{project_id}/task-import-sources/{source_id}/content"),
+    ("GET", "/projects/{project_id}/tasks"),
+    ("GET", "/projects/{project_id}/tasks/ready"),
+    ("GET", "/projects/{project_id}/tasks/{task_id}"),
+    ("GET", "/projects/{project_id}/tasks/{task_id}/locked-context"),
+    ("GET", "/projects/{project_id}/tasks/{task_id}/submission-requirements"),
+    ("GET", "/projects/{project_id}/tasks/{task_id}/submissions"),
+    ("GET", "/submissions/{submission_id}"),
+    ("GET", "/submissions/{submission_id}/checker-runs"),
+    ("GET", "/submissions/{submission_id}/checker-runs/{checker_run_id}"),
+    ("GET", "/tasks/{task_id}"),
+    ("GET", "/tasks/{task_id}/submission-requirements"),
+    ("GET", "/tasks/{task_id}/submissions"),
+    ("POST", "/projects/{project_id}/contribution-policies/drafts"),
+    (
+        "POST",
+        "/projects/{project_id}/contribution-policies/{policy_id}/versions/{version_id}/publication",
+    ),
+    (
+        "POST",
+        "/projects/{project_id}/contribution-policies/{policy_id}/versions/{version_id}/retirement",
+    ),
+    ("POST", "/projects/{project_id}/guides/{guide_id}/activate"),
+    (
+        "POST",
+        "/projects/{project_id}/guides/{guide_id}/compilations/{compilation_id}/corrections",
+    ),
+    (
+        "POST",
+        "/projects/{project_id}/guides/{guide_id}/compilations/{compilation_id}/corrections/{correction_operation_id}/dispatch",
+    ),
+    (
+        "POST",
+        "/projects/{project_id}/guides/{guide_id}/compilations/{compilation_id}/post-submission-policies/{policy_id}/approval",
+    ),
+    (
+        "POST",
+        "/projects/{project_id}/guides/{guide_id}/compilations/{compilation_id}/post-submission-policies/{policy_id}/corrections",
+    ),
+    (
+        "POST",
+        "/projects/{project_id}/guides/{guide_id}/compilations/{compilation_id}/pre-submission-approval",
+    ),
+    (
+        "PUT",
+        "/projects/{project_id}/contribution-policies/{policy_id}/versions/{version_id}",
+    ),
+}
+CHECKER_REGISTRY_RATE_BINDINGS = {
+    ("POST", "/operations/external-checker-registry"): {
+        enforce_admin_mutation_rate_limit
+    },
+    ("GET", "/operations/external-checker-registry/{registry_entry_id}"): {
+        enforce_authorization_read_rate_limit
+    },
+}
+
+
+def _dependency_calls(dependant) -> set:
+    calls = {dependant.call}
+    for dependency in dependant.dependencies:
+        calls.update(_dependency_calls(dependency))
+    return calls
+
+
+def _production_routes(routes):
+    visited: set[int] = set()
+
+    def collect(candidates):
+        for route in candidates:
+            if hasattr(route, "dependant"):
+                yield route
+            original_router = getattr(route, "original_router", None)
+            if original_router is None or id(original_router) in visited:
+                continue
+            visited.add(id(original_router))
+            yield from collect(original_router.routes)
+
+    yield from collect(routes)
+
+
+def _rate_dependency_bindings(routes) -> dict[tuple[str, str], set]:
+    bindings: dict[tuple[str, str], set] = {}
+    for route in _production_routes(routes):
+        attached = RATE_DEPENDENCIES.intersection(
+            _dependency_calls(route.dependant)
+        )
+        if not attached:
+            continue
+        for method in route.methods:
+            bindings.setdefault((method, route.path), set()).update(attached)
+    return bindings
+
+
+def test_production_rate_dependencies_match_exact_route_allowlist() -> None:
+    expected = {
+        **{
+            route: {enforce_admin_mutation_rate_limit}
+            for route in ESTABLISHED_ADMIN_MUTATION_RATE_ROUTES
+        },
+        **{
+            route: {enforce_authorization_read_rate_limit}
+            for route in ESTABLISHED_AUTHORIZATION_READ_RATE_ROUTES
+        },
+        **CHECKER_REGISTRY_RATE_BINDINGS,
     }
 
-    def dependency_calls(dependant) -> set:
-        calls = {dependant.call}
-        for dependency in dependant.dependencies:
-            calls.update(dependency_calls(dependency))
-        return calls
+    assert _rate_dependency_bindings(create_app().routes) == expected
 
-    app = create_app()
-    assert all(
-        forbidden.isdisjoint(dependency_calls(route.dependant))
-        for route in app.routes
-        if hasattr(route, "dependant")
+
+def test_rate_dependency_inventory_discovers_unexpected_nested_route() -> None:
+    nested_router = APIRouter()
+
+    @nested_router.get(
+        "/unexpected-nested-rate-control",
+        dependencies=[Depends(enforce_first_access_rate_limit)],
     )
+    async def unexpected_nested_rate_control() -> None:
+        return None
+
+    wrapper = SimpleNamespace(original_router=nested_router)
+
+    assert _rate_dependency_bindings([wrapper]) == {
+        ("GET", "/unexpected-nested-rate-control"): {
+            enforce_first_access_rate_limit
+        }
+    }
