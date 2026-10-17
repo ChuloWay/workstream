@@ -490,16 +490,8 @@ pub(super) fn execute_terminal_benchmark(
             RemovalOutcome::Unsettled => return Err("implementation_unavailable"),
         }
         containers.retain(|item| item != &builder);
-        match builder_outcome {
-            BuilderOutcome::Succeeded => {}
-            BuilderOutcome::WorkFailure => {
-                return work_failure(
-                    request,
-                    "build_failed",
-                    "Submitted Dockerfile did not build.",
-                );
-            }
-            BuilderOutcome::CapacityFailure => return Err("capacity_exceeded"),
+        if let Some(result) = builder_result(request, builder_outcome)? {
+            return Ok(result);
         }
         let tar_size = fs::metadata(&tar)
             .map_err(|_| "implementation_unavailable")?
@@ -539,15 +531,8 @@ pub(super) fn execute_terminal_benchmark(
             RemovalOutcome::Unsettled => return Err("implementation_unavailable"),
         }
         containers.retain(|item| item != &candidate);
-        if candidate_status.status == 0 {
-            return work_failure(
-                request,
-                "starter_unexpectedly_passed",
-                "Unchanged starter passed the project tests.",
-            );
-        }
-        if candidate_status.status != 1 {
-            return Err("implementation_unavailable");
+        if let Some(result) = candidate_result(request, &candidate_status)? {
+            return Ok(result);
         }
         let mut stable = None;
         for repetition in 0..3 {
@@ -571,21 +556,9 @@ pub(super) fn execute_terminal_benchmark(
                 RemovalOutcome::Unsettled => return Err("implementation_unavailable"),
             }
             containers.retain(|item| item != &name);
-            if status.status != 0 {
-                return work_failure(
-                    request,
-                    "reference_failed",
-                    "Reference solution did not pass the project tests.",
-                );
+            if let Some(result) = reference_result(request, &mut stable, status)? {
+                return Ok(result);
             }
-            if stable.as_ref().is_some_and(|previous| previous != &status) {
-                return work_failure(
-                    request,
-                    "reference_unstable",
-                    "Reference result changed across fresh isolated runs.",
-                );
-            }
-            stable = Some(status);
         }
         completed_result(request, Vec::new()).map_err(|_| "invalid_output")
     })();
@@ -645,6 +618,66 @@ fn work_failure(
         }],
     )
     .map_err(|_| "invalid_output")
+}
+
+fn builder_result(
+    request: &ValidatedRequest,
+    outcome: BuilderOutcome,
+) -> Result<Option<Value>, &'static str> {
+    match outcome {
+        BuilderOutcome::Succeeded => Ok(None),
+        BuilderOutcome::WorkFailure => work_failure(
+            request,
+            "build_failed",
+            "Submitted Dockerfile did not build.",
+        )
+        .map(Some),
+        BuilderOutcome::CapacityFailure => Err("capacity_exceeded"),
+    }
+}
+
+fn candidate_result(
+    request: &ValidatedRequest,
+    observation: &OracleObservation,
+) -> Result<Option<Value>, &'static str> {
+    match observation.status {
+        0 => work_failure(
+            request,
+            "starter_unexpectedly_passed",
+            "Unchanged starter passed the project tests.",
+        )
+        .map(Some),
+        1 => Ok(None),
+        _ => Err("implementation_unavailable"),
+    }
+}
+
+fn reference_result(
+    request: &ValidatedRequest,
+    stable: &mut Option<OracleObservation>,
+    observation: OracleObservation,
+) -> Result<Option<Value>, &'static str> {
+    if observation.status != 0 {
+        return work_failure(
+            request,
+            "reference_failed",
+            "Reference solution did not pass the project tests.",
+        )
+        .map(Some);
+    }
+    if stable
+        .as_ref()
+        .is_some_and(|previous| previous != &observation)
+    {
+        return work_failure(
+            request,
+            "reference_unstable",
+            "Reference result changed across fresh isolated runs.",
+        )
+        .map(Some);
+    }
+    *stable = Some(observation);
+    Ok(None)
 }
 
 fn project_build_context(
@@ -1398,6 +1431,82 @@ mod tests {
         assert_eq!(reserved.reserve_remaining_bytes(), Err("capacity_exceeded"));
         assert_eq!(reserved.bytes(1), Err("capacity_exceeded"));
         assert_eq!(docker_file_size_limit(4096), "fsize=4096:4096");
+    }
+
+    #[test]
+    fn build_and_oracle_work_failures_are_distinct_completed_results() {
+        let request = request("post_submit");
+        let finding_code = |result: &Value| {
+            result["findings"][0]["code"]
+                .as_str()
+                .expect("work failure has one coded finding")
+                .to_owned()
+        };
+
+        let build = builder_result(&request, BuilderOutcome::WorkFailure)
+            .unwrap()
+            .unwrap();
+        let starter = candidate_result(
+            &request,
+            &OracleObservation {
+                status: 0,
+                output_digest: format!("sha256:{}", "1".repeat(64)),
+            },
+        )
+        .unwrap()
+        .unwrap();
+        let reference = reference_result(
+            &request,
+            &mut None,
+            OracleObservation {
+                status: 1,
+                output_digest: format!("sha256:{}", "2".repeat(64)),
+            },
+        )
+        .unwrap()
+        .unwrap();
+        let mut stable = Some(OracleObservation {
+            status: 0,
+            output_digest: format!("sha256:{}", "3".repeat(64)),
+        });
+        let unstable = reference_result(
+            &request,
+            &mut stable,
+            OracleObservation {
+                status: 0,
+                output_digest: format!("sha256:{}", "4".repeat(64)),
+            },
+        )
+        .unwrap()
+        .unwrap();
+
+        assert_eq!(
+            [build, starter, reference, unstable].map(|result| finding_code(&result)),
+            [
+                "build_failed",
+                "starter_unexpectedly_passed",
+                "reference_failed",
+                "reference_unstable",
+            ]
+        );
+        assert!(builder_result(&request, BuilderOutcome::Succeeded)
+            .unwrap()
+            .is_none());
+        assert_eq!(
+            builder_result(&request, BuilderOutcome::CapacityFailure)
+                .err()
+                .as_deref(),
+            Some("capacity_exceeded")
+        );
+        assert!(candidate_result(
+            &request,
+            &OracleObservation {
+                status: 1,
+                output_digest: format!("sha256:{}", "5".repeat(64)),
+            },
+        )
+        .unwrap()
+        .is_none());
     }
 
     #[test]

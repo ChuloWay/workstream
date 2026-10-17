@@ -561,12 +561,19 @@ can safely adopt the PILOT-00 mechanism.
   Kaniko build, unchanged starter rejection, reference pass and three fresh
   stable reference runs. Marker-only or omitted build/oracle implementations
   fail a focused regression.
-- [x] A genuine Dockerfile failure, reference failure, no-op pass and unstable
-  repeated outcome produce distinct work findings; dependent phases are omitted
-  explicitly rather than reported as independent passes or infrastructure.
-- [x] Missing/substituted builder or base cache, unavailable `runsc`, deadline,
-  memory/PID/disk exhaustion, malformed output, disconnect and uncertain cleanup
-  produce the existing recoverable infrastructure outcomes and no work verdict.
+- [x] The production builder/candidate/reference classification paths produce
+  distinct `build_failed`, `starter_unexpectedly_passed`, `reference_failed`
+  and `reference_unstable` completed results. The focused Rust regression calls
+  those same production helpers and validates their SDK result objects in
+  `build_and_oracle_work_failures_are_distinct_completed_results`; the
+  isolated matrix proves the retained package's successful path, not four
+  separate real-container negative fixtures.
+- [x] Missing/substituted cache and grant inputs, a non-gVisor terminal profile,
+  deadline/disconnect, malformed output, capacity classification and uncertain
+  cleanup produce recoverable infrastructure outcomes and no work verdict in
+  focused service tests. The isolated matrix separately proves real XFS quota
+  enforcement and cleanup. Forced real memory/PID exhaustion is not claimed by
+  that matrix and remains a deployment verification boundary.
 - [x] The builder context contains exactly `.dockerignore`,
   `environment/Dockerfile`, and `workspace/**`; it cannot read `solution/**`,
   `tests/**`, the original grant, or an absolute submitted Dockerfile path.
@@ -592,18 +599,21 @@ can safely adopt the PILOT-00 mechanism.
   before publishing residue, and that second grant succeeds after the first is
   released. Concurrent conventional POST grants keep only their original small
   reservations, publish no runtime sibling and do not consume terminal capacity.
-- [x] `test_post_result_is_hidden_until_grant_workspace_cleanup_completes`
-  proves the service settles Docker resources before its socket response and the
-  Python grant/materializer revokes and deletes scratch before exposing the
-  result to CHECKERS.
-- [x] `test_service_sigkill_fails_adapter_and_live_art_unwinds_workspace`
-  proves service death fails transport, the live Python owner synchronously
-  unwinds scratch, and restart removes only its labeled/prefixed Docker residue.
-- [x] `test_dead_art_owner_is_reaped_after_ttl` proves Python-owner death is the
-  distinct case handled by the existing TTL plus dead-owner workspace reaper.
-- [x] `test_art_cleanup_failure_discards_received_result_and_retains_ledger_custody`
-  proves cleanup failure wins over an already received result and preserves the
-  reservation for retry.
+- [x] `test_selected_post_exposes_result_only_after_grant_cleanup` exercises the
+  actual `SelectedPostSubmitProcessor` grant context and proves the response is
+  appended only after that context closes. The service implementation settles
+  its owned Docker resources before returning the framed response.
+- [x] The isolated-runner interrupt action kills only the recorded Rust service
+  PID after builder creation, observes adapter failure and an empty live ART
+  ledger/workspace, then proves restart removes the labeled/prefixed orphan while
+  preserving an unowned control.
+- [x] `test_stale_cleanup_preserves_other_live_process_custody` and
+  `test_stale_cleanup_reclaims_reservation_after_pid_reuse` distinguish live
+  ownership from the existing TTL plus dead-owner reaper.
+- [x] `test_selected_post_discards_received_result_when_grant_cleanup_fails`
+  proves a received response cannot escape a failed grant close;
+  `test_cancelled_close_propagates_cleanup_failure_for_retry` proves the ART
+  reservation remains owned until the failed cleanup is retried successfully.
 - [x] Grant substitution produces no continuation launch. Conventional and PRE
   images continue to receive only the ordinary request stdin and cannot gain the
   stronger profile even if their output copies its plan shape. Removing or
@@ -679,10 +689,10 @@ can safely adopt the PILOT-00 mechanism.
 | Existing owner and gap | Inspect PILOT-00, PILOT-04 service/SDK, ART grants, selected PRE/POST owners and #493/#576/#555 | The selected service had exact verified input and image custody but only one conventional checker launch; this change adds one exact-authorized terminal-benchmark continuation rather than a general runner, exercised by the isolated-runner matrix | Exact terminal entry registration, approved activation and deployed composition remain separate |
 | Platform pin feasibility | `docker buildx imagetools inspect --raw` for the proposed CPython and Kaniko digests, without pulling either image | Both proposed top-level digests are OCI indexes; linux/amd64 resolves to CPython `sha256:6e13e65c...` and Kaniko `sha256:c73ca67a...`; raw nonsecret manifests and SHA-256 commands are retained under `/tmp/workstream-493-python-*` | Production activation must retain the reviewed canonical cache inventory, platform manifests and config IDs |
 | Corpus dependency | Merge `e6a55d26b`; run `python3 pilots/terminal_benchmark/verify_corpus.py` on the final reviewed #576 dependency | PASS in the corpus branch: all five originals report three reference passes plus starter and near-miss rejection; the malformed-input harness cases become bounded work failures; the atomic-import destructive-state mutant is rejected across three runs; all 46 manifest files match | This is explicitly `trusted_native_corpus_only`, not Docker/gVisor or production admission proof; parent assets remain outside this change's implementation diff |
-| Scratch and cleanup owner | Inspect `ArtifactScratchManager` workspace ledger, TTL/dead-process recovery, no-follow deletion, external grant publication and selected POST call order | Existing owner already provides aggregate byte quota and per-workspace entry ceiling, durable workspace ownership, failed-cleanup retention and crash recovery. Rust settles Docker before socket response; the live Python context then revokes/deletes before exposing the evaluation. Focused tests cover exact limits, cleanup ordering and dead-owner recovery; the isolated-runner matrix exercises service SIGKILL, live ART unwind and restart orphan cleanup | Deployed process-crash behavior remains separate from development proof |
+| Scratch and cleanup owner | Inspect `ArtifactScratchManager` workspace ledger, TTL/dead-process recovery, no-follow deletion, external grant publication and selected POST call order; run the two selected-POST cleanup-order tests plus the adapter-failure, live/dead-owner and failed-close retry tests | Existing owner provides aggregate byte quota and per-workspace entry ceiling, durable workspace ownership, failed-cleanup retention and crash recovery. The focused six-test cleanup selection passes (`39a2d8fe086134c4253c27722d9f32f8d1c22e25166ba2318baa69db63590d25`); the isolated-runner matrix separately exercises service SIGKILL, live ART unwind and restart orphan cleanup | Deployed process-crash behavior remains separate from development proof |
 | #582 ownership check | Coordinate exact paths and port ownership with the S3 activation owner | #582 does not touch `preparation.py` or `post_submit_materialization.py`; it owns provider-neutral ArtifactStore activation evidence and S3 composition, while this change reuses the separate existing ArtifactScratchManager/ledger without extending that activation port | Recheck after either branch changes its bounded files |
 | Aggregate execution budget | Inspect request resource contract, selected POST budget and service timeout constants | Immutable registry resources include CPU, memory, deadline and output; the current adapter reserves one 60-second cleanup margin. Work uses one absolute deadline/output meter; emergency cleanup uses one 10-second deadline and separate 256 KiB output ceiling. Reviewed implementation run `39041591039` exercises interruption and representative quota bounds | Production-limit selection and deployed behavior remain separate |
-| Required Rust workspace gate | Backend `external-checker-runtime` job: `cargo fmt --all --check && cargo test --workspace --locked` | PASS on source-identical head `e655ec4bea160ad1edf32037f83e7335ab65b7a2`: 5 SDK, 35 service and 9 project-image tests. The service suite covers exact terminal profile authorization, zero-allowance grant verification, custody-first startup, cancellation, aggregate cleanup budgets, exact successful-absence queries and fatal cleanup propagation. The image suite covers all five packages plus bounded count/serialized-byte findings and actual SDK result serialization | Pure/fake-Docker tests alone do not prove actual Docker/runsc behavior; reviewed implementation run `39041591039` supplies that separate development evidence |
+| Required Rust workspace gate | Backend `external-checker-runtime` job: `cargo fmt --all --check && cargo test --workspace --locked` | PASS on source-identical head `e655ec4bea160ad1edf32037f83e7335ab65b7a2`: 5 SDK, 35 service and 9 project-image tests. The amended service suite adds the production builder/candidate/reference classification regression and requires a fresh hosted locked-workspace pass before this head is reviewable. The existing suite covers exact terminal profile authorization, zero-allowance grant verification, custody-first startup, cancellation, aggregate cleanup budgets, exact successful-absence queries and fatal cleanup propagation | Pure/fake-Docker tests do not prove four real negative builder/oracle scenarios; reviewed implementation run `39041591039` supplies successful and interrupt-path development evidence only |
 | Rust strict lint | `CARGO_BUILD_JOBS=1 cargo clippy --manifest-path external_checkers/Cargo.toml -p workstream-checker-service --all-targets -- -D warnings` plus blame and `.github/workflows/backend.yml` inspection | The repaired head reports only `clippy::large_enum_variant` at the unchanged pre-existing `GrantIdentity` (128-byte PRE versus 424-byte POST variant); no suppression or new diagnostic was introduced. The required `external-checker-runtime` CI lane runs locked workspace tests and formatting, not clippy | This optional local strict-clippy probe remains nonzero on that baseline warning; changing the existing serialized grant type is outside this bounded repair |
 | Project image and SDK contracts | Backend locked Rust workspace tests for `workstream-terminal-benchmark-checker` and `workstream-checker-sdk` | PASS: 9 project-package tests over all five originals and 5 SDK contract/canonicalization tests; the suite proves long/unrepresentable-path result serialization, and the isolated-runner matrix executes the built project image through PRE validation and POST continuation | Registry activation and deployed execution remain separate |
 | ART scratch integration | `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 PYTHONPATH=. backend/.venv/bin/python -m pytest -q backend/tests/checkers/external/test_runtime.py` | PASS: 14 tests, including terminal aggregate-capacity hold/refusal/reuse, concurrent conventional reservations, exact existing-ledger byte/entry reservation and cleanup | Does not by itself prove service/Python process-crash ordering; the isolated matrix supplies the development interruption proof |
@@ -789,10 +799,11 @@ existing grant request, leaves conventional POST reservations unchanged and
 requires the exact service-authorized terminal profile before accepting the
 runtime sibling. Focused local ART tests pass for the expanded aggregate hold,
 failure without residue, reuse after release and concurrent conventional
-reservations. The hosted locked Rust workspace gate passed all 5 SDK, 35 service
-and 9 project-image tests, including exact grant/profile authorization and the
-bounded output regressions; local memory and swap were not used for another Rust
-compile.
+reservations. The source-identical hosted gate passed 5 SDK, 35 service and 9
+project-image tests. This final amendment adds one service test over the actual
+builder/candidate/reference result helpers and therefore requires a fresh hosted
+locked-workspace pass before review. Local memory and swap are not used for a
+Rust compile.
 
 ## Reconciliation
 
@@ -814,6 +825,9 @@ compile.
   not depend on or extend #582's activation guard.
 - Remaining risks: production-limit selection, exact terminal entry
   registration, approved-policy activation and deployed `runsc` operation remain
-  unproved. The path-scoped
+  unproved. The development matrix also does not force real builder failure,
+  no-op starter, reference failure/instability or memory/PID exhaustion; their
+  production mappings and bounds have focused source-level tests, while a real
+  negative-container matrix remains follow-up evidence. The path-scoped
   isolated-runner matrix is development evidence for the exact image/service
   behavior and does not claim deployed Workstream operation.
