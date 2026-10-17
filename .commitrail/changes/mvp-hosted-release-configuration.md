@@ -229,7 +229,10 @@ as another release service here.
    output; do not upload logs, directory trees, images or repository-digest claims.
    Each smoke container carries this workflow run/attempt’s exact owner label.
    An unconditional workflow cleanup step removes only matching containers and
-   verifies absence, including when the inspection process times out.
+   verifies absence, including when the inspection process times out. The job
+   deadline exceeds the sum of explicit step caps by five minutes, preserving
+   cleanup time after ordinary step timeouts; runner loss remains an external
+   execution limitation.
 4. Run repository formatting, Markdown-link, stale-wording and Commitrail
    checks. Assess local sheet constraints only if roadmap exports are present.
 5. Freeze one clean candidate and route architecture, security, product/ops,
