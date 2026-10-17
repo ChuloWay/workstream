@@ -163,7 +163,7 @@ def installed_packages() -> dict[str, str]:
 def inside_backend() -> dict:
     require(os.getuid() == 10001, "backend runtime user changed")
     require(stat.S_IMODE(Path(LOADER).lstat().st_mode) == 0o555, "loader mode changed")
-    checked(["/bin/uv", "pip", "check", "--python", sys.executable])
+    checked(["/bin/uv", "--no-cache", "pip", "check", "--python", sys.executable])
     return {
         "source": source_inventory(Path("/workspace/backend")),
         "loader": file_hash(Path(LOADER)),
@@ -301,7 +301,21 @@ def inspect_image(image: str, role: str, owner: str) -> dict:
     ]
     try:
         result = run(command, data=Path(__file__).read_bytes())
-        require(result.returncode == 0, "release image inspection failed")
+        if result.returncode != 0:
+            # Only fixed verifier failures may cross the image boundary. Never
+            # print arbitrary image stdout/stderr, paths or exception values.
+            failures = {
+                b"ValueError: proof command failed": "dependency check failed",
+                b"ValueError: duplicate canonical distribution": "duplicate package metadata",
+                b"ValueError: source symlink refused": "source symlink refused",
+                b"ValueError: source special file refused": "source special file refused",
+                b"ValueError: loader mode changed": "loader mode changed",
+                b"ValueError: backend runtime user changed": "runtime user changed",
+                b"ValueError: checker runtime user changed": "runtime user changed",
+            }
+            lines = result.stderr.splitlines()
+            failure = failures.get(lines[-1] if lines else b"", "unclassified failure")
+            raise ValueError(f"{role} release image inspection failed: {failure}")
         return json.loads(result.stdout)
     finally:
         # No --rm: successful and failed runs retain one exact owned cleanup target.

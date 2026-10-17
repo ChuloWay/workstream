@@ -28,3 +28,6 @@ backend/.ruff_cache/
 backend/.venv/
 backend/**/__pycache__/
 backend/**/*.pyc
+
+backend/build/
+backend/*.egg-info/

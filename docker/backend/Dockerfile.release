@@ -31,7 +31,8 @@ COPY backend/ ./
 COPY docker/backend/release-entrypoint.sh /usr/local/bin/workstream-release-entrypoint
 
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --locked --extra agents --no-dev \
+    uv sync --locked --extra agents --no-dev --no-editable \
+    && rm -rf /workspace/backend/build /workspace/backend/workstream_backend.egg-info \
     && chmod 0555 /usr/local/bin/workstream-release-entrypoint \
     && chown -R workstream:workstream /workspace /opt/venv
 

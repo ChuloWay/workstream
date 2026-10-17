@@ -59,6 +59,31 @@ class ReleaseImageProofTests(unittest.TestCase):
             ):
                 proof.verify_backend(altered, self.source, self.packages, self.loader)
 
+    def test_image_failure_diagnostics_never_expose_arbitrary_output(self):
+        for stderr, expected in (
+            (b"trace\nValueError: proof command failed\n", "dependency check failed"),
+            (
+                b"ValueError: duplicate canonical distribution\n",
+                "duplicate package metadata",
+            ),
+            (b"ValueError: private sentinel", "unclassified failure"),
+        ):
+            result = SimpleNamespace(
+                returncode=1, stdout=b"private sentinel", stderr=stderr
+            )
+            with (
+                self.subTest(stderr=stderr),
+                patch.object(proof, "run", return_value=result),
+                patch.object(proof, "checked") as cleanup,
+            ):
+                with self.assertRaises(ValueError) as failure:
+                    proof.inspect_image("fixture", "backend", "123-1")
+                self.assertIn(expected, str(failure.exception))
+                self.assertNotIn("private sentinel", str(failure.exception))
+                self.assertEqual(
+                    cleanup.call_args.args[0][:3], ["docker", "rm", "--force"]
+                )
+
     def test_duplicate_distribution_and_canonical_alias_reject(self):
         for name in ("openai-agents", "openai_agents", "OpenAI.Agents"):
             distributions = [

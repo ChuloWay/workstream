@@ -284,6 +284,15 @@ permissions, decimal-looking strings, floats and booleans reject. A focused
 regression and a render through the actual hosted Compose release preserve this
 boundary without changing secret access or the release topology.
 
+The image inspection uses `uv --no-cache pip check`: the root filesystem stays
+read-only and temporary verifier state stays in the bounded scratch tmpfs.
+A pinned-uv packaging probe also showed that setuptools leaves source egg-info
+alongside the installed distribution. The release image installs a non-editable
+wheel and removes only its generated build/egg-info intermediates; host build
+intermediates are excluded from the context. Duplicate-distribution rejection
+remains intact. Inspection failures expose only a closed diagnostic category,
+never arbitrary image output.
+
 ## Evidence
 
 Source/configuration candidate checks:
