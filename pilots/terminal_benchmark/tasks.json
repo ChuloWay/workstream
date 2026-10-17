@@ -1,0 +1,63 @@
+{
+  "schema_version": "workstream.task_import.v1",
+  "metadata": {
+    "label": "Original terminal benchmark authoring pilot"
+  },
+  "tasks": [
+    {
+      "external_task_id": "terminal-ledger-reconcile",
+      "title": "Author an exact-decimal ledger repair benchmark",
+      "description": "Create a terminal repair benchmark for a ledger reconciliation tool. Exercise posted credits and debits, duplicate transaction delivery, currency separation and decimal amounts. Supply a broken starter, precise instructions, independent tests and a reference solution under the project guide.",
+      "task_type": "terminal_benchmark_authoring",
+      "skill_tags": [
+        "Python",
+        "testing",
+        "containers"
+      ]
+    },
+    {
+      "external_task_id": "terminal-event-rollup",
+      "title": "Author a UTC event-rollup repair benchmark",
+      "description": "Create a benchmark that repairs daily service metrics over timestamped events. Include timezone offsets crossing midnight, duplicate IDs, error counting and nearest-rank latency percentiles. The guide defines the required package and verification rules.",
+      "task_type": "terminal_benchmark_authoring",
+      "skill_tags": [
+        "Python",
+        "testing",
+        "containers"
+      ]
+    },
+    {
+      "external_task_id": "terminal-atomic-import",
+      "title": "Author a transactional import repair benchmark",
+      "description": "Create a benchmark for an idempotent SQLite inventory importer. The repaired program must preserve committed rows, reject conflicting replays and roll back an entire invalid batch. Tests must inspect stored rows, not just reported success.",
+      "task_type": "terminal_benchmark_authoring",
+      "skill_tags": [
+        "Python",
+        "testing",
+        "containers"
+      ]
+    },
+    {
+      "external_task_id": "terminal-file-inventory",
+      "title": "Author a deterministic file-inventory repair benchmark",
+      "description": "Create a benchmark for a filesystem inventory program. Exercise nested directories, zero-byte files, UTF-8 bytes, deterministic ordering and temporary-file exclusion. All task fixture trees are regular files and directories; arbitrary host filesystem access is outside the project.",
+      "task_type": "terminal_benchmark_authoring",
+      "skill_tags": [
+        "Python",
+        "testing",
+        "containers"
+      ]
+    },
+    {
+      "external_task_id": "terminal-config-overlay",
+      "title": "Author a configuration-overlay repair benchmark",
+      "description": "Create a benchmark for a configuration merger with nested overrides, deletion, list replacement and false-valued options. Specify the semantics precisely and supply tests that discriminate deep merge from shallow update.",
+      "task_type": "terminal_benchmark_authoring",
+      "skill_tags": [
+        "Python",
+        "testing",
+        "containers"
+      ]
+    }
+  ]
+}
