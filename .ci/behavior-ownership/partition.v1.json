@@ -1,2147 +1,2123 @@
 {
-    "assignments": [
-        {
-            "group": "artifacts",
-            "target": "backend/app/adapters/artifacts/internal_workers.py"
-        },
-        {
-            "group": "artifacts",
-            "target": "backend/app/adapters/artifacts/local.py"
-        },
-        {
-            "group": "artifacts",
-            "target": "backend/app/adapters/artifacts/s3_compatible.py"
-        },
-        {
-            "group": "shared",
-            "target": "backend/app/adapters/auth/adapter_bindings.py"
-        },
-        {
-            "group": "shared",
-            "target": "backend/app/adapters/auth/assignment_invalidation_publication.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/adapters/auth/contribution_policies.py"
-        },
-        {
-            "group": "shared",
-            "target": "backend/app/adapters/auth/dev.py"
-        },
-        {
-            "group": "shared",
-            "target": "backend/app/adapters/auth/flow.py"
-        },
-        {
-            "group": "shared",
-            "target": "backend/app/adapters/auth/metrics.py"
-        },
-        {
-            "group": "artifacts",
-            "target": "backend/app/adapters/checkers/external_service.py"
-        },
-        {
-            "group": "shared",
-            "target": "backend/app/adapters/observability.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/adapters/project_agents/openai_agent_sdk.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/adapters/project_agents/openai_workspace.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/adapters/project_agents/provider_resilience.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/adapters/projects/contribution_validation.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/adapters/reviews/contribution_reads.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/adapters/tasks/contribution_reads.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/adapters/tasks/routing_acceptance.py"
-        },
-        {
-            "group": "shared",
-            "target": "backend/app/api/deps/api_controls.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/api/deps/auth.py"
-        },
-        {
-            "group": "shared",
-            "target": "backend/app/api/deps/authorization.py"
-        },
-        {
-            "group": "artifacts",
-            "target": "backend/app/api/deps/checker_recovery.py"
-        },
-        {
-            "group": "artifacts",
-            "target": "backend/app/api/deps/checker_registry.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/api/deps/contribution_exports.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/api/deps/contribution_policies.py"
-        },
-        {
-            "group": "shared",
-            "target": "backend/app/api/deps/contributor_reads.py"
-        },
-        {
-            "group": "shared",
-            "target": "backend/app/api/deps/guide_activation.py"
-        },
-        {
-            "group": "shared",
-            "target": "backend/app/api/deps/guide_proposal_http.py"
-        },
-        {
-            "group": "shared",
-            "target": "backend/app/api/deps/guide_proposals.py"
-        },
-        {
-            "group": "shared",
-            "target": "backend/app/api/deps/history.py"
-        },
-        {
-            "group": "shared",
-            "target": "backend/app/api/deps/post_policy.py"
-        },
-        {
-            "group": "shared",
-            "target": "backend/app/api/deps/rate_controls.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/api/deps/task_batch_transitions.py"
-        },
-        {
-            "group": "shared",
-            "target": "backend/app/api/router.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/api/routes/artifact_submissions.py"
-        },
-        {
-            "group": "artifacts",
-            "target": "backend/app/api/routes/artifact_task_import_sources.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/api/routes/auth.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/api/routes/contribution_policies.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/api/routes/contributions.py"
-        },
-        {
-            "group": "shared",
-            "target": "backend/app/api/routes/contributor_reads.py"
-        },
-        {
-            "group": "shared",
-            "target": "backend/app/api/routes/guide_activation.py"
-        },
-        {
-            "group": "shared",
-            "target": "backend/app/api/routes/guide_proposals.py"
-        },
-        {
-            "group": "shared",
-            "target": "backend/app/api/routes/health.py"
-        },
-        {
-            "group": "shared",
-            "target": "backend/app/api/routes/post_policy.py"
-        },
-        {
-            "group": "shared",
-            "target": "backend/app/core/api_controls.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/core/auth.py"
-        },
-        {
-            "group": "shared",
-            "target": "backend/app/core/cancellation.py"
-        },
-        {
-            "group": "shared",
-            "target": "backend/app/core/celery_observability.py"
-        },
-        {
-            "group": "shared",
-            "target": "backend/app/core/config.py"
-        },
-        {
-            "group": "shared",
-            "target": "backend/app/core/diagnostic_logging.py"
-        },
-        {
-            "group": "shared",
-            "target": "backend/app/core/file_locks.py"
-        },
-        {
-            "group": "shared",
-            "target": "backend/app/core/hashing.py"
-        },
-        {
-            "group": "shared",
-            "target": "backend/app/core/identifiers.py"
-        },
-        {
-            "group": "shared",
-            "target": "backend/app/core/observability.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/core/project_agents.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/core/project_guide_instructions.py"
-        },
-        {
-            "group": "shared",
-            "target": "backend/app/core/s3_validation.py"
-        },
-        {
-            "group": "shared",
-            "target": "backend/app/db/base.py"
-        },
-        {
-            "group": "shared",
-            "target": "backend/app/db/errors.py"
-        },
-        {
-            "group": "shared",
-            "target": "backend/app/db/models.py"
-        },
-        {
-            "group": "shared",
-            "target": "backend/app/db/session.py"
-        },
-        {
-            "group": "shared",
-            "target": "backend/app/interfaces/artifact_operations.py"
-        },
-        {
-            "group": "shared",
-            "target": "backend/app/interfaces/artifacts.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/interfaces/auth.py"
-        },
-        {
-            "group": "artifacts",
-            "target": "backend/app/interfaces/external_checker_execution.py"
-        },
-        {
-            "group": "artifacts",
-            "target": "backend/app/interfaces/external_services.py"
-        },
-        {
-            "group": "shared",
-            "target": "backend/app/interfaces/observability.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/interfaces/project_agents.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/interfaces/project_guide_runtime.py"
-        },
-        {
-            "group": "shared",
-            "target": "backend/app/main.py"
-        },
-        {
-            "group": "shared",
-            "target": "backend/app/modules/actors/api/compensation_adapter.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/actors/api/contribution_labels.py"
-        },
-        {
-            "group": "shared",
-            "target": "backend/app/modules/actors/api/service_identities.py"
-        },
-        {
-            "group": "shared",
-            "target": "backend/app/modules/actors/compensation_adapter.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/actors/contribution_labels.py"
-        },
-        {
-            "group": "shared",
-            "target": "backend/app/modules/actors/legacy_classification.py"
-        },
-        {
-            "group": "shared",
-            "target": "backend/app/modules/actors/models.py"
-        },
-        {
-            "group": "shared",
-            "target": "backend/app/modules/actors/repository.py"
-        },
-        {
-            "group": "shared",
-            "target": "backend/app/modules/actors/schemas.py"
-        },
-        {
-            "group": "shared",
-            "target": "backend/app/modules/actors/service.py"
-        },
-        {
-            "group": "shared",
-            "target": "backend/app/modules/api_controls/models.py"
-        },
-        {
-            "group": "shared",
-            "target": "backend/app/modules/api_controls/repository.py"
-        },
-        {
-            "group": "shared",
-            "target": "backend/app/modules/api_controls/service.py"
-        },
-        {
-            "group": "artifacts",
-            "target": "backend/app/modules/artifacts/api/review_packet.py"
-        },
-        {
-            "group": "artifacts",
-            "target": "backend/app/modules/artifacts/api/submission_admission.py"
-        },
-        {
-            "group": "artifacts",
-            "target": "backend/app/modules/artifacts/api/submission_preparation.py"
-        },
-        {
-            "group": "artifacts",
-            "target": "backend/app/modules/artifacts/api/task_import_source.py"
-        },
-        {
-            "group": "artifacts",
-            "target": "backend/app/modules/artifacts/authorization.py"
-        },
-        {
-            "group": "artifacts",
-            "target": "backend/app/modules/artifacts/checker_output_bindings.py"
-        },
-        {
-            "group": "artifacts",
-            "target": "backend/app/modules/artifacts/checker_output_custody.py"
-        },
-        {
-            "group": "artifacts",
-            "target": "backend/app/modules/artifacts/checker_outputs.py"
-        },
-        {
-            "group": "artifacts",
-            "target": "backend/app/modules/artifacts/guide_document_access.py"
-        },
-        {
-            "group": "artifacts",
-            "target": "backend/app/modules/artifacts/guide_documents.py"
-        },
-        {
-            "group": "artifacts",
-            "target": "backend/app/modules/artifacts/guide_formats.py"
-        },
-        {
-            "group": "artifacts",
-            "target": "backend/app/modules/artifacts/metrics.py"
-        },
-        {
-            "group": "artifacts",
-            "target": "backend/app/modules/artifacts/models.py"
-        },
-        {
-            "group": "artifacts",
-            "target": "backend/app/modules/artifacts/operator.py"
-        },
-        {
-            "group": "artifacts",
-            "target": "backend/app/modules/artifacts/post_submit_materialization.py"
-        },
-        {
-            "group": "artifacts",
-            "target": "backend/app/modules/artifacts/post_submit_selection.py"
-        },
-        {
-            "group": "artifacts",
-            "target": "backend/app/modules/artifacts/preparation.py"
-        },
-        {
-            "group": "artifacts",
-            "target": "backend/app/modules/artifacts/preparation_reads.py"
-        },
-        {
-            "group": "artifacts",
-            "target": "backend/app/modules/artifacts/repository.py"
-        },
-        {
-            "group": "artifacts",
-            "target": "backend/app/modules/artifacts/router.py"
-        },
-        {
-            "group": "artifacts",
-            "target": "backend/app/modules/artifacts/schemas.py"
-        },
-        {
-            "group": "artifacts",
-            "target": "backend/app/modules/artifacts/selected_pre_submit_admission.py"
-        },
-        {
-            "group": "artifacts",
-            "target": "backend/app/modules/artifacts/selected_pre_submit_execution.py"
-        },
-        {
-            "group": "artifacts",
-            "target": "backend/app/modules/artifacts/service.py"
-        },
-        {
-            "group": "artifacts",
-            "target": "backend/app/modules/artifacts/sources.py"
-        },
-        {
-            "group": "artifacts",
-            "target": "backend/app/modules/artifacts/submission_admission.py"
-        },
-        {
-            "group": "artifacts",
-            "target": "backend/app/modules/artifacts/submission_archive.py"
-        },
-        {
-            "group": "artifacts",
-            "target": "backend/app/modules/artifacts/submission_authorization.py"
-        },
-        {
-            "group": "artifacts",
-            "target": "backend/app/modules/artifacts/submission_bindings.py"
-        },
-        {
-            "group": "artifacts",
-            "target": "backend/app/modules/artifacts/submission_custody.py"
-        },
-        {
-            "group": "artifacts",
-            "target": "backend/app/modules/artifacts/submission_manifest.py"
-        },
-        {
-            "group": "artifacts",
-            "target": "backend/app/modules/artifacts/submission_materialization.py"
-        },
-        {
-            "group": "artifacts",
-            "target": "backend/app/modules/artifacts/task_guide_documents.py"
-        },
-        {
-            "group": "artifacts",
-            "target": "backend/app/modules/artifacts/task_import_sources.py"
-        },
-        {
-            "group": "artifacts",
-            "target": "backend/app/modules/artifacts/zip_safety.py"
-        },
-        {
-            "group": "shared",
-            "target": "backend/app/modules/audit/api.py"
-        },
-        {
-            "group": "shared",
-            "target": "backend/app/modules/audit/invalidation.py"
-        },
-        {
-            "group": "shared",
-            "target": "backend/app/modules/audit/repository.py"
-        },
-        {
-            "group": "shared",
-            "target": "backend/app/modules/audit/schemas.py"
-        },
-        {
-            "group": "shared",
-            "target": "backend/app/modules/audit/service.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/acceptance_source_contracts.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/adapter_binding_authorization.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/admin_schemas.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/admin_service.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/api/acceptance_source.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/api/action_ids.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/api/adapter_bindings.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/api/assignment_invalidation.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/api/contribution_policies.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/api/contributor_reads.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/api/decisions.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/api/errors.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/api/facts.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/api/guide_proposal_review.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/api/outbox_dispatch.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/api/ports.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/api/post_policy.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/api/project_guide_compilation.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/api/project_guide_projections.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/api/project_setup_finalization.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/api/task_queues.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/artifact_project_authority.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/assignment_invalidation_authorization.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/catalogue.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/catalogue.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/catalogue.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/checker_registry_authorization.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/checker_retry_authorization.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/checker_retry_read.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/contribution_policy_authorization.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/contribution_read.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/contributor_read.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/domain/action_groups.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/domain/adapter_bindings.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/domain/artifact_storage.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/domain/assignment_invalidation.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/domain/audit.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/domain/audit_targets.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/domain/checker_registry.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/domain/checker_retry.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/domain/checker_retry_reads.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/domain/contribution_policies.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/domain/contribution_reads.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/domain/contributor_reads.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/domain/guide_activation.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/domain/guide_compilation.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/domain/guide_compilation_projections.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/domain/guide_manager_resources.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/domain/guide_mutations.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/domain/guide_proposals.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/domain/lifecycle.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/domain/outbox_dispatch.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/domain/post_policy.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/domain/post_submit.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/domain/post_submit_routing.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/domain/pre_submit.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/domain/prepared_adapter_bindings.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/domain/prepared_compilation.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/domain/prepared_contribution_policies.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/domain/prepared_guide_mutations.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/domain/prepared_service.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/domain/prepared_submission_policy.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/domain/project_create.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/domain/project_reads.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/domain/project_setup_finalization.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/domain/read_dispatch.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/domain/read_dispatch.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/domain/read_dispatch.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/domain/resource_digest.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/domain/revision_expiry.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/domain/revision_recovery.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/domain/submission_history.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/domain/task_authority.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/domain/task_queues.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/fixed_service_revalidation.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/guide_activation_authorization.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/guide_compilation.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/guide_compilation_projections.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/guide_proposal_authorization.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/history_authorization.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/kernel.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/lifecycle_authorization.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/lifecycle_schemas.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/lifecycle_service.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/models.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/outbox_dispatch_authorization.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/pagination.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/policy.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/post_policy_authorization.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/post_submit_authorization.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/post_submit_routing_authorization.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/pre_submit_authorization.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/pre_submit_materialization.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/prepared.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/prepared_admin_authority.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/prepared_checker_retry_replay.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/prepared_lifecycle_replay.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/prepared_post_submit_replay.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/prepared_projection_replay.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/prepared_proposal_replay.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/prepared_routing_replay.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/prepared_submission_replay.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/project_role_schemas.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/project_role_service.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/project_setup_finalization.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/read_service.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/repository.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/review_contracts.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/revision_expiry_authorization.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/revision_recovery_authorization.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/router.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/runtime.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/runtime.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/runtime.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/schemas.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/service.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/service_actor_schemas.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/service_actor_service.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/submission_consumption.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/submission_creation_authorization.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/submission_preparation.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/task_authorization.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/task_import_sources.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/modules/authorization/task_queue_read.py"
-        },
-        {
-            "group": "artifacts",
-            "target": "backend/app/modules/checkers/api/artifact_paths.py"
-        },
-        {
-            "group": "artifacts",
-            "target": "backend/app/modules/checkers/api/canonical_values.py"
-        },
-        {
-            "group": "artifacts",
-            "target": "backend/app/modules/checkers/api/default_checker.py"
-        },
-        {
-            "group": "artifacts",
-            "target": "backend/app/modules/checkers/api/evaluation_contract.py"
-        },
-        {
-            "group": "artifacts",
-            "target": "backend/app/modules/checkers/api/execution.py"
-        },
-        {
-            "group": "artifacts",
-            "target": "backend/app/modules/checkers/api/external.py"
-        },
-        {
-            "group": "artifacts",
-            "target": "backend/app/modules/checkers/api/external_policy.py"
-        },
-        {
-            "group": "artifacts",
-            "target": "backend/app/modules/checkers/api/history.py"
-        },
-        {
-            "group": "artifacts",
-            "target": "backend/app/modules/checkers/api/material.py"
-        },
-        {
-            "group": "artifacts",
-            "target": "backend/app/modules/checkers/api/materialization.py"
-        },
-        {
-            "group": "artifacts",
-            "target": "backend/app/modules/checkers/api/output_custody.py"
-        },
-        {
-            "group": "artifacts",
-            "target": "backend/app/modules/checkers/api/policy_custody.py"
-        },
-        {
-            "group": "artifacts",
-            "target": "backend/app/modules/checkers/api/pre_submit_material.py"
-        },
-        {
-            "group": "artifacts",
-            "target": "backend/app/modules/checkers/api/selected_post_submit.py"
-        },
-        {
-            "group": "artifacts",
-            "target": "backend/app/modules/checkers/api/selected_pre_submit.py"
-        },
-        {
-            "group": "artifacts",
-            "target": "backend/app/modules/checkers/checker_retry.py"
-        },
-        {
-            "group": "artifacts",
-            "target": "backend/app/modules/checkers/default_checker.py"
-        },
-        {
-            "group": "artifacts",
-            "target": "backend/app/modules/checkers/delivery_authority.py"
-        },
-        {
-            "group": "artifacts",
-            "target": "backend/app/modules/checkers/execution.py"
-        },
-        {
-            "group": "artifacts",
-            "target": "backend/app/modules/checkers/execution_coordination.py"
-        },
-        {
-            "group": "artifacts",
-            "target": "backend/app/modules/checkers/execution_repository.py"
-        },
-        {
-            "group": "artifacts",
-            "target": "backend/app/modules/checkers/execution_results.py"
-        },
-        {
-            "group": "artifacts",
-            "target": "backend/app/modules/checkers/external_registry.py"
-        },
-        {
-            "group": "artifacts",
-            "target": "backend/app/modules/checkers/history.py"
-        },
-        {
-            "group": "artifacts",
-            "target": "backend/app/modules/checkers/models.py"
-        },
-        {
-            "group": "artifacts",
-            "target": "backend/app/modules/checkers/pre_submit_defaults.py"
-        },
-        {
-            "group": "artifacts",
-            "target": "backend/app/modules/checkers/router.py"
-        },
-        {
-            "group": "artifacts",
-            "target": "backend/app/modules/checkers/selected_post_submit_execution.py"
-        },
-        {
-            "group": "artifacts",
-            "target": "backend/app/modules/checkers/selected_pre_submit_coordination.py"
-        },
-        {
-            "group": "artifacts",
-            "target": "backend/app/modules/checkers/selected_pre_submit_execution.py"
-        },
-        {
-            "group": "artifacts",
-            "target": "backend/app/modules/checkers/selected_pre_submit_reads.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/compensation/api/adapter_bindings.py"
-        },
-        {
-            "group": "shared",
-            "target": "backend/app/modules/compensation/api/award_reads.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/compensation/api/awards.py"
-        },
-        {
-            "group": "shared",
-            "target": "backend/app/modules/compensation/api/instruments.py"
-        },
-        {
-            "group": "shared",
-            "target": "backend/app/modules/compensation/api/policy_bindings.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/compensation/awards/models.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/compensation/awards/participant.py"
-        },
-        {
-            "group": "shared",
-            "target": "backend/app/modules/compensation/awards/read_repository.py"
-        },
-        {
-            "group": "shared",
-            "target": "backend/app/modules/compensation/models.py"
-        },
-        {
-            "group": "shared",
-            "target": "backend/app/modules/compensation/policy_binding_service.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/compensation/repository.py"
-        },
-        {
-            "group": "shared",
-            "target": "backend/app/modules/compensation/schemas.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/compensation/service.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/contributions/api/participation.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/contributions/api/policies.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/contributions/api/policy_http.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/contributions/api/published_selection.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/contributions/api/records.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/contributions/api/source_reads.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/contributions/api/validation.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/contributions/models.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/contributions/policy_eligibility.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/contributions/policy_graph.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/contributions/policy_mutation_support.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/contributions/policy_publication.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/contributions/policy_validation.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/contributions/records/csv.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/contributions/records/models.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/contributions/records/pagination.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/contributions/records/participant.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/contributions/records/read_facts.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/contributions/records/read_repository.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/contributions/records/read_service.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/contributions/records/repository.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/contributions/records/schemas.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/contributions/repository.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/contributions/schemas.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/contributions/selected_policy_validation.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/contributions/service.py"
-        },
-        {
-            "group": "shared",
-            "target": "backend/app/modules/outbox/api.py"
-        },
-        {
-            "group": "shared",
-            "target": "backend/app/modules/outbox/delivery.py"
-        },
-        {
-            "group": "shared",
-            "target": "backend/app/modules/outbox/delivery_repository.py"
-        },
-        {
-            "group": "shared",
-            "target": "backend/app/modules/outbox/models.py"
-        },
-        {
-            "group": "shared",
-            "target": "backend/app/modules/outbox/registry.py"
-        },
-        {
-            "group": "shared",
-            "target": "backend/app/modules/outbox/repository.py"
-        },
-        {
-            "group": "shared",
-            "target": "backend/app/modules/outbox/service.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/projects/api/compensation_binding.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/projects/api/compilation_identity.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/projects/api/contribution_policy.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/projects/api/guide_activation.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/projects/api/guide_activation_context.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/projects/api/guide_compilation.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/projects/api/guide_compilation_projections.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/projects/api/guide_documents.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/projects/api/guide_proposal_package.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/projects/api/guide_proposals.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/projects/api/locked_policy.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/projects/api/policy_lineage.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/projects/api/post_policy.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/projects/api/project_summaries.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/projects/api/setup_identity.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/projects/api/task_examples.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/projects/authorization_reads.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/projects/compensation_binding.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/projects/contribution_policy.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/projects/create_repository.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/projects/create_router.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/projects/create_service.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/projects/document_upload.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/projects/guide_activation/custody.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/projects/guide_activation/service.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/projects/guide_compilation/approval_custody.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/projects/guide_compilation/context.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/projects/guide_compilation/contracts.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/projects/guide_compilation/correction_dispatch.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/projects/guide_compilation/correction_feedback.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/projects/guide_compilation/correction_request.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/projects/guide_compilation/custody_payloads.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/projects/guide_compilation/delivery_request.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/projects/guide_compilation/diagnostics.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/projects/guide_compilation/document_scope.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/projects/guide_compilation/finalization.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/projects/guide_compilation/finalization_payloads.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/projects/guide_compilation/live.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/projects/guide_compilation/models.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/projects/guide_compilation/orchestrator.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/projects/guide_compilation/projection_payloads.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/projects/guide_compilation/projections.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/projects/guide_compilation/proposal_approval.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/projects/guide_compilation/proposal_authority.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/projects/guide_compilation/proposal_correction.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/projects/guide_compilation/proposal_repository.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/projects/guide_compilation/proposal_service.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/projects/guide_compilation/repository.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/projects/guide_compilation/request_inputs.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/projects/guide_compilation/runtime_resources.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/projects/guide_compilation/service.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/projects/guide_compilation/source_state.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/projects/guide_compilation/validation.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/projects/guide_mutation_repository.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/projects/guide_mutation_router.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/projects/guide_mutation_service.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/projects/guide_setup_continuation.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/projects/locked_policy_projection.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/projects/locked_policy_repository.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/projects/models.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/projects/policy_mutation_replay_repository.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/projects/policy_mutation_router.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/projects/policy_mutation_service.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/projects/post_policy/compiler.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/projects/post_policy/correction.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/projects/post_policy/custody.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/projects/post_policy/delivery.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/projects/post_policy/models.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/projects/post_policy/queue.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/projects/post_policy/repository.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/projects/post_policy/service.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/projects/project_summaries.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/projects/repository.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/projects/router.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/projects/schemas.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/projects/service.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/projects/setup_queue.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/projects/submission_policy_mutation_repository.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/projects/submission_policy_mutation_service.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/projects/sufficiency_mutation_repository.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/projects/sufficiency_mutation_service.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/reviews/acceptance/models.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/reviews/acceptance/participant.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/reviews/acceptance/read_repository.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/reviews/acceptance/repository.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/reviews/api/acceptance.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/reviews/api/acceptance_reads.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/reviews/api/lifecycle.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/reviews/decision/models.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/reviews/decision/schemas.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/reviews/lifecycle/fence.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/reviews/lifecycle/models.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/reviews/lifecycle/service.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/reviews/models.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/reviews/packet/models.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/reviews/packet/repository.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/reviews/packet/schemas.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/reviews/repository.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/reviews/schemas.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/tasks/accepted_effects.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/tasks/api/accepted_effects.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/tasks/api/assignment_invalidation.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/tasks/api/assignment_outcome.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/tasks/api/audit_evidence.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/tasks/api/authorization.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/tasks/api/contribution_evidence.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/tasks/api/contributor_reads.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/tasks/api/guide_documents.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/tasks/api/management_queue.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/tasks/api/post_submit_routing.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/tasks/api/ready_queue.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/tasks/api/revision.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/tasks/api/revision_exhaustion.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/tasks/api/revision_expiry.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/tasks/api/revision_recovery.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/tasks/api/routing_outcome.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/tasks/api/submission_command.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/tasks/api/submission_context.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/tasks/api/submission_history.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/tasks/api/submitted_bundle.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/tasks/api/task_batch_transition.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/tasks/api/task_detail.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/tasks/api/task_import.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/tasks/api/task_import_membership.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/tasks/api/transition_audit.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/tasks/assignment_invalidation.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/tasks/authorized_commands.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/tasks/command_replay.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/tasks/contribution_evidence.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/tasks/contributor_reads.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/tasks/evaluation_completion_delivery.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/tasks/evaluation_delivery.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/tasks/lifecycle.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/tasks/models.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/tasks/post_submit_routing/evaluation_guard.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/tasks/post_submit_routing/models.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/tasks/post_submit_routing/outcome.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/tasks/post_submit_routing/ports.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/tasks/post_submit_routing/requests.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/tasks/post_submit_routing/source.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/tasks/post_submit_routing/terminal_replay.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/tasks/queue_router.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/tasks/repository.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/tasks/revision/blocked_notice.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/tasks/revision/exhausted_notice.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/tasks/revision/exhaustion.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/tasks/revision/exhaustion_event.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/tasks/revision/exhaustion_recovery.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/tasks/revision/expired_notice.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/tasks/revision/expiry.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/tasks/revision/expiry_event.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/tasks/revision/models.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/tasks/revision/recovery.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/tasks/revision/recovery_scan.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/tasks/revision/service.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/tasks/revision/terminal_read.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/tasks/router.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/tasks/schemas.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/tasks/service.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/tasks/submission_attempts.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/tasks/submission_composition.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/tasks/submission_context.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/tasks/submission_dispatch.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/tasks/submission_history.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/tasks/submission_participants.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/tasks/submission_replay.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/tasks/submitted_bundle.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/tasks/task_batch_transition/models.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/tasks/task_batch_transition_router.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/tasks/task_batch_transitions.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/tasks/task_import_batches.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/modules/tasks/task_import_membership.py"
-        },
-        {
-            "group": "auth",
-            "target": "backend/app/schemas/auth.py"
-        },
-        {
-            "group": "shared",
-            "target": "backend/app/schemas/health.py"
-        },
-        {
-            "group": "shared",
-            "target": "backend/app/workers/artifacts.py"
-        },
-        {
-            "group": "shared",
-            "target": "backend/app/workers/async_runner.py"
-        },
-        {
-            "group": "shared",
-            "target": "backend/app/workers/celery_app.py"
-        },
-        {
-            "group": "shared",
-            "target": "backend/app/workers/errors.py"
-        },
-        {
-            "group": "shared",
-            "target": "backend/app/workers/outbox.py"
-        },
-        {
-            "group": "shared",
-            "target": "backend/app/workers/outbox_topology.py"
-        },
-        {
-            "group": "shared",
-            "target": "backend/app/workers/post_policy.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/workers/project_setup.py"
-        },
-        {
-            "group": "shared",
-            "target": "backend/app/workers/revision_recovery.py"
-        },
-        {
-            "group": "lifecycle",
-            "target": "backend/app/workers/task_settings.py"
-        },
-        {
-            "group": "shared",
-            "target": "backend/scripts/admin_api_drill.py"
-        },
-        {
-            "group": "shared",
-            "target": "backend/scripts/admin_guard_probe.py"
-        },
-        {
-            "group": "shared",
-            "target": "backend/scripts/api_contract_e2e.py"
-        },
-        {
-            "group": "shared",
-            "target": "backend/scripts/authorization_boundary.py"
-        },
-        {
-            "group": "shared",
-            "target": "backend/scripts/behavior_ownership.py"
-        },
-        {
-            "group": "shared",
-            "target": "backend/scripts/bootstrap_access_administrator.py"
-        },
-        {
-            "group": "shared",
-            "target": "backend/scripts/coverage_policy.py"
-        },
-        {
-            "group": "shared",
-            "target": "backend/scripts/ensure_local_minio_bucket.py"
-        },
-        {
-            "group": "shared",
-            "target": "backend/scripts/external_api_drill.py"
-        },
-        {
-            "group": "shared",
-            "target": "backend/scripts/guide_compilation_e2e.py"
-        },
-        {
-            "group": "shared",
-            "target": "backend/scripts/guide_document_api_drill.py"
-        },
-        {
-            "group": "shared",
-            "target": "backend/scripts/identifier_inventory.py"
-        },
-        {
-            "group": "shared",
-            "target": "backend/scripts/issue_local_flow_token.py"
-        },
-        {
-            "group": "shared",
-            "target": "backend/scripts/legacy_actor_classification.py"
-        },
-        {
-            "group": "shared",
-            "target": "backend/scripts/local_flow_tokens.py"
-        },
-        {
-            "group": "shared",
-            "target": "backend/scripts/merge_test_lane_evidence.py"
-        },
-        {
-            "group": "shared",
-            "target": "backend/scripts/module_boundaries.py"
-        },
-        {
-            "group": "shared",
-            "target": "backend/scripts/mutation_policy.py"
-        },
-        {
-            "group": "shared",
-            "target": "backend/scripts/record_id_collection.py"
-        },
-        {
-            "group": "shared",
-            "target": "backend/scripts/run_isolated_tests.py"
-        },
-        {
-            "group": "shared",
-            "target": "backend/scripts/run_test_lanes.py"
-        },
-        {
-            "group": "shared",
-            "target": "backend/scripts/schema_baseline_manifest.py"
-        },
-        {
-            "group": "shared",
-            "target": "backend/scripts/schema_baseline_sql.py"
-        },
-        {
-            "group": "shared",
-            "target": "backend/scripts/select_ci_scope.py"
-        },
-        {
-            "group": "shared",
-            "target": "backend/scripts/test_lane_catalogue.py"
-        },
-        {
-            "group": "shared",
-            "target": "backend/scripts/test_structure_boundary.py"
-        },
-        {
-            "group": "shared",
-            "target": "backend/scripts/validate_test_lane_evidence.py"
-        }
-    ],
-    "authority_digest": "891852bda26d756ed2a77d317dec01711b032d3ccc3ea03dc70f74b0fb6973d4",
-    "protected_base_commit": "7676ce4347db0c9694962a9b587a20765e16eac6",
-    "schema": "workstream.behavior-ownership-partition.v1"
+  "assignments": [
+    {
+      "group": "artifacts",
+      "target": "backend/app/adapters/artifacts/internal_workers.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/adapters/artifacts/local.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/adapters/artifacts/s3_compatible.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/app/adapters/auth/adapter_bindings.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/app/adapters/auth/assignment_invalidation_publication.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/adapters/auth/contribution_policies.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/app/adapters/auth/dev.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/app/adapters/auth/flow.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/app/adapters/auth/metrics.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/adapters/checkers/external_service.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/app/adapters/observability.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/adapters/project_agents/openai_agent_sdk.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/adapters/project_agents/openai_workspace.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/adapters/project_agents/provider_resilience.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/adapters/projects/contribution_validation.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/adapters/reviews/contribution_reads.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/adapters/tasks/contribution_reads.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/adapters/tasks/routing_acceptance.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/app/api/deps/api_controls.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/api/deps/auth.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/app/api/deps/authorization.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/api/deps/checker_recovery.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/api/deps/checker_registry.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/api/deps/contribution_exports.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/api/deps/contribution_policies.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/app/api/deps/contributor_reads.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/app/api/deps/guide_activation.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/app/api/deps/guide_proposal_http.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/app/api/deps/guide_proposals.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/app/api/deps/history.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/app/api/deps/post_policy.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/app/api/deps/rate_controls.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/api/deps/task_batch_transitions.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/app/api/router.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/api/routes/artifact_submissions.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/api/routes/artifact_task_import_sources.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/api/routes/auth.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/api/routes/contribution_policies.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/api/routes/contributions.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/app/api/routes/contributor_reads.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/app/api/routes/guide_activation.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/app/api/routes/guide_proposals.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/app/api/routes/health.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/app/api/routes/post_policy.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/app/core/api_controls.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/core/auth.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/app/core/cancellation.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/app/core/celery_observability.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/app/core/config.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/app/core/diagnostic_logging.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/app/core/file_locks.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/app/core/hashing.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/app/core/identifiers.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/app/core/observability.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/core/project_agents.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/core/project_guide_instructions.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/app/core/s3_validation.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/app/db/base.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/app/db/errors.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/app/db/models.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/app/db/session.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/app/interfaces/artifact_operations.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/app/interfaces/artifacts.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/interfaces/auth.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/interfaces/external_checker_execution.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/interfaces/external_services.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/app/interfaces/observability.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/interfaces/project_agents.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/interfaces/project_guide_runtime.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/app/main.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/app/modules/actors/api/compensation_adapter.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/actors/api/contribution_labels.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/app/modules/actors/api/service_identities.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/app/modules/actors/compensation_adapter.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/actors/contribution_labels.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/app/modules/actors/legacy_classification.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/app/modules/actors/models.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/app/modules/actors/repository.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/app/modules/actors/schemas.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/app/modules/actors/service.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/app/modules/api_controls/models.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/app/modules/api_controls/repository.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/app/modules/api_controls/service.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/modules/artifacts/api/review_packet.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/modules/artifacts/api/submission_admission.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/modules/artifacts/api/submission_preparation.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/modules/artifacts/api/task_import_source.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/modules/artifacts/authorization.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/modules/artifacts/checker_output_bindings.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/modules/artifacts/checker_output_custody.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/modules/artifacts/checker_outputs.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/modules/artifacts/guide_document_access.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/modules/artifacts/guide_documents.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/modules/artifacts/guide_formats.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/modules/artifacts/metrics.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/modules/artifacts/models.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/modules/artifacts/operator.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/modules/artifacts/post_submit_materialization.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/modules/artifacts/post_submit_selection.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/modules/artifacts/preparation.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/modules/artifacts/preparation_reads.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/modules/artifacts/repository.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/modules/artifacts/router.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/modules/artifacts/schemas.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/modules/artifacts/selected_pre_submit_admission.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/modules/artifacts/selected_pre_submit_execution.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/modules/artifacts/service.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/modules/artifacts/sources.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/modules/artifacts/submission_admission.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/modules/artifacts/submission_archive.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/modules/artifacts/submission_authorization.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/modules/artifacts/submission_bindings.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/modules/artifacts/submission_custody.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/modules/artifacts/submission_manifest.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/modules/artifacts/submission_materialization.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/modules/artifacts/task_guide_documents.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/modules/artifacts/task_import_sources.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/modules/artifacts/zip_safety.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/app/modules/audit/api.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/app/modules/audit/invalidation.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/app/modules/audit/repository.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/app/modules/audit/schemas.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/app/modules/audit/service.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/acceptance_source_contracts.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/adapter_binding_authorization.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/admin_schemas.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/admin_service.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/api/acceptance_source.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/api/action_ids.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/api/adapter_bindings.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/api/assignment_invalidation.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/api/contribution_policies.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/api/contributor_reads.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/api/decisions.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/api/errors.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/api/facts.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/api/guide_proposal_review.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/api/outbox_dispatch.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/api/ports.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/api/post_policy.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/api/project_guide_compilation.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/api/project_guide_projections.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/api/project_setup_finalization.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/api/task_queues.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/artifact_project_authority.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/assignment_invalidation_authorization.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/catalogue.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/checker_registry_authorization.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/checker_retry_authorization.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/checker_retry_read.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/contribution_policy_authorization.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/contribution_read.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/contributor_read.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/domain/action_groups.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/domain/adapter_bindings.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/domain/artifact_storage.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/domain/assignment_invalidation.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/domain/audit.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/domain/audit_targets.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/domain/checker_registry.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/domain/checker_retry.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/domain/checker_retry_reads.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/domain/contribution_policies.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/domain/contribution_reads.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/domain/contributor_reads.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/domain/guide_activation.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/domain/guide_compilation.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/domain/guide_compilation_projections.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/domain/guide_manager_resources.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/domain/guide_mutations.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/domain/guide_proposals.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/domain/lifecycle.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/domain/outbox_dispatch.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/domain/post_policy.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/domain/post_submit.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/domain/post_submit_routing.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/domain/pre_submit.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/domain/prepared_adapter_bindings.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/domain/prepared_compilation.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/domain/prepared_contribution_policies.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/domain/prepared_guide_mutations.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/domain/prepared_service.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/domain/prepared_submission_policy.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/domain/project_create.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/domain/project_reads.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/domain/project_setup_finalization.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/domain/read_dispatch.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/domain/resource_digest.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/domain/revision_expiry.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/domain/revision_recovery.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/domain/submission_history.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/domain/task_authority.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/domain/task_queues.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/fixed_service_revalidation.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/guide_activation_authorization.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/guide_compilation.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/guide_compilation_projections.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/guide_proposal_authorization.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/history_authorization.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/kernel.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/lifecycle_authorization.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/lifecycle_schemas.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/lifecycle_service.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/models.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/outbox_dispatch_authorization.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/pagination.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/policy.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/post_policy_authorization.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/post_submit_authorization.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/post_submit_routing_authorization.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/pre_submit_authorization.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/pre_submit_materialization.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/prepared.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/prepared_admin_authority.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/prepared_checker_retry_replay.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/prepared_lifecycle_replay.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/prepared_post_submit_replay.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/prepared_projection_replay.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/prepared_proposal_replay.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/prepared_routing_replay.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/prepared_submission_replay.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/project_role_schemas.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/project_role_service.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/project_setup_finalization.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/read_service.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/repository.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/review_contracts.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/revision_expiry_authorization.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/revision_recovery_authorization.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/router.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/runtime.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/schemas.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/service.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/service_actor_schemas.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/service_actor_service.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/submission_consumption.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/submission_creation_authorization.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/submission_preparation.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/task_authorization.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/task_import_sources.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/task_queue_read.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/modules/checkers/api/artifact_paths.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/modules/checkers/api/canonical_values.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/modules/checkers/api/default_checker.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/modules/checkers/api/evaluation_contract.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/modules/checkers/api/execution.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/modules/checkers/api/external.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/modules/checkers/api/external_policy.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/modules/checkers/api/history.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/modules/checkers/api/material.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/modules/checkers/api/materialization.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/modules/checkers/api/output_custody.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/modules/checkers/api/policy_custody.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/modules/checkers/api/pre_submit_material.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/modules/checkers/api/selected_post_submit.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/modules/checkers/api/selected_pre_submit.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/modules/checkers/checker_retry.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/modules/checkers/default_checker.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/modules/checkers/delivery_authority.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/modules/checkers/execution.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/modules/checkers/execution_coordination.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/modules/checkers/execution_repository.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/modules/checkers/execution_results.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/modules/checkers/external_registry.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/modules/checkers/history.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/modules/checkers/models.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/modules/checkers/pre_submit_defaults.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/modules/checkers/router.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/modules/checkers/selected_post_submit_execution.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/modules/checkers/selected_pre_submit_coordination.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/modules/checkers/selected_pre_submit_execution.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/modules/checkers/selected_pre_submit_reads.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/compensation/api/adapter_bindings.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/app/modules/compensation/api/award_reads.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/compensation/api/awards.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/app/modules/compensation/api/instruments.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/app/modules/compensation/api/policy_bindings.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/compensation/awards/models.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/compensation/awards/participant.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/app/modules/compensation/awards/read_repository.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/app/modules/compensation/models.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/app/modules/compensation/policy_binding_service.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/compensation/repository.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/app/modules/compensation/schemas.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/compensation/service.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/contributions/api/participation.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/contributions/api/policies.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/contributions/api/policy_http.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/contributions/api/published_selection.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/contributions/api/records.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/contributions/api/source_reads.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/contributions/api/validation.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/contributions/models.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/contributions/policy_eligibility.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/contributions/policy_graph.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/contributions/policy_mutation_support.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/contributions/policy_publication.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/contributions/policy_validation.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/contributions/records/csv.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/contributions/records/models.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/contributions/records/pagination.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/contributions/records/participant.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/contributions/records/read_facts.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/contributions/records/read_repository.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/contributions/records/read_service.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/contributions/records/repository.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/contributions/records/schemas.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/contributions/repository.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/contributions/schemas.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/contributions/selected_policy_validation.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/contributions/service.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/app/modules/outbox/api.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/app/modules/outbox/delivery.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/app/modules/outbox/delivery_repository.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/app/modules/outbox/models.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/app/modules/outbox/registry.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/app/modules/outbox/repository.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/app/modules/outbox/service.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/projects/api/compensation_binding.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/projects/api/compilation_identity.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/projects/api/contribution_policy.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/projects/api/guide_activation.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/projects/api/guide_activation_context.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/projects/api/guide_compilation.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/projects/api/guide_compilation_projections.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/projects/api/guide_documents.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/projects/api/guide_proposal_package.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/projects/api/guide_proposals.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/projects/api/locked_policy.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/projects/api/policy_lineage.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/projects/api/post_policy.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/projects/api/project_summaries.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/projects/api/setup_identity.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/projects/api/task_examples.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/projects/authorization_reads.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/projects/compensation_binding.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/projects/contribution_policy.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/projects/create_repository.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/projects/create_router.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/projects/create_service.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/projects/document_upload.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/projects/guide_activation/custody.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/projects/guide_activation/service.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/projects/guide_compilation/approval_custody.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/projects/guide_compilation/context.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/projects/guide_compilation/contracts.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/projects/guide_compilation/correction_dispatch.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/projects/guide_compilation/correction_feedback.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/projects/guide_compilation/correction_request.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/projects/guide_compilation/custody_payloads.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/projects/guide_compilation/delivery_request.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/projects/guide_compilation/diagnostics.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/projects/guide_compilation/document_scope.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/projects/guide_compilation/finalization.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/projects/guide_compilation/finalization_payloads.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/projects/guide_compilation/live.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/projects/guide_compilation/models.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/projects/guide_compilation/orchestrator.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/projects/guide_compilation/projection_payloads.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/projects/guide_compilation/projections.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/projects/guide_compilation/proposal_approval.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/projects/guide_compilation/proposal_authority.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/projects/guide_compilation/proposal_correction.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/projects/guide_compilation/proposal_repository.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/projects/guide_compilation/proposal_service.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/projects/guide_compilation/repository.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/projects/guide_compilation/request_inputs.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/projects/guide_compilation/runtime_resources.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/projects/guide_compilation/service.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/projects/guide_compilation/source_state.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/projects/guide_compilation/validation.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/projects/guide_mutation_repository.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/projects/guide_mutation_router.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/projects/guide_mutation_service.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/projects/guide_setup_continuation.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/projects/locked_policy_projection.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/projects/locked_policy_repository.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/projects/models.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/projects/policy_mutation_replay_repository.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/projects/policy_mutation_router.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/projects/policy_mutation_service.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/projects/post_policy/compiler.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/projects/post_policy/correction.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/projects/post_policy/custody.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/projects/post_policy/delivery.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/projects/post_policy/models.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/projects/post_policy/queue.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/projects/post_policy/repository.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/projects/post_policy/service.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/projects/project_summaries.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/projects/repository.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/projects/router.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/projects/schemas.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/projects/service.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/projects/setup_queue.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/projects/submission_policy_mutation_repository.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/projects/submission_policy_mutation_service.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/projects/sufficiency_mutation_repository.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/projects/sufficiency_mutation_service.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/reviews/acceptance/models.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/reviews/acceptance/participant.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/reviews/acceptance/read_repository.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/reviews/acceptance/repository.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/reviews/api/acceptance.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/reviews/api/acceptance_reads.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/reviews/api/lifecycle.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/reviews/decision/models.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/reviews/decision/schemas.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/reviews/lifecycle/fence.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/reviews/lifecycle/models.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/reviews/lifecycle/service.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/reviews/models.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/reviews/packet/models.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/reviews/packet/repository.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/reviews/packet/schemas.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/reviews/repository.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/reviews/schemas.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/accepted_effects.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/api/accepted_effects.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/api/assignment_invalidation.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/api/assignment_outcome.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/api/audit_evidence.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/api/authorization.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/api/contribution_evidence.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/api/contributor_reads.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/api/guide_documents.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/api/management_queue.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/api/post_submit_routing.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/api/ready_queue.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/api/revision.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/api/revision_exhaustion.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/api/revision_expiry.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/api/revision_recovery.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/api/routing_outcome.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/api/submission_command.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/api/submission_context.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/api/submission_history.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/api/submitted_bundle.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/api/task_batch_transition.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/api/task_detail.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/api/task_import.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/api/task_import_membership.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/api/transition_audit.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/assignment_invalidation.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/authorized_commands.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/command_replay.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/contribution_evidence.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/contributor_reads.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/evaluation_completion_delivery.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/evaluation_delivery.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/lifecycle.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/models.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/post_submit_routing/evaluation_guard.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/post_submit_routing/models.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/post_submit_routing/outcome.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/post_submit_routing/ports.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/post_submit_routing/requests.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/post_submit_routing/source.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/post_submit_routing/terminal_replay.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/queue_router.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/repository.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/revision/blocked_notice.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/revision/exhausted_notice.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/revision/exhaustion.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/revision/exhaustion_event.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/revision/exhaustion_recovery.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/revision/expired_notice.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/revision/expiry.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/revision/expiry_event.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/revision/models.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/revision/recovery.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/revision/recovery_scan.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/revision/service.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/revision/terminal_read.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/router.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/schemas.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/service.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/submission_attempts.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/submission_composition.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/submission_context.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/submission_dispatch.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/submission_history.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/submission_participants.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/submission_replay.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/submitted_bundle.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/task_batch_transition/models.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/task_batch_transition_router.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/task_batch_transitions.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/task_import_batches.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/task_import_membership.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/schemas/auth.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/app/schemas/health.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/app/workers/artifacts.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/app/workers/async_runner.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/app/workers/celery_app.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/app/workers/errors.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/app/workers/outbox.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/app/workers/outbox_topology.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/app/workers/post_policy.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/workers/project_setup.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/app/workers/revision_recovery.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/workers/task_settings.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/scripts/admin_api_drill.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/scripts/admin_guard_probe.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/scripts/api_contract_e2e.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/scripts/authorization_boundary.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/scripts/behavior_ownership.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/scripts/bootstrap_access_administrator.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/scripts/coverage_policy.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/scripts/ensure_local_minio_bucket.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/scripts/external_api_drill.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/scripts/guide_compilation_e2e.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/scripts/guide_document_api_drill.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/scripts/identifier_inventory.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/scripts/issue_local_flow_token.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/scripts/legacy_actor_classification.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/scripts/local_flow_tokens.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/scripts/merge_test_lane_evidence.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/scripts/module_boundaries.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/scripts/mutation_policy.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/scripts/record_id_collection.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/scripts/run_isolated_tests.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/scripts/run_test_lanes.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/scripts/schema_baseline_manifest.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/scripts/schema_baseline_sql.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/scripts/select_ci_scope.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/scripts/test_lane_catalogue.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/scripts/test_structure_boundary.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/scripts/validate_test_lane_evidence.py"
+    }
+  ],
+  "authority_digest": "63bd7c5bf88c7ee20bbec0dbcc08359c5e77d7acc79dea93363cf61f9b108c73",
+  "protected_base_commit": "7676ce4347db0c9694962a9b587a20765e16eac6",
+  "schema": "workstream.behavior-ownership-partition.v1"
 }
