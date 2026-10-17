@@ -95,26 +95,36 @@ def _capture_safe_request_exception():
     original_error = api_controls.LOGGER.error
 
     def capture(message, *args, **kwargs):
-        exc = sys.exception()
-        if message == "request_failed_before_response_start" and exc is not None:
-            frames = []
-            traceback = exc.__traceback__
-            while traceback is not None:
-                filename = Path(traceback.tb_frame.f_code.co_filename).resolve()
-                try:
-                    relative = filename.relative_to(backend_root)
-                except ValueError:
-                    pass
-                else:
-                    if relative.parts[:1] == ("app",):
-                        frames.append((
-                            relative.as_posix(),
-                            traceback.tb_frame.f_code.co_name,
-                            traceback.tb_lineno,
-                        ))
-                traceback = traceback.tb_next
-            captured.append((type(exc).__module__, type(exc).__qualname__, frames))
-        original_error(message, *args, **kwargs)
+        try:
+            exc = sys.exception()
+            if (
+                len(captured) < 2
+                and message == "request_failed_before_response_start"
+                and exc is not None
+            ):
+                frames = []
+                examined = 0
+                traceback = exc.__traceback__
+                while traceback is not None and examined < 32:
+                    examined += 1
+                    filename = Path(traceback.tb_frame.f_code.co_filename).resolve()
+                    try:
+                        relative = filename.relative_to(backend_root)
+                    except ValueError:
+                        pass
+                    else:
+                        if relative.parts[:1] == ("app",):
+                            frames.append((
+                                relative.as_posix(),
+                                traceback.tb_frame.f_code.co_name,
+                                traceback.tb_lineno,
+                            ))
+                    traceback = traceback.tb_next
+                captured.append((type(exc).__module__, type(exc).__qualname__, frames))
+        except Exception:
+            pass
+        finally:
+            original_error(message, *args, **kwargs)
 
     with patch.object(api_controls.LOGGER, "error", capture):
         yield captured
