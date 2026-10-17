@@ -22,7 +22,7 @@ Intent -> Plan -> Bounded Change -> Tests -> Review -> Pull Request -> Human Mer
 
 ## Set Up The Development Environment
 
-Use the [Developer Quickstart](README.md#developer-quickstart) before running
+Use the [Developer Setup](docs/engineering/developer-setup.md) guide before running
 repository checks. Docker is the supported cross-host path for macOS and
 Windows and selects native Linux x86_64 or aarch64 inside the Docker VM. Native
 host setup is supported only on the Linux/glibc/Python matrix documented there.

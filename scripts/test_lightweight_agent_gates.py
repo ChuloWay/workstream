@@ -104,9 +104,11 @@ class LightweightAgentGateTests(unittest.TestCase):
                     )
                     self.assertEqual(result.returncode, code, result.stderr)
                     actual = [json.loads(line) for line in calls.read_text().splitlines()]
-                    suites = ("test_profile_flow", "test_access_reads") if code == 0 else (
+                    suites = (
                         "test_profile_flow",
-                    )
+                        "test_access_reads",
+                        "test_admin_grants",
+                    ) if code == 0 else ("test_profile_flow",)
                     expected = [
                         [
                             "run", "--frozen", "python", "scripts/run_isolated_tests.py",
@@ -397,6 +399,27 @@ class LightweightAgentGateTests(unittest.TestCase):
             workflow,
         )
         self.assertIn("cancel-in-progress: true", workflow)
+        # Description-only edits must not cancel or repeat proof for the same head.
+        self.assertIn(
+            "format('-description-edit-{0}', github.run_id)",
+            workflow,
+        )
+        self.assertIn("actions: read", workflow)
+        self.assertIn(
+            "if: ${{ !(github.event.action == 'edited' && !github.event.changes.base && github.event.pull_request.head.repo.full_name == github.repository) }}",
+            workflow.split("\n  scope:\n", 1)[1].split("\n  minio-image:\n", 1)[0],
+        )
+        test_job = workflow.split("\n  test:\n", 1)[1]
+        self.assertIn("Mirror the existing proof for a description-only edit", test_job)
+        self.assertIn('select(.name == "scope")', test_job)
+        self.assertIn(".number == $pr and .base.ref == $base and .base.sha == $base_sha", test_job)
+        self.assertIn("gh api --paginate", test_job)
+        self.assertIn("EXPECTED_JOB: ${{ github.event.pull_request.draft && 'draft-test' || 'test' }}", test_job)
+        self.assertIn('test "${conclusion}" = success', test_job)
+        # An unfinished proof must not hold a runner until its final check exists.
+        self.assertIn("its own ${EXPECTED_JOB} check will replace this one", test_job)
+        self.assertNotIn("seq 1 140", test_job)
+        self.assertIn("timeout-minutes: 40", test_job.split("\n    steps:\n", 1)[0])
         scope_job = workflow.split("\n  scope:\n", 1)[1].split(
             "\n  minio-image:\n", 1
         )[0]
