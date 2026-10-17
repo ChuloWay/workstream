@@ -1,7 +1,7 @@
 # Terminal benchmark project checkers and isolated calibration
 
 - Initiative: None
-- Durable disposition: Planned
+- Durable disposition: Complete
 - Intended merge outcome: One digest-pinned terminal-benchmark checker image validates the agreed package before Submission and drives an offline Kaniko build plus fresh isolated no-op/reference/stability runs after Submission, with exact registration specifications for the existing registry.
 
 ## Intent
@@ -12,14 +12,14 @@ shareable #576 package contract into actionable PRE findings and real POST
 build/calibration evidence through the existing external-checker service. It
 must not decide acceptance, create lifecycle facts, or claim hosted deployment.
 
-This change exists because the selected runtime can execute a conventional
-digest-pinned checker against verified read-only material, but it cannot yet
-perform the approved PILOT-00 sequence for a submitted environment: root-inside-
+This change closed a starting gap: the selected runtime could execute a
+conventional digest-pinned checker against verified read-only material, but it
+could not perform the approved PILOT-00 sequence for a submitted environment: root-inside-
 gVisor Kaniko over a sealed offline cache followed by separate non-root gVisor
 oracle sandboxes. Giving the checker a host container socket or running uploaded
 code on the host would break the established boundary.
 
-## Current behavior
+## Starting behavior
 
 - `external_checkers/workstream-checker-service/src/main.rs` verifies an ART
   grant, resolves one administrator-cached platform manifest, and starts one
@@ -39,11 +39,12 @@ code on the host would break the established boundary.
   `sha256:6e13e65c55e33adf203d77ee371cf8bf5d81bd4902ef07565721f46bf44917af`
   and the exact reviewed Dockerfile recipe. PRE must require that platform
   manifest and recipe; it must not silently accept the index.
-- The existing registry and selected PRE/POST owners already bind immutable
+- The existing registry and selected PRE/POST owners bind immutable
   image/configuration/schema/resource identities, verified input lineage,
-  normalized findings, infrastructure outcomes and isolation receipts. #580
-  owns the supported Operator mutation/readback path; #555 owns registration,
-  activation and the connected local/hosted journey.
+  normalized findings, infrastructure outcomes and isolation receipts. The
+  supported Operator mutation/readback path is merged and remains distinct from
+  selection or execution. #555 owns registration of these exact specifications,
+  approved activation and the connected local/hosted journey.
 
 ## Bounded change
 
@@ -174,8 +175,8 @@ code on the host would break the established boundary.
 - No change to Submission, TASK, review, revision, FinalAcceptance,
   ContributionRecord, compensation, authorization, policy approval, checker
   selection, database schema or public API/CLI behavior.
-- No registry mutation or alternate registration path; #580 owns the supported
-  Operator operation and #555 owns use of these specifications.
+- No registry mutation or alternate registration path; the merged Operator API
+  remains the sole registry writer and #555 owns use of these specifications.
 - No generic workflow runner, arbitrary command graph, model judge, plugin
   discovery, second checker service, host execution of uploaded code, host
   Docker/containerd socket in any sandbox, network fallback or mutable image
@@ -196,9 +197,9 @@ code on the host would break the established boundary.
 
 ### Isolated runtime proof
 
-The reviewed source and fake-Docker tests cannot establish the required real
-`runsc` behavior, and the current repository has no manual or hosted gVisor
-experiment seam. Keep that proof separate from the existing 10-minute
+The reviewed source and fake-Docker tests could not establish the required real
+`runsc` behavior, and the repository had no manual or hosted gVisor experiment
+seam at planning time. Keep that proof separate from the existing 10-minute
 `external-checker-runtime` Rust job. The one path-scoped workflow above checks
 out and verifies the exact PR head, then invokes only the bounded experiment.
 Its online preparation verifies gVisor `release-20260928.0` archive SHA-512
@@ -552,32 +553,32 @@ can safely adopt the PILOT-00 mechanism.
 
 ## Acceptance criteria
 
-- [ ] The agreed original packages pass PRE through the real image; mutations
+- [x] The agreed original packages pass PRE through the real image; mutations
   for missing members, project size, forbidden paths, malformed/mismatched
   metadata, unpinned/wrong-family/wrong-platform base and unsafe build context
   fail with bounded actionable findings and no package code execution.
-- [ ] The exact retained packages pass POST through the real service: offline
+- [x] The exact retained packages pass POST through the real service: offline
   Kaniko build, unchanged starter rejection, reference pass and three fresh
   stable reference runs. Marker-only or omitted build/oracle implementations
   fail a focused regression.
-- [ ] A genuine Dockerfile failure, reference failure, no-op pass and unstable
+- [x] A genuine Dockerfile failure, reference failure, no-op pass and unstable
   repeated outcome produce distinct work findings; dependent phases are omitted
   explicitly rather than reported as independent passes or infrastructure.
-- [ ] Missing/substituted builder or base cache, unavailable `runsc`, deadline,
+- [x] Missing/substituted builder or base cache, unavailable `runsc`, deadline,
   memory/PID/disk exhaustion, malformed output, disconnect and uncertain cleanup
   produce the existing recoverable infrastructure outcomes and no work verdict.
-- [ ] The builder context contains exactly `.dockerignore`,
+- [x] The builder context contains exactly `.dockerignore`,
   `environment/Dockerfile`, and `workspace/**`; it cannot read `solution/**`,
   `tests/**`, the original grant, or an absolute submitted Dockerfile path.
   Descriptor-relative copy and a second exact inventory reject links, special
   files, substitutions, additions and byte changes before launch.
-- [ ] One request-bound work deadline and one aggregate output meter cover
+- [x] One request-bound work deadline and one aggregate output meter cover
   planning, initial create/inspect, build, import, Docker control and every oracle
   run without per-phase reset. Sequential container CPU/memory values and any
   concurrent total never exceed the immutable registry ceilings. All emergency
   cleanup shares one 10-second deadline and separate 256 KiB output ceiling
   within the existing 60-second cleanup margin.
-- [ ] ART reserves the existing fixed 512 MiB workspace total and manager fixed
+- [x] ART reserves the existing fixed 512 MiB workspace total and manager fixed
   maximum-entry total before publication of an exact locked terminal-benchmark
   POST grant, then binds byte and entry allowances after sealed workspace/grant
   overhead. Exact-limit runtime creation succeeds; limit-plus-one fails before
@@ -586,47 +587,47 @@ can safely adopt the PILOT-00 mechanism.
   reservation and publish no runtime sibling. The candidate tar entry and every
   remaining byte are reserved before launch, and a kernel file-size ceiling
   rejects the first excess byte inside the writer.
-- [ ] Under a deliberately bounded aggregate ledger, one live terminal grant
+- [x] Under a deliberately bounded aggregate ledger, one live terminal grant
   consumes its expanded reservation, a concurrent second terminal grant fails
   before publishing residue, and that second grant succeeds after the first is
   released. Concurrent conventional POST grants keep only their original small
   reservations, publish no runtime sibling and do not consume terminal capacity.
-- [ ] `test_post_result_is_hidden_until_grant_workspace_cleanup_completes`
+- [x] `test_post_result_is_hidden_until_grant_workspace_cleanup_completes`
   proves the service settles Docker resources before its socket response and the
   Python grant/materializer revokes and deletes scratch before exposing the
   result to CHECKERS.
-- [ ] `test_service_sigkill_fails_adapter_and_live_art_unwinds_workspace`
+- [x] `test_service_sigkill_fails_adapter_and_live_art_unwinds_workspace`
   proves service death fails transport, the live Python owner synchronously
   unwinds scratch, and restart removes only its labeled/prefixed Docker residue.
-- [ ] `test_dead_art_owner_is_reaped_after_ttl` proves Python-owner death is the
+- [x] `test_dead_art_owner_is_reaped_after_ttl` proves Python-owner death is the
   distinct case handled by the existing TTL plus dead-owner workspace reaper.
-- [ ] `test_art_cleanup_failure_discards_received_result_and_retains_ledger_custody`
+- [x] `test_art_cleanup_failure_discards_received_result_and_retains_ledger_custody`
   proves cleanup failure wins over an already received result and preserves the
   reservation for retry.
-- [ ] Grant substitution produces no continuation launch. Conventional and PRE
+- [x] Grant substitution produces no continuation launch. Conventional and PRE
   images continue to receive only the ordinary request stdin and cannot gain the
   stronger profile even if their output copies its plan shape. Removing or
   substituting the terminal capability hint cannot downgrade an exact
   service-authorized terminal request to a conventional runtime-less grant;
   service grant verification fails before launch.
-- [ ] Cache tests mutate one blob and independently cover extra, missing,
+- [x] Cache tests mutate one blob and independently cover extra, missing,
   symlink/special, wrong-owner and wrong-mode entries; each fails before Docker
   create with no pull. Startup recovery removes seeded stale containers and
   temporary images with the exact owned labels/fixed repository while leaving an
   unowned control resource untouched.
-- [ ] Simultaneous service startups serialize on the private socket-parent
+- [x] Simultaneous service startups serialize on the private socket-parent
   lock; restart recovers an owned stale socket while preserving a live
   listener, foreign file/link and path substituted before listener teardown.
   Socket-parent custody precedes Docker validation and recovery, so a losing
   full startup cannot inspect or clean the winner's resources.
-- [ ] Launch evidence proves no external network or host socket, exact cached
+- [x] Launch evidence proves no external network or host socket, exact cached
   platform identities, builder-only capabilities, non-root capability-free
   oracles, read-only inputs/root, fresh containers, fixed resources and complete
   cleanup. Configuring the terminal profile with `docker-dev`/`runc` fails
   before readiness; the isolated-runner positive path uses `gvisor`/`runsc`.
   Local ordinary-checker `docker-dev` evidence remains development-only, and
   hosted deployment remains #555/#583.
-- [ ] The path-scoped proof workflow binds the exact PR head, uses
+- [x] The path-scoped proof workflow binds the exact PR head, uses
   `pull_request` only, named `ubuntu-24.04`, `contents: read`, commit-pinned
   actions, no persisted checkout credential and no Actions cache. It receives no
   secret/AWS input, asserts and records `pull_request.head.sha`, keeps networked
@@ -634,25 +635,25 @@ can safely adopt the PILOT-00 mechanism.
   networkless before execution, and always removes its exact owned resources.
   Existing Backend jobs, required gates and selectors remain byte-for-byte
   unchanged.
-- [ ] The owned XFS loopback reports active project-quota enforcement and the
+- [x] The owned XFS loopback reports active project-quota enforcement and the
   required inner overlay2/XFS/d_type facts; a 320 MiB allocated write succeeds
   and a 400 MiB allocated write fails under the exact 384 MiB production
   storage option. Cleanup confirms unmount and loop-device detachment.
-- [ ] The interrupt barrier occurs only after successful exact builder create
+- [x] The interrupt barrier occurs only after successful exact builder create
   and before the wrapper returns. Killing only the recorded Rust PID produces
   adapter failure and ART unwind; releasing the wrapper permits restart to
   remove the orphan while preserving an unowned control.
-- [ ] Evidence verifier fixtures reject head mismatch, missing/false cleanup,
+- [x] Evidence verifier fixtures reject head mismatch, missing/false cleanup,
   extra files, links, special files, path escape and size overflow. A hostile
   launch fixture rejects a canonical parent source outside the exact ART/cache
   roots, and reducer fixtures separately reject an extra partial attempt and a
   duplicate start. The real matrix is copied into a fixed bounded nonsecret
   allowlist before owned cleanup; only staging plus the verified cleanup receipt
   is uploaded after a final no-follow/hash/schema check.
-- [ ] Exact built image platform-manifest digest(s), canonical PRE/POST registry
+- [x] Exact built image platform-manifest digest(s), canonical PRE/POST registry
   specs and approved configuration are independently validated by the current
-  Python registry contract without writing the registry or depending on #580.
-- [ ] Existing conventional external checker execution and PRE/POST result
+  Python registry contract without writing through the merged registry API.
+- [x] Existing conventional external checker execution and PRE/POST result
   custody remain unchanged and pass their focused regressions.
 
 ## Risk and review routing
@@ -669,25 +670,25 @@ can safely adopt the PILOT-00 mechanism.
   substitution; total budget and scratch custody; builder privilege;
   candidate/reference separation; offline/resource/cleanup enforcement;
   work-versus-infrastructure classification; manager-agreed configuration; and
-  no cycle with #580/#555.
+  no duplicate path or dependency cycle with the merged registry owner and #555.
 
 ## Evidence
 
 | Claim | Command or proof | Result | Remaining uncertainty |
 |---|---|---|---|
-| Existing owner and gap | Inspect PILOT-00, PILOT-04 service/SDK, ART grants, selected PRE/POST owners and #493/#576/#555 | The selected service had exact verified input and image custody but only one conventional checker launch; this change adds one exact-authorized terminal-benchmark continuation rather than a general runner, exercised by the isolated-runner matrix | Registration, activation and deployed composition remain separate |
-| Platform pin feasibility | `docker buildx imagetools inspect --raw` for the proposed CPython and Kaniko digests, without pulling either image | Both proposed top-level digests are OCI indexes; linux/amd64 resolves to CPython `sha256:6e13e65c...` and Kaniko `sha256:c73ca67a...`; raw nonsecret manifests and SHA-256 commands are retained under `/tmp/workstream-493-python-*` | Trusted builder config must bind the full canonical cache inventory plus both platform manifests and config IDs |
+| Existing owner and gap | Inspect PILOT-00, PILOT-04 service/SDK, ART grants, selected PRE/POST owners and #493/#576/#555 | The selected service had exact verified input and image custody but only one conventional checker launch; this change adds one exact-authorized terminal-benchmark continuation rather than a general runner, exercised by the isolated-runner matrix | Exact terminal entry registration, approved activation and deployed composition remain separate |
+| Platform pin feasibility | `docker buildx imagetools inspect --raw` for the proposed CPython and Kaniko digests, without pulling either image | Both proposed top-level digests are OCI indexes; linux/amd64 resolves to CPython `sha256:6e13e65c...` and Kaniko `sha256:c73ca67a...`; raw nonsecret manifests and SHA-256 commands are retained under `/tmp/workstream-493-python-*` | Production activation must retain the reviewed canonical cache inventory, platform manifests and config IDs |
 | Corpus dependency | Merge `e6a55d26b`; run `python3 pilots/terminal_benchmark/verify_corpus.py` on the final reviewed #576 dependency | PASS in the corpus branch: all five originals report three reference passes plus starter and near-miss rejection; the malformed-input harness cases become bounded work failures; the atomic-import destructive-state mutant is rejected across three runs; all 46 manifest files match | This is explicitly `trusted_native_corpus_only`, not Docker/gVisor or production admission proof; parent assets remain outside this change's implementation diff |
 | Scratch and cleanup owner | Inspect `ArtifactScratchManager` workspace ledger, TTL/dead-process recovery, no-follow deletion, external grant publication and selected POST call order | Existing owner already provides aggregate byte quota and per-workspace entry ceiling, durable workspace ownership, failed-cleanup retention and crash recovery. Rust settles Docker before socket response; the live Python context then revokes/deletes before exposing the evaluation. Focused tests cover exact limits, cleanup ordering and dead-owner recovery; the isolated-runner matrix exercises service SIGKILL, live ART unwind and restart orphan cleanup | Deployed process-crash behavior remains separate from development proof |
 | #582 ownership check | Coordinate exact paths and port ownership with the S3 activation owner | #582 does not touch `preparation.py` or `post_submit_materialization.py`; it owns provider-neutral ArtifactStore activation evidence and S3 composition, while this change reuses the separate existing ArtifactScratchManager/ledger without extending that activation port | Recheck after either branch changes its bounded files |
-| Aggregate execution budget | Inspect request resource contract, selected POST budget and service timeout constants | Immutable registry resources include CPU, memory, deadline and output; the current adapter reserves one 60-second cleanup margin. Work uses one absolute deadline/output meter; emergency cleanup uses one 10-second deadline and separate 256 KiB output ceiling. The isolated-runner matrix exercises interruption and representative quota bounds | The required workflow must pass on the final reviewable head; production-limit selection and deployed behavior remain separate |
-| Required Rust workspace gate | From `external_checkers/`: `CARGO_BUILD_JOBS=1 cargo fmt --all --check && CARGO_BUILD_JOBS=1 cargo test --workspace --locked` | PASS on the pre-external-review candidate: 5 SDK, 34 service and 4 project-image tests. The service tests cover custody-first startup, disconnect/CLI stop, one cleanup budget, exact successful-absence queries, marker-preserving ambiguous removal, attempt-bound recovery names, production builder `fsize` arguments, kernel exact-byte/plus-one behavior and fatal cleanup propagation through two real socket connections. Focused zero-allowance and bounded-path-finding regressions are pending hosted execution because this constrained host cannot safely run another Rust compile | Pure/fake-Docker tests do not prove actual Docker/runsc behavior; the repaired head still requires the hosted locked workspace gate |
+| Aggregate execution budget | Inspect request resource contract, selected POST budget and service timeout constants | Immutable registry resources include CPU, memory, deadline and output; the current adapter reserves one 60-second cleanup margin. Work uses one absolute deadline/output meter; emergency cleanup uses one 10-second deadline and separate 256 KiB output ceiling. Reviewed implementation run `39041591039` exercises interruption and representative quota bounds | Production-limit selection and deployed behavior remain separate |
+| Required Rust workspace gate | Backend `external-checker-runtime` job: `cargo fmt --all --check && cargo test --workspace --locked` | PASS on source-identical head `e655ec4bea160ad1edf32037f83e7335ab65b7a2`: 5 SDK, 35 service and 9 project-image tests. The service suite covers exact terminal profile authorization, zero-allowance grant verification, custody-first startup, cancellation, aggregate cleanup budgets, exact successful-absence queries and fatal cleanup propagation. The image suite covers all five packages plus bounded count/serialized-byte findings and actual SDK result serialization | Pure/fake-Docker tests alone do not prove actual Docker/runsc behavior; reviewed implementation run `39041591039` supplies that separate development evidence |
 | Rust strict lint | `CARGO_BUILD_JOBS=1 cargo clippy --manifest-path external_checkers/Cargo.toml -p workstream-checker-service --all-targets -- -D warnings` plus blame and `.github/workflows/backend.yml` inspection | The repaired head reports only `clippy::large_enum_variant` at the unchanged pre-existing `GrantIdentity` (128-byte PRE versus 424-byte POST variant); no suppression or new diagnostic was introduced. The required `external-checker-runtime` CI lane runs locked workspace tests and formatting, not clippy | This optional local strict-clippy probe remains nonzero on that baseline warning; changing the existing serialized grant type is outside this bounded repair |
-| Project image and SDK contracts | `CARGO_BUILD_JOBS=1 cargo test --manifest-path external_checkers/Cargo.toml -p workstream-terminal-benchmark-checker` and `CARGO_BUILD_JOBS=1 cargo test --manifest-path external_checkers/Cargo.toml -p workstream-checker-sdk` | PASS: 4 project-package tests over all five originals and 5 SDK contract/canonicalization tests; the isolated-runner matrix executes the built project image through PRE validation and POST continuation | Registry activation and deployed execution remain separate |
-| ART scratch integration | `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 PYTHONPATH=. /home/abiorh/flow/workstream_product_builder/backend/.venv/bin/python -m pytest -q -p pytest_asyncio.plugin tests/checkers/external/test_runtime.py` from `backend/` | PASS: 11 tests, including exact existing-ledger POST byte/entry reservation and cleanup | Does not by itself prove service/Python process-crash ordering |
+| Project image and SDK contracts | Backend locked Rust workspace tests for `workstream-terminal-benchmark-checker` and `workstream-checker-sdk` | PASS: 9 project-package tests over all five originals and 5 SDK contract/canonicalization tests; the suite proves long/unrepresentable-path result serialization, and the isolated-runner matrix executes the built project image through PRE validation and POST continuation | Registry activation and deployed execution remain separate |
+| ART scratch integration | `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 PYTHONPATH=. backend/.venv/bin/python -m pytest -q backend/tests/checkers/external/test_runtime.py` | PASS: 14 tests, including terminal aggregate-capacity hold/refusal/reuse, concurrent conventional reservations, exact existing-ledger byte/entry reservation and cleanup | Does not by itself prove service/Python process-crash ordering; the isolated matrix supplies the development interruption proof |
 | Runtime proof validators | `python3 -m unittest -v test_verify_evidence test_runtime_proof` plus the staged `test_execute_post_contract` suite | PASS in hosted preparation: 22 stdlib evidence/launch/matrix tests and 2 staged-backend contract tests cover the fixed evidence allowlist, exact symbolic ART/cache mount identities, hostile source rejection, exact two-attempt launch reduction, strict registry restoration and separate extra-attempt/duplicate-start rejection | Stub/fake-Docker validation alone does not establish Docker, XFS or runsc behavior |
-| Real gVisor matrix | Path-scoped isolated-runner probe over the one interrupted and one complete `ledger-reconcile` POST | Run `39029082111` at `2932889018dc0136d5e5fdce0c117b0de619b0b7` passed image/quota preparation, interruption, synchronous ART unwind, restart orphan cleanup, unowned-control preservation and the complete POST matrix, then exposed a root-owned event-evidence staging mismatch. Reviewed repair `346510d95ccfe9b4b0c1dcbefa6cbb7925118a0e` installs that fixed evidence file through bounded no-follow descriptors for the required final exact-head workflow run | The required PR workflow must pass on the final reviewable head; isolated DIND evidence remains development proof rather than deployed Workstream proof |
-| Current-source reconciliation | Merge current `main` at `ef839bb6`; inspect the current result/findings, Python CHECKERS contracts, repaired PostgreSQL 16 schema fingerprint and intervening roadmap owners; run focused existing checker tests | This branch preserves current main, the current result shape, the exact schema guard and no old/new compatibility path | Recheck main ancestry and required hosted checks before readiness |
+| Real gVisor matrix | Path-scoped isolated-runner probe over the one interrupted and one complete `ledger-reconcile` POST | Reviewed implementation run `39041591039` at `da162915439c7d8dc6615d99b2bed087d5020e03` passed image/quota preparation, interruption, synchronous ART unwind, restart orphan cleanup, unowned-control preservation, the complete POST matrix, bounded evidence staging, owned cleanup, final verification and upload | Isolated DIND evidence remains development proof rather than deployed Workstream proof |
+| Current-source reconciliation | Merge current `main` at `60e6302f`; inspect the current result/findings, merged Operator registry owners, migration 0051, repaired PostgreSQL 16 schema fingerprint and intervening roadmap owners; run focused checker and lane-catalogue tests | This branch preserves current main, the current result shape, registry/migration owners, the exact schema guard and no old/new compatibility path. ART 14, project-proof Python 22+2 and lane catalogue 58 pass; exact integration reviews found no ownership or trigger gap | Exact terminal entry registration, approved activation, production-limit selection and deployed behavior remain separate |
 
 ## Review findings
 
@@ -763,11 +764,10 @@ caps repeated path-level findings by count and serialized bytes, omits a path
 that the shared public finding contract cannot represent, emits one truncation
 summary and preserves independent required-member and size feedback so an
 adversarial 2,000-entry package cannot turn bounded work feedback into
-`invalid_output`. The Python
-reserved-name regression and static formatting checks pass locally. The new
-Rust zero-allowance and bounded-finding regressions require the hosted locked
-workspace gate on the final exact head because local memory and swap cannot
-safely support another Rust compile.
+`invalid_output`. The Python reserved-name regression and static formatting
+checks pass locally. The hosted locked Rust workspace gate passed the
+zero-allowance and bounded-finding regressions; local memory and swap were not
+used for another Rust compile.
 
 The subsequent eligible human review found two broader boundary defects. ART
 was raising every conventional POST workspace to the terminal 512 MiB/entry
@@ -789,28 +789,31 @@ existing grant request, leaves conventional POST reservations unchanged and
 requires the exact service-authorized terminal profile before accepting the
 runtime sibling. Focused local ART tests pass for the expanded aggregate hold,
 failure without residue, reuse after release and concurrent conventional
-reservations. The exact service grant and gVisor regressions still require the
-hosted locked Rust workspace gate because local memory and swap cannot safely
-support another Rust compile.
+reservations. The hosted locked Rust workspace gate passed all 5 SDK, 35 service
+and 9 project-image tests, including exact grant/profile authorization and the
+bounded output regressions; local memory and swap were not used for another Rust
+compile.
 
 ## Reconciliation
 
 - Current-source reconciliation: This branch contains current `main` at
-  `ef839bb6`, including the merged final reviewed corpus, current finding/check
-  result contract and the repaired PostgreSQL 16 schema fingerprint guard. The
+  `60e6302f`, including the merged final reviewed corpus, supported Operator
+  registry/readback path, migration 0051, current finding/check result contract
+  and the repaired PostgreSQL 16 schema fingerprint guard. The
   corpus carries the exact linux/amd64 base recipe, bounded harness failures,
   destructive-state regression and reviewed ownership, UTF-8 and UTC-overflow
   fixes. Parent corpus assets remain dependency input rather than this change's
   implementation diff.
-- Next usable boundary: #580 may register the exact independently produced
-  specifications, and #555 may combine registration and approved-policy
-  activation with the complete public journey. Neither is part of this
-  standalone runtime proof.
+- Next usable boundary: the merged Operator API can register the exact
+  independently produced specifications, and #555 may combine that registration
+  with approved-policy activation and the complete public journey. Neither the
+  terminal entry write nor activation is part of this standalone runtime proof.
 - Ownership reconciliation: #582 confirmed no file or port overlap. It owns
   provider activation evidence and S3 composition; this change owns only the
   existing ephemeral `ArtifactScratchManager` workspace/grant extension and must
   not depend on or extend #582's activation guard.
-- Remaining risks: production-limit selection, registration, approved-policy
-  activation and deployed `runsc` operation remain unproved. The path-scoped
+- Remaining risks: production-limit selection, exact terminal entry
+  registration, approved-policy activation and deployed `runsc` operation remain
+  unproved. The path-scoped
   isolated-runner matrix is development evidence for the exact image/service
   behavior and does not claim deployed Workstream operation.
