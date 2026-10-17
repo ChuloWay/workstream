@@ -561,6 +561,7 @@ TASK_MODULES = (
     "tests/project_reads/test_preparations_projection.py",
     "tests/project_reads/test_preparations_reads.py",
     "tests/project_reads/test_contribution_policies_list.py",
+    "tests/project_reads/test_consistency.py",
     "tests/tasks/test_task_detail.py",
     "tests/tasks/test_work_context.py",
     "tests/tasks/test_guide_documents.py",

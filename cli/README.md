@@ -1144,8 +1144,9 @@ shows each guide version with its stored `draft`, `active` or `superseded`
 status. `guide show` returns the declared documents with ingest state and
 SHA-256, the selected review and revision policy values and the latest setup
 run and compilation IDs. `guide readiness` is a dry run of activation's own
-conditions: it reports `ready` or every unmet condition with the same refusal
-code activation would return, and it activates, consumes and reserves nothing.
+conditions: it reports `ready` or the unmet conditions it evaluates, each with
+the same refusal code activation would return (a check whose inputs are
+missing is not evaluated), and it activates, consumes and reserves nothing.
 `guide document` downloads one uploaded original into an existing directory,
 verifies it against the declared SHA-256 and never overwrites a file; a
 declared document that is not uploaded fails with `guide_document_not_uploaded`.

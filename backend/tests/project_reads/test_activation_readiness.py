@@ -12,33 +12,15 @@ from sqlalchemy import text
 from app.modules.projects.api.guide_activation import GuideActivationCondition, GuideActivationReadiness
 from app.modules.projects.api.guide_proposals import GuideProposalError
 from app.modules.projects.guide_activation.service import GuideActivationService
-from tests.projects.guide_activation.pg_support import activation_case, activation_command, activation_service
+from tests.projects.guide_activation.pg_support import (
+    activation_case, activation_command, activation_service, readiness_read as _readiness,
+)
 
 _PRODUCT_TABLES = (
     "project_guides", "projects", "guide_mutation_idempotency_records", "audit_events",
     "checker_policies", "review_policies", "revision_policies", "contribution_policies",
     "contribution_policy_versions",
 )
-
-
-async def _readiness(factory, project_id, guide_id) -> GuideActivationReadiness:
-    """One readiness read through the composed owner, in its own transaction."""
-    from app.adapters.contributions import contribution_policy_validation_port, published_contribution_policy_port
-    from app.adapters.projects import project_guide_activation_readiness_port
-    from app.adapters.projects.contribution_validation import (
-        GuideContributionPolicyDiscovery, GuideContributionPolicyValidation,
-    )
-
-    async with factory() as session, session.begin():
-        port = project_guide_activation_readiness_port(
-            session, contribution=GuideContributionPolicyValidation(contribution_policy_validation_port(session)),
-        )
-        result = await port.readiness(
-            project_id, guide_id,
-            contribution=GuideContributionPolicyDiscovery(published_contribution_policy_port(session)),
-        )
-        assert not (session.new or session.dirty or session.deleted)
-    return result
 
 
 async def _refusal(factory, actor, command, grant) -> str:
@@ -124,10 +106,11 @@ async def test_ready_guide_reads_ready_without_effect_and_then_activates(clean_p
                 command, actor=actor, request_id=uuid4(),
             )
         assert receipt.command == command
-        # The activated guide is no longer activatable; both paths refuse it with one code.
+        # The activated guide is no longer a draft; both paths refuse it with one code.
         again = await _readiness(factory, *_ids(command))
         fresh = command.model_copy(update={"idempotency_key": uuid4()})
-        assert not again.ready and again.unmet[0].code == await _refusal(factory, actor, fresh, grant)
+        assert [item.reason for item in again.unmet] == ["guide_not_draft"]
+        assert again.unmet[0].code == await _refusal(factory, actor, fresh, grant)
 
 
 async def test_archived_project_reports_activations_refusal_first(clean_postgres_database):

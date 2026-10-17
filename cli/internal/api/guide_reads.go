@@ -12,17 +12,8 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
-	"strconv"
 	"strings"
 )
-
-// GuideQuery selects one page of a project's guides. The server binds every
-// continuation to the same status filter and limit.
-type GuideQuery struct {
-	Limit  int
-	Cursor *string
-	Status *string
-}
 
 type ProjectGuideSummary struct {
 	GuideID     string  `json:"guide_id"`
@@ -135,8 +126,7 @@ var activationReasonCodes = map[string]string{
 	"post_policy_unavailable":         "",
 	"upstream_approval_not_current":   "",
 	"post_policy_not_approved":        "proposal_stale",
-	"guide_not_draft":                 "proposal_stale",
-	"selection_stale":                 "proposal_stale",
+	"guide_not_draft":                 "",
 	"review_policy_unselected":        "proposal_stale",
 	"revision_policy_unselected":      "proposal_stale",
 	"source_snapshot_invalid":         "approval_blocked",
@@ -170,39 +160,29 @@ func ValidUUID(value string) bool { return validUUID(value) }
 func SameUUID(left, right string) bool { return sameUUID(left, right) }
 
 // ProjectGuides lists a project's guide versions by creation order.
-func (c *Client) ProjectGuides(ctx context.Context, project string, q GuideQuery) (Result[ProjectGuidePage], error) {
+func (c *Client) ProjectGuides(ctx context.Context, project string, q ContributorQuery) (Result[ProjectGuidePage], error) {
 	var result Result[ProjectGuidePage]
+	if q.ProjectID != nil || q.TaskID != nil || q.State != nil || q.UpdatedSince != nil || q.Outcome != nil {
+		return result, errors.New("guides accept only --status")
+	}
 	path, err := projectReadPath(project, "/guides")
 	if err != nil {
 		return result, err
 	}
-	if q.Limit < 1 || q.Limit > 100 || (q.Cursor != nil && !validTaskCursor(*q.Cursor)) ||
-		(q.Status != nil && !oneOf(*q.Status, guideStatuses...)) {
-		return result, errors.New("limit must be 1–100; cursor 1–512 characters; status draft, active or superseded")
-	}
-	query := url.Values{"limit": {strconv.Itoa(q.Limit)}}
-	if q.Cursor != nil {
-		query.Set("cursor", *q.Cursor)
-	}
-	if q.Status != nil {
-		query.Set("status", *q.Status)
-	}
-	raw, err := c.requestWithResponseLimit(ctx, http.MethodGet, path, query.Encode(), nil, "", http.StatusOK, maxSubmissionReadBytes)
+	query, err := q.encodeWith(guideStatuses)
 	if err != nil {
 		return result, err
 	}
-	var page struct {
-		Items  []json.RawMessage `json:"items"`
-		Cursor *string           `json:"next_cursor"`
+	raw, fields, items, err := c.readPage(ctx, path, query, q.Limit)
+	if err != nil {
+		return result, err
 	}
-	fields, err := contextObject(raw, &page, []string{"items"}, nil)
-	if err != nil || !requiredNullable(fields, "next_cursor") || page.Items == nil || len(page.Items) > q.Limit ||
-		(page.Cursor != nil && (!validTaskCursor(*page.Cursor) || len(page.Items) == 0)) || !c.safeMutationResponse(raw) {
+	value := ProjectGuidePage{Items: make([]ProjectGuideSummary, 0, len(items))}
+	if json.Unmarshal(fields["next_cursor"], &value.Cursor) != nil {
 		return result, &Failure{Code: "invalid_api_response"}
 	}
-	value := ProjectGuidePage{Items: make([]ProjectGuideSummary, 0, len(page.Items)), Cursor: page.Cursor}
 	seen := map[[16]byte]bool{}
-	for _, item := range page.Items {
+	for _, item := range items {
 		var guide ProjectGuideSummary
 		itemFields, err := contextObject(item, &guide, []string{"guide_id", "version", "status", "created_at"}, nil)
 		id, valid := uuidIdentity(guide.GuideID)

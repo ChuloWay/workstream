@@ -8,22 +8,21 @@ from app.modules.authorization.api.management_reads import (
     UNPAGED_MANAGEMENT_READ_ACTIONS, ProjectManagementReadCursorInvalid, ProjectManagementReadGrant, ProjectManagementReadPosition,
     ProjectManagementReadRequest, ProjectManagementReadUnavailable,
 )
-from app.modules.authorization.catalogue import ActionId, PermissionId
+from app.modules.authorization.catalogue import ActionId
 from app.modules.authorization.domain.management_reads import (
     MANAGEMENT_RESOURCE_BY_ACTION, ProjectManagementReadResourceContext,
 )
+from app.modules.authorization.domain.resource_digest import authorization_resource_digest
 from app.modules.authorization.kernel import AuthorizationService
 from app.modules.authorization.pagination import AuthorizationReadCursorCodec, InvalidPaginationCursor
-from app.modules.authorization.repository import AdminAuthorizationRepository
-from app.modules.authorization.schemas import AdminRole
 
 
 class ProjectManagementReadAuthorization:
     """One request-local adapter; the caller's response transaction owns evidence."""
 
-    def __init__(self, kernel: AuthorizationService, repository: AdminAuthorizationRepository, secret):
-        """Bind the kernel, the grant repository and the cursor secret."""
-        self._kernel, self._repository, self._secret = kernel, repository, secret
+    def __init__(self, kernel: AuthorizationService, secret):
+        """Bind the kernel and the cursor secret."""
+        self._kernel, self._secret = kernel, secret
 
     @staticmethod
     def _query(request: ProjectManagementReadRequest) -> str:
@@ -55,11 +54,12 @@ class ProjectManagementReadAuthorization:
             ),
         })
         action = ActionId(request.action)
-        await self._kernel.require(action, ProjectManagementReadResourceContext(
+        resource = ProjectManagementReadResourceContext(
             resource_type=MANAGEMENT_RESOURCE_BY_ACTION[action], resource_id=request.resource_id,
             scope_project_id=request.project_id, actor_profile_id=request.actor_profile_id,
             request_digest=digest,
-        ))
+        )
+        decision = await self._kernel.require(action, resource)
         position = None
         if cursor is not None:
             try:
@@ -67,16 +67,13 @@ class ProjectManagementReadAuthorization:
             except InvalidPaginationCursor as exc:
                 raise ProjectManagementReadCursorInvalid("Invalid project management read cursor") from exc
             position = ProjectManagementReadPosition(timestamp, record_id)
-        award_totals_visible = False
-        if action is ActionId.PROJECT_SUMMARY_READ:
-            # Award totals follow the PILOT-10 precedent: only an exact-project
-            # Finance grant discloses them; a system Finance grant does not.
-            # Locked with the decision so the disclosure holds until commit.
-            award_totals_visible = await self._repository.find_effective_grant(
-                request.actor_profile_id, PermissionId.COMPENSATION_AWARD_READ,
-                scope_project_id=request.project_id, exact_project_scope=True, for_update=True,
-                allowed_roles=frozenset({AdminRole.FINANCE_AUTHORITY}),
-            ) is not None
+        # The evaluator alone resolves and locks the exact-project Finance grant
+        # and records it in the decision's resource digest; a summary decision
+        # recorded over the resource as sent withholds award totals.
+        award_totals_visible = (
+            action is ActionId.PROJECT_SUMMARY_READ
+            and decision.resource_context_digest != authorization_resource_digest(resource)
+        )
         return ProjectManagementReadGrant(request.project_id, position, award_totals_visible)
 
     def encode(self, request: ProjectManagementReadRequest, position: ProjectManagementReadPosition) -> str:

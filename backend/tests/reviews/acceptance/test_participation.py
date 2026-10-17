@@ -145,3 +145,35 @@ async def test_foreign_stored_completion_cannot_use_another_invocation(
                         )
             async with h.factory() as session:
                 assert await outcome_snapshot(session) == before
+
+
+async def test_project_award_totals_are_the_exact_sums_of_the_projects_stored_awards(
+    tmp_path, isolated_database_env
+):
+    """PILOT-READ-3 C6: the summary's project award totals over real accepted-work awards."""
+    from app.adapters.compensation import project_award_totals_port
+    from app.core.identifiers import new_record_id
+
+    async with authorized_routing_source(
+        tmp_path, isolated_database_env, contribution_awards=("money", "project_points")
+    ) as h:
+        async with h.factory() as session, session.begin():
+            await apply_outcome(session, h, 2)
+        async with h.factory() as session:
+            expected = (
+                await session.execute(
+                    text("""
+              SELECT instrument_type, unit_code, sum(quantity) FROM public.compensation_awards
+              WHERE project_id = CAST(:project AS uuid) GROUP BY 1, 2 ORDER BY 1, 2
+            """),
+                    {"project": str(h.request.project_id)},
+                )
+            ).all()
+            port = project_award_totals_port(session)
+            totals = await port.read_project_award_totals(h.request.project_id)
+            assert [row[0] for row in expected] == ["money", "project_points"]
+            assert [(t.instrument_type, t.unit_code, t.quantity) for t in totals] == [
+                tuple(row) for row in expected
+            ]
+            # Another project's totals never include these awards.
+            assert await port.read_project_award_totals(new_record_id()) == ()

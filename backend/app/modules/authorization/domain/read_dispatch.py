@@ -18,9 +18,18 @@ READ_ACTIONS = (
 
 
 async def read_denial(action, resource, context, repository, refresh, lifecycle, revalidate_self):
-    """Keep project reads on their existing actor revalidation callback."""
+    """Evaluate one closed read and return its outcome with the resource the decision records.
+
+    Project reads keep their existing actor revalidation callback. Only the
+    management evaluator returns an evaluated resource (the summary's locked
+    exact-project Finance disclosure); every other family records the
+    resource it was given.
+    """
     if action.action_id is ActionId.PROJECT_READ:
-        return await project_read_denial(action, resource, context, repository, revalidate_self, lifecycle)
+        return (*await project_read_denial(
+            action, resource, context, repository, revalidate_self, lifecycle), resource)
+    if action.action_id in PROJECT_MANAGEMENT_READ_ACTIONS:
+        return await management_read_denial(action, resource, context, repository, refresh, lifecycle)
     if action.action_id in HISTORY_READ_ACTIONS:
         evaluator = history_read_denial
     elif action.action_id in TASK_QUEUE_ACTIONS:
@@ -29,8 +38,6 @@ async def read_denial(action, resource, context, repository, refresh, lifecycle,
         evaluator = contribution_read_denial
     elif action.action_id in CONTRIBUTOR_READ_ACTIONS:
         evaluator = contributor_read_denial
-    elif action.action_id in PROJECT_MANAGEMENT_READ_ACTIONS:
-        evaluator = management_read_denial
     else:
         raise TypeError("unsupported closed read action")
-    return await evaluator(action, resource, context, repository, refresh, lifecycle)
+    return (*await evaluator(action, resource, context, repository, refresh, lifecycle), resource)

@@ -4,18 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"net/url"
-	"strconv"
 )
-
-// ProjectPageQuery selects one page of a project-wide management list. The
-// server binds every continuation to the same filters and limit. Outcome
-// filters preparations only.
-type ProjectPageQuery struct {
-	Limit   int
-	Cursor  *string
-	Outcome *string
-}
 
 // ProjectPreparation is one contributor's preparation with finding counts only.
 type ProjectPreparation struct {
@@ -30,24 +19,12 @@ type ProjectPreparationPage struct {
 
 var preparationOutcomes = []string{"pending", "passed", "failed", "infrastructure_failed"}
 
-func (q ProjectPageQuery) encode() (string, error) {
-	if q.Limit < 1 || q.Limit > 100 || (q.Cursor != nil && !validTaskCursor(*q.Cursor)) ||
-		(q.Outcome != nil && !oneOf(*q.Outcome, preparationOutcomes...)) {
-		return "", errors.New("limit must be 1–100; cursor 1–512 characters; outcome pending, passed, failed or infrastructure_failed")
-	}
-	query := url.Values{"limit": {strconv.Itoa(q.Limit)}}
-	if q.Cursor != nil {
-		query.Set("cursor", *q.Cursor)
-	}
-	if q.Outcome != nil {
-		query.Set("outcome", *q.Outcome)
-	}
-	return query.Encode(), nil
-}
-
 // ProjectPreparations lists every contributor's ZIP preparations in one project, newest first.
-func (c *Client) ProjectPreparations(ctx context.Context, project string, q ProjectPageQuery) (Result[ProjectPreparationPage], error) {
+func (c *Client) ProjectPreparations(ctx context.Context, project string, q ContributorQuery) (Result[ProjectPreparationPage], error) {
 	var result Result[ProjectPreparationPage]
+	if q.ProjectID != nil || q.TaskID != nil || q.State != nil || q.Status != nil || q.UpdatedSince != nil {
+		return result, errors.New("preparations accept only --outcome")
+	}
 	path, err := projectReadPath(project, "/submission-bundle-preparations")
 	if err != nil {
 		return result, err

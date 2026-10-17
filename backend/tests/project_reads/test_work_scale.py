@@ -1,4 +1,10 @@
-"""Project work pages and the summary stay within budget on 10,000 tasks and 20,000 submissions."""
+"""Project work pages and the summary stay within budget on 10,000 tasks and 20,000 submissions.
+
+The preparation list is timed over 10,000 seeded runs, so its project/queued
+index carries the page and the ``failed`` filter scans every pending run. The
+guide list (C1) and the contribution policy list (D1) are low-cardinality per
+project and are not timed here.
+"""
 
 import json
 
@@ -8,7 +14,7 @@ from .support import as_manager, get_ok, project_path, submitted_case
 
 async def test_project_pages_and_summary_meet_budget_at_scale(task_client, monkeypatch, task_database_env):
     project, task, submission = await submitted_case(task_client, monkeypatch)
-    await _seed(task_database_env, task, submission)
+    await _seed(task_database_env, task, submission, preparations=TASKS)
     as_manager(monkeypatch)
     timings = {}
     for name, suffix, params in (
@@ -17,6 +23,8 @@ async def test_project_pages_and_summary_meet_budget_at_scale(task_client, monke
         ("assignments", "/assignments", {"limit": 100}),
         ("summary", "/summary", {}),
         ("import_batches", "/task-import-batches", {"limit": 100}),
+        ("preparations", "/submission-bundle-preparations", {"limit": 100}),
+        ("preparations_failed", "/submission-bundle-preparations", {"limit": 100, "outcome": "failed"}),
     ):
         timings[name], page = await _timed(task_client, project_path(project, suffix), **params)
         if page.get("next_cursor"):

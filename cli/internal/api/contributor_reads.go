@@ -8,10 +8,12 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 )
 
-// ContributorQuery selects one page of the caller's own work. The server binds
-// every continuation to the same filters and limit.
+// ContributorQuery selects one page of a signed list: the caller's own work or
+// a project-wide management list. The server binds every continuation to the
+// same filters and limit; each list accepts only its own filters.
 type ContributorQuery struct {
 	Limit        int
 	Cursor       *string
@@ -20,6 +22,7 @@ type ContributorQuery struct {
 	State        *string
 	Status       *string
 	UpdatedSince *string
+	Outcome      *string
 }
 
 type ActiveGuide struct {
@@ -153,18 +156,24 @@ func oneOf(value string, allowed ...string) bool {
 
 var attemptStatuses = []string{"evaluation_pending", "review_pending", "accepted", "needs_revision", "rejected"}
 
-func (q ContributorQuery) encode() (string, error) {
+func (q ContributorQuery) encode() (string, error) { return q.encodeWith(attemptStatuses) }
+
+// encodeWith validates and encodes every set filter; status is checked
+// against the list's own stored statuses.
+func (q ContributorQuery) encodeWith(statuses []string) (string, error) {
 	if q.Limit < 1 || q.Limit > 100 || (q.Cursor != nil && !validTaskCursor(*q.Cursor)) ||
 		!optionalUUID(q.ProjectID) || !optionalUUID(q.TaskID) ||
 		(q.State != nil && !oneOf(*q.State, "active", "closed")) ||
-		(q.Status != nil && !oneOf(*q.Status, attemptStatuses...)) ||
-		(q.UpdatedSince != nil && !validTime(*q.UpdatedSince)) {
-		return "", errors.New("limit must be 1–100; cursor 1–512 characters; IDs UUIDs; times RFC 3339; state active or closed")
+		(q.Status != nil && !oneOf(*q.Status, statuses...)) ||
+		(q.UpdatedSince != nil && !validTime(*q.UpdatedSince)) ||
+		(q.Outcome != nil && !oneOf(*q.Outcome, preparationOutcomes...)) {
+		return "", errors.New("limit must be 1–100; cursor 1–512 characters; IDs UUIDs; times RFC 3339; state active or closed; status " +
+			strings.Join(statuses, ", ") + "; outcome " + strings.Join(preparationOutcomes, ", "))
 	}
 	query := url.Values{"limit": {strconv.Itoa(q.Limit)}}
 	for name, value := range map[string]*string{
 		"cursor": q.Cursor, "project_id": q.ProjectID, "task_id": q.TaskID,
-		"state": q.State, "status": q.Status, "updated_since": q.UpdatedSince,
+		"state": q.State, "status": q.Status, "updated_since": q.UpdatedSince, "outcome": q.Outcome,
 	} {
 		if value != nil {
 			query.Set(name, *value)

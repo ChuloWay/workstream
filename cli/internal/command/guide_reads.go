@@ -14,8 +14,7 @@ import (
 
 // addGuideReads adds the Project Manager's read-only guide commands.
 func addGuideReads(guide *cobra.Command, client func() (*api.Client, error), output *string, stdout io.Writer) {
-	var limit int
-	var cursor, status string
+	var page pageFlags
 	list := &cobra.Command{
 		Use: "list PROJECT_ID", Short: "List the project's guide versions and their stored status", Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -23,14 +22,7 @@ func addGuideReads(guide *cobra.Command, client func() (*api.Client, error), out
 			if err != nil {
 				return err
 			}
-			query := api.GuideQuery{Limit: limit}
-			if cmd.Flags().Changed("cursor") {
-				query.Cursor = &cursor
-			}
-			if cmd.Flags().Changed("status") {
-				query.Status = &status
-			}
-			result, err := apiClient.ProjectGuides(cmd.Context(), args[0], query)
+			result, err := apiClient.ProjectGuides(cmd.Context(), args[0], page.query(cmd))
 			if err != nil || *output == "json" {
 				return jsonOrError(stdout, result.Raw, err)
 			}
@@ -45,9 +37,7 @@ func addGuideReads(guide *cobra.Command, client func() (*api.Client, error), out
 			return err
 		},
 	}
-	list.Flags().IntVar(&limit, "limit", 50, "Page size (1–100; keep unchanged when continuing)")
-	list.Flags().StringVar(&cursor, "cursor", "", "Opaque next cursor from the previous page (same filters)")
-	list.Flags().StringVar(&status, "status", "", "draft, active or superseded")
+	page.bind(list, 50, "status=draft, active or superseded")
 	guide.AddCommand(list)
 	guide.AddCommand(&cobra.Command{
 		Use: "show PROJECT_ID GUIDE_ID", Short: "Read one guide, its declared documents and selected policies", Args: cobra.ExactArgs(2),
@@ -69,7 +59,7 @@ func addGuideReads(guide *cobra.Command, client func() (*api.Client, error), out
 		},
 	})
 	guide.AddCommand(&cobra.Command{
-		Use: "readiness PROJECT_ID GUIDE_ID", Short: "Dry-run activation: ready, or every unmet condition (writes nothing)", Args: cobra.ExactArgs(2),
+		Use: "readiness PROJECT_ID GUIDE_ID", Short: "Dry-run activation: ready, or the unmet conditions it evaluates (writes nothing)", Args: cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			apiClient, err := client()
 			if err != nil {

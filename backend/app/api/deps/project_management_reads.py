@@ -14,6 +14,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps.authorization import get_authorization_actor_identity, get_authorization_service
+from app.api.deps.snapshot_reads import run_snapshot_read, start_read_snapshot
 from app.core.api_controls import StructuredHTTPException
 from app.db.session import get_db_session
 from app.modules.authorization.api import ActorIdentityFacts
@@ -83,9 +84,7 @@ class ProjectManagementReadRunner:
 
     async def snapshot(self) -> None:
         """Start the one REPEATABLE READ snapshot every statement of this response reads."""
-        if self._session.in_transaction():
-            await self._session.commit()
-        await self._session.connection(execution_options={"isolation_level": "REPEATABLE READ"})
+        await start_read_snapshot(self._session)
 
     async def authorize(self, request: ProjectManagementReadRequest) -> ProjectManagementReadGrant:
         """Record the decision inside the open snapshot; a denial propagates for concealment."""
@@ -110,16 +109,11 @@ class ProjectManagementReadRunner:
 
     async def run(self, request: ProjectManagementReadRequest, read, *, faults: tuple[type[Exception], ...] = ()):
         """One bounded read; owner faults named by the caller map to the retryable 503."""
-        try:
-            await self.snapshot()
-            grant = await self.authorize(request)
-            response = await read(grant)
-            response.model_dump(mode="json")
-            await self._session.commit()
-            return response
-        except (*READ_FAULTS, *faults) as exc:
-            await self._session.rollback()
-            raise project_read_unavailable() from exc
+        return await run_snapshot_read(
+            self._session, lambda: self._authority.authorize(request), read,
+            cursor_invalid=ProjectManagementReadCursorInvalid, invalid_cursor=_cursor_invalid,
+            faults=(*READ_FAULTS, *faults), unavailable=project_read_unavailable,
+        )
 
 
 async def get_project_management_read_runner(
@@ -132,7 +126,7 @@ async def get_project_management_read_runner(
     from app.adapters.auth import project_management_read_authorization
 
     return ProjectManagementReadRunner(session, actor.actor_profile_id, project_management_read_authorization(
-        authority, session, request.app.state.settings.pagination_cursor_hmac_secret,
+        authority, request.app.state.settings.pagination_cursor_hmac_secret,
     ))
 
 

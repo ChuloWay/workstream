@@ -282,8 +282,9 @@ task lists; the CLI `me`,
 `task preparations` and `project tasks` filter commands consume them.
 PILOT-READ-3 adds the Project Manager's project-wide reads, each with its own
 AUTH action: guide versions, one guide with its documents and selected
-policies, a side-effect-free activation readiness dry run that reports every
-unmet activation condition with activation's own refusal code, verified
+policies, a side-effect-free activation readiness dry run that reports the
+unmet activation conditions it evaluates (a check whose inputs are missing is
+not evaluated) with activation's own refusal code, verified
 read-back of an uploaded guide original, every attempt and claim, a project
 summary (award totals only alongside an exact-project Finance Authority grant),
 task import batches and ZIP preparations with finding counts; plus the Finance

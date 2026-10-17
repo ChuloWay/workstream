@@ -59,7 +59,10 @@ async def read_project_guide(project_id: UUID, guide_id: UUID, reads: Reads) -> 
 async def read_guide_activation_readiness(
     project_id: UUID, guide_id: UUID, reads: Reads,
 ) -> GuideActivationReadiness:
-    """Dry-run activation over the current selections: ready, or every unmet condition with its refusal code."""
+    """Dry-run activation over the current selections: ready, or the unmet conditions it evaluates, with refusal codes.
+
+    A check whose inputs are missing is not evaluated.
+    """
     return await reads.activation_readiness(project_id, guide_id)
 
 

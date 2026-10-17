@@ -150,13 +150,16 @@ map to `project.guide.manage`; `project.submission.list`,
 `project.submission_bundle_preparation.list` map to `project.task.manage`; all
 nine accept only a Project Manager grant covering the project (system or
 exact). `contribution.policy.list` maps to `compensation.policy.manage` and
-accepts only a covering Finance Authority grant. The kernel locks actor,
+accepts only a covering Finance Authority grant. The evaluator locks actor,
 matched grant and Project in that order. A guide or document read names the
 selected record inside the project; its owner conceals a record of another
-project after the decision. `project.summary.read` additionally locks any
-exact-project Finance Authority `compensation.award.read` grant and discloses
-award totals only when one exists (the PILOT-10 exact-project Finance rule);
-that check narrows disclosure and authorizes nothing. Denials use the
+project after the decision. For `project.summary.read` the same evaluator,
+after the Project Manager grant and before Project, also resolves and locks
+any exact-project Finance Authority `compensation.award.read` grant; award
+totals are disclosed only when one exists (the PILOT-10 exact-project Finance
+rule), and the recorded decision's resource digest then binds that grant, so
+the evidence shows the disclosure. That grant narrows disclosure and
+authorizes nothing; the Project Manager grant stays the matched grant. Denials use the
 concealed not-found response. Decision digests and signed cursors bind the
 caller, project, resource, normalized filters, limit and order as for
 PILOT-READ-2; single-record and summary reads accept no cursor. These actions

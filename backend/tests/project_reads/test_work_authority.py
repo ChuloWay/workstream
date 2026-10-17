@@ -83,7 +83,9 @@ async def test_each_read_commits_one_exact_decision(task_client, monkeypatch):
     assert all(row.matched_grant_id is not None for row in rows[:-1])
 
 
-async def test_award_totals_need_an_exact_project_finance_grant(task_client, monkeypatch):
+async def test_award_totals_need_an_exact_project_finance_grant_and_the_decision_records_it(
+    task_client, monkeypatch,
+):
     project, _task, _submission = await submitted_case(task_client, monkeypatch)
     as_manager(monkeypatch)
     assert (await get_ok(task_client, project_path(project, "/summary")))["award_totals"] is None
@@ -92,3 +94,14 @@ async def test_award_totals_need_an_exact_project_finance_grant(task_client, mon
     assert (await get_ok(task_client, project_path(project, "/summary")))["award_totals"] is None
     await as_admin(task_client, monkeypatch, MANAGER, "finance_authority", project=project)
     assert (await get_ok(task_client, project_path(project, "/summary")))["award_totals"] == []
+    async with db_session.get_session_factory()() as session:
+        rows = (await session.scalars(select(AuditEvent).where(
+            AuditEvent.action_id == "project.summary.read",
+        ).order_by(AuditEvent.created_at))).all()
+    withheld, system_finance, disclosed = (row.after_facts["resource_context_digest"] for row in rows)
+    # The same request records the same evidence until the evaluator locks an
+    # exact-project Finance grant; that disclosure changes the recorded digest.
+    assert withheld == system_finance != disclosed
+    # The Project Manager grant stays the matched authority for the action.
+    assert len({row.matched_grant_id for row in rows}) == 1 and rows[0].matched_grant_id is not None
+

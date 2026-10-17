@@ -274,7 +274,11 @@ class GuideActivationService:
         except GuideProposalError as exc:
             if not conditions.collect or exc.code not in _PRODUCT_REFUSALS:
                 raise
-            conditions.fail(exc.code, "post_policy_unavailable")
+            # The lock admits only a draft guide; name that cause with the
+            # lock's own refusal code, which activation raises unchanged.
+            guide = await self.projects.get_guide(str(selection.guide_id))
+            conditions.fail(exc.code, "guide_not_draft" if guide is not None and guide.status != "draft"
+                            else "post_policy_unavailable")
             return None
         try:
             await self.post.require_current_upstream(locked)
@@ -291,9 +295,7 @@ class GuideActivationService:
         ):
             conditions.fail("proposal_stale", "selection_stale")
         guide = locked.view.guide
-        if guide.status != "draft":
-            conditions.fail("proposal_stale", "guide_not_draft")
-        elif expected is not None and guide.mutation_generation != expected.guide_mutation_generation:
+        if expected is not None and guide.mutation_generation != expected.guide_mutation_generation:
             conditions.fail("proposal_stale", "selection_stale")
         previous = await self.projects.lock_active_guide(str(selection.project_id))
         if expected is not None and (
@@ -429,7 +431,11 @@ class _ActivationConditions:
         self.unmet: list[GuideActivationCondition] = []
 
     def fail(self, code, reason, missing_capabilities=()) -> None:
-        """Refuse activation now, or record the condition for a readiness read."""
+        """Refuse activation now, or record the condition for a readiness read.
+
+        ``selection_stale`` compares a displayed selection, which only
+        activation has, so that reason never reaches a readiness answer.
+        """
         if not self.collect:
             raise GuideProposalError(code, missing_capabilities=missing_capabilities)
         self.unmet.append(GuideActivationCondition.of(code, reason, missing_capabilities))

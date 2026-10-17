@@ -34,7 +34,8 @@ func taskCounts(counts api.TaskStatusCounts) string {
 
 // addManagerReads adds the Project Manager's project-wide work reads under `project`.
 func addManagerReads(project *cobra.Command, client func() (*api.Client, error), output *string, stdout io.Writer) {
-	var submissionPage, assignmentPage, batchPage projectFlags
+	var submissionPage projectFlags
+	var assignmentPage, batchPage pageFlags
 	submissions := &cobra.Command{Use: "submissions PROJECT_ID", Short: "List every attempt in a project with its submitter and stored outcome", Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			apiClient, err := client()
@@ -66,7 +67,7 @@ func addManagerReads(project *cobra.Command, client func() (*api.Client, error),
 			if err != nil {
 				return err
 			}
-			result, err := apiClient.ProjectAssignments(cmd.Context(), args[0], assignmentPage.query(cmd))
+			result, err := apiClient.ProjectAssignments(cmd.Context(), args[0], api.ProjectWorkQuery{ContributorQuery: assignmentPage.query(cmd)})
 			if err != nil || *output == "json" {
 				return jsonOrError(stdout, result.Raw, err)
 			}
@@ -123,7 +124,7 @@ func addManagerReads(project *cobra.Command, client func() (*api.Client, error),
 			if err != nil {
 				return err
 			}
-			result, err := apiClient.ProjectImportBatches(cmd.Context(), args[0], batchPage.query(cmd))
+			result, err := apiClient.ProjectImportBatches(cmd.Context(), args[0], api.ProjectWorkQuery{ContributorQuery: batchPage.query(cmd)})
 			if err != nil || *output == "json" {
 				return jsonOrError(stdout, result.Raw, err)
 			}

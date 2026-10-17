@@ -7,7 +7,9 @@ from app.modules.tasks.api.contributor_reads import ContributorAssignmentCounts,
 from app.modules.tasks.api.project_reads import ProjectWorkCounts, TaskStatusCounts
 from app.modules.compensation.api.award_reads import ContributorAwardTotal
 from app.core.identifiers import new_record_id
+from app.modules.outbox.api import HandlerOutcome
 from tests.submission_fixtures import route_retained_checker_remediation, seed_retained_checker_run
+from tests.tasks.invalidation_support import invoked, revoke, setup_assignment
 from tests.test_tasks import actor_id, create_draft_task
 from .support import OWNER, as_manager, get_ok, project_path, submitted_case
 
@@ -40,6 +42,22 @@ async def test_assignment_carries_contributor_and_the_work_context_revision(task
     # The work-context route omits null fields; the values are the same projection.
     assert item["revision"] is not None and _present(item["revision"]) == _present(context["revision_context"])
     assert item["compensation"]["contribution_policy_version_id"]
+
+
+async def test_a_revoked_claim_is_closed_with_only_its_contributors_facts(task_client, monkeypatch):
+    s = await setup_assignment(task_client, monkeypatch)
+    await revoke(s)
+    _, envelope = await invoked(s)
+    assert await s.handler(envelope) is HandlerOutcome.ACKNOWLEDGE
+    as_manager(monkeypatch)
+    path = project_path(s.project["id"], "/assignments")
+    [item] = (await get_ok(task_client, path, state="closed"))["items"]
+    assert (item["assignment_id"], item["task_id"]) == (s.assignment["id"], s.task["id"])
+    assert (item["state"], item["assignment_status"]) == ("closed", "authority_revoked")
+    assert item["contributor_actor_id"] == s.grant["actor_profile_id"]
+    # A closed claim projects no current task status and no revision context.
+    assert item["task_status"] is None and item["revision"] is None and item["released_at"] is not None
+    assert (await get_ok(task_client, path, state="active"))["items"] == []
 
 
 async def test_summary_counts_tasks_claims_attempts_and_infrastructure_failures(task_client, monkeypatch):

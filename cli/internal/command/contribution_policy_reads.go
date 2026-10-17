@@ -51,7 +51,7 @@ func addContributionPolicyReads(project *cobra.Command, client func() (*api.Clie
 	}
 	show.Flags().StringVar(&version, "version", "", "Optional exact version UUID; omitted means backend selection, not auto-discovery")
 	policy.AddCommand(show)
-	var page projectPageFlags
+	var page pageFlags
 	list := &cobra.Command{
 		Use: "list PROJECT_ID", Short: "List every stored policy version with its draft, published or retired status, oldest first", Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -75,7 +75,7 @@ func addContributionPolicyReads(project *cobra.Command, client func() (*api.Clie
 			return err
 		},
 	}
-	page.bind(list, false)
+	page.bind(list, 50)
 	policy.AddCommand(list)
 	addContributionPolicyMutations(policy, client, output, stdout)
 	project.AddCommand(policy)
