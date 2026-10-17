@@ -97,7 +97,9 @@ class ExternalGrantConsumer(Consumer):
                 }
             }
             values["entry_digest"] = external_checker_json_hash(spec)
-            registry = ExternalCheckerRegistryEntry.model_validate(values)
+            registry = ExternalCheckerRegistryEntry.model_validate_json(
+                json.dumps(values, separators=(",", ":"), sort_keys=True)
+            )
         return make_external_checker_execution_request(
             registry=registry,
             identity=identity,

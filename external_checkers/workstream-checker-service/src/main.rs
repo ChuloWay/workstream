@@ -992,7 +992,7 @@ fn verify_grant(
     let runtime = match (&manifest.identity, &manifest.runtime_scratch) {
         (GrantIdentity::PreSubmit { .. }, None) => None,
         (GrantIdentity::PostSubmit { .. }, None) if !terminal_runtime_required => None,
-        (GrantIdentity::PostSubmit { .. }, Some(runtime)) => {
+        (GrantIdentity::PostSubmit { .. }, Some(runtime)) if terminal_runtime_required => {
             let path = grant_root.join("runtime");
             let metadata = fs::symlink_metadata(&path).map_err(|_| "runtime scratch missing")?;
             if !metadata.file_type().is_dir()
@@ -3214,6 +3214,12 @@ exit 2
             grant_id: zero_allowance_manifest.grant_id.clone(),
             binding_digest: zero_allowance_manifest.binding_digest.clone(),
         };
+        config.terminal_benchmark = None;
+        assert_eq!(
+            verify_grant(&config, &request, &zero_reference).unwrap_err(),
+            "grant runtime phase differs"
+        );
+        config.terminal_benchmark = Some(TerminalBenchmarkProfile::authorization_fixture(&request));
         let verified = verify_grant(&config, &request, &zero_reference).unwrap();
         let (_, runtime_grant) = verified.runtime.unwrap();
         assert_eq!(runtime_grant.byte_allowance, 0);
