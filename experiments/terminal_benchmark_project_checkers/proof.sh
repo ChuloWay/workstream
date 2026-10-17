@@ -1451,11 +1451,93 @@ PY
   kill -TERM "$(cat "${SERVICE_PID_FILE}")"
   wait "${second_service_job}" || true
 
-  timeout 15 "${REAL_DOCKER}" exec "${DIND_NAME}" docker events \
-    --since "${event_since}" --until "$(date +%s)" \
-    --filter 'label=workstream.owner=terminal-benchmark-checker-service-v1' \
-    --format '{{json .}}' | head -c 262144 >"${RAW_DIR}/docker-events.ndjson"
-  [[ -s "${RAW_DIR}/docker-events.ndjson" ]]
+  local docker_events_capture="${CONTROL_ROOT}/docker-events.ndjson.capture"
+  [[ ! -e "${docker_events_capture}" && ! -L "${docker_events_capture}" ]]
+  (
+    umask 077
+    timeout 15 "${REAL_DOCKER}" exec "${DIND_NAME}" docker events \
+      --since "${event_since}" --until "$(date +%s)" \
+      --filter 'label=workstream.owner=terminal-benchmark-checker-service-v1' \
+      --format '{{json .}}' | head -c 262144 >"${docker_events_capture}"
+  )
+  python3 - "${docker_events_capture}" "${RAW_DIR}" "${OWNER_UID}" "${DOCKER_GID}" <<'PY'
+import os
+import stat
+import sys
+
+source_path, destination_root, owner_uid, owner_gid = sys.argv[1:]
+owner_uid, owner_gid = int(owner_uid), int(owner_gid)
+source_metadata = os.lstat(source_path)
+if (
+    not stat.S_ISREG(source_metadata.st_mode)
+    or stat.S_IMODE(source_metadata.st_mode) != 0o600
+    or (source_metadata.st_uid, source_metadata.st_gid) != (0, 0)
+    or not 0 < source_metadata.st_size <= 262_144
+):
+    raise SystemExit("Docker event capture identity differs")
+
+root_metadata = os.lstat(destination_root)
+if (
+    not stat.S_ISDIR(root_metadata.st_mode)
+    or stat.S_IMODE(root_metadata.st_mode) != 0o700
+    or (root_metadata.st_uid, root_metadata.st_gid) != (owner_uid, owner_gid)
+):
+    raise SystemExit("evidence root identity differs")
+
+source = os.open(source_path, os.O_RDONLY | os.O_NOFOLLOW)
+root = os.open(destination_root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+destination = None
+try:
+    opened_root = os.fstat(root)
+    if (opened_root.st_dev, opened_root.st_ino) != (
+        root_metadata.st_dev,
+        root_metadata.st_ino,
+    ):
+        raise SystemExit("evidence root changed")
+    destination = os.open(
+        "docker-events.ndjson",
+        os.O_CREAT | os.O_EXCL | os.O_WRONLY | os.O_NOFOLLOW,
+        0o600,
+        dir_fd=root,
+    )
+    copied = 0
+    while chunk := os.read(source, 65_536):
+        copied += len(chunk)
+        if copied > 262_144:
+            raise SystemExit("Docker event capture is unbounded")
+        view = memoryview(chunk)
+        while view:
+            written = os.write(destination, view)
+            if written <= 0:
+                raise OSError("Docker event capture copy made no progress")
+            view = view[written:]
+    opened_source = os.fstat(source)
+    if (
+        copied != source_metadata.st_size
+        or (
+            opened_source.st_dev,
+            opened_source.st_ino,
+            opened_source.st_size,
+            opened_source.st_mtime_ns,
+        )
+        != (
+            source_metadata.st_dev,
+            source_metadata.st_ino,
+            source_metadata.st_size,
+            source_metadata.st_mtime_ns,
+        )
+    ):
+        raise SystemExit("Docker event capture changed")
+    os.fchown(destination, owner_uid, owner_gid)
+    os.fchmod(destination, 0o600)
+    os.fsync(destination)
+finally:
+    if destination is not None:
+        os.close(destination)
+    os.close(root)
+    os.close(source)
+PY
+  rm -f "${docker_events_capture}"
   run_as_owner "${BACKEND_PYTHON}" "${MATRIX_BUILDER}" \
     --raw "${RAW_DIR}" --head "${EXPECTED_HEAD}" --output "${RAW_DIR}/matrix.json"
   find "${RAW_DIR}" -maxdepth 1 -type f -exec chmod 0600 {} +
