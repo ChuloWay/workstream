@@ -269,10 +269,15 @@ of this corrected clean plan is required before implementation.
 ## Reconciliation
 
 - Current-source reconciliation: implementation started from `34501cd64` and
-  now follows merged main `d5bac1313`. Main's contributor reads own revision
+  now follows merged main `ef839bb6d`. Main's contributor reads own revision
   `0050_contributor_reads`; this change's exact operational-read audit pairs are
   the sole `0051_operational_read_audit` successor. The registry surface remains
   separate from contributor/result reads, CI and README ownership.
+- Schema-fingerprint reconciliation: main's
+  `schema-fingerprint-task-status` record restores the main-only `0050`
+  fingerprint. This branch retains the independently measured combined
+  `0050 -> 0051` fingerprint because the operational-read audit constraint is
+  part of its exact graph; no migration or product source changed in the merge.
 - Shared migration order: recovery and S3 consume this byte-identical `0051`
   prerequisite before adding their later revisions. Other open read work must
   rechain after the revisions that actually merge; this PR does not duplicate
