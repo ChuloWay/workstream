@@ -169,7 +169,7 @@ type ContributionPolicyVersionPage struct {
 }
 
 // ContributionPolicyVersions lists every stored version of the project's policies, oldest first.
-func (c *Client) ContributionPolicyVersions(ctx context.Context, project string, q ContributorQuery) (Result[ContributionPolicyVersionPage], error) {
+func (c *Client) ContributionPolicyVersions(ctx context.Context, project string, q PageQuery) (Result[ContributionPolicyVersionPage], error) {
 	var result Result[ContributionPolicyVersionPage]
 	if q.ProjectID != nil || q.TaskID != nil || q.State != nil || q.Status != nil || q.UpdatedSince != nil || q.Outcome != nil {
 		return result, errors.New("policy versions accept no filters")

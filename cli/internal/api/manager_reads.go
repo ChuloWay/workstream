@@ -14,7 +14,7 @@ import (
 // ProjectWorkQuery selects one page of a project's attempts or claims. The
 // server binds every continuation to the same caller, project and filters.
 type ProjectWorkQuery struct {
-	ContributorQuery
+	PageQuery
 	SubmitterID *string
 }
 
@@ -76,7 +76,7 @@ func (q ProjectWorkQuery) encode() (string, error) {
 	if q.ProjectID != nil || !optionalUUID(q.SubmitterID) {
 		return "", errors.New("--submitter must be a UUID")
 	}
-	query, err := q.ContributorQuery.encode()
+	query, err := q.PageQuery.encode()
 	if err != nil || q.SubmitterID == nil {
 		return query, err
 	}

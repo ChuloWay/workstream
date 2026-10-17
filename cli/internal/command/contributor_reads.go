@@ -16,14 +16,14 @@ type pageFlags struct {
 	cursor, project, task, state, status, since, outcome string
 }
 
-func (f *pageFlags) query(cmd *cobra.Command) api.ContributorQuery {
+func (f *pageFlags) query(cmd *cobra.Command) api.PageQuery {
 	selected := func(name string, value *string) *string {
 		if cmd.Flags().Changed(name) {
 			return value
 		}
 		return nil
 	}
-	return api.ContributorQuery{
+	return api.PageQuery{
 		Limit: f.limit, Cursor: selected("cursor", &f.cursor), ProjectID: selected("project", &f.project),
 		TaskID: selected("task", &f.task), State: selected("state", &f.state), Status: selected("status", &f.status),
 		UpdatedSince: selected("updated-since", &f.since), Outcome: selected("outcome", &f.outcome),

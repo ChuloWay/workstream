@@ -20,7 +20,7 @@ type ProjectPreparationPage struct {
 var preparationOutcomes = []string{"pending", "passed", "failed", "infrastructure_failed"}
 
 // ProjectPreparations lists every contributor's ZIP preparations in one project, newest first.
-func (c *Client) ProjectPreparations(ctx context.Context, project string, q ContributorQuery) (Result[ProjectPreparationPage], error) {
+func (c *Client) ProjectPreparations(ctx context.Context, project string, q PageQuery) (Result[ProjectPreparationPage], error) {
 	var result Result[ProjectPreparationPage]
 	if q.ProjectID != nil || q.TaskID != nil || q.State != nil || q.Status != nil || q.UpdatedSince != nil {
 		return result, errors.New("preparations accept only --outcome")
@@ -29,7 +29,7 @@ func (c *Client) ProjectPreparations(ctx context.Context, project string, q Cont
 	if err != nil {
 		return result, err
 	}
-	query, err := q.encode()
+	query, err := q.encodePreparations()
 	if err != nil {
 		return result, err
 	}

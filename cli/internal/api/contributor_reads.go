@@ -11,10 +11,10 @@ import (
 	"strings"
 )
 
-// ContributorQuery selects one page of a signed list: the caller's own work or
-// a project-wide management list. The server binds every continuation to the
+// PageQuery selects one page of a signed list: the caller's own work or a
+// project-wide management list. The server binds every continuation to the
 // same filters and limit; each list accepts only its own filters.
-type ContributorQuery struct {
+type PageQuery struct {
 	Limit        int
 	Cursor       *string
 	ProjectID    *string
@@ -156,24 +156,26 @@ func oneOf(value string, allowed ...string) bool {
 
 var attemptStatuses = []string{"evaluation_pending", "review_pending", "accepted", "needs_revision", "rejected"}
 
-func (q ContributorQuery) encode() (string, error) { return q.encodeWith(attemptStatuses) }
+func (q PageQuery) encode() (string, error) { return q.encodeWith(attemptStatuses) }
 
 // encodeWith validates and encodes every set filter; status is checked
-// against the list's own stored statuses.
-func (q ContributorQuery) encodeWith(statuses []string) (string, error) {
+// against the list's own stored statuses. Only preparation lists accept an
+// outcome, through encodePreparations.
+func (q PageQuery) encodeWith(statuses []string) (string, error) {
+	if q.Outcome != nil {
+		return "", errors.New("only preparation lists accept --outcome")
+	}
 	if q.Limit < 1 || q.Limit > 100 || (q.Cursor != nil && !validTaskCursor(*q.Cursor)) ||
 		!optionalUUID(q.ProjectID) || !optionalUUID(q.TaskID) ||
 		(q.State != nil && !oneOf(*q.State, "active", "closed")) ||
 		(q.Status != nil && !oneOf(*q.Status, statuses...)) ||
-		(q.UpdatedSince != nil && !validTime(*q.UpdatedSince)) ||
-		(q.Outcome != nil && !oneOf(*q.Outcome, preparationOutcomes...)) {
-		return "", errors.New("limit must be 1–100; cursor 1–512 characters; IDs UUIDs; times RFC 3339; state active or closed; status " +
-			strings.Join(statuses, ", ") + "; outcome " + strings.Join(preparationOutcomes, ", "))
+		(q.UpdatedSince != nil && !validTime(*q.UpdatedSince)) {
+		return "", errors.New("limit must be 1–100; cursor 1–512 characters; IDs UUIDs; times RFC 3339; state active or closed")
 	}
 	query := url.Values{"limit": {strconv.Itoa(q.Limit)}}
 	for name, value := range map[string]*string{
 		"cursor": q.Cursor, "project_id": q.ProjectID, "task_id": q.TaskID,
-		"state": q.State, "status": q.Status, "updated_since": q.UpdatedSince, "outcome": q.Outcome,
+		"state": q.State, "status": q.Status, "updated_since": q.UpdatedSince,
 	} {
 		if value != nil {
 			query.Set(name, *value)
@@ -182,7 +184,23 @@ func (q ContributorQuery) encodeWith(statuses []string) (string, error) {
 	return query.Encode(), nil
 }
 
-func (c *Client) contributorPage(ctx context.Context, path string, q ContributorQuery) (json.RawMessage, map[string]json.RawMessage, []json.RawMessage, error) {
+// encodePreparations encodes a preparation list page and its optional outcome.
+func (q PageQuery) encodePreparations() (string, error) {
+	outcome := q.Outcome
+	if outcome != nil && !oneOf(*outcome, preparationOutcomes...) {
+		return "", errors.New("--outcome must be " + strings.Join(preparationOutcomes, ", "))
+	}
+	q.Outcome = nil
+	query, err := q.encode()
+	if err != nil || outcome == nil {
+		return query, err
+	}
+	values, _ := url.ParseQuery(query)
+	values.Set("outcome", *outcome)
+	return values.Encode(), nil
+}
+
+func (c *Client) contributorPage(ctx context.Context, path string, q PageQuery) (json.RawMessage, map[string]json.RawMessage, []json.RawMessage, error) {
 	query, err := q.encode()
 	if err != nil {
 		return nil, nil, nil, err
@@ -238,7 +256,7 @@ func decodeActorProject(raw json.RawMessage) (ActorProject, bool) {
 }
 
 // MyProjects lists projects where the caller holds an exact grant.
-func (c *Client) MyProjects(ctx context.Context, q ContributorQuery) (Result[ActorProjectPage], error) {
+func (c *Client) MyProjects(ctx context.Context, q PageQuery) (Result[ActorProjectPage], error) {
 	var result Result[ActorProjectPage]
 	raw, fields, items, err := c.contributorPage(ctx, "/api/v1/actors/me/projects", q)
 	if err != nil {
@@ -289,7 +307,7 @@ func decodeContributorAssignment(raw json.RawMessage) (ContributorAssignment, bo
 }
 
 // MyAssignments lists the caller's claims in projects where it holds a Submitter grant.
-func (c *Client) MyAssignments(ctx context.Context, q ContributorQuery) (Result[ContributorAssignmentPage], error) {
+func (c *Client) MyAssignments(ctx context.Context, q PageQuery) (Result[ContributorAssignmentPage], error) {
 	var result Result[ContributorAssignmentPage]
 	raw, fields, items, err := c.contributorPage(ctx, "/api/v1/actors/me/assignments", q)
 	if err != nil {
@@ -325,7 +343,7 @@ func decodeContributorSubmission(raw json.RawMessage) (ContributorSubmission, bo
 }
 
 // MySubmissions lists the caller's attempts in projects where it holds a Submitter grant.
-func (c *Client) MySubmissions(ctx context.Context, q ContributorQuery) (Result[ContributorSubmissionPage], error) {
+func (c *Client) MySubmissions(ctx context.Context, q PageQuery) (Result[ContributorSubmissionPage], error) {
 	var result Result[ContributorSubmissionPage]
 	raw, fields, items, err := c.contributorPage(ctx, "/api/v1/actors/me/submissions", q)
 	if err != nil {
@@ -418,13 +436,17 @@ func preparationsPath(task string) (string, error) {
 }
 
 // Preparations lists the caller's ZIP preparations for one task, newest first.
-func (c *Client) Preparations(ctx context.Context, task string, q ContributorQuery) (Result[PreparationPage], error) {
+func (c *Client) Preparations(ctx context.Context, task string, q PageQuery) (Result[PreparationPage], error) {
 	var result Result[PreparationPage]
 	path, err := preparationsPath(task)
 	if err != nil {
 		return result, err
 	}
-	raw, fields, items, err := c.contributorPage(ctx, path, q)
+	query, err := q.encodePreparations()
+	if err != nil {
+		return result, err
+	}
+	raw, fields, items, err := c.readPage(ctx, path, query, q.Limit)
 	if err != nil {
 		return result, err
 	}

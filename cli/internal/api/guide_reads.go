@@ -160,10 +160,13 @@ func ValidUUID(value string) bool { return validUUID(value) }
 func SameUUID(left, right string) bool { return sameUUID(left, right) }
 
 // ProjectGuides lists a project's guide versions by creation order.
-func (c *Client) ProjectGuides(ctx context.Context, project string, q ContributorQuery) (Result[ProjectGuidePage], error) {
+func (c *Client) ProjectGuides(ctx context.Context, project string, q PageQuery) (Result[ProjectGuidePage], error) {
 	var result Result[ProjectGuidePage]
 	if q.ProjectID != nil || q.TaskID != nil || q.State != nil || q.UpdatedSince != nil || q.Outcome != nil {
 		return result, errors.New("guides accept only --status")
+	}
+	if q.Status != nil && !oneOf(*q.Status, guideStatuses...) {
+		return result, errors.New("--status must be " + strings.Join(guideStatuses, ", "))
 	}
 	path, err := projectReadPath(project, "/guides")
 	if err != nil {

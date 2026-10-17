@@ -8,15 +8,23 @@ project and are not timed here.
 
 import json
 
-from tests.contributor_reads.test_scale import BUDGET_SECONDS, SUBMISSIONS_PER_TASK, TASKS, _seed, _timed
+from tests.contributor_reads.test_scale import (
+    BUDGET_SECONDS,
+    SUBMISSIONS_PER_TASK,
+    TASKS,
+    _seed,
+    _timed,
+)
 from .support import as_manager, get_ok, project_path, submitted_case
 
 
-async def test_project_pages_and_summary_meet_budget_at_scale(task_client, monkeypatch, task_database_env):
+async def test_project_pages_and_summary_meet_budget_at_scale(
+    task_client, monkeypatch, task_database_env
+):
     project, task, submission = await submitted_case(task_client, monkeypatch)
     await _seed(task_database_env, task, submission, preparations=TASKS)
     as_manager(monkeypatch)
-    timings = {}
+    timings, pages = {}, {}
     for name, suffix, params in (
         ("submissions", "/submissions", {"limit": 100}),
         ("submissions_filtered", "/submissions", {"limit": 100, "status": "evaluation_pending"}),
@@ -24,12 +32,21 @@ async def test_project_pages_and_summary_meet_budget_at_scale(task_client, monke
         ("summary", "/summary", {}),
         ("import_batches", "/task-import-batches", {"limit": 100}),
         ("preparations", "/submission-bundle-preparations", {"limit": 100}),
-        ("preparations_failed", "/submission-bundle-preparations", {"limit": 100, "outcome": "failed"}),
+        (
+            "preparations_failed",
+            "/submission-bundle-preparations",
+            {"limit": 100, "outcome": "failed"},
+        ),
     ):
         timings[name], page = await _timed(task_client, project_path(project, suffix), **params)
+        pages[name] = page
         if page.get("next_cursor"):
             timings[name + "_continued"], _ = await _timed(
-                task_client, project_path(project, suffix), **params, cursor=page["next_cursor"])
+                task_client, project_path(project, suffix), **params, cursor=page["next_cursor"]
+            )
+    # A seeding miss must fail: the timed page is full, and no seeded or real run failed.
+    assert len(pages["preparations"]["items"]) == 100 and pages["preparations"]["next_cursor"]
+    assert pages["preparations_failed"] == {"items": [], "next_cursor": None}
     summary = await get_ok(task_client, project_path(project, "/summary"))
     assert sum(summary["tasks"].values()) == TASKS + 1
     assert summary["assignments"]["active"] == TASKS + 1

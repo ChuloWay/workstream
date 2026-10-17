@@ -16,7 +16,7 @@ type projectFlags struct {
 }
 
 func (f *projectFlags) query(cmd *cobra.Command) api.ProjectWorkQuery {
-	q := api.ProjectWorkQuery{ContributorQuery: f.pageFlags.query(cmd)}
+	q := api.ProjectWorkQuery{PageQuery: f.pageFlags.query(cmd)}
 	if cmd.Flags().Changed("submitter") {
 		q.SubmitterID = &f.submitter
 	}
@@ -67,7 +67,7 @@ func addManagerReads(project *cobra.Command, client func() (*api.Client, error),
 			if err != nil {
 				return err
 			}
-			result, err := apiClient.ProjectAssignments(cmd.Context(), args[0], api.ProjectWorkQuery{ContributorQuery: assignmentPage.query(cmd)})
+			result, err := apiClient.ProjectAssignments(cmd.Context(), args[0], api.ProjectWorkQuery{PageQuery: assignmentPage.query(cmd)})
 			if err != nil || *output == "json" {
 				return jsonOrError(stdout, result.Raw, err)
 			}
@@ -124,7 +124,7 @@ func addManagerReads(project *cobra.Command, client func() (*api.Client, error),
 			if err != nil {
 				return err
 			}
-			result, err := apiClient.ProjectImportBatches(cmd.Context(), args[0], api.ProjectWorkQuery{ContributorQuery: batchPage.query(cmd)})
+			result, err := apiClient.ProjectImportBatches(cmd.Context(), args[0], api.ProjectWorkQuery{PageQuery: batchPage.query(cmd)})
 			if err != nil || *output == "json" {
 				return jsonOrError(stdout, result.Raw, err)
 			}

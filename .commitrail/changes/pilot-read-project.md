@@ -148,8 +148,9 @@ filters, and is the template this change follows).
     Authority grant (a system Finance grant does not add them; the PILOT-10
     precedent) and a list (possibly empty) with one. The closed evaluator
     resolves and locks that grant after the Project Manager grant and before
-    Project, and binds it into the recorded decision's resource digest, so
-    the audit evidence shows the disclosure; the Project Manager grant stays
+    Project, and binds it into the recorded decision's resource digest
+    (recomputable from the request and the candidate grant; the grant id
+    itself is not stored); the Project Manager grant stays
     the matched grant. Acceptance rate is accepted over decided attempts
     (accepted, needs_revision, rejected); checker infrastructure failures
     count post-submit checker runs whose status is `infrastructure_failed`.
@@ -251,6 +252,18 @@ documentation tracks at `b4b34a39a`.
   every unmet condition (it reports the conditions it evaluates); the record
   stated the C6 default twice, claimed a table test for every C3 reason and
   called the issue complete with two OPEN decisions.
+- Fixed on replay: the CLI's shared page query was named for contributor
+  lists though management lists use it (renamed `PageQuery`); every list but
+  the preparation lists accepted `--outcome` and PR2's contributor-list
+  validation message gained outcome text (rejected outside preparations, PR2
+  message restored, Go unit test); the timed preparations page did not prove
+  the seeding (now asserts a full 100-item page and the empty `failed` page);
+  the C6 test compared the port with the same grouped-sum SQL (now asserts
+  the fixture's configured award quantities; two awards in one
+  instrument/unit would need a second accepted contribution, since an award
+  set holds one award per instrument); the docs said the evidence shows the
+  disclosure (the decision digest binds the Finance grant and is recomputable
+  from the request and the candidate grant; the grant id is not stored).
 - Recorded, not changed: the C3 `FOR UPDATE` row locks held until the
   response commits (Human review focus).
 
