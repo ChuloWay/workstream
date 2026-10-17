@@ -2,6 +2,10 @@
   "assignments": [
     {
       "group": "artifacts",
+      "target": "backend/app/adapters/artifacts/aws_live_proof.py"
+    },
+    {
+      "group": "artifacts",
       "target": "backend/app/adapters/artifacts/internal_workers.py"
     },
     {
@@ -403,6 +407,10 @@
     {
       "group": "artifacts",
       "target": "backend/app/modules/artifacts/preparation_reads.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/modules/artifacts/provider_activation.py"
     },
     {
       "group": "artifacts",
@@ -2026,6 +2034,10 @@
     },
     {
       "group": "shared",
+      "target": "backend/scripts/aws_artifact_provider_proof.py"
+    },
+    {
+      "group": "shared",
       "target": "backend/scripts/behavior_ownership.py"
     },
     {
@@ -2117,7 +2129,7 @@
       "target": "backend/scripts/validate_test_lane_evidence.py"
     }
   ],
-  "authority_digest": "63bd7c5bf88c7ee20bbec0dbcc08359c5e77d7acc79dea93363cf61f9b108c73",
+  "authority_digest": "0251ad35a6cecb0defe06f0400500a6645f97acbde08d35ae53faaae81dd64eb",
   "protected_base_commit": "7676ce4347db0c9694962a9b587a20765e16eac6",
   "schema": "workstream.behavior-ownership-partition.v1"
 }
