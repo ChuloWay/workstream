@@ -198,7 +198,7 @@ action or tests.
 
 | Claim | Command or proof | Result | Remaining uncertainty |
 |---|---|---|---|
-| Existing owner and public gap | Inspect `CheckerRetryService`, adapter composition, routes, issue #581 and ARCH-04F4 tests at base `a201d7432` | Hidden exact terminal retry and absent Operator read/command confirmed; implementation extends that owner | Public PostgreSQL proof remains pending |
+| Existing owner and public gap | Inspect `CheckerRetryService`, adapter composition, routes, issue #581 and ARCH-04F4 tests at base `a201d7432` | Hidden exact terminal retry and absent Operator read/command confirmed; implementation extends that owner | Final stacked-head hosted/full-suite checks remain pending |
 | UNKNOWN separation | Inspect OUTBOX dead-letter contracts and issue #581 | Unresolved invocation effects have no safe generic replay owner; excluded from this PR | Source-specific reconciliation remains a later bounded change |
 | Public PostgreSQL behavior | Focused signed `/api/v1` recovery tests plus existing checker retry suites | Exact clean head `667e5a053` passed 4/4 in 143.68 seconds: real prepared-denial binding, complete public discovery/retry/replay/revocation, real OUTBOX-conflict rollback, and stale-source refusal after auto-acceptance; isolated database, role and MinIO cleanup all completed | Exact-head hosted full-suite evidence remains pending |
 | Closed AUTH and lane ownership | Exact OpenAPI/action, all-route rate-control inventory and stray-route probe, closed recovery owner, and lane catalogue/fingerprint tests | `6 passed` in 26.86 seconds on stacked head `e898db656`; behavior-ownership validation also exited `0`; the recovery HTTP proof remains in exactly one canonical project lane | Exact-head hosted boundary and lane execution remain pending |
@@ -224,7 +224,7 @@ full-suite evidence remains pending.
 ## Reconciliation
 
 - Current-source reconciliation: main `d5bac1313` is an ancestor through the
-  published PR #589 head `2aa661bb9`; issue #580 owns supported checker
+  published PR #589 head `e820b5fd1`; issue #580 owns supported checker
   registration and a separate registry read action. This change owns only
   terminal checker recovery and preserves both catalogue additions. PR #589
   owns the canonical `0051_operational_read_audit` migration before #588 and
@@ -233,5 +233,5 @@ full-suite evidence remains pending.
 - Next usable boundary: source-specific observation and reconciliation for
   request execution, checker completion and acceptance commit/acknowledgement
   loss, followed by parent issue #555's real-project worker drill.
-- Remaining risks: exact-head PostgreSQL/public API evidence and routed internal
-  review remain pending. UNKNOWN effects stay held.
+- Remaining risks: final stacked-head hosted/full-suite checks remain pending.
+  UNKNOWN effects stay held.
