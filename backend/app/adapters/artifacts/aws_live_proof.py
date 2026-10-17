@@ -134,6 +134,7 @@ class AwsArtifactLiveProof:
         )
 
     async def _observe_principal(self, expected: str) -> str:
+        """Return the canonical role ARN that STS reports for the current credentials."""
         async with self._session.create_client(
             "sts",
             region_name=self._required(self._settings.artifact_s3_region),
@@ -146,6 +147,7 @@ class AwsArtifactLiveProof:
         return _canonical_observed_role_arn(arn, expected)
 
     async def _runtime_immutability(self, group_nonce: UUID) -> dict[str, object]:
+        """Write the nonce challenge once and prove the runtime role cannot overwrite it."""
         content, key, missing_key = self._challenge(group_nonce)
         bucket = self._required(self._settings.artifact_s3_bucket)
         async with self._session.create_client(
@@ -207,11 +209,13 @@ class AwsArtifactLiveProof:
         }
 
     async def _negative_access(self, group_nonce: UUID) -> dict[str, object]:
+        """Prove the negative role is denied get, put and delete on the challenge object."""
         content, key, _ = self._challenge(group_nonce)
         await self._prove_object_denials(key, content)
         return {"known_object_get_denied": True, "put_denied": True, "delete_denied": True}
 
     async def _readiness(self, group_nonce: UUID) -> dict[str, object]:
+        """Verify bucket controls, IAM bindings and analyzer results, then prove denials."""
         content, key, _ = self._challenge(group_nonce)
         bucket = self._required(self._settings.artifact_s3_bucket)
         region = self._required(self._settings.artifact_s3_region)
@@ -298,6 +302,7 @@ class AwsArtifactLiveProof:
         }
 
     async def _validate_iam(self) -> None:
+        """Check each proof role's attached policy and trust-policy digest against settings."""
         runtime_role = self._required(self._settings.artifact_s3_runtime_role_arn)
         readiness_role = self._required(self._settings.artifact_s3_readiness_role_arn)
         negative_role = self._required(self._settings.artifact_s3_negative_role_arn)
@@ -376,6 +381,7 @@ class AwsArtifactLiveProof:
                     _validate_readiness_policy(parsed, self._settings)
 
     async def _validate_access_analyzer(self, bucket_policy_text: str) -> None:
+        """Require a finding-free bucket policy that grants no public object access."""
         async with self._session.create_client("accessanalyzer", config=self._config) as analyzer:
             validation = await analyzer.validate_policy(
                 policyDocument=bucket_policy_text,
@@ -404,6 +410,7 @@ class AwsArtifactLiveProof:
                 raise ArtifactConfigurationError("AWS bucket policy grants forbidden access")
 
     async def _prove_object_denials(self, key: str, content: bytes) -> None:
+        """Require AccessDenied for get, conditional put and delete on one object key."""
         bucket = self._required(self._settings.artifact_s3_bucket)
         async with self._session.create_client(
             "s3",
@@ -422,6 +429,7 @@ class AwsArtifactLiveProof:
             )
 
     async def _prove_anonymous_denials(self, key: str, content: bytes) -> None:
+        """Require unsigned requests to be denied on the challenge object."""
         unsigned = AioConfig(
             signature_version=UNSIGNED,
             connect_timeout=self._settings.artifact_s3_connect_timeout_seconds,
@@ -448,6 +456,7 @@ class AwsArtifactLiveProof:
             )
 
     def _challenge(self, group_nonce: UUID) -> tuple[bytes, str, str]:
+        """Derive challenge bytes, their content key and a never-written key from the nonce."""
         if type(group_nonce) is not UUID:
             raise ArtifactConfigurationError("AWS proof challenge nonce is invalid")
         content = b"workstream-aws-artifact-proof-v1:" + group_nonce.bytes
@@ -461,6 +470,7 @@ class AwsArtifactLiveProof:
         )
 
     def _expected_principal(self, probe_type: AwsArtifactProbeType) -> str:
+        """Return the configured role ARN that must run the given probe type."""
         values = {
             "readiness": self._settings.artifact_s3_readiness_role_arn,
             "runtime_immutability": self._settings.artifact_s3_runtime_role_arn,
@@ -470,6 +480,7 @@ class AwsArtifactLiveProof:
 
     @staticmethod
     def _required(value: str | None) -> str:
+        """Return a required setting or fail closed when it is missing."""
         if value is None:
             raise ArtifactConfigurationError("AWS proof configuration is incomplete")
         return value
