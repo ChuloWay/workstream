@@ -4,7 +4,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.authorization.catalogue import ActionId
 from app.modules.authorization.domain.checker_retry import (
-    CheckerRetryResourceContext, checker_retry_resource_json,
+    CheckerRetryPrepareDenialResourceContext,
+    CheckerRetryResourceContext,
+    checker_retry_resource_json,
 )
 from app.modules.authorization.kernel import AuthorizationService
 from app.modules.authorization.prepared import PreparedAuthorizationService
@@ -58,19 +60,52 @@ class PreparedCheckerRetryAuthorization:
             or self._context.request_id != facts.request_key
             or self._context.correlation_id != facts.request_key
         ):
+            self._service.close()
             raise CheckerRetryOperationUnavailable("checker_retry_authority_unavailable")
+        caller_input = self._caller_input(facts)
         try:
             return await self._service.prepare(
                 ActionId.OPERATIONS_CHECKER_RETRY,
-                self._caller_input(facts),
+                caller_input,
                 PreparedAuthorityScope(kind=PreparedAuthorityScopeKind.SYSTEM),
             )
         except AuthorizationDenied as exc:
+            self._service.close()
             raise CheckerRetryAuthorityDenied("checker_retry_authority_unavailable") from exc
-        except (PreparedAuthorizationUnsupported, PreparedAuthorizationHandleInvalid) as exc:
+        except PreparedAuthorizationUnsupported as exc:
+            resource = CheckerRetryPrepareDenialResourceContext(
+                resource_id=facts.source.source_run_id,
+                project_id=facts.source.project_id,
+                identity_link_id=self._context.identity_link_id,
+                preparation=facts,
+            )
+            try:
+                await self._service.deny_unsupported(
+                    ActionId.OPERATIONS_CHECKER_RETRY,
+                    caller_input,
+                    resource,
+                    exc,
+                )
+            except AuthorizationDenied as denial:
+                self._service.close()
+                raise CheckerRetryAuthorityDenied(
+                    "checker_retry_authority_unavailable"
+                ) from denial
+            except BaseException:
+                self._service.close()
+                raise
+            self._service.close()
             raise CheckerRetryOperationUnavailable(
                 "checker_retry_authority_unavailable"
             ) from exc
+        except PreparedAuthorizationHandleInvalid as exc:
+            self._service.close()
+            raise CheckerRetryOperationUnavailable(
+                "checker_retry_authority_unavailable"
+            ) from exc
+        except BaseException:
+            self._service.close()
+            raise
 
     async def consume(
         self, handle: object, facts: CheckerRetryPreparation,

@@ -1115,5 +1115,6 @@ AuthorizationResourceContext = (
     | SubmissionBundlePreparationResourceContext
     | AdapterBindingReadResourceContext | AdapterBindingMutationResourceContext
     | ContributionPolicyReadResourceContext | ContributionPolicyMutationResourceContext | checker_registry.ExternalCheckerRegistryResourceContext
+    | checker_retry.CheckerRetryPrepareDenialResourceContext
     | checker_retry.CheckerRetryResourceContext
 )

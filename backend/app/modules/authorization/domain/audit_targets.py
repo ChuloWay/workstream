@@ -47,7 +47,10 @@ def project_authority_audit_target(
         AdapterBindingMutationResourceContext,
     )
     from app.modules.authorization.domain.checker_registry import ExternalCheckerRegistryResourceContext
-    from app.modules.authorization.domain.checker_retry import CheckerRetryResourceContext
+    from app.modules.authorization.domain.checker_retry import (
+        CheckerRetryPrepareDenialResourceContext,
+        CheckerRetryResourceContext,
+    )
     from app.modules.authorization.domain.checker_retry_reads import (
         CheckerRetrySourceReadResourceContext,
     )
@@ -97,7 +100,10 @@ def project_authority_audit_target(
     if isinstance(resource, ExternalCheckerRegistryResourceContext):
         entry_id = str(resource.resource_id)
         return None, resource.resource_type, entry_id, resource.resource_type, entry_id
-    if type(resource) is CheckerRetryResourceContext:
+    if type(resource) in {
+        CheckerRetryPrepareDenialResourceContext,
+        CheckerRetryResourceContext,
+    }:
         project_id = str(resource.project_id)
         return project_id, "checker_run", str(resource.resource_id), "project", project_id
     if type(resource) is CheckerRetrySourceReadResourceContext:

@@ -35,6 +35,27 @@ class CheckerRetryResourceContext(BaseModel):
         return self
 
 
+class CheckerRetryPrepareDenialResourceContext(BaseModel):
+    """Bind a prepare-time denial to the exact source without inventing a successor."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+
+    resource_type: Literal["checker_run"] = "checker_run"
+    resource_id: UUID
+    project_id: UUID
+    identity_link_id: UUID
+    preparation: CheckerRetryPreparation
+
+    @model_validator(mode="after")
+    def validate_identity(self):
+        if (
+            self.resource_id != self.preparation.source.source_run_id
+            or self.project_id != self.preparation.source.project_id
+        ):
+            raise ValueError("invalid checker retry denial resource")
+        return self
+
+
 def parse_checker_retry_prepare(action_id, caller_input, scope, context, invalid_error):
     """Admit only the complete system-scoped Operator request before AUTH locking."""
     if action_id is not ActionId.OPERATIONS_CHECKER_RETRY:

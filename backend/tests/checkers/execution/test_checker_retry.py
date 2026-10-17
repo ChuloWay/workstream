@@ -24,6 +24,10 @@ from app.modules.authorization.catalogue import ActionId, PermissionId
 from app.modules.authorization.checker_retry_read import (
     CheckerRetryDiscoveryAuthorization,
 )
+from app.modules.authorization.checker_retry_authorization import (
+    PreparedCheckerRetryAuthorization,
+)
+from app.modules.authorization.domain.action_groups import supports_prepared_denial
 from app.modules.authorization.domain.audit import (
     AuthorizationDecision,
     AuthorizationDenialCode,
@@ -32,13 +36,25 @@ from app.modules.authorization.domain.audit_targets import project_authority_aud
 from app.modules.authorization.domain.checker_retry_reads import (
     CheckerRetrySourceReadResourceContext,
 )
+from app.modules.authorization.domain.checker_retry import (
+    CheckerRetryPrepareDenialResourceContext,
+)
+from app.modules.authorization.runtime import (
+    ActorKind,
+    ActorStatus,
+    AuthorizationDenied,
+    HumanAuthorizationContext,
+    IdentityLinkStatus,
+    PreparedAuthorizationUnsupported,
+)
 from app.modules.audit.schemas import (
     ActorReferenceKind, AuthorityAuditEventInput, AuthorityEventType,
     LifecycleAuditEntityType, LifecycleAuditEventInput, LifecycleAuditEventType,
     LifecycleAuditReason, LifecycleAuditReferenceKind,
 )
 from app.modules.checkers.api.execution import (
-    CheckerExecutionUnavailable, CheckerRequestConflict, CheckerRetryCommand,
+    CheckerExecutionUnavailable, CheckerRequestConflict, CheckerRetryAuthorityDenied,
+    CheckerRetryCommand,
     CheckerRetryOperationUnavailable,
     CheckerRetryPreparation, CheckerRetryRequest, CheckerRetrySource,
     CheckerRetrySourcePosition, CheckerRetrySourceQuery,
@@ -235,6 +251,89 @@ def test_recovery_read_builds_canonical_project_decision_and_audit_event():
     )
     assert event.resource_type == "project"
     assert event.permission_id is PermissionId.OPERATIONS_STATUS_READ
+
+
+async def test_retry_prepare_unsupported_is_exact_typed_denial():
+    actor_id, link_id, key = new_record_id(), new_record_id(), new_record_id()
+    source = CheckerRetrySource(
+        project_id=new_record_id(), task_id=new_record_id(),
+        assignment_id=new_record_id(), submission_id=new_record_id(),
+        submission_version=1, source_run_id=new_record_id(),
+        source_request_id=new_record_id(), source_request_digest="sha256:" + "0" * 64,
+        source_result_id=new_record_id(), source_result_digest="sha256:" + "1" * 64,
+        source_finalize_evidence_id=new_record_id(), source_generation=1,
+        failure_code="material_unavailable",
+    )
+    preparation = CheckerRetryPreparation(
+        actor_profile_id=actor_id,
+        request_key=key,
+        reason="Restore verified checker infrastructure",
+        source=source,
+    )
+    context = HumanAuthorizationContext(
+        actor_profile_id=actor_id,
+        actor_kind=ActorKind.HUMAN,
+        actor_status=ActorStatus.ACTIVE,
+        identity_link_id=link_id,
+        identity_link_status=IdentityLinkStatus.ACTIVE,
+        request_id=key,
+        correlation_id=key,
+    )
+
+    class Prepared:
+        def __init__(self):
+            self.closed = 0
+            self.resource = None
+
+        async def prepare(self, *_args):
+            raise PreparedAuthorizationUnsupported(
+                AuthorizationDenialCode.PERMISSION_NOT_GRANTED
+            )
+
+        async def deny_unsupported(self, action, caller_input, resource, denial):
+            assert action is ActionId.OPERATIONS_CHECKER_RETRY
+            assert caller_input.idempotency_key == key
+            assert denial.denial_code is AuthorizationDenialCode.PERMISSION_NOT_GRANTED
+            self.resource = resource
+            raise AuthorizationDenied(AuthorizationDecision(
+                decision_id=new_record_id(),
+                action_id=ActionId.OPERATIONS_CHECKER_RETRY,
+                permission_id=PermissionId.OPERATIONS_CHECKER_RETRY,
+                allowed=False,
+                denial_code=AuthorizationDenialCode.PERMISSION_NOT_GRANTED,
+                resource_type=resource.resource_type,
+                resource_id=resource.resource_id,
+                resource_context_digest=canonical_json_hash(resource.model_dump(mode="json")),
+                matched_authority_kind=None,
+                revalidated=False,
+                request_id=key,
+                correlation_id=key,
+            ))
+
+        def close(self):
+            self.closed += 1
+
+    prepared = Prepared()
+    owner = object.__new__(PreparedCheckerRetryAuthorization)
+    owner._context = context
+    owner._service = prepared
+    with pytest.raises(
+        CheckerRetryAuthorityDenied,
+        match="checker_retry_authority_unavailable",
+    ) as denied:
+        await owner.prepare(preparation)
+    assert isinstance(denied.value.__cause__, AuthorizationDenied)
+    assert prepared.closed == 1
+    assert type(prepared.resource) is CheckerRetryPrepareDenialResourceContext
+    assert supports_prepared_denial(
+        ActionId.OPERATIONS_CHECKER_RETRY, prepared.resource,
+    )
+    assert project_authority_audit_target(
+        prepared.resource, ActionId.OPERATIONS_CHECKER_RETRY,
+    ) == (
+        str(source.project_id), "checker_run", str(source.source_run_id),
+        "project", str(source.project_id),
+    )
 
 
 def test_retry_reason_rejects_ascii_del_at_all_typed_boundaries():
