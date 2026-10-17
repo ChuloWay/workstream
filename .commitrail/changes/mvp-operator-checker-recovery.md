@@ -200,7 +200,7 @@ action or tests.
 |---|---|---|---|
 | Existing owner and public gap | Inspect `CheckerRetryService`, adapter composition, routes, issue #581 and ARCH-04F4 tests at base `a201d7432` | Hidden exact terminal retry and absent Operator read/command confirmed; implementation extends that owner | Public PostgreSQL proof remains pending |
 | UNKNOWN separation | Inspect OUTBOX dead-letter contracts and issue #581 | Unresolved invocation effects have no safe generic replay owner; excluded from this PR | Source-specific reconciliation remains a later bounded change |
-| Public PostgreSQL behavior | Focused signed `/api/v1` recovery tests plus existing checker retry suites | Hosted head `6faab0a5b` reproduced the public `500` and safely located the missing caller-root transaction; head `020d3d55d` contains the reviewed transaction repair | Exact-head PostgreSQL rerun and hosted full-suite evidence remain pending |
+| Public PostgreSQL behavior | Focused signed `/api/v1` recovery tests plus existing checker retry suites | Exact clean head `667e5a053` passed 4/4 in 143.68 seconds: real prepared-denial binding, complete public discovery/retry/replay/revocation, real OUTBOX-conflict rollback, and stale-source refusal after auto-acceptance; isolated database, role and MinIO cleanup all completed | Exact-head hosted full-suite evidence remains pending |
 | Closed AUTH and lane ownership | Exact catalogue, OpenAPI route/action, recovery HTTP transaction, ownership validation and running OpenAPI snapshot checks | `3 passed` in 162.42 seconds; ownership validation and exact snapshot comparison exited `0`; recovery HTTP proof remains in exactly one canonical project lane | Exact-head hosted boundary and lane execution remain pending |
 | Static implementation checks | Changed-file Ruff; conflict/stale-wording/Markdown-link/authorization-doc scans; `git diff --check` | Passed on clean stacked head `020d3d55d` | Affected review must replay after any source change |
 | Commitrail validity | `python3 scripts/check_commitrail_records.py --base-ref 2aa661bb9bb19e0970b12f05527454de77d30163` | Passed | None for the current stacked diff |
@@ -213,9 +213,13 @@ lock; a real held-lock wrong-project probe; a project/query-bound stable signed
 cursor; explicit caller-root rollback and canonical denial restaging; and clear
 separation between fresh AUTH evidence on replay and duplicate retry business
 effects. The implementation and focused tests incorporate those corrections.
-Security and architecture source review passed on clean head `020d3d55d`;
-runtime and the remaining routed reviews remain pending until the focused
-PostgreSQL evidence is clean.
+Security, architecture, QA, test-delta, product-operations, reuse and
+documentation source review passed through the repaired public projection at
+clean head `1be238145`. QA/test-delta replay then passed on clean head
+`667e5a053`, confirming that replay retains the exact original allow decision
+while freshly revalidating current Operator authority without adding a second
+allow event. The focused PostgreSQL proof passed at that exact head; hosted
+full-suite evidence remains pending.
 
 ## Reconciliation
 
