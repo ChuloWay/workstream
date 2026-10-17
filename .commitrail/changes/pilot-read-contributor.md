@@ -229,9 +229,10 @@ test_delta, documentation and reuse_dedup tracks at `fcbfa9562`.
 
 ## Reconciliation
 
-- Current-source reconciliation: based on main at `d049602cf` (PR1 #575, #573
+- Current-source reconciliation: based on main at `7b3dd58df` (PR1 #575, #573
   revision exhaustion and paused revision time, #585 lane capacity, #586,
-  #587 and #591 unreadable-ZIP feedback, whose roadmap row keeps both changes). The audit
+  #587 and #591 unreadable-ZIP feedback, whose roadmap row keeps both changes,
+  #593 and #518). The audit
   migration is `0050_contributor_reads` after `0049_attempt_outcome_findings`;
   main's single-task revision read and this change's batch are one
   implementation; the assignment list carries #573's exhausted status and
