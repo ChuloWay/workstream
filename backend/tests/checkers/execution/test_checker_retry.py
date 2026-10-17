@@ -42,6 +42,7 @@ from app.modules.checkers.api.execution import (
     CheckerRetryOperationUnavailable,
     CheckerRetryPreparation, CheckerRetryRequest, CheckerRetrySource,
     CheckerRetrySourcePosition, CheckerRetrySourceQuery,
+    CheckerRetrySourceUnavailable,
 )
 from app.modules.checkers.models import CheckerRetryReceipt, CheckerRun, CheckerSubmissionFence
 from app.modules.outbox.api import (
@@ -804,7 +805,10 @@ async def test_retry_replays_after_real_auto_acceptance_but_new_key_denies(
 
         with monkeypatch.context() as patch:
             patch.setattr(TaskEvaluationGuard, "lock_terminal_retry_scope", observed)
-            with pytest.raises(CheckerExecutionUnavailable, match="checker_retry_scope_unavailable"):
+            with pytest.raises(
+                CheckerRetrySourceUnavailable,
+                match="checker_retry_source_unavailable",
+            ):
                 async with h.factory.begin() as session:
                     await checker_retry_service(session, another_operator).retry(
                         command.model_copy(update={"request_key": another_key})
