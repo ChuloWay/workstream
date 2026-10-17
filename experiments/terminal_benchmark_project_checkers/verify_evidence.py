@@ -352,6 +352,7 @@ def stage(raw: Path, destination: Path, expected_head: str, expected_uid: int) -
 def add_cleanup(
     destination: Path, receipt: Path, expected_head: str, expected_uid: int
 ) -> None:
+    destination_name = "cleanup-receipt.json"
     destination_descriptor = _open_directory(destination)
     try:
         destination_metadata = os.fstat(destination_descriptor)
@@ -367,14 +368,14 @@ def add_cleanup(
         data = _read_regular(
             descriptor,
             receipt.name,
-            FINAL_ONLY[receipt.name],
+            FINAL_ONLY[destination_name],
             expected_uid=expected_uid,
             expected_modes={0o600},
         )
     finally:
         os.close(descriptor)
-    _validate_content(receipt.name, data, expected_head)
-    _atomic_write(destination, receipt.name, data)
+    _validate_content(destination_name, data, expected_head)
+    _atomic_write(destination, destination_name, data)
 
 
 def final(destination: Path, expected_head: str) -> None:

@@ -126,7 +126,7 @@ class EvidenceVerifierTests(unittest.TestCase):
 
     def test_exact_inventory_stages_and_final_cleanup_verifies(self) -> None:
         stage = self._stage()
-        receipt = self.root / "cleanup-receipt.json"
+        receipt = self.root / "ws493-run-cleanup-receipt.json"
         receipt.write_text(
             json.dumps(
                 {
@@ -145,6 +145,8 @@ class EvidenceVerifierTests(unittest.TestCase):
         )
         receipt.chmod(0o600)
         verify_evidence.add_cleanup(stage, receipt, HEAD, os.geteuid())
+        self.assertTrue((stage / "cleanup-receipt.json").is_file())
+        self.assertFalse((stage / receipt.name).exists())
         verify_evidence.final(stage, HEAD)
 
     def test_head_substitution_is_rejected(self) -> None:
