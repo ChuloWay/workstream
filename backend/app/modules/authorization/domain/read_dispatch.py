@@ -1,10 +1,15 @@
 """Closed selection of the existing read families and contribution evidence reads."""
 
 from app.modules.authorization.catalogue import (
-    ActionId, CHECKER_RETRY_READ_ACTIONS, HISTORY_READ_ACTIONS,
-    CONTRIBUTION_READ_ACTIONS, CONTRIBUTOR_READ_ACTIONS,
+    ActionId,
+    CONTRIBUTION_READ_ACTIONS,
+    CONTRIBUTOR_READ_ACTIONS,
+    HISTORY_READ_ACTIONS,
 )
-from app.modules.authorization.domain.checker_retry_reads import checker_retry_read_denial
+from app.modules.authorization.domain.checker_retry_reads import (
+    CHECKER_RETRY_READ_ACTIONS,
+    checker_retry_read_denial,
+)
 from app.modules.authorization.domain.contribution_reads import contribution_read_denial
 from app.modules.authorization.domain.contributor_reads import contributor_read_denial
 from app.modules.authorization.domain.project_reads import project_read_denial
