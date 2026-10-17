@@ -58,6 +58,8 @@ resources:
 ```bash
 cd experiments/terminal_benchmark_project_checkers
 python3 -m unittest -q test_verify_evidence test_runtime_proof
+PYTHONPATH=../../backend:. ../../backend/.venv/bin/python -m unittest -q \
+  test_execute_post_contract
 ```
 
 Do not run `proof.sh` on a shared development host. It is intentionally bound

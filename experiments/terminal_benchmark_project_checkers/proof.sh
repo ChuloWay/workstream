@@ -1028,8 +1028,10 @@ prepare() {
   done
   PYTHONPATH="${SCRIPT_DIR}" python3 -m unittest -q \
     test_verify_evidence test_runtime_proof
+  PYTHONPATH="${BACKEND_SOURCE}:${PYTHON_SOURCE_ROOT}/scripts:${SCRIPT_DIR}" \
+    "${BACKEND_PYTHON}" -m unittest -q test_execute_post_contract
   write_owned_json "${RAW_DIR}/verifier-tests.json" \
-    '{"passed":true,"suites":["test_verify_evidence","test_runtime_proof"]}'
+    '{"passed":true,"suites":["test_execute_post_contract","test_verify_evidence","test_runtime_proof"]}'
 }
 
 service_environment() {

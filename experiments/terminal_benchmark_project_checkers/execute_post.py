@@ -109,9 +109,16 @@ def _write(path: Path, value: object) -> None:
         os.close(descriptor)
 
 
+def _registry_entry_from_json(value: object) -> ExternalCheckerRegistryEntry:
+    """Restore the strict registry value through its actual JSON boundary."""
+    return ExternalCheckerRegistryEntry.model_validate_json(
+        json.dumps(value, sort_keys=True, separators=(",", ":"))
+    )
+
+
 async def _execute(arguments: argparse.Namespace) -> None:
     contract = json.loads(arguments.contract.read_text(encoding="utf-8"))
-    registry = ExternalCheckerRegistryEntry.model_validate(contract["registry"])
+    registry = _registry_entry_from_json(contract["registry"])
     directories, files, manifest_entries = _inventory(arguments.package)
     semantic_body = {
         "schema_version": SUBMISSION_MANIFEST_SCHEMA_VERSION,

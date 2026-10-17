@@ -157,6 +157,58 @@ def _write(path: Path, value: object) -> None:
         os.close(descriptor)
 
 
+def _registry_entry(image_digest: str) -> ExternalCheckerRegistryEntry:
+    configuration_document = {
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["external_task_id", "schema_version"],
+        "properties": {
+            "external_task_id": {"const": "terminal-ledger-reconcile"},
+            "schema_version": {"const": "terminal_benchmark_project.v1"},
+        },
+    }
+    input_document = {
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["manifest"],
+        "properties": {
+            "manifest": {
+                "type": "array",
+                "minItems": 12,
+                "maxItems": 12,
+                "items": {"type": "object"},
+            }
+        },
+    }
+    output_document = {"type": "object"}
+    spec = ExternalCheckerRegistrySpec(
+        capability_id="workstream.terminal_benchmark_project",
+        capability_version="v1",
+        phase="post_submit",
+        image_digest=image_digest,
+        configuration_schema=_schema(
+            "terminal_benchmark.configuration", configuration_document
+        ),
+        input_schema=_schema("external_checker_post_submit_input", input_document),
+        output_schema=_schema("external_checker_result", output_document),
+        resources=ExternalCheckerResourceLimits(
+            cpu_millis=1_000,
+            memory_bytes=512 * 1024 * 1024,
+            deadline_ms=600_000,
+            maximum_output_bytes=65_536,
+        ),
+    )
+    return ExternalCheckerRegistryEntry(
+        **spec.model_dump(),
+        registry_entry_id=REGISTRY_ENTRY_ID,
+        entry_digest=spec.spec_digest,
+        registration_operation_id=REGISTRATION_OPERATION_ID,
+        registered_by_actor_profile_id=REGISTERED_BY_ID,
+        authorization_decision_event_id=AUTHORIZATION_EVENT_ID,
+        created_at=datetime(2026, 10, 16, tzinfo=timezone.utc),
+    )
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--facts", type=Path, required=True)
@@ -186,54 +238,8 @@ def main() -> None:
         }:
             raise SystemExit("image facts shape differs")
 
-    configuration_document = {
-        "type": "object",
-        "additionalProperties": False,
-        "required": ["external_task_id", "schema_version"],
-        "properties": {
-            "external_task_id": {"const": "terminal-ledger-reconcile"},
-            "schema_version": {"const": "terminal_benchmark_project.v1"},
-        },
-    }
-    input_document = {
-        "type": "object",
-        "additionalProperties": False,
-        "required": ["manifest"],
-        "properties": {
-            "manifest": {
-                "type": "array",
-                "minItems": 12,
-                "maxItems": 12,
-                "items": {"type": "object"},
-            }
-        },
-    }
-    output_document = {"type": "object"}
-    spec = ExternalCheckerRegistrySpec(
-        capability_id="workstream.terminal_benchmark_project",
-        capability_version="v1",
-        phase="post_submit",
-        image_digest=facts["checker"]["platform_manifest_digest"],
-        configuration_schema=_schema(
-            "terminal_benchmark.configuration", configuration_document
-        ),
-        input_schema=_schema("external_checker_post_submit_input", input_document),
-        output_schema=_schema("external_checker_result", output_document),
-        resources=ExternalCheckerResourceLimits(
-            cpu_millis=1_000,
-            memory_bytes=512 * 1024 * 1024,
-            deadline_ms=600_000,
-            maximum_output_bytes=65_536,
-        ),
-    )
-    entry = ExternalCheckerRegistryEntry(
-        **spec.model_dump(),
-        registry_entry_id=REGISTRY_ENTRY_ID,
-        entry_digest=spec.spec_digest,
-        registration_operation_id=REGISTRATION_OPERATION_ID,
-        registered_by_actor_profile_id=REGISTERED_BY_ID,
-        authorization_decision_event_id=AUTHORIZATION_EVENT_ID,
-        created_at=datetime(2026, 10, 16, tzinfo=timezone.utc),
+    entry = _registry_entry(
+        str(facts["checker"]["platform_manifest_digest"])
     )
     sealed_cache = _inventory(
         arguments.cache_root,

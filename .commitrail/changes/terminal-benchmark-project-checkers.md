@@ -411,7 +411,9 @@ inventory, whose exact file set, ownership, modes, sizes and hashes are
 revalidated before the matrix and each service start;
 the run entry and each service start revalidate custody before touching control
 files, and runtime socket readiness proves that the service actually executed
-before POST starts.
+before POST starts. The POST driver restores the serialized registry entry
+through the strict JSON validation boundary; a focused round-trip regression
+requires all four registry authority identifiers to return as UUID values.
 
 Every service-created Docker container has exact trusted labels for deployment
 owner, request digest, grant ID, attempt nonce and resource kind. The temporary
