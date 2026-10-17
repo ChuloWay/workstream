@@ -1,7 +1,7 @@
 # AWS artifact-provider live activation
 
 - Initiative: None
-- Durable disposition: Planned
+- Durable disposition: Complete
 - Intended merge outcome: Make the existing native AWS S3 artifact adapter usable only after fresh, exact live proof, while retaining the same ART storage owners and fail-closed behavior at startup, every provider operation, and terminal evidence commits.
 
 ## Intent
@@ -305,6 +305,17 @@ require real PostgreSQL concurrency tests.
 - [x] Overlapping refresh batches are valid. Coordination accepts one exact
   three-probe common-nonce group and rejects mixed nonce/result groups; runtime
   selection is deterministic and returns the exact selected activation ID.
+- [x] Runbook documents non-secret prerequisites, five-minute proof execution,
+  expiry/recovery, evidence inspection and the approved backup/restore boundary.
+  Logs/reports contain no credentials, raw provider responses or private product
+  bytes.
+
+### Later environment proof
+
+The bounded source implementation is complete. These environment-dependent
+gates remain deliberately unchecked and are outside this PR's authorized proof
+scope; they prevent claiming issue #582 or any AWS environment ready.
+
 - [ ] Live readiness proves the approved principal/action/resource and bucket
   policy matrix, public denial, encryption/ownership, retention/lifecycle and
   bootstrap-principal denial; runtime, readiness, negative and anonymous live
@@ -315,10 +326,6 @@ require real PostgreSQL concurrency tests.
 - [ ] The hosted public journey stores and rereads genuine guide and Submission
   bytes through AWS and retains exact Workstream custody/evidence; MinIO or a
   direct SDK product write cannot satisfy this criterion.
-- [x] Runbook documents non-secret prerequisites, five-minute proof execution,
-  expiry/recovery, evidence inspection and the approved backup/restore boundary.
-  Logs/reports contain no credentials, raw provider responses or private product
-  bytes.
 
 ## Risk and review routing
 
@@ -399,10 +406,10 @@ rebinding route.
 | Current composition/guard traced | Source inspection at base `34501cd64` | AWS adapter/resolver foundations exist; factory is MinIO-only and AWS is denied before factory construction | No live AWS observation |
 | Current provider call owners traced | `rg` over every `ArtifactStore` consumer and ART composition root | Writable calls remain in `ArtifactStorageOrchestrator`; four current direct-read owners also require gating | Implementation must keep this inventory closed |
 | Normative activation contract traced | `docs/spec_artifact_storage_service.md:694-740` | Three live probes, immutable activation, per-I/O and terminal checks are current canonical requirements; the exact-role IAM inspection contradiction is resolved above | Measured AWS deadlines remain a later live-run prerequisite |
-| Offline static proof | `py_compile`; focused Ruff; `git diff --check`; stale-wording, stale artifact/authorization contract and changed-Markdown-link checks | Initial candidate passed all checks; repaired source and all five new test modules pass `py_compile`, focused Ruff and `git diff --check`; all named documentation checks pass | Full affected selection requires exact repaired-head replay |
-| Offline behavior proof | Focused activation/config/startup/factory pytest batches | Initial candidate: 230 passed and seven failed; the seven repaired cases then passed. At clean source `159003fce`, one exact-head selection covering the original affected set plus native proof transport/CLI passed 278 tests with no failures, errors or skips in 164.39 seconds; lane-catalogue contract 58 passed; all nine moved terminal-test cases pass `--setup-plan` fixture closure | Exact latest-main hosted lane replay remains required; live AWS proof remains a later deployment gate |
+| Offline static proof | `py_compile`; focused Ruff; `git diff --check`; stale-wording, stale artifact/authorization contract and changed-Markdown-link checks | Initial candidate passed all checks; repaired source and all five new test modules pass `py_compile`, focused Ruff and `git diff --check`; all named documentation checks pass | Live AWS proof remains a later deployment gate |
+| Offline behavior proof | Focused activation/config/startup/factory pytest batches | Initial candidate: 230 passed and seven failed; the seven repaired cases then passed. At clean source `159003fce`, one exact-head selection covering the original affected set plus native proof transport/CLI passed 278 tests with no failures, errors or skips in 164.39 seconds; lane-catalogue contract 58 passed; all nine moved terminal-test cases pass `--setup-plan` fixture closure | Live AWS proof remains a later deployment gate |
 | Review repair proof | Focused exact trust-policy selection; direct-SQL test setup plan; Alembic graph/revision scan; isolated PostgreSQL batches | Closed trust grammar and IAM placement: 14 passed, followed by the three-case issuer/account scope addendum. At clean `2e4a71819`, the combined `0052` schema fingerprint is `0f38f0705b0aae59b40e1d873932c6710c2f56f2e58647f9911ae2f15deaf7e9`; hostile-search-path migration, two-loop guard, direct role/trust/principal SQL denials and put/missing/mismatch crossed-expiry terminal cases passed 8/8 in 292.96 seconds. Canonical repaired `0051` passed its 0049/0050 resume and downgrade-refusal selection 3/3; the stacked exact `91002c941` regression rebuilt `0051`, proved downgrade refusal without mutation and restored `0052` in 121.47 seconds. All isolated database cleanup completed. The graph has one `0052` head through canonical operational-read `0051` and contributor-read `0050`, and all 52 revision IDs fit the 32-character version column | Live AWS proof remains a later deployment gate |
-| CI/test metadata proof | `python -m scripts.test_structure_boundary validate ...`; `pytest -q tests/test_ci_lane_catalogue.py`; AST comparison of the three moved functions; ownership partition generation | Debt transition passes while `test_artifact_admission.py` shrinks from 2,779 to 2,593 lines; 58 lane tests pass; all three moved function ASTs are identical. Latest-main reconciliation retains 529 exact ownership assignments with the existing protected base and adds the three S3 targets on top of the canonical registry/main inventory. Final architecture/documentation/CI and security/QA/test-delta reviews passed against the exact reconciled source tree. | Required hosted checks and live AWS proof remain separate repository and deployment gates. |
+| CI/test metadata proof | `python -m scripts.test_structure_boundary validate ...`; `pytest -q tests/test_ci_lane_catalogue.py`; AST comparison of the three moved functions; ownership partition generation | Debt transition passes while `test_artifact_admission.py` shrinks from 2,779 to 2,593 lines; 58 lane tests pass; all three moved function ASTs are identical. Latest-main reconciliation retains 529 exact ownership assignments with the existing protected base and adds the three S3 targets on top of the canonical registry/main inventory. Final architecture/documentation/CI and security/QA/test-delta reviews passed against the exact reconciled source tree. | Live AWS proof remains a separate deployment gate. |
 | Post-review proof-order repair | Focused nodes `test_activation_rejects_probes_started_before_runtime_completed` and `test_activation_trigger_rejects_probes_started_before_runtime_completed`, each parameterized for readiness and negative access, plus the existing runtime-first overlapping-group control | At clean `7a97a0199`, the regenerated combined `0052` fingerprint is `444c180e173fb00f85eb376c53fb5faa1dc36964406e0d0a91beb0231bde69e3`; service and direct-SQL counterexamples plus the runtime-first control passed 5/5 in 84.28 seconds. Isolated database cleanup completed. Evidence: `/tmp/mvp-s3-582-order-final.ySd4px`; stdout SHA-256 `25534542b11d78ffbd2f2ca0c853a3d781a3e2025c4774cc5a3456363231b4e2`; JUnit SHA-256 `efc0010d37eb9bc74fca2bb23dc95fa1f556d24c86848a6745097a452bb39b4a` | No AWS call was needed; live AWS proof remains a deployment gate |
 | Live proof | Three separately identified executors, credential-free coordination, then hosted public guide/Submission drill | Not authorized or run | Requires approved #583 environment and explicit live authorization |
 
@@ -489,10 +496,9 @@ read owner. These are separate failure boundaries, not one broad mock graph.
   `0052` head. The current combined `0052` fingerprint is `444c180e...` after
   adding the proof-order trigger invariant; baseline and `0051` fingerprints
   remain owned by their existing graphs.
-- Next usable boundary: complete the required exact-head hosted checks and
-  eligible human review, then human-merge this bounded activation code. After
-  deployment, request the precise live environment authorization/facts listed
-  above and run the live probes plus the hosted public custody drill before
-  claiming issue or environment readiness.
+- Next usable boundary: after human merge and deployment, request the precise
+  live environment authorization/facts listed above and run the live probes
+  plus the hosted public custody drill before claiming issue or environment
+  readiness.
 - Remaining risks: actual AWS readiness, product custody and restore evidence do
   not exist and must not be claimed from offline tests or MinIO.
