@@ -1,4 +1,4 @@
-"""Admit the Project Manager and Finance project-wide read decisions to the audit ledger."""
+"""Admit the Project Manager and Finance project-wide read decisions and index the project preparation list."""
 
 from alembic import op
 from sqlalchemy import text
@@ -23,7 +23,7 @@ _ACTIONS = (
 
 
 def upgrade():
-    """Extend only the closed action/permission evidence vocabulary; no data changes."""
+    """Extend the closed action/permission evidence vocabulary and add one read index; no data changes."""
     op.execute("SET LOCAL search_path=pg_catalog,public,pg_temp")
     op.execute("LOCK TABLE public.audit_events IN ACCESS EXCLUSIVE MODE")
     name = "ck_audit_events_authorization_action_evidence"
@@ -44,6 +44,11 @@ def upgrade():
     op.execute("ALTER TABLE public.audit_events DROP CONSTRAINT " + name)
     op.execute("ALTER TABLE public.audit_events ADD CONSTRAINT " + name + " "
                + definition.replace(anchor, anchor + addition))
+    # The project preparation list reads newest first by (queued_at, id) within one project.
+    op.create_index(
+        "ix_selected_pre_submit_runs_project_queued", "selected_pre_submit_runs",
+        ["project_id", text("queued_at DESC"), text("id DESC")],
+    )
 
 
 def downgrade():

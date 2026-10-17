@@ -1,5 +1,6 @@
 """ContributionPolicy read and draft mutation orchestration."""
 
+from datetime import datetime
 from decimal import Decimal
 from typing import cast
 from uuid import UUID
@@ -36,6 +37,7 @@ from app.modules.contributions.api import (
     PolicyRuleInput,
     PolicyRuleView,
 )
+from app.modules.contributions.api.policies import ContributionPolicyVersionListItem
 from app.modules.contributions.models import (
     ContributionAwardDefinition,
     ContributionPolicy,
@@ -121,6 +123,23 @@ class ContributionPolicyService:
         if version is None:
             raise ContributionPolicyConflict("contribution_policy_not_found")
         return self._view(policy, version)
+
+    async def read_versions(
+        self, project_id: UUID, *, after: tuple[datetime, UUID] | None, limit: int,
+    ) -> tuple[tuple[ContributionPolicyVersionListItem, ...], bool]:
+        """Every stored version of the project's policies, oldest first.
+
+        The caller has already authorized ``contribution.policy.list`` for the
+        project in this transaction; this read takes no locks and writes nothing.
+        """
+        rows, more = await self._repository.read_policy_versions(project_id, after=after, limit=limit)
+        return tuple(
+            self._view(
+                policy, version, ContributionPolicyVersionListItem, created_at=version.created_at,
+                published_at=version.published_at, retired_at=version.retired_at,
+            )
+            for policy, version in rows
+        ), more
 
     async def read_current(self, request: ContributionPolicyProjectReadRequest) -> ContributionPolicyProjectSelection:
         """Authorize one current aggregate, then refresh its exact public selectors."""
@@ -458,9 +477,10 @@ class ContributionPolicyService:
 
     @staticmethod
     def _view(
-        policy: ContributionPolicy, version: ContributionPolicyVersion
+        policy: ContributionPolicy, version: ContributionPolicyVersion,
+        view_type: type[ContributionPolicyView] = ContributionPolicyView, **extra,
     ) -> ContributionPolicyView:
-        """Project an ORM graph into immutable public policy facts."""
+        """Project an ORM graph into immutable public policy facts, plus any ``view_type`` fields."""
         rules = tuple(
             PolicyRuleView(
                 rule_id=rule.id,
@@ -481,7 +501,7 @@ class ContributionPolicyService:
             )
             for rule in sorted(version.rules, key=lambda value: value.contribution_type)
         )
-        return ContributionPolicyView(
+        return view_type(
             project_id=UUID(policy.project_id),
             contribution_policy_id=policy.id,
             name=policy.name,
@@ -490,4 +510,5 @@ class ContributionPolicyService:
             version_number=version.version_number,
             version_status=version.status,
             rules=rules,
+            **extra,
         )

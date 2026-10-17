@@ -53,11 +53,17 @@ filters, and is the template this change follows).
   and port types, adapter and factory, read dispatch, audit resource types,
   runtime resource union, concealment mapping, catalogue counts and active
   boundary, docs and the MCP contract snapshot that embeds the action enum.
-  Migration `0051_project_reads` extends only the closed audit
-  action/permission vocabulary (the `0050_contributor_reads` precedent); it
-  changes no data.
+  Migration `0051_project_reads` extends the closed audit action/permission
+  vocabulary (the `0050_contributor_reads` precedent) and adds one read index,
+  `ix_selected_pre_submit_runs_project_queued` on `selected_pre_submit_runs
+  (project_id, queued_at DESC, id DESC)`, mirrored on the ORM model, which the
+  C8 page needs to stay within the latency budget; it changes no data.
 - Routes, composed in `app/api` from owner ports in one REPEATABLE READ
-  response transaction: `GET /projects/{project_id}/guides`,
+  response transaction run by one shared project management read runner
+  (`app/api/deps/project_management_reads.py`: snapshot, authorize, read,
+  validate, commit; `422 project_read_cursor_invalid`,
+  `503 project_read_unavailable`; AUTH denials propagate to the concealment
+  mapping): `GET /projects/{project_id}/guides`,
   `/guides/{guide_id}`, `/guides/{guide_id}/activation-readiness`,
   `/guides/{guide_id}/documents/{document_id}/content`, `/submissions`,
   `/assignments`, `/summary`, `/task-import-batches`,
@@ -66,8 +72,9 @@ filters, and is the template this change follows).
   existing guide, document and review/revision policy responses and the latest
   setup run; an activation-readiness read that shares one conditions function
   with `GuideActivationService.activate` (activate raises the first unmet
-  condition, readiness returns them all, without locks, consumption, replay
-  reservation or writes); ART: split the task guide document open into resolve
+  condition, readiness returns them all, without activation authority,
+  consumption, replay reservation or writes; readiness takes the same row
+  locks as the post-policy review read and holds them until its commit); ART: split the task guide document open into resolve
   and verify-and-stream so the guide document content read reuses it.
 - TASK (work package 2): a project-wide submission list sharing the
   contributor submission row builder and evidence stamp, an assignment list
@@ -88,7 +95,7 @@ filters, and is the template this change follows).
 ### Not allowed
 
 - No product write, lifecycle rule or stored column; no migration beyond the
-  audit vocabulary. No new status or outcome the owners do not already record
+  audit vocabulary and the one C8 read index. No new status or outcome the owners do not already record
   (C1 exposes the stored guide statuses only).
 - No change to who may read a single task, submission, guide or policy, and
   no change to activation itself beyond extracting its shared conditions.
@@ -121,7 +128,20 @@ filters, and is the template this change follows).
   - C1 exposes the stored guide statuses `draft`, `active` and `superseded`;
     no `retired` guide status exists.
   - C3 assumes the current published contribution policy version; none is an
-    unmet condition.
+    unmet condition. Readiness evaluates the current selections it reads, so
+    `selection_stale` (a displayed selection that no longer matches) cannot
+    appear in a readiness answer.
+  - C5 closed assignments use the A2 own-facts rule: a closed claim projects
+    only the facts PR2 shows its contributor (see the OPEN item below).
+  - C6 `award_totals` is null without an exact-project Finance Authority
+    grant, and a list (possibly empty) with one.
+  - C9 answers `409 guide_document_not_uploaded` for a declared document with
+    no uploaded original and `503 guide_document_integrity_unavailable` when
+    the stored original fails verification; no bytes are served then.
+  - `ContributionPolicyView` types `policy_status` (`draft`, `active`,
+    `retired`) and `version_status` (`draft`, `published`, `retired`) as
+    closed enums; this also tightens the existing current and exact-version
+    read schemas.
   - C6 award totals appear only when the caller also holds a current
     exact-project Finance Authority grant (the PILOT-10 precedent); the
     adapter locks that grant with the decision. Acceptance rate is accepted
@@ -140,7 +160,9 @@ filters, and is the template this change follows).
     no compensation award read. C6 follows the roles table until decided.
 - Latency budget: the PR2 budget applies, one list page or summary within
   1 second on 10,000 tasks and 20,000 submissions on the isolated PostgreSQL
-  test database, with indexed queries and no per-row queries.
+  test database, with indexed queries and no per-row queries. C8 uses the new
+  project/queued index; C4 and C5 order by a computed activity time, which no
+  index can serve, so no assignment index is added.
 
 ## Acceptance criteria
 
@@ -177,14 +199,15 @@ filters, and is the template this change follows).
 | AUTH evaluator and adapter | `tests/authorization/test_management_read_scope.py`, catalogue and audit contract tests | Recorded in the PR | PostgreSQL custody runs in the focused suites |
 | Authorization, pagination, projection | Focused backend suites through `run_isolated_tests.py` on PostgreSQL 16 | Recorded in the PR | Hosted lanes run in CI |
 | Scale | 10k-task/20k-submission latency test | Recorded in the PR | Hosted runner timing differs |
-| CLI | Hosted `cli-public-contract` | Recorded in the PR | No local Go 1.27 toolchain |
+| CLI | `go build`, `go vet`, `go test` with Go 1.27.1, gofmt; CLI HTTP integration tests | Recorded in the PR | Hosted `cli-public-contract` runs in CI |
+| Known test gaps | — | Open | C3 reasons beyond the covered table rows have no PostgreSQL scenario; the C8 `failed` outcome is proven only by the pure projection test; no closed-assignment C5 test; no C6 award-total sum over real awards |
 
 ## Reconciliation
 
 - Current-source reconciliation: stacked on PILOT-READ-2 (#577). The audit
   migration is `0051_project_reads` after `0050_contributor_reads`; the
-  public schema fingerprint is recomputed after the migration runs on
-  PostgreSQL 16.
+  public schema fingerprint (`EXPECTED_PUBLIC_SCHEMA_SHA256`) is recomputed
+  after the migration, including the new index, runs on PostgreSQL 16.
 - Next usable boundary: the PILOT read-API issue is complete; live human
   review and revision follow per the delivery priority.
 - Retained state needing explicit handling: none known beyond PR2's retained

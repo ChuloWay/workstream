@@ -18,6 +18,8 @@ PolicyAction = Literal[
 PolicyEventType = Literal["draft_created", "draft_updated", "published", "retired"]
 ContributionType = Literal["accepted_submission", "completed_review"]
 CompensationMode = Literal["unpaid", "compensated"]
+ContributionPolicyStatus = Literal["draft", "active", "retired"]
+ContributionPolicyVersionStatus = Literal["draft", "published", "retired"]
 
 
 class ContributionPolicyUnavailable(RuntimeError):
@@ -165,11 +167,28 @@ class ContributionPolicyView:
     project_id: UUID
     contribution_policy_id: UUID
     name: str
-    policy_status: str
+    policy_status: ContributionPolicyStatus
     contribution_policy_version_id: UUID
     version_number: int
-    version_status: str
+    version_status: ContributionPolicyVersionStatus
     rules: tuple[PolicyRuleView, ...]
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ContributionPolicyVersionListItem(ContributionPolicyView):
+    """One stored version of the project's policy with its lifecycle instants."""
+
+    created_at: datetime
+    published_at: datetime | None
+    retired_at: datetime | None
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ContributionPolicyVersionPage:
+    """One page of every stored policy version in the project, oldest first."""
+
+    items: tuple[ContributionPolicyVersionListItem, ...]
+    next_cursor: str | None
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -199,6 +218,11 @@ class ContributionPolicyOperationsPort(Protocol):
 
     async def read_current(self, request: ContributionPolicyProjectReadRequest) -> ContributionPolicyProjectSelection: ...
     async def read(self, request: ContributionPolicyReadRequest) -> ContributionPolicyView: ...
+    async def read_versions(
+        self, project_id: UUID, *, after: tuple[datetime, UUID] | None, limit: int,
+    ) -> tuple[tuple[ContributionPolicyVersionListItem, ...], bool]:
+        """Every stored version oldest first; the caller has already authorized the project read."""
+        ...
     async def create_draft(self, request: ContributionPolicyCreateDraftRequest) -> ContributionPolicyMutationResult: ...
     async def update_draft(self, request: ContributionPolicyUpdateDraftRequest) -> ContributionPolicyMutationResult: ...
     async def publish(self, request: ContributionPolicyPublishRequest) -> ContributionPolicyMutationResult: ...
