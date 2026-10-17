@@ -64,7 +64,7 @@ pub struct TerminalBenchmarkPlan {
 
 /// Mirrors Python `safe_finding_path`: a relative archive path with no control,
 /// formatting, traversal or absolute forms. Python revalidates every result.
-fn is_safe_finding_path(path: &str) -> bool {
+pub fn is_safe_finding_path(path: &str) -> bool {
     let formatting = |item: char| {
         matches!(item as u32,
             0x0080..=0x009F | 0x2028 | 0x2029 | 0x00AD | 0x0600..=0x0605 | 0x061C | 0x06DD | 0x070F | 0x0890..=0x0891 | 0x08E2

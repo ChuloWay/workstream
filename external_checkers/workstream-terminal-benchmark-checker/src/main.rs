@@ -7,14 +7,16 @@ use std::fs;
 use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
 use workstream_checker_sdk::{
-    completed_result, parse_request, terminal_benchmark_plan, Finding, ValidatedRequest,
-    MAX_REQUEST_BYTES,
+    completed_result, is_safe_finding_path, parse_request, terminal_benchmark_plan, Finding,
+    ValidatedRequest, MAX_REQUEST_BYTES,
 };
 
 const INPUT_ROOT: &str = "/work/input";
 const CONFIG_VERSION: &str = "terminal_benchmark_project.v1";
 const BASE: &str = "python:3.12-slim-bookworm@sha256:6e13e65c55e33adf203d77ee371cf8bf5d81bd4902ef07565721f46bf44917af";
 const MAX_PROJECT_BYTES: u64 = 2 * 1024 * 1024;
+const MAX_PATH_FINDINGS: usize = 32;
+const MAX_PATH_FINDING_BYTES: usize = 16 * 1024;
 const EXIT_INPUT_READ: i32 = 20;
 const EXIT_REQUEST_INVALID: i32 = 21;
 const EXIT_CONFIGURATION_INVALID: i32 = 22;
@@ -109,8 +111,41 @@ fn finding(code: &str, message: &str, path: Option<&str>) -> Finding {
     }
 }
 
+fn push_path_finding(
+    findings: &mut Vec<Finding>,
+    path_findings: &mut usize,
+    path_finding_bytes: &mut usize,
+    truncated: &mut bool,
+    code: &str,
+    message: &str,
+    path: &str,
+) {
+    if *path_findings >= MAX_PATH_FINDINGS {
+        *truncated = true;
+        return;
+    }
+    let mut item = finding(code, message, is_safe_finding_path(path).then_some(path));
+    let mut encoded_bytes = serde_json::to_vec(&item).map_or(usize::MAX, |value| value.len());
+    if path_finding_bytes.saturating_add(encoded_bytes) > MAX_PATH_FINDING_BYTES
+        && item.path.is_some()
+    {
+        item.path = None;
+        encoded_bytes = serde_json::to_vec(&item).map_or(usize::MAX, |value| value.len());
+    }
+    if path_finding_bytes.saturating_add(encoded_bytes) > MAX_PATH_FINDING_BYTES {
+        *truncated = true;
+        return;
+    }
+    findings.push(item);
+    *path_findings += 1;
+    *path_finding_bytes += encoded_bytes;
+}
+
 fn validate_package(request: &ValidatedRequest, root: &Path, task: &str) -> Vec<Finding> {
     let mut findings = Vec::new();
+    let mut path_findings = 0;
+    let mut path_finding_bytes = 0;
+    let mut path_findings_truncated = false;
     let Some(manifest) = request
         .value
         .get("input")
@@ -144,22 +179,30 @@ fn validate_package(request: &ValidatedRequest, root: &Path, task: &str) -> Vec<
             )];
         };
         if !observed_paths.insert(path.to_owned()) {
-            findings.push(finding(
+            push_path_finding(
+                &mut findings,
+                &mut path_findings,
+                &mut path_finding_bytes,
+                &mut path_findings_truncated,
                 "duplicate_path",
                 "Package path is duplicated.",
-                Some(path),
-            ));
+                path,
+            );
             continue;
         }
         match entry.get("entry_type").and_then(Value::as_str) {
             Some("directory") => {
                 observed_directories.insert(path.to_owned());
                 if !DIRECTORIES.contains(&path) {
-                    findings.push(finding(
+                    push_path_finding(
+                        &mut findings,
+                        &mut path_findings,
+                        &mut path_finding_bytes,
+                        &mut path_findings_truncated,
                         "forbidden_path",
                         "Package contains a directory outside the fixed project contract.",
-                        Some(path),
-                    ));
+                        path,
+                    );
                 }
                 continue;
             }
@@ -167,11 +210,15 @@ fn validate_package(request: &ValidatedRequest, root: &Path, task: &str) -> Vec<
                 observed_files.insert(path.to_owned());
             }
             _ => {
-                findings.push(finding(
+                push_path_finding(
+                    &mut findings,
+                    &mut path_findings,
+                    &mut path_finding_bytes,
+                    &mut path_findings_truncated,
                     "manifest_invalid",
                     "Verified package inventory has an unsupported entry type.",
-                    Some(path),
-                ));
+                    path,
+                );
                 continue;
             }
         }
@@ -182,12 +229,23 @@ fn validate_package(request: &ValidatedRequest, root: &Path, task: &str) -> Vec<
                 .unwrap_or(u64::MAX),
         );
         if !FILES.contains(&path) {
-            findings.push(finding(
+            push_path_finding(
+                &mut findings,
+                &mut path_findings,
+                &mut path_finding_bytes,
+                &mut path_findings_truncated,
                 "forbidden_path",
                 "Package contains a file outside the fixed project contract.",
-                Some(path),
-            ));
+                path,
+            );
         }
+    }
+    if path_findings_truncated {
+        findings.push(finding(
+            "path_findings_truncated",
+            "Package contains additional invalid or out-of-contract paths.",
+            None,
+        ));
     }
     if total > MAX_PROJECT_BYTES {
         findings.push(finding(
@@ -569,6 +627,127 @@ mod tests {
         assert!(validate_package(&oversized, &package, TASKS[4])
             .iter()
             .any(|finding| finding.code == "project_too_large"));
+    }
+
+    #[test]
+    fn package_inventory_bounds_path_findings_and_preserves_other_feedback() {
+        let package = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../pilots/terminal_benchmark/packages/ledger-reconcile");
+        let mut request = package_request(&package);
+        let manifest = request.value["input"]["manifest"].as_array_mut().unwrap();
+        manifest.push(serde_json::json!({
+            "normalized_path": "foreign/file.txt",
+            "entry_type": "file",
+            "byte_count": 1,
+            "sha256": format!("sha256:{}", "1".repeat(64)),
+            "executable": false,
+        }));
+        manifest.push(serde_json::json!({
+            "normalized_path": "foreign/file.txt",
+            "entry_type": "file",
+            "byte_count": 1,
+            "sha256": format!("sha256:{}", "1".repeat(64)),
+            "executable": false,
+        }));
+        manifest.push(serde_json::json!({
+            "normalized_path": "foreign/special",
+            "entry_type": "special",
+        }));
+        for index in 0..300 {
+            manifest.push(serde_json::json!({
+                "normalized_path": format!("foreign/extra-{index:03}.txt"),
+                "entry_type": "file",
+                "byte_count": 1,
+                "sha256": format!("sha256:{}", "2".repeat(64)),
+                "executable": false,
+            }));
+        }
+        manifest.retain(|item| item["normalized_path"] != "tests");
+
+        let findings = validate_package(&request, &package, TASKS[4]);
+        assert_eq!(
+            findings
+                .iter()
+                .filter(|item| matches!(
+                    item.code.as_str(),
+                    "duplicate_path" | "forbidden_path" | "manifest_invalid"
+                ))
+                .count(),
+            MAX_PATH_FINDINGS
+        );
+        for code in ["duplicate_path", "forbidden_path", "manifest_invalid"] {
+            assert!(findings.iter().any(|item| item.code == code));
+        }
+        assert_eq!(
+            findings
+                .iter()
+                .filter(|item| item.code == "path_findings_truncated")
+                .count(),
+            1
+        );
+        assert!(findings
+            .iter()
+            .any(|item| item.code == "required_member_missing"));
+        assert!(completed_result(&request, findings).is_ok());
+    }
+
+    #[test]
+    fn package_inventory_omits_an_unrepresentable_path() {
+        let package = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../pilots/terminal_benchmark/packages/ledger-reconcile");
+        let mut request = package_request(&package);
+        request.value["input"]["manifest"]
+            .as_array_mut()
+            .unwrap()
+            .push(serde_json::json!({
+                "normalized_path": "a".repeat(1001),
+                "entry_type": "file",
+                "byte_count": 1,
+                "sha256": format!("sha256:{}", "1".repeat(64)),
+                "executable": false,
+            }));
+
+        let findings = validate_package(&request, &package, TASKS[4]);
+        let forbidden = findings
+            .iter()
+            .find(|item| item.code == "forbidden_path")
+            .unwrap();
+        assert_eq!(forbidden.path, None);
+        assert!(completed_result(&request, findings).is_ok());
+    }
+
+    #[test]
+    fn package_inventory_bounds_maximum_escaped_paths_by_serialized_bytes() {
+        let package = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../pilots/terminal_benchmark/packages/ledger-reconcile");
+        let mut request = package_request(&package);
+        let manifest = request.value["input"]["manifest"].as_array_mut().unwrap();
+        for index in 0..64 {
+            manifest.push(serde_json::json!({
+                "normalized_path": format!("{}{:04}", "\"".repeat(996), index),
+                "entry_type": "file",
+                "byte_count": 1,
+                "sha256": format!("sha256:{}", "2".repeat(64)),
+                "executable": false,
+            }));
+        }
+
+        let findings = validate_package(&request, &package, TASKS[4]);
+        let path_findings = findings
+            .iter()
+            .filter(|item| item.code == "forbidden_path")
+            .collect::<Vec<_>>();
+        assert_eq!(path_findings.len(), MAX_PATH_FINDINGS);
+        assert!(path_findings.iter().any(|item| item.path.is_some()));
+        assert!(path_findings.iter().any(|item| item.path.is_none()));
+        assert_eq!(
+            findings
+                .iter()
+                .filter(|item| item.code == "path_findings_truncated")
+                .count(),
+            1
+        );
+        assert!(completed_result(&request, findings).is_ok());
     }
 
     fn package_request(package: &Path) -> ValidatedRequest {

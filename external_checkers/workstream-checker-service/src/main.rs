@@ -998,9 +998,7 @@ fn verify_grant(
                 || runtime.uid != config.sandbox_uid
                 || runtime.gid != config.sandbox_gid
                 || runtime.mode != 0o700
-                || runtime.byte_allowance == 0
                 || runtime.byte_allowance > 512 * 1024 * 1024
-                || runtime.entry_allowance == 0
                 || fs::read_dir(&path)
                     .map_err(|_| "runtime scratch unavailable")?
                     .next()
@@ -3148,6 +3146,51 @@ exit 2
             maximum_output_bytes: 256,
         };
         assert!(grant_matches_request(&manifest, &request));
+
+        let (root, config) = test_config();
+        let mut zero_allowance_manifest = manifest.clone();
+        zero_allowance_manifest.runtime_scratch = Some(RuntimeScratchGrant {
+            byte_allowance: 0,
+            entry_allowance: 0,
+            uid: config.sandbox_uid,
+            gid: config.sandbox_gid,
+            mode: 0o700,
+        });
+        let mut binding_body = serde_json::to_value(&zero_allowance_manifest).unwrap();
+        binding_body
+            .as_object_mut()
+            .unwrap()
+            .remove("binding_digest");
+        zero_allowance_manifest.binding_digest = canonical_hash(&binding_body).unwrap();
+        let grant_root = config
+            .material_root
+            .join("workspaces")
+            .join(&zero_allowance_manifest.grant_id);
+        let workspace = grant_root.join("workspace");
+        let runtime = grant_root.join("runtime");
+        fs::create_dir_all(&workspace).unwrap();
+        fs::create_dir(&runtime).unwrap();
+        fs::set_permissions(&grant_root, fs::Permissions::from_mode(0o700)).unwrap();
+        fs::set_permissions(&workspace, fs::Permissions::from_mode(0o500)).unwrap();
+        fs::set_permissions(&runtime, fs::Permissions::from_mode(0o700)).unwrap();
+        let manifest_path = grant_root.join(".external-checker-grant.json");
+        fs::write(
+            &manifest_path,
+            serde_json::to_vec(&zero_allowance_manifest).unwrap(),
+        )
+        .unwrap();
+        fs::set_permissions(&manifest_path, fs::Permissions::from_mode(0o400)).unwrap();
+        let reference = GrantReference {
+            grant_id: zero_allowance_manifest.grant_id.clone(),
+            binding_digest: zero_allowance_manifest.binding_digest.clone(),
+        };
+
+        let verified = verify_grant(&config, &request, &reference).unwrap();
+        let (_, runtime_grant) = verified.runtime.unwrap();
+        assert_eq!(runtime_grant.byte_allowance, 0);
+        assert_eq!(runtime_grant.entry_allowance, 0);
+        fs::set_permissions(&workspace, fs::Permissions::from_mode(0o700)).unwrap();
+        fs::remove_dir_all(root).unwrap();
 
         let original = manifest.identity.clone();
         if let GrantIdentity::PostSubmit {

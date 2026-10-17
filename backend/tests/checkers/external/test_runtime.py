@@ -589,10 +589,10 @@ def test_post_external_grant_uses_existing_workspace_byte_and_entry_ownership(
     manager.close()
 
 
-def test_post_external_grant_preserves_submitted_workspace_directory(
+def test_post_external_grant_preserves_submitted_reserved_names(
     tmp_path: Path,
 ) -> None:
-    """Keep a valid package workspace below ART's final grant mount directory."""
+    """Move submitted reserved names below ART's distinct grant control paths."""
     manager = ArtifactScratchManager(
         root=tmp_path / "scratch",
         limits=ArtifactPreparationLimits(
@@ -602,25 +602,49 @@ def test_post_external_grant_preserves_submitted_workspace_directory(
         ),
     )
     payload = b"print('starter')\n"
-    file = ExternalMaterialFile(
-        normalized_path="workspace/program.py",
-        byte_count=len(payload),
-        sha256=f"sha256:{hashlib.sha256(payload).hexdigest()}",
-        executable=False,
+    submitted_manifest = b"submitted project file\n"
+    files = tuple(
+        sorted(
+            (
+                ExternalMaterialFile(
+                    normalized_path=".external-checker-grant.json",
+                    byte_count=len(submitted_manifest),
+                    sha256=(
+                        f"sha256:{hashlib.sha256(submitted_manifest).hexdigest()}"
+                    ),
+                    executable=False,
+                ),
+                ExternalMaterialFile(
+                    normalized_path="workspace/program.py",
+                    byte_count=len(payload),
+                    sha256=f"sha256:{hashlib.sha256(payload).hexdigest()}",
+                    executable=False,
+                ),
+            ),
+            key=lambda item: item.normalized_path,
+        )
     )
-    semantic_manifest_sha256 = canonical_json_hash(
-        {
-            "schema_version": SUBMISSION_MANIFEST_SCHEMA_VERSION,
-            "entries": [
-                {"normalized_path": "workspace", "entry_type": "directory"},
+    manifest_entries = sorted(
+        [
+            {"normalized_path": "runtime", "entry_type": "directory"},
+            {"normalized_path": "workspace", "entry_type": "directory"},
+            *(
                 {
                     "normalized_path": file.normalized_path,
                     "entry_type": "file",
                     "byte_count": file.byte_count,
                     "sha256": file.sha256,
                     "executable": file.executable,
-                },
-            ],
+                }
+                for file in files
+            ),
+        ],
+        key=lambda item: item["normalized_path"],
+    )
+    semantic_manifest_sha256 = canonical_json_hash(
+        {
+            "schema_version": SUBMISSION_MANIFEST_SCHEMA_VERSION,
+            "entries": manifest_entries,
         }
     )
     identifiers = [str(uuid4()) for _ in range(11)]
@@ -640,26 +664,35 @@ def test_post_external_grant_preserves_submitted_workspace_directory(
         content_id=identifiers[6],
         replica_id=identifiers[7],
         content_sha256=SHA,
-        byte_count=len(payload),
+        byte_count=len(payload) + len(submitted_manifest),
         evidence_id=identifiers[8],
         verification_receipt_id=identifiers[9],
         verification_job_id=identifiers[10],
         verification_generation=1,
         namespace_fingerprint=SHA,
         semantic_manifest_sha256=semantic_manifest_sha256,
-        directories=("workspace",),
-        files=(file,),
+        directories=("runtime", "workspace"),
+        files=files,
     )
 
     with manager.extraction_workspace(
-        reserved_bytes=len(payload), maximum_entries=3
+        reserved_bytes=len(payload) + len(submitted_manifest), maximum_entries=5
     ) as extraction:
+        (extraction / ".external-checker-grant.json").write_bytes(submitted_manifest)
+        (extraction / "runtime").mkdir()
         submitted_workspace = extraction / "workspace"
         submitted_workspace.mkdir()
         (submitted_workspace / "program.py").write_bytes(payload)
         with manager._external_material_grant(extraction, request) as grant:
             grant_root = tmp_path / "scratch" / "workspaces" / grant.grant_id
             assert (grant_root / "workspace/workspace/program.py").read_bytes() == payload
+            assert (grant_root / "workspace/runtime").is_dir()
+            assert (
+                grant_root / "workspace/.external-checker-grant.json"
+            ).read_bytes() == submitted_manifest
+            assert json.loads((grant_root / ".external-checker-grant.json").read_text())[
+                "grant_id"
+            ] == grant.grant_id
             assert not any(
                 item.name.startswith(".external-material-")
                 for item in grant_root.iterdir()

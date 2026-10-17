@@ -662,13 +662,13 @@ can safely adopt the PILOT-00 mechanism.
 | Scratch and cleanup owner | Inspect `ArtifactScratchManager` workspace ledger, TTL/dead-process recovery, no-follow deletion, external grant publication and selected POST call order | Existing owner already provides aggregate byte quota and per-workspace entry ceiling, durable workspace ownership, failed-cleanup retention and crash recovery. Rust settles Docker before socket response; the live Python context then revokes/deletes before exposing the evaluation. Focused tests cover exact limits, cleanup ordering and dead-owner recovery; the isolated-runner matrix exercises service SIGKILL, live ART unwind and restart orphan cleanup | Deployed process-crash behavior remains separate from development proof |
 | #582 ownership check | Coordinate exact paths and port ownership with the S3 activation owner | #582 does not touch `preparation.py` or `post_submit_materialization.py`; it owns provider-neutral ArtifactStore activation evidence and S3 composition, while this change reuses the separate existing ArtifactScratchManager/ledger without extending that activation port | Recheck after either branch changes its bounded files |
 | Aggregate execution budget | Inspect request resource contract, selected POST budget and service timeout constants | Immutable registry resources include CPU, memory, deadline and output; the current adapter reserves one 60-second cleanup margin. Work uses one absolute deadline/output meter; emergency cleanup uses one 10-second deadline and separate 256 KiB output ceiling. The isolated-runner matrix exercises interruption and representative quota bounds | The required workflow must pass on the final reviewable head; production-limit selection and deployed behavior remain separate |
-| Required Rust workspace gate | From `external_checkers/`: `CARGO_BUILD_JOBS=1 cargo fmt --all --check && CARGO_BUILD_JOBS=1 cargo test --workspace --locked` | PASS on the `TEST493002` repair candidate: 5 SDK, 34 service and 4 project-image tests. The service tests cover custody-first startup, disconnect/CLI stop, one cleanup budget, exact successful-absence queries, marker-preserving ambiguous removal, attempt-bound recovery names, production builder `fsize` arguments, kernel exact-byte/plus-one behavior and fatal cleanup propagation through two real socket connections. Focused mutations of both the `handle_frame` fatal guard and listener-loop propagation fail this regression | Pure/fake-Docker tests do not prove actual Docker/runsc behavior |
+| Required Rust workspace gate | From `external_checkers/`: `CARGO_BUILD_JOBS=1 cargo fmt --all --check && CARGO_BUILD_JOBS=1 cargo test --workspace --locked` | PASS on the pre-external-review candidate: 5 SDK, 34 service and 4 project-image tests. The service tests cover custody-first startup, disconnect/CLI stop, one cleanup budget, exact successful-absence queries, marker-preserving ambiguous removal, attempt-bound recovery names, production builder `fsize` arguments, kernel exact-byte/plus-one behavior and fatal cleanup propagation through two real socket connections. Focused zero-allowance and bounded-path-finding regressions are pending hosted execution because this constrained host cannot safely run another Rust compile | Pure/fake-Docker tests do not prove actual Docker/runsc behavior; the repaired head still requires the hosted locked workspace gate |
 | Rust strict lint | `CARGO_BUILD_JOBS=1 cargo clippy --manifest-path external_checkers/Cargo.toml -p workstream-checker-service --all-targets -- -D warnings` plus blame and `.github/workflows/backend.yml` inspection | The repaired head reports only `clippy::large_enum_variant` at the unchanged pre-existing `GrantIdentity` (128-byte PRE versus 424-byte POST variant); no suppression or new diagnostic was introduced. The required `external-checker-runtime` CI lane runs locked workspace tests and formatting, not clippy | This optional local strict-clippy probe remains nonzero on that baseline warning; changing the existing serialized grant type is outside this bounded repair |
 | Project image and SDK contracts | `CARGO_BUILD_JOBS=1 cargo test --manifest-path external_checkers/Cargo.toml -p workstream-terminal-benchmark-checker` and `CARGO_BUILD_JOBS=1 cargo test --manifest-path external_checkers/Cargo.toml -p workstream-checker-sdk` | PASS: 4 project-package tests over all five originals and 5 SDK contract/canonicalization tests; the isolated-runner matrix executes the built project image through PRE validation and POST continuation | Registry activation and deployed execution remain separate |
 | ART scratch integration | `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 PYTHONPATH=. /home/abiorh/flow/workstream_product_builder/backend/.venv/bin/python -m pytest -q -p pytest_asyncio.plugin tests/checkers/external/test_runtime.py` from `backend/` | PASS: 11 tests, including exact existing-ledger POST byte/entry reservation and cleanup | Does not by itself prove service/Python process-crash ordering |
 | Runtime proof validators | `python3 -m unittest -v test_verify_evidence test_runtime_proof` plus the staged `test_execute_post_contract` suite | PASS in hosted preparation: 22 stdlib evidence/launch/matrix tests and 2 staged-backend contract tests cover the fixed evidence allowlist, exact symbolic ART/cache mount identities, hostile source rejection, exact two-attempt launch reduction, strict registry restoration and separate extra-attempt/duplicate-start rejection | Stub/fake-Docker validation alone does not establish Docker, XFS or runsc behavior |
 | Real gVisor matrix | Path-scoped isolated-runner probe over the one interrupted and one complete `ledger-reconcile` POST | Run `39029082111` at `2932889018dc0136d5e5fdce0c117b0de619b0b7` passed image/quota preparation, interruption, synchronous ART unwind, restart orphan cleanup, unowned-control preservation and the complete POST matrix, then exposed a root-owned event-evidence staging mismatch. Reviewed repair `346510d95ccfe9b4b0c1dcbefa6cbb7925118a0e` installs that fixed evidence file through bounded no-follow descriptors for the required final exact-head workflow run | The required PR workflow must pass on the final reviewable head; isolated DIND evidence remains development proof rather than deployed Workstream proof |
-| Current-source reconciliation | Merge current `main` at `d5bac131`; inspect the current result/findings, Python CHECKERS contracts and intervening roadmap owners; run focused existing checker tests | This branch preserves current main, the current result shape and no old/new compatibility path | Recheck main ancestry and required hosted checks before readiness |
+| Current-source reconciliation | Merge current `main` at `ef839bb6`; inspect the current result/findings, Python CHECKERS contracts, repaired PostgreSQL 16 schema fingerprint and intervening roadmap owners; run focused existing checker tests | This branch preserves current main, the current result shape, the exact schema guard and no old/new compatibility path | Recheck main ancestry and required hosted checks before readiness |
 
 ## Review findings
 
@@ -732,14 +732,33 @@ a queued health request. The test requires retained-resource evidence, EOF with
 no first response, the fatal listener-loop error and no second-request Docker
 marker. Both mutations therefore fail without a hung thread or child process.
 
+The ready-for-review CodeRabbit pass on `dd909e2dca1e2e161c990845dabeca06265885d1`
+reported three valid bounded edge cases. Submitted top-level `runtime/` and
+`.external-checker-grant.json` names belong inside the sealed project package,
+so ART now reserves only its unpredictable publication-staging name and proves
+those submitted names survive below the published workspace. Ordinary POST
+grants may legitimately reserve zero continuation bytes and entries; the
+service now verifies those grants while terminal continuation still meters any
+requested write against the immutable allowance. Finally, package validation
+caps repeated path-level findings by count and serialized bytes, omits a path
+that the shared public finding contract cannot represent, emits one truncation
+summary and preserves independent required-member and size feedback so an
+adversarial 2,000-entry package cannot turn bounded work feedback into
+`invalid_output`. The Python
+reserved-name regression and static formatting checks pass locally. The new
+Rust zero-allowance and bounded-finding regressions require the hosted locked
+workspace gate on the final exact head because local memory and swap cannot
+safely support another Rust compile.
+
 ## Reconciliation
 
 - Current-source reconciliation: This branch contains current `main` at
-  `d5bac131`, including the merged final reviewed corpus and current
-  finding/check result contract. The corpus carries the exact linux/amd64 base
-  recipe, bounded harness failures, destructive-state regression and reviewed
-  ownership, UTF-8 and UTC-overflow fixes. Parent corpus
-  assets remain dependency input rather than this change's implementation diff.
+  `ef839bb6`, including the merged final reviewed corpus, current finding/check
+  result contract and the repaired PostgreSQL 16 schema fingerprint guard. The
+  corpus carries the exact linux/amd64 base recipe, bounded harness failures,
+  destructive-state regression and reviewed ownership, UTF-8 and UTC-overflow
+  fixes. Parent corpus assets remain dependency input rather than this change's
+  implementation diff.
 - Next usable boundary: #580 may register the exact independently produced
   specifications, and #555 may combine registration and approved-policy
   activation with the complete public journey. Neither is part of this

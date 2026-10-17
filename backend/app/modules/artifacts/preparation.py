@@ -786,11 +786,7 @@ class ArtifactScratchManager:
             os.fchmod(root_fd, 0o700)
             names = os.listdir(root_fd)
             workspace_staging = f".external-material-{grant_id}"
-            if (
-                workspace_staging in names
-                or _EXTERNAL_GRANT_MANIFEST in names
-                or _EXTERNAL_RUNTIME_DIRECTORY in names
-            ):
+            if workspace_staging in names:
                 raise ArtifactScratchIntegrityError("external material workspace is invalid")
             os.mkdir(workspace_staging, mode=0o700, dir_fd=root_fd)
             workspace_fd = os.open(
