@@ -25,8 +25,9 @@ whose leftover jobs then appeared as failures.
 
 - Give title/description-only edits a run-specific concurrency group.
 - Skip `scope`, and therefore all proof jobs, for those edits.
-- Make the required `test` job of such a run wait for, and mirror, the newest
-  other Backend run on the same head whose `scope` job executed.
+- Make the required `test` job of such a run mirror the newest other Backend
+  run on the same head whose `scope` job executed, without waiting for that
+  run's prerequisites.
 - Grant the workflow `actions: read` for that lookup; update the workflow gate
   test and `docs/operations_backend_testing.md`.
 
@@ -40,7 +41,22 @@ whose leftover jobs then appeared as failures.
 Skipping the edit run outright was rejected: a skipped required check counts as
 passing, so the newest `test` check run could hide an earlier failure. Mirroring
 keeps the required check equal to the real proof. When no executed run exists
-for the head, or it does not complete within the job timeout, the mirror fails.
+for the head, the mirror fails.
+
+The first version waited up to 70 minutes for the proof run to complete. The
+second hosted probe (below) showed that this fails on a busy day and holds one
+of the organization's 20 concurrent job slots while it waits. The mirror now
+reads the proof run's final check (`test` or `draft-test`) instead:
+
+- If that check has completed, the mirror reports its result.
+- If that check has not been created yet, the mirror fails at once. The proof
+  creates its check later, after the mirror's own check, so the proof's result
+  becomes the newest one and replaces the failure.
+- If that check exists but has not completed, the mirror waits for that one
+  short job, for at most 30 minutes.
+
+Failing, rather than passing, while proof is unfinished means a cancelled proof
+can leave a PR red but never green without proof.
 A base retarget sets `github.event.changes.base`, so it keeps the shared group
 and full proof.
 
@@ -83,8 +99,18 @@ The first hosted probe on #593 edited the description during proof: the
 running proof was not cancelled, and both edit runs skipped every proof job
 while their `test` jobs waited to mirror it.
 
+The second hosted probe (head `5218ec8db`, 2026-10-16) edited the description
+at 17:56 UTC while five other PRs saturated the runner limit. The proof run
+38943336385 was not cancelled, but its `test` job did not start until 19:54.
+Both edit runs timed out waiting and reported failure at 19:27 and 19:30; the
+proof's passing `test` at 20:17 then became the PR's current check. This led
+to the fail-fast rule above.
+
 ## Reconciliation
 
 - Current-source reconciliation: based on `main` after #575 and #585.
 - Next usable boundary: None.
-- Remaining risks: a mirror run occupies one runner while it waits.
+- Remaining risks: after a description edit, the PR shows a failed `test`
+  until the proof run's own `test` check completes. The replacement relies on
+  GitHub using the newest check run of a given name; the 2026-10-16 probe
+  showed the later passing check superseding two earlier failures.

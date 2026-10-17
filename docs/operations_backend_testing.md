@@ -139,9 +139,12 @@ the required check even on an unchanged commit; an older green draft result
 cannot satisfy it.
 Base-branch edits also start a fresh run bound to the new base. A title or
 description edit starts a separate run that neither cancels nor repeats proof:
-its required `test` job waits for the newest other Backend run on the same head
-whose `scope` job ran, then reports that run's `test` result. Without such a
-run, it fails.
+its required `test` job finds the newest other Backend run on the same head
+whose `scope` job ran. If that run's `test` job has finished, the edit run
+reports its result. If that job does not exist yet, the edit run fails at once:
+the proof run creates its own `test` check later, and that newer check replaces
+the failure. The edit run waits only while that `test` job already exists but
+has not finished. Without a proof run, it fails.
 
 The explicit inventory lives in `backend/scripts/test_lane_catalogue.py`.
 Authorization preflight runs alongside all sixteen lanes when backend proof is

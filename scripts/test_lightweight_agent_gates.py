@@ -413,6 +413,10 @@ class LightweightAgentGateTests(unittest.TestCase):
         self.assertIn(".number == $pr and .base.ref == $base", test_job)
         self.assertIn("EXPECTED_JOB: ${{ github.event.pull_request.draft && 'draft-test' || 'test' }}", test_job)
         self.assertIn('test "${conclusion}" = success', test_job)
+        # An unfinished proof must not hold a runner until its final check exists.
+        self.assertIn("its own ${EXPECTED_JOB} check will replace this one", test_job)
+        self.assertNotIn("seq 1 140", test_job)
+        self.assertIn("timeout-minutes: 40", test_job.split("\n    steps:\n", 1)[0])
         scope_job = workflow.split("\n  scope:\n", 1)[1].split(
             "\n  minio-image:\n", 1
         )[0]

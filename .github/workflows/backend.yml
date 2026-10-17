@@ -813,7 +813,7 @@ jobs:
     if: ${{ always() }}
     needs: [scope, auth-boundary-preflight, external-checker-runtime, lanes, minio-image, cli-public-contract, mcp-contract, full-suite]
     runs-on: ubuntu-latest
-    timeout-minutes: 75
+    timeout-minutes: 40
     steps:
       - name: Mirror the existing proof for a description-only edit
         if: ${{ github.event.action == 'edited' && !github.event.changes.base && github.event.pull_request.head.repo.full_name == github.repository }}
@@ -829,36 +829,47 @@ jobs:
         run: |
           set -euo pipefail
           # The proof is the newest other Backend run for this exact head, this
-          # PR and this base branch whose scope job executed. Wait for it, then
-          # report its result for the check name this PR currently requires.
-          for _ in $(seq 1 140); do
-            proof=""
-            for run in $(gh api "repos/${REPOSITORY}/actions/workflows/backend.yml/runs?head_sha=${HEAD_SHA}&event=pull_request&per_page=50" \
-                | jq -r --argjson self "${RUN_ID}" --argjson pr "${PR_NUMBER}" --arg base "${BASE_REF}" \
-                  '.workflow_runs | sort_by(.created_at) | reverse | .[] | select(.id != $self)
-                   | select(any(.pull_requests[]?; .number == $pr and .base.ref == $base)) | .id'); do
-              scope=$(gh api "repos/${REPOSITORY}/actions/runs/${run}/jobs?per_page=100" \
-                --jq '[.jobs[] | select(.name == "scope")][0].conclusion // "pending"')
-              if [[ "${scope}" != skipped ]]; then
-                proof="${run}"
-                break
+          # PR and this base branch whose scope job executed.
+          proof=""
+          for run in $(gh api "repos/${REPOSITORY}/actions/workflows/backend.yml/runs?head_sha=${HEAD_SHA}&event=pull_request&per_page=50" \
+              | jq -r --argjson self "${RUN_ID}" --argjson pr "${PR_NUMBER}" --arg base "${BASE_REF}" \
+                '.workflow_runs | sort_by(.created_at) | reverse | .[] | select(.id != $self)
+                 | select(any(.pull_requests[]?; .number == $pr and .base.ref == $base)) | .id'); do
+            scope=$(gh api "repos/${REPOSITORY}/actions/runs/${run}/jobs?per_page=100" \
+              --jq '[.jobs[] | select(.name == "scope")][0].conclusion // "pending"')
+            if [[ "${scope}" != skipped ]]; then
+              proof="${run}"
+              break
+            fi
+          done
+          if [[ -z "${proof}" ]]; then
+            echo "No Backend proof exists for ${HEAD_SHA}." >&2
+            exit 1
+          fi
+          # The proof creates its final check only after its prerequisites
+          # finish. If that check does not exist yet, it will be created after
+          # this one and replace it, so fail now instead of holding a runner.
+          # Once it exists, wait only for that short job and report its result.
+          for _ in $(seq 1 60); do
+            job=$(gh api "repos/${REPOSITORY}/actions/runs/${proof}/jobs?per_page=100" \
+              | jq -c --arg name "${EXPECTED_JOB}" '[.jobs[] | select(.name == $name)][0] // empty')
+            if [[ -z "${job}" ]]; then
+              if [[ "$(gh api "repos/${REPOSITORY}/actions/runs/${proof}" --jq .status)" == completed ]]; then
+                echo "Proof run ${proof} has no ${EXPECTED_JOB} check." >&2
+              else
+                echo "Proof run ${proof} is still running; its own ${EXPECTED_JOB} check will replace this one." >&2
               fi
-            done
-            if [[ -z "${proof}" ]]; then
-              echo "No Backend proof exists for ${HEAD_SHA}." >&2
               exit 1
             fi
-            status=$(gh api "repos/${REPOSITORY}/actions/runs/${proof}" --jq .status)
-            if [[ "${status}" == completed ]]; then
-              conclusion=$(gh api "repos/${REPOSITORY}/actions/runs/${proof}/jobs?per_page=100" \
-                | jq -r --arg name "${EXPECTED_JOB}" '[.jobs[] | select(.name == $name)][0].conclusion // "missing"')
+            if [[ "$(jq -r .status <<<"${job}")" == completed ]]; then
+              conclusion=$(jq -r '.conclusion // "missing"' <<<"${job}")
               echo "Mirroring run ${proof}: ${EXPECTED_JOB} ${conclusion}."
               test "${conclusion}" = success
               exit 0
             fi
             sleep 30
           done
-          echo "Proof run ${proof} did not complete in time." >&2
+          echo "Proof run ${proof}: ${EXPECTED_JOB} did not complete in time." >&2
           exit 1
 
       - name: Require the selected draft scope or complete merge proof
