@@ -61,6 +61,20 @@ _PROJECT_CONTEXT_ACTIONS = (
     ActionId.PROJECT_ACTIVE_GUIDE_READ,
 )
 
+def eligible_project_admin_roles(admin_roles: tuple[str, ...]) -> tuple[str, ...]:
+    """Admin roles that carry at least one active project-context action."""
+    return tuple(
+        role_name
+        for role_name in admin_roles
+        if any(
+            ACTION_BY_ID[action_id].availability is ActionAvailability.ACTIVE
+            and ACTION_BY_ID[action_id].permission_id
+            in permissions_for(AdminRole(role_name))
+            for action_id in _PROJECT_CONTEXT_ACTIONS
+        )
+    )
+
+
 class ProjectRoleReadResourceNotFound(LookupError):
     """One concealed absence for project or project-role grant reads."""
 
@@ -115,16 +129,7 @@ class ActorAuthorizationContextReadService:
             project_id=project_id,
             actor_profile_id=actor_profile_id,
         )
-        eligible_admin_roles = tuple(
-            role_name
-            for role_name in admin_roles
-            if any(
-                ACTION_BY_ID[action_id].availability is ActionAvailability.ACTIVE
-                and ACTION_BY_ID[action_id].permission_id
-                in permissions_for(AdminRole(role_name))
-                for action_id in _PROJECT_CONTEXT_ACTIONS
-            )
-        )
+        eligible_admin_roles = eligible_project_admin_roles(admin_roles)
         admin_permissions = {
             permission
             for role_name in eligible_admin_roles

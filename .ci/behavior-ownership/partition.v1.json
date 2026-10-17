@@ -98,6 +98,10 @@
     },
     {
       "group": "shared",
+      "target": "backend/app/api/deps/contributor_reads.py"
+    },
+    {
+      "group": "shared",
       "target": "backend/app/api/deps/guide_activation.py"
     },
     {
@@ -147,6 +151,10 @@
     {
       "group": "lifecycle",
       "target": "backend/app/api/routes/contributions.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/app/api/routes/contributor_reads.py"
     },
     {
       "group": "shared",
@@ -390,6 +398,10 @@
     },
     {
       "group": "artifacts",
+      "target": "backend/app/modules/artifacts/preparation_reads.py"
+    },
+    {
+      "group": "artifacts",
       "target": "backend/app/modules/artifacts/repository.py"
     },
     {
@@ -514,6 +526,10 @@
     },
     {
       "group": "auth",
+      "target": "backend/app/modules/authorization/api/contributor_reads.py"
+    },
+    {
+      "group": "auth",
       "target": "backend/app/modules/authorization/api/decisions.py"
     },
     {
@@ -570,6 +586,14 @@
     },
     {
       "group": "auth",
+      "target": "backend/app/modules/authorization/catalogue.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/catalogue.py"
+    },
+    {
+      "group": "auth",
       "target": "backend/app/modules/authorization/checker_registry_authorization.py"
     },
     {
@@ -583,6 +607,10 @@
     {
       "group": "auth",
       "target": "backend/app/modules/authorization/contribution_read.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/contributor_read.py"
     },
     {
       "group": "auth",
@@ -623,6 +651,10 @@
     {
       "group": "auth",
       "target": "backend/app/modules/authorization/domain/contribution_reads.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/domain/contributor_reads.py"
     },
     {
       "group": "auth",
@@ -1049,6 +1081,10 @@
       "target": "backend/app/modules/checkers/selected_pre_submit_execution.py"
     },
     {
+      "group": "artifacts",
+      "target": "backend/app/modules/checkers/selected_pre_submit_reads.py"
+    },
+    {
       "group": "lifecycle",
       "target": "backend/app/modules/compensation/api/adapter_bindings.py"
     },
@@ -1286,6 +1322,10 @@
     },
     {
       "group": "lifecycle",
+      "target": "backend/app/modules/projects/api/project_summaries.py"
+    },
+    {
+      "group": "lifecycle",
       "target": "backend/app/modules/projects/api/setup_identity.py"
     },
     {
@@ -1514,6 +1554,10 @@
     },
     {
       "group": "lifecycle",
+      "target": "backend/app/modules/projects/project_summaries.py"
+    },
+    {
+      "group": "lifecycle",
       "target": "backend/app/modules/projects/repository.py"
     },
     {
@@ -1650,6 +1694,10 @@
     },
     {
       "group": "lifecycle",
+      "target": "backend/app/modules/tasks/api/contributor_reads.py"
+    },
+    {
+      "group": "lifecycle",
       "target": "backend/app/modules/tasks/api/guide_documents.py"
     },
     {
@@ -1735,6 +1783,10 @@
     {
       "group": "lifecycle",
       "target": "backend/app/modules/tasks/contribution_evidence.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/contributor_reads.py"
     },
     {
       "group": "lifecycle",
@@ -2061,7 +2113,7 @@
       "target": "backend/scripts/validate_test_lane_evidence.py"
     }
   ],
-  "authority_digest": "21a7cfbcc0d392733b6bd22910686272280b22f973f617de9c75e901a78eec62",
+  "authority_digest": "fb1ec4d28bc6cc35300ecb0d6bc8adde1488d5a205a58ef3287c5fdfea005f2c",
   "protected_base_commit": "7676ce4347db0c9694962a9b587a20765e16eac6",
   "schema": "workstream.behavior-ownership-partition.v1"
 }

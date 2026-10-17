@@ -297,6 +297,12 @@ def task_queue_authorization(kernel, secret):
     return TaskQueueReadAuthorization(kernel, secret)
 
 
+def contributor_read_authorization(kernel, session: AsyncSession, secret):
+    """Compose the caller's own-work AUTH adapter in the shared decision transaction."""
+    from app.modules.authorization.contributor_read import ContributorReadAuthorization
+    return ContributorReadAuthorization(kernel, AdminAuthorizationRepository(session), secret)
+
+
 def history_read_authorization(kernel):
     """Compose current AUTH decisions for owner-selected immutable history."""
     from app.modules.authorization.history_authorization import HistoryReadAuthorization

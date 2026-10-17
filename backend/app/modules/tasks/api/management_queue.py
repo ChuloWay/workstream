@@ -2,10 +2,36 @@
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Protocol
+from typing import Literal, Protocol, get_args
 from uuid import UUID
 
 from app.modules.tasks.api.ready_queue import TaskQueueCursor, TaskQueueRequest, _aware
+
+
+TaskStatus = Literal[
+    "draft", "screening", "ready", "claimed", "in_progress", "submitted",
+    "evaluation_pending", "review_pending", "needs_revision", "accepted",
+]
+TASK_STATUSES = frozenset(get_args(TaskStatus))
+
+
+@dataclass(frozen=True, slots=True)
+class TaskQueueFilters:
+    """Optional management filters; ``import_batch_id`` selects native batch membership."""
+
+    status: TaskStatus | None = None
+    assignee_actor_id: UUID | None = None
+    import_batch_id: UUID | None = None
+    updated_since: datetime | None = None
+
+    def __post_init__(self) -> None:
+        if (
+            (self.status is not None and (not isinstance(self.status, str) or self.status not in TASK_STATUSES))
+            or any(value is not None and not isinstance(value, UUID)
+                   for value in (self.assignee_actor_id, self.import_batch_id))
+            or (self.updated_since is not None and not _aware(self.updated_since))
+        ):
+            raise ValueError("task queue filters are invalid")
 
 
 @dataclass(frozen=True, slots=True)
@@ -19,7 +45,7 @@ class ManagementTaskSummary:
     difficulty: str | None
     skill_tags: tuple[str, ...]
     estimated_time_minutes: int | None
-    status: str
+    status: TaskStatus
     deadline_at: datetime | None
     created_at: datetime
     updated_at: datetime
@@ -29,6 +55,7 @@ class ManagementTaskSummary:
         if (
             not isinstance(self.task_id, UUID) or not isinstance(self.project_id, UUID)
             or not isinstance(self.title, str) or not isinstance(self.status, str)
+            or self.status not in TASK_STATUSES
             or any(value is not None and not isinstance(value, str) for value in (self.task_type, self.difficulty))
             or not isinstance(self.skill_tags, tuple)
             or any(not isinstance(value, str) for value in self.skill_tags)
@@ -45,7 +72,7 @@ class OperationalTaskSummary:
 
     task_id: UUID
     project_id: UUID
-    status: str
+    status: TaskStatus
     created_at: datetime
     updated_at: datetime
 
@@ -53,7 +80,7 @@ class OperationalTaskSummary:
         """Keep operational output immutable and restricted to scalar facts."""
         if (
             not isinstance(self.task_id, UUID) or not isinstance(self.project_id, UUID)
-            or not isinstance(self.status, str)
+            or not isinstance(self.status, str) or self.status not in TASK_STATUSES
             or not _aware(self.created_at) or not _aware(self.updated_at)
         ):
             raise ValueError("operational task summary is invalid")
@@ -107,7 +134,9 @@ class OperationalTaskPage:
 class ManagementTaskQueuePort(Protocol):
     """Hidden project management facts; ARCH-03C supplies exact live authority."""
 
-    async def read_management_tasks(self, request: TaskQueueRequest) -> ManagementTaskPage:
+    async def read_management_tasks(
+        self, request: TaskQueueRequest, filters: TaskQueueFilters = TaskQueueFilters(),
+    ) -> ManagementTaskPage:
         """Read all project task states without owning the caller's transaction."""
         ...
 

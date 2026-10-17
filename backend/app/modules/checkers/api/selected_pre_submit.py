@@ -920,6 +920,30 @@ class SelectedPreSubmitAuthorityUnavailable(RuntimeError):
     """Conceal fixed-service PRE authorization loss without product facts."""
 
 
+@dataclass(frozen=True, slots=True)
+class SelectedPreSubmitRunView:
+    """One retained selected PRE run of its own contributor, with revalidated terminal facts."""
+
+    run_id: UUID
+    task_id: UUID
+    assignment_id: UUID
+    status: Literal["queued", "running", "completed", "infrastructure_failed"]
+    archive_sha256: str
+    archive_byte_count: int
+    queued_at: datetime
+    completed_at: datetime | None
+    terminal: SelectedPreSubmitTerminalFacts | None
+
+
+class SelectedPreSubmitRunReadPort(Protocol):
+    """Read one contributor's runs for one task, newest first; the caller authorizes."""
+
+    async def read_contributor_runs(
+        self, *, actor_profile_id: UUID, task_id: UUID, run_id: UUID | None,
+        limit: int, before: tuple[datetime, UUID] | None,
+    ) -> tuple[tuple[SelectedPreSubmitRunView, ...], bool]: ...
+
+
 __all__ = (
     "ExternalPreSubmitIsolationFacts",
     "ExternalPreSubmitMemberFacts",
@@ -939,6 +963,8 @@ __all__ = (
     "SelectedPreSubmitLeaseFacts",
     "SelectedPreSubmitReservationFacts",
     "SelectedPreSubmitRequestConflict",
+    "SelectedPreSubmitRunReadPort",
+    "SelectedPreSubmitRunView",
     "SelectedPreSubmitTerminalFacts",
     "SelectedPreSubmitUnavailable",
 )

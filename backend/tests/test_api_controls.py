@@ -501,6 +501,22 @@ def test_openapi_documents_request_error_and_response_context() -> None:
         assert route in protected_inventory
         method, path = route.split(" ", 1)
         assert schema["paths"][path][method.lower()]["x-workstream-action-id"] == action
+    preparations = "/api/v1/tasks/{task_id}/submission-bundle-preparations"
+    contributor_reads = {
+        "GET /api/v1/actors/me/projects": "actor.project.list",
+        "GET /api/v1/actors/me/assignments": "actor.assignment.list",
+        "GET /api/v1/actors/me/submissions": "actor.submission.list",
+        "GET /api/v1/actors/me/summary": "actor.work_summary.read",
+        f"GET {preparations}": "task.submission_bundle_preparation.list",
+        f"GET {preparations}/{{preparation_id}}": "task.submission_bundle_preparation.read",
+    }
+    for route, action in contributor_reads.items():
+        assert route in protected_inventory
+        method, path = route.split(" ", 1)
+        operation = schema["paths"][path][method.lower()]
+        assert operation["x-workstream-action-id"] == action
+        assert operation["security"]
+    new_manager_reads |= contributor_reads.keys()
     source_prefix = "/api/v1/projects/{project_id}/task-import-sources"
     source_actions = {
         f"POST {source_prefix}": "artifact.task_import_source.declare",
@@ -553,13 +569,13 @@ def test_openapi_documents_request_error_and_response_context() -> None:
     assert repair_operation["x-workstream-action-id"] == "project.task.revision.repair"
     assert repair_operation["security"]
     new_manager_reads.add(revision_repair)
-    assert len(route_inventory) == 109
+    assert len(route_inventory) == 115
     retained_routes = sorted(set(route_inventory) - proposal_routes - post_policy_routes - queue_routes - new_manager_reads - guide_read - contribution_reads.keys() - public_entry_actions.keys() - registry_actions.keys())
     retained_protected = sorted(set(protected_inventory) - proposal_routes - post_policy_routes - queue_routes - new_manager_reads - guide_read - contribution_reads.keys() - public_entry_actions.keys() - registry_actions.keys())
     assert sha256("\n".join(retained_routes).encode()).hexdigest() == (
         "793237012e9256d308dd5d1e9c1a65e41381cf6306888fdd175dc9794b118444"
     )
-    assert len(protected_inventory) == 107
+    assert len(protected_inventory) == 113
     assert sha256("\n".join(retained_protected).encode()).hexdigest() == (
         "0953ae6392b81a4a7ba7c9f6b7fccc17768f34cd1f958572fdc553cd204ec82e"
     )
@@ -590,6 +606,7 @@ def test_openapi_documents_request_error_and_response_context() -> None:
     assert action_declarations == {
         revision_repair: "project.task.revision.repair",
         **contribution_reads,
+        **contributor_reads,
         **source_actions,
         **public_entry_actions,
         **registry_actions,
