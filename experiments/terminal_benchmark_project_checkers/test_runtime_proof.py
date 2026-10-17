@@ -3,6 +3,9 @@
 
 from __future__ import annotations
 
+from contextlib import redirect_stdout
+import hashlib
+import io
 import json
 import os
 from pathlib import Path
@@ -11,6 +14,7 @@ import tempfile
 import unittest
 
 import build_matrix
+import image_facts
 
 
 HEAD = "a" * 40
@@ -26,6 +30,129 @@ def _write_ndjson(path: Path, values: list[dict[str, object]]) -> None:
         "".join(json.dumps(value, sort_keys=True) + "\n" for value in values),
         encoding="utf-8",
     )
+
+
+class OciLayoutFactTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.temporary = tempfile.TemporaryDirectory()
+        self.layout = Path(self.temporary.name)
+        blobs = self.layout / "blobs" / "sha256"
+        blobs.mkdir(parents=True)
+        (self.layout / "oci-layout").write_text(
+            '{"imageLayoutVersion":"1.0.0"}', encoding="utf-8"
+        )
+        config = b'{"architecture":"amd64","os":"linux"}'
+        layer = b"exact compressed layer bytes"
+        config_digest = self._blob(config)
+        self.layer_digest = self._blob(layer)
+        self.layer_bytes = layer
+        manifest = json.dumps(
+            {
+                "schemaVersion": 2,
+                "mediaType": "application/vnd.oci.image.manifest.v1+json",
+                "config": {
+                    "mediaType": "application/vnd.oci.image.config.v1+json",
+                    "digest": config_digest,
+                    "size": len(config),
+                },
+                "layers": [
+                    {
+                        "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+                        "digest": self.layer_digest,
+                        "size": len(layer),
+                    }
+                ],
+            },
+            separators=(",", ":"),
+        ).encode()
+        self.manifest_digest = self._blob(manifest)
+        _write_json(
+            self.layout / "index.json",
+            {
+                "schemaVersion": 2,
+                "manifests": [
+                    {
+                        "mediaType": "application/vnd.oci.image.manifest.v1+json",
+                        "digest": self.manifest_digest,
+                        "size": len(manifest),
+                    }
+                ],
+            },
+        )
+
+    def tearDown(self) -> None:
+        self.temporary.cleanup()
+
+    def _blob(self, value: bytes) -> str:
+        digest = hashlib.sha256(value).hexdigest()
+        (self.layout / "blobs" / "sha256" / digest).write_bytes(value)
+        return f"sha256:{digest}"
+
+    def test_exact_single_manifest_layout_is_accepted(self) -> None:
+        output = io.StringIO()
+        with redirect_stdout(output):
+            image_facts.layout_fact(
+                self.layout, self.manifest_digest, "registry.example/image"
+            )
+        self.assertEqual(
+            json.loads(output.getvalue())["platform_manifest_digest"],
+            self.manifest_digest,
+        )
+
+    def test_substituted_manifest_is_rejected_before_transport(self) -> None:
+        manifest = json.loads((self.layout / "index.json").read_text())
+        digest = manifest["manifests"][0]["digest"].removeprefix("sha256:")
+        (self.layout / "blobs" / "sha256" / digest).write_bytes(b"substituted")
+        with self.assertRaisesRegex(ValueError, "manifest digest differs"):
+            image_facts.layout_fact(
+                self.layout, self.manifest_digest, "registry.example/image"
+            )
+
+    def test_substituted_referenced_layer_is_rejected_before_transport(self) -> None:
+        layer = self.layout / "blobs" / "sha256" / self.layer_digest.removeprefix(
+            "sha256:"
+        )
+        layer.write_bytes(b"x" * len(self.layer_bytes))
+        with self.assertRaisesRegex(ValueError, "OCI layout blob digest differs"):
+            image_facts.layout_fact(
+                self.layout, self.manifest_digest, "registry.example/image"
+            )
+
+    def test_symlinked_referenced_blob_is_rejected(self) -> None:
+        layer = self.layout / "blobs" / "sha256" / self.layer_digest.removeprefix(
+            "sha256:"
+        )
+        target = (
+            self.layout
+            / "blobs"
+            / "sha256"
+            / self.manifest_digest.removeprefix("sha256:")
+        )
+        layer.unlink()
+        layer.symlink_to(target)
+        with self.assertRaisesRegex(ValueError, "non-regular file"):
+            image_facts.layout_fact(
+                self.layout, self.manifest_digest, "registry.example/image"
+            )
+
+    def test_unreferenced_blob_is_rejected(self) -> None:
+        (self.layout / "blobs" / "sha256" / ("f" * 64)).write_bytes(b"extra")
+        with self.assertRaisesRegex(ValueError, "unexpected entry"):
+            image_facts.layout_fact(
+                self.layout, self.manifest_digest, "registry.example/image"
+            )
+
+    def test_index_media_type_substitution_is_rejected(self) -> None:
+        index_path = self.layout / "index.json"
+        index = json.loads(index_path.read_text())
+        index["manifests"][0]["mediaType"] = (
+            "application/vnd.oci.image.index.v1+json"
+        )
+        _write_json(index_path, index)
+        with self.assertRaisesRegex(ValueError, "manifest media type differs"):
+            image_facts.layout_fact(
+                self.layout, self.manifest_digest, "registry.example/image"
+            )
 
 
 class MatrixReducerTests(unittest.TestCase):

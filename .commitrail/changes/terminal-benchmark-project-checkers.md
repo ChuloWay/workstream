@@ -211,15 +211,22 @@ and registry
 It records the complete linux/amd64 child manifests, media types, byte counts
 and config IDs before the networkless phase.
 
-Preparation builds the checker image, loads exact images into the owned DIND
-daemon, and publishes the builder, approved base and checker to the pinned
-registry on that daemon's loopback. It then warms and canonically inventories the
-approved CPython cache from that exact loopback base without a second external
-registry fetch. The exact Kaniko child, approved CPython base and registry receive
-run-owned transfer tags only for save/load. The Kaniko and CPython loopback
-pushes must reproduce their byte-identical verified upstream child manifests and
-digests or preparation fails; the pinned registry runs from its transferred tag,
-and cleanup removes and positively queries every transfer tag. The trusted cache
+Preparation builds the checker image and publishes the builder, approved base
+and checker to the pinned registry on the owned DIND daemon's loopback. The
+networked host uses the checksum-pinned `crane v0.22.1` binary to acquire the
+exact Kaniko and CPython child manifests and blobs as bounded OCI layouts. A
+no-follow verifier requires one exact manifest, rejects every unexpected or
+non-regular inventory entry, matches descriptor media types, hashes every
+referenced blob, and enforces count and whole-layout byte ceilings before
+transport. The same verified binary
+is copied byte-for-byte into the externally networkless DIND and pushes those
+layouts only to the fixed loopback registry. Independently fetched loopback
+manifest bytes must retain their exact upstream digests before either image is
+used. Preparation then warms and canonically inventories the approved CPython
+cache from that exact loopback base without another external registry fetch.
+The pinned registry and locally built checker receive run-owned transfer tags;
+cleanup removes and positively queries both aliases and deletes the owned OCI
+layouts and crane files with the quota-backed state. The trusted cache
 warmer alone uses the DIND host network to reach that fixed plain-HTTP loopback
 registry with 1 CPU, 1 GiB, 128 pids, no added capability and no privilege
 escalation; the outer DIND itself has only loopback. The DIND registers the
@@ -239,11 +246,17 @@ root and mount facts.
 
 During the networked preparation phase, the workflow downloads and installs
 only Ubuntu 24.04's exact `xfsprogs=6.6.0-1ubuntu2.1` package through the signed
-Ubuntu archive. It rejects a different APT candidate or installed version,
-records the downloaded package SHA-256 and `dpkg-query` result, and records the
-versions of `mkfs.xfs`, `xfs_quota` and the runner-provided `losetup`, `findmnt`
-and `mountpoint`. It installs no kernel component and fails if the runner kernel
-lacks loop or XFS project-quota support.
+Ubuntu archive and the official static `crane v0.22.1` release archive at
+SHA-256
+`0ab7a1d6932a213aed964ce97666c3077fe691c8606413674a8b3e0b9ec4cda0`.
+It rejects a different package candidate, installed version, archive hash or
+tool version, records the package, archive and extracted-binary SHA-256 values,
+and records the versions of `crane`, `mkfs.xfs`, `xfs_quota` and the
+runner-provided `losetup`, `findmnt` and `mountpoint`. It installs no kernel
+component and fails if the runner kernel lacks loop or XFS project-quota
+support. The proof syncs the backend's frozen `dev` extra because its trusted
+contract-preparation script imports the locked JSON Schema validator and the
+same preparation phase runs the checked-in proof fixtures.
 
 The runner creates one 6 GiB sparse harness-owned file, attaches it to one
 recorded loop device, formats it with XFS `ftype=1`, mounts it with project quota

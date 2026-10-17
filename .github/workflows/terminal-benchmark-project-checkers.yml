@@ -64,6 +64,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          source "${GITHUB_WORKSPACE}/experiments/terminal_benchmark_project_checkers/inputs.env"
           sudo apt-get update -qq
           cd "${RUNNER_TEMP}"
           rm -f "xfsprogs_${XFS_PROGS_VERSION}_amd64.deb"
@@ -71,13 +72,22 @@ jobs:
           test "$(dpkg-deb --field "xfsprogs_${XFS_PROGS_VERSION}_amd64.deb" Version)" = "${XFS_PROGS_VERSION}"
           sudo dpkg -i "xfsprogs_${XFS_PROGS_VERSION}_amd64.deb"
           test "$(dpkg-query -W -f='${Version}' xfsprogs)" = "${XFS_PROGS_VERSION}"
+          rm -rf ws493-crane ws493-crane.tar.gz
+          curl --fail --location --silent --show-error \
+            "https://github.com/google/go-containerregistry/releases/download/${CRANE_VERSION}/go-containerregistry_Linux_x86_64.tar.gz" \
+            --output ws493-crane.tar.gz
+          printf '%s  %s\n' "${CRANE_ARCHIVE_SHA256}" ws493-crane.tar.gz | sha256sum --check
+          mkdir -m 0700 ws493-crane
+          tar -xzf ws493-crane.tar.gz -C ws493-crane crane
+          chmod 0555 ws493-crane/crane
+          test "$(ws493-crane/crane version)" = "${CRANE_VERSION#v}"
           rustup toolchain install 1.84.0 --profile minimal
           test "$(rustc +1.84.0 --version | cut -d' ' -f2)" = 1.84.0
           python3 -m venv "${GITHUB_WORKSPACE}/backend/.venv"
           "${GITHUB_WORKSPACE}/backend/.venv/bin/python" -m pip install "uv==0.10.7"
           test "$("${GITHUB_WORKSPACE}/backend/.venv/bin/uv" --version)" = "uv 0.10.7"
           cd "${GITHUB_WORKSPACE}/backend"
-          UV_PROJECT_ENVIRONMENT=.venv .venv/bin/uv sync --frozen --no-dev
+          UV_PROJECT_ENVIRONMENT=.venv .venv/bin/uv sync --frozen --extra dev
 
       - name: Prepare exact images and quota-backed isolated DIND
         shell: bash

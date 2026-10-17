@@ -17,7 +17,11 @@ with stable observations.
 
 Preparation is the only phase that uses external networking. DIND and all
 product sandboxes are externally networkless during execution. The trusted
-cache warmer uses DIND's host network only to read the fixed loopback registry;
+checksum-pinned crane binary first acquires exact builder/base OCI layouts on
+the host, validates the single manifest and every referenced blob, then pushes
+them from the externally networkless DIND only to its fixed loopback registry.
+Unexpected, non-regular or over-budget layout entries fail before transport.
+The trusted cache warmer uses DIND's host network only to read that registry;
 the outer DIND has no external interface. Builder and oracle continuation
 containers use `--pull=never --network none`; every
 product container receives no Docker socket and is inspected for the fixed
@@ -28,8 +32,9 @@ The workflow also proves the production 384 MiB writable-layer option on the
 owned XFS backing store: an allocated and fsynced 320 MiB write succeeds and an
 allocated 400 MiB write fails. It stages only the fixed nonsecret evidence
 allowlist through no-follow file descriptors. Cleanup removes the exact DIND
-and run-owned transfer image aliases, unmounts XFS, detaches the loop device,
-deletes raw state, and adds a verified cleanup receipt before upload.
+and run-owned checker/registry transfer image aliases, removes the crane
+archive and binary, unmounts XFS, detaches the loop device, deletes raw state,
+and adds a verified cleanup receipt before upload.
 
 The evidence, launch-source and matrix-reducer tests require no Docker
 resources:

@@ -45,6 +45,9 @@ readonly REAL_DOCKER="$(readlink -f "$(command -v docker)")"
 readonly DOCKER_WRAPPER="$(readlink -f "${SCRIPT_DIR}/docker-wrapper.sh")"
 readonly PILOT_PROBE="${REPOSITORY_ROOT}/experiments/pilot00_gvisor_offline/probe.sh"
 readonly PACKAGE="${REPOSITORY_ROOT}/pilots/terminal_benchmark/packages/ledger-reconcile"
+readonly CRANE_ROOT="${RUNNER_TEMP_ROOT}/ws493-crane"
+readonly CRANE_BINARY="${CRANE_ROOT}/crane"
+readonly CRANE_ARCHIVE="${RUNNER_TEMP_ROOT}/ws493-crane.tar.gz"
 
 require_command() {
   command -v "$1" >/dev/null 2>&1 || { echo "missing required command: $1" >&2; exit 69; }
@@ -144,18 +147,14 @@ prepare_images() {
   kaniko_child="$(python3 "${SCRIPT_DIR}/image_facts.py" select-child "${work}/kaniko-index.json" "${kaniko_index_digest}")"
   local kaniko_repository="${KANIKO_INDEX%@*}"
   local kaniko_reference="${kaniko_repository}@${kaniko_child}"
-  local kaniko_transfer="ws493-kaniko:${EXPECTED_HEAD}"
-  local base_transfer="ws493-base:${EXPECTED_HEAD}"
   local registry_transfer="ws493-registry:${EXPECTED_HEAD}"
-  manifest_raw "${kaniko_reference}" "${work}/kaniko-manifest.json"
-  python3 "${SCRIPT_DIR}/image_facts.py" manifest-fact \
-    "${work}/kaniko-manifest.json" "${kaniko_child}" "${kaniko_repository}" >"${work}/upstream-builder-fact.json"
-  manifest_raw "${BASE_PLATFORM_IMAGE}" "${work}/upstream-base-manifest.json"
-  python3 "${SCRIPT_DIR}/image_facts.py" manifest-fact \
-    "${work}/upstream-base-manifest.json" "${BASE_PLATFORM_IMAGE##*@}" "${BASE_PLATFORM_IMAGE%@*}" >"${work}/upstream-base-fact.json"
+  "${CRANE_BINARY}" pull "${kaniko_reference}" "${work}/builder-oci" --format=oci
+  python3 "${SCRIPT_DIR}/image_facts.py" layout-fact \
+    "${work}/builder-oci" "${kaniko_child}" "${kaniko_repository}" >"${work}/upstream-builder-fact.json"
+  "${CRANE_BINARY}" pull "${BASE_PLATFORM_IMAGE}" "${work}/base-oci" --format=oci
+  python3 "${SCRIPT_DIR}/image_facts.py" layout-fact \
+    "${work}/base-oci" "${BASE_PLATFORM_IMAGE##*@}" "${BASE_PLATFORM_IMAGE%@*}" >"${work}/upstream-base-fact.json"
 
-  docker pull "${kaniko_reference}" >/dev/null
-  docker pull "${BASE_PLATFORM_IMAGE}" >/dev/null
   docker pull "${REGISTRY_IMAGE}" >/dev/null
   docker pull "${CHECKER_BUILD_IMAGE}" >/dev/null
   docker pull "${CHECKER_FINAL_IMAGE}" >/dev/null
@@ -164,17 +163,15 @@ prepare_images() {
     "${REPOSITORY_ROOT}/external_checkers" >/dev/null
   printf 'ws493_prepare=outer_images_ready\n'
 
-  docker tag "${kaniko_reference}" "${kaniko_transfer}"
-  docker tag "${BASE_PLATFORM_IMAGE}" "${base_transfer}"
   docker tag "${REGISTRY_IMAGE}" "${registry_transfer}"
-  docker save "${kaniko_transfer}" | "${REAL_DOCKER}" exec -i "${DIND_NAME}" docker load >/dev/null
-  docker save "${base_transfer}" | "${REAL_DOCKER}" exec -i "${DIND_NAME}" docker load >/dev/null
   docker save "${registry_transfer}" | "${REAL_DOCKER}" exec -i "${DIND_NAME}" docker load >/dev/null
   docker save "ws493-checker:${EXPECTED_HEAD}" | "${REAL_DOCKER}" exec -i "${DIND_NAME}" docker load >/dev/null
-  inner_docker image inspect "${kaniko_transfer}" >/dev/null
-  inner_docker image inspect "${base_transfer}" >/dev/null
   inner_docker image inspect "${registry_transfer}" >/dev/null
-  printf 'ws493_prepare=inner_images_loaded\n'
+  "${REAL_DOCKER}" cp "${CRANE_BINARY}" "${DIND_NAME}:/usr/local/bin/ws493-crane"
+  local crane_sha
+  crane_sha="$(sha256sum "${CRANE_BINARY}" | cut -d' ' -f1)"
+  [[ "$("${REAL_DOCKER}" exec "${DIND_NAME}" sha256sum /usr/local/bin/ws493-crane | cut -d' ' -f1)" == "${crane_sha}" ]]
+  printf 'ws493_prepare=inner_transport_ready\n'
 
   inner_docker run -d --name "${PROOF_PREFIX}-registry" \
     --label "org.workstream.ws493.run=${RUN_ID}" --network host \
@@ -186,34 +183,35 @@ prepare_images() {
     sleep 1
   done
   "${REAL_DOCKER}" exec "${DIND_NAME}" wget -qO- http://127.0.0.1:5000/v2/ >/dev/null
+  printf 'ws493_prepare=loopback_registry_ready\n'
   local builder_repository=127.0.0.1:5000/workstream/builder
   local builder_tag="${builder_repository}:${EXPECTED_HEAD}"
-  inner_docker tag "${kaniko_transfer}" "${builder_tag}"
-  inner_docker push "${builder_tag}" >/dev/null
-  local builder_reference builder_digest
-  builder_reference="$(inner_repository_digest "${builder_tag}" "${builder_repository}")"
-  builder_digest="${builder_reference##*@}"
-  [[ "${builder_reference}" == "${builder_repository}@${builder_digest}" ]]
-  [[ "${builder_digest}" == "${kaniko_child}" ]]
+  "${REAL_DOCKER}" exec "${DIND_NAME}" /usr/local/bin/ws493-crane push \
+    --insecure "${work}/builder-oci" "${builder_tag}" >/dev/null
+  local builder_digest="${kaniko_child}"
+  local builder_reference="${builder_repository}@${builder_digest}"
   "${REAL_DOCKER}" exec "${DIND_NAME}" wget -qO "${work}/builder-manifest.json" \
     --header 'Accept: application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json' \
     "http://127.0.0.1:5000/v2/workstream/builder/manifests/${builder_digest}"
   python3 "${SCRIPT_DIR}/image_facts.py" manifest-fact \
     "${work}/builder-manifest.json" "${builder_digest}" "${builder_repository}" >"${work}/builder-fact.json"
+  inner_docker pull "${builder_reference}" >/dev/null
+  [[ "$(inner_repository_digest "${builder_reference}" "${builder_repository}")" == "${builder_reference}" ]]
+  printf 'ws493_prepare=builder_manifest_verified\n'
   local base_repository=127.0.0.1:5000/workstream/base
   local base_tag="${base_repository}:${EXPECTED_HEAD}"
-  inner_docker tag "${base_transfer}" "${base_tag}"
-  inner_docker push "${base_tag}" >/dev/null
-  local base_reference base_digest
-  base_reference="$(inner_repository_digest "${base_tag}" "${base_repository}")"
-  base_digest="${base_reference##*@}"
-  [[ "${base_reference}" == "${base_repository}@${base_digest}" ]]
-  [[ "${base_digest}" == "${BASE_PLATFORM_IMAGE##*@}" ]]
+  "${REAL_DOCKER}" exec "${DIND_NAME}" /usr/local/bin/ws493-crane push \
+    --insecure "${work}/base-oci" "${base_tag}" >/dev/null
+  local base_digest="${BASE_PLATFORM_IMAGE##*@}"
+  local base_reference="${base_repository}@${base_digest}"
   "${REAL_DOCKER}" exec "${DIND_NAME}" wget -qO "${work}/base-manifest.json" \
     --header 'Accept: application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json' \
     "http://127.0.0.1:5000/v2/workstream/base/manifests/${base_digest}"
   python3 "${SCRIPT_DIR}/image_facts.py" manifest-fact \
     "${work}/base-manifest.json" "${base_digest}" "${base_repository}" >"${work}/base-fact.json"
+  inner_docker pull "${base_reference}" >/dev/null
+  [[ "$(inner_repository_digest "${base_reference}" "${base_repository}")" == "${base_reference}" ]]
+  printf 'ws493_prepare=base_manifest_verified\n'
   mkdir -p "${CACHE_ROOT}"
   inner_docker run --rm --pull=never --name "${PROOF_PREFIX}-cache-warmer" \
     --label "org.workstream.ws493.run=${RUN_ID}" --network host --user 0:0 \
@@ -418,6 +416,9 @@ prepare_tool_evidence() {
   DOCKER_VERSION="$(docker version --format '{{.Client.Version}}/{{.Server.Version}}')" \
   RUNSC_VERSION="$("${STATE_ROOT}/tools/runsc" --version | head -1)" \
   RUSTC_VERSION="$(rustc --version)" CARGO_VERSION="$(cargo --version)" \
+  CRANE_VERSION_ACTUAL="$("${CRANE_BINARY}" version)" \
+  CRANE_BINARY_SHA="$(sha256sum "${CRANE_BINARY}" | cut -d' ' -f1)" \
+  CRANE_ARCHIVE_SHA="$(sha256sum "${CRANE_ARCHIVE}" | cut -d' ' -f1)" \
   python3 - "${RAW_DIR}/tool-versions.json" <<'PY'
 import json
 import os
@@ -427,6 +428,9 @@ import sys
 
 value = {
     "cargo": os.environ["CARGO_VERSION"],
+    "crane": os.environ["CRANE_VERSION_ACTUAL"],
+    "crane_archive_sha256": os.environ["CRANE_ARCHIVE_SHA"],
+    "crane_binary_sha256": os.environ["CRANE_BINARY_SHA"],
     "docker": os.environ["DOCKER_VERSION"],
     "findmnt": subprocess.check_output(["findmnt", "--version"], text=True).splitlines()[0],
     "kernel": platform.release(),
@@ -450,6 +454,9 @@ prepare() {
   for command in docker git python3 cargo rustc truncate losetup mkfs.xfs mount findmnt mountpoint xfs_quota setpriv flock timeout; do
     require_command "${command}"
   done
+  [[ -x "${CRANE_BINARY}" ]]
+  [[ "$(sha256sum "${CRANE_ARCHIVE}" | cut -d' ' -f1)" == "${CRANE_ARCHIVE_SHA256}" ]]
+  [[ "$("${CRANE_BINARY}" version)" == "${CRANE_VERSION#v}" ]]
   assert_source_head
   preflight
   prepare_filesystem
@@ -620,14 +627,10 @@ cleanup() {
   local outer_absent=false
   docker image rm -f \
     "ws493-checker:${EXPECTED_HEAD}" \
-    "ws493-kaniko:${EXPECTED_HEAD}" \
-    "ws493-base:${EXPECTED_HEAD}" \
     "ws493-registry:${EXPECTED_HEAD}" >/dev/null 2>&1 || true
   if [[ -z "$(docker ps -aq --no-trunc --filter "label=${OUTER_OWNER_LABEL}")" ]] \
     && [[ -z "$(docker ps -aq --no-trunc --filter "label=org.workstream.ws493.run=${RUN_ID}")" ]] \
     && [[ -z "$(docker image ls --quiet "ws493-checker:${EXPECTED_HEAD}")" ]] \
-    && [[ -z "$(docker image ls --quiet "ws493-kaniko:${EXPECTED_HEAD}")" ]] \
-    && [[ -z "$(docker image ls --quiet "ws493-base:${EXPECTED_HEAD}")" ]] \
     && [[ -z "$(docker image ls --quiet "ws493-registry:${EXPECTED_HEAD}")" ]]; then
     outer_absent=true
   fi
@@ -644,6 +647,8 @@ cleanup() {
   if [[ ! -e "${RAW_DEVICE_FILE}" ]] || [[ -z "$(losetup -j "${RAW_DEVICE_FILE}")" ]]; then detached=true; fi
   rm -f "${RAW_DEVICE_FILE}" "${LOOP_RECORD}"
   rm -f "${RUNNER_TEMP_ROOT}/xfsprogs_${XFS_PROGS_VERSION}_amd64.deb"
+  rm -rf "${CRANE_ROOT}"
+  rm -f "${CRANE_ARCHIVE}"
   rmdir "${MOUNT_ROOT}" 2>/dev/null || true
   if [[ ! -e "${RAW_DEVICE_FILE}" && ! -e "${STATE_ROOT}" ]]; then deleted=true; fi
   rm -f "${CLEANUP_RECEIPT}"
@@ -669,7 +674,8 @@ PY
     python3 "${SCRIPT_DIR}/verify_evidence.py" add-cleanup \
       "${STAGING_DIR}" "${CLEANUP_RECEIPT}" "${EXPECTED_HEAD}" 0
   fi
-  [[ "${outer_absent}" == true && "${unmounted}" == true && "${detached}" == true && "${deleted}" == true ]]
+  [[ "${outer_absent}" == true && "${unmounted}" == true && "${detached}" == true && "${deleted}" == true \
+    && ! -e "${CRANE_ROOT}" && ! -e "${CRANE_ARCHIVE}" ]]
 }
 
 final_evidence() {
