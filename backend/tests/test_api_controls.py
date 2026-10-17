@@ -554,6 +554,14 @@ def test_openapi_documents_request_error_and_response_context() -> None:
         operation = schema["paths"][path][method.lower()]
         assert operation["x-workstream-action-id"] == action
         assert operation["security"]
+    retry_operation = schema["paths"][
+        "/api/v1/operations/projects/{project_id}/checker-runs/{source_run_id}/retry"
+    ]["post"]
+    assert retry_operation["responses"]["201"]["content"][
+        "application/json"
+    ]["schema"]["$ref"].endswith("/CheckerRetryPublicResult")
+    retry_source = schema["components"]["schemas"]["CheckerRetryDiscoverySource"]
+    assert "assignment_id" not in retry_source["properties"]
     public_entry_actions = {
         "POST /api/v1/tasks/{task_id}/submission-bundle-preparations": "artifact.submission_bundle.prepare",
         "POST /api/v1/tasks/{task_id}/submissions": "submission.create",
