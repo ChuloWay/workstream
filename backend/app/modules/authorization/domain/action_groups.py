@@ -62,6 +62,9 @@ def supports_prepared_denial(action_id: ActionId, resource_context: object) -> b
     """Admit only the existing action/context pairs for prepare-time denial evidence."""
     from app.modules.authorization.domain.task_authority import TASK_ACTIONS, TaskAuthorityResourceContext
     from app.modules.authorization.domain.project_create import ProjectCreateResourceContext
+    from app.modules.authorization.domain.checker_retry import (
+        CheckerRetryPrepareDenialResourceContext,
+    )
     from app.modules.authorization.runtime import (
         TaskImportSourceResourceContext,
         ProjectGuideMutationPrepareDenialResourceContext, ProjectGuideSufficiencyMutationResourceContext,
@@ -72,6 +75,10 @@ def supports_prepared_denial(action_id: ActionId, resource_context: object) -> b
             action_id in checker_registry.CHECKER_REGISTRY_MUTATION_ACTIONS
             and type(resource_context)
             is checker_registry.ExternalCheckerRegistryResourceContext
+        )
+        or (
+            action_id is ActionId.OPERATIONS_CHECKER_RETRY
+            and type(resource_context) is CheckerRetryPrepareDenialResourceContext
         )
         or
         (

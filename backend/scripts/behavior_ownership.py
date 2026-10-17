@@ -347,9 +347,12 @@ ARCH_04F3_REPLACEMENT_TARGETS = frozenset({
     "backend/app/modules/tasks/submission_context.py",
 })
 ARCH_04F4_RETRY_TARGETS = frozenset({
+    "backend/app/api/deps/checker_recovery.py",
     "backend/app/modules/checkers/checker_retry.py",
     "backend/app/modules/authorization/checker_retry_authorization.py",
+    "backend/app/modules/authorization/checker_retry_read.py",
     "backend/app/modules/authorization/domain/checker_retry.py",
+    "backend/app/modules/authorization/domain/checker_retry_reads.py",
     "backend/app/modules/authorization/prepared_checker_retry_replay.py",
 })
 

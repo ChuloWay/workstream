@@ -297,6 +297,22 @@ def task_queue_authorization(kernel, secret):
     return TaskQueueReadAuthorization(kernel, secret)
 
 
+def checker_retry_discovery_authorization(session, context, secret):
+    """Compose exact Operator retry-source reads through the shared AUTH kernel."""
+    from app.modules.authorization.checker_retry_read import (
+        CheckerRetryDiscoveryAuthorization,
+    )
+    from app.modules.authorization.kernel import AuthorizationService
+
+    repository = AdminAuthorizationRepository(session)
+    return CheckerRetryDiscoveryAuthorization(
+        AuthorizationService(
+            session, context, admin_repository=repository,
+        ),
+        secret,
+    )
+
+
 def contributor_read_authorization(kernel, session: AsyncSession, secret):
     """Compose the caller's own-work AUTH adapter in the shared decision transaction."""
     from app.modules.authorization.contributor_read import ContributorReadAuthorization
