@@ -325,6 +325,9 @@ expected = {
         "WS-AUTH-001-14",
     ),
     "operations.checker.retry": ("operations.checker.retry", "WS-AUTH-001-14"),
+    "operations.checker_retry_source.list": (
+        "operations.status.read", "WS-AUTH-001-14",
+    ),
     "submission.create": ("submission.create", "WS-AUTH-001-14"),
     **{
         action: (permission, owner)
@@ -463,6 +466,7 @@ AUDIT_ALLOWED_ACTION_VALUES = {
     "checker.pre_submit.execute",
     "checker.pre_submit.finalize",
     "operations.checker.retry",
+    "operations.checker_retry_source.list",
     "contribution.read_self",
     "contribution.read_project",
     "actor.project.list",

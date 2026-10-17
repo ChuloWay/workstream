@@ -205,6 +205,7 @@ class ActionId(StrEnum):
     OPERATIONS_TASK_START_OVERRIDE = "operations.task.start_override"
     OPERATIONS_SUBMISSION_GATE_REPAIR = "operations.submission_gate.repair"
     OPERATIONS_CHECKER_RETRY = "operations.checker.retry"
+    OPERATIONS_CHECKER_RETRY_SOURCE_LIST = "operations.checker_retry_source.list"
     SUBMISSION_CREATE = "submission.create"
     REVIEW_QUEUE_READ = "review.queue.read"
     REVIEW_QUEUE_INSPECT = "review.queue.inspect"
@@ -622,6 +623,11 @@ ACTION_DEFINITIONS = (
     ),
     _active(ActionId.OPERATIONS_CHECKER_RETRY, PermissionId.OPERATIONS_CHECKER_RETRY, ActionOwner.AUTH_14),
     _active(
+        ActionId.OPERATIONS_CHECKER_RETRY_SOURCE_LIST,
+        PermissionId.OPERATIONS_STATUS_READ,
+        ActionOwner.AUTH_14,
+    ),
+    _active(
         ActionId.CHECKER_REGISTRY_READ,
         PermissionId.OPERATIONS_STATUS_READ,
         ActionOwner.PILOT_04,
@@ -823,7 +829,7 @@ HISTORICAL_PERMISSION_IDS = PERMISSION_IDS - NEW_PERMISSION_IDS
 
 def _require_catalogue_counts() -> None:
     """Keep the closed action inventory and permission boundary exact."""
-    if len(PERMISSION_IDS) != 82 or len(ACTION_IDS) != 163:
+    if len(PERMISSION_IDS) != 82 or len(ACTION_IDS) != 164:
         raise RuntimeError("authorization catalogue count mismatch")
     if len(HISTORICAL_PERMISSION_IDS) != 49 or len(NEW_PERMISSION_IDS) != 33:
         raise RuntimeError("authorization permission boundary mismatch")
@@ -973,6 +979,7 @@ def _index_actions(definitions: tuple[ActionDefinition, ...]) -> MappingProxyTyp
         ActionId.TASK_READ, ActionId.TASK_SUBMISSION_REQUIREMENTS_READ,
         ActionId.PROJECT_TASK_READ, ActionId.PROJECT_TASK_SUBMISSION_REQUIREMENTS_READ,
         ActionId.AUDIT_TASK_EVIDENCE_READ, ActionId.OPERATIONS_CHECKER_RETRY,
+        ActionId.OPERATIONS_CHECKER_RETRY_SOURCE_LIST,
     } | TASK_LOCKED_CONTEXT_READ_ACTIONS | HISTORY_READ_ACTIONS:
         raise RuntimeError("authorization active action boundary mismatch")
     _validate_action_definitions(definitions)
