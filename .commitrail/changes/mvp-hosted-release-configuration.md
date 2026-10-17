@@ -137,12 +137,10 @@ explicit operation, complete-read and persistence timeout settings; the example
 values are unmeasured and do not assert a live result. Format, partition/account
 coherence, required distinct identities, eligibility math and runtime
 enforcement remain with #582's canonical application owner rather than being
-duplicated in preflight. That owner is not present on this branch: its current
-Settings ignores the eleven extra environment fields. The clean reviewed #582/PR
-#592 implementation must be present in the candidate source before release images
-are built or used; a stacked candidate may supply that source before human merge,
-but #592 must merge before this PR. Only the combined source can make the
-startup-validation claim. The role-isolated
+duplicated in preflight. The candidate includes the canonical #582/PR #592
+implementation as a stacked dependency, so its Settings owns all eleven fields.
+#592 must merge before this PR. Release-image proof runs the canonical Settings
+tests before building and does not infer live cloud evidence from valid settings. The role-isolated
 proof-job profile remains pending the stable #493 integration and is not invented
 as another release service here.
 
@@ -274,10 +272,10 @@ explicitly provisional.
 
 Bounded repair review at `c3ae39539` found `HOST-S3001`: the rendered wiring and
 focused role-isolation proof passed, but the branch-local application Settings
-does not yet own the eleven fields and ignores extra environment keys. The
-documentation now makes #582/PR #592 an explicit merge and release-image
-dependency instead of claiming that this branch performs canonical startup
-validation. No duplicate hosted validator or unreviewed #582 source is added.
+did not yet own the eleven fields and ignored extra environment keys. The
+combined candidate now includes that canonical #582/PR #592 owner as a stacked
+dependency. Its own Settings tests precede image builds; preflight does not
+duplicate application validation. #592 remains the prerequisite human merge.
 
 ## Evidence
 

@@ -98,15 +98,11 @@ profile requires the dedicated host's IAM role; web-identity token and
 container-role transports need a different reviewed topology and fail this
 preflight.
 
-After #582/PR #592 has a clean reviewed target, set the immutable release digest
-and every exact AWS role, managed-policy, trust-policy and bucket-policy identity
-from that evidence. The release wrapper allowlists these eleven non-secret values
+Set the immutable release digest and every exact AWS role, managed-policy,
+trust-policy and bucket-policy identity from the approved release evidence. The release wrapper allowlists these eleven non-secret values
 and the shared Compose environment passes them unchanged to API, worker and Beat.
-This branch's application `Settings` does not yet define the eleven fields and
-ignores extra environment keys, so this configuration alone does not validate
-their format or relationships. Do not build or use a release image until the
-reviewed #582/PR #592 owner is merged into its source. Once merged, that canonical
-owner rejects a malformed digest or ARN, a mixed AWS partition/account, reused
+The integrated canonical application `Settings` from #582/PR #592 defines
+these fields and validates their format and relationships. That owner rejects a malformed digest or ARN, a mixed AWS partition/account, reused
 workload roles or trust-policy digests, or reused managed policies when any of
 those processes starts. Preflight checks presence and rendered custody only so
 it does not create a second IAM-policy validator.
@@ -127,9 +123,8 @@ max(S3 operation total, complete-read deadline)
   + 300-second proof refresh <= 900 seconds
 ```
 
-Preflight checks only that these required values are finite and positive. After
-#582/PR #592 is merged, its canonical owner validates eligibility at application
-startup. Replace the example values only with values supported by the hosted AWS
+Preflight checks only that these required values are finite and positive. The
+canonical application owner validates eligibility at startup. Replace the example values only with values supported by the hosted AWS
 drill; satisfying the arithmetic does not prove live latency, AWS identity or
 activation.
 
@@ -152,9 +147,8 @@ access the Docker socket; the script never opens application secret files.
 The configuration-only check renders Compose and validates fixed topology,
 digest identities, Flow/AWS profile and the hosted checker selectors plus
 declared cache-identity shape needed by this topology. The application and
-checker startup owners validate their complete settings and config schemas, but
-the eleven AWS evidence fields require the reviewed #582/PR #592 owner described
-above. This check does not inspect host ownership, Docker, cache or any external
+checker startup owners validate their complete settings and config schemas,
+including the canonical AWS evidence fields described above. This check does not inspect host ownership, Docker, cache or any external
 service:
 
 ```sh
@@ -176,10 +170,9 @@ Preflight cannot attest the active AWS identity, absence of extra IAM
 permissions, Flow token acceptance, external service health, collector delivery,
 backup recoverability or a live checker result. Issue #582 and PR #592 own the
 AWS release identity, exact role/policy and bucket-policy proof contract. This
-configuration carries those values into every long-running process environment,
-but the current branch ignores them until that owner is merged. Do not infer
-validation, the underlying facts or completed proof-job execution from rendered
-values.
+configuration carries those values into every long-running process environment
+for canonical startup validation. Rendered values and valid formats do not prove
+the underlying cloud facts or completed proof-job execution.
 
 ## Start and inspect
 

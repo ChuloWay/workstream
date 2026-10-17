@@ -313,9 +313,9 @@ verification and AWS workload identity, and binds the existing checker service
 to a dedicated Docker/runsc host with exact private material paths and cached
 image identities. It carries the required release digest and exact AWS
 role/policy/trust/bucket-policy identities into every long-running process
-environment. The current branch's application Settings ignores those fields;
-merging the clean reviewed #582/PR #592 owner before building a release image is
-required for canonical format and relationship validation. Its preflight proves
+environment. The integrated canonical S3 Settings owner validates their format
+and relationships at startup; image proof first exercises that owner directly.
+Its preflight proves
 local configuration and host prerequisites only. The role-isolated AWS proof-job
 profile, deployment, active cloud/IAM identity, representative resource limits,
 diagnostic privacy/outage behavior, drain/restart and isolated backup/restore
