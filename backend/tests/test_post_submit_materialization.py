@@ -54,10 +54,11 @@ class Consumer:
 class ExternalGrantConsumer(Consumer):
     """Exercise the real POST lineage through ART's callback-scoped grant."""
 
-    def __init__(self, files, execution, scratch):
+    def __init__(self, files, execution, scratch, *, terminal=False):
         super().__init__(files)
         self.execution = execution
         self.scratch = scratch
+        self.terminal = terminal
         self.grant_path = None
         self.manifest = None
 
@@ -83,6 +84,7 @@ class ExternalGrantConsumer(Consumer):
         if terminal:
             values = registry.model_dump(mode="json")
             values["capability_id"] = "workstream.terminal_benchmark_project"
+            values["capability_version"] = "v1"
             spec = {
                 key: value
                 for key, value in values.items()
@@ -112,7 +114,11 @@ class ExternalGrantConsumer(Consumer):
 
     async def evaluate(self, request, view):
         await super().evaluate(request, view)
-        external_request = self.external_request(view.external_checker_material)
+        # Publishing a grant moves the projected tree below the fixed mount, so
+        # each materialization callback can publish at most one valid grant.
+        external_request = self.external_request(
+            view.external_checker_material, terminal=self.terminal
+        )
         with view.external_checker_grant(external_request) as grant:
             self.grant_path = self.scratch / "workspaces" / grant.grant_id
             self.manifest = json.loads(
@@ -122,23 +128,16 @@ class ExternalGrantConsumer(Consumer):
             assert self.manifest["submission_id"] == str(request.submission_id)
             assert self.manifest["request_digest"] == external_request.request_digest
             assert self.manifest["binding_digest"] == grant.binding_digest
-            assert "runtime_scratch" not in self.manifest
-            assert not (self.grant_path / "runtime").exists()
+            if self.terminal:
+                assert self.manifest["runtime_scratch"]["byte_allowance"] > 0
+                assert (self.grant_path / "runtime").is_dir()
+            else:
+                assert "runtime_scratch" not in self.manifest
+                assert not (self.grant_path / "runtime").exists()
         # Revocation removes the service grant immediately; the outer material
         # callback still owns its workspace until materialization completes.
         assert self.grant_path.is_dir()
         assert not (self.grant_path / ".external-checker-grant.json").exists()
-
-        terminal_request = self.external_request(
-            view.external_checker_material, terminal=True
-        )
-        with view.external_checker_grant(terminal_request) as grant:
-            terminal_root = self.scratch / "workspaces" / grant.grant_id
-            terminal_manifest = json.loads(
-                (terminal_root / ".external-checker-grant.json").read_text()
-            )
-            assert terminal_manifest["runtime_scratch"]["byte_allowance"] > 0
-            assert (terminal_root / "runtime").is_dir()
 
         changed = view.external_checker_material.model_copy(
             update={"binding_id": new_record_id()}
@@ -198,10 +197,13 @@ async def test_exact_materialization_reads_verified_original_and_revokes_view(tm
                                         "input_materialization_evidence_id"}
 
 
-async def test_post_external_grant_binds_native_submission_art_and_lease(tmp_path, isolated_database_env):
+@pytest.mark.parametrize("terminal", [False, True], ids=["conventional", "terminal_benchmark"])
+async def test_post_external_grant_binds_native_submission_art_and_lease(
+    tmp_path, isolated_database_env, terminal
+):
     async with material_fixture(tmp_path, isolated_database_env) as h:
         execution = await material_execution(h)
-        consumer = ExternalGrantConsumer(h.files, execution, h.scratch)
+        consumer = ExternalGrantConsumer(h.files, execution, h.scratch, terminal=terminal)
         material = await h.service.materialize(execution, consumer)
         assert material.evaluation.outcome == "completed"
         assert consumer.manifest["lease_id"] == str(execution.lease.lease_id)
