@@ -111,6 +111,13 @@ unknown provider outcome fails closed and cannot commit success evidence.
   `.ci/auth-boundaries/TEST_STRUCTURE_DEBT.json`: assign the new focused tests
   to the existing shared-foundation lanes and refresh only the existing,
   shrinking artifact-admission debt facts after rehoming terminal proof.
+- `backend/scripts/behavior_ownership.py`,
+  `backend/tests/test_behavior_ownership.py` and
+  `.ci/behavior-ownership/partition.v1.json`: register only the three new
+  activation/probe targets in the existing exact-target transition inventory;
+  preserve all main assignments and regenerate its digest. Verify acceptance
+  of those exact additions and rejection of neighboring unapproved targets and
+  reassigned existing targets. No eligibility or validation relaxation.
 - `README.md`, `docs/spec_artifact_storage_service.md`,
   `docs/operations_artifact_storage.md`, `docs/engineering/local-pilot.md` and
   `docs/roadmap_status.md`: exact
@@ -290,8 +297,8 @@ write outcomes require real PostgreSQL concurrency tests.
 - Work type: storage security, schema, infrastructure integration and operations.
 - Required reviewers: `architecture`, `security`, `qa`, `test_delta`,
   `reuse_dedup`, `senior_engineering`, `documentation`, and `product_ops`.
-  `ci_integrity` is required only if an unforeseen workflow change is proposed;
-  workflows are currently prohibited.
+  `ci_integrity` also reviews the exact behavior-ownership inventory additions
+  and their focused transition proof; workflows remain prohibited.
 - Resolved design input: the narrow IAM inspection clarification below is part
   of this bounded change. The current session authorizes bounded offline MVP
   work; it does not authorize the later named live AWS/database proof run.
