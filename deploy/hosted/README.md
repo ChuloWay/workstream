@@ -52,6 +52,16 @@ checker-service build compiles the committed Rust lock and copies the pinned
 Docker client. A local build tag is build evidence only; the release file must
 contain the registry-resolved digest after publication.
 
+The scoped [release-image workflow](../../.github/workflows/release-images.yml)
+builds the exact PR head without cache, publication or deployment credentials.
+It first requires the canonical AWS Settings owner, then checks the copied
+application/migration files, lockfiles, secret loader, production dependency
+closure and default image commands. Bounded networkless containers verify the
+Docker CLI and the checker's expected missing-configuration failure; they do not
+start Workstream or run a project checker. Its fixed JSON artifact records source
+identity and local image IDs, not publishable repository digests. Full hosted
+operation remains separate evidence.
+
 ## Prepare the host
 
 Install and configure Docker and gVisor using the approved host process. Confirm
