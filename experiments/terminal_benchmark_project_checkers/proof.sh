@@ -43,7 +43,9 @@ readonly BARRIER_RELEASE="${WRAPPER_WORK}/barrier.release"
 readonly BARRIER_TOKEN="${EXPECTED_HEAD}-${RUN_ID}"
 readonly STAGING_DIR="${RUNNER_TEMP_ROOT}/${PROOF_PREFIX}-staging"
 readonly CLEANUP_RECEIPT="${RUNNER_TEMP_ROOT}/${PROOF_PREFIX}-cleanup-receipt.json"
-readonly BACKEND_PYTHON="${REPOSITORY_ROOT}/backend/.venv/bin/python"
+readonly BACKEND_BOOTSTRAP_UV="${REPOSITORY_ROOT}/backend/.venv/bin/uv"
+readonly BACKEND_RUNTIME="${CONTROL_ROOT}/python"
+readonly BACKEND_PYTHON="${BACKEND_RUNTIME}/bin/python"
 readonly REAL_DOCKER="$(readlink -f "$(command -v docker)")"
 readonly DOCKER_WRAPPER_SOURCE="$(readlink -f "${SCRIPT_DIR}/docker-wrapper.sh")"
 readonly DOCKER_WRAPPER="${CONTROL_ROOT}/docker-wrapper.sh"
@@ -580,6 +582,14 @@ PY
 
 prepare_contract() {
   create_control_custody
+  [[ -x /usr/bin/python3 && -x "${BACKEND_BOOTSTRAP_UV}" ]]
+  [[ "$(/usr/bin/python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')" == 3.12 ]]
+  /usr/bin/python3 -m venv --copies "${BACKEND_RUNTIME}"
+  (
+    cd "${REPOSITORY_ROOT}/backend"
+    UV_PROJECT_ENVIRONMENT="${BACKEND_RUNTIME}" \
+      "${BACKEND_BOOTSTRAP_UV}" sync --frozen --extra dev
+  )
   install -d -m 0700 -o "${OWNER_UID}" -g "${DOCKER_GID}" "${ART_ROOT}" "${SERVICE_ROOT}" "${WRAPPER_WORK}"
   chown "${OWNER_UID}:${DOCKER_GID}" "${ART_ROOT}" "${SERVICE_ROOT}" "${WRAPPER_WORK}"
   chmod 0700 "${ART_ROOT}" "${SERVICE_ROOT}" "${WRAPPER_WORK}"
@@ -588,6 +598,10 @@ prepare_contract() {
     sh -c 'test -x "$1"; test -x "$2"; : >"$3"; : >"$4"; : >"$5"; rm -f "$3" "$4" "$5"' sh \
     "${SERVICE_BINARY}" "${DOCKER_WRAPPER}" "${WRAPPER_WORK}/owner-write-probe" \
     "${SERVICE_ROOT}/owner-write-probe" "${ART_ROOT}/owner-write-probe"
+  setpriv --reuid "${OWNER_UID}" --regid "${DOCKER_GID}" --clear-groups \
+    env HOME="${STATE_ROOT}" PYTHONPATH="${REPOSITORY_ROOT}/backend" \
+    "${BACKEND_PYTHON}" -c \
+    'import jsonschema; from app.modules.artifacts.preparation import ArtifactScratchManager'
   "${BACKEND_PYTHON}" "${SCRIPT_DIR}/prepare_contract.py" \
     --facts "${RAW_DIR}/image-facts.json" --cache-root "${CACHE_ROOT}" \
     --material-root "${ART_ROOT}" --socket "${SOCKET_PATH}" \
@@ -608,6 +622,7 @@ prepare_tool_evidence() {
   DOCKER_VERSION="$(docker version --format '{{.Client.Version}}/{{.Server.Version}}')" \
   RUNSC_VERSION="$("${STATE_ROOT}/tools/runsc" --version | head -1)" \
   RUSTC_VERSION="$(rustc --version)" CARGO_VERSION="$(cargo --version)" \
+  BACKEND_PYTHON_VERSION="$("${BACKEND_PYTHON}" --version)" \
   CRANE_VERSION_ACTUAL="$("${CRANE_BINARY}" version)" \
   CRANE_BINARY_SHA="$(sha256sum "${CRANE_BINARY}" | cut -d' ' -f1)" \
   CRANE_ARCHIVE_SHA="$(sha256sum "${CRANE_ARCHIVE}" | cut -d' ' -f1)" \
@@ -619,6 +634,7 @@ import subprocess
 import sys
 
 value = {
+    "backend_python": os.environ["BACKEND_PYTHON_VERSION"],
     "cargo": os.environ["CARGO_VERSION"],
     "crane": os.environ["CRANE_VERSION_ACTUAL"],
     "crane_archive_sha256": os.environ["CRANE_ARCHIVE_SHA"],
@@ -811,7 +827,7 @@ PY
     --filter 'label=workstream.owner=terminal-benchmark-checker-service-v1' \
     --format '{{json .}}' | head -c 262144 >"${RAW_DIR}/docker-events.ndjson"
   [[ -s "${RAW_DIR}/docker-events.ndjson" ]]
-  run_as_owner python3 "${SCRIPT_DIR}/build_matrix.py" \
+  run_as_owner "${BACKEND_PYTHON}" "${SCRIPT_DIR}/build_matrix.py" \
     --raw "${RAW_DIR}" --head "${EXPECTED_HEAD}" --output "${RAW_DIR}/matrix.json"
   find "${RAW_DIR}" -maxdepth 1 -type f -exec chmod 0600 {} +
   [[ -z "$(find "${RAW_DIR}" -mindepth 1 -maxdepth 1 ! -type f -print -quit)" ]]

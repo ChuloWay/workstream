@@ -397,7 +397,11 @@ fixed Docker wrapper into root-owned `0555` files, binds both SHA-256 values in
 the custody marker and rehashes both at every custody check. The trusted service
 therefore executes the verified byte-exact copies. Preparation checks execute
 permission and create/remove access as the service owner in both child control
-directories and the ART scratch root;
+directories and the ART scratch root. The same control tree contains one
+root-owned Python 3.12 venv created with copied executables and populated by the
+existing version-pinned `uv` from the frozen backend dev lock during the
+networked preparation phase. An actual fixed-UID import probe proves that
+runtime before POST;
 the run entry and each service start revalidate custody before touching control
 files, and runtime socket readiness proves that the service actually executed
 before POST starts.
