@@ -5,9 +5,11 @@ from __future__ import annotations
 import asyncio
 
 import asyncpg
+import pytest
 from alembic import command
 from alembic.config import Config
 from app.db import session as db_session
+from app.core.identifiers import new_record_id
 from scripts.run_isolated_tests import NAME_RE, ROLE_RE
 from tests.conftest import _drop_test_database_schema
 from tests.migration_fixtures import current_schema_revision
@@ -17,10 +19,61 @@ def _config() -> Config:
     return Config("alembic.ini")
 
 
+async def _audit_constraint_snapshot(
+    url: str,
+) -> tuple[str, str]:
+    connection = await asyncpg.connect(url)
+    try:
+        return (
+            await connection.fetchval(
+                "select version_num from public.alembic_version"
+            ),
+            await connection.fetchval(
+                "select pg_get_constraintdef(oid) from pg_constraint "
+                "where conrelid='public.audit_events'::regclass "
+                "and conname='ck_audit_events_authorization_action_evidence'"
+            ),
+        )
+    finally:
+        await connection.close()
+
+
+async def _insert_audit_pair(
+    connection: asyncpg.Connection, *, action_id: str, permission_id: str
+) -> None:
+    """Insert one privacy-bounded authority decision directly into PostgreSQL."""
+    event_id = new_record_id()
+    await connection.execute(
+        """
+        insert into public.audit_events (
+            id, entity_type, entity_id, event_type, actor_id, actor_roles,
+            claim_snapshot, auth_source, is_dev_auth, reason, event_payload,
+            event_domain, event_version, actor_ref_kind, request_id,
+            correlation_id, matched_grant_id, permission_id, action_id,
+            after_facts, occurred_at
+        ) values (
+            $1, 'authorization_decision', $1, 'SensitiveAuthorizationAllowed',
+            $2, '[]'::json, '{}'::json, 'local_authority', false,
+            'authorization_evaluation', '{}'::json, 'authority', 1,
+            'actor_profile', $3, $4, $5, $6, $7, '{"allowed":true}'::json,
+            clock_timestamp()
+        )
+        """,
+        event_id,
+        str(new_record_id()),
+        new_record_id(),
+        new_record_id(),
+        str(new_record_id()),
+        permission_id,
+        action_id,
+    )
+
+
 async def test_registry_upgrade_targets_public_schema_with_shadow_search_path(
     isolated_database_env,
     migration_lock,
 ) -> None:
+    assert len(current_schema_revision()) <= 32
     shadow = "pilot04_registry_shadow"
     url = isolated_database_env.replace("+asyncpg", "")
     with migration_lock():
@@ -76,8 +129,29 @@ async def test_registry_upgrade_targets_public_schema_with_shadow_search_path(
                     "and conname='ck_audit_events_authorization_action_evidence'",
                     f"{shadow}.audit_events",
                 )
+                exact_pairs = (
+                    ("checker.registry.read", "operations.status.read"),
+                    ("operations.checker_retry_source.list", "operations.status.read"),
+                )
                 assert "checker.registry.register" in public_definition
+                assert all(
+                    action in public_definition and permission in public_definition
+                    for action, permission in exact_pairs
+                )
                 assert shadow_after == shadow_before
+                for action, permission in exact_pairs:
+                    await _insert_audit_pair(
+                        probe, action_id=action, permission_id=permission
+                    )
+                    with pytest.raises(asyncpg.CheckViolationError) as error:
+                        await _insert_audit_pair(
+                            probe,
+                            action_id=action,
+                            permission_id="operations.reconcile.run",
+                        )
+                    assert error.value.constraint_name == (
+                        "ck_audit_events_authorization_action_evidence"
+                    )
             finally:
                 await probe.close()
         finally:
@@ -87,3 +161,24 @@ async def test_registry_upgrade_targets_public_schema_with_shadow_search_path(
                 await cleanup.execute(f"drop schema if exists {shadow} cascade")
             finally:
                 await cleanup.close()
+
+
+async def test_operational_read_audit_one_step_downgrade_refuses_without_mutation(
+    isolated_database_env,
+    migration_lock,
+) -> None:
+    url = isolated_database_env.replace("+asyncpg", "")
+    before = await _audit_constraint_snapshot(url)
+    assert before[0] == current_schema_revision()
+
+    with migration_lock(), pytest.raises(
+        RuntimeError,
+        match="Workstream v0.1 migrations cannot be downgraded; recreate the database",
+    ):
+        await asyncio.to_thread(
+            command.downgrade,
+            _config(),
+            "0050_contributor_reads",
+        )
+
+    assert await _audit_constraint_snapshot(url) == before

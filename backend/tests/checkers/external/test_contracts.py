@@ -14,12 +14,13 @@ from app.modules.checkers.api.external import (
     RESULT_SCHEMA_ID,
     ExternalCheckerContractError,
     ExternalCheckerFinding,
+    ExternalCheckerRegistrationCommand,
     PreSubmitExternalCheckerMaterial,
     ExternalCheckerSchema,
+    external_checker_registration_request_digest,
     external_checker_json_hash,
     make_external_checker_execution_request,
     make_external_checker_execution_result,
-    make_external_checker_registration_request,
 )
 from tests.checkers.external.support import (
     SHA,
@@ -102,21 +103,24 @@ def test_registry_schema_is_offline_and_self_contained(reference: str) -> None:
         )
 
 
-def test_registration_request_digest_is_derived_and_substitution_fails() -> None:
-    request = make_external_checker_registration_request(
+def test_registration_request_digest_binds_server_selected_uuid() -> None:
+    command = ExternalCheckerRegistrationCommand(
         actor_profile_id=uuid4(),
         operation_id=uuid4(),
-        registry_entry_id=new_record_id(),
         spec=registry_spec(),
     )
-    with pytest.raises(ValidationError, match="digest mismatch"):
-        request.model_copy(update={"registry_entry_id": uuid4()}).model_validate(
-        request.model_copy(update={"registry_entry_id": new_record_id()})
+    first, second = new_record_id(), new_record_id()
+    assert external_checker_registration_request_digest(command, first) != (
+        external_checker_registration_request_digest(command, second)
     )
-    with pytest.raises(ExternalCheckerContractError, match="derived"):
-        make_external_checker_registration_request(
-            **request.model_dump(exclude={"request_digest"}), request_digest=SHA
-        )
+    changed = command.model_copy(
+        update={"spec": registry_spec("post_submit")}
+    )
+    assert external_checker_registration_request_digest(command, first) != (
+        external_checker_registration_request_digest(changed, first)
+    )
+    with pytest.raises(ExternalCheckerContractError, match="UUIDv7"):
+        external_checker_registration_request_digest(command, uuid4())
 
 
 @pytest.mark.parametrize("phase", ["pre_submit", "post_submit"])

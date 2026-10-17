@@ -70,6 +70,7 @@ def test_checker_delivery_and_routing_preparation_partition_every_node_once() ->
         "tests/checkers/external/test_contracts.py",
         "tests/checkers/external/test_migration.py",
         "tests/checkers/external/test_postgresql.py",
+        "tests/checkers/external/test_public_api.py",
         "tests/checkers/external/test_registry.py",
         "tests/checkers/external/test_runtime.py",
         "tests/checkers/external/test_policy.py",
@@ -265,8 +266,8 @@ def test_semantic_family_membership_has_an_independent_fingerprint() -> None:
             "980cbd9fb01c7f8c870ef348cb2f56d2cfc200d810ec1e25c841338d4ae83be1",
         ),
         "project": (
-            199,
-            "8dd24fe857d08ea7488c0996893010cd36590f84755e0ab2f2550f7ea46c0deb",
+            200,
+            "2872c67e9818f813e82b2be3353b64336e6a455392f73f48cae247bf9dedcca1",
         ),
         "task": (
             95,
@@ -338,9 +339,9 @@ def test_project_lane_ownership_has_an_independent_fingerprint() -> None:
         )
         + "\n"
     )
-    assert len(catalogue.PROJECT_PARTITIONED_MODULES) == 199
+    assert len(catalogue.PROJECT_PARTITIONED_MODULES) == 200
     assert hashlib.sha256(canonical.encode()).hexdigest() == (
-        "590abc07b5d50a127556ff32193cb47274377f796811f7de0242a09c147647ce"
+        "0dc0b5df731d36ddd343ce19a74a95bc4ed47152b89d3b6fe5364d9b25a6e8c1"
     )
 
 

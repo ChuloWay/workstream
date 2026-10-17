@@ -254,6 +254,7 @@ class ActionId(StrEnum):
     ARTIFACT_CHECKER_OUTPUT_WRITE = "artifact.checker_output.write"
     ARTIFACT_REVIEW_PACKET_MATERIALIZE = "artifact.review_packet.materialize"
     ARTIFACT_REVIEW_EVIDENCE_BINDING_CREATE = "artifact.review_evidence.binding.create"
+    CHECKER_REGISTRY_READ = "checker.registry.read"
     CHECKER_REGISTRY_REGISTER = "checker.registry.register"
     COMPENSATION_ADAPTER_BINDING_READ = "compensation.adapter_binding.read"
     COMPENSATION_ADAPTER_BINDING_CREATE = "compensation.adapter_binding.create"
@@ -641,11 +642,8 @@ ACTION_DEFINITIONS = (
         ActionOwner.AUTH_14,
     ),
     _active(ActionId.OPERATIONS_CHECKER_RETRY, PermissionId.OPERATIONS_CHECKER_RETRY, ActionOwner.AUTH_14),
-    _active(
-        ActionId.CHECKER_REGISTRY_REGISTER,
-        PermissionId.OPERATIONS_RECONCILE_RUN,
-        ActionOwner.PILOT_04,
-    ),
+    _active(ActionId.CHECKER_REGISTRY_READ, PermissionId.OPERATIONS_STATUS_READ, ActionOwner.PILOT_04),
+    _active(ActionId.CHECKER_REGISTRY_REGISTER, PermissionId.OPERATIONS_RECONCILE_RUN, ActionOwner.PILOT_04),
     _active(ActionId.SUBMISSION_CREATE, PermissionId.SUBMISSION_CREATE, ActionOwner.AUTH_14),
     _planned(ActionId.REVIEW_QUEUE_READ, PermissionId.REVIEW_QUEUE_READ, ActionOwner.AUTH_REV_05),
     _planned(ActionId.REVIEW_QUEUE_INSPECT, PermissionId.REVIEW_QUEUE_INSPECT, ActionOwner.AUTH_REV_05),
@@ -838,7 +836,7 @@ HISTORICAL_PERMISSION_IDS = PERMISSION_IDS - NEW_PERMISSION_IDS
 
 def _require_catalogue_counts() -> None:
     """Keep the closed action inventory and permission boundary exact."""
-    if len(PERMISSION_IDS) != 82 or len(ACTION_IDS) != 172:
+    if len(PERMISSION_IDS) != 82 or len(ACTION_IDS) != 173:
         raise RuntimeError("authorization catalogue count mismatch")
     if len(HISTORICAL_PERMISSION_IDS) != 49 or len(NEW_PERMISSION_IDS) != 33:
         raise RuntimeError("authorization permission boundary mismatch")
@@ -915,6 +913,7 @@ _ACTIVE_ACTION_BOUNDARY = frozenset({
     ActionId.ACTOR_PROFILE_DEACTIVATE,
     ActionId.ACTOR_IDENTITY_LINK_REVOKE,
     ActionId.ACTOR_IDENTITY_LINK_REACTIVATE,
+    ActionId.CHECKER_REGISTRY_READ,
     ActionId.CHECKER_REGISTRY_REGISTER,
     ActionId.PROJECT_CONTRIBUTOR_CANDIDATE_LIST,
     ActionId.PROJECT_ROLE_GRANT_LIST,

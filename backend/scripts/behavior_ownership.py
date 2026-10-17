@@ -222,6 +222,7 @@ PILOT_10_EXPORT_TARGETS = frozenset({
 })
 PILOT_04_REGISTRY_TARGETS = frozenset(
     {
+        "backend/app/api/deps/checker_registry.py",
         "backend/app/modules/authorization/checker_registry_authorization.py",
         "backend/app/modules/authorization/domain/checker_registry.py",
         "backend/app/modules/checkers/api/external.py",
