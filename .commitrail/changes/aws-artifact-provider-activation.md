@@ -293,7 +293,7 @@ require real PostgreSQL concurrency tests.
   role/policy/time-bound and cannot be activated from mixed, replayed, expired or
   public/product/configuration-authored results. The trusted proof process and
   database writers remain an explicit v0.1 trust boundary.
-- [ ] Coordination and its database trigger require runtime proof to complete
+- [x] Coordination and its database trigger require runtime proof to complete
   before readiness and negative-access proof start, so a missing-key `403`
   cannot satisfy known-object denial. Focused service and direct-SQL tests reject
   both out-of-order variants and retain a valid runtime-first control.
@@ -403,7 +403,7 @@ rebinding route.
 | Offline behavior proof | Focused activation/config/startup/factory pytest batches | Initial candidate: 230 passed and seven failed; the seven repaired cases then passed. At clean source `159003fce`, one exact-head selection covering the original affected set plus native proof transport/CLI passed 278 tests with no failures, errors or skips in 164.39 seconds; lane-catalogue contract 58 passed; all nine moved terminal-test cases pass `--setup-plan` fixture closure | Exact latest-main hosted lane replay remains required; live AWS proof remains a later deployment gate |
 | Review repair proof | Focused exact trust-policy selection; direct-SQL test setup plan; Alembic graph/revision scan; isolated PostgreSQL batches | Closed trust grammar and IAM placement: 14 passed, followed by the three-case issuer/account scope addendum. At clean `2e4a71819`, the combined `0052` schema fingerprint is `0f38f0705b0aae59b40e1d873932c6710c2f56f2e58647f9911ae2f15deaf7e9`; hostile-search-path migration, two-loop guard, direct role/trust/principal SQL denials and put/missing/mismatch crossed-expiry terminal cases passed 8/8 in 292.96 seconds. Canonical repaired `0051` passed its 0049/0050 resume and downgrade-refusal selection 3/3; the stacked exact `91002c941` regression rebuilt `0051`, proved downgrade refusal without mutation and restored `0052` in 121.47 seconds. All isolated database cleanup completed. The graph has one `0052` head through canonical operational-read `0051` and contributor-read `0050`, and all 52 revision IDs fit the 32-character version column | Live AWS proof remains a later deployment gate |
 | CI/test metadata proof | `python -m scripts.test_structure_boundary validate ...`; `pytest -q tests/test_ci_lane_catalogue.py`; AST comparison of the three moved functions; ownership partition generation | Debt transition passes while `test_artifact_admission.py` shrinks from 2,779 to 2,593 lines; 58 lane tests pass; all three moved function ASTs are identical. Latest-main reconciliation retains 529 exact ownership assignments with the existing protected base and adds the three S3 targets on top of the canonical registry/main inventory | Exact latest-main CI-integrity and test-delta replay remain pending |
-| Post-review proof-order repair | Future focused nodes `test_activation_rejects_probes_started_before_runtime_completed` and `test_activation_trigger_rejects_probes_started_before_runtime_completed`, each parameterized for readiness and negative access, plus the existing runtime-first overlapping-group control | Planned: service rejects before activation construction; direct SQL reaches the activation trigger with otherwise-valid rows and is rejected; runtime-first control still activates | Requires implementation and exact-head PostgreSQL execution; no AWS call is needed |
+| Post-review proof-order repair | Focused nodes `test_activation_rejects_probes_started_before_runtime_completed` and `test_activation_trigger_rejects_probes_started_before_runtime_completed`, each parameterized for readiness and negative access, plus the existing runtime-first overlapping-group control | At clean `7a97a0199`, the regenerated combined `0052` fingerprint is `444c180e173fb00f85eb376c53fb5faa1dc36964406e0d0a91beb0231bde69e3`; service and direct-SQL counterexamples plus the runtime-first control passed 5/5 in 84.28 seconds. Isolated database cleanup completed. Evidence: `/tmp/mvp-s3-582-order-final.ySd4px`; stdout SHA-256 `25534542b11d78ffbd2f2ca0c853a3d781a3e2025c4774cc5a3456363231b4e2`; JUnit SHA-256 `efc0010d37eb9bc74fca2bb23dc95fa1f556d24c86848a6745097a452bb39b4a` | No AWS call was needed; live AWS proof remains a deployment gate |
 | Live proof | Three separately identified executors, credential-free coordination, then hosted public guide/Submission drill | Not authorized or run | Requires approved #583 environment and explicit live authorization |
 
 The terminal-custody tests moved together from the oversized admission module;
@@ -456,6 +456,18 @@ readiness. The supported trust grammar retains the current Linux VM path:
 runtime may use the closed `ec2.amazonaws.com` service trust while readiness
 and negative jobs require exact, disjoint OIDC subjects.
 
+Human review of the ready candidate identified that the runbook's runtime-first
+proof sequence was not enforced by ART or PostgreSQL. A denial probe could
+therefore run before the challenge existed and misclassify S3's missing-key 403
+as known-object denial. The coordinator and existing `0052` activation trigger
+now enforce runtime completion before readiness and negative start. Focused
+service and direct-SQL counterexamples reject each out-of-order probe, while a
+runtime-first group remains valid. The same review clarified two existing trust
+boundaries: the proof process and database writer are trusted in v0.1, and each
+five-minute group intentionally retains one small challenge in the production
+no-expiry namespace. The repair adds no role, privilege system, prefix,
+lifecycle exception or retained-data cleanup.
+
 Focused regressions must independently prove: a guard immediately before nested
 SDK calls; `open` guarding at iterator consumption; same-ID terminal rechecks
 for success, missing and integrity mismatch; crossed expiry and unknown write;
@@ -465,15 +477,18 @@ read owner. These are separate failure boundaries, not one broad mock graph.
 ## Reconciliation
 
 - Current-source reconciliation: the implementation began at `34501cd64` and
-  has been reconciled against `origin/main` at `d5bac1313`. Issue #583 is
+  has been reconciled against `origin/main` at `ef839bb6d`, through the exact
+  canonical #589 parent `317fe89a1`. Issue #583 is
   parallel and owns hosted process topology,
   scheduling and backup execution. Merged PR #577 owns contributor-read
   migration `0050`; the canonical operational-read audit migration owns
   `0051`, and this provider-proof migration chains after it as `0052` without
   making the product features depend on each other. The repaired `0051` source
-  is exact ancestry at `45b9a4119`; its upgrade DDL is unchanged, its downgrade
+  is exact ancestry through parent `317fe89a1`; its upgrade DDL is unchanged, its downgrade
   refuses without mutation, and the stacked regression restores the current
-  `0052` head.
+  `0052` head. The current combined `0052` fingerprint is `444c180e...` after
+  adding the proof-order trigger invariant; baseline and `0051` fingerprints
+  remain owned by their existing graphs.
 - Next usable boundary: complete exact latest-main source review and hosted CI,
   then prepare this bounded activation code for human merge. After deployment,
   request the precise live environment authorization/facts listed above and run
