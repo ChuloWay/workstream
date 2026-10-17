@@ -213,6 +213,19 @@ async def _history_rejects_source(h, client, source_id):
     detail = await client.get(f"/api/v1/tasks/{h.request.task_id}")
     assert detail.status_code == 200, detail.text
     assert detail.json()["last_assignment_outcome"] == expected
+    mine = await client.get("/api/v1/actors/me/assignments", params={"state": "closed"})
+    assert mine.status_code == 200, mine.text
+    # A closed claim projects only the contributor's own facts.
+    [closed] = [item for item in mine.json()["items"] if item["assignment_id"] == receipt.assignment_id]
+    assert (closed["state"], closed["assignment_status"], closed["next_action"]) == (
+        "closed", "revision_exhausted", "none",
+    )
+    assert closed["task_status"] is None and closed["revision"] is None
+    assert closed["latest_submission"]["submission_id"] == str(source_id)
+    assert closed["latest_submission"]["status_reason"] == "revision_limit_reached"
+    active = await client.get("/api/v1/actors/me/assignments", params={"state": "active"})
+    assert active.status_code == 200, active.text
+    assert receipt.assignment_id not in {item["assignment_id"] for item in active.json()["items"]}
     return expected
 
 

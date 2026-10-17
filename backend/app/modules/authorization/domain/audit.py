@@ -45,6 +45,12 @@ CONTEXT_DIGEST_RESOURCE_TYPES = (
     "external_checker_registry_entry",
     "task_import_source",
     "task_import_batch",
+    "actor_project_collection",
+    "actor_assignment_collection",
+    "actor_submission_collection",
+    "actor_work_summary",
+    "task_submission_bundle_preparation_collection",
+    "submission_bundle_preparation_read",
 )
 
 
@@ -110,6 +116,12 @@ AuthorizationDecisionResourceType = Literal[
     "external_checker_registry_entry",
     "task_import_source",
     "task_import_batch",
+    "actor_project_collection",
+    "actor_assignment_collection",
+    "actor_submission_collection",
+    "actor_work_summary",
+    "task_submission_bundle_preparation_collection",
+    "submission_bundle_preparation_read",
 ]
 
 

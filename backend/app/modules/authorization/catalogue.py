@@ -266,9 +266,24 @@ class ActionId(StrEnum):
     CONTRIBUTION_POLICY_RETIRE = "contribution.policy.retire"
     CONTRIBUTION_READ_SELF = "contribution.read_self"
     CONTRIBUTION_READ_PROJECT = "contribution.read_project"
+    ACTOR_PROJECT_LIST = "actor.project.list"
+    ACTOR_ASSIGNMENT_LIST = "actor.assignment.list"
+    ACTOR_SUBMISSION_LIST = "actor.submission.list"
+    ACTOR_WORK_SUMMARY_READ = "actor.work_summary.read"
+    TASK_SUBMISSION_BUNDLE_PREPARATION_LIST = "task.submission_bundle_preparation.list"
+    TASK_SUBMISSION_BUNDLE_PREPARATION_READ = "task.submission_bundle_preparation.read"
 
 
 CONTRIBUTION_READ_ACTIONS = frozenset({ActionId.CONTRIBUTION_READ_SELF, ActionId.CONTRIBUTION_READ_PROJECT})
+# Own-work reads under a current exact-project Submitter grant.
+CONTRIBUTOR_WORK_READ_ACTIONS = frozenset({
+    ActionId.ACTOR_ASSIGNMENT_LIST,
+    ActionId.ACTOR_SUBMISSION_LIST,
+    ActionId.ACTOR_WORK_SUMMARY_READ,
+    ActionId.TASK_SUBMISSION_BUNDLE_PREPARATION_LIST,
+    ActionId.TASK_SUBMISSION_BUNDLE_PREPARATION_READ,
+})
+CONTRIBUTOR_READ_ACTIONS = CONTRIBUTOR_WORK_READ_ACTIONS | {ActionId.ACTOR_PROJECT_LIST}
 
 HISTORY_READ_ACTIONS = frozenset({
     ActionId.TASK_SUBMISSION_LIST,
@@ -307,6 +322,7 @@ class ActionOwner(StrEnum):
     PILOT_04 = "PILOT-04"
     PILOT_08 = "PILOT-08"
     PILOT_10 = "PILOT-10"
+    PILOT_READ_2 = "PILOT-READ-2"
 
     AUTH_07B = "WS-AUTH-001-07B"
     AUTH_08 = "WS-AUTH-001-08"
@@ -407,6 +423,11 @@ _CONTRIBUTION_POLICY_ACTION_IDS = (
 
 
 ACTION_DEFINITIONS = (
+    _active(ActionId.ACTOR_PROJECT_LIST, PermissionId.ACTOR_PROFILE_READ_SELF, ActionOwner.PILOT_READ_2),
+    *(
+        _active(action, PermissionId.SUBMISSION_READ_OWN, ActionOwner.PILOT_READ_2)
+        for action in sorted(CONTRIBUTOR_WORK_READ_ACTIONS)
+    ),
     _active(ActionId.CONTRIBUTION_READ_SELF, PermissionId.CONTRIBUTION_READ_SELF, ActionOwner.PILOT_10),
     _active(ActionId.CONTRIBUTION_READ_PROJECT, PermissionId.CONTRIBUTION_READ_PROJECT, ActionOwner.PILOT_10),
     _active(ActionId.TASK_POST_SUBMIT_ROUTE, PermissionId.TASK_POST_SUBMIT_ROUTE, ActionOwner.ARCH_04E2),
@@ -796,7 +817,7 @@ HISTORICAL_PERMISSION_IDS = PERMISSION_IDS - NEW_PERMISSION_IDS
 
 def _require_catalogue_counts() -> None:
     """Keep the closed action inventory and permission boundary exact."""
-    if len(PERMISSION_IDS) != 82 or len(ACTION_IDS) != 156:
+    if len(PERMISSION_IDS) != 82 or len(ACTION_IDS) != 162:
         raise RuntimeError("authorization catalogue count mismatch")
     if len(HISTORICAL_PERMISSION_IDS) != 49 or len(NEW_PERMISSION_IDS) != 33:
         raise RuntimeError("authorization permission boundary mismatch")
@@ -933,7 +954,7 @@ def _index_actions(definitions: tuple[ActionDefinition, ...]) -> MappingProxyTyp
         definition.action_id
         for definition in definitions
         if definition.availability is ActionAvailability.ACTIVE
-    } != _ACTIVE_ACTION_BOUNDARY | CONTRIBUTION_READ_ACTIONS | {
+    } != _ACTIVE_ACTION_BOUNDARY | CONTRIBUTION_READ_ACTIONS | CONTRIBUTOR_READ_ACTIONS | {
         ActionId.TASK_CLAIM, ActionId.TASK_START, ActionId.TASK_WORK_CONTEXT_READ, ActionId.TASK_GUIDE_READ,
         ActionId.PROJECT_TASK_WORK_CONTEXT_READ, ActionId.OPERATIONS_TASK_START_OVERRIDE,
         ActionId.PROJECT_TASK_CREATE, ActionId.PROJECT_TASK_SCREEN, ActionId.PROJECT_TASK_RELEASE,

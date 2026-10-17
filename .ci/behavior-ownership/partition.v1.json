@@ -94,6 +94,10 @@
     },
     {
       "group": "shared",
+      "target": "backend/app/api/deps/contributor_reads.py"
+    },
+    {
+      "group": "shared",
       "target": "backend/app/api/deps/guide_activation.py"
     },
     {
@@ -143,6 +147,10 @@
     {
       "group": "lifecycle",
       "target": "backend/app/api/routes/contributions.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/app/api/routes/contributor_reads.py"
     },
     {
       "group": "shared",
@@ -386,6 +394,10 @@
     },
     {
       "group": "artifacts",
+      "target": "backend/app/modules/artifacts/preparation_reads.py"
+    },
+    {
+      "group": "artifacts",
       "target": "backend/app/modules/artifacts/repository.py"
     },
     {
@@ -510,6 +522,10 @@
     },
     {
       "group": "auth",
+      "target": "backend/app/modules/authorization/api/contributor_reads.py"
+    },
+    {
+      "group": "auth",
       "target": "backend/app/modules/authorization/api/decisions.py"
     },
     {
@@ -582,6 +598,10 @@
     },
     {
       "group": "auth",
+      "target": "backend/app/modules/authorization/contributor_read.py"
+    },
+    {
+      "group": "auth",
       "target": "backend/app/modules/authorization/domain/action_groups.py"
     },
     {
@@ -619,6 +639,10 @@
     {
       "group": "auth",
       "target": "backend/app/modules/authorization/domain/contribution_reads.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/domain/contributor_reads.py"
     },
     {
       "group": "auth",
@@ -1045,6 +1069,10 @@
       "target": "backend/app/modules/checkers/selected_pre_submit_execution.py"
     },
     {
+      "group": "artifacts",
+      "target": "backend/app/modules/checkers/selected_pre_submit_reads.py"
+    },
+    {
       "group": "lifecycle",
       "target": "backend/app/modules/compensation/api/adapter_bindings.py"
     },
@@ -1282,6 +1310,10 @@
     },
     {
       "group": "lifecycle",
+      "target": "backend/app/modules/projects/api/project_summaries.py"
+    },
+    {
+      "group": "lifecycle",
       "target": "backend/app/modules/projects/api/setup_identity.py"
     },
     {
@@ -1510,6 +1542,10 @@
     },
     {
       "group": "lifecycle",
+      "target": "backend/app/modules/projects/project_summaries.py"
+    },
+    {
+      "group": "lifecycle",
       "target": "backend/app/modules/projects/repository.py"
     },
     {
@@ -1646,6 +1682,10 @@
     },
     {
       "group": "lifecycle",
+      "target": "backend/app/modules/tasks/api/contributor_reads.py"
+    },
+    {
+      "group": "lifecycle",
       "target": "backend/app/modules/tasks/api/guide_documents.py"
     },
     {
@@ -1731,6 +1771,10 @@
     {
       "group": "lifecycle",
       "target": "backend/app/modules/tasks/contribution_evidence.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/contributor_reads.py"
     },
     {
       "group": "lifecycle",
@@ -2057,7 +2101,7 @@
       "target": "backend/scripts/validate_test_lane_evidence.py"
     }
   ],
-  "authority_digest": "1cc62386c25ee7702dbc9b828a08b55fe95a7a07d4c1fb3ece7da002e2740366",
+  "authority_digest": "3f771fab02514171549d615554c0dace62fecbdb15648fc3e4a503e54a0c0ed0",
   "protected_base_commit": "7676ce4347db0c9694962a9b587a20765e16eac6",
   "schema": "workstream.behavior-ownership-partition.v1"
 }

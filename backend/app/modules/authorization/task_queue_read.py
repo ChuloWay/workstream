@@ -25,6 +25,7 @@ class TaskQueueReadAuthorization:
     def _query(request: TaskQueueReadRequest) -> str:
         return authorization_read_query_digest(
             action_id=ActionId(request.action), project_id=request.project_id, limit=request.limit,
+            filters=request.filters,
         )
 
     def _codec(self) -> AuthorizationReadCursorCodec:

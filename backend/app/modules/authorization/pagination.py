@@ -65,11 +65,13 @@ def authorization_read_query_digest(
     limit: int,
     status: Literal["active", "revoked"] | None = None,
     role: ProjectRole | None = None,
+    filters: tuple[tuple[str, str | None], ...] = (),
 ) -> str:
     """Bind a cursor to one normalized read query and ordering contract."""
     return canonical_json_hash(
         {
             "action_id": action_id.value,
+            "filters": dict(filters),
             "limit": limit,
             "order": _ORDER,
             "project_id": str(project_id),

@@ -206,8 +206,17 @@ class AdminAuthorizationRepository:
         self, *, project_id: UUID, actor_profile_id: UUID
     ) -> tuple[str, ...]:
         """Project sorted effective admin role names for one exact project."""
-        roles = await self._session.scalars(
-            select(AdminRoleGrant.role)
+        roles = await self.effective_admin_roles_for_projects(
+            project_ids=(project_id,), actor_profile_id=actor_profile_id,
+        )
+        return roles[project_id]
+
+    async def effective_admin_roles_for_projects(
+        self, *, project_ids: tuple[UUID, ...], actor_profile_id: UUID
+    ) -> dict[UUID, tuple[str, ...]]:
+        """Sorted effective admin role names for each selected project, in one query."""
+        rows = await self._session.execute(
+            select(AdminRoleGrant.role, AdminRoleGrant.scope_type, AdminRoleGrant.scope_project_id)
             .join(ActorProfile, ActorProfile.id == AdminRoleGrant.target_actor_profile_id)
             .where(
                 AdminRoleGrant.target_actor_profile_id == str(actor_profile_id),
@@ -224,14 +233,62 @@ class AdminAuthorizationRepository:
                     AdminRoleGrant.scope_type == AdminScope.SYSTEM.value,
                     and_(
                         AdminRoleGrant.scope_type == AdminScope.PROJECT.value,
-                        AdminRoleGrant.scope_project_id == str(project_id),
+                        AdminRoleGrant.scope_project_id.in_([str(item) for item in project_ids]),
                     ),
                 ),
             )
-            .distinct()
-            .order_by(AdminRoleGrant.role)
         )
-        return tuple(roles.all())
+        selected: dict[UUID, set[str]] = {project_id: set() for project_id in project_ids}
+        for role, scope_type, scope_project_id in rows.all():
+            for project_id in (
+                project_ids if scope_type == AdminScope.SYSTEM.value
+                else (UUID(str(scope_project_id)),)
+            ):
+                selected[project_id].add(role)
+        return {project_id: tuple(sorted(roles)) for project_id, roles in selected.items()}
+
+    async def active_project_roles_for_projects(
+        self, *, project_ids: tuple[UUID, ...], actor_profile_id: UUID
+    ) -> dict[UUID, tuple[str, ...]]:
+        """Sorted active contributor role names for each selected project."""
+        rows = await self._session.execute(
+            select(ProjectRoleGrant.project_id, ProjectRoleGrant.role).where(
+                ProjectRoleGrant.project_id.in_([str(item) for item in project_ids]),
+                ProjectRoleGrant.actor_profile_id == str(actor_profile_id),
+                ProjectRoleGrant.status == "active",
+            )
+        )
+        selected: dict[UUID, set[str]] = {project_id: set() for project_id in project_ids}
+        for project_id, role in rows.all():
+            selected[UUID(str(project_id))].add(role)
+        return {project_id: tuple(sorted(roles)) for project_id, roles in selected.items()}
+
+    async def active_project_ids_for_role(
+        self, *, actor_profile_id: UUID, role: str
+    ) -> frozenset[UUID]:
+        """Lock and return every project where the actor holds this active role."""
+        rows = await self._session.scalars(
+            select(ProjectRoleGrant.project_id).where(
+                ProjectRoleGrant.actor_profile_id == str(actor_profile_id),
+                ProjectRoleGrant.role == role,
+                ProjectRoleGrant.status == "active",
+            ).order_by(ProjectRoleGrant.id).with_for_update(of=ProjectRoleGrant)
+        )
+        return frozenset(UUID(str(item)) for item in rows.all())
+
+    async def exact_grant_project_ids(self, *, actor_profile_id: UUID) -> frozenset[UUID]:
+        """Every project where the actor holds an active exact-project grant."""
+        rows = await self._session.scalars(
+            select(ProjectRoleGrant.project_id).where(
+                ProjectRoleGrant.actor_profile_id == str(actor_profile_id),
+                ProjectRoleGrant.status == "active",
+            ).union(select(AdminRoleGrant.scope_project_id).where(
+                AdminRoleGrant.target_actor_profile_id == str(actor_profile_id),
+                AdminRoleGrant.status == "active",
+                AdminRoleGrant.scope_type == AdminScope.PROJECT.value,
+            ))
+        )
+        return frozenset(UUID(str(item)) for item in rows.all())
 
     async def add_project_role_snapshot(
         self, snapshot: ProjectRoleQualificationSnapshot

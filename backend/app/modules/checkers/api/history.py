@@ -3,6 +3,7 @@ from datetime import datetime
 from typing import Literal, Protocol
 from uuid import UUID
 from pydantic import BaseModel, ConfigDict
+from sqlalchemy import Subquery
 
 
 CheckerStatus = Literal["queued", "running", "completed", "infrastructure_failed"]
@@ -92,4 +93,8 @@ class CheckerHistoryReadPort(Protocol):
         This satisfies TASK's ``SubmissionFindingCountsPort`` structurally, without
         a public dependency from CHECKERS back onto TASK.
         """
+        ...
+
+    def evidence_stamps(self) -> Subquery:
+        """``(submission_id, evidence_at)``: when the current run completed, else when it was queued."""
         ...
