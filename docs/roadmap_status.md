@@ -1230,8 +1230,8 @@ proof.
 
 The [hosted release configuration record](../.commitrail/changes/mvp-hosted-release-configuration.md)
 and [operator runbook](../deploy/hosted/README.md) define the digest-only process
-topology, dedicated Docker/runsc trust boundary, private configuration checks
-and the live environment evidence that remains before deployment can be claimed.
+topology, dedicated Docker/runsc trust boundary, private configuration and
+runsc/cache checks repeated before every launch, and the live environment evidence that remains before deployment can be claimed.
 
 The [terminal benchmark pilot corpus](../pilots/terminal_benchmark/README.md)
 provides a shareable guide, five native task-authoring briefs and independently

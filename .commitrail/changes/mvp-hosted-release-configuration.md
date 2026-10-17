@@ -293,6 +293,35 @@ intermediates are excluded from the context. Duplicate-distribution rejection
 remains intact. Inspection failures expose only a closed diagnostic category,
 never arbitrary image output.
 
+## Launch-boundary correction
+
+The hosted launch wrapper must not rely on a separately completed preflight.
+Before every `up`, it reloads the current checker configuration and applies the
+existing checker-selector, private-host-input and Docker-runtime/cache
+validators before launching Compose. `pull`, `ps` and `stop` remain available
+without these launch-only prerequisites so an invalid host can still be stopped.
+No product or checker-service policy is added by this repair; those owners stay
+outside this configuration change. The dedicated host administrator must keep
+configuration and host inputs stable between validation and execution and while
+the service runs; point-in-time validation is not protection against that trusted
+administrator mutating a running host.
+
+Regression proof invokes the actual wrapper entrypoint with real environment
+and checker-file parsing: valid launch succeeds; independently changed `runc`
+or `docker-dev` selectors, private-host-input failure and Docker-runtime failure
+prevent the Compose launch. A stop control remains usable after configuration
+becomes invalid. All 26 release configuration/image unit tests pass. Separate
+in-memory removal of checker-selector validation, private-host validation and
+Docker-runtime validation makes each intended regression fail its assertions;
+the source is not changed by those probes. Required focused review covers security, architecture,
+operations, QA/test delta and affected documentation on the frozen repair.
+
+The image verifier's `uv --no-cache pip check` is distinct from the Docker
+build's package-download cache mount, which is not part of the resulting image.
+The optional workflow bootstrap hash pin is not part of this launch correction;
+its exact version pin remains, alongside the image's digest-pinned uv binary and
+locked production dependencies.
+
 ## Evidence
 
 Source/configuration candidate checks:

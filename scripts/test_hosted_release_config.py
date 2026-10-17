@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+from contextlib import redirect_stderr, redirect_stdout
 import copy
 import hashlib
 import importlib.util
+import io
 import json
 import os
 from pathlib import Path
@@ -26,6 +28,14 @@ SPEC = importlib.util.spec_from_file_location("hosted_release_preflight", PREFLI
 assert SPEC is not None and SPEC.loader is not None
 preflight = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(preflight)
+
+COMPOSE_SPEC = importlib.util.spec_from_file_location(
+    "hosted_release_compose", ROOT / "deploy" / "hosted" / "compose.py"
+)
+assert COMPOSE_SPEC is not None and COMPOSE_SPEC.loader is not None
+compose = importlib.util.module_from_spec(COMPOSE_SPEC)
+with patch.dict(sys.modules, {"preflight": preflight}):
+    COMPOSE_SPEC.loader.exec_module(compose)
 
 
 class HostedReleaseConfigTests(unittest.TestCase):
@@ -175,6 +185,95 @@ class HostedReleaseConfigTests(unittest.TestCase):
         for key in ("COMPOSE_FILE", "AWS_ACCESS_KEY_ID"):
             self.assertNotIn(key, operation_environment)
         self.assertIn("deploy/hosted/compose.py", (ROOT / "deploy/hosted/README.md").read_text())
+
+    def _compose_main(self, operation: str) -> tuple[int, str]:
+        errors = io.StringIO()
+        with (
+            patch.object(sys, "argv", ["compose.py", "--env-file", str(self.environment_path), operation]),
+            redirect_stderr(errors),
+        ):
+            result = compose.main()
+        return result, errors.getvalue()
+
+    def test_launch_rechecks_checker_selectors_after_preflight(self) -> None:
+        with (
+            patch.object(sys, "argv", ["preflight.py", "--env-file", str(self.environment_path)]),
+            patch.object(preflight, "validate_private_host_inputs"),
+            patch.object(preflight, "validate_docker_runtime"),
+            redirect_stdout(io.StringIO()),
+        ):
+            self.assertEqual(preflight.main(), 0)
+        for field, unsafe in (("runtime", "runc"), ("isolation_mode", "docker-dev")):
+            with self.subTest(field=field):
+                self.checker_path.write_text(
+                    json.dumps(self.checker | {field: unsafe}), encoding="utf-8"
+                )
+                with (
+                    patch.object(compose, "validate_private_host_inputs") as private,
+                    patch.object(compose, "validate_docker_runtime") as runtime,
+                    patch.object(compose, "run_compose") as run,
+                ):
+                    result, error = self._compose_main("up")
+                self.assertEqual(result, 1)
+                self.assertIn(f"unsafe release value: {field}", error)
+                private.assert_not_called()
+                runtime.assert_not_called()
+                run.assert_not_called()
+
+    def test_launch_checks_host_and_runtime_before_starting(self) -> None:
+        for failure in (None, "private", "runtime"):
+            with self.subTest(failure=failure):
+                order = []
+
+                def private_check(values):
+                    self.assertEqual(values, self.environment)
+                    order.append("private")
+                    if failure == "private":
+                        raise preflight.PreflightError("private host rejected")
+
+                def runtime_check(config, values):
+                    self.assertEqual(config, self.checker)
+                    self.assertEqual(values, self.environment)
+                    order.append("runtime")
+                    if failure == "runtime":
+                        raise preflight.PreflightError("Docker runtime rejected")
+
+                def launch(path, values, arguments):
+                    self.assertEqual(path, self.environment_path)
+                    self.assertEqual(values, self.environment)
+                    self.assertEqual(arguments, ["up"])
+                    order.append("launch")
+                    return 0
+
+                with (
+                    patch.object(compose, "validate_private_host_inputs", side_effect=private_check),
+                    patch.object(compose, "validate_docker_runtime", side_effect=runtime_check),
+                    patch.object(compose, "run_compose", side_effect=launch) as run,
+                ):
+                    result, error = self._compose_main("up")
+                if failure is None:
+                    self.assertEqual((result, error), (0, ""))
+                    self.assertEqual(order, ["private", "runtime", "launch"])
+                    run.assert_called_once()
+                else:
+                    self.assertEqual(result, 1)
+                    self.assertIn("rejected", error)
+                    self.assertEqual(order, ["private"] if failure == "private" else ["private", "runtime"])
+                    run.assert_not_called()
+
+    def test_stop_remains_available_with_invalid_checker_configuration(self) -> None:
+        self.checker_path.write_text("invalid json", encoding="utf-8")
+        with (
+            patch.object(compose, "load_checker_config") as load,
+            patch.object(compose, "validate_private_host_inputs") as private,
+            patch.object(compose, "validate_docker_runtime") as runtime,
+            patch.object(compose, "run_compose", return_value=0) as run,
+        ):
+            self.assertEqual(self._compose_main("stop"), (0, ""))
+        load.assert_not_called()
+        private.assert_not_called()
+        runtime.assert_not_called()
+        run.assert_called_once_with(self.environment_path, self.environment, ["stop"])
 
     def test_environment_rejects_mutable_or_development_settings(self) -> None:
         cases = {

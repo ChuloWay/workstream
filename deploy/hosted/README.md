@@ -50,7 +50,10 @@ Both Dockerfiles pin their base images. The backend build installs the committed
 Python resolution with the agent runtime and without the development extra. The
 checker-service build compiles the committed Rust lock and copies the pinned
 Docker client. A local build tag is build evidence only; the release file must
-contain the registry-resolved digest after publication.
+contain the registry-resolved digest after publication. The backend build's uv
+package-download cache mount exists only on the builder; it is not retained in
+the image. Runtime image inspection uses `uv --no-cache pip check` and bounded
+temporary storage.
 
 The scoped [release-image workflow](../../.github/workflows/release-images.yml)
 runs for release definitions and copied backend/checker source changes, building
@@ -180,7 +183,15 @@ Use the checked-in wrapper for every Compose operation. It parses and validates
 the approved environment file, renders the fixed topology, and gives Docker
 Compose only that parsed allowlist plus fixed process path, operator home and
 local Docker-socket values. Ambient shell values cannot replace an image, Flow
-URL, secret path, Compose selector or Docker daemon selector:
+URL, secret path, Compose selector or Docker daemon selector. Every `up` also
+reloads the current checker configuration and repeats the checker-selector,
+private-host-input and Docker-runtime/cache checks before starting anything.
+Skipping the separate preflight does not skip these launch checks. `pull`, `ps`
+and `stop` remain available without launch-only checks so an invalid host can
+still be inspected or stopped. Run `up` from the same trusted administrator
+account used for full preflight. Keep the private configuration and host inputs
+unchanged between validation and launch and while the service runs; these
+point-in-time checks do not constrain a trusted host administrator:
 
 ```sh
 python3 deploy/hosted/compose.py --env-file /etc/workstream/release.env pull

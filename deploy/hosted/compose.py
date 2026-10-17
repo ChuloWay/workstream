@@ -9,11 +9,15 @@ import sys
 
 from preflight import (
     PreflightError,
+    load_checker_config,
     parse_environment,
     render_compose,
     run_compose,
+    validate_checker_config,
     validate_compose,
+    validate_docker_runtime,
     validate_environment,
+    validate_private_host_inputs,
 )
 
 
@@ -30,6 +34,11 @@ def main() -> int:
         values = parse_environment(args.env_file)
         validate_environment(values)
         validate_compose(render_compose(args.env_file, values))
+        if args.compose_arguments and args.compose_arguments[0] == "up":
+            checker_config = load_checker_config(Path(values["WORKSTREAM_CHECKER_CONFIG_FILE"]))
+            validate_checker_config(checker_config, values)
+            validate_private_host_inputs(values)
+            validate_docker_runtime(checker_config, values)
         return run_compose(args.env_file, values, args.compose_arguments)
     except PreflightError as exc:
         print(f"hosted Compose command failed: {exc}", file=sys.stderr)
