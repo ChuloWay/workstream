@@ -4,7 +4,7 @@ use serde_json::{Map, Value};
 use sha2::{Digest, Sha256};
 use std::collections::BTreeSet;
 use std::fs;
-use std::io::{self, Read};
+use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
 use workstream_checker_sdk::{
     completed_result, parse_request, terminal_benchmark_plan, Finding, ValidatedRequest,
@@ -15,6 +15,12 @@ const INPUT_ROOT: &str = "/work/input";
 const CONFIG_VERSION: &str = "terminal_benchmark_project.v1";
 const BASE: &str = "python:3.12-slim-bookworm@sha256:6e13e65c55e33adf203d77ee371cf8bf5d81bd4902ef07565721f46bf44917af";
 const MAX_PROJECT_BYTES: u64 = 2 * 1024 * 1024;
+const EXIT_INPUT_READ: i32 = 20;
+const EXIT_REQUEST_INVALID: i32 = 21;
+const EXIT_CONFIGURATION_INVALID: i32 = 22;
+const EXIT_PLAN_INVALID: i32 = 23;
+const EXIT_RESULT_INVALID: i32 = 24;
+const EXIT_OUTPUT_UNAVAILABLE: i32 = 25;
 const TASKS: [&str; 5] = [
     "terminal-atomic-import",
     "terminal-config-overlay",
@@ -35,28 +41,42 @@ const FILES: [&str; 8] = [
 const DIRECTORIES: [&str; 4] = ["environment", "solution", "tests", "workspace"];
 
 fn main() {
-    if run().is_err() {
-        std::process::exit(2);
+    // The service maps every nonzero status to the same public invalid-output
+    // result; fixed statuses only distinguish private runtime proof stages.
+    if let Err(status) = run() {
+        std::process::exit(status);
     }
 }
 
-fn run() -> Result<(), ()> {
+fn run() -> Result<(), i32> {
+    run_with_io(io::stdin(), io::stdout(), Path::new(INPUT_ROOT))
+}
+
+fn run_with_io(input: impl Read, output: impl Write, input_root: &Path) -> Result<(), i32> {
     let mut bytes = Vec::new();
-    io::stdin()
+    input
         .take((MAX_REQUEST_BYTES + 1) as u64)
         .read_to_end(&mut bytes)
-        .map_err(|_| ())?;
-    let request = parse_request(&bytes).map_err(|_| ())?;
-    let task = configured_task(&request).map_err(|_| ())?;
-    let findings = validate_package(&request, Path::new(INPUT_ROOT), task);
+        .map_err(|_| EXIT_INPUT_READ)?;
+    let request = parse_request(&bytes).map_err(|_| EXIT_REQUEST_INVALID)?;
+    execute_request(&request, output, input_root)
+}
+
+fn execute_request(
+    request: &ValidatedRequest,
+    output: impl Write,
+    input_root: &Path,
+) -> Result<(), i32> {
+    let task = configured_task(request).map_err(|_| EXIT_CONFIGURATION_INVALID)?;
+    let findings = validate_package(request, input_root, task);
     let value = if request.phase == "post_submit"
         && !findings.iter().any(|finding| finding.level == "error")
     {
-        terminal_benchmark_plan(&request, task).map_err(|_| ())?
+        terminal_benchmark_plan(request, task).map_err(|_| EXIT_PLAN_INVALID)?
     } else {
-        completed_result(&request, findings).map_err(|_| ())?
+        completed_result(request, findings).map_err(|_| EXIT_RESULT_INVALID)?
     };
-    serde_json::to_writer(io::stdout(), &value).map_err(|_| ())
+    serde_json::to_writer(output, &value).map_err(|_| EXIT_OUTPUT_UNAVAILABLE)
 }
 
 fn configured_task(request: &ValidatedRequest) -> Result<&str, ()> {
@@ -387,6 +407,27 @@ fn safe_case_path(path: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::Cursor;
+
+    struct FailedRead;
+
+    impl Read for FailedRead {
+        fn read(&mut self, _buffer: &mut [u8]) -> io::Result<usize> {
+            Err(io::Error::other("injected read failure"))
+        }
+    }
+
+    struct FailedWrite;
+
+    impl Write for FailedWrite {
+        fn write(&mut self, _buffer: &[u8]) -> io::Result<usize> {
+            Err(io::Error::other("injected write failure"))
+        }
+
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
 
     #[test]
     fn fixed_corpus_packages_satisfy_project_text_contract() {
@@ -419,6 +460,48 @@ mod tests {
                 "{task}"
             );
         }
+    }
+
+    #[test]
+    fn entry_stages_distinguish_input_request_and_configuration_failures() {
+        let package = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../pilots/terminal_benchmark/packages/ledger-reconcile");
+        assert_eq!(
+            run_with_io(FailedRead, Vec::new(), &package),
+            Err(EXIT_INPUT_READ)
+        );
+        assert_eq!(
+            run_with_io(Cursor::new(b"{}"), Vec::new(), &package),
+            Err(EXIT_REQUEST_INVALID)
+        );
+        assert_eq!(
+            execute_request(&package_request(&package), Vec::new(), &package),
+            Err(EXIT_CONFIGURATION_INVALID)
+        );
+    }
+
+    #[test]
+    fn entry_emits_a_post_plan_and_distinguishes_output_failure() {
+        let package = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../pilots/terminal_benchmark/packages/ledger-reconcile");
+        let mut request = package_request(&package);
+        request.phase = "post_submit".into();
+        request.value["configuration"] = serde_json::json!({
+            "external_task_id": "terminal-ledger-reconcile",
+            "schema_version": CONFIG_VERSION,
+        });
+        let mut output = Vec::new();
+
+        assert_eq!(execute_request(&request, &mut output, &package), Ok(()));
+        let value: Value = serde_json::from_slice(&output).unwrap();
+        assert_eq!(
+            value["schema_version"],
+            Value::String(workstream_checker_sdk::TERMINAL_BENCHMARK_PLAN_VERSION.into())
+        );
+        assert_eq!(
+            execute_request(&request, FailedWrite, &package),
+            Err(EXIT_OUTPUT_UNAVAILABLE)
+        );
     }
 
     #[test]
