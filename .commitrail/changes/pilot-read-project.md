@@ -271,6 +271,27 @@ documentation tracks at `b4b34a39a`.
 - Decided: the C3 `FOR UPDATE` row locks held until the response commits
   (Human review focus), accepted by the maintainer.
 
+- External review at `82f88192`:
+  - `shared_foundations_a` was interrupted at the 1500 s lane deadline after
+    284 of 1,854 tests; no test failed. The lane evidence names the
+    unfinished test,
+    `test_real_authority_publication_and_retirement_serialize_with_validation[True-publish]`
+    (shared contribution-policy lock serialization). PR3 changes no code on
+    its validation, publication or lock path (its CON changes are the
+    lock-free version list and an extracted view), and no backend code
+    changed between the passing `9d4a21853` and `82f881927`. In the last 60
+    hosted Backend runs, this was the only interruption of the lane; the
+    other lane failures completed every test. Twenty-eight local runs of
+    that test on PostgreSQL 16, with `faulthandler_timeout=150`, all passed
+    in 77–175 s per group of four. Its cause is not established; the test
+    bounds its two calls at 60 s, so a stall beyond that lies in fixture
+    setup, cancellation cleanup or the final unbounded validation read.
+    Complete hosted verification is the rerun on this head.
+  - Decisions recorded as the maintainer's (Design and decisions).
+  - Added the superseded-guide C1 and retired-version D1 list regressions.
+  - D1 reads through `ContributionPolicyVersionListPort` and its own adapter
+    instead of the policy operations port.
+
 ## Reconciliation
 
 - Current-source reconciliation: stacked on PILOT-READ-2 (#577). The audit
