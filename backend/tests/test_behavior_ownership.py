@@ -2520,8 +2520,11 @@ def test_retry_ownership_does_not_allow_a_parallel_checker_runner():
     targets = ownership.ARCH_04F4_RETRY_TARGETS
     assert targets == {
         "backend/app/modules/checkers/checker_retry.py",
+        "backend/app/api/deps/checker_recovery.py",
         "backend/app/modules/authorization/checker_retry_authorization.py",
+        "backend/app/modules/authorization/checker_retry_read.py",
         "backend/app/modules/authorization/domain/checker_retry.py",
+        "backend/app/modules/authorization/domain/checker_retry_reads.py",
         "backend/app/modules/authorization/prepared_checker_retry_replay.py",
     }
     retained = "backend/app/core/config.py"

@@ -53,10 +53,12 @@ eligible source or call the retry through a bearer-authenticated public route.
   read/mutation denials through canonical restage/commit. The public read uses
   the existing authorization-read rate gate before AUTH or CHECKERS lookup.
   Mutation continues to use `operations.checker.retry` unchanged.
-- `backend/scripts/behavior_ownership.py` and
+- `backend/scripts/behavior_ownership.py`,
+  `backend/tests/test_behavior_ownership.py` and
   `.ci/behavior-ownership/partition.v1.json`: register only the three new
-  public recovery modules with the existing ARCH-04F4 ownership group and
-  regenerate its additive partition snapshot.
+  public recovery modules with the existing ARCH-04F4 ownership group, retain
+  its closed no-parallel-runner inventory and regenerate the additive
+  partition snapshot.
 - `backend/alembic/versions/0050_operational_read_audit.py`, the canonical
   head in `backend/alembic/env.py`, the existing external-checker migration
   proof, the real PostgreSQL schema fingerprint in `backend/tests/conftest.py`,

@@ -59,8 +59,13 @@ from tests.checkers.execution.completion_fixture import completed_evidence
 from tests.checkers.execution.support import live_executor, reserve
 from tests.project_create_fixtures import grant_fixture_admin_role
 from tests.authentication.fixtures import (
+    auth_database_env as auth_database_env,
     clear_settings_cache as clear_settings_cache,
     rsa_signing_material as rsa_signing_material,
+)
+from tests.authorization.admin_access.fixtures import (
+    admin_access as admin_access,
+    signed_access as signed_access,
 )
 from tests.reviews.lifecycle.fixtures import live_acceptance_lifecycle as live_acceptance_lifecycle
 from tests.tasks.evaluation_delivery.support import delivery_fixture, outcome, state
