@@ -3,6 +3,7 @@
 from dataclasses import dataclass
 from datetime import datetime
 from pydantic import BaseModel, ConfigDict
+from sqlalchemy import Subquery
 from typing import Literal, Protocol
 from uuid import UUID
 
@@ -66,6 +67,10 @@ class SubmissionFindingCountsPort(Protocol):
     async def read_finding_counts(
         self, submission_ids: tuple[UUID, ...], *, manager: bool,
     ) -> dict[UUID, tuple[int, int, int]]: ...
+
+    def evidence_stamps(self) -> Subquery:
+        """``(submission_id, evidence_at)``: when each submission's counted findings last changed."""
+        ...
 
 
 SubmissionAttemptStatus = Literal[

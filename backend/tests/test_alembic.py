@@ -136,6 +136,7 @@ def test_v01_graph_has_one_root_and_head() -> None:
 
     assert [revision.revision for revision in revisions] == [
         HEAD_REVISION,
+        "0049_attempt_outcome_findings",
         "0048_revision_exhaustion",
         "0047_revision_recovery",
         "0046_revision_expiry_retry",
@@ -320,6 +321,7 @@ def test_repeated_upgrade_head_preserves_current_database(
     "0046_revision_expiry_retry",
     "0047_revision_recovery",
     "0048_revision_exhaustion",
+    "0049_attempt_outcome_findings",
 ])
 def test_preceding_head_upgrades_to_current_without_recreation(
     isolated_database_env: str, migration_lock, installed_revision: str,

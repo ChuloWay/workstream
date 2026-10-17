@@ -446,18 +446,24 @@ async def test_revision_projection_stale_source_preserves_deadline_and_limit_pri
 ):
     from app.modules.tasks.revision.service import project_current_revision
 
+    row = SimpleNamespace(id=new_record_id())
+
     class Session:
         calls = 0
 
+        async def execute(self, *_args, **_kwargs):
+            self.calls += 1
+            return SimpleNamespace(all=lambda: [(row.id, False)])
+
         async def scalar(self, *_args, **_kwargs):
             self.calls += 1
-            return False if self.calls == 1 else datetime.now(UTC)
+            return datetime.now(UTC)
 
     view = SimpleNamespace(disposition=disposition)
     view.model_copy = lambda *, update: SimpleNamespace(disposition=update["disposition"])
     monkeypatch.setattr("app.modules.tasks.revision.service.project_revision", lambda *_: view)
     session = Session()
-    result = await project_current_revision(session, SimpleNamespace(id=new_record_id()))
+    result = await project_current_revision(session, row)
     assert result.disposition == expected
     assert session.calls == 2
 

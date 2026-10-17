@@ -1,7 +1,11 @@
 """Compose exact AUTH decisions with TASK's existing bounded queue projections."""
 
+from datetime import UTC
+from functools import partial
 from typing import Annotated
 from uuid import UUID
+
+from pydantic import AwareDatetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,7 +21,7 @@ from app.modules.authorization.api.task_queues import (
     TaskQueueReadAuthorizationPort, TaskQueueReadRequest, TaskQueuePosition,
     TaskQueueCursorInvalid, TaskQueueReadUnavailable,
 )
-from app.modules.tasks.api import TaskQueueCursor, TaskQueueRequest
+from app.modules.tasks.api import TaskQueueCursor, TaskQueueFilters, TaskQueueRequest, TaskStatus
 from app.modules.tasks.schemas import (
     ContributorTaskQueueResponse, ManagementTaskQueueResponse, OperationalTaskQueueResponse,
 )
@@ -29,9 +33,9 @@ PageLimit = Annotated[int, Query(ge=1, le=100)]
 PageCursor = Annotated[str | None, Query(max_length=512)]
 
 
-async def _page(project_id, limit, cursor, authority, session, action, read, response_type):
+async def _page(project_id, limit, cursor, authority, session, action, read, response_type, filters=()):
     """Commit only after live authority, bounded projection and JSON validation."""
-    query = TaskQueueReadRequest(action, project_id, limit, cursor)
+    query = TaskQueueReadRequest(action, project_id, limit, cursor, filters)
     try:
         position = await authority.authorize_and_decode(query)
     except TaskQueueCursorInvalid as exc:
@@ -71,11 +75,21 @@ async def ready_tasks(
 async def management_tasks(
     project_id: UUID, authority: Authority, session: Session,
     limit: PageLimit = 50, cursor: PageCursor = None,
+    status: TaskStatus | None = None, assignee_actor_id: UUID | None = None,
+    import_batch_id: UUID | None = None, updated_since: AwareDatetime | None = None,
 ) -> ManagementTaskQueueResponse:
-    """List project planning fields for a covering Project Manager."""
+    """List project planning fields for a covering Project Manager, optionally filtered."""
+    filters = TaskQueueFilters(status, assignee_actor_id, import_batch_id, updated_since)
     return await _page(
         project_id, limit, cursor, authority, session, MANAGEMENT_QUEUE_ACTION,
-        TaskRepository(session).read_management_tasks, ManagementTaskQueueResponse,
+        partial(TaskRepository(session).read_management_tasks, filters=filters), ManagementTaskQueueResponse,
+        filters=tuple((name, value) for name, value in (
+            ("assignee_actor_id", None if assignee_actor_id is None else str(assignee_actor_id)),
+            ("import_batch_id", None if import_batch_id is None else str(import_batch_id)),
+            ("status", status),
+            ("updated_since", None if updated_since is None
+             else updated_since.astimezone(UTC).isoformat(timespec="microseconds")),
+        ) if value is not None),
     )
 
 

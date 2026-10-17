@@ -7,6 +7,7 @@ from app.api.routes.guide_activation import router as guide_activation_router
 from app.api.routes.post_policy import router as post_policy_router
 from app.api.routes.contribution_policies import router as contribution_policy_router
 from app.api.routes.contributions import router as contributions_router
+from app.api.routes.contributor_reads import router as contributor_reads_router
 
 from fastapi import APIRouter
 
@@ -27,6 +28,7 @@ api_router = APIRouter()
 api_router.include_router(health_router)
 api_router.include_router(health_router, prefix="/api/v1")
 api_router.include_router(actors_router, prefix="/api/v1")
+api_router.include_router(contributor_reads_router, prefix="/api/v1")
 api_router.include_router(authorization_router, prefix="/api/v1")
 api_router.include_router(project_create_router, prefix="/api/v1")
 api_router.include_router(guide_mutation_router, prefix="/api/v1")

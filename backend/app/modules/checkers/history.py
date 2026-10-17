@@ -102,6 +102,13 @@ class CheckerHistoryRepository:
             projected.setdefault(str(row["checker_run_id"]), []).append(result_schema(**item))
         return projected
 
+    def evidence_stamps(self):
+        """Counts change when the current run completes or a retry moves the fence to a new run."""
+        return select(
+            CheckerSubmissionFence.submission_id.label("submission_id"),
+            func.coalesce(CheckerRun.completed_at, CheckerRun.queued_at).label("evidence_at"),
+        ).join(CheckerRun, CheckerRun.id == CheckerSubmissionFence.current_run_id).subquery()
+
     async def read_finding_counts(self, submission_ids, *, manager):
         """Count (blocking, warning, coverage_incomplete) findings of each current completed run.
 
