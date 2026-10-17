@@ -48,7 +48,8 @@ jobs:
           test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
           test -z "$(git status --porcelain)"
           python -m pip install 'uv==0.12.3'
-          test "$(uv --version)" = 'uv 0.12.3'
+          uv --version
+          test "$(uv --version | cut -d ' ' -f 2)" = '0.12.3'
           uv lock --project backend --check
           uv sync --project backend --frozen --all-extras
       - name: Require canonical AWS Settings owner and verify configuration
