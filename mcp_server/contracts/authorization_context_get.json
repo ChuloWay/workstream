@@ -1,5 +1,5 @@
 {
-  "canonical_sha256": "6d89a867d3995422cdfff3e8c70e1f6f65729324f4b04a3c1d91f6eff57a295f",
+  "canonical_sha256": "6fcdbc4acff9016baaecc84876367b035218ad03addb29e494ad79478effd209",
   "components": {
     "schemas": {
       "ActionId": {
@@ -102,6 +102,7 @@
           "operations.task.start_override",
           "operations.submission_gate.repair",
           "operations.checker.retry",
+          "operations.checker_retry_source.list",
           "submission.create",
           "review.queue.read",
           "review.queue.inspect",
@@ -564,7 +565,7 @@
   "schema_version": 1,
   "source": {
     "action_id": "actor.authorization_context.read",
-    "backend_git_sha": "640e66660d2f9e83fffd4a592857430cab45e522",
+    "backend_git_sha": "1c05f84bbefb29eea8a45b5a28f317ed66cc1e0c",
     "method": "GET",
     "openapi_version": "3.1.0",
     "path": "/api/v1/actors/me/authorization-context"

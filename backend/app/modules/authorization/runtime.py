@@ -23,8 +23,8 @@ from app.modules.authorization.domain.contribution_policies import ContributionP
 from app.modules.authorization.domain.adapter_bindings import AdapterBindingMutationResourceContext, AdapterBindingReadResourceContext
 from app.modules.authorization.domain.project_create import ProjectCreateResourceContext
 from app.modules.authorization.domain import (
-    checker_registry, checker_retry, contribution_reads, contributor_reads, management_reads,
-    submission_history, task_authority, task_queues,
+    checker_registry, checker_retry, checker_retry_reads, contribution_reads,
+    contributor_reads, management_reads, submission_history, task_authority, task_queues,
 )
 from app.modules.authorization.domain.guide_mutations import (
     ProjectGuideMutationResourceContext, ProjectGuideMutationPrepareDenialResourceContext,
@@ -1056,7 +1056,9 @@ AuthorizationResourceContext = (
     ReviewLifecycleActivationContract | contribution_reads.ContributionSelfReadResourceContext | contribution_reads.ContributionProjectReadResourceContext
     | contributor_reads.ActorProjectListResourceContext | contributor_reads.ContributorWorkReadResourceContext
     | management_reads.ProjectManagementReadResourceContext |
-    submission_history.HistoryReadResourceContext | task_queues.QueueReadResourceContext | task_authority.TaskAuthorityResourceContext | ActorSelfResourceContext
+    submission_history.HistoryReadResourceContext | task_queues.QueueReadResourceContext
+    | checker_retry_reads.CheckerRetrySourceReadResourceContext
+    | task_authority.TaskAuthorityResourceContext | ActorSelfResourceContext
     | ProjectReadResourceContext | ProjectDiagnosticReadResourceContext
     | ProjectPolicyReadResourceContext
     | ProjectActiveGuideReadResourceContext
@@ -1114,5 +1116,6 @@ AuthorizationResourceContext = (
     | SubmissionBundlePreparationResourceContext
     | AdapterBindingReadResourceContext | AdapterBindingMutationResourceContext
     | ContributionPolicyReadResourceContext | ContributionPolicyMutationResourceContext | checker_registry.ExternalCheckerRegistryResourceContext
+    | checker_retry.CheckerRetryPrepareDenialResourceContext
     | checker_retry.CheckerRetryResourceContext
 )

@@ -281,10 +281,12 @@ def evaluation_coordinator(session) -> EvaluationCoordinationPort:
     return EvaluationCoordinator(session, tasks=evaluation_task_guard(session))
 
 
-def checker_retry_service(session, context):
-    """Compose hidden Operator retry from existing owner operations only."""
+def checker_retry_service(session, context, *, cursor_secret=None):
+    """Compose supported Operator recovery from existing owner operations."""
     from app.adapters.audit import checker_retry_audit
-    from app.adapters.auth import checker_retry_authorization
+    from app.adapters.auth import (
+        checker_retry_authorization, checker_retry_discovery_authorization,
+    )
     from app.adapters.outbox import outbox_append
     from app.adapters.tasks import evaluation_task_guard
     from app.modules.checkers.checker_retry import CheckerRetryService
@@ -295,6 +297,9 @@ def checker_retry_service(session, context):
         session, actor_profile_id=context.actor_profile_id,
         tasks=tasks, evaluations=EvaluationCoordinator(session, tasks=tasks),
         authorization=checker_retry_authorization(session, context),
+        discovery=checker_retry_discovery_authorization(
+            session, context, cursor_secret,
+        ),
         events=outbox_append(session), audit=checker_retry_audit(session),
     )
 

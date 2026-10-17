@@ -86,6 +86,10 @@
     },
     {
       "group": "artifacts",
+      "target": "backend/app/api/deps/checker_recovery.py"
+    },
+    {
+      "group": "artifacts",
       "target": "backend/app/api/deps/checker_registry.py"
     },
     {
@@ -634,6 +638,10 @@
     },
     {
       "group": "auth",
+      "target": "backend/app/modules/authorization/checker_retry_read.py"
+    },
+    {
+      "group": "auth",
       "target": "backend/app/modules/authorization/contribution_policy_authorization.py"
     },
     {
@@ -675,6 +683,10 @@
     {
       "group": "auth",
       "target": "backend/app/modules/authorization/domain/checker_retry.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/domain/checker_retry_reads.py"
     },
     {
       "group": "auth",
@@ -2173,7 +2185,7 @@
       "target": "backend/scripts/validate_test_lane_evidence.py"
     }
   ],
-  "authority_digest": "b52a73bf1a8c90f11daa4e38be33f4ebbca2df778efd08cf08fb5b7bdc8574df",
+  "authority_digest": "898452e867c39d07d6339fa71ba595f3dabe0a85e6999bd1d8cbe505f6c5892f",
   "protected_base_commit": "7676ce4347db0c9694962a9b587a20765e16eac6",
   "schema": "workstream.behavior-ownership-partition.v1"
 }
