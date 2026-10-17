@@ -258,22 +258,22 @@ write outcomes require real PostgreSQL concurrency tests.
 
 ## Acceptance criteria
 
-- [ ] Native AWS remains denied before credential inspection/provider I/O when
+- [x] Native AWS remains denied before credential inspection/provider I/O when
   any proof is absent, failed, stale, expired or mismatched; API, worker, Beat
   and each AWS SDK call follow the same rule. Nested head/get,
   replay/recovery and consumed `open` streams cannot bypass the guard.
-- [ ] The sole existing typed factory constructs MinIO or the native AWS adapter;
+- [x] The sole existing typed factory constructs MinIO or the native AWS adapter;
   no duplicate factory/constructor path exists and Local/MinIO behavior remains
   covered.
-- [ ] Probe and activation rows are immutable, secret-free, namespace/release/
+- [x] Probe and activation rows are immutable, secret-free, namespace/release/
   role/policy/time-bound and cannot be activated from mixed, replayed, expired or
   caller-authored results.
-- [ ] Every AWS SDK call requires sufficient PostgreSQL-time TTL; the first
+- [x] Every AWS SDK call requires sufficient PostgreSQL-time TTL; the first
   qualifying activation ID is retained across the operation and that same ID is
   rechecked before every provider-derived terminal fact, including success,
   missing and integrity mismatch. Expiry and unknown writes retain recoverable
   state with no false absence or success.
-- [ ] Overlapping refresh batches are valid. Coordination accepts one exact
+- [x] Overlapping refresh batches are valid. Coordination accepts one exact
   three-probe common-nonce group and rejects mixed nonce/result groups; runtime
   selection is deterministic and returns the exact selected activation ID.
 - [ ] Live readiness proves the approved principal/action/resource and bucket
@@ -368,9 +368,9 @@ rebinding route.
 | Current provider call owners traced | `rg` over every `ArtifactStore` consumer and ART composition root | Writable calls remain in `ArtifactStorageOrchestrator`; four current direct-read owners also require gating | Implementation must keep this inventory closed |
 | Normative activation contract traced | `docs/spec_artifact_storage_service.md:694-740` | Three live probes, immutable activation, per-I/O and terminal checks are current canonical requirements; the exact-role IAM inspection contradiction is resolved above | Measured AWS deadlines remain a later live-run prerequisite |
 | Offline static proof | `py_compile`; focused Ruff; `git diff --check`; stale-wording, stale artifact/authorization contract and changed-Markdown-link checks | Initial candidate passed all checks; repaired source and all five new test modules pass `py_compile`, focused Ruff and `git diff --check`; all named documentation checks pass | Full affected selection requires exact repaired-head replay |
-| Offline behavior proof | Focused activation/config/startup/factory pytest batches | Initial candidate: 230 passed and seven failed; the seven repaired cases then passed. At clean source `159003fce`, one exact-head selection covering the original affected set plus native proof transport/CLI passed 278 tests with no failures, errors or skips in 164.39 seconds; lane-catalogue contract 58 passed; all nine moved terminal-test cases pass `--setup-plan` fixture closure | PostgreSQL/migration and live AWS proof remain pending; the review repair after `159003fce` requires a focused replay before freeze |
-| Review repair proof | Focused exact trust-policy selection; direct-SQL test setup plan; Alembic graph/revision scan | Closed trust grammar and IAM placement: 14 passed, followed by the three-case issuer/account scope addendum; both direct-SQL role/digest parameters retain the complete isolated PostgreSQL fixture closure; the graph has one `0052` head through canonical operational-read `0051` and contributor-read `0050`, and all 52 revision IDs fit the 32-character version column | Direct-SQL and current-head schema execution await the scheduled PostgreSQL batch |
-| CI/test metadata proof | `python -m scripts.test_structure_boundary validate ...`; `pytest -q tests/test_ci_lane_catalogue.py`; AST comparison of the three moved functions | Debt transition passes while `test_artifact_admission.py` shrinks from 2,779 to 2,596 lines; 58 lane tests pass; all three moved function ASTs are identical | CI-integrity and test-delta reviewer replay remain pending on the clean target |
+| Offline behavior proof | Focused activation/config/startup/factory pytest batches | Initial candidate: 230 passed and seven failed; the seven repaired cases then passed. At clean source `159003fce`, one exact-head selection covering the original affected set plus native proof transport/CLI passed 278 tests with no failures, errors or skips in 164.39 seconds; lane-catalogue contract 58 passed; all nine moved terminal-test cases pass `--setup-plan` fixture closure | Exact latest-main hosted lane replay remains required; live AWS proof remains a later deployment gate |
+| Review repair proof | Focused exact trust-policy selection; direct-SQL test setup plan; Alembic graph/revision scan; isolated PostgreSQL batch | Closed trust grammar and IAM placement: 14 passed, followed by the three-case issuer/account scope addendum. At clean `2e4a71819`, the combined `0052` schema fingerprint is `0f38f0705b0aae59b40e1d873932c6710c2f56f2e58647f9911ae2f15deaf7e9`; hostile-search-path migration, two-loop guard, direct role/trust/principal SQL denials and put/missing/mismatch crossed-expiry terminal cases passed 8/8 in 292.96 seconds. Isolated database cleanup completed. The graph has one `0052` head through canonical operational-read `0051` and contributor-read `0050`, and all 52 revision IDs fit the 32-character version column | Live AWS proof remains a later deployment gate |
+| CI/test metadata proof | `python -m scripts.test_structure_boundary validate ...`; `pytest -q tests/test_ci_lane_catalogue.py`; AST comparison of the three moved functions; ownership partition generation | Debt transition passes while `test_artifact_admission.py` shrinks from 2,779 to 2,596 lines; 58 lane tests pass; all three moved function ASTs are identical. Latest-main reconciliation retains 529 exact ownership assignments with the existing protected base and adds the three S3 targets on top of the canonical registry/main inventory | Exact latest-main CI-integrity and test-delta replay remain pending |
 | Live proof | Three separately identified executors, credential-free coordination, then hosted public guide/Submission drill | Not authorized or run | Requires approved #583 environment and explicit live authorization |
 
 The terminal-custody tests moved together from the oversized admission module;
@@ -410,15 +410,16 @@ inspection and restore boundaries. The current repair derives and enforces the
 probe principal in ART and PostgreSQL, resolves worker guards through the
 current loop owner, binds three exact reviewed trust-policy digests and
 disjoint workload subjects into activation, reconciles schema metadata, adds
-the focused regressions, and corrects the documentation. Those tracks remain
+the focused regressions, and corrects the documentation. Those tracks were
 replayed against `159003fce`. Architecture, CI and test-delta found no further
 source blocker, while security found that the trust parser still accepted
 negative and unsupported principal semantics and that PostgreSQL did not
 enforce pairwise-distinct role/digest tuples. This repair closes the parser to
 one exact OIDC shape, adds matching model/database constraints and direct-SQL
-proof, and fixes the local-pilot constructor example. PostgreSQL and live AWS
-evidence remain unavailable, so the source repairs alone do not establish live
-AWS readiness. The supported trust grammar retains the current Linux VM path:
+proof, and fixes the local-pilot constructor example. The real PostgreSQL
+batch at `2e4a71819` proves the migration, database constraints, per-loop guard
+and crossed-expiry rollback boundaries; it does not establish live AWS
+readiness. The supported trust grammar retains the current Linux VM path:
 runtime may use the closed `ec2.amazonaws.com` service trust while readiness
 and negative jobs require exact, disjoint OIDC subjects.
 
@@ -437,9 +438,10 @@ read owner. These are separate failure boundaries, not one broad mock graph.
   migration `0050`; the canonical operational-read audit migration owns
   `0051`, and this provider-proof migration chains after it as `0052` without
   making the product features depend on each other.
-- Next usable boundary: after plan approval, complete offline implementation and
-  deterministic proof without AWS access; then request the precise live
-  environment authorization/facts listed above and run the live probes plus the
-  hosted public custody drill.
+- Next usable boundary: complete exact latest-main source review and hosted CI,
+  then prepare this bounded activation code for human merge. After deployment,
+  request the precise live environment authorization/facts listed above and run
+  the live probes plus the hosted public custody drill before claiming issue or
+  environment readiness.
 - Remaining risks: actual AWS readiness, product custody and restore evidence do
   not exist and must not be claimed from offline tests or MinIO.
