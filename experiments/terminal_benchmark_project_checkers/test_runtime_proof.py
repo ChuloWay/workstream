@@ -392,6 +392,69 @@ class DockerWrapperSourceTests(unittest.TestCase):
             "ws-terminal-candidate-abc",
         )
 
+    def _builder_item(self, project_source: Path) -> dict[str, object]:
+        grant_root = self.art / "workspaces" / GRANT_ID
+        runtime = grant_root / "runtime"
+        runtime.mkdir(parents=True, exist_ok=True)
+        (runtime / "candidate.tar").write_bytes(b"")
+        return {
+            "Id": "builder-id",
+            "Name": "/ws-terminal-builder-abc",
+            "Config": {
+                "Labels": {
+                    "workstream.owner": "terminal-benchmark-checker-service-v1",
+                    "workstream.resource-kind": "builder",
+                    "workstream.attempt": "abc",
+                    "workstream.grant-id": GRANT_ID,
+                },
+                "User": "0:0",
+            },
+            "HostConfig": {
+                "Runtime": "runsc",
+                "NetworkMode": "none",
+                "CapDrop": ["ALL"],
+                "CapAdd": [
+                    "CAP_CHOWN",
+                    "CAP_DAC_OVERRIDE",
+                    "CAP_FOWNER",
+                    "CAP_SYS_CHROOT",
+                ],
+                "SecurityOpt": ["no-new-privileges"],
+                "ReadonlyRootfs": False,
+                "PidsLimit": 128,
+                "Memory": 536_870_912,
+                "NanoCpus": 1_000_000_000,
+                "StorageOpt": {"size": "402653184"},
+                "Tmpfs": {"/busybox": "rw,noexec,nosuid,nodev,size=16777216"},
+            },
+            "Mounts": [
+                {
+                    "Type": "tmpfs",
+                    "Source": "",
+                    "Destination": "/busybox",
+                    "RW": True,
+                },
+                {
+                    "Type": "bind",
+                    "Source": str(self.cache),
+                    "Destination": "/cache",
+                    "RW": False,
+                },
+                {
+                    "Type": "bind",
+                    "Source": str(runtime / "candidate.tar"),
+                    "Destination": "/out/candidate.tar",
+                    "RW": True,
+                },
+                {
+                    "Type": "bind",
+                    "Source": str(project_source),
+                    "Destination": "/project",
+                    "RW": False,
+                },
+            ],
+        }
+
     def test_exact_art_source_is_recorded_without_raw_path(self) -> None:
         result = self._run(self.tests)
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -418,54 +481,8 @@ class DockerWrapperSourceTests(unittest.TestCase):
     def test_noncanonical_builder_source_is_rejected_with_fixed_labels(self) -> None:
         grant_root = self.art / "workspaces" / GRANT_ID
         runtime = grant_root / "runtime"
-        runtime.mkdir(parents=True)
-        (runtime / "candidate.tar").write_bytes(b"")
         missing_project = runtime / "missing-build-context"
-        item = {
-            "Id": "builder-id",
-            "Name": "/ws-terminal-builder-abc",
-            "Config": {
-                "Labels": {
-                    "workstream.owner": "terminal-benchmark-checker-service-v1",
-                    "workstream.resource-kind": "builder",
-                    "workstream.attempt": "abc",
-                    "workstream.grant-id": GRANT_ID,
-                },
-                "User": "0:0",
-            },
-            "HostConfig": {
-                "Runtime": "runsc",
-                "NetworkMode": "none",
-                "CapDrop": ["ALL"],
-                "CapAdd": ["CHOWN", "DAC_OVERRIDE", "FOWNER", "SYS_CHROOT"],
-                "SecurityOpt": ["no-new-privileges"],
-                "ReadonlyRootfs": False,
-                "PidsLimit": 128,
-                "Memory": 536_870_912,
-                "NanoCpus": 1_000_000_000,
-                "StorageOpt": {"size": "402653184"},
-            },
-            "Mounts": [
-                {
-                    "Type": "bind",
-                    "Source": str(self.cache),
-                    "Destination": "/cache",
-                    "RW": False,
-                },
-                {
-                    "Type": "bind",
-                    "Source": str(runtime / "candidate.tar"),
-                    "Destination": "/out/candidate.tar",
-                    "RW": True,
-                },
-                {
-                    "Type": "bind",
-                    "Source": str(missing_project),
-                    "Destination": "/project",
-                    "RW": False,
-                },
-            ],
-        }
+        item = self._builder_item(missing_project)
 
         result = self._run_item(item, "ws-terminal-builder-abc")
 
@@ -481,6 +498,29 @@ class DockerWrapperSourceTests(unittest.TestCase):
         self.assertIn("source", rejection.split(":", 2)[2].split(","))
         self.assertIn("project_source", rejection.split(":", 2)[2].split(","))
         self.assertNotIn(str(self.root), rejection)
+
+    def test_normalized_builder_profile_is_recorded_without_anonymous_volume(
+        self,
+    ) -> None:
+        project = self.art / "workspaces" / GRANT_ID / "runtime" / "build-context"
+        project.mkdir(parents=True)
+
+        result = self._run_item(self._builder_item(project), "ws-terminal-builder-abc")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        [launch] = [
+            json.loads(line)
+            for line in (self.raw / "launches.ndjson").read_text().splitlines()
+        ]
+        self.assertEqual(
+            launch["cap_add"],
+            ["CAP_CHOWN", "CAP_DAC_OVERRIDE", "CAP_FOWNER", "CAP_SYS_CHROOT"],
+        )
+        self.assertEqual(
+            launch["mount_destinations"],
+            ["/busybox", "/cache", "/out/candidate.tar", "/project"],
+        )
+        self.assertNotIn("/busybox", launch["mount_source_identities"])
 
     def test_checker_start_forwards_request_stdin_into_dind(self) -> None:
         capture = self.root / "checker-request.json"

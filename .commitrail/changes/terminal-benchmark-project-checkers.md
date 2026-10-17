@@ -460,6 +460,10 @@ POST both reject any other recipe before building.
 
 The produced image is attempt-specific evidence, not a reproducible artifact:
 Kaniko timestamps mean identical inputs need not produce identical tar bytes.
+The pinned debug builder image declares `/busybox` as a volume. The service
+overrides that declaration with one 16 MiB, no-exec tmpfs and verifies the exact
+normalized mount and four `CAP_*` capability facts before launch, avoiding an
+unowned anonymous Docker volume while retaining Kaniko's mounted-path exclusion.
 The service loads the bounded attempt tar under the owned temporary identity,
 inspects its image ID, and uses that observed ID only for the bound oracle runs.
 Candidate runs receive the produced image plus a read-only tests mount and no

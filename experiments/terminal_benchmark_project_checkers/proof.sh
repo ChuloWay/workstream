@@ -1171,13 +1171,14 @@ for command in commands:
 if len(command_trace) > 256 or len(start_statuses) > 8:
     raise SystemExit(1)
 allowed_rejection_checks = {
-    "cache_destination", "cache_read_only", "cache_source", "candidate_tar_destination",
+    "bind_mount_count", "busybox_tmpfs", "busybox_tmpfs_options", "cache_destination",
+    "cache_read_only", "cache_source", "candidate_tar_destination",
     "candidate_tar_read_write", "candidate_tar_source", "cap_add", "cap_add_count",
     "cap_chown", "cap_dac_override", "cap_drop", "cap_fowner", "cap_sys_chroot", "cpu",
     "destinations", "kind", "memory", "mount_count", "name", "network", "pids",
     "project_destination", "project_read_only", "project_source", "read_only_root",
     "read_write", "runtime", "security", "socket_destination", "socket_source", "source",
-    "storage", "tmpfs", "user",
+    "storage", "tmpfs", "tmpfs_mount_count", "user",
 }
 launch_rejections = []
 for argument in arguments:

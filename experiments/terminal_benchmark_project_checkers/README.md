@@ -26,8 +26,10 @@ The trusted cache warmer uses DIND's host network only to read that registry;
 the outer DIND has no external interface. Builder and oracle continuation
 containers use `--pull=never --network none`; every
 product container receives no Docker socket and is inspected for the fixed
-runtime, user, capabilities, root mode and mounts. The host shell makes no
-offline claim.
+runtime, user, capabilities, root mode and mounts. The builder replaces the
+pinned debug image's declared `/busybox` volume with a bounded no-exec tmpfs,
+so Docker creates no anonymous volume outside the container cleanup path. The
+host shell makes no offline claim.
 
 The workflow also proves the production 384 MiB writable-layer option on the
 owned XFS backing store: an allocated and fsynced 320 MiB write succeeds and an

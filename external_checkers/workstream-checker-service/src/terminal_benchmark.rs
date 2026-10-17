@@ -15,6 +15,7 @@ const PROFILE_VERSION: &str = "terminal_benchmark_build_oracle.v1";
 const TEMPORARY_REPOSITORY: &str = "workstream.local/terminal-benchmark-candidate";
 const OWNER_LABEL: &str = "workstream.owner=terminal-benchmark-checker-service-v1";
 const BUILDER_WRITABLE_BYTES: u64 = 384 * 1024 * 1024;
+const BUILDER_INTERNAL_TMPFS: &str = "/busybox:rw,noexec,nosuid,nodev,size=16777216";
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -836,6 +837,8 @@ fn run_builder(
         format!("size={BUILDER_WRITABLE_BYTES}"),
         "--ulimit".into(),
         file_size_limit,
+        "--tmpfs".into(),
+        BUILDER_INTERNAL_TMPFS.into(),
         "--mount".into(),
         context_mount,
         "--mount".into(),
@@ -1422,14 +1425,19 @@ mod tests {
 if test "$1" = create; then
   printf '%s\n' "$@" > "{capture}"
   previous=
-  matched=
+  fsize_matched=
+  tmpfs_matched=
   for argument in "$@"; do
     if test "$previous" = --ulimit && test "$argument" = fsize=4096:4096; then
-      matched=yes
+      fsize_matched=yes
+    fi
+    if test "$previous" = --tmpfs && test "$argument" = /busybox:rw,noexec,nosuid,nodev,size=16777216; then
+      tmpfs_matched=yes
     fi
     previous="$argument"
   done
-  test "$matched" = yes || exit 64
+  test "$fsize_matched" = yes || exit 64
+  test "$tmpfs_matched" = yes || exit 65
   exit 0
 fi
 test "$1 $2" = "start --attach" && exit 0
@@ -1474,6 +1482,7 @@ exit 2
         ));
         let captured = fs::read_to_string(&capture).unwrap();
         assert!(captured.contains("--ulimit\nfsize=4096:4096\n"));
+        assert!(captured.contains("--tmpfs\n/busybox:rw,noexec,nosuid,nodev,size=16777216\n"));
 
         assert!(run_builder(
             &execution,

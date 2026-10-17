@@ -127,7 +127,9 @@ config = item.get("Config", {})
 mounts = item.get("Mounts", [])
 destinations = sorted(mount.get("Destination") for mount in mounts)
 read_write = {mount.get("Destination"): mount.get("RW") for mount in mounts}
-sources = {mount.get("Destination"): mount.get("Source") for mount in mounts}
+bind_mounts = [mount for mount in mounts if mount.get("Type") == "bind"]
+tmpfs_mounts = [mount for mount in mounts if mount.get("Type") == "tmpfs"]
+sources = {mount.get("Destination"): mount.get("Source") for mount in bind_mounts}
 security = set(host.get("SecurityOpt") or [])
 
 def canonical(path: Path) -> bool:
@@ -150,8 +152,10 @@ grant_root = (
 source_valid = (
     canonical(art_root)
     and canonical(cache_root)
-    and len(mounts) == len(destinations) == len(read_write) == len(sources)
-    and all(mount.get("Type") == "bind" for mount in mounts)
+    and len(mounts) == len(destinations) == len(set(destinations)) == len(read_write)
+    and len(bind_mounts) == len(sources)
+    and (not tmpfs_mounts or kind == "builder")
+    and len(mounts) == len(bind_mounts) + len(tmpfs_mounts)
     and all(canonical(path) for path in source_paths.values())
 )
 
@@ -218,18 +222,37 @@ checks = {
 }
 if kind == "builder":
     cap_add = sorted(host.get("CapAdd") or [])
+    busybox_tmpfs = [
+        mount for mount in tmpfs_mounts if mount.get("Destination") == "/busybox"
+    ]
+    tmpfs_options = set((host.get("Tmpfs") or {}).get("/busybox", "").split(","))
     checks.update({
         "user": config.get("User") == "0:0",
-        "cap_add": cap_add == ["CHOWN", "DAC_OVERRIDE", "FOWNER", "SYS_CHROOT"],
+        "cap_add": cap_add
+        == ["CAP_CHOWN", "CAP_DAC_OVERRIDE", "CAP_FOWNER", "CAP_SYS_CHROOT"],
         "cap_add_count": len(cap_add) == 4,
-        "cap_chown": "CHOWN" in cap_add,
-        "cap_dac_override": "DAC_OVERRIDE" in cap_add,
-        "cap_fowner": "FOWNER" in cap_add,
-        "cap_sys_chroot": "SYS_CHROOT" in cap_add,
-        "destinations": destinations == ["/cache", "/out/candidate.tar", "/project"],
+        "cap_chown": "CAP_CHOWN" in cap_add,
+        "cap_dac_override": "CAP_DAC_OVERRIDE" in cap_add,
+        "cap_fowner": "CAP_FOWNER" in cap_add,
+        "cap_sys_chroot": "CAP_SYS_CHROOT" in cap_add,
+        "destinations": destinations
+        == ["/busybox", "/cache", "/out/candidate.tar", "/project"],
         "read_write": read_write
-        == {"/cache": False, "/out/candidate.tar": True, "/project": False},
-        "mount_count": len(mounts) == 3,
+        == {
+            "/busybox": True,
+            "/cache": False,
+            "/out/candidate.tar": True,
+            "/project": False,
+        },
+        "mount_count": len(mounts) == 4,
+        "bind_mount_count": len(bind_mounts) == 3,
+        "tmpfs_mount_count": len(tmpfs_mounts) == 1,
+        "busybox_tmpfs": len(busybox_tmpfs) == 1
+        and busybox_tmpfs[0].get("Source") == ""
+        and busybox_tmpfs[0].get("RW") is True,
+        "busybox_tmpfs_options": (host.get("Tmpfs") or {}).keys() == {"/busybox"}
+        and tmpfs_options
+        == {"rw", "noexec", "nosuid", "nodev", "size=16777216"},
         "cache_destination": "/cache" in destinations,
         "candidate_tar_destination": "/out/candidate.tar" in destinations,
         "project_destination": "/project" in destinations,
