@@ -19,6 +19,25 @@ def _config() -> Config:
     return Config("alembic.ini")
 
 
+async def _audit_constraint_snapshot(
+    url: str,
+) -> tuple[str, str]:
+    connection = await asyncpg.connect(url)
+    try:
+        return (
+            await connection.fetchval(
+                "select version_num from public.alembic_version"
+            ),
+            await connection.fetchval(
+                "select pg_get_constraintdef(oid) from pg_constraint "
+                "where conrelid='public.audit_events'::regclass "
+                "and conname='ck_audit_events_authorization_action_evidence'"
+            ),
+        )
+    finally:
+        await connection.close()
+
+
 async def _insert_audit_pair(
     connection: asyncpg.Connection, *, action_id: str, permission_id: str
 ) -> None:
@@ -142,3 +161,24 @@ async def test_registry_upgrade_targets_public_schema_with_shadow_search_path(
                 await cleanup.execute(f"drop schema if exists {shadow} cascade")
             finally:
                 await cleanup.close()
+
+
+async def test_operational_read_audit_one_step_downgrade_refuses_without_mutation(
+    isolated_database_env,
+    migration_lock,
+) -> None:
+    url = isolated_database_env.replace("+asyncpg", "")
+    before = await _audit_constraint_snapshot(url)
+    assert before[0] == "0051_operational_read_audit"
+
+    with migration_lock(), pytest.raises(
+        RuntimeError,
+        match="Workstream v0.1 migrations cannot be downgraded; recreate the database",
+    ):
+        await asyncio.to_thread(
+            command.downgrade,
+            _config(),
+            "0050_contributor_reads",
+        )
+
+    assert await _audit_constraint_snapshot(url) == before

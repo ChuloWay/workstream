@@ -285,3 +285,8 @@ of this corrected clean plan is required before implementation.
   rollback and same-key retry are covered by the external-checker tests named
   above. The shared read-pair migration must remain one linear prerequisite for
   recovery and S3, and no REV behavior is authorized.
+- Latest migration review: the Alembic preflight explicitly accepts main's
+  `0050_contributor_reads` stamp so a separately invoked `0050 -> 0051` upgrade
+  preserves retained data. The `0051` downgrade follows the repository's
+  standard refusal contract, with a focused one-step test proving the version
+  and closed audit constraint remain unchanged.
