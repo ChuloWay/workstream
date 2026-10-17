@@ -202,8 +202,8 @@ action or tests.
 | UNKNOWN separation | Inspect OUTBOX dead-letter contracts and issue #581 | Unresolved invocation effects have no safe generic replay owner; excluded from this PR | Source-specific reconciliation remains a later bounded change |
 | Public PostgreSQL behavior | Focused signed `/api/v1` recovery tests plus existing checker retry suites | Exact clean head `667e5a053` passed 4/4 in 143.68 seconds: real prepared-denial binding, complete public discovery/retry/replay/revocation, real OUTBOX-conflict rollback, and stale-source refusal after auto-acceptance. External-review repair head `0464524c8` then passed the complete public Operator journey 1/1 in 62.84 seconds, including same-key replay and new-key superseded-source concealment with unchanged retry facts. Both isolated runs completed database, role and MinIO cleanup. | Exact-head hosted full-suite evidence remains pending |
 | Closed AUTH and lane ownership | Exact OpenAPI/action, all-route rate-control inventory and stray-route probe, closed recovery owner, and lane catalogue/fingerprint tests | `6 passed` in 36.94 seconds after merging canonical registry head `317fe89a1`; behavior-ownership validation also exited `0`; the recovery HTTP proof remains in exactly one canonical project lane | Exact-head hosted boundary and lane execution remain pending |
-| Static implementation checks | Changed-file Ruff; test-structure validation; stale-wording and Markdown-link scans; `git diff --check` | Passed after merging canonical registry head `317fe89a1` | Hosted exact-head checks remain pending |
-| Commitrail validity | `python3 scripts/check_commitrail_records.py --base-ref 317fe89a12960ccf3cd781955575d43fce26efd1` | Passed | None for the current stacked diff |
+| Static implementation checks | Changed-file Ruff; test-structure validation; stale-wording and Markdown-link scans; `git diff --check` | Passed after reconciling merged prerequisite main `60e6302f5` | Hosted exact-head checks remain pending |
+| Commitrail validity | `python3 scripts/check_commitrail_records.py --base-ref 60e6302f54b614e9e285f7a9f4e8b32909caa415` | Passed | None for the current main-relative diff |
 
 ## Review findings
 
@@ -227,13 +227,13 @@ concealment path; the public journey requires `404` and unchanged retry facts.
 
 ## Reconciliation
 
-- Current-source reconciliation: main `ef839bb6d` is an ancestor through the
-  published PR #589 head `317fe89a1`; issue #580 owns supported checker
+- Current-source reconciliation: main `60e6302f5` includes merged PR #589;
+  issue #580 owns supported checker
   registration and a separate registry read action. This change owns only
-  terminal checker recovery and preserves both catalogue additions. PR #589
-  owns the canonical `0051_operational_read_audit` migration before #588 and
-  #592; this branch consumes its proved migration and schema fingerprint
-  byte-for-byte and introduces no sibling revision.
+  terminal checker recovery and preserves both catalogue additions. Merged PR
+  #589 owns the canonical `0051_operational_read_audit` migration consumed by
+  this change; the reconciled branch preserves its proved migration and schema
+  fingerprint byte-for-byte and introduces no sibling revision.
 - Next usable boundary: source-specific observation and reconciliation for
   request execution, checker completion and acceptance commit/acknowledgement
   loss, followed by parent issue #555's real-project worker drill.
