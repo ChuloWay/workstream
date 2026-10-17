@@ -104,9 +104,11 @@ class LightweightAgentGateTests(unittest.TestCase):
                     )
                     self.assertEqual(result.returncode, code, result.stderr)
                     actual = [json.loads(line) for line in calls.read_text().splitlines()]
-                    suites = ("test_profile_flow", "test_access_reads") if code == 0 else (
+                    suites = (
                         "test_profile_flow",
-                    )
+                        "test_access_reads",
+                        "test_admin_grants",
+                    ) if code == 0 else ("test_profile_flow",)
                     expected = [
                         [
                             "run", "--frozen", "python", "scripts/run_isolated_tests.py",
