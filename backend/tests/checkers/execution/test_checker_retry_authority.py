@@ -12,25 +12,50 @@ from app.adapters.checkers import checker_retry_service
 from app.adapters.outbox import outbox_append
 from app.adapters.tasks import task_commands
 from app.core.config import get_settings
+from app.core.hashing import canonical_json_hash
 from app.core.identifiers import new_record_id
 from app.modules.actors.api import ServiceIdentity
 from app.modules.actors.models import ActorIdentityLink, ActorProfile
 from app.modules.authorization.admin_service import AdminRoleGrantService
-from app.modules.authorization.catalogue import ActionId
+from app.modules.authorization.catalogue import ActionId, PermissionId
 from app.modules.authorization.checker_retry_authorization import (
     PreparedCheckerRetryAuthorization,
 )
+from app.modules.authorization.domain.audit import (
+    AuthorizationDecision,
+    AuthorizationDenialCode,
+)
+from app.modules.authorization.domain.checker_retry import (
+    CheckerRetryPrepareDenialResourceContext,
+)
 from app.modules.authorization.kernel import AuthorizationService
 from app.modules.authorization.models import AdminRoleGrant, AuthorityControl
+from app.modules.authorization.prepared import PreparedAuthorizationService
 from app.modules.authorization.repository import AdminAuthorizationRepository
-from app.modules.authorization.runtime import AdminRoleGrantResourceContext
+from app.modules.authorization.runtime import (
+    ActorKind,
+    ActorStatus,
+    AdminRoleGrantResourceContext,
+    AuthorizationDenied,
+    HumanAuthorizationContext,
+    IdentityLinkStatus,
+    PreparedAuthorizationHandleInvalid,
+    PreparedAuthorizationInput,
+    PreparedAuthorizationUnsupported,
+    PreparedAuthorityScope,
+    PreparedAuthorityScopeKind,
+)
 from app.modules.authorization.schemas import (
     AdminRoleGrantRevokeRequest,
     AuthorityOperation,
     derive_reason_digest,
 )
 from app.modules.authorization.task_authorization import PreparedTaskAuthorization
-from app.modules.checkers.api.execution import CheckerExecutionUnavailable
+from app.modules.checkers.api.execution import (
+    CheckerExecutionUnavailable,
+    CheckerRetryPreparation,
+    CheckerRetrySource,
+)
 from app.modules.audit.schemas import LifecycleAuditEventType
 from app.modules.checkers.models import CheckerRetryReceipt, CheckerRun, CheckerSubmissionFence
 from app.modules.checkers.execution_coordination import EvaluationCoordinator
@@ -81,6 +106,118 @@ def test_checker_projection_probe_unwraps_labels_and_detects_private_columns():
         "project_id", "request_json", "retry_receipt_id",
     }
 
+
+@pytest.mark.asyncio
+async def test_retry_prepare_denial_requires_original_source_and_current_identity():
+    actor_id, link_id, key = new_record_id(), new_record_id(), new_record_id()
+    source = CheckerRetrySource(
+        project_id=new_record_id(), task_id=new_record_id(),
+        assignment_id=new_record_id(), submission_id=new_record_id(),
+        submission_version=1, source_run_id=new_record_id(),
+        source_request_id=new_record_id(), source_request_digest="sha256:" + "0" * 64,
+        source_result_id=new_record_id(), source_result_digest="sha256:" + "1" * 64,
+        source_finalize_evidence_id=new_record_id(), source_generation=1,
+        failure_code="material_unavailable",
+    )
+    preparation = CheckerRetryPreparation(
+        actor_profile_id=actor_id,
+        request_key=key,
+        reason="Restore verified checker infrastructure",
+        source=source,
+    )
+    context = HumanAuthorizationContext(
+        actor_profile_id=actor_id,
+        actor_kind=ActorKind.HUMAN,
+        actor_status=ActorStatus.ACTIVE,
+        identity_link_id=link_id,
+        identity_link_status=IdentityLinkStatus.ACTIVE,
+        request_id=key,
+        correlation_id=key,
+    )
+    caller_input = PreparedAuthorizationInput(
+        idempotency_key=key,
+        request_value=preparation.model_dump(mode="json"),
+    )
+    resource = CheckerRetryPrepareDenialResourceContext(
+        resource_id=source.source_run_id,
+        project_id=source.project_id,
+        identity_link_id=link_id,
+        preparation=preparation,
+    )
+    assert PreparedAuthorizationService._scope_from_resource(
+        ActionId.OPERATIONS_CHECKER_RETRY, resource,
+    ) == PreparedAuthorityScope(kind=PreparedAuthorityScopeKind.SYSTEM)
+
+    class DenialAuthorization:
+        calls = 0
+
+        async def _complete_prepared_denial(
+            self, consumer_token, action_id, final_resource, denial_code,
+        ):
+            assert consumer_token is token
+            assert action_id is ActionId.OPERATIONS_CHECKER_RETRY
+            assert final_resource is resource
+            assert denial_code is AuthorizationDenialCode.PERMISSION_NOT_GRANTED
+            self.calls += 1
+            raise AuthorizationDenied(AuthorizationDecision(
+                decision_id=new_record_id(),
+                action_id=action_id,
+                permission_id=PermissionId.OPERATIONS_CHECKER_RETRY,
+                allowed=False,
+                denial_code=denial_code,
+                resource_type=resource.resource_type,
+                resource_id=resource.resource_id,
+                resource_context_digest=canonical_json_hash(
+                    resource.model_dump(mode="json")
+                ),
+                matched_authority_kind=None,
+                revalidated=False,
+                request_id=key,
+                correlation_id=key,
+            ))
+
+    token = object()
+    authorization = DenialAuthorization()
+    service = object.__new__(PreparedAuthorizationService)
+    service._context = context
+    service._authorization = authorization
+    service._consumer_token = token
+    denial = PreparedAuthorizationUnsupported(
+        AuthorizationDenialCode.PERMISSION_NOT_GRANTED
+    )
+    other_source = source.model_copy(update={
+        "project_id": new_record_id(),
+        "source_run_id": new_record_id(),
+    })
+    other_preparation = preparation.model_copy(update={"source": other_source})
+
+    for mismatched in (
+        resource.model_copy(update={"identity_link_id": new_record_id()}),
+        CheckerRetryPrepareDenialResourceContext(
+            resource_id=other_source.source_run_id,
+            project_id=other_source.project_id,
+            identity_link_id=link_id,
+            preparation=other_preparation,
+        ),
+        resource.model_copy(update={"resource_id": new_record_id()}),
+    ):
+        with pytest.raises(PreparedAuthorizationHandleInvalid):
+            await service.deny_unsupported(
+                ActionId.OPERATIONS_CHECKER_RETRY,
+                caller_input,
+                mismatched,
+                denial,
+            )
+    assert authorization.calls == 0
+
+    with pytest.raises(AuthorizationDenied):
+        await service.deny_unsupported(
+            ActionId.OPERATIONS_CHECKER_RETRY,
+            caller_input,
+            resource,
+            denial,
+        )
+    assert authorization.calls == 1
 
 async def _assert_project_manager_concealed(admin_access, h, discovery_path, retry_path):
     project_grant = await admin_access.signed.grant(

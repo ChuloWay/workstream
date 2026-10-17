@@ -47,13 +47,8 @@ def project_authority_audit_target(
         AdapterBindingMutationResourceContext,
     )
     from app.modules.authorization.domain.checker_registry import ExternalCheckerRegistryResourceContext
-    from app.modules.authorization.domain.checker_retry import (
-        CheckerRetryPrepareDenialResourceContext,
-        CheckerRetryResourceContext,
-    )
-    from app.modules.authorization.domain.checker_retry_reads import (
-        CheckerRetrySourceReadResourceContext,
-    )
+    from app.modules.authorization.domain.checker_retry import CheckerRetryPrepareDenialResourceContext, CheckerRetryResourceContext
+    from app.modules.authorization.domain.checker_retry_reads import CheckerRetrySourceReadResourceContext
     from app.modules.authorization.domain.guide_compilation import (
         ProjectGuideCompilationRequestResourceContext,
         ProjectGuideCompilationExecuteResourceContext,
