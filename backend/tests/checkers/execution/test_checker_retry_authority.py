@@ -1,10 +1,6 @@
 """PostgreSQL proofs for checker-retry authority ordering and revocation."""
 
 import asyncio
-from contextlib import contextmanager
-from pathlib import Path
-import sys
-from unittest.mock import patch
 from uuid import UUID, uuid4
 
 import pytest
@@ -15,7 +11,6 @@ from app.adapters.audit import task_transition_audit
 from app.adapters.checkers import checker_retry_service
 from app.adapters.outbox import outbox_append
 from app.adapters.tasks import task_commands
-from app.core import api_controls
 from app.core.config import get_settings
 from app.core.identifiers import new_record_id
 from app.modules.actors.api import ServiceIdentity
@@ -87,49 +82,6 @@ def test_checker_projection_probe_unwraps_labels_and_detects_private_columns():
     }
 
 
-@contextmanager
-def _capture_safe_request_exception():
-    """Record only the exception type and repository-relative application frames."""
-    captured = []
-    backend_root = Path(__file__).resolve().parents[3]
-    original_error = api_controls.LOGGER.error
-
-    def capture(message, *args, **kwargs):
-        try:
-            exc = sys.exception()
-            if (
-                len(captured) < 2
-                and message == "request_failed_before_response_start"
-                and exc is not None
-            ):
-                frames = []
-                examined = 0
-                traceback = exc.__traceback__
-                while traceback is not None and examined < 32:
-                    examined += 1
-                    filename = Path(traceback.tb_frame.f_code.co_filename).resolve()
-                    try:
-                        relative = filename.relative_to(backend_root)
-                    except ValueError:
-                        pass
-                    else:
-                        if relative.parts[:1] == ("app",):
-                            frames.append((
-                                relative.as_posix(),
-                                traceback.tb_frame.f_code.co_name,
-                                traceback.tb_lineno,
-                            ))
-                    traceback = traceback.tb_next
-                captured.append((type(exc).__module__, type(exc).__qualname__, frames))
-        except Exception:
-            pass
-        finally:
-            original_error(message, *args, **kwargs)
-
-    with patch.object(api_controls.LOGGER, "error", capture):
-        yield captured
-
-
 async def _assert_project_manager_concealed(admin_access, h, discovery_path, retry_path):
     project_grant = await admin_access.signed.grant(
         admin_access.admin,
@@ -155,13 +107,12 @@ async def _assert_project_manager_concealed(admin_access, h, discovery_path, ret
         for statement in denied_statements
         for table in ("checker_runs", "checker_retry_receipts")
     )
-    with _capture_safe_request_exception() as captured:
-        denied_retry = await admin_access.signed.client.post(
-            retry_path,
-            headers=admin_access.target.headers | {"Idempotency-Key": str(new_record_id())},
-            json={"reason": "Restore verified checker infrastructure"},
-        )
-    assert denied_retry.status_code == 404, (denied_retry.text, captured)
+    denied_retry = await admin_access.signed.client.post(
+        retry_path,
+        headers=admin_access.target.headers | {"Idempotency-Key": str(new_record_id())},
+        json={"reason": "Restore verified checker infrastructure"},
+    )
+    assert denied_retry.status_code == 404, denied_retry.text
     async with h.factory() as session:
         assert await session.scalar(select(func.count()).select_from(CheckerRetryReceipt)) == 0
         assert await session.scalar(select(func.count()).select_from(CheckerRun)) == 1
@@ -594,14 +545,13 @@ async def test_public_retry_real_outbox_conflict_is_retryable_and_rolls_back(
                     AuditEvent.action_id == ActionId.OPERATIONS_CHECKER_RETRY.value
                 )),
             )
-        with _capture_safe_request_exception() as captured:
-            failed = await admin_access.signed.client.post(
-                retry_path,
-                headers=admin_access.target.headers
-                | {"Idempotency-Key": str(new_record_id())},
-                json={"reason": "Restore verified checker infrastructure"},
-            )
-        assert failed.status_code == 503, (failed.text, captured)
+        failed = await admin_access.signed.client.post(
+            retry_path,
+            headers=admin_access.target.headers
+            | {"Idempotency-Key": str(new_record_id())},
+            json={"reason": "Restore verified checker infrastructure"},
+        )
+        assert failed.status_code == 503, failed.text
         assert failed.json()["error"]["code"] == "checker_recovery_unavailable"
         assert failed.json()["error"]["retryable"] is True
         assert "reserved by another producer" not in failed.text

@@ -97,15 +97,23 @@ async def test_recovery_internal_unavailability_rolls_back_and_returns_retryable
         def __init__(self):
             self.rollbacks = 0
             self.commits = 0
+            self.begins = 0
+            self.active = False
 
         async def rollback(self):
             self.rollbacks += 1
+            self.active = False
 
         async def commit(self):
             self.commits += 1
+            self.active = False
+
+        async def begin(self):
+            self.begins += 1
+            self.active = True
 
         def in_transaction(self):
-            return False
+            return self.active
 
     class Service:
         async def retry(self, _command):
@@ -157,6 +165,7 @@ async def test_recovery_internal_unavailability_rolls_back_and_returns_retryable
     }
     assert session.rollbacks == 2
     assert session.commits == 0
+    assert session.begins == 1
 
 
 @pytest.mark.parametrize(

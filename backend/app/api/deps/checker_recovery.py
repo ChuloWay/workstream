@@ -122,6 +122,7 @@ async def _checker_retry_commands(
         cursor_secret=request.app.state.settings.pagination_cursor_hmac_secret,
     )
     try:
+        await session.begin()
         yield CheckerRetryCommands(session, service, key)
     except CheckerRetryAuthorityDenied as exc:
         await session.rollback()
