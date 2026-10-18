@@ -64,29 +64,33 @@ third operation.
   reconciliation module, only to classify exact request execution facts and to
   reuse `PostSubmissionExecutor` under a live reconciliation-event fence after
   proving the original run has no execute lease/evidence/result. Existing
-  terminal-result validation supplies committed verification.
+  `require_current_completion` and finalized-infrastructure source validation
+  supply committed verification; do not copy their row predicates.
 - Existing TASK evaluation delivery, routing request/source/outcome public
   ports and composition, plus one cohesive source-specific reconciliation
-  module, only to classify exact completion facts and reuse
-  `TaskPostSubmitOutcome` under a live reconciliation-event fence after proving
-  no routing manifest/effects committed. Exact retained manifest/effect replay
-  supplies committed verification.
+  module, only to classify exact completion facts, extract a nonmutating source
+  observer from the existing routing source owner, extract an owner-owned
+  retained-outcome verifier from `TaskPostSubmitOutcome` replay validation, and
+  reuse `TaskPostSubmitOutcome` under a live reconciliation-event fence after
+  proving no routing manifest/effects committed. The verifier must validate
+  retained effects without calling `apply` or acceptance participation.
 - Existing checker operations router and one focused API dependency/composition
   module for project-scoped Operator list/detail/reconcile endpoints, signed
   bounded cursor, reason and UUID idempotency key, canonical transaction
   rollback/denial restaging, exact HTTP error mapping and privacy-bounded DTOs.
 - Existing AUTH action/permission catalogue, action groups, prepared-resource
   matching, read and mutation adapters, audit pair constraint and focused AUTH
-  fixtures/tests for two exact actions: an Operator status read and an Operator
-  reconciliation command. Reuse `operations.status.read` and
-  `operations.reconcile.run`; add no permission or role.
-- One coordinated migration numbered `0055` only if the exact AUTH audit-pair
-  constraint requires it after the separately owned `0054`. The migration may
-  add only the two exact action/permission audit pairs and the corresponding
-  Alembic head/fingerprint/test updates. It must not depend on S3 behavior; the
-  dependency is migration-chain ordering only. If plan review finds a
-  constraint-safe existing action that is semantically exact, omit the
-  migration rather than creating it ceremonially.
+  fixtures/tests for exactly
+  `operations.post_submit_delivery.list` / `operations.status.read` and
+  `operations.post_submit_delivery.reconcile` /
+  `operations.reconcile.run`. Add no permission, role, alias or service grant.
+- One coordinated migration numbered `0055_operational_delivery_reconciliation`
+  after the separately owned `0054_artifact_proof_timing`. The migration may
+  add only those two exact action/permission pairs to the closed audit
+  constraint and the corresponding Alembic head/fingerprint/test updates. It
+  has no S3 runtime dependency; its only relationship to `0054` is the required
+  linear schema sequence. Consume the canonical published `0054` before
+  authoring `0055` and do not create a sibling migration.
 - Focused real PostgreSQL request/completion recovery, public API, AUTH,
   transaction, concurrency, migration and delivery registration tests; exact
   ownership/lane/action/rate/OpenAPI inventories affected by the new routes and
@@ -111,8 +115,9 @@ third operation.
   Review or reviewer contribution, human decision runtime, acceptance policy
   change, payment fulfillment, reputation, CLI or frontend work.
 - No raw OUTBOX payloads, artifact bodies, findings bodies, provider
-  coordinates, transport errors, credentials or private assignment identity in
-  public responses or diagnostics.
+  coordinates, exception text, `outcome_json`, event payload, transport or
+  provider details, credentials or private assignment identity in public
+  responses or diagnostics.
 - No broad full-suite, Docker, Rust or cloud work in local authoring. #555 owns
   the later complete durable-worker interruption drill; this PR proves focused
   source-specific boundaries and does not claim deployment.
@@ -124,11 +129,13 @@ third operation.
 The public read selects only project-qualified, finalized attempts whose stored
 outcome says `invocation_unknown=true` and whose event type/version is one of the
 two exact production post-submit handlers. It reports bounded delivery identity,
-generation/timestamps/state/error and source identity/status without returning
-the event payload. Stable pagination orders by finalization time and event ID and
-binds the signed cursor to project, filters and limit. Fresh system-Operator
-authority and the selected project are locked before any delivery or product
-query.
+generation/timestamps/state, a closed `error_code` classification and bounded
+source identity/status without returning exception text, `outcome_json`, event
+payload or transport/provider detail. Stable pagination orders by finalization
+time and event ID and binds the signed cursor to project, filters and limit. A
+nonlocking owner-qualified selector conceals an absent or foreign project before
+any foreign product row lock. Fresh system-Operator read authority is then
+recorded before the project-bound delivery and product projection.
 
 The source-specific classifier returns exactly:
 
@@ -143,12 +150,25 @@ The source-specific classifier returns exactly:
   generation zero and no execute/finalize/material/result/completion evidence,
   or the completion is the exact current terminal CHECKERS source with no
   routing request/manifest/effects and unchanged TASK/policy branch. The
-  observation is rechecked under canonical TASK/CHECKERS/OUTBOX locks before a
-  recovery event is appended.
+  completion observation uses a nonmutating owner method extracted from
+  `TaskRoutingSourcePreparer`; it must not call `TaskRoutingRequests._stage`,
+  allocate IDs or create a routing request. The observation is rechecked under
+  the canonical mutation locks before a recovery event is appended.
 - `unresolved`: every other shape, including running/expired CHECKERS leases,
   partial or inconsistent retained facts, stale/superseded source, unsupported
-  event/version, or an uncertain recovery attempt. It remains visible and no
-  event is appended.
+  event/version, or a reconciliation child that itself finalized UNKNOWN. It
+  remains visible and no event is appended.
+
+Committed request classification delegates to CHECKERS
+`require_current_completion` for completed delivery and the canonical #588
+finalized-infrastructure source validator for infrastructure failure. Committed
+completion classification delegates to a read-only verifier extracted from the
+existing `TaskPostSubmitOutcome` replay branch. That verifier owns the complete
+check of the exact retained source/manifest,
+`public.task_routing_outcome_complete`, authorization/audit/outcome notice, and
+the false-policy FinalAcceptance, submitter contribution and complete governed
+award set. It never calls `TaskPostSubmitOutcome.apply`,
+`acceptance.participate` or any effect writer.
 
 Work failure, finalized infrastructure failure and exhausted known-terminal
 retry remain projected as source facts but do not become uncertain-recovery
@@ -162,11 +182,26 @@ classification, bounded reason and request key, then appends one immutable
 `PostSubmissionDeliveryReconciliationRequested` event. The child contains only
 the exact original selectors, classification, Operator decision reference and
 request digest; it carries no original payload. OUTBOX idempotency provides
-same-key replay. The command locks the source in canonical feature order and
-the original OUTBOX rows last, so classification and append cannot race another
-source transition. A source-level lock and existing child lookup prevent two
-different keys from scheduling concurrent recovery for the same original
-attempt; changed-key facts conflict rather than produce another effect.
+same-key replay. Exactly one child may exist for an original attempt. A
+source-level uniqueness guard and locked child lookup make concurrent different
+keys deterministic conflicts; every later different key conflicts after a
+pending, active, acknowledged or UNKNOWN child. This first release deliberately
+holds a child whose own outcome is UNKNOWN rather than adding child generations
+or another recovery mechanism.
+
+Public qualification and branch selection are detached, nonmutating
+observations and grant no authority. Request mutation follows the existing
+`DeliveryExecutionAuthority` TASK/AUTH/CHECKERS order and fences the original
+OUTBOX invocation rows last; this plan does not introduce a second lock path.
+Completion mutation first observes the branch without locks; when false-policy
+acceptance is possible it acquires the REV lifecycle fence first, then TASK,
+assignment/submission, PROJECTS, CHECKERS, AUTH and finally OUTBOX invocation
+custody. Both paths re-read the exact branch, source currentness, original
+UNKNOWN attempt and absence of a child after all canonical locks and before
+append. A mismatch rolls back. Independent-session races cover an original
+transaction committing or rolling back while the command classifies, plus two
+concurrent commands, so no-effect observation and recovery cannot race a live
+business commit.
 
 The child handler first proves its own live invocation, then obtains the
 original finalized-UNKNOWN envelope through a typed OUTBOX observation port.
@@ -175,23 +210,26 @@ validates it through a narrow AUTH cause port, while the existing executor and
 routing outcome continue to obtain their current fixed-service execute,
 finalize and route authority. No service gains an Operator permission.
 
-- For `committed`, the handler validates the exact terminal result or complete
-  routing outcome and acknowledges the child without calling the external
-  checker or `TaskPostSubmitOutcome.apply`. This is the acceptance
-  commit/ack-loss path and cannot create another business effect.
+- For `committed`, the handler delegates to the CHECKERS committed validators or
+  the owner-owned read-only TASK retained-outcome verifier and acknowledges the
+  child without calling the external checker, `TaskPostSubmitOutcome.apply` or
+  acceptance participation. This is the acceptance commit/ack-loss path and
+  cannot create another business effect.
 - For `retry_safe`, a recovery-bound invocation observer/fence projects the
   child event's live custody only for the exact original envelope. The handler
-  then invokes the existing `PostSubmissionExecutor` or
-  `TaskPostSubmitOutcome`; those owners retain all TASK, PROJECTS, CHECKERS,
-  AUTH, REV/CON and OUTBOX rules. The fence is acquired after the feature locks
-  and rechecks the source classification in the same transaction. The child is
-  not `retry_unknown`; if its outcome becomes uncertain, the next Operator read
-  reclassifies from durable source facts. A later reconciliation may verify a
-  committed effect, authorize a still-proven-no-effect try, or hold it.
+  reclassifies under the same canonical locks before invoking anything. A
+  source that is now committed takes the read-only committed path; a source
+  that remains retry-safe invokes the existing `PostSubmissionExecutor` or
+  `TaskPostSubmitOutcome`; every stale, partial or uncertain shape is held and
+  produces no business effect. Those owners retain all TASK, PROJECTS,
+  CHECKERS, AUTH, REV/CON and OUTBOX rules. The child is not `retry_unknown`; if
+  its outcome becomes uncertain, the next Operator read reports that one child
+  and the original source as held, and no later reconciliation is authorized in
+  this release.
 
-An acknowledged child is the immutable reconciliation receipt. Inspection
-links it to the original attempt and shows pending, active, acknowledged,
-unknown or held reconciliation state without changing the original dead letter.
+The sole child is the immutable reconciliation receipt. Inspection links it to
+the original attempt and projects that child as pending, active, acknowledged,
+unknown or held without changing the original dead letter.
 
 ### Alternatives rejected
 
@@ -223,12 +261,16 @@ unknown or held reconciliation state without changing the original dead letter.
   audit. A queued generation-zero request may execute once through the existing
   owner; running, expired-running and partially evidenced requests remain held.
 - [ ] A complete routing manifest is reconciled without calling the routing
-  operation. False-policy acceptance commit/ack-loss retains the exact one
-  FinalAcceptance, submitter ContributionRecord and governed award set and
+  operation or acceptance participation. The owner-owned verifier checks the
+  database closure, exact source/manifest, authorization/audit/outcome notice
+  and branch effects. False-policy acceptance commit/ack-loss retains exactly
+  one FinalAcceptance, submitter ContributionRecord and governed award set and
   creates no Review. A no-effect completion may invoke the existing routing
   operation once; partial, stale or inconsistent outcomes remain held.
 - [ ] Same-key command and response-loss replay return the same recovery event.
-  Concurrent changed keys cannot schedule two active children. Transaction,
+  Concurrent or sequential changed keys cannot schedule another child. A child
+  that finalizes UNKNOWN remains visibly held and cannot be retried by this
+  surface. Transaction,
   AUTH/audit, append, handler and commit failures roll back their caller-owned
   writes, while already committed business effects are detected on the next
   observation rather than repeated.
@@ -238,7 +280,10 @@ unknown or held reconciliation state without changing the original dead letter.
   during an uncertain external phase and after finalization; interrupt
   completion before commit and after false-policy acceptance commit; and assert
   exact locks, immutable original attempts, complete/unchanged effects,
-  idempotency and no blind repeat.
+  idempotency and no blind repeat. Independent sessions race the original
+  commit/rollback against recovery and race two command keys. Handler tests move
+  the source between command and child execution and require fresh committed,
+  retry-safe or held classification before any effect.
 - [ ] Production registration, AUTH/action/audit pairs, OpenAPI, route-rate
   controls, ownership and test-lane catalogues include only the exact new
   surface. Current Operator workflow and roadmap describe the delivered limit;
@@ -266,12 +311,29 @@ unknown or held reconciliation state without changing the original dead letter.
 | Request source has a durable no-effect discriminator | Inspect CHECKERS queued/running/terminal state, lease generation and phase evidence | Queued generation zero with no phase evidence is distinct; running or expired-running is uncertain | Real PostgreSQL race/interruption proof required |
 | Completion commit is atomically distinguishable | Inspect `TaskPostSubmitOutcome`, routing manifest and deferred closure | Complete manifest is the retained outcome; absent transaction leaves no committed routing effects | Real false-policy commit/ack-loss and corruption proof required |
 | Existing operations can remain sole writers | Inject a recovery-bound typed invocation observer/fence into existing executor/outcome composition | Planned | Architecture/security review and exact integration proof required |
-| Public authority can remain least privilege | Two exact actions reuse existing Operator permissions; handler validates decision as cause and uses current service actions | Planned | Catalogue/audit migration and revocation/substitution proof required |
+| Public authority can remain least privilege | `operations.post_submit_delivery.list` / `operations.status.read` and `operations.post_submit_delivery.reconcile` / `operations.reconcile.run`; handler validates the Operator decision only as cause and existing owners use their current service actions | Planned | Required 0055 audit-pair migration and revocation/substitution proof |
 | Full interruption drill | Parent #555 durable-worker matrix | Deferred | This PR must not claim the complete #555 drill or deployed operation |
 
 ## Review findings
 
-No plan or implementation review findings recorded yet.
+- `REC-581-PLAN-ARCH-001` closed in plan: detached branch observation now leads
+  into the existing false-policy REV -> TASK -> assignment/submission ->
+  PROJECTS -> CHECKERS -> AUTH -> OUTBOX order, with post-lock recheck and
+  independent-session commit/rollback and two-command races.
+- `REC-581-PLAN-QA-001` closed in plan: committed completion uses one read-only
+  verifier extracted from the `TaskPostSubmitOutcome` replay owner; request
+  verification delegates to the existing CHECKERS completion and
+  finalized-infrastructure validators.
+- `REC-581-PLAN-REUSE-001` closed in plan: completion observation extracts a
+  nonmutating routing-source method and cannot call request staging or allocate
+  IDs.
+- `REC-581-PLAN-PROD-001` closed in plan: exactly one immutable child is
+  permitted; same-key replay is exact, every different key conflicts, and a
+  child UNKNOWN remains visibly held rather than introducing a sequencing
+  subsystem.
+- Architecture/security plan review also required two exact AUTH pairs and the
+  required 0055 migration after 0054, plus a closed public `error_code`; both
+  are now explicit.
 
 ## Reconciliation
 
