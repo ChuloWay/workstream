@@ -15,6 +15,7 @@ from tests.projects.guide_activation.pg_support import activation_case
 from tests.authorization.guide_activation.pg_support import activate
 from manager_task_journey import exercise_manager_task_preparation
 from project_role_journey import exercise_project_role_decisions
+from operator_task_journey import exercise_operator_task_journey
 
 
 async def exercise_contributor_task_reads(
@@ -492,6 +493,17 @@ async def exercise_contributor_task_reads(
         second_key = uuid4()
         second_claim = await mutate("claim", ready_ids[1], second_key)
         assert second_claim["assignment"]["contributor_id"] == actor_id
+        await exercise_operator_task_journey(
+            direct,
+            cli,
+            origin,
+            tokens,
+            env,
+            project,
+            foreign_project,
+            ready_ids[1],
+            actor_id,
+        )
         # The same freshly authorized actor is suspended: stale revocation cannot
         # masquerade as lifecycle denial. Restore it for the outer journey.
         await post(

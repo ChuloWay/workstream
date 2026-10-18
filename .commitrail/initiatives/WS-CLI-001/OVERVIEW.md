@@ -30,11 +30,19 @@
   [WS-CLI-001-23](WS-CLI-001-23.md), Finance draft creation, rule replacement, publication and retirement;
   [WS-CLI-001-24](WS-CLI-001-24.md), self/project contribution evidence and exact private CSV export;
   [WS-CLI-001-25](WS-CLI-001-25.md), explicit public ZIP preparation, Submission replay/history and contributor checker findings;
+  [WS-CLI-001-36](WS-CLI-001-36.md), status-only Operator task browsing,
+  exact locked-context inspection and explicit reasoned start override;
   [PILOT-13](../../changes/pilot13-assigned-task-guide-documents.md), assigned-task locked-guide listing/download;
   [PILOT-02](../../changes/pilot02-bulk-transitions-cli.md), explicit CSV conversion,
   source custody, atomic import, batch status and whole-batch screen/release.
 
 ## Current boundary
+
+The Operator commands `operations task list`, `operations task locked-context`
+and `operations task start` use three existing public routes. Their restricted
+read projections remain observations; the backend rechecks the distinct
+Operator authority on every start and exact-key replay. These commands do not
+create assignments or fall back to contributor authority.
 
 The backend exposes `GET /api/v1/actors/me` and
 `GET /api/v1/actors/me/authorization-context` in

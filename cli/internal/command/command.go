@@ -168,6 +168,9 @@ func Run(args []string, stdout, stderr io.Writer, getenv environment, version st
 	root.AddCommand(project)
 	addContributorTasks(root, client, &output, stdout)
 	addContributorReads(root, client, &output, stdout)
+	operations := &cobra.Command{Use: "operations", Short: "Explicit system Operator operations"}
+	addOperatorTasks(operations, client, &output, stdout)
+	root.AddCommand(operations)
 
 	err := root.ExecuteContext(context.Background())
 	if err == nil {
