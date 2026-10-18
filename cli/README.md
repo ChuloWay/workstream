@@ -42,6 +42,7 @@ contribution-evidence exports:
 | `workstream project task create PROJECT_ID --input FILE --idempotency-key UUID` | `POST /api/v1/projects/PROJECT_ID/tasks` |
 | `workstream project task screen PROJECT_ID TASK_ID --idempotency-key UUID [--reason TEXT]` | `POST /api/v1/tasks/TASK_ID/screen` |
 | `workstream project task release PROJECT_ID TASK_ID --idempotency-key UUID --reason TEXT` | `POST /api/v1/tasks/TASK_ID/release` |
+| `workstream project task repair-revision PROJECT_ID TASK_ID --idempotency-key UUID --reason TEXT` with exact parent pair or routing manifest | `POST /api/v1/projects/PROJECT_ID/tasks/TASK_ID/revision-context/repair` |
 | `workstream project task-batch convert-csv --input FILE --out FILE` | Local CSV-to-JSON conversion; no API call |
 | `workstream project task-batch source-declare PROJECT_ID --input FILE --idempotency-key UUID` | `POST /api/v1/projects/PROJECT_ID/task-import-sources` |
 | `workstream project task-batch source-upload PROJECT_ID SOURCE_ID --input FILE` | `PUT /api/v1/projects/PROJECT_ID/task-import-sources/SOURCE_ID/content` |
@@ -1060,6 +1061,39 @@ socket/Flow/PREP/PostgreSQL journey prepares a task using these commands, verifi
 stored locks and single command/audit facts, tests foreign-project, suspension and
 revocation denials, then exercises contributor discovery/claim/start. Canonical
 guide setup fixtures are not live inference or deployed-service certification.
+
+## Repair a blocked revision context as a project manager
+
+```sh
+workstream project task PROJECT_ID TASK_ID --output json
+workstream project task repair-revision PROJECT_ID TASK_ID \
+  --parent-preparation-id PREPARATION_ID \
+  --parent-preparation-sha256 sha256:LOWERCASE_64_HEX \
+  --reason "Adopt corrected approved context" --idempotency-key REPAIR_KEY --output json
+
+# Only for a retained failure missing its preparation, select its exact routing source instead:
+workstream project task repair-revision PROJECT_ID TASK_ID \
+  --routing-manifest-id ROUTING_MANIFEST_ID \
+  --reason "Recover missing revision root" --idempotency-key ROOT_KEY --output json
+```
+
+Choose exactly one source form. `--reason` must be nonblank, at most 1000
+Unicode characters, and at most 1000 UTF-8 bytes after surrounding whitespace
+is stripped; the backend makes every eligibility, authority, lineage and clock
+decision again at the POST. The preceding manager detail is only an observation:
+it does not reserve a repair or authorize a later write. Each invocation makes
+one keyed POST without an automatic read, retry, guide rebase or deadline reset.
+The JSON output is the complete `ContributorRevisionContext` returned by that
+POST, not a manager task or acceptance receipt. `clock_state=paused` has a null
+deadline, positive `remaining_microseconds` and `context_blocked` disposition;
+`clock_state=running` has a deadline and null allowance. A repair may still be
+blocked under the backend's current policy. Text output escapes terminal controls.
+
+Keep the original project, task, exact source, reason and key together for
+deliberate replay after an uncertain write. A read is not rollback proof, and
+changing the key can conflict with the already committed child. A canonical
+denial is not a success; current Project Manager authority is required even to
+replay. This command does not create a human Review or decide acceptance.
 
 ## Browse tasks as a project manager
 
