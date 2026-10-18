@@ -473,9 +473,7 @@ async def test_policy_replay_waits_for_grant_revocation_then_denies(
             "review_preference_window_seconds": 4800,
             "review_lease_duration_seconds": 1900,
         },
-        "if_match": policy_selector_etag(
-            review.id, review.policy_generation, review.policy_hash
-        ),
+        "if_match": policy_selector_etag(review.id, review.policy_generation, review.policy_hash),
         "key": uuid4(),
     }
     created = await _request(project_client, case)
@@ -494,9 +492,7 @@ async def test_policy_replay_waits_for_grant_revocation_then_denies(
             entered_grant_query.set()
         return await original_find(self, actor_profile_id, permission_id, **kwargs)
 
-    monkeypatch.setattr(
-        AdminAuthorizationRepository, "find_effective_grant", signal_grant_query
-    )
+    monkeypatch.setattr(AdminAuthorizationRepository, "find_effective_grant", signal_grant_query)
     replay_task = None
     revocation_committed = False
     async with db_session.get_session_factory()() as revoker:
