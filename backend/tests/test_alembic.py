@@ -331,6 +331,7 @@ def test_repeated_upgrade_head_preserves_current_database(
     "0051_operational_read_audit",
     "0052_artifact_provider_proof",
     "0053_project_reads",
+    "0054_artifact_proof_timing",
 ])
 def test_preceding_head_upgrades_to_current_without_recreation(
     isolated_database_env: str, migration_lock, installed_revision: str,

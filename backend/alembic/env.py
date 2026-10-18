@@ -107,6 +107,7 @@ def do_run_migrations(connection: Connection) -> None:
             ("0051_operational_read_audit",),
             ("0052_artifact_provider_proof",),
             ("0053_project_reads",),
+            ("0054_artifact_proof_timing",),
             (_CURRENT_HEAD_REVISION,),
         ):
             raise RuntimeError(_RECREATE_GUIDANCE)
