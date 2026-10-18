@@ -36,6 +36,13 @@
 
 ## Current boundary
 
+[WS-CLI-001-29](WS-CLI-001-29.md) adds explicit system-Operator commands for
+immutable external-checker registry registration/read and project-bound
+known-terminal checker retry-source listing/retry through four existing public
+REST routes. Registration does not enable execution; source reads do not authorize
+later retry, and exact replay rechecks backend authority. Hosted operation and
+CLI distribution remain separate.
+
 The backend exposes `GET /api/v1/actors/me` and
 `GET /api/v1/actors/me/authorization-context` in
 `backend/app/api/routes/auth.py`. The selected 29-operation

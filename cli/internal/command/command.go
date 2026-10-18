@@ -166,6 +166,7 @@ func Run(args []string, stdout, stderr io.Writer, getenv environment, version st
 		},
 	})
 	root.AddCommand(project)
+	addCheckerOperations(root, client, &output, stdout)
 	addContributorTasks(root, client, &output, stdout)
 	addContributorReads(root, client, &output, stdout)
 

@@ -1352,6 +1352,52 @@ later edits. Complete 4xx replies with a parseable Workstream error envelope
 even when sensitive metadata is suppressed. A gateway 4xx without that envelope
 is uncertain too; HTTP status alone does not establish a Workstream denial.
 
+## Operator checker registration and terminal recovery
+
+The `operations checker` commands consume four existing public `/api/v1`
+operations. They require a current system Operator grant on every call; a prior
+read is not authority for a later write. Registry publication stores an
+immutable definition but does not select, enable, execute or activate a checker.
+
+```sh
+workstream operations checker registry register --input checker.json --idempotency-key UUID -o json
+workstream operations checker registry read ENTRY_ID -o json
+workstream operations checker retry-sources PROJECT_ID --limit 50 -o json
+workstream operations checker retry-sources PROJECT_ID --limit 50 --cursor 'OPAQUE_CURSOR' -o json
+workstream operations checker retry PROJECT_ID SOURCE_RUN_ID --reason 'Verified infrastructure restored' --idempotency-key UUID -o json
+```
+
+`checker.json` is one closed `ExternalCheckerRegistrySpec` object with
+`capability_id`, `capability_version`, `phase` (`pre_submit` or `post_submit`),
+`image_digest` (`sha256:` and 64 lowercase hexadecimal digits),
+`configuration_schema`, `input_schema`, `output_schema` and `resources`.
+Each schema has `schema_id`, `schema_version`, an object `document`, and
+`schema_sha256`; input schema IDs are
+`external_checker_pre_submit_input` or
+`external_checker_post_submit_input` according to phase, and the output schema
+ID is `external_checker_result`. Resources are `cpu_millis` (100..64000),
+`memory_bytes` (16777216..68719476736), `deadline_ms` (100..3600000) and
+`maximum_output_bytes` (256..65536). The file is read once as a regular JSON
+file, at most 1 MiB, and sent unchanged. The CLI checks its closed wire shape,
+phase identities and bounds; the backend validates JSON Schema semantics and
+computes each canonical schema/entry digest. An entry read returns the exact
+server-selected UUIDv7 entry and immutable specification, not a latest alias.
+
+`retry-sources` returns only one project-bound page (1..100 items) and its
+opaque `next_cursor`; the CLI never follows pages automatically. The backend
+marks each source `eligible`, `retried` with its retained successor, or
+`not_current`. Only an exact finalized post-submit infrastructure failure can
+be retried, after the named problem has been restored. The retry command
+requires an explicit reason of 1..500 characters without ASCII controls and a
+caller-owned UUID key. It sends one POST, creates no Review, acceptance,
+contribution or award, and never enables an external checker. On a lost or
+malformed response, `error.outcome_unknown` is true: manually replay the
+unchanged project, source run, reason and key. A fresh backend authority check
+also applies to exact replay. There is no preflight authority check, automatic
+retry, cached source eligibility or local policy decision. JSON output is the
+complete validated public response; text output safely escapes terminal
+controls.
+
 ## Verification
 
 Behavior tests invoke the built executable from outside the repository, with
@@ -1401,6 +1447,12 @@ Hosted CLI verification partitions the complete integration directory into
 task/general HTTP, guide HTTP, native API, native self-service and native batch
 groups. The contribution HTTP and native API tests remain included; no group
 replaces or skips another. Local conversion rule tests supplement process tests.
+Operator checker proof uses the built binary against adversarial HTTP and one
+isolated signed FastAPI/PostgreSQL journey: exact registry publication/read and
+replay, terminal-source discovery, explicit retry/replay, foreign selection and
+grant-revocation denial. The source's infrastructure failure is arranged by a
+real backend worker fixture. This does not prove hosted OCI execution, external
+Flow issuer integration or S3 custody.
 
 ```sh
 go mod verify
