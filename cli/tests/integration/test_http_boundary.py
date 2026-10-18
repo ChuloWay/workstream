@@ -70,6 +70,8 @@ def http_fixture():
 
         def do_PATCH(self):  # noqa: N802 - standard HTTP handler interface
             body = self.rfile.read(int(self.headers.get("Content-Length", "0")))
+            response.setdefault("raw_commands", []).append(body)
+            response.setdefault("request_headers", []).append(dict(self.headers))
             response["updates"].append(
                 (self.headers.get("Content-Type"), json.loads(body))
             )

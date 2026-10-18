@@ -18,6 +18,9 @@ contribution-evidence exports:
 | `workstream project show PROJECT_ID` | `GET /api/v1/projects/PROJECT_ID` |
 | `workstream project create --name TEXT --slug TEXT --idempotency-key UUID` | `POST /api/v1/projects` |
 | `workstream project guide create PROJECT_ID --input FILE --idempotency-key UUID` | `POST /api/v1/projects/PROJECT_ID/guides` |
+| `workstream project guide edit PROJECT_ID GUIDE_ID --input FILE --idempotency-key UUID` | `PATCH /api/v1/projects/PROJECT_ID/guides/GUIDE_ID` |
+| `workstream project guide set-review-policy PROJECT_ID GUIDE_ID --input FILE --if-match ETAG --idempotency-key UUID` | `PUT /api/v1/projects/PROJECT_ID/guides/GUIDE_ID/review-policy` |
+| `workstream project guide set-revision-policy PROJECT_ID GUIDE_ID --input FILE --if-match ETAG --idempotency-key UUID` | `PUT /api/v1/projects/PROJECT_ID/guides/GUIDE_ID/revision-policy` |
 | `workstream project guide upload PROJECT_ID GUIDE_ID DOCUMENT_ID --file FILE --media-type MIME --idempotency-key UUID` | `POST /api/v1/projects/PROJECT_ID/guides/GUIDE_ID/documents/DOCUMENT_ID/content` |
 | `workstream project guide setup PROJECT_ID GUIDE_ID` | `GET /api/v1/projects/PROJECT_ID/guides/GUIDE_ID/setup-runs/latest` |
 | `workstream project guide proposal PROJECT_ID GUIDE_ID COMPILATION_ID` | `GET /api/v1/projects/PROJECT_ID/guides/GUIDE_ID/compilations/COMPILATION_ID/proposal` |
@@ -431,6 +434,59 @@ Changed input conflicts. Lost, malformed, redirected or unexpected replies
 report an unknown outcome, not rollback; manually replay only the unchanged
 input and key. A complete canonical 4xx is a known denial. Local file errors
 never echo file paths, contents or OS error details.
+
+## Edit a draft guide and select its review/revision policies
+
+```sh
+workstream project guide edit PROJECT_ID GUIDE_ID --input guide-edit.json --idempotency-key EDIT_UUID --output json
+workstream project guide set-review-policy PROJECT_ID GUIDE_ID --input review-policy.json --if-match '"no-current-policy"' --idempotency-key REVIEW_UUID --output json
+workstream project guide set-revision-policy PROJECT_ID GUIDE_ID --input revision-policy.json --if-match '"no-current-policy"' --idempotency-key REVISION_UUID --output json
+```
+
+`guide-edit.json` is a closed public PATCH body: `{}` leaves fields omitted,
+`{"change_summary":null}` clears the draft summary, and a string sets it. A
+review-policy input requires integer `review_preference_window_seconds` and
+`review_lease_duration_seconds`; it may explicitly provide
+`human_review_required` (otherwise the backend applies its documented default
+or inherits the selected mode), `max_active_review_leases_per_reviewer`,
+`self_review_allowed`, `reject_policy`, `finding_evidence_requirement`,
+`requires_second_review`, `allowed_decisions`, and `minimum_finding_fields`.
+For example:
+
+```json
+{"review_preference_window_seconds":3600,"review_lease_duration_seconds":1800,"human_review_required":false}
+```
+
+A revision-policy input requires integer `max_revision_rounds` and
+`revision_deadline_hours`; it may supply `allowed_resubmission_states` and
+nullable `reviewer_reassignment_rule`. For example:
+
+```json
+{"max_revision_rounds":7,"revision_deadline_hours":48,"reviewer_reassignment_rule":null}
+```
+
+Use `"no-current-policy"` only when that policy has no current selection. To
+replace one, inspect `project guide show` and supply the exact quoted selector
+`"POLICY_ID.GENERATION.HASH_HEX"`, using its selected policy ID, generation and
+the 64 lowercase hexadecimal characters after `sha256:` in its policy hash.
+The CLI sends `If-Match` exactly as supplied; it never fetches a new selector
+or overwrites after a stale-precondition conflict. The server checks current
+Project Manager authority, draft status and policy lineage for a new mutation.
+An exact-key committed replay may return its historical receipt after a later
+change; that receipt is not current guide readiness or policy-selection proof.
+The two policies are independent; setting one does not approve or activate a
+guide, and `human_review_required=false` is a backend-governed mode, not CLI
+acceptance.
+
+All three commands require a regular JSON file of at most 1MiB and a
+caller-owned UUID idempotency key. The CLI preserves JSON field omission, null
+where supported and full integer values, while backend validation decides
+numeric and policy admissibility. JSON output is the complete validated public
+response; text output escapes terminal controls. Retain the exact project,
+guide, input bytes, key and (for PUT) `If-Match` for a deliberate replay.
+Changed-input/key reuse and stale selection are known conflicts; dropped or
+malformed responses leave the outcome unknown. No write is retried
+automatically, and a read is not proof of later write authority.
 
 ## Upload a declared guide original
 

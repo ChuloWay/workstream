@@ -36,6 +36,14 @@
 
 ## Current boundary
 
+[WS-CLI-001-26](WS-CLI-001-26.md) adds deliberate draft-guide summary editing
+and separate guide-bound review/revision policy configuration. The commands
+`project guide edit`, `set-review-policy` and `set-revision-policy` consume only
+the existing public writes with caller-owned replay keys and policy `If-Match`.
+The backend owns manager authorization for new writes, policy semantics, replay and activation;
+editing/configuring a guide does not approve or activate it. Other public API
+client gaps, optional TUI and binary distribution remain separate work.
+
 The backend exposes `GET /api/v1/actors/me` and
 `GET /api/v1/actors/me/authorization-context` in
 `backend/app/api/routes/auth.py`. The selected 29-operation
