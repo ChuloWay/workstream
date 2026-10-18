@@ -1,0 +1,204 @@
+# PILOT-06B — Terminal benchmark negative runtime proof
+
+- Initiative: None
+- Durable disposition: Planned
+- Intended merge outcome: The existing terminal-benchmark runsc proof executes PRE-valid negative packages for no-op, reference failure, reference instability and resource exhaustion, while every nonzero fixed-recipe builder exit is classified as infrastructure or capacity rather than contributor work.
+
+## Intent
+
+Close the remaining #493 evidence gap without adding another runner. The merged
+checker already proves one successful package and service-interruption cleanup,
+but its hosted matrix does not execute the retained negative result paths or
+forced resource limits. This change extends that same isolated, offline runsc
+proof so #555 can consume real outcome evidence rather than helper-only result
+mapping.
+
+## Current behavior
+
+- `external_checkers/workstream-terminal-benchmark-checker/src/main.rs` admits
+  only one byte-exact Dockerfile: pinned Python base, fixed directory setup,
+  `COPY workspace/`, and a non-root final user. POST projects only
+  `.dockerignore`, that Dockerfile and `workspace/program.py`; no submitted
+  build instruction remains.
+- `external_checkers/workstream-checker-service/src/terminal_benchmark.rs`
+  currently maps a non-capacity Kaniko exit to the completed work finding
+  `build_failed`. Under the admitted recipe, that exit cannot be attributed to
+  a contributor-controlled build step. Base/cache/runtime/storage faults are
+  infrastructure or capacity.
+- `experiments/terminal_benchmark_project_checkers/proof.sh` executes one
+  interrupted and one successful `ledger-reconcile` POST through the existing
+  isolated DIND/runsc service. `build_matrix.py` and `verify_evidence.py` bind
+  exactly those attempts and their fixed evidence inventory.
+- The public corpus already contains a starter that fails and a reference that
+  passes. Its native calibration includes an ineffective-test mutation, but
+  that mutation has not run through the real container service.
+
+## Bounded change
+
+### Allowed
+
+- This standalone Commitrail record.
+- `external_checkers/workstream-checker-service/src/terminal_benchmark.rs` for
+  the fixed-recipe builder classification and its focused Rust regressions.
+- `experiments/terminal_benchmark_project_checkers/**` for deterministic
+  PRE-valid negative package preparation, request execution, matrix reduction,
+  evidence verification and focused tests.
+- `.github/workflows/terminal-benchmark-project-checkers.yml` only as needed to
+  execute and retain the expanded existing proof on an ephemeral GitHub-hosted
+  runner; preserve the current event, permissions, exact-head checkout,
+  concurrency, bounds, cleanup and evidence upload model.
+- `docs/roadmap_status.md` and the experiment README for the resulting bounded
+  development evidence and its remaining deployment boundary.
+
+### Not allowed
+
+- No new runner, registry, service, checker phase, generic evaluator framework,
+  broad #496 CI expansion, production activation or deployment.
+- No changes to authorization, lifecycle routing, acceptance, contribution,
+  registry persistence, migrations, shared catalogues or public APIs.
+- No submitted network access, host Docker socket, extra Linux capabilities,
+  relaxed runsc/profile checks, larger production limits or weaker cleanup.
+- No edits to the reviewed public corpus packages. Negative packages are
+  deterministic proof fixtures derived from the exact tracked
+  `ledger-reconcile` package inside the proof's root-owned staging custody.
+- No fake `build_failed` package. A PRE-invalid Dockerfile is intake evidence,
+  and missing/corrupt image or runtime material is infrastructure evidence.
+- No live cloud, credentials or private benchmark material.
+
+## Design and decisions
+
+### Fixed-recipe builder classification
+
+The admitted build context contains three verified regular files, and the exact
+Dockerfile has no submitted `RUN`, build argument or dependency acquisition.
+The service continues to distinguish an observed builder OOM or recognized
+storage/PID exhaustion as `capacity_exceeded`. Any other builder nonzero becomes
+`implementation_unavailable`; the dead completed-work `build_failed` branch is
+removed. A fake-Docker regression drives the real `run_builder` command path
+through success, capacity and ordinary nonzero exits, then the existing SDK
+result constructor proves the public infrastructure classification. The oracle
+mapping regression continues to cover no-op, reference failure and instability.
+
+### Proof packages
+
+One bounded preparation helper copies the exact HEAD-bound public package into
+fixed named proof variants using no-follow regular-file reads, a closed eight
+file/four directory inventory, count/byte ceilings and atomic publication below
+the existing root-owned control tree. It changes only these reviewed text files:
+
+- `no-op-pass`: replace `tests/test_task.py` with a nonempty successful test so
+  the unchanged starter exits zero and yields `starter_unexpectedly_passed`.
+- `reference-failure`: replace `solution/program.py` with a deterministic
+  failing program; the unchanged starter fails first and the reference then
+  yields `reference_failed`.
+- `reference-instability`: retain the real assertions and emit the fresh
+  container hostname only after a successful reference run. The candidate
+  still fails; unique container identities make successful reference output
+  digests differ and yield `reference_unstable` without randomness.
+- `memory-capacity`: run a deterministic memory allocation beyond the immutable
+  request limit before test evaluation; the real oracle must report
+  `capacity_exceeded` and owned resources must be absent afterward.
+- `pid-capacity`: start bounded sleeping children until the immutable pids limit
+  refuses creation; the real oracle must report `capacity_exceeded`, terminate
+  with the container and leave no owned residue.
+
+The helper emits a canonical fixture inventory binding base HEAD, variant name,
+changed path and SHA-256. Focused tests reject extra variants/files, symlinks,
+source substitution, unsafe modes, over-budget content and a mutation that
+would let any variant bypass PRE. The actual checker image runs PRE for every
+variant before POST; a variant with PRE findings is a proof failure.
+
+### Matrix and infrastructure proof
+
+The existing successful and interruption attempts remain. After restart
+cleanup, the harness executes the five variants sequentially through the same
+Python ART grant and Rust service. Each response must have the exact request
+identity, expected completed finding or infrastructure code, runsc isolation,
+and empty ART/Docker ownership afterward. Launch reduction binds the exact
+builder/candidate/reference prefix for each outcome and rejects missing, extra
+or reordered attempts.
+
+For missing-material classification, the harness removes one harness-owned
+local approved-base alias only after all package cases, positively confirms its
+absence, and executes one final request. The response must be
+`infrastructure_failed/implementation_unavailable`, with no builder or oracle
+launch and no work finding. The proof does not mutate the sealed cache bytes,
+pull from the network, or remove any unowned image.
+
+The evidence schema is revised in place, with fixed per-case result/ART files,
+bounded launch/command/event streams, a canonical matrix summary and the
+existing complete owned cleanup receipt. Verification rejects omission,
+substitution, unknown files, wrong head, wrong classifications, insufficient
+resource evidence and cleanup ambiguity.
+
+## Acceptance criteria
+
+- [ ] A source-level invariant and real `run_builder` regression prove that the
+  fixed admitted recipe has no contributor-controlled failing build step;
+  non-capacity builder exits return `implementation_unavailable`, and builder
+  OOM/storage/PID exhaustion returns `capacity_exceeded`.
+- [ ] The exact project checker image accepts every derived variant under PRE
+  before any POST continuation launches.
+- [ ] A real runsc candidate returns the completed work finding
+  `starter_unexpectedly_passed` for the ineffective-test variant.
+- [ ] Real runsc references return `reference_failed` and
+  `reference_unstable` for the respective variants, with the instability case
+  using distinct fresh container identities and successful exits.
+- [ ] Real runsc memory and PID cases return infrastructure
+  `capacity_exceeded`, with observed enforcement evidence and no work finding.
+- [ ] A real missing harness-owned approved-base image returns infrastructure
+  `implementation_unavailable` before builder/oracle launch and without network
+  fallback.
+- [ ] Every case binds its exact request/result/isolation facts, launch prefix,
+  ART unwind and positive Docker/image absence; unknown or partial attempts fail
+  the reducer and verifier.
+- [ ] Interrupted and successful controls still pass unchanged, the unowned
+  control survives, and final workflow cleanup proves DIND/registry absence,
+  XFS unmount, loop detach and deletion of raw state.
+- [ ] Focused unit/mutation tests discriminate fixture substitution, omitted
+  cases, wrong classification, loosened launch expectations and weakened
+  cleanup; locked Rust workspace tests and the hosted exact-head proof pass.
+- [ ] The roadmap and issue handoff distinguish this hosted development proof
+  from exact registration, approved activation, production-limit selection and
+  deployed Workstream operation owned by #555.
+
+## Risk and review routing
+
+- Risk class: L1 — bounded untrusted-code isolation, resource classification,
+  evidence workflow and cleanup behavior.
+- Required reviewers: architecture and reuse for the existing-runner boundary;
+  security for isolation, fixture custody and missing-image handling; CI
+  integrity for pull-request execution/evidence/cleanup; QA and test delta for
+  feasible discriminating negative cases; documentation for roadmap and honest
+  proof limits.
+- Human review focus: accept the fixed-recipe conclusion that `build_failed` is
+  unreachable contributor blame, inspect each real package mutation and exact
+  result, and verify no privilege/network/limit relaxation or deployment claim.
+
+## Evidence
+
+| Claim | Command or proof | Result | Remaining uncertainty |
+|---|---|---|---|
+| Current proof boundary | Inspect merged #594 service, PRE contract, workflow, matrix and run `39058870579` | One successful and one interruption path are implemented and hosted-green | Negative packages and forced resource cases are not exercised |
+| Fixed-recipe feasibility | Trace exact PRE Dockerfile and projected builder context through `validate_fixed_text`, `project_build_context` and `run_builder` | No contributor-controlled build instruction exists after PRE | Plan review must confirm source metadata/path/storage cannot produce a distinct work failure |
+| Fixture contracts | Focused stdlib tests for variant preparation and PRE invocation | Planned | Source tests do not replace hosted runsc execution |
+| Result classification | Locked Rust workspace tests including real builder command-path regression | Planned | Fake Docker proves mapping, not Docker/runsc behavior |
+| Real negative/resource matrix | Existing path-scoped hosted workflow on exact PR head | Planned | Development runner evidence is not deployed production proof |
+| Evidence closure | Matrix reducer, evidence verifier, owned cleanup receipt and mutation probes | Planned | Production activation and #555 journey remain separate |
+
+## Review findings
+
+- Discovery finding: a genuine contributor `build_failed` package is infeasible
+  under the exact PRE recipe. Fabricating one would either violate PRE or relabel
+  missing trusted infrastructure as contributor work. The plan therefore makes
+  that invariant executable and narrows the service classification.
+
+## Reconciliation
+
+- Current-source reconciliation: based on `origin/main` at
+  `51b86807111ff25b067402219ba0b533e0750f3e`; merged #594 owns the checker and
+  proof harness. Later main changes must be inspected before readiness.
+- Next usable boundary: #555 registers and activates the exact checker entry,
+  chooses production limits and runs the connected deployed contribution drill.
+- Remaining risks: GitHub-hosted isolated DIND/runsc remains development proof;
+  production topology, limits and operational recovery require #555.
