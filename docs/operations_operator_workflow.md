@@ -213,6 +213,10 @@ the checker or accept the Submission. On response loss, repeat the exact project
 event, reason and key. Fresh authority is required for replay, which returns the
 same child. Every different key conflicts once a child exists.
 
+After a child is scheduled, `source.classification` records the scheduling
+decision, while `reconciliation_state` reports the child's current progress or
+outcome. For example, a `retry_safe` source can have an `acknowledged` child.
+
 The OUTBOX handler rechecks source facts before acting. A committed false-policy outcome
 retains its original FinalAcceptance, submitter ContributionRecord and award set;
 reconciliation never fabricates a Review or duplicates those effects. The

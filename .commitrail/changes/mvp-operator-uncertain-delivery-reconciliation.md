@@ -274,6 +274,10 @@ The sole child is the immutable reconciliation receipt. Inspection links it to
 the original attempt and projects that child as pending, active, acknowledged
 or held without changing the original dead letter. OUTBOX's internal UNKNOWN
 child state is exposed only as the closed public `held` classification.
+After the child is scheduled, the source classification remains the immutable
+scheduling decision; `reconciliation_state` reports the child's current
+progress or outcome. An acknowledged child can therefore retain a
+`retry_safe` source classification.
 
 ### Alternatives rejected
 
@@ -311,13 +315,13 @@ child state is exposed only as the closed public `held` classification.
   one FinalAcceptance, submitter ContributionRecord and governed award set and
   creates no Review. A no-effect completion may invoke the existing routing
   operation once; partial, stale or inconsistent outcomes remain held.
-- [ ] A real rolled-back acceptance followed by original UNKNOWN can be
+- [x] A real rolled-back acceptance followed by original UNKNOWN can be
   reconciled through the public command and production delivery wrapper into
   exactly one routing manifest, FinalAcceptance, submitter contribution and
   governed award set, with no Review. Original event and attempt rows remain
   unchanged; inspection, same-key replay and duplicate child delivery retain
   the recovered effects.
-- [ ] PostgreSQL independently rejects invalid original/child/cause custody
+- [x] PostgreSQL independently rejects invalid original/child/cause custody
   through the intended guard. Negative probes preserve otherwise valid payload
   commitments; removing a key guard makes its corresponding regression fail.
   Ordinary receipt shape/digest and original completion execution remain valid.
@@ -362,16 +366,17 @@ child state is exposed only as the closed public `held` classification.
 
 | Claim | Command or proof | Result | Remaining uncertainty |
 |---|---|---|---|
-| Existing terminal UNKNOWN attempts are immutable and excluded from automatic replay | Inspect OUTBOX delivery/model/recovery SQL guards and production registry | Confirmed on base | Plan review must challenge whether a child event is the smallest safe execution seam |
-| Request source has a durable no-effect discriminator | Inspect CHECKERS queued/running/terminal state, lease generation and phase evidence | Queued generation zero with no phase evidence is distinct; running or expired-running is uncertain | Real PostgreSQL race/interruption proof required |
-| Completion commit is atomically distinguishable | Inspect `TaskPostSubmitOutcome`, routing manifest and deferred closure | Complete manifest is the retained outcome; absent transaction leaves no committed routing effects | Real false-policy commit/ack-loss and corruption proof required |
-| Existing operations remain sole writers | Recovery-bound typed invocation observation composes the existing executor/outcome owners; committed completion uses the extracted read-only retained-outcome verifier | Request and committed-completion proofs cover no-repeat behavior; the retry-safe completion proof must also reach production delivery and final acceptance | The full durable-worker interruption drill remains #555 |
-| Public authority remains least privilege | Exact list/status.read and reconcile/reconcile.run pairs; project-targeted `outbox_delivery` audit resource; cause validation while existing owners retain their fixed-service actions | Catalogue/OpenAPI/rate proofs pass; public PostgreSQL denial, revocation and same-key replay proofs pass | No new permission, role or service grant |
-| Migration preserves closed audit vocabularies and routing custody | Upgrade from 0054 to `0055_delivery_reconciliation`, exact audit/resource pairs, wrong pair/target rejection, downgrade refusal, ordinary and recovery routing guard proofs | Migration and source-specific PostgreSQL tests must use the final schema fingerprint and exact committed candidate | Final full-suite execution remains repository CI evidence |
-| Missing completion proof discriminates the defect | `test_public_operator_recovers_rolled_back_acceptance_once` runs a real acceptance transaction then rolls it back, finalizes the original UNKNOWN, creates a child through public APIs and delivers it | At `5f2e1c97f`, the intended acknowledgement assertion failed because the child became UNKNOWN; the committed-request control passed; isolated cleanup complete | The repaired production wrapper and exact persisted lineage require the final committed-candidate run |
-| Request, completion and child custody are source-specific | Public PostgreSQL request/completion cases and independent-session races; full original event/attempt snapshots, one child, retained effects, source transition and foreign denial | Includes committed request and completion, retry-safe request and completion, held UNKNOWN and commit/rollback races | Exploratory or earlier split-head runs do not establish final candidate correctness |
-| Routing receipts bind recovery without rewriting retained facts | Pure AUTH substitutions, ordinary fixed digest vectors, exact JSON shape, recovered adapter replay and each child-claim field commitment | 102 focused AUTH contract tests passed during repair, including the new recovery and retained-evidence cases | Final candidate execution and PostgreSQL custody remain separate requirements |
-| Closed contracts and production inventories match the surface | DTO/privacy/idempotency contracts, OUTBOX append validation, AUTH catalogue, OpenAPI, rate, ownership, lane and selected MCP contract checks | 18 MCP contract tests passed against the actual backend OpenAPI after regenerating the one affected fragment | No generic OUTBOX recovery surface or MCP tool was added |
+| Existing terminal UNKNOWN attempts are immutable and excluded from automatic replay | Public PostgreSQL request/completion recovery and held-child cases compare complete original event and attempt rows before and after reconciliation | Final candidate `060ccfb82`: public module 9/9 passed in 172.06s with isolated database cleanup complete | The full durable-worker interruption drill remains #555 |
+| Request source has a durable no-effect discriminator | Public queued-generation-zero, running/partial, committed, source-transition and child-delivery cases through existing CHECKERS owners | Final candidate `060ccfb82`: retry-safe and committed requests, held uncertain work and no-repeat delivery passed in the public 9/9 batch | No request outside the exact registered source may use this surface |
+| Completion commit is atomically distinguishable | Public retained-outcome verification plus rollback-to-UNKNOWN recovery through the production delivery wrapper | Final candidate `060ccfb82`: committed and retry-safe completion paths retained exact routing, FinalAcceptance, contribution and awards with no Review or repeat effect | The full hosted interruption matrix remains #555 |
+| Existing operations remain sole writers | Recovery-bound typed invocation observation composes the existing executor/outcome owners; committed completion uses the extracted read-only retained-outcome verifier | Final public PostgreSQL proof reached the existing executor/outcome and acceptance owners; response-loss replay retained the exact effects | The full durable-worker interruption drill remains #555 |
+| Public authority remains least privilege | Exact list/status.read and reconcile/reconcile.run pairs; project-targeted `outbox_delivery` audit resource; cause validation while existing owners retain their fixed-service actions | Final public 9/9 proof includes denial, revocation and same-key replay; catalogue, OpenAPI and route-rate inventories pass | No new permission, role or service grant |
+| Migration preserves closed audit vocabularies and routing custody | Upgrade from 0054 to `0055_delivery_reconciliation`, exact audit/resource pairs, wrong pair/target rejection, downgrade refusal, ordinary and recovery routing guard proofs | Final candidate `060ccfb82`: migration plus independent-session concurrency 4/4 passed in 117.97s; schema fingerprint is `83cd646aa391c0a74e0e856f85313a1c5a97c9839b0f88450090e27f2967998f`; cleanup complete | Repository-wide migration coverage remains CI evidence |
+| Completion defect is directly discriminated | `test_public_operator_recovers_rolled_back_acceptance_once` rolls back a real acceptance, finalizes the original UNKNOWN, creates a child publicly and delivers it after Operator revocation | The pre-repair assertion failed at `5f2e1c97f` when the child became UNKNOWN; the repaired final candidate passed through acknowledgement, exact effect lineage and replay in the public 9/9 batch | No deployed-worker claim is inferred from focused PostgreSQL proof |
+| Request, completion and command concurrency are source-specific | Public PostgreSQL request/completion cases and independent-session races; full original event/attempt snapshots, one child, retained effects, source transition and foreign denial | Final candidate `060ccfb82`: public 9/9 and migration/concurrency 4/4 passed with zero skips and isolated cleanup complete | Earlier exploratory runs are not used as final-candidate evidence |
+| PostgreSQL custody rejects substituted recovery provenance | Eleven focused controls cover ordinary and recovered routing, missing/wrong/finalized child claims, coherent source/cause/Operator substitutions and a transactional guard-removal mutant | At committed source `2cd97513f` with final production source unchanged: the first bounded run passed the first eight nodes before timeout; a separate tail run passed the remaining 3/3 in 71.26s. All eleven collected nodes are individually accounted for, but the timed first run is not described as a whole-module pass | Exact full-module execution remains repository CI evidence |
+| Routing receipts bind recovery without rewriting retained facts | Pure AUTH substitutions, ordinary fixed digest vectors, exact JSON shape, recovered adapter replay and each child-claim field commitment | Final candidate pure AUTH/recovery/TASK contracts passed 160/160; the focused routing AUTH module also passed 102/102 during the repair | Final public PostgreSQL proof independently exercises the persisted receipt path |
+| Closed contracts and production inventories match the surface | DTO/privacy/idempotency contracts, OUTBOX append validation, AUTH catalogue, OpenAPI, rate, ownership, lane and selected MCP contract checks | Final candidate lane/boundary/ownership/static checks pass; 18 MCP contract tests passed against the actual backend OpenAPI after regenerating the one affected fragment | No generic OUTBOX recovery surface or MCP tool was added |
 | Full interruption drill | Parent #555 durable-worker matrix | Deferred | This PR must not claim the complete #555 drill or deployed operation |
 
 ## Review findings
