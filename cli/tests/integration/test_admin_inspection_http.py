@@ -138,6 +138,26 @@ def test_admin_scope_filtered_grants_and_cursor(cli):
         assert invoke(cli, origin, "actor", "role-grants", ACTOR, "--scope", "system").returncode == 0
 
 
+def test_admin_omitted_status_binds_default_active_response_on_both_routes(cli):
+    revoked = GRANT | {
+        "status": "revoked", "version": 2,
+        "revoked_by_actor_profile_id": ACTOR,
+        "revoked_by_admin_role_grant_id": KEY,
+        "revoked_reason": "End assignment", "revoked_at": STAMP,
+    }
+    with http_fixture() as (origin, response, requests):
+        for args in (("role-grants",), ("actor", "role-grants", ACTOR)):
+            response["body"] = json.dumps(page([GRANT])).encode()
+            active = invoke(cli, origin, *args, "--scope", "project", "--project-id", PROJECT)
+            assert active.returncode == 0 and json.loads(active.stdout)["items"] == [GRANT]
+            assert "status" not in parse_qs(urlsplit(requests[-1][1]).query)
+
+            response["body"] = json.dumps(page([revoked])).encode()
+            refused = invoke(cli, origin, *args, "--scope", "project", "--project-id", PROJECT)
+            assert_failure(refused, "invalid_api_response")
+            assert "status" not in parse_qs(urlsplit(requests[-1][1]).query)
+
+
 def test_admin_rejects_bad_inputs_without_dispatch(cli):
     with http_fixture() as (origin, _response, requests):
         for args in (

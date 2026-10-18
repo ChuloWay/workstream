@@ -163,9 +163,6 @@ func validServiceIdentity(value string) bool {
 		"workstream.review.projection", "workstream.compensation.adapter",
 	)
 }
-func validAdminRole(value string) bool {
-	return oneOf(value, "access_administrator", "operator", "project_manager", "finance_authority", "audit_authority")
-}
 func validAdminScope(value string) bool { return oneOf(value, "system", "project") }
 
 func (q AdminGrantQuery) encode() (string, error) {
@@ -233,6 +230,12 @@ func (c *Client) AdminRoleGrants(ctx context.Context, actor *string, query Admin
 }
 
 func validAdminGrant(raw json.RawMessage, value *AdminRoleGrant, actor *string, query AdminGrantQuery) bool {
+	// Omitting status on the wire asks the backend for its default active page.
+	// Match that effective selection in the response without sending a new flag.
+	expectedStatus := "active"
+	if query.Status != nil {
+		expectedStatus = *query.Status
+	}
 	fields, err := contextObject(raw, value, []string{
 		"grant_id", "target_actor_profile_id", "role", "scope_type", "status", "version",
 		"granted_by_ref_kind", "granted_by_ref", "grant_reason", "granted_at",
@@ -244,7 +247,7 @@ func validAdminGrant(raw json.RawMessage, value *AdminRoleGrant, actor *string, 
 		(value.ScopeProjectID == nil) != (query.ProjectID == nil) ||
 		(value.ScopeProjectID != nil && !sameUUID(*value.ScopeProjectID, *query.ProjectID)) ||
 		!oneOf(value.Status, "active", "revoked") ||
-		(query.Status != nil && *query.Status != "all" && value.Status != *query.Status) ||
+		(expectedStatus != "all" && value.Status != expectedStatus) ||
 		!oneOf(strconv.Itoa(value.Version), "1", "2") ||
 		!oneOf(value.GrantedByRefKind, "actor_profile", "system_principal") ||
 		value.GrantedByRef == "" ||
