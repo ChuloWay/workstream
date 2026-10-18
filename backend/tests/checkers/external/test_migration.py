@@ -300,7 +300,7 @@ async def test_delivery_reconciliation_audit_upgrade_and_downgrade_refusal(
                     assert stored["resource_type"] == "outbox_delivery"
                     assert str(UUID(stored["resource_id"])) == stored["resource_id"]
                     assert stored["target_ref_kind"] == "project"
-                    assert stored["target_ref_id"] == stored["project_id"]
+                    assert stored["target_ref_id"] == str(stored["project_id"])
                     with pytest.raises(asyncpg.CheckViolationError) as error:
                         await _insert_audit_pair(
                             connection,
