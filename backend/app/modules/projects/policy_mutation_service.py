@@ -161,30 +161,85 @@ class ProjectPolicyMutationService:
     async def _existing(
         self,
         resolved: ResolvedActor,
+        prepared: PreparedAuthorizationService,
         action: ActionId,
         key: UUID,
         digest: str,
         project_id: UUID,
         guide_id: UUID,
+        kind: Literal["review", "revision"],
+        expected_selector: tuple[UUID, int, str] | None,
         response_type: type[ReviewPolicyResponse] | type[RevisionPolicyResponse],
     ) -> PolicyMutationOutcome | None:
         """Return an exact committed replay or reject unsafe reuse."""
         record = await self._replay.find(resolved.profile.id, action.value, key)
         if record is None:
             return None
+        return await self._replay_outcome(
+            record, resolved, prepared, action, key, digest,
+            project_id, guide_id, kind, expected_selector, response_type,
+        )
+
+    async def _replay_outcome(
+        self, record, resolved, prepared, action, key, digest,
+        project_id, guide_id, kind, expected_selector, response_type,
+    ) -> PolicyMutationOutcome:
+        """Recheck current manager authority before exposing an exact old receipt."""
         if (
-            record.project_id != str(project_id)
+            record.actor_profile_id != resolved.profile.id
+            or record.identity_link_id != resolved.identity_link.id
+            or record.action_id != action.value
+            or record.idempotency_key != key
+            or record.project_id != str(project_id)
             or record.guide_id != str(guide_id)
             or record.request_digest != digest
         ):
             raise PolicyMutationConflict("idempotency_mismatch")
         if record.status != "committed" or record.response_json is None:
             raise PolicyMutationConflict("idempotency_pending")
-        return PolicyMutationOutcome(self._response(record, response_type), True)
+        response = self._response(record, response_type)
+        predecessor_id = expected_selector[0] if expected_selector is not None else None
+        predecessor_generation = expected_selector[1] if expected_selector is not None else None
+        predecessor_digest = expected_selector[2] if expected_selector is not None else None
+        if (
+            response.id != record.policy_id
+            or response.project_id != str(project_id)
+            or response.policy_generation != record.policy_generation
+            or response.supersedes_policy_id != (
+                str(predecessor_id) if predecessor_id is not None else None
+            )
+            or record.policy_generation != (
+                1 if predecessor_generation is None else predecessor_generation + 1
+            )
+        ):
+            raise RuntimeError("committed policy replay lost response custody")
+        resource = self._resource(
+            kind=kind, policy_id=UUID(record.policy_id),
+            operation_id=record.operation_id, request_digest=digest,
+            project_id=project_id, guide_id=guide_id,
+            guide_version=response.guide_version,
+            generation=record.policy_generation, final_digest=record.policy_hash,
+            predecessor_id=predecessor_id,
+            predecessor_generation=predecessor_generation,
+            predecessor_digest=predecessor_digest,
+        )
+        if authorization_resource_digest(resource) != record.resource_context_digest:
+            raise RuntimeError("committed policy replay lost resource custody")
+        caller = self._caller(
+            action, key, project_id, guide_id, UUID(record.policy_id),
+            record.operation_id, digest, record.policy_hash,
+            record.policy_generation, predecessor_id,
+            predecessor_generation, predecessor_digest,
+        )
+        handle = await self._prepare(
+            prepared, action, caller, project_id, guide_id, kind, digest
+        )
+        prepared.close_handle(handle)
+        return PolicyMutationOutcome(response, True)
 
     @staticmethod
     def _response(record, response_type):
-        """Verify replay semantics before interpreting absent legacy fields."""
+        """Validate retained policy semantics before returning its old receipt."""
         response = response_type.model_validate(record.response_json)
         if response.policy_hash != record.policy_hash:
             raise RuntimeError("committed policy replay lost digest custody")
@@ -202,6 +257,58 @@ class ProjectPolicyMutationService:
             except ValueError as exc:
                 raise RuntimeError("committed policy replay lost semantics custody") from exc
         return response
+
+    @staticmethod
+    def _caller(
+        action, key, project_id, guide_id, policy_id, operation_id,
+        request_digest, policy_hash, generation, predecessor_id,
+        predecessor_generation, predecessor_digest,
+    ) -> PreparedAuthorizationInput:
+        return PreparedAuthorizationInput(
+            idempotency_key=key,
+            request_value={
+                "action_id": action.value,
+                "project_id": str(project_id),
+                "guide_id": str(guide_id),
+                "policy_id": str(policy_id),
+                "operation_id": str(operation_id),
+                "request_digest": request_digest,
+                "policy_digest": policy_hash,
+                "policy_generation": generation,
+                "predecessor_policy_id": (
+                    str(predecessor_id) if predecessor_id is not None else None
+                ),
+                "predecessor_policy_generation": predecessor_generation,
+                "predecessor_policy_digest": predecessor_digest,
+                "guide_status": "draft",
+            },
+        )
+
+    @staticmethod
+    async def _prepare(prepared, action, caller, project_id, guide_id, kind, request_digest):
+        try:
+            return await prepared.prepare(
+                action,
+                caller,
+                PreparedAuthorityScope(
+                    kind=PreparedAuthorityScopeKind.PROJECT,
+                    project_id=project_id,
+                ),
+            )
+        except PreparedAuthorizationUnsupported as exc:
+            await prepared.deny_unsupported(
+                action,
+                caller,
+                ProjectPolicyMutationPrepareDenialResourceContext(
+                    resource_type="project_policy_mutation_request",
+                    resource_id=guide_id,
+                    scope_project_id=project_id,
+                    requested_guide_id=guide_id,
+                    requested_policy_kind=kind,
+                    request_digest=request_digest,
+                ),
+                exc,
+            )
 
     async def replace_review_policy(
         self,
@@ -295,7 +402,8 @@ class ProjectPolicyMutationService:
             }
         )
         existing = await self._existing(
-            resolved, action, key, request_digest, project_id, guide_id, response_type
+            resolved, prepared, action, key, request_digest, project_id, guide_id,
+            kind, expected_selector, response_type,
         )
         if existing is not None:
             return existing
@@ -356,49 +464,18 @@ class ProjectPolicyMutationService:
                 raise PolicyMutationConflict("idempotency_mismatch")
             if disposition == "pending" or replay.response_json is None:
                 raise PolicyMutationConflict("idempotency_pending")
-            return PolicyMutationOutcome(self._response(replay, response_type), True)
-        caller = PreparedAuthorizationInput(
-            idempotency_key=key,
-            request_value={
-                "action_id": action.value,
-                "project_id": str(project_id),
-                "guide_id": str(guide_id),
-                "policy_id": str(policy_id),
-                "operation_id": str(operation_id),
-                "request_digest": request_digest,
-                "policy_digest": final_digest,
-                "policy_generation": generation,
-                "predecessor_policy_id": (
-                    str(predecessor_id) if predecessor_id is not None else None
-                ),
-                "predecessor_policy_generation": predecessor_generation,
-                "predecessor_policy_digest": predecessor_digest,
-                "guide_status": "draft",
-            },
+            return await self._replay_outcome(
+                replay, resolved, prepared, action, key, request_digest,
+                project_id, guide_id, kind, expected_selector, response_type,
+            )
+        caller = self._caller(
+            action, key, project_id, guide_id, policy_id, operation_id,
+            request_digest, final_digest, generation, predecessor_id,
+            predecessor_generation, predecessor_digest,
         )
-        try:
-            handle = await prepared.prepare(
-                action,
-                caller,
-                PreparedAuthorityScope(
-                    kind=PreparedAuthorityScopeKind.PROJECT,
-                    project_id=project_id,
-                ),
-            )
-        except PreparedAuthorizationUnsupported as exc:
-            await prepared.deny_unsupported(
-                action,
-                caller,
-                ProjectPolicyMutationPrepareDenialResourceContext(
-                    resource_type="project_policy_mutation_request",
-                    resource_id=guide_id,
-                    scope_project_id=project_id,
-                    requested_guide_id=guide_id,
-                    requested_policy_kind=kind,
-                    request_digest=request_digest,
-                ),
-                exc,
-            )
+        handle = await self._prepare(
+            prepared, action, caller, project_id, guide_id, kind, request_digest
+        )
         guide = await self._projects.lock_project_guide(str(guide_id))
         if guide is None or guide.project_id != str(project_id):
             raise GuideNotFound("guide not found")

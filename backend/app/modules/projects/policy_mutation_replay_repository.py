@@ -91,7 +91,8 @@ class PolicyMutationReplayRepository:
         if record_id == values["id"]:
             return "claimed", record
         if (
-            record.project_id != project_id
+            record.identity_link_id != identity_link_id
+            or record.project_id != project_id
             or record.guide_id != guide_id
             or record.request_digest != request_digest
             or record.policy_hash != policy_hash

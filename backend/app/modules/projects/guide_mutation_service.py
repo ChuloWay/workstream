@@ -120,18 +120,45 @@ class GuideMutationService:
             )
         return PreparedAuthorizationInput(idempotency_key=key, request_value=request), digest
 
-    async def _existing(self, resolved, action, key, digest, response_type):
-        record = await self._replay.find(resolved.profile.id, action.value, key)
-        if record is None:
-            return None
-        if record.identity_link_id != resolved.identity_link.id or record.request_digest != digest:
+    @staticmethod
+    def _update_receipt(record, resolved, key, digest, project_id, guide_id):
+        """Verify the original guide target before releasing its stored receipt."""
+        if (
+            record.actor_profile_id != resolved.profile.id
+            or record.identity_link_id != resolved.identity_link.id
+            or record.action_id != ActionId.PROJECT_GUIDE_UPDATE.value
+            or record.idempotency_key != key
+            or record.project_id != str(project_id)
+            or record.resource_id != str(guide_id)
+            or record.request_digest != digest
+        ):
             raise GuideMutationIdempotencyConflict("idempotency_mismatch")
         if record.status != "committed" or record.response_json is None:
             raise GuideMutationIdempotencyConflict("idempotency_pending")
-        return GuideMutationOutcome(response_type.model_validate(record.response_json), True)
+        response = ProjectGuideResponse.model_validate(record.response_json)
+        if response.id != str(guide_id) or response.project_id != str(project_id):
+            raise RuntimeError("committed guide replay lost response custody")
+        return response
+
+    async def _existing(self, resolved, prepared, key, digest, caller, project_id, guide_id):
+        action = ActionId.PROJECT_GUIDE_UPDATE
+        record = await self._replay.find(resolved.profile.id, action.value, key)
+        if record is None:
+            return None
+        response = self._update_receipt(record, resolved, key, digest, project_id, guide_id)
+        historical_caller = PreparedAuthorizationInput(
+            idempotency_key=key,
+            request_value={**caller.request_value, "operation_id": str(record.operation_id)},
+        )
+        handle = await self._prepare(
+            prepared, action, historical_caller, project_id,
+            guide_id=guide_id, target_kind="guide_update",
+        )
+        prepared.close_handle(handle)
+        return GuideMutationOutcome(response, True)
 
     @staticmethod
-    def _reservation_outcome(disposition, record, response_type):
+    def _reservation_outcome(disposition, record, resolved, key, digest, project_id, guide_id):
         """Return an exact concurrent replay or raise the bounded conflict."""
         if disposition == "claimed":
             return None
@@ -140,7 +167,9 @@ class GuideMutationService:
         if disposition == "pending" or record.response_json is None:
             raise GuideMutationIdempotencyConflict("idempotency_pending")
         return GuideMutationOutcome(
-            response=response_type.model_validate(record.response_json),
+            response=GuideMutationService._update_receipt(
+                record, resolved, key, digest, project_id, guide_id
+            ),
             replayed=True,
         )
 
@@ -485,7 +514,9 @@ class GuideMutationService:
             target_resource_id=guide_id,
             operation_id=operation_id,
         )
-        existing = await self._existing(resolved, action, key, digest, ProjectGuideResponse)
+        existing = await self._existing(
+            resolved, prepared, key, digest, caller, project_id, guide_id
+        )
         if existing:
             return existing
         handle = await self._prepare(
@@ -537,7 +568,9 @@ class GuideMutationService:
             resource_id=guide.id,
             operation_generation=generation,
         )
-        concurrent = self._reservation_outcome(disposition, replay, ProjectGuideResponse)
+        concurrent = self._reservation_outcome(
+            disposition, replay, resolved, key, digest, project_id, guide_id
+        )
         if concurrent is not None:
             return concurrent
         for field, value in changes.items():

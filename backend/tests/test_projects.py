@@ -103,6 +103,7 @@ from app.modules.projects.schemas import (
 from app.modules.authorization.runtime import (
     AuthorizationDenialCode,
     MatchedAuthorityKind,
+    PreparedAuthorizationInput,
     PreparedAuthorizationUnsupported,
 )
 from app.modules.projects.setup_queue import ProjectSetupQueueError
@@ -2212,12 +2213,6 @@ async def test_guide_mutation_service_executes_all_three_authorized_happy_paths(
     assert repository.items
 
 
-class _GuideMutationTestResponse:
-    @classmethod
-    def model_validate(cls, value):
-        return ("validated", value)
-
-
 def _guide_mutation_edge_subject():
     actor_id, link_id, project_id = (uuid4() for _ in range(3))
     resolved = SimpleNamespace(
@@ -2238,55 +2233,82 @@ def _guide_mutation_edge_subject():
     return resolved, project_id, replay, service
 
 
-async def test_guide_mutation_service_classifies_existing_replay() -> None:
-    resolved, _project_id, replay, service = _guide_mutation_edge_subject()
-    replay.record = SimpleNamespace(
-        identity_link_id=str(uuid4()),
+def _guide_update_replay_record(resolved, project_id, guide_id, key):
+    now = datetime.now(UTC).isoformat()
+    return SimpleNamespace(
+        actor_profile_id=resolved.profile.id,
+        identity_link_id=resolved.identity_link.id,
+        action_id=ActionId.PROJECT_GUIDE_UPDATE.value,
+        idempotency_key=key,
+        project_id=str(project_id),
+        resource_id=str(guide_id),
         request_digest="digest",
+        operation_id=uuid4(),
         status="committed",
-        response_json={"id": "response"},
+        response_json={
+            "id": str(guide_id), "project_id": str(project_id),
+            "version": "v1", "status": "draft", "change_summary": "Clarified",
+            "task_examples": None, "task_examples_hash": None,
+            "approved_by": None, "effective_at": None,
+            "created_by": resolved.profile.id, "created_at": now,
+            "updated_at": now, "superseded_at": None,
+        },
     )
+
+
+async def test_guide_mutation_service_classifies_existing_replay() -> None:
+    resolved, project_id, replay, service = _guide_mutation_edge_subject()
+    guide_id, key = uuid4(), uuid4()
+    replay.record = _guide_update_replay_record(resolved, project_id, guide_id, key)
+    caller = PreparedAuthorizationInput(
+        idempotency_key=key,
+        request_value={"operation_id": str(uuid4())},
+    )
+
+    class Prepared:
+        prepared = []
+        closed = []
+
+        async def prepare(self, action, input_value, scope):
+            self.prepared.append((action, input_value, scope))
+            return object()
+
+        def close_handle(self, handle):
+            self.closed.append(handle)
+
+    prepared = Prepared()
+    replay.record.identity_link_id = str(uuid4())
     with pytest.raises(
         guide_mutation_router_module.GuideMutationIdempotencyConflict,
         match="idempotency_mismatch",
     ):
-        await service._existing(
-            resolved,
-            ActionId.PROJECT_GUIDE_CREATE,
-            uuid4(),
-            "digest",
-            _GuideMutationTestResponse,
-        )
-
-    replay.record = SimpleNamespace(
-        identity_link_id=resolved.identity_link.id,
-        request_digest="digest",
-        status="pending",
-        response_json=None,
-    )
+        await service._existing(resolved, prepared, key, "digest", caller, project_id, guide_id)
+    replay.record.identity_link_id = resolved.identity_link.id
+    replay.record.status = "pending"
+    replay.record.response_json = None
     with pytest.raises(
         guide_mutation_router_module.GuideMutationIdempotencyConflict,
         match="idempotency_pending",
     ):
-        await service._existing(
-            resolved,
-            ActionId.PROJECT_GUIDE_CREATE,
-            uuid4(),
-            "digest",
-            _GuideMutationTestResponse,
-        )
+        await service._existing(resolved, prepared, key, "digest", caller, project_id, guide_id)
 
     replay.record.status = "committed"
-    replay.record.response_json = {"id": "response"}
+    replay.record.response_json = _guide_update_replay_record(
+        resolved, project_id, guide_id, key
+    ).response_json
     existing = await service._existing(
-        resolved,
-        ActionId.PROJECT_GUIDE_CREATE,
-        uuid4(),
-        "digest",
-        _GuideMutationTestResponse,
+        resolved, prepared, key, "digest", caller, project_id, guide_id,
     )
-    assert existing.response == ("validated", {"id": "response"})
+    assert existing.response.id == str(guide_id)
     assert existing.replayed is True
+    assert len(prepared.prepared) == len(prepared.closed) == 1
+    assert prepared.prepared[0][1].request_value["operation_id"] == str(
+        replay.record.operation_id
+    )
+    replay.record.response_json["id"] = str(uuid4())
+    with pytest.raises(RuntimeError, match="lost response custody"):
+        await service._existing(resolved, prepared, key, "digest", caller, project_id, guide_id)
+    assert len(prepared.prepared) == 1
 
 
 async def test_guide_update_service_returns_exact_cached_response() -> None:
@@ -2313,20 +2335,21 @@ async def test_guide_update_service_returns_exact_cached_response() -> None:
 
 
 def test_guide_mutation_service_classifies_reservation_outcomes() -> None:
-    _resolved, _project_id, _replay, service = _guide_mutation_edge_subject()
-    record = SimpleNamespace(response_json={"id": "response"})
+    resolved, project_id, _replay, service = _guide_mutation_edge_subject()
+    guide_id, key = uuid4(), uuid4()
+    record = _guide_update_replay_record(resolved, project_id, guide_id, key)
     with pytest.raises(
         guide_mutation_router_module.GuideMutationIdempotencyConflict,
         match="idempotency_mismatch",
     ):
-        service._reservation_outcome("mismatch", record, _GuideMutationTestResponse)
+        service._reservation_outcome("mismatch", record, resolved, key, "digest", project_id, guide_id)
     with pytest.raises(
         guide_mutation_router_module.GuideMutationIdempotencyConflict,
         match="idempotency_pending",
     ):
-        service._reservation_outcome("pending", record, _GuideMutationTestResponse)
-    replayed = service._reservation_outcome("replayed", record, _GuideMutationTestResponse)
-    assert replayed.response == ("validated", {"id": "response"})
+        service._reservation_outcome("pending", record, resolved, key, "digest", project_id, guide_id)
+    replayed = service._reservation_outcome("replayed", record, resolved, key, "digest", project_id, guide_id)
+    assert replayed.response.id == str(guide_id)
     assert replayed.replayed is True
 
 
