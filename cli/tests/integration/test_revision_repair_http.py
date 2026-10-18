@@ -67,7 +67,7 @@ def test_exact_parent_and_missing_root_wire_and_clock_projection(cli):
             assert text.returncode == 0 and text.stderr == "", text.stderr
             assert "\x1b" not in text.stdout
             if clock == "running":
-                assert "\\u001B" in text.stdout
+                assert "\\u001b" in text.stdout
             assert f'"clock_state":"{clock}"' in text.stdout
             assert f'"disposition":"{value["disposition"]}"' in text.stdout
         # A new subcommand must not consume the existing positional manager read.
@@ -139,9 +139,10 @@ def test_canonical_denial_and_uncertain_write_keep_original_key(cli, tmp_path):
         unknown = invoke(cli, origin)
         assert unknown.returncode == 1 and unknown.stdout == ""
         assert json.loads(unknown.stderr)["error"]["outcome_unknown"] is True
-        assert "unchanged" in unknown.stderr
+        text_unknown = invoke(cli, origin, output="text")
+        assert text_unknown.returncode == 1 and "unchanged" in text_unknown.stderr
         assert response["commands"][-1][1] == [KEY]
-        assert len(requests) == 2
+        assert len(requests) == 3
     with goaway_fixture(tmp_path) as (origin, env, requests, _):
         selectors = ("--parent-preparation-id", PARENT, "--parent-preparation-sha256", SHA)
         result = cli(origin, TOKEN, "project", "task", "repair-revision", PROJECT, TASK,
