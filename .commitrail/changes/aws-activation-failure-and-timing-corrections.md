@@ -78,9 +78,12 @@ negative proofs and uncertain-delivery reconciliation; CLI is separately owned.
    generic storage errors. Use existing unavailable persistence. Expired live
    proof retains its distinct unknown-effect behavior; actual mismatch/conflict
    stays distinct. Iterator tests raise during actual `open` advancement.
-5. Document that continuous availability additionally requires successive proof
-   starts within 300 seconds. No new scheduling guarantee is invented; missed
-   cadence fails closed. The hosted drill must measure cadence and duration.
+5. Document that the arithmetic assumes successive proof starts within 300
+   seconds and successful coordination within the allowance. At maximum bounds
+   equality leaves no scheduling/commit latency slack: operators must start
+   earlier or use smaller operation limits for margin. No continuous-availability
+   or scheduling guarantee is invented; missed cadence fails closed. The hosted
+   drill must measure cadence, sequence duration and commit latency.
 6. The terminal-expiry fixture first commits a valid ordered group/activation
    through production owners. In a separate isolated-test transaction, disable
    only the named probe/activation immutable triggers, shift every linked probe
