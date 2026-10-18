@@ -456,8 +456,18 @@ def test_detail_time_directory_swap_cannot_redirect_guide_original(cli, tmp_path
     with guide_server() as (origin, state, requests):
         state["before_detail"] = swap
         result = cli(
-            origin, TOKEN, "project", "guide", "document", PROJECT, GUIDE,
-            DOCUMENT, "--download", str(selected), "-o", "json",
+            origin,
+            TOKEN,
+            "project",
+            "guide",
+            "document",
+            PROJECT,
+            GUIDE,
+            DOCUMENT,
+            "--download",
+            str(selected),
+            "-o",
+            "json",
         )
         assert result.returncode == 0 and result.stderr == "", result.stderr
         assert (original / f"{DOCUMENT}.md").read_bytes() == ORIGINAL

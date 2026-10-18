@@ -58,8 +58,17 @@ def source_server():
 
 def invoke(cli, origin, directory, *, project=PROJECT, selector=SOURCE, output="json"):
     return cli(
-        origin, TOKEN, "-o", output, "project", "task-batch", "source-download",
-        project, selector, "--download", str(directory),
+        origin,
+        TOKEN,
+        "-o",
+        output,
+        "project",
+        "task-batch",
+        "source-download",
+        project,
+        selector,
+        "--download",
+        str(directory),
     )
 
 
@@ -94,7 +103,9 @@ def test_verified_original_exact_public_reads_and_private_no_overwrite(cli, tmp_
         assert (destination / name).read_bytes() == RAW
 
 
-def test_compact_selector_preserves_wire_identity_but_canonicalizes_filename(cli, tmp_path):
+def test_compact_selector_preserves_wire_identity_but_canonicalizes_filename(
+    cli, tmp_path
+):
     compact = SOURCE.replace("-", "")
     with source_server() as (origin, state):
         result = invoke(cli, origin, tmp_path, selector=compact)
@@ -102,8 +113,14 @@ def test_compact_selector_preserves_wire_identity_but_canonicalizes_filename(cli
         assert json.loads(result.stdout)["downloaded"] == SOURCE + ".json"
         assert (tmp_path / (SOURCE + ".json")).read_bytes() == RAW
         assert state["requests"] == [
-            (f"/api/v1/projects/{PROJECT}/task-import-sources/{compact}", "Bearer " + TOKEN),
-            (f"/api/v1/projects/{PROJECT}/task-import-sources/{compact}/content", "Bearer " + TOKEN),
+            (
+                f"/api/v1/projects/{PROJECT}/task-import-sources/{compact}",
+                "Bearer " + TOKEN,
+            ),
+            (
+                f"/api/v1/projects/{PROJECT}/task-import-sources/{compact}/content",
+                "Bearer " + TOKEN,
+            ),
         ]
 
 
@@ -119,7 +136,9 @@ def test_unsafe_destination_and_invalid_selectors_never_contact_api(cli, tmp_pat
             (real, "../private", SOURCE),
             (real, PROJECT, "../private"),
         ):
-            result = invoke(cli, origin, destination, project=project, selector=selector)
+            result = invoke(
+                cli, origin, destination, project=project, selector=selector
+            )
             assert result.returncode == 2 and result.stdout == "", result.stderr
         assert state["requests"] == []
         assert list(real.iterdir()) == []
@@ -151,7 +170,13 @@ def test_mismatched_content_never_publishes_partial_file(cli, tmp_path):
     with source_server() as (origin, state):
         variants = (
             (RAW, {"Content-Type": "text/plain"}),
-            (RAW, {"Content-Type": "application/json", "Content-Length": str(len(RAW) + 1)}),
+            (
+                RAW,
+                {
+                    "Content-Type": "application/json",
+                    "Content-Length": str(len(RAW) + 1),
+                },
+            ),
             (RAW[:-1] + b" ", {"Content-Type": "application/json"}),
             (RAW + b" ", {"Content-Type": "application/json"}),
             (RAW[:-1], {"Content-Type": "application/json"}),
@@ -159,7 +184,9 @@ def test_mismatched_content_never_publishes_partial_file(cli, tmp_path):
         )
         for body, headers in variants:
             state["content"], state["content_headers"] = body, headers
-            failure(invoke(cli, origin, tmp_path), "task_import_source_integrity_mismatch")
+            failure(
+                invoke(cli, origin, tmp_path), "task_import_source_integrity_mismatch"
+            )
             assert list(tmp_path.iterdir()) == []
 
 
@@ -167,7 +194,8 @@ def test_broken_content_stream_removes_private_partial_file(cli, tmp_path):
     with source_server() as (origin, state):
         state["content"] = RAW[:10]
         state["content_headers"] = {
-            "Content-Type": "application/json", "Content-Length": str(len(RAW)),
+            "Content-Type": "application/json",
+            "Content-Length": str(len(RAW)),
         }
         failure(invoke(cli, origin, tmp_path), "task_import_source_download_failed")
         assert list(tmp_path.iterdir()) == []
@@ -183,13 +211,19 @@ def test_content_redirect_is_not_followed_or_published(cli, tmp_path):
         assert list(tmp_path.iterdir()) == []
 
 
-def test_existing_symlink_or_different_uuid_spelling_cannot_replace_target(cli, tmp_path):
+def test_existing_symlink_or_different_uuid_spelling_cannot_replace_target(
+    cli, tmp_path
+):
     target = tmp_path / (SOURCE + ".json")
     keep = tmp_path / "keep"
     keep.write_bytes(b"preserve")
     target.symlink_to(keep)
     with source_server() as (origin, state):
-        failure(invoke(cli, origin, tmp_path, selector=SOURCE.replace("-", "")), "invalid_arguments", exit_code=2)
+        failure(
+            invoke(cli, origin, tmp_path, selector=SOURCE.replace("-", "")),
+            "invalid_arguments",
+            exit_code=2,
+        )
         assert target.is_symlink() and keep.read_bytes() == b"preserve"
         assert len(state["requests"]) == 1
 
