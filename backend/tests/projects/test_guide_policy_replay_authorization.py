@@ -487,7 +487,7 @@ async def test_policy_replay_waits_for_grant_revocation_then_denies(
 
     async def signal_grant_query(self, actor_profile_id, permission_id, **kwargs):
         if (
-            actor_profile_id == actor_id
+            str(actor_profile_id) == str(actor_id)
             and str(kwargs.get("scope_project_id")) == project["id"]
             and kwargs.get("for_update")
         ):
@@ -531,7 +531,7 @@ async def test_policy_replay_waits_for_grant_revocation_then_denies(
                 blocked_query = (
                     await revoker.execute(
                         text(
-                            "select pid, wait_event_type, wait_event, query "
+                            "select pid, wait_event_type, wait_event "
                             "from pg_stat_activity where datname = current_database() "
                             "and pid != pg_backend_pid() "
                             "and :revoker_pid = any(pg_blocking_pids(pid)) "
@@ -547,11 +547,6 @@ async def test_policy_replay_waits_for_grant_revocation_then_denies(
                 "exact replay never waited on the uncommitted revoke; "
                 f"request_status={replay_task.result().status_code if replay_task.done() else 'pending'}"
             )
-            print(
-                "replay lock dependency: "
-                f"waiter_pid={blocked_query.pid} revoker_pid={revoker_pid} "
-                f"wait_event={blocked_query.wait_event} sql={blocked_query.query}"
-            )
             assert not replay_task.done()
             await revoker.commit()
             revocation_committed = True
@@ -562,11 +557,7 @@ async def test_policy_replay_waits_for_grant_revocation_then_denies(
                 await asyncio.gather(replay_task, return_exceptions=True)
     assert replay_task is not None
     denied = await asyncio.wait_for(replay_task, timeout=5)
-    print(
-        "replay after revoke: "
-        f"status={denied.status_code} code={denied.json().get('error', {}).get('code')} "
-        f"grant_query_entered={entered_grant_query.is_set()}"
-    )
+    assert entered_grant_query.is_set()
     assert denied.status_code == 403, denied.text
     assert denied.json()["error"]["code"] == "permission_not_granted"
     assert await _product_counts(project["id"], guide["id"]) == original_counts
