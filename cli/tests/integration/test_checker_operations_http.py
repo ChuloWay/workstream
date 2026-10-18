@@ -100,6 +100,21 @@ def invoke(cli, origin, *args, output="json"):
     return cli(origin, TOKEN, "-o", output, "operations", "checker", *args)
 
 
+def test_checker_is_one_child_of_single_operations_root(cli):
+    root = cli("", "", "--help")
+    assert root.returncode == 0 and root.stderr == "", root.stderr
+    assert sum(line.strip().startswith("operations ") for line in root.stdout.splitlines()) == 1
+
+    operations = cli("", "", "operations", "--help")
+    assert operations.returncode == 0 and operations.stderr == "", operations.stderr
+    assert sum(line.strip().startswith("checker ") for line in operations.stdout.splitlines()) == 1
+
+    checker = cli("", "", "operations", "checker", "--help")
+    assert checker.returncode == 0 and checker.stderr == "", checker.stderr
+    for name in ("registry", "retry-sources", "retry"):
+        assert any(line.strip().startswith(name + " ") for line in checker.stdout.splitlines())
+
+
 def test_registry_registration_and_read_exact_wire_and_closed_entry(cli, tmp_path):
     path = tmp_path / "checker.json"
     with http_fixture() as (origin, response, requests):

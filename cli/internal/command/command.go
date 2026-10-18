@@ -166,7 +166,9 @@ func Run(args []string, stdout, stderr io.Writer, getenv environment, version st
 		},
 	})
 	root.AddCommand(project)
-	addCheckerOperations(root, client, &output, stdout)
+	operations := &cobra.Command{Use: "operations", Short: "Explicit system Operator operations"}
+	addCheckerOperations(operations, client, &output, stdout)
+	root.AddCommand(operations)
 	addContributorTasks(root, client, &output, stdout)
 	addContributorReads(root, client, &output, stdout)
 

@@ -8,8 +8,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func addCheckerOperations(root *cobra.Command, client func() (*api.Client, error), output *string, stdout io.Writer) {
-	operations := &cobra.Command{Use: "operations", Short: "Explicit system Operator operations"}
+func addCheckerOperations(operations *cobra.Command, client func() (*api.Client, error), output *string, stdout io.Writer) {
 	checker := &cobra.Command{Use: "checker", Short: "External checker registration and terminal recovery"}
 	registry := &cobra.Command{Use: "registry", Short: "Immutable external-checker registry; publication does not enable execution"}
 
@@ -112,5 +111,4 @@ func addCheckerOperations(root *cobra.Command, client func() (*api.Client, error
 	retry.Flags().StringVar(&retryKey, "idempotency-key", "", "Required caller-owned UUID; reuse with exact source and reason for manual replay")
 	checker.AddCommand(retry)
 	operations.AddCommand(checker)
-	root.AddCommand(operations)
 }
