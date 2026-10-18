@@ -16,6 +16,7 @@ from app.modules.outbox.api import FinalizationCause, HandlerOutcome
 from app.modules.checkers.api.delivery_reconciliation import (
     PostSubmitDeliveryOperationUnavailable,
 )
+from app.modules.checkers.delivery_reconciliation import PostSubmitDeliveryService
 from app.modules.reviews.lifecycle.fence import PostgresJointLifecycleMutationFence
 from app.modules.tasks.post_submit_routing.outcome import TaskPostSubmitOutcome
 from tests.authentication.fixtures import (
@@ -206,6 +207,27 @@ async def test_public_operator_retries_proven_no_effect_request_once(
     admin_access,
 ) -> None:
     """A queued generation-zero request may run once behind the immutable child."""
+    captured = []
+    original_reconcile = PostSubmitDeliveryService.reconcile
+
+    async def capture_reconcile(owner, *args, **kwargs):
+        try:
+            return await original_reconcile(owner, *args, **kwargs)
+        except Exception as error:
+            causes = []
+            current = error
+            for _ in range(6):
+                if current is None:
+                    break
+                diagnostic = getattr(getattr(current, "orig", None), "diag", None)
+                causes.append(
+                    (type(current).__name__, getattr(diagnostic, "constraint_name", None))
+                )
+                current = current.__cause__
+            captured.append(tuple(causes))
+            raise
+
+    monkeypatch.setattr(PostSubmitDeliveryService, "reconcile", capture_reconcile)
     async with material_fixture(tmp_path, auth_database_env) as h:
         operator_grant = await admin_access.signed.grant(
             admin_access.admin, admin_access.target
@@ -232,7 +254,7 @@ async def test_public_operator_retries_proven_no_effect_request_once(
         created = await _reconcile(
             admin_access, h.request.project_id, original.claim.event_id, key
         )
-        assert created.status_code == 201, created.text
+        assert created.status_code == 201, f"{created.text}; cause={captured[:2]}"
         result = created.json()
         assert result["source"] == source | {
             "reconciliation_event_id": result["successor"]["event_id"],
