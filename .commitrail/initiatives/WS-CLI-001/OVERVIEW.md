@@ -36,6 +36,12 @@
 
 ## Current boundary
 
+[WS-CLI-001-31](WS-CLI-001-31.md) adds `project task-batch source-download`
+through retained-source status and content public GETs. The CLI verifies bytes
+against the returned size/SHA-256 before publishing a private, non-overwriting
+local file. Source custody and fresh read authorization remain backend-owned;
+the CLI never reads a provider URL or storage key directly.
+
 The backend exposes `GET /api/v1/actors/me` and
 `GET /api/v1/actors/me/authorization-context` in
 `backend/app/api/routes/auth.py`. The selected 29-operation

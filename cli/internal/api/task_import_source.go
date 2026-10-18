@@ -2,8 +2,12 @@ package api
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"io"
+	"mime"
 	"net/http"
 	"net/url"
 
@@ -19,6 +23,12 @@ type TaskImportSource struct {
 	MediaType string `json:"media_type"`
 	Status    string `json:"status"`
 	CreatedAt string `json:"created_at"`
+}
+
+// Filename uses one spelling per UUID identity, including compact or braced
+// selectors accepted by the public API.
+func (source TaskImportSource) Filename() string {
+	return canonicalUUID(source.SourceID) + ".json"
 }
 
 func taskImportSourcePath(project string) string {
@@ -86,6 +96,46 @@ func (c *Client) TaskImportSourceStatus(ctx context.Context, project, source str
 		return result, err
 	}
 	return c.decodeTaskImportSource(raw, project, source)
+}
+
+// DownloadTaskImportSource reads only the public, same-origin source endpoint.
+// The caller publishes its private destination only after this verifies the
+// complete stream against the original commitment returned by source-status.
+func (c *Client) DownloadTaskImportSource(ctx context.Context, project, source string, metadata TaskImportSource, target io.Writer) error {
+	if !validUUID(project) || !validUUID(source) || !sameUUID(metadata.ProjectID, project) ||
+		!sameUUID(metadata.SourceID, source) || metadata.Status != "verified" ||
+		!contextPolicyDigest.MatchString(metadata.SHA256) || metadata.ByteCount < 1 ||
+		metadata.ByteCount > taskimport.MaxBytes || metadata.MediaType != "application/json" {
+		return &Failure{Code: "invalid_api_response"}
+	}
+	response, err := c.openRequest(ctx, c.guideHTTP, http.MethodGet,
+		taskImportSourcePath(project)+"/"+url.PathEscape(source)+"/content", "", nil, "", "application/json")
+	if err != nil {
+		return err
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		body, err := io.ReadAll(io.LimitReader(response.Body, maxResponseBytes+1))
+		if err != nil || len(body) > maxResponseBytes {
+			return &Failure{Code: "invalid_api_response", Status: response.StatusCode}
+		}
+		return c.responseFailure(http.MethodGet, response, body)
+	}
+	mediaType, _, err := mime.ParseMediaType(response.Header.Get("Content-Type"))
+	if err != nil || mediaType != metadata.MediaType ||
+		response.Header.Get("Content-Encoding") != "" && response.Header.Get("Content-Encoding") != "identity" ||
+		response.ContentLength >= 0 && response.ContentLength != int64(metadata.ByteCount) {
+		return &Failure{Code: "task_import_source_integrity_mismatch"}
+	}
+	digest := sha256.New()
+	count, err := io.Copy(io.MultiWriter(target, digest), io.LimitReader(response.Body, int64(metadata.ByteCount)+1))
+	if err != nil {
+		return &Failure{Code: "task_import_source_download_failed"}
+	}
+	if count != int64(metadata.ByteCount) || "sha256:"+hex.EncodeToString(digest.Sum(nil)) != metadata.SHA256 {
+		return &Failure{Code: "task_import_source_integrity_mismatch"}
+	}
+	return nil
 }
 
 func (c *Client) decodeTaskImportSource(raw json.RawMessage, project, source string) (Result[TaskImportSource], error) {

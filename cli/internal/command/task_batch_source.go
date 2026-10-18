@@ -1,8 +1,11 @@
 package command
 
 import (
+	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"os"
 
 	"github.com/Flow-Research/workstream/cli/internal/api"
 	"github.com/Flow-Research/workstream/cli/internal/taskimport"
@@ -67,6 +70,52 @@ func addTaskBatchSources(batch *cobra.Command, client func() (*api.Client, error
 			return writeTaskBatchSource(stdout, *output, result)
 		},
 	})
+	var directory string
+	download := &cobra.Command{
+		Use: "source-download PROJECT_ID SOURCE_ID", Short: "Download a verified source JSON original without overwrite", Args: cobra.ExactArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if !api.ValidUUID(args[0]) || !api.ValidUUID(args[1]) {
+				return commandError{"invalid_arguments", "PROJECT_ID and SOURCE_ID must be UUIDs"}
+			}
+			info, err := os.Lstat(directory)
+			if directory == "" || err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+				return commandError{"invalid_arguments", "--download must be an existing real directory"}
+			}
+			apiClient, err := client()
+			if err != nil {
+				return err
+			}
+			result, err := apiClient.TaskImportSourceStatus(cmd.Context(), args[0], args[1])
+			if err != nil {
+				return err
+			}
+			if result.Value.Status != "verified" {
+				return &api.Failure{Code: "task_import_source_not_verified"}
+			}
+			root, err := os.OpenRoot(directory)
+			if err != nil {
+				return errors.New("cannot open download directory")
+			}
+			defer root.Close()
+			name := result.Value.Filename()
+			if err := publishVerifiedDownload(root, name, func(target io.Writer) error {
+				return apiClient.DownloadTaskImportSource(cmd.Context(), args[0], args[1], result.Value, target)
+			}); err != nil {
+				return err
+			}
+			if *output == "json" {
+				body, err := json.Marshal(map[string]any{"downloaded": name, "source": result.Value})
+				if err != nil {
+					return err
+				}
+				return writeSafeJSON(stdout, body)
+			}
+			_, err = fmt.Fprintf(stdout, "Downloaded: %s\n", safeText(name))
+			return err
+		},
+	}
+	download.Flags().StringVar(&directory, "download", "", "Required existing directory for the verified JSON original (never overwrite)")
+	batch.AddCommand(download)
 }
 
 func readTaskBatchJSON(path string) ([]byte, error) {
