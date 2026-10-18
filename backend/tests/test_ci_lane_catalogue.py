@@ -92,6 +92,7 @@ def test_checker_delivery_and_routing_preparation_partition_every_node_once() ->
         "tests/checkers/execution/test_checker_retry_history_replay.py",
         "tests/checkers/execution/test_checker_retry_http.py",
         "tests/checkers/execution/test_checker_retry_migration.py",
+        "tests/checkers/execution/test_delivery_reconciliation_concurrency.py",
         "tests/checkers/execution/test_delivery_reconciliation_contract.py",
         "tests/checkers/execution/test_delivery_reconciliation_public.py",
         "tests/test_post_submit_materialization.py",

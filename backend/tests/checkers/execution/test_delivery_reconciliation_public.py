@@ -17,6 +17,7 @@ from app.modules.checkers.api.delivery_reconciliation import (
     PostSubmitDeliveryOperationUnavailable,
 )
 from app.modules.reviews.lifecycle.fence import PostgresJointLifecycleMutationFence
+from app.modules.tasks.post_submit_routing.outcome import TaskPostSubmitOutcome
 from tests.authentication.fixtures import (
     auth_database_env as auth_database_env,
     clear_settings_cache as clear_settings_cache,
@@ -69,6 +70,40 @@ async def _project_facts(factory, project_id):
             )
         ).one()
         return tuple(row)
+
+
+async def _retained_effect_rows(factory, project_id):
+    """Snapshot every retained routing/acceptance consequence, not only counts."""
+    selections = (
+        ("task_post_submit_routing_manifests", "project_id=:project"),
+        ("final_acceptances", "project_id=:project"),
+        ("contribution_records", "project_id=:project"),
+        ("compensation_awards", "project_id=:project"),
+        (
+            "audit_events",
+            "project_id=:project AND action_id='task.post_submit.route'",
+        ),
+        (
+            "outbox_events",
+            "project_id=:project AND event_type='TaskPostSubmitRouted'",
+        ),
+    )
+    async with factory() as session:
+        return tuple(
+            await session.scalar(
+                text(
+                    "SELECT COALESCE("
+                    "jsonb_agg(to_jsonb(row) ORDER BY to_jsonb(row)::text)::text, "
+                    "'[]') FROM (SELECT * FROM public."
+                    + table
+                    + " WHERE "
+                    + predicate
+                    + ") AS row"
+                ),
+                {"project": str(project_id)},
+            )
+            for table, predicate in selections
+        )
 
 
 async def _delivery_rows(factory, original_id, child_id=None):
@@ -148,7 +183,8 @@ async def _discover_one(admin_access, project_id, *, classification):
     assert source["classification"] == classification
     assert source["delivery_state"] == "dead_letter"
     assert source["error_code"] == "INVOKE_OUTCOME_UNKNOWN"
-    assert "payload" not in response.text and "outcome_json" not in response.text
+    assert "outcome_json" not in response.text
+    assert '"payload":' not in response.text
     return source
 
 
@@ -359,6 +395,7 @@ async def test_public_operator_verifies_committed_acceptance_without_repeating_e
     tmp_path,
     auth_database_env,
     live_acceptance_lifecycle,
+    monkeypatch,
 ) -> None:
     """Acceptance commit plus acknowledgement loss verifies retained effects only."""
     admin_access = live_acceptance_lifecycle
@@ -372,6 +409,7 @@ async def test_public_operator_verifies_committed_acceptance_without_repeating_e
         assert await handler(h.envelope) is HandlerOutcome.ACKNOWLEDGE
         effects = await _project_facts(h.factory, h.request.project_id)
         assert effects == (1, 1, 1, 1, 1, 1)
+        retained_effects = await _retained_effect_rows(h.factory, h.request.project_id)
         finalized = await h.completion_delivery.finalize(
             h.envelope.claim, FinalizationCause.UNKNOWN
         )
@@ -429,11 +467,19 @@ async def test_public_operator_verifies_committed_acceptance_without_repeating_e
         assert result["successor"]["classification"] == "committed"
         child_id = UUID(result["successor"]["event_id"])
 
+        async def unexpected_apply(*_args, **_kwargs):
+            pytest.fail("committed reconciliation invoked the routing writer")
+
+        monkeypatch.setattr(TaskPostSubmitOutcome, "apply", unexpected_apply)
+
         delivered = await production_outbox_delivery(h.factory).deliver(
             child_id, h.request.project_id, "reconcile-completion"
         )
         assert outcome(delivered)["delivery_state"] == "acknowledged"
         assert await _project_facts(h.factory, h.request.project_id) == effects
+        assert await _retained_effect_rows(
+            h.factory, h.request.project_id
+        ) == retained_effects
         original_after, child = await _delivery_rows(
             h.factory, h.envelope.claim.event_id, child_id
         )
