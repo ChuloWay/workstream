@@ -48,6 +48,8 @@ from app.modules.artifacts.models import (
     ArtifactVerificationReceipt,
 )
 from app.interfaces.artifacts import (
+    ArtifactConfigurationError,
+    ArtifactIntegrityError,
     ArtifactPutObservation,
     ArtifactPutResult,
     ArtifactStoreError,
@@ -955,9 +957,20 @@ async def test_terminal_authority_revocation_writes_zero_terminal_facts(
         await engine.dispose()
 
 
+@pytest.mark.parametrize(
+    ("observation_error", "fallback_error"),
+    (
+        (ArtifactStoreUnavailableError, None),
+        (ArtifactConfigurationError, None),
+        (ArtifactIntegrityError, ArtifactConfigurationError),
+    ),
+    ids=("provider-unavailable", "lazy-configuration", "integrity-fallback-configuration"),
+)
 async def test_put_observation_unavailable_retries_then_exhausts_without_facts(
     admission_database_env: str,
     tmp_path: Path,
+    observation_error: type[ArtifactStoreError],
+    fallback_error: type[ArtifactStoreError] | None,
 ) -> None:
     settings = _settings(tmp_path).model_copy(
         update={"artifact_provider_observation_maximum_attempts": 2}
@@ -970,7 +983,12 @@ async def test_put_observation_unavailable_retries_then_exhausts_without_facts(
         identity = SimpleNamespace(provider_key=namespace.adapter)
 
         async def observe_put_result(self, _commitment, **_kwargs):
-            raise ArtifactStoreUnavailableError("provider unavailable")
+            raise observation_error("provider unavailable")
+
+        async def open(self, _provider_object_ref, **_kwargs):
+            assert fallback_error is not None
+            yield b"partial stream"
+            raise fallback_error("provider unavailable")
 
     try:
         async with factory() as session:
@@ -1823,9 +1841,15 @@ async def test_verification_terminal_authority_denial_writes_zero_result_facts(
         await engine.dispose()
 
 
+@pytest.mark.parametrize(
+    "provider_error",
+    (ArtifactStoreUnavailableError, ArtifactConfigurationError),
+    ids=("provider-unavailable", "lazy-configuration"),
+)
 async def test_verification_unavailable_retries_then_exhausts(
     admission_database_env: str,
     tmp_path: Path,
+    provider_error: type[ArtifactStoreError],
 ) -> None:
     settings = _settings(tmp_path).model_copy(
         update={"artifact_provider_observation_maximum_attempts": 2}
@@ -1851,8 +1875,13 @@ async def test_verification_unavailable_retries_then_exhausts(
                 assert job is not None
                 job_id = UUID(job.id)
                 await session.rollback()
-                orchestrator._read_complete = AsyncMock(
-                    side_effect=ArtifactStoreUnavailableError("unavailable")
+                async def unavailable_open(_provider_object_ref, **_kwargs):
+                    yield b"partial stream"
+                    raise provider_error("unavailable")
+
+                orchestrator = ArtifactStorageOrchestrator(
+                    session, SimpleNamespace(identity=store.identity, open=unavailable_open),
+                    namespace, settings, _AllowArtifactAuthority(),
                 )
                 assert await orchestrator.verify_object(job_id) == "provider_unavailable"
                 await session.refresh(job)

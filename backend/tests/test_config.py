@@ -19,7 +19,10 @@ from app.adapters.auth.flow import FlowAuthVerifier
 from app.api.deps.auth import get_application_auth_verifier
 from app.core.auth import clear_auth_verifier_cache, get_auth_verifier
 from app.core.config import (
+    ARTIFACT_AWS_ACTIVATION_REFRESH_SECONDS,
+    ARTIFACT_AWS_ACTIVATION_VALIDITY_SECONDS,
     ARTIFACT_AWS_CLOCK_SAFETY_MARGIN_SECONDS,
+    ARTIFACT_AWS_PROOF_SEQUENCE_ALLOWANCE_SECONDS,
     Settings,
     decode_pagination_cursor_hmac_secret,
     get_settings,
@@ -1489,8 +1492,15 @@ def test_aws_s3_rejects_cross_account_bindings_and_oversized_deadline(
             tmp_path,
             artifact_s3_negative_role_arn="arn:aws:iam::999999999999:role/workstream-negative",
         )
+    assert (
+        _aws_settings(
+            tmp_path,
+            artifact_s3_operation_total_timeout_seconds=330,
+        ).artifact_s3_operation_total_timeout_seconds
+        == 330
+    )
     with pytest.raises(ValidationError, match="activation window"):
-        _aws_settings(tmp_path, artifact_s3_operation_total_timeout_seconds=600)
+        _aws_settings(tmp_path, artifact_s3_operation_total_timeout_seconds=331)
     with pytest.raises(ValidationError, match="trust policies must be distinct"):
         _aws_settings(
             tmp_path,
@@ -1498,12 +1508,17 @@ def test_aws_s3_rejects_cross_account_bindings_and_oversized_deadline(
         )
 
 
-def test_aws_activation_uses_the_fixed_production_clock_safety_margin(
+def test_aws_activation_uses_fixed_production_safety_allowances(
     tmp_path: Path,
 ) -> None:
     settings = _aws_settings(tmp_path)
+    boundary_settings = _aws_settings(
+        tmp_path,
+        artifact_s3_operation_total_timeout_seconds=330,
+    )
 
     assert ARTIFACT_AWS_CLOCK_SAFETY_MARGIN_SECONDS == 30
+    assert ARTIFACT_AWS_PROOF_SEQUENCE_ALLOWANCE_SECONDS == 120
     assert (
         max(
             settings.artifact_s3_operation_total_timeout_seconds,
@@ -1512,6 +1527,25 @@ def test_aws_activation_uses_the_fixed_production_clock_safety_margin(
         + settings.artifact_terminal_persistence_margin_seconds
         + ARTIFACT_AWS_CLOCK_SAFETY_MARGIN_SECONDS
     ) == 450
+    assert (
+        max(
+            settings.artifact_s3_operation_total_timeout_seconds,
+            settings.artifact_complete_read_deadline_seconds,
+        )
+        + settings.artifact_terminal_persistence_margin_seconds
+        + ARTIFACT_AWS_CLOCK_SAFETY_MARGIN_SECONDS
+        + ARTIFACT_AWS_PROOF_SEQUENCE_ALLOWANCE_SECONDS
+    ) == 570
+    assert (
+        max(
+            boundary_settings.artifact_s3_operation_total_timeout_seconds,
+            boundary_settings.artifact_complete_read_deadline_seconds,
+        )
+        + boundary_settings.artifact_terminal_persistence_margin_seconds
+        + ARTIFACT_AWS_CLOCK_SAFETY_MARGIN_SECONDS
+        + ARTIFACT_AWS_PROOF_SEQUENCE_ALLOWANCE_SECONDS
+        + ARTIFACT_AWS_ACTIVATION_REFRESH_SECONDS
+    ) == ARTIFACT_AWS_ACTIVATION_VALIDITY_SECONDS
 
 
 def test_aws_factory_fails_with_live_proof_before_constructing_provider(

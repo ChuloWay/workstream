@@ -300,6 +300,17 @@ class _IamClient:
         return {"PolicyVersion": {"Document": quote(json.dumps(document))}}
 
 
+class _AccessAnalyzerClient:
+    async def validate_policy(self, **_kwargs: object) -> dict[str, object]:
+        return {"findings": []}
+
+    async def check_no_public_access(self, **_kwargs: object) -> dict[str, object]:
+        return {"result": "PASS"}
+
+    async def check_access_not_granted(self, **_kwargs: object) -> dict[str, object]:
+        return {"result": "PASS"}
+
+
 def _client_error(code: str, operation: str) -> ClientError:
     return ClientError(
         {"Error": {"Code": code, "Message": "bounded test response"}},
@@ -501,10 +512,13 @@ async def test_validate_iam_accepts_only_exact_roles_trusts_attachments_and_poli
 ) -> None:
     trusts = _trust_policies()
     iam = _IamClient(trusts)
-    proof = AwsArtifactLiveProof(_settings(tmp_path, trust_policies=trusts), _Session(iam=iam))
+    session = _Session(iam=iam)
+    proof = AwsArtifactLiveProof(_settings(tmp_path, trust_policies=trusts), session)
 
     await proof._validate_iam()
 
+    assert session.requests[0][0] == "iam"
+    assert session.requests[0][1]["region_name"] == "us-east-1"
     assert [call for call in iam.calls if call[0] == "get_role"] == [
         ("get_role", "workstream-runtime"),
         ("get_role", "workstream-readiness"),
@@ -514,6 +528,18 @@ async def test_validate_iam_accepts_only_exact_roles_trusts_attachments_and_poli
         ("get_policy_version", _RUNTIME_POLICY),
         ("get_policy_version", _READINESS_POLICY),
     ]
+
+
+@pytest.mark.asyncio
+async def test_validate_access_analyzer_uses_configured_region(tmp_path: Path) -> None:
+    trusts = _trust_policies()
+    session = _Session(accessanalyzer=_AccessAnalyzerClient())
+    proof = AwsArtifactLiveProof(_settings(tmp_path, trust_policies=trusts), session)
+
+    await proof._validate_access_analyzer(json.dumps(_bucket_policy()))
+
+    assert session.requests[0][0] == "accessanalyzer"
+    assert session.requests[0][1]["region_name"] == "us-east-1"
 
 
 @pytest.mark.asyncio

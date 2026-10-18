@@ -72,12 +72,11 @@ def _aws_activation_settings(settings: Settings) -> Settings:
         }
     )
 
-async def _insert_soon_expiring_activation(
+async def _insert_current_activation(
     session,
     settings: Settings,
     namespace_fingerprint: str,
 ) -> UUID:
-    from datetime import timedelta
     from uuid import uuid4
 
     from app.modules.artifacts.provider_activation import (
@@ -93,14 +92,9 @@ async def _insert_soon_expiring_activation(
         "readiness": settings.artifact_s3_readiness_role_arn,
         "negative_access": settings.artifact_s3_negative_role_arn,
     }
-    now = await artifact_provider_database_time(session)
     for probe_type, principal in principals.items():
         assert principal is not None
-        started_at = (
-            now - timedelta(minutes=14, seconds=55)
-            if probe_type == "runtime_immutability"
-            else await artifact_provider_database_time(session)
-        )
+        started_at = await artifact_provider_database_time(session)
         await record_artifact_provider_probe_result(
             session,
             settings,
@@ -120,6 +114,71 @@ async def _insert_soon_expiring_activation(
         namespace_fingerprint=namespace_fingerprint,
         group_nonce=group_nonce,
     )
+
+async def _age_admitted_activation_near_expiry(factory, activation_id: UUID) -> None:
+    """Simulate elapsed time for one previously valid group in isolated test custody."""
+    async with factory() as session, session.begin():
+        shift = await session.scalar(
+            text("SELECT expires_at-clock_timestamp()-interval '5 seconds' "
+                 "FROM public.artifact_provider_activations WHERE id=:id FOR UPDATE"),
+            {"id": str(activation_id)},
+        )
+        assert shift is not None and shift.total_seconds() > 0
+        # Transactional DDL rolls back if aging fails; successful paths restore
+        # both named immutable triggers before any product code resumes.
+        await session.execute(text(
+            "ALTER TABLE public.artifact_provider_probe_results "
+            "DISABLE TRIGGER artifact_provider_probe_result_immutable"
+        ))
+        await session.execute(text(
+            "ALTER TABLE public.artifact_provider_activations "
+            "DISABLE TRIGGER artifact_provider_activation_immutable"
+        ))
+        try:
+            await session.execute(text(
+                "UPDATE public.artifact_provider_probe_results SET "
+                "started_at=started_at-CAST(:shift AS interval), "
+                "completed_at=completed_at-CAST(:shift AS interval), "
+                "expires_at=expires_at-CAST(:shift AS interval) "
+                "WHERE id IN (SELECT unnest(ARRAY[readiness_result_id,runtime_result_id,"
+                "negative_result_id]) FROM public.artifact_provider_activations WHERE id=:id)"
+            ), {"shift": shift, "id": str(activation_id)})
+            await session.execute(text(
+                "UPDATE public.artifact_provider_activations SET "
+                "activated_at=activated_at-CAST(:shift AS interval), "
+                "expires_at=expires_at-CAST(:shift AS interval) WHERE id=:id"
+            ), {"shift": shift, "id": str(activation_id)})
+        finally:
+            await session.execute(text(
+                "ALTER TABLE public.artifact_provider_probe_results "
+                "ENABLE TRIGGER artifact_provider_probe_result_immutable"
+            ))
+            await session.execute(text(
+                "ALTER TABLE public.artifact_provider_activations "
+                "ENABLE TRIGGER artifact_provider_activation_immutable"
+            ))
+        assert await session.scalar(text(
+            "SELECT a.expires_at=least(r.expires_at,n.expires_at,d.expires_at) "
+            "AND r.expires_at=r.started_at+interval '15 minutes' "
+            "AND n.expires_at=n.started_at+interval '15 minutes' "
+            "AND d.expires_at=d.started_at+interval '15 minutes' "
+            "AND r.completed_at<=n.started_at AND r.completed_at<=d.started_at "
+            "AND a.activated_at-r.started_at<=interval '120 seconds' "
+            "FROM public.artifact_provider_activations a "
+            "JOIN public.artifact_provider_probe_results r ON r.id=a.runtime_result_id "
+            "JOIN public.artifact_provider_probe_results n ON n.id=a.negative_result_id "
+            "JOIN public.artifact_provider_probe_results d ON d.id=a.readiness_result_id "
+            "WHERE a.id=:id"
+        ), {"id": str(activation_id)})
+        for statement in (
+            "UPDATE public.artifact_provider_activations SET expires_at=expires_at WHERE id=:id",
+            "UPDATE public.artifact_provider_probe_results SET expires_at=expires_at "
+            "WHERE id=(SELECT runtime_result_id FROM public.artifact_provider_activations WHERE id=:id)",
+        ):
+            with pytest.raises(DBAPIError, match="immutable"):
+                async with session.begin_nested():
+                    await session.execute(text(statement), {"id": str(activation_id)})
+
 
 async def _assert_recoverable_verification_after_activation_expiry(
     session,
@@ -441,7 +500,6 @@ async def test_checker_output_put_observation_terminal_outcomes(
 @pytest.mark.parametrize("provider_outcome", ["missing", "integrity_mismatch"])
 async def test_expired_activation_rolls_back_provider_verification_facts(
     admission_database_env: str,
-    monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
     provider_outcome: str,
 ) -> None:
@@ -456,10 +514,6 @@ async def test_expired_activation_rolls_back_provider_verification_facts(
     engine = create_async_engine(admission_database_env)
     factory = async_sessionmaker(engine, expire_on_commit=False)
     policy_bundle = await create_standalone_unified_policy(factory, namespace)
-    monkeypatch.setattr(
-        "app.modules.artifacts.provider_activation.ARTIFACT_AWS_CLOCK_SAFETY_MARGIN_SECONDS",
-        0,
-    )
     try:
         async with factory() as session:
             relationships = await seed_checker_output_relationships(
@@ -543,7 +597,7 @@ async def test_expired_activation_rolls_back_provider_verification_facts(
                 assert unrelated_receipt_count > 0
                 await session.rollback()
                 async with session.begin():
-                    activation_id = await _insert_soon_expiring_activation(
+                    activation_id = await _insert_current_activation(
                         session,
                         activation_settings,
                         namespace.namespace_fingerprint,
@@ -566,6 +620,7 @@ async def test_expired_activation_rolls_back_provider_verification_facts(
                     )
                     assert lease.activation_id == activation_id
                     operation_evidence.bind(lease)
+                    await _age_admitted_activation_near_expiry(factory, activation_id)
                     await asyncio.sleep(5.1)
                     if provider_outcome == "missing":
                         raise ArtifactObjectMissingError("missing")

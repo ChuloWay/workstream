@@ -19,6 +19,7 @@ from app.db.errors import integrity_constraint_name
 from app.core.config import Settings
 from app.core.hashing import canonical_json_hash
 from app.interfaces.artifacts import (
+    ArtifactConfigurationError,
     ArtifactStore,
     ArtifactCommitment,
     ArtifactIntegrityError,
@@ -687,6 +688,8 @@ class ArtifactStorageOrchestrator:
                     facts,
                     force_acknowledgement_unknown=True,
                 )
+            except ArtifactConfigurationError:
+                return await self._record_put_unavailable(executor_id, facts)
             except ArtifactStoreError:
                 return await self._record_provider_put_conflict(
                     claimed,
@@ -718,6 +721,8 @@ class ArtifactStorageOrchestrator:
                 facts,
                 force_acknowledgement_unknown=True,
             )
+        except ArtifactConfigurationError:
+            return await self._record_put_unavailable(executor_id, facts)
         except ArtifactStoreError:
             return await self._record_provider_put_conflict(
                 claimed,
@@ -885,6 +890,8 @@ class ArtifactStorageOrchestrator:
         except (ArtifactStoreUnavailableError, TimeoutError):
             return await self._record_verification_unavailable(executor_id, facts)
         except ArtifactProviderLiveProofRequiredError:
+            return await self._record_verification_unavailable(executor_id, facts)
+        except ArtifactConfigurationError:
             return await self._record_verification_unavailable(executor_id, facts)
         except ArtifactStoreError:
             return await self._complete_provider_verification(
