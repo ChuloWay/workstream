@@ -275,7 +275,8 @@ unknown or held without changing the original dead letter.
   writes, while already committed business effects are detected on the next
   observation rather than repeated.
 - [ ] The recovery event remains absent from `retry_unknown`; an UNKNOWN child
-  is reclassified only by a later authorized source-specific command.
+  is projected as held by later authorized reads from durable source facts, and
+  no later reconciliation command or event is allowed.
 - [ ] Real PostgreSQL tests interrupt request execution before invocation,
   during an uncertain external phase and after finalization; interrupt
   completion before commit and after false-policy acceptance commit; and assert
