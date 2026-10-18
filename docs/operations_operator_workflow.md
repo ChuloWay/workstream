@@ -213,7 +213,7 @@ the checker or accept the Submission. On response loss, repeat the exact project
 event, reason and key. Fresh authority is required for replay, which returns the
 same child. Every different key conflicts once a child exists.
 
-The worker rechecks source facts before acting. A committed false-policy outcome
+The OUTBOX handler rechecks source facts before acting. A committed false-policy outcome
 retains its original FinalAcceptance, submitter ContributionRecord and award set;
 reconciliation never fabricates a Review or duplicates those effects. The
 original UNKNOWN delivery remains immutable. If the child also becomes UNKNOWN,
