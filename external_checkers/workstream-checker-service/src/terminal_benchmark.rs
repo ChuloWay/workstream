@@ -1664,6 +1664,7 @@ exit 2
     #[test]
     fn oracle_command_applies_equal_memory_and_swap_limits() {
         let root = temporary_directory("oracle-memory-command");
+        fs::create_dir(&root).unwrap();
         let capture = root.join("arguments");
         let docker = root.join("docker");
         fs::write(
@@ -1752,7 +1753,7 @@ exit 64
             client: &client,
             deadline: Instant::now() + Duration::from_secs(10),
         };
-        let mut run = |name: &str| {
+        let run = |name: &str| {
             let mut output = OutputMeter::new(65_536);
             let mut cleanup = EmergencyCleanupBudget::new();
             run_builder(
