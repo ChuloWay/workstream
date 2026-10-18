@@ -103,16 +103,27 @@ def invoke(cli, origin, *args, output="json"):
 def test_checker_is_one_child_of_single_operations_root(cli):
     root = cli("", "", "--help")
     assert root.returncode == 0 and root.stderr == "", root.stderr
-    assert sum(line.strip().startswith("operations ") for line in root.stdout.splitlines()) == 1
+    assert (
+        sum(line.strip().startswith("operations ") for line in root.stdout.splitlines())
+        == 1
+    )
 
     operations = cli("", "", "operations", "--help")
     assert operations.returncode == 0 and operations.stderr == "", operations.stderr
-    assert sum(line.strip().startswith("checker ") for line in operations.stdout.splitlines()) == 1
+    assert (
+        sum(
+            line.strip().startswith("checker ")
+            for line in operations.stdout.splitlines()
+        )
+        == 1
+    )
 
     checker = cli("", "", "operations", "checker", "--help")
     assert checker.returncode == 0 and checker.stderr == "", checker.stderr
     for name in ("registry", "retry-sources", "retry"):
-        assert any(line.strip().startswith(name + " ") for line in checker.stdout.splitlines())
+        assert any(
+            line.strip().startswith(name + " ") for line in checker.stdout.splitlines()
+        )
 
 
 def test_registry_registration_and_read_exact_wire_and_closed_entry(cli, tmp_path):
@@ -123,21 +134,35 @@ def test_registry_registration_and_read_exact_wire_and_closed_entry(cli, tmp_pat
             path.write_text(json.dumps(value, ensure_ascii=False))
             response.update(status=201, body=json.dumps(entry(value)).encode())
             result = invoke(
-                cli, origin, "registry", "register", "--input", str(path),
-                "--idempotency-key", KEY,
+                cli,
+                origin,
+                "registry",
+                "register",
+                "--input",
+                str(path),
+                "--idempotency-key",
+                KEY,
             )
-            assert result.returncode == 0 and json.loads(result.stdout) == entry(value), result.stderr
+            assert result.returncode == 0 and json.loads(result.stdout) == entry(
+                value
+            ), result.stderr
             assert requests[-1] == (
-                "POST", "/api/v1/operations/external-checker-registry", "Bearer " + TOKEN,
+                "POST",
+                "/api/v1/operations/external-checker-registry",
+                "Bearer " + TOKEN,
             )
             assert response["commands"][-1] == ("application/json", [KEY], value)
             assert response["raw_commands"][-1] == path.read_bytes()
 
             response["status"] = 200
             read = invoke(cli, origin, "registry", "read", ENTRY.replace("-", ""))
-            assert read.returncode == 0 and json.loads(read.stdout) == entry(value), read.stderr
+            assert read.returncode == 0 and json.loads(read.stdout) == entry(value), (
+                read.stderr
+            )
             assert requests[-1] == (
-                "GET", "/api/v1/operations/external-checker-registry/" + ENTRY.replace("-", ""),
+                "GET",
+                "/api/v1/operations/external-checker-registry/"
+                + ENTRY.replace("-", ""),
                 "Bearer " + TOKEN,
             )
 
@@ -153,8 +178,18 @@ def test_registry_refuses_local_invalid_and_response_substitution(cli, tmp_path)
         ):
             path.write_text(json.dumps(spec() | changed))
             assert_failure(
-                invoke(cli, origin, "registry", "register", "--input", str(path), "--idempotency-key", KEY),
-                "invalid_arguments", 2,
+                invoke(
+                    cli,
+                    origin,
+                    "registry",
+                    "register",
+                    "--input",
+                    str(path),
+                    "--idempotency-key",
+                    KEY,
+                ),
+                "invalid_arguments",
+                2,
             )
         assert requests == []
 
@@ -164,23 +199,53 @@ def test_registry_refuses_local_invalid_and_response_substitution(cli, tmp_path)
         for bad in (
             entry(value) | {"registration_operation_id": ACTOR},
             entry(value) | {"image_digest": "sha256:" + "b" * 64},
-            entry(value) | {"input_schema": value["input_schema"] | {"schema_sha256": "sha256:" + "b" * 64}},
-            entry(value) | {"input_schema": value["input_schema"] | {"document": {"type": "array"}}},
-            entry(value) | {"registry_entry_id": "00000000-0000-4000-8000-000000000001"},
+            entry(value)
+            | {
+                "input_schema": value["input_schema"]
+                | {"schema_sha256": "sha256:" + "b" * 64}
+            },
+            entry(value)
+            | {"input_schema": value["input_schema"] | {"document": {"type": "array"}}},
+            entry(value)
+            | {"registry_entry_id": "00000000-0000-4000-8000-000000000001"},
             entry(value) | {"entry_digest": "latest"},
             entry(value) | {"extra": "unexpected"},
         ):
             response["body"] = json.dumps(bad).encode()
-            result = invoke(cli, origin, "registry", "register", "--input", str(path), "--idempotency-key", KEY)
+            result = invoke(
+                cli,
+                origin,
+                "registry",
+                "register",
+                "--input",
+                str(path),
+                "--idempotency-key",
+                KEY,
+            )
             assert_failure(result, "invalid_api_response")
             assert json.loads(result.stderr)["error"]["outcome_unknown"] is True
-            assert "manually replay" in invoke(
-                cli, origin, "registry", "register", "--input", str(path),
-                "--idempotency-key", KEY, output="text",
-            ).stderr
+            assert (
+                "manually replay"
+                in invoke(
+                    cli,
+                    origin,
+                    "registry",
+                    "register",
+                    "--input",
+                    str(path),
+                    "--idempotency-key",
+                    KEY,
+                    output="text",
+                ).stderr
+            )
 
-        response.update(status=200, body=json.dumps(entry(value) | {"registry_entry_id": ACTOR}).encode())
-        assert_failure(invoke(cli, origin, "registry", "read", ENTRY), "invalid_api_response")
+        response.update(
+            status=200,
+            body=json.dumps(entry(value) | {"registry_entry_id": ACTOR}).encode(),
+        )
+        assert_failure(
+            invoke(cli, origin, "registry", "read", ENTRY), "invalid_api_response"
+        )
 
 
 def test_registry_large_response_safe_text_and_bearer_reflection(cli, tmp_path):
@@ -190,19 +255,34 @@ def test_registry_large_response_safe_text_and_bearer_reflection(cli, tmp_path):
     path = tmp_path / "large-checker.json"
     path.write_text(json.dumps(value, ensure_ascii=False))
     with http_fixture() as (origin, response, requests):
-        response.update(status=201, body=json.dumps(entry(value), ensure_ascii=False).encode())
+        response.update(
+            status=201, body=json.dumps(entry(value), ensure_ascii=False).encode()
+        )
         assert len(response["body"]) > 64 * 1024
         registered = invoke(
-            cli, origin, "registry", "register", "--input", str(path),
-            "--idempotency-key", KEY, output="text",
+            cli,
+            origin,
+            "registry",
+            "register",
+            "--input",
+            str(path),
+            "--idempotency-key",
+            KEY,
+            output="text",
         )
         assert registered.returncode == 0 and registered.stderr == "", registered.stderr
         assert "\u202e" not in registered.stdout and "\\u202E" in registered.stdout
         assert len(requests) == 1
 
         machine = invoke(
-            cli, origin, "registry", "register", "--input", str(path),
-            "--idempotency-key", KEY,
+            cli,
+            origin,
+            "registry",
+            "register",
+            "--input",
+            str(path),
+            "--idempotency-key",
+            KEY,
         )
         assert machine.returncode == 0 and machine.stderr == "", machine.stderr
         assert json.loads(machine.stdout) == entry(value)
@@ -212,29 +292,46 @@ def test_registry_large_response_safe_text_and_bearer_reflection(cli, tmp_path):
 
         response["status"] = 200
         response["body"] = json.dumps(
-            entry(value) | {"input_schema": value["input_schema"] | {
-                "document": {"type": "object", "description": TOKEN},
-            }},
+            entry(value)
+            | {
+                "input_schema": value["input_schema"]
+                | {
+                    "document": {"type": "object", "description": TOKEN},
+                }
+            },
         ).encode()
-        assert_failure(invoke(cli, origin, "registry", "read", ENTRY), "invalid_api_response")
+        assert_failure(
+            invoke(cli, origin, "registry", "read", ENTRY), "invalid_api_response"
+        )
 
 
-def test_registration_compares_postgres_normalized_numbers_without_integer_collapse(cli, tmp_path):
+def test_registration_compares_postgres_normalized_numbers_without_integer_collapse(
+    cli, tmp_path
+):
     value = spec()
     value["configuration_schema"]["document"] = {
-        "type": "object", "examples": [9007199254740993, -0.0, 1e20],
+        "type": "object",
+        "examples": [9007199254740993, -0.0, 1e20],
     }
     path = tmp_path / "numbered-checker.json"
     path.write_text(json.dumps(value))
     with http_fixture() as (origin, response, requests):
         normalized = deepcopy(entry(value))
         normalized["configuration_schema"]["document"]["examples"] = [
-            9007199254740993, 0, 100000000000000000000,
+            9007199254740993,
+            0,
+            100000000000000000000,
         ]
         response.update(status=201, body=json.dumps(normalized).encode())
         same_value = invoke(
-            cli, origin, "registry", "register", "--input", str(path),
-            "--idempotency-key", KEY,
+            cli,
+            origin,
+            "registry",
+            "register",
+            "--input",
+            str(path),
+            "--idempotency-key",
+            KEY,
         )
         assert same_value.returncode == 0, same_value.stderr
 
@@ -242,8 +339,14 @@ def test_registration_compares_postgres_normalized_numbers_without_integer_colla
         changed["configuration_schema"]["document"]["examples"][0] = 9007199254740992
         response["body"] = json.dumps(changed).encode()
         substituted = invoke(
-            cli, origin, "registry", "register", "--input", str(path),
-            "--idempotency-key", KEY,
+            cli,
+            origin,
+            "registry",
+            "register",
+            "--input",
+            str(path),
+            "--idempotency-key",
+            KEY,
         )
         assert_failure(substituted, "invalid_api_response")
         assert json.loads(substituted.stderr)["error"]["outcome_unknown"] is True
@@ -253,13 +356,16 @@ def test_registration_compares_postgres_normalized_numbers_without_integer_colla
 def test_retry_lineage_rejects_relational_substitutions_on_receipts_and_history(cli):
     historical = {
         "project_id": PROJECT,
-        "items": [{
-            "source": source(), "recovery_state": "retried",
-            "created_at": "2026-10-18T10:00:00Z",
-            "completed_at": "2026-10-18T10:01:00Z",
-            "retry_receipt_id": EVIDENCE,
-            "successor": successor(),
-        }],
+        "items": [
+            {
+                "source": source(),
+                "recovery_state": "retried",
+                "created_at": "2026-10-18T10:00:00Z",
+                "completed_at": "2026-10-18T10:01:00Z",
+                "retry_receipt_id": EVIDENCE,
+                "successor": successor(),
+            }
+        ],
         "next_cursor": None,
     }
     with http_fixture() as (origin, response, _requests):
@@ -277,12 +383,24 @@ def test_retry_lineage_rejects_relational_substitutions_on_receipts_and_history(
             bad_history = deepcopy(historical)
             bad_history["items"][0]["successor"].update(successor_change)
             response["body"] = json.dumps(bad_history).encode()
-            assert_failure(invoke(cli, origin, "retry-sources", PROJECT), "invalid_api_response")
+            assert_failure(
+                invoke(cli, origin, "retry-sources", PROJECT), "invalid_api_response"
+            )
 
             bad_receipt = receipt()
             bad_receipt["successor"].update(successor_change)
             response.update(status=201, body=json.dumps(bad_receipt).encode())
-            result = invoke(cli, origin, "retry", PROJECT, RUN, "--reason", "fixed", "--idempotency-key", KEY)
+            result = invoke(
+                cli,
+                origin,
+                "retry",
+                PROJECT,
+                RUN,
+                "--reason",
+                "fixed",
+                "--idempotency-key",
+                KEY,
+            )
             assert_failure(result, "invalid_api_response")
             assert json.loads(result.stderr)["error"]["outcome_unknown"] is True
             response["status"] = 200
@@ -300,26 +418,45 @@ def test_retry_source_page_and_exact_reason_bound_receipt(cli):
     page = {"project_id": PROJECT, "items": [item], "next_cursor": "opaque+/="}
     with http_fixture() as (origin, response, requests):
         response["body"] = json.dumps(page).encode()
-        result = invoke(cli, origin, "retry-sources", PROJECT, "--limit", "1", "--cursor", "a+/=")
-        assert result.returncode == 0 and json.loads(result.stdout) == page, result.stderr
+        result = invoke(
+            cli, origin, "retry-sources", PROJECT, "--limit", "1", "--cursor", "a+/="
+        )
+        assert result.returncode == 0 and json.loads(result.stdout) == page, (
+            result.stderr
+        )
         request = urlsplit(requests[-1][1])
-        assert request.path == f"/api/v1/operations/projects/{PROJECT}/checker-retry-sources"
+        assert (
+            request.path
+            == f"/api/v1/operations/projects/{PROJECT}/checker-retry-sources"
+        )
         assert parse_qs(request.query) == {"limit": ["1"], "cursor": ["a+/="]}
         assert requests[-1][0] == "GET"
 
         response.update(status=201, body=json.dumps(receipt()).encode())
         for _ in range(2):
             result = invoke(
-                cli, origin, "retry", PROJECT, RUN, "--reason", "Fixed runtime é",
-                "--idempotency-key", KEY,
+                cli,
+                origin,
+                "retry",
+                PROJECT,
+                RUN,
+                "--reason",
+                "Fixed runtime é",
+                "--idempotency-key",
+                KEY,
             )
-            assert result.returncode == 0 and json.loads(result.stdout) == receipt(), result.stderr
+            assert result.returncode == 0 and json.loads(result.stdout) == receipt(), (
+                result.stderr
+            )
             assert requests[-1] == (
-                "POST", f"/api/v1/operations/projects/{PROJECT}/checker-runs/{RUN}/retry",
+                "POST",
+                f"/api/v1/operations/projects/{PROJECT}/checker-runs/{RUN}/retry",
                 "Bearer " + TOKEN,
             )
             assert response["commands"][-1] == (
-                "application/json", [KEY], {"reason": "Fixed runtime é"},
+                "application/json",
+                [KEY],
+                {"reason": "Fixed runtime é"},
             )
         assert len(requests) == 3
 
@@ -331,7 +468,15 @@ def test_retry_refuses_invalid_inputs_foreign_pages_and_unknown_writes(cli):
             ("retry-sources", PROJECT, "--limit", "0"),
             ("retry-sources", PROJECT, "--cursor", "x" * 513),
             ("retry", PROJECT, RUN, "--reason", " ", "--idempotency-key", KEY),
-            ("retry", PROJECT, RUN, "--reason", "bad\nreason", "--idempotency-key", KEY),
+            (
+                "retry",
+                PROJECT,
+                RUN,
+                "--reason",
+                "bad\nreason",
+                "--idempotency-key",
+                KEY,
+            ),
             ("retry", PROJECT, RUN, "--reason", "x" * 501, "--idempotency-key", KEY),
             ("retry", PROJECT, RUN, "--reason", "valid", "--idempotency-key", "wrong"),
         ):
@@ -340,21 +485,33 @@ def test_retry_refuses_invalid_inputs_foreign_pages_and_unknown_writes(cli):
 
         base = {
             "project_id": PROJECT,
-            "items": [{
-                "source": source(), "recovery_state": "eligible",
-                "created_at": "2026-10-18T10:00:00Z", "completed_at": "2026-10-18T10:01:00Z",
-                "retry_receipt_id": None, "successor": None,
-            }],
+            "items": [
+                {
+                    "source": source(),
+                    "recovery_state": "eligible",
+                    "created_at": "2026-10-18T10:00:00Z",
+                    "completed_at": "2026-10-18T10:01:00Z",
+                    "retry_receipt_id": None,
+                    "successor": None,
+                }
+            ],
             "next_cursor": None,
         }
         for bad in (
             base | {"project_id": ACTOR},
-            base | {"items": [base["items"][0] | {"source": source() | {"project_id": ACTOR}}]},
+            base
+            | {
+                "items": [
+                    base["items"][0] | {"source": source() | {"project_id": ACTOR}}
+                ]
+            },
             base | {"items": [base["items"][0] | {"recovery_state": "retried"}]},
             base | {"items": [base["items"][0]] * 2},
         ):
             response["body"] = json.dumps(bad).encode()
-            assert_failure(invoke(cli, origin, "retry-sources", PROJECT), "invalid_api_response")
+            assert_failure(
+                invoke(cli, origin, "retry-sources", PROJECT), "invalid_api_response"
+            )
 
         response.update(status=201)
         for bad in (
@@ -363,17 +520,47 @@ def test_retry_refuses_invalid_inputs_foreign_pages_and_unknown_writes(cli):
             receipt() | {"successor": successor() | {"request_digest": "latest"}},
         ):
             response["body"] = json.dumps(bad).encode()
-            result = invoke(cli, origin, "retry", PROJECT, RUN, "--reason", "fixed", "--idempotency-key", KEY)
+            result = invoke(
+                cli,
+                origin,
+                "retry",
+                PROJECT,
+                RUN,
+                "--reason",
+                "fixed",
+                "--idempotency-key",
+                KEY,
+            )
             assert_failure(result, "invalid_api_response")
             assert json.loads(result.stderr)["error"]["outcome_unknown"] is True
 
         response.update(status=403, body=json.dumps(canonical_error()).encode())
-        denied = invoke(cli, origin, "retry", PROJECT, RUN, "--reason", "fixed", "--idempotency-key", KEY)
+        denied = invoke(
+            cli,
+            origin,
+            "retry",
+            PROJECT,
+            RUN,
+            "--reason",
+            "fixed",
+            "--idempotency-key",
+            KEY,
+        )
         assert_failure(denied, "authorization_denied")
         assert "outcome_unknown" not in json.loads(denied.stderr)["error"]
         before = len(requests)
         response["drop"] = True
-        lost = invoke(cli, origin, "retry", PROJECT, RUN, "--reason", "fixed", "--idempotency-key", KEY)
+        lost = invoke(
+            cli,
+            origin,
+            "retry",
+            PROJECT,
+            RUN,
+            "--reason",
+            "fixed",
+            "--idempotency-key",
+            KEY,
+        )
         assert_failure(lost, "service_unavailable")
         assert json.loads(lost.stderr)["error"]["outcome_unknown"] is True
         assert len(requests) == before + 1
