@@ -105,10 +105,11 @@ the existing root-owned control tree. It changes only these reviewed text files:
   request limit before test evaluation; the real oracle must report
   `capacity_exceeded`; the matrix must bind the exact labeled Docker `oom` event
   and owned resources must be absent afterward.
-- `capacity-spoof`: emit the formerly trusted capacity phrase and exit nonzero.
-  The real response must be `implementation_unavailable`, never
-  `capacity_exceeded`, proving package-controlled output cannot claim a trusted
-  enforcement signal.
+- `capacity-spoof`: emit the formerly trusted capacity phrase and exit exactly
+  2. The real response must be `implementation_unavailable`, never
+  `capacity_exceeded`, and no reference may launch. This distinguishes the
+  spoof from the ordinary status-1 starter failure and proves package-controlled
+  output cannot claim a trusted enforcement signal.
 
 The helper emits a canonical fixture inventory binding base HEAD, variant name,
 changed path and SHA-256. Focused tests reject extra variants/files, symlinks,
