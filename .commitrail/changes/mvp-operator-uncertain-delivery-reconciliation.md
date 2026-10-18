@@ -75,7 +75,7 @@ third operation.
   proving no routing manifest/effects committed. The verifier must validate
   retained effects without calling `apply` or acceptance participation.
 - Existing checker operations router and one focused API dependency/composition
-  module for project-scoped Operator list/detail/reconcile endpoints, signed
+  module for project-scoped Operator list/reconcile endpoints, signed
   bounded cursor, reason and UUID idempotency key, canonical transaction
   rollback/denial restaging, exact HTTP error mapping and privacy-bounded DTOs.
 - Existing AUTH action/permission catalogue, action groups, prepared-resource
@@ -84,8 +84,9 @@ third operation.
   `operations.post_submit_delivery.list` / `operations.status.read` and
   `operations.post_submit_delivery.reconcile` /
   `operations.reconcile.run`. Add no permission, role, alias or service grant.
-- One coordinated migration numbered `0055_operational_delivery_reconciliation`
-  after the separately owned `0054_artifact_proof_timing`. The migration may
+- One coordinated migration file `0055_operational_delivery_reconciliation.py`
+  with revision `0055_delivery_reconciliation` after the separately owned
+  `0054_artifact_proof_timing`. The migration may
   add only those two exact action/permission pairs and the exact
   `outbox_delivery` resource type to the closed audit constraints. The target
   remains the canonical project target; the migration adds no target or
