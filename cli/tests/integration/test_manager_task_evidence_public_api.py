@@ -26,6 +26,11 @@ from tests.conftest import (  # noqa: E402
 )
 from tests.tasks.test_submission_lineage import _prepared_packet  # noqa: E402
 from tests.tasks.test_public_submission_intake import _client  # noqa: E402
+from tests.project_create_fixtures import (  # noqa: E402
+    grant_fixture_admin_role,
+    seed_historical_project,
+)
+from app.core.identifiers import new_record_id  # noqa: E402
 from app.modules.authorization.models import AdminRoleGrant  # noqa: E402
 
 
@@ -140,6 +145,41 @@ async def test_manager_context_history_and_checker_authority(
                         0
                     ]
                 )
+
+                foreign_project = str(new_record_id())
+                async with h.factory.begin() as session:
+                    await seed_historical_project(
+                        session,
+                        project_id=foreign_project,
+                        name="Manager evidence foreign project",
+                        slug=f"manager-evidence-foreign-{foreign_project}",
+                    )
+                    foreign_grant = await grant_fixture_admin_role(
+                        session,
+                        h.context.actor_profile_id,
+                        project_id=foreign_project,
+                    )
+                    assert foreign_grant.status == "active"
+                assert (await call("project", "show", foreign_project))["id"] == (
+                    foreign_project
+                )
+                for args in (
+                    ("project", "task-requirements", foreign_project, task),
+                    ("project", "task-locked-context", foreign_project, task),
+                    ("project", "task-context", foreign_project, task),
+                    ("project", "task-submissions", foreign_project, task),
+                    ("project", "submission", foreign_project, submission),
+                    ("project", "checker-runs", foreign_project, submission),
+                    (
+                        "project",
+                        "checker-runs",
+                        foreign_project,
+                        submission,
+                        "--run",
+                        run["id"],
+                    ),
+                ):
+                    await call(*args, status=404)
 
                 for args in (
                     ("project", "task-requirements", str(uuid4()), task),

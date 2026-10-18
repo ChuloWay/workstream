@@ -233,3 +233,36 @@ def test_manager_evidence_rejects_oversized_success_without_output(cli):
         )
         assert_failure(result, "invalid_api_response")
         assert result.stdout == "" and len(requests) == 1
+
+
+def test_manager_submission_nullable_lineage_pairs_are_atomic(cli):
+    pairs = (
+        ("locked_guide_source_snapshot_id", "locked_guide_source_snapshot_hash"),
+        (
+            "locked_effective_project_submission_artifact_policy_id",
+            "locked_effective_project_submission_artifact_policy_hash",
+        ),
+        (
+            "locked_pre_submit_checker_policy_id",
+            "locked_pre_submit_checker_bundle_hash",
+        ),
+    )
+    populated = deepcopy(MANAGER_HISTORY)
+    for identity, digest in pairs:
+        populated[identity] = ACTOR
+        populated[digest] = "sha256:" + "a" * 64
+
+    with http_fixture() as (origin, response, requests):
+        args = ("project", "submission", PROJECT, SUBMISSION, "-o", "json")
+        _respond(response, populated)
+        control = cli(origin, TOKEN, *args)
+        assert control.returncode == 0 and json.loads(control.stdout) == populated, (
+            control.stderr
+        )
+        for identity, digest in pairs:
+            for missing in (identity, digest):
+                half_present = deepcopy(populated)
+                half_present[missing] = None
+                _respond(response, half_present)
+                assert_failure(cli(origin, TOKEN, *args), "invalid_api_response")
+        assert len(requests) == 7
