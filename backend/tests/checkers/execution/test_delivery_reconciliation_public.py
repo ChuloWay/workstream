@@ -619,7 +619,7 @@ async def test_child_reclassifies_source_transition_before_any_effect(
             claim, FinalizationCause.REJECT,
         )
         assert outcome(refused)["delivery_state"] == "dead_letter"
-        assert outcome(refused)["error_code"] == "NON_RETRYABLE"
+        assert outcome(refused)["error_code"] == "HANDLER_REJECTED"
         assert await state(h) == running
         assert not h.store.opens
         assert await _project_facts(h.factory, h.request.project_id) == before
