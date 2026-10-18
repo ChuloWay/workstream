@@ -304,6 +304,36 @@ def checker_retry_service(session, context, *, cursor_secret=None):
     )
 
 
+def post_submit_delivery_service(
+    session, sessions, context, *, cursor_secret=None,
+):
+    """Compose exact Operator inspection and one-child reconciliation."""
+    from app.adapters.auth import (
+        post_submit_delivery_authorization,
+        post_submit_delivery_read_authorization,
+    )
+    from app.adapters.outbox import finalized_unknown_deliveries, outbox_append
+    from app.adapters.tasks import (
+        evaluation_delivery_request_reader,
+        post_submit_delivery_outcome,
+    )
+    from app.modules.checkers.delivery_reconciliation import PostSubmitDeliveryService
+
+    return PostSubmitDeliveryService(
+        session,
+        actor_profile_id=context.actor_profile_id,
+        deliveries=finalized_unknown_deliveries(session),
+        events=outbox_append(session),
+        evaluations=evaluation_coordinator(session),
+        requests=evaluation_delivery_request_reader(
+            session, evaluation_coordinator(session)
+        ),
+        outcomes=post_submit_delivery_outcome(session, sessions),
+        read_authority=post_submit_delivery_read_authorization(
+            session, context, cursor_secret,
+        ),
+        authorization=post_submit_delivery_authorization(session, context),
+    )
 def post_submission_executor(*, sessions, materialization):
     """Compose the sole executor with exact fixed-service AUTH at both phases."""
     from app.adapters.outbox import outbox_append
@@ -396,6 +426,105 @@ def delivery_bound_post_submission_executor(
         selected_execution=selected_execution,
         outbox=outbox_append,
         review_modes=project_locked_policy_context_port,
+    )
+
+
+def reconciliation_bound_post_submission_executor(
+    *, sessions, materialization, child, original, payload, request, selected_execution=None
+):
+    """Run the existing executor behind exact original-and-child recovery custody."""
+    from app.adapters.auth import (
+        post_submit_delivery_cause_authorization,
+        post_submit_execution_authority,
+    )
+    from app.adapters.outbox import (
+        committed_invocation_reader,
+        finalized_unknown_deliveries,
+        outbox_append,
+    )
+    from app.adapters.tasks import evaluation_task_guard
+    from app.modules.checkers.delivery_authority import DeliveryExecutionAuthority
+    from app.modules.checkers.delivery_reconciliation_handler import (
+        ReconciliationInvocationCustody,
+    )
+    from app.modules.checkers.execution import PostSubmissionExecutor
+
+    observer = committed_invocation_reader(sessions)
+
+    def authority(session):
+        cause = post_submit_delivery_cause_authorization(session)
+        custody = ReconciliationInvocationCustody(
+            child=child,
+            original=original,
+            observer=observer,
+            deliveries=finalized_unknown_deliveries(session),
+        )
+
+        async def validate_cause():
+            await cause.validate_cause(payload, original)
+
+        return DeliveryExecutionAuthority(
+            authority=post_submit_execution_authority(session),
+            tasks=evaluation_task_guard(session),
+            fence=custody,
+            envelope=original,
+            request=request,
+            cause=validate_cause,
+        )
+
+    from app.adapters.projects import project_locked_policy_context_port
+
+    return PostSubmissionExecutor(
+        sessions=sessions,
+        execute_authority=authority,
+        finalize_authority=authority,
+        materialization=materialization,
+        selected_execution=selected_execution,
+        outbox=outbox_append,
+        review_modes=project_locked_policy_context_port,
+    )
+
+
+def post_submit_delivery_reconciliation_handler(*, sessions, materialization):
+    """Compose the single registered child handler from existing owner operations."""
+    from app.adapters.auth import post_submit_delivery_cause_authorization
+    from app.adapters.outbox import (
+        committed_invocation_reader,
+        finalized_unknown_deliveries,
+    )
+    from app.adapters.tasks import (
+        evaluation_delivery_request_reader,
+        reconciliation_task_post_submit_outcome,
+    )
+    from app.core.config import get_settings
+    from app.modules.checkers.delivery_reconciliation_handler import (
+        PostSubmitDeliveryReconciliationHandler,
+    )
+
+    observer = committed_invocation_reader(sessions)
+
+    def executor(child, original, payload, request):
+        return reconciliation_bound_post_submission_executor(
+            sessions=sessions,
+            materialization=materialization,
+            child=child,
+            original=original,
+            payload=payload,
+            request=request,
+            selected_execution=configured_external_checker_execution(get_settings()),
+        )
+
+    return PostSubmitDeliveryReconciliationHandler(
+        sessions,
+        observer=observer,
+        deliveries=finalized_unknown_deliveries,
+        evaluations=evaluation_coordinator,
+        requests=evaluation_delivery_request_reader,
+        authorization=post_submit_delivery_cause_authorization,
+        outcomes=lambda session, custody, cause: reconciliation_task_post_submit_outcome(
+            session, sessions, custody, cause
+        ),
+        executor=executor,
     )
 
 

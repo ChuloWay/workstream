@@ -185,9 +185,41 @@ contribution. `closed/review_rejected` is not a canonical task state.
 
 This operation preserves the failed run and creates no Review, acceptance,
 contribution or award. It refuses queued, running, completed, stale and foreign
-sources. A dead-lettered delivery with an uncertain external effect is not a
-known terminal failure; keep it held until its source owner can prove whether
-the effect committed and defines a source-specific acknowledgement or retry.
+sources. A dead-lettered delivery with an uncertain effect is not a known
+terminal failure. Use the separate reconciliation flow below for the two
+supported post-submit deliveries.
+
+## Uncertain Post-Submit Delivery Reconciliation
+
+An active system Operator can inspect finalized uncertain request and completion
+deliveries through
+`GET /api/v1/operations/projects/{project_id}/post-submit-deliveries`.
+Follow its signed cursor to read the next bounded page; each request checks
+current authority. The response exposes the delivery identity, a closed error
+code, source classification and any reconciliation child. It does not expose
+raw event payloads, exception text, artifact contents or provider details.
+
+| Classification | Meaning and permitted action |
+|---|---|
+| `committed` | The source owner verifies the exact retained checker result or routing effects. Reconciliation acknowledges those facts without another checker execution or acceptance. |
+| `retry_safe` | Current durable facts prove the original source has no execution or routing effect. Reconciliation may invoke the existing owner after checking the facts again under its locks. |
+| `unresolved` | Facts are incomplete, stale or uncertain. Keep the delivery held; this surface cannot authorize another attempt. |
+
+For a `committed` or `retry_safe` source without an existing child, send a bounded
+reason and one UUID `Idempotency-Key` to
+`POST /api/v1/operations/projects/{project_id}/post-submit-deliveries/{event_id}/reconcile`.
+This schedules one durable reconciliation child; it does not synchronously run
+the checker or accept the Submission. On response loss, repeat the exact project,
+event, reason and key. Fresh authority is required for replay, which returns the
+same child. Every different key conflicts once a child exists.
+
+The worker rechecks source facts before acting. A committed false-policy outcome
+retains its original FinalAcceptance, submitter ContributionRecord and award set;
+reconciliation never fabricates a Review or duplicates those effects. The
+original UNKNOWN delivery remains immutable. If the child also becomes UNKNOWN,
+the read reports it as held and no further child is allowed. Other uncertain
+event types remain outside this recovery surface. The full hosted interruption
+drill is still required; focused source tests do not establish deployed recovery.
 
 ## Lessons Learned
 

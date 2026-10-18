@@ -4,7 +4,7 @@ import json
 from contextlib import AsyncExitStack
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 
 from app.core.identifiers import new_record_id
 from app.modules.checkers.api.execution import COMPLETION_EVENT, EvaluationCompletion
@@ -42,6 +42,7 @@ class TaskPostSubmitOutcome:
         invocation_fence,
         audit,
         outbox,
+        delivery_cause=None,
     ):
         """Inject existing owner ports into one caller-owned transaction."""
         self._session, self._projects = session, projects
@@ -51,22 +52,13 @@ class TaskPostSubmitOutcome:
         self._authorization, self._acceptance = authorization, acceptance
         self._observer, self._invocation_fence = observer, invocation_fence
         self._audit, self._outbox = audit, outbox
+        self._delivery_cause = delivery_cause
 
     async def apply(self, envelope: OutboxEventEnvelope, *, current_generation: int | None) -> TaskRoutingOutcome:
         """Return durable identities only after staging complete new or exact replay facts."""
         await require_routing_transaction(self._session)
-        envelope = OutboxEventEnvelope.model_validate(envelope)
-        completion = EvaluationCompletion.model_validate_json(envelope.payload_json)
-        if (
-            envelope.event_type != COMPLETION_EVENT
-            or envelope.event_version != 1
-            or envelope.aggregate_type != "checker_run"
-            or envelope.aggregate_id != completion.reference.attempt_id
-            or envelope.claim.project_id != completion.project_id
-            or completion.routing_recommendation
-            not in {"allow_review", "needs_revision"}
-            or await self._observer.observe_invocation(envelope) is None
-        ):
+        envelope, completion = self._completion(envelope)
+        if await self._observer.observe_invocation(envelope) is None:
             raise TaskRoutingRequestUnavailable("routing invocation unavailable")
         human = await self._observe_review_mode(completion)
         accepts = completion.routing_recommendation == "allow_review" and not human
@@ -119,6 +111,8 @@ class TaskPostSubmitOutcome:
             ):
                 raise TaskRoutingRequestUnavailable("routing retained consequence unavailable")
             authority = await stack.enter_async_context(self._authorization.prepare(source.request))
+            if self._delivery_cause is not None:
+                await self._delivery_cause()
             if await self._invocation_fence.fence_invocation(envelope) is None:
                 raise TaskRoutingRequestUnavailable("routing invocation changed")
             if replay:
@@ -205,6 +199,110 @@ class TaskPostSubmitOutcome:
                 replayed=replay,
             )
 
+    async def classify_uncertain_delivery(
+        self, envelope: OutboxEventEnvelope, *, current_generation: int | None,
+    ) -> str:
+        """Classify exact completion facts without staging a request or any effect."""
+        await require_routing_transaction(self._session)
+        envelope, completion = self._completion(envelope)
+        human = await self._observe_review_mode(completion)
+        accepts = completion.routing_recommendation == "allow_review" and not human
+        if accepts != (current_generation is not None):
+            return "unresolved"
+        async with AsyncExitStack() as stack:
+            if accepts:
+                await stack.enter_async_context(
+                    self._acceptance.prepare(current_generation)
+                )
+            retained = await self._retained(envelope, completion)
+            try:
+                if retained is None:
+                    observed = await self._source.observe_unstaged(
+                        envelope.claim.event_id, completion
+                    )
+                    if observed.human_review_required is not human:
+                        return "unresolved"
+                    return "retry_safe"
+                source = await self._source.prepare(
+                    envelope.claim.event_id, completion
+                )
+                if source.source.human_review_required is not human:
+                    return "unresolved"
+                return (
+                    "committed"
+                    if await self._routing_complete(retained.id)
+                    else "unresolved"
+                )
+            except TaskRoutingRequestUnavailable:
+                return "unresolved"
+
+    async def verify_retained_delivery(
+        self, envelope: OutboxEventEnvelope, *, current_generation: int | None,
+    ) -> None:
+        """Verify exact committed routing facts without calling any effect writer."""
+        await require_routing_transaction(self._session)
+        envelope, completion = self._completion(envelope)
+        human = await self._observe_review_mode(completion)
+        accepts = completion.routing_recommendation == "allow_review" and not human
+        if accepts != (current_generation is not None):
+            raise TaskRoutingRequestUnavailable("routing branch unavailable")
+        async with AsyncExitStack() as stack:
+            if accepts:
+                await stack.enter_async_context(
+                    self._acceptance.prepare(current_generation)
+                )
+            source = await self._source.prepare(envelope.claim.event_id, completion)
+            if source.source.human_review_required is not human:
+                raise TaskRoutingRequestUnavailable("routing branch changed")
+            stored = await self._retained(envelope, completion)
+            if stored is None or not await self._routing_complete(stored.id):
+                raise TaskRoutingRequestUnavailable("routing retained outcome unavailable")
+            authorized_generation = stored.authorized_lifecycle_generation
+            acceptance_id = stored.final_acceptance_id
+            if accepts != (acceptance_id is not None) or accepts != (
+                authorized_generation is not None
+            ):
+                raise TaskRoutingRequestUnavailable(
+                    "routing retained consequence unavailable"
+                )
+            effects = (
+                TaskAcceptedEffectsRequest(
+                    **source.source.model_dump(
+                        include={
+                            "project_id", "task_id", "assignment_id", "submission_id",
+                            "submission_version", "contributor_id",
+                            "contribution_policy_version_id", "content_id", "content_sha256",
+                        }
+                    ),
+                    final_acceptance_id=acceptance_id,
+                    expected_task_status="evaluation_pending",
+                )
+                if accepts
+                else None
+            )
+            receipt = RoutingAuthorityFacts(
+                decision_id=UUID(stored.authorization_decision_id),
+                actor_id=UUID(stored.router_actor_id),
+                identity_link_id=UUID(stored.router_identity_link_id),
+                context_json=json.dumps(stored.authority_context),
+            )
+            async with self._authorization.prepare(source.request) as authority:
+                await authority.validate_replay(
+                    source, receipt, effects, authorized_generation
+                )
+            if self._delivery_cause is not None:
+                await self._delivery_cause()
+            if await self._invocation_fence.fence_invocation(envelope) is None:
+                raise TaskRoutingRequestUnavailable("routing invocation changed")
+            await self._outbox.require_existing(
+                stored.outcome_event_id,
+                _notice(source, receipt, acceptance_id),
+            )
+            if not await self._routing_complete(stored.id):
+                raise TaskRoutingRequestUnavailable(
+                    "routing retained outcome unavailable"
+                )
+
     async def observe_delivery_generation(self, envelope: OutboxEventEnvelope) -> int | None:
         """Select server-owned generation without authority or mutation locks."""
         completion = EvaluationCompletion.model_validate_json(envelope.payload_json)
@@ -214,6 +312,51 @@ class TaskPostSubmitOutcome:
         if human:
             return None
         return await self._acceptance.observe_generation()
+
+    @staticmethod
+    def _completion(
+        envelope: OutboxEventEnvelope,
+    ) -> tuple[OutboxEventEnvelope, EvaluationCompletion]:
+        """Validate the original completion envelope without granting invocation custody."""
+        try:
+            envelope = OutboxEventEnvelope.model_validate(envelope)
+            completion = EvaluationCompletion.model_validate_json(envelope.payload_json)
+        except (TypeError, ValueError) as exc:
+            raise TaskRoutingRequestUnavailable("routing invocation unavailable") from exc
+        if (
+            envelope.event_type != COMPLETION_EVENT
+            or envelope.event_version != 1
+            or envelope.aggregate_type != "checker_run"
+            or envelope.aggregate_id != completion.reference.attempt_id
+            or envelope.claim.project_id != completion.project_id
+            or completion.routing_recommendation
+            not in {"allow_review", "needs_revision"}
+        ):
+            raise TaskRoutingRequestUnavailable("routing invocation unavailable")
+        return envelope, completion
+
+    async def _retained(self, envelope, completion):
+        """Read the exact manifest selected by the original completion event."""
+        return await self._session.scalar(
+            select(TaskPostSubmitRoutingManifest).where(
+                TaskPostSubmitRoutingManifest.project_id == str(completion.project_id),
+                TaskPostSubmitRoutingManifest.task_id == str(completion.task_id),
+                TaskPostSubmitRoutingManifest.submission_id == str(completion.submission_id),
+                TaskPostSubmitRoutingManifest.completion_event_id == envelope.claim.event_id,
+            ).execution_options(populate_existing=True)
+        )
+
+    async def _routing_complete(self, manifest_id: UUID) -> bool:
+        """Delegate complete retained effect closure to TASK's database owner."""
+        return (
+            await self._session.scalar(
+                text(
+                    "SELECT public.task_routing_outcome_complete(m) "
+                    "FROM public.task_post_submit_routing_manifests m WHERE m.id=:manifest_id"
+                ),
+                {"manifest_id": manifest_id},
+            )
+        ) is True
 
     async def _observe_review_mode(self, completion: EvaluationCompletion) -> bool:
         """Observe exact task policy; authoritative source preparation rechecks it."""

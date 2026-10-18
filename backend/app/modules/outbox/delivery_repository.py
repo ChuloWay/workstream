@@ -14,9 +14,11 @@ from app.modules.outbox.api import (
     CommittedInvocationObservation,
     DeliveryCandidate, DeliveryCandidatePage,
     DrainObservation,
+    FinalizedUnknownDelivery, FinalizedUnknownDeliveryPage,
     OutboxClaim,
     OutboxEventEnvelope,
     DeliveryUnavailable,
+    ReconciliationChildObservation,
 )
 from app.core.hashing import canonical_json_hash
 from app.modules.outbox.models import OutboxDeliveryAttempt, OutboxEvent
@@ -48,6 +50,62 @@ def matches_event(event: OutboxEvent, claim: OutboxClaim) -> bool:
         and event.claim_owner == claim.claim_owner
         and event.claimed_at == claim.claimed_at
         and event.claim_expires_at == claim.claim_expires_at
+    )
+
+
+def _envelope(event: OutboxEvent, attempt: OutboxDeliveryAttempt) -> OutboxEventEnvelope:
+    """Detach an exact retained envelope from immutable event and attempt custody."""
+    return OutboxEventEnvelope(
+        claim=claim_from_attempt(attempt),
+        event_type=event.event_type,
+        event_version=event.event_version,
+        aggregate_type=event.aggregate_type,
+        aggregate_id=UUID(str(event.aggregate_id)),
+        correlation_id=event.correlation_id,
+        causation_event_id=(
+            UUID(str(event.causation_event_id))
+            if event.causation_event_id is not None
+            else None
+        ),
+        idempotency_key=event.idempotency_key,
+        occurred_at=event.occurred_at,
+        payload_json=json.dumps(
+            event.payload,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+            allow_nan=False,
+        ),
+    )
+
+
+def _child(event: OutboxEvent) -> ReconciliationChildObservation:
+    """Project closed child delivery state without provider or outcome detail."""
+    if event.delivery_state in {"pending", "retryable"}:
+        state = "pending"
+    elif event.delivery_state == "claimed":
+        state = "active"
+    elif event.delivery_state == "acknowledged":
+        state = "acknowledged"
+    elif (
+        event.delivery_state == "dead_letter"
+        and event.last_error_code == "INVOKE_OUTCOME_UNKNOWN"
+    ):
+        state = "unknown"
+    else:
+        state = "held"
+    return ReconciliationChildObservation(
+        event_id=UUID(str(event.event_id)),
+        payload_digest=event.payload_digest,
+        payload_json=json.dumps(
+            event.payload,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+            allow_nan=False,
+        ),
+        occurred_at=event.occurred_at,
+        state=state,
     )
 
 
@@ -106,6 +164,200 @@ class DeliveryRepository:
         if lock:
             query = query.with_for_update()
         return (await self.session.execute(query)).scalar_one_or_none()
+
+    @staticmethod
+    def _unknown_predicate(event_types):
+        e, a = OutboxEvent, OutboxDeliveryAttempt
+        supported = (
+            or_(*(and_(e.event_type == name, e.event_version == version)
+                  for name, version in event_types))
+            if event_types
+            else literal(False)
+        )
+        return and_(
+            supported,
+            e.delivery_state == "dead_letter",
+            e.last_error_code == "INVOKE_OUTCOME_UNKNOWN",
+            e.finalized_at.is_not(None),
+            a.event_id == e.event_id,
+            a.claim_generation == e.claim_generation,
+            a.project_id == e.project_id,
+            a.payload_digest == e.payload_digest,
+            a.stage == "completed",
+            func.jsonb_extract_path_text(
+                cast(a.outcome_json, JSONB), "invocation_unknown"
+            ) == "true",
+            func.jsonb_extract_path_text(
+                cast(a.outcome_json, JSONB), "delivery_state"
+            ) == "dead_letter",
+            func.jsonb_extract_path_text(
+                cast(a.outcome_json, JSONB), "error_code"
+            ) == "INVOKE_OUTCOME_UNKNOWN",
+        )
+
+    async def _children(self, original_ids, child_event_type, *, lock):
+        """Return at most one exact child per original, rejecting corrupt multiplicity."""
+        if not original_ids:
+            return {}
+        statement = (
+            select(OutboxEvent)
+            .where(
+                OutboxEvent.event_type == child_event_type,
+                OutboxEvent.event_version == 1,
+                OutboxEvent.causation_event_id.in_(original_ids),
+            )
+            .order_by(OutboxEvent.causation_event_id, OutboxEvent.event_id)
+            .execution_options(populate_existing=True)
+        )
+        if lock:
+            statement = statement.with_for_update()
+        values = {}
+        for event in (await self.session.scalars(statement)).all():
+            key = UUID(str(event.causation_event_id))
+            if key in values:
+                raise DeliveryUnavailable("outbox_delivery_reconciliation_unavailable")
+            values[key] = _child(event)
+        return values
+
+    async def list_finalized_unknown(
+        self,
+        *,
+        project_id: UUID,
+        event_types: tuple[tuple[str, int], ...],
+        child_event_type: str,
+        after: tuple[datetime, UUID] | None,
+        limit: int,
+    ) -> FinalizedUnknownDeliveryPage:
+        """List exact terminal UNKNOWN custody without returning payloads publicly."""
+        if (
+            type(project_id) is not UUID
+            or type(event_types) is not tuple
+            or not event_types
+            or type(child_event_type) is not str
+            or type(limit) is not int
+            or not 1 <= limit <= 100
+        ):
+            raise DeliveryUnavailable("outbox_delivery_reconciliation_unavailable")
+        e, a = OutboxEvent, OutboxDeliveryAttempt
+        statement = (
+            select(e, a)
+            .join(
+                a,
+                and_(a.event_id == e.event_id, a.claim_generation == e.claim_generation),
+            )
+            .where(
+                e.project_id == str(project_id),
+                self._unknown_predicate(event_types),
+            )
+        )
+        if after is not None:
+            statement = statement.where(
+                tuple_(e.finalized_at, e.event_id) > tuple_(after[0], after[1])
+            )
+        rows = (
+            await self.session.execute(
+                statement.order_by(e.finalized_at, e.event_id).limit(limit + 1)
+            )
+        ).all()
+        selected = rows[:limit]
+        children = await self._children(
+            [row[0].event_id for row in selected], child_event_type, lock=False
+        )
+        items = tuple(
+            FinalizedUnknownDelivery(
+                envelope=_envelope(event, attempt),
+                finalized_at=event.finalized_at,
+                error_code="INVOKE_OUTCOME_UNKNOWN",
+                child=children.get(UUID(str(event.event_id))),
+            )
+            for event, attempt in selected
+        )
+        return FinalizedUnknownDeliveryPage(items=items, has_more=len(rows) > limit)
+
+    async def read_finalized_unknown(
+        self,
+        *,
+        project_id: UUID,
+        event_id: UUID,
+        event_types: tuple[tuple[str, int], ...],
+        child_event_type: str,
+        lock: bool,
+    ) -> FinalizedUnknownDelivery | None:
+        """Qualify project before optionally locking exact original custody and child."""
+        if (
+            type(project_id) is not UUID
+            or type(event_id) is not UUID
+            or type(event_types) is not tuple
+            or not event_types
+            or type(child_event_type) is not str
+            or type(lock) is not bool
+        ):
+            raise DeliveryUnavailable("outbox_delivery_reconciliation_unavailable")
+        e, a = OutboxEvent, OutboxDeliveryAttempt
+        statement = (
+            select(e, a)
+            .join(
+                a,
+                and_(a.event_id == e.event_id, a.claim_generation == e.claim_generation),
+            )
+            .where(
+                e.event_id == event_id,
+                e.project_id == str(project_id),
+                self._unknown_predicate(event_types),
+            )
+            .execution_options(populate_existing=True)
+        )
+        if lock:
+            statement = statement.with_for_update(of=(e, a))
+        row = (await self.session.execute(statement)).one_or_none()
+        if row is None:
+            return None
+        event, attempt = row
+        children = await self._children([event.event_id], child_event_type, lock=lock)
+        return FinalizedUnknownDelivery(
+            envelope=_envelope(event, attempt),
+            finalized_at=event.finalized_at,
+            error_code="INVOKE_OUTCOME_UNKNOWN",
+            child=children.get(UUID(str(event.event_id))),
+        )
+
+    async def fence_reconciliation(
+        self,
+        *,
+        original: OutboxEventEnvelope,
+        child: OutboxEventEnvelope,
+        event_types: tuple[tuple[str, int], ...],
+        child_event_type: str,
+    ) -> CommittedInvocationObservation | None:
+        """Hold original terminal custody and the linked live child through commit."""
+        if not self.session.in_transaction() or self.session.in_nested_transaction():
+            raise DeliveryUnavailable("outbox reconciliation requires a root transaction")
+        try:
+            original = OutboxEventEnvelope.model_validate(original)
+            child = OutboxEventEnvelope.model_validate(child)
+        except (TypeError, ValueError):
+            return None
+        retained = await self.read_finalized_unknown(
+            project_id=original.claim.project_id,
+            event_id=original.claim.event_id,
+            event_types=event_types,
+            child_event_type=child_event_type,
+            lock=True,
+        )
+        if (
+            retained is None
+            or retained.envelope != original
+            or retained.child is None
+            or retained.child.event_id != child.claim.event_id
+            or child.event_type != child_event_type
+            or child.event_version != 1
+            or child.claim.project_id != original.claim.project_id
+            or child.aggregate_type != "outbox_delivery"
+            or child.aggregate_id != original.claim.event_id
+            or child.causation_event_id != original.claim.event_id
+        ):
+            return None
+        return await self.fence_invocation(child)
 
     async def observe(self, envelope: OutboxEventEnvelope) -> CommittedInvocationObservation | None:
         """Compare the entire immutable envelope in one nonlocking SQL snapshot."""

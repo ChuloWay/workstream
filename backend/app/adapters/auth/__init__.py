@@ -78,6 +78,28 @@ def checker_retry_authorization(session: AsyncSession, context: AuthorizationCon
     return PreparedCheckerRetryAuthorization(session, context)
 
 
+def post_submit_delivery_authorization(
+    session: AsyncSession, context: AuthorizationContext,
+):
+    """Compose one exact public uncertain-delivery reconciliation decision."""
+    from app.modules.authorization.post_submit_delivery_authorization import (
+        PostSubmitDeliveryAuthorization,
+    )
+
+    repository = AdminAuthorizationRepository(session)
+    kernel = AuthorizationService(session, context, admin_repository=repository)
+    return PostSubmitDeliveryAuthorization(session, context, kernel)
+
+
+def post_submit_delivery_cause_authorization(session: AsyncSession):
+    """Validate the retained human decision as worker cause without new authority."""
+    from app.modules.authorization.post_submit_delivery_authorization import (
+        PostSubmitDeliveryAuthorization,
+    )
+
+    return PostSubmitDeliveryAuthorization(session, None, None)
+
+
 def checker_registry_authorization(
     session: AsyncSession, context: AuthorizationContext,
 ):
@@ -309,6 +331,19 @@ def checker_retry_discovery_authorization(session, context, secret):
         AuthorizationService(
             session, context, admin_repository=repository,
         ),
+        secret,
+    )
+
+
+def post_submit_delivery_read_authorization(session, context, secret):
+    """Compose exact Operator uncertain-delivery reads through canonical AUTH."""
+    from app.modules.authorization.post_submit_delivery_read import (
+        PostSubmitDeliveryReadAuthorization,
+    )
+
+    repository = AdminAuthorizationRepository(session)
+    return PostSubmitDeliveryReadAuthorization(
+        AuthorizationService(session, context, admin_repository=repository),
         secret,
     )
 

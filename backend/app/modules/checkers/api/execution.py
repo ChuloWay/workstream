@@ -22,6 +22,9 @@ from app.modules.checkers.api.canonical_values import (
     Sha256,
     VersionNumber,
 )
+from app.modules.checkers.api.delivery_reconciliation import (
+    PostSubmitRequestDeliveryFacts,
+)
 
 REQUEST_EVENT = "PostSubmissionEvaluationRequested"
 COMPLETION_EVENT = "PostSubmissionEvaluationCompleted"
@@ -581,6 +584,12 @@ class EvaluationCoordinationPort(Protocol):
         self, request: PostSubmissionExecutionRequest
     ) -> CompletedEvaluation:
         """Lock and return the completed evaluation for the exact current request."""
+        ...
+
+    async def classify_uncertain_delivery(
+        self, request: PostSubmissionExecutionRequest,
+    ) -> PostSubmitRequestDeliveryFacts:
+        """Lock and classify exact request delivery facts without creating effects."""
         ...
 
 
