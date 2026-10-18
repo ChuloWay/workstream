@@ -236,8 +236,23 @@ async def test_public_operator_recovers_rolled_back_acceptance_once(
         successor = created.json()["successor"]
         assert successor["classification"] == "retry_safe"
         child_id = UUID(successor["event_id"])
+        async with h.factory() as observer:
+            operator_grant_id = await observer.scalar(text(
+                "SELECT id FROM public.admin_role_grants "
+                "WHERE target_actor_profile_id=:actor AND role='operator' "
+                "AND scope_type='system' AND status='active'"
+            ), {"actor": str(admin_access.target.id)})
+        assert operator_grant_id is not None
+        revoked = await admin_access.signed.revoke(
+            admin_access.admin,
+            str(operator_grant_id),
+            reason="End uncertain delivery reconciliation duty",
+        )
+        assert revoked.status_code == 200, revoked.text
         delivery = production_outbox_delivery(h.factory)
-        delivered = await delivery.deliver(child_id, h.request.project_id, "recover-completion")
+        delivered = await delivery.deliver(
+            child_id, h.request.project_id, "recover-completion"
+        )
         assert outcome(delivered)["delivery_state"] == "acknowledged", outcome(delivered)
         assert await _project_facts(h.factory, h.request.project_id) == (1,) * 6
         async with h.factory() as session:
@@ -248,12 +263,13 @@ async def test_public_operator_recovers_rolled_back_acceptance_once(
                        c.source_final_acceptance_id=a.id,
                        c.source_task_assignment_id=s.task_assignment_id,
                        c.contribution_policy_version_id=s.contribution_policy_version_id,
-                       c.artifact_hash=s.package_hash,
+                       c.artifact_hash=content.sha256,
                        t.status='accepted', s.attempt_status='accepted',
                        m.completion_event_id=:original
                 FROM public.final_acceptances a
                 JOIN public.contribution_records c ON c.source_final_acceptance_id=a.id
                 JOIN public.submissions s ON s.id=a.submission_id
+                JOIN public.artifact_contents content ON content.id=s.artifact_content_id
                 JOIN public.workstream_tasks t ON t.id=a.task_id
                 JOIN public.task_post_submit_routing_manifests m
                   ON m.id=a.source_routing_manifest_id
@@ -268,8 +284,11 @@ async def test_public_operator_recovers_rolled_back_acceptance_once(
         original_after, child = await _delivery_rows(h.factory, h.envelope.claim.event_id, child_id)
         assert original_after == original_before
         assert child[:3] == ("acknowledged", None, h.envelope.claim.event_id)
+        await admin_access.signed.grant(admin_access.admin, admin_access.target)
         replay = await _reconcile(admin_access, h.request.project_id, h.envelope.claim.event_id, key)
         assert replay.status_code == 201, replay.text
+        assert replay.json()["source"]["classification"] == "retry_safe"
+        assert replay.json()["source"]["reconciliation_state"] == "acknowledged"
         assert replay.json()["successor"] == successor
         await delivery.deliver(child_id, h.request.project_id, "duplicate-completion")
         assert await _retained_effect_rows(h.factory, h.request.project_id) == retained

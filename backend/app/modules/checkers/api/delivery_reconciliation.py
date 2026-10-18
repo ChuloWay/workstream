@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import Annotated, Literal, Protocol
 from uuid import UUID
 
@@ -26,6 +27,15 @@ POST_SUBMIT_DELIVERY_SUPPORTED_EVENTS = (
     ("PostSubmissionEvaluationRequested", 1),
     ("PostSubmissionEvaluationCompleted", 1),
 )
+
+
+def _without_none(value):
+    """Mirror Pydantic's recursive exclude-none digest input."""
+    if isinstance(value, dict):
+        return {key: _without_none(item) for key, item in value.items() if item is not None}
+    if isinstance(value, list):
+        return [_without_none(item) for item in value]
+    return value
 
 
 class PostSubmitDeliveryUnavailable(RuntimeError):
@@ -240,8 +250,33 @@ class PostSubmitDeliveryChildPayload(BaseModel):
     request_digest: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
     authorization_decision_id: UUID
     authorization_resource_digest: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
+    authorization_resource_json: str = Field(min_length=2, max_length=8192)
     operator_actor_profile_id: UUID
     operator_identity_link_id: UUID
+
+    @model_validator(mode="after")
+    def exact_authorization_resource(self):
+        """Retain one canonical bounded Operator resource receipt."""
+        try:
+            resource = json.loads(self.authorization_resource_json)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("delivery authorization resource is invalid") from exc
+        if (
+            not isinstance(resource, dict)
+            or set(resource) != {"resource_context"}
+            or json.dumps(
+                resource,
+                sort_keys=True,
+                separators=(",", ":"),
+                ensure_ascii=False,
+                allow_nan=False,
+            )
+            != self.authorization_resource_json
+            or canonical_json_hash(_without_none(resource))
+            != self.authorization_resource_digest
+        ):
+            raise ValueError("delivery authorization resource differs")
+        return self
 
 
 class PostSubmitDeliverySuccessor(BaseModel):

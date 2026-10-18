@@ -78,6 +78,7 @@ class PostSubmitRoutingResourceContext(_RoutingValue):
     request: TaskRoutingRequestFacts
     source: TaskPostSubmitSourceProposal
     claim: OutboxClaim
+    reconciliation_claim: OutboxClaim | None = None
     consequence: Annotated[
         HumanAdmissionConsequence
         | AutomatedAcceptanceConsequence
@@ -93,6 +94,11 @@ class PostSubmitRoutingResourceContext(_RoutingValue):
         request = TaskRoutingRequestFacts.model_validate(self.request.model_dump())
         source = TaskPostSubmitSourceProposal.model_validate(self.source.model_dump())
         claim = OutboxClaim.model_validate(self.claim.model_dump())
+        reconciliation_claim = (
+            OutboxClaim.model_validate(self.reconciliation_claim.model_dump())
+            if self.reconciliation_claim is not None
+            else None
+        )
         if not (
             self.resource_type == "task_post_submit_routing_manifest"
             and self.resource_id == request.routing_manifest_id == source.id
@@ -101,6 +107,11 @@ class PostSubmitRoutingResourceContext(_RoutingValue):
             and request.evaluation_request_digest == source.request_digest
         ):
             raise ValueError("routing resource identity differs")
+        if reconciliation_claim is not None and (
+            reconciliation_claim.project_id != claim.project_id
+            or reconciliation_claim.event_id == claim.event_id
+        ):
+            raise ValueError("routing reconciliation claim differs")
         for field in (
             "task_id", "submission_id", "submission_version", "checker_run_id",
             "evaluation_request_id", "evaluation_generation", "result_id", "result_digest",
@@ -167,17 +178,20 @@ def post_submit_routing_resource_digest(resource: PostSubmitRoutingResourceConte
         resource.source, route_operation_id=resource.request.route_operation_id,
         route_request_digest=resource.request.route_request_digest,
     )
-    return canonical_json_hash(
-        {
-            "domain": "workstream.authorization.task_post_submit_route.v0.1",
-            "resource_type": resource.resource_type,
-            "resource_id": str(resource.resource_id),
-            "project_id": str(resource.scope_project_id),
-            "router_actor_id": str(resource.router_actor_id),
-            "router_identity_link_id": str(resource.router_identity_link_id),
-            "request": post_submit_routing_prepare_values(resource.request),
-            "source_commitment_digest": acceptance_source_commitment_digest(source),
-            "claim": resource.claim.model_dump(mode="json"),
-            "consequence": resource.consequence.model_dump(mode="json"),
-        }
-    )
+    facts = {
+        "domain": "workstream.authorization.task_post_submit_route.v0.1",
+        "resource_type": resource.resource_type,
+        "resource_id": str(resource.resource_id),
+        "project_id": str(resource.scope_project_id),
+        "router_actor_id": str(resource.router_actor_id),
+        "router_identity_link_id": str(resource.router_identity_link_id),
+        "request": post_submit_routing_prepare_values(resource.request),
+        "source_commitment_digest": acceptance_source_commitment_digest(source),
+        "claim": resource.claim.model_dump(mode="json"),
+        "consequence": resource.consequence.model_dump(mode="json"),
+    }
+    if resource.reconciliation_claim is not None:
+        facts["reconciliation_claim"] = resource.reconciliation_claim.model_dump(
+            mode="json"
+        )
+    return canonical_json_hash(facts)

@@ -595,7 +595,7 @@ def post_submit_delivery_outcome(session, sessions):
 
 
 def reconciliation_task_post_submit_outcome(
-    session, sessions, custody, validate_cause,
+    session, sessions, custody, reconciliation_claim,
 ):
     """Compose the existing TASK owner behind recovery-bound delivery custody."""
     from app.adapters.audit import task_routing_audit
@@ -616,7 +616,7 @@ def reconciliation_task_post_submit_outcome(
         invocation_fence=custody,
         audit=task_routing_audit(session),
         outbox=outbox_append(session),
-        delivery_cause=validate_cause,
+        reconciliation_claim=reconciliation_claim,
     ))
 
 

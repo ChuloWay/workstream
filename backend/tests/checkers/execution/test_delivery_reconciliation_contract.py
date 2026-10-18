@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from pydantic import ValidationError
 import pytest
 
+from app.core.hashing import canonical_json_hash
 from app.core.identifiers import new_record_id
 from app.api.deps.checker_recovery import PostSubmitDeliveryReads
 from app.modules.audit.schemas import (
@@ -12,6 +13,8 @@ from app.modules.audit.schemas import (
     AuthorityAuditEventInput,
     AuthorityEventType,
 )
+
+
 from app.modules.outbox.api import OutboxAppendInput
 from app.modules.checkers.api.delivery_reconciliation import (
     PostSubmitDeliveryChildPayload,
@@ -22,6 +25,10 @@ from app.modules.checkers.api.delivery_reconciliation import (
     PostSubmitDeliverySuccessor,
     post_submit_delivery_request_digest,
 )
+
+
+_AUTHORIZATION_RESOURCE_JSON = '{"resource_context":{}}'
+_AUTHORIZATION_RESOURCE_DIGEST = canonical_json_hash({"resource_context": {}})
 
 
 @pytest.fixture
@@ -144,7 +151,8 @@ def test_child_payload_excludes_raw_private_fields(preparation, field) -> None:
         reconciliation_request_id=preparation.command.request_key,
         request_digest=post_submit_delivery_request_digest(preparation),
         authorization_decision_id=new_record_id(),
-        authorization_resource_digest="sha256:" + "2" * 64,
+        authorization_resource_digest=_AUTHORIZATION_RESOURCE_DIGEST,
+        authorization_resource_json=_AUTHORIZATION_RESOURCE_JSON,
         operator_actor_profile_id=preparation.command.actor_profile_id,
         operator_identity_link_id=new_record_id(),
     )
@@ -174,7 +182,8 @@ def test_child_payload_passes_canonical_outbox_privacy_validation(preparation) -
         reconciliation_request_id=preparation.command.request_key,
         request_digest=post_submit_delivery_request_digest(preparation),
         authorization_decision_id=new_record_id(),
-        authorization_resource_digest="sha256:" + "2" * 64,
+        authorization_resource_digest=_AUTHORIZATION_RESOURCE_DIGEST,
+        authorization_resource_json=_AUTHORIZATION_RESOURCE_JSON,
         operator_actor_profile_id=preparation.command.actor_profile_id,
         operator_identity_link_id=new_record_id(),
     )

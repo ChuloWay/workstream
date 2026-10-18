@@ -1,6 +1,7 @@
 """One flush-only governed outcome; callers own commit and delivery acknowledgement."""
 
 import json
+from collections.abc import Awaitable, Callable
 from contextlib import AsyncExitStack
 from uuid import UUID
 
@@ -8,7 +9,7 @@ from sqlalchemy import select, text
 
 from app.core.identifiers import new_record_id
 from app.modules.checkers.api.execution import COMPLETION_EVENT, EvaluationCompletion
-from app.modules.outbox.api import OutboxAppendInput, OutboxEventEnvelope
+from app.modules.outbox.api import OutboxAppendInput, OutboxClaim, OutboxEventEnvelope
 from app.modules.tasks.api.accepted_effects import TaskAcceptedEffectsRequest
 from app.modules.tasks.models import Submission, WorkstreamTask
 from app.modules.tasks.submission_attempts import record_attempt_outcome
@@ -42,7 +43,7 @@ class TaskPostSubmitOutcome:
         invocation_fence,
         audit,
         outbox,
-        delivery_cause=None,
+        reconciliation_claim: Callable[[], Awaitable[OutboxClaim]] | None = None,
     ):
         """Inject existing owner ports into one caller-owned transaction."""
         self._session, self._projects = session, projects
@@ -52,7 +53,7 @@ class TaskPostSubmitOutcome:
         self._authorization, self._acceptance = authorization, acceptance
         self._observer, self._invocation_fence = observer, invocation_fence
         self._audit, self._outbox = audit, outbox
-        self._delivery_cause = delivery_cause
+        self._reconciliation_claim = reconciliation_claim
 
     async def apply(self, envelope: OutboxEventEnvelope, *, current_generation: int | None) -> TaskRoutingOutcome:
         """Return durable identities only after staging complete new or exact replay facts."""
@@ -111,8 +112,11 @@ class TaskPostSubmitOutcome:
             ):
                 raise TaskRoutingRequestUnavailable("routing retained consequence unavailable")
             authority = await stack.enter_async_context(self._authorization.prepare(source.request))
-            if self._delivery_cause is not None:
-                await self._delivery_cause()
+            effect_claim = envelope.claim
+            if self._reconciliation_claim is not None:
+                effect_claim = OutboxClaim.model_validate(
+                    await self._reconciliation_claim()
+                )
             if await self._invocation_fence.fence_invocation(envelope) is None:
                 raise TaskRoutingRequestUnavailable("routing invocation changed")
             if replay:
@@ -125,7 +129,13 @@ class TaskPostSubmitOutcome:
                 await authority.validate_replay(source, receipt, effects, authorized_generation)
             else:
                 receipt = await authority.consume(
-                    source, envelope.claim, effects, authorized_generation
+                    source,
+                    envelope.claim,
+                    effects,
+                    authorized_generation,
+                    reconciliation_claim=(
+                        effect_claim if effect_claim != envelope.claim else None
+                    ),
                 )
             audit_id = UUID(stored.audit_event_id) if replay else new_record_id()
             if replay:
@@ -290,8 +300,8 @@ class TaskPostSubmitOutcome:
                 await authority.validate_replay(
                     source, receipt, effects, authorized_generation
                 )
-            if self._delivery_cause is not None:
-                await self._delivery_cause()
+            if self._reconciliation_claim is not None:
+                await self._reconciliation_claim()
             if await self._invocation_fence.fence_invocation(envelope) is None:
                 raise TaskRoutingRequestUnavailable("routing invocation changed")
             await self._outbox.require_existing(

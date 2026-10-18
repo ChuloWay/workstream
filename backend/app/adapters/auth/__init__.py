@@ -394,7 +394,16 @@ def lifecycle_transition_authorization(session: AsyncSession, context):
     return LifecycleAuthorizationAdapter(session, context)
 
 
-def _routing_resource(source, claim, effects, authorized_generation, actor_id, link_id):
+def _routing_resource(
+    source,
+    claim,
+    effects,
+    authorized_generation,
+    actor_id,
+    link_id,
+    *,
+    reconciliation_claim=None,
+):
     accepts = source.source.routing_recommendation == "allow_review" and not source.source.human_review_required
     if accepts != (effects is not None) or accepts != (authorized_generation is not None):
         raise PreparedAuthorizationHandleInvalid("routing consequence unavailable")
@@ -418,8 +427,17 @@ def _routing_resource(source, claim, effects, authorized_generation, actor_id, l
         request=source.request,
         source=source.source,
         claim=claim,
+        reconciliation_claim=reconciliation_claim,
         consequence=consequence,
     )
+
+
+def _routing_resource_values(resource):
+    """Omit only the absent recovery claim; retain every established null fact."""
+    values = resource.model_dump(mode="json")
+    if values["reconciliation_claim"] is None:
+        del values["reconciliation_claim"]
+    return values
 
 
 class _TaskRoutingAuthorizationAdapter:
@@ -436,7 +454,15 @@ class _PreparedTaskRoutingAdapter:
     def __init__(self, prepared):
         self._prepared = prepared
 
-    async def consume(self, source, claim, effects, authorized_generation):
+    async def consume(
+        self,
+        source,
+        claim,
+        effects,
+        authorized_generation,
+        *,
+        reconciliation_claim=None,
+    ):
         resource = _routing_resource(
             source,
             claim,
@@ -444,13 +470,16 @@ class _PreparedTaskRoutingAdapter:
             authorized_generation,
             self._prepared.actor_profile_id,
             self._prepared.identity_link_id,
+            reconciliation_claim=reconciliation_claim,
         )
         receipt = await self._prepared.consume(resource)
         return RoutingAuthorityFacts(
             decision_id=receipt.authorization_decision_event_id,
             actor_id=receipt.actor_profile_id,
             identity_link_id=receipt.actor_identity_link_id,
-            context_json=resource.model_dump_json(),
+            context_json=json.dumps(
+                _routing_resource_values(resource), separators=(",", ":")
+            ),
         )
 
     async def validate_replay(self, source, retained, effects, authorized_generation):
@@ -462,9 +491,11 @@ class _PreparedTaskRoutingAdapter:
             authorized_generation,
             retained.actor_id,
             retained.identity_link_id,
+            reconciliation_claim=original.reconciliation_claim,
         )
-        if original != expected or json.loads(retained.context_json) != expected.model_dump(
-            mode="json"
+        if (
+            original != expected
+            or json.loads(retained.context_json) != _routing_resource_values(expected)
         ):
             raise PreparedAuthorizationHandleInvalid("routing receipt unavailable")
         await self._prepared.validate_replay(

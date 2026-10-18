@@ -316,6 +316,7 @@ class PostSubmitDeliveryService:
                 request_digest=post_submit_delivery_request_digest(preparation),
                 authorization_decision_id=authority.decision_id,
                 authorization_resource_digest=authority.resource_digest,
+                authorization_resource_json=authority.resource_json,
                 operator_actor_profile_id=authority.actor_profile_id,
                 operator_identity_link_id=authority.identity_link_id,
             )
@@ -470,4 +471,3 @@ class PostSubmitDeliveryService:
 
     async def restage_read_denial(self, error: Exception) -> bool:
         return await self._read_authority.restage_denial(error)
-

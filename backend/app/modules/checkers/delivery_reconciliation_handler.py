@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from typing import Protocol
 
 from pydantic import ValidationError
@@ -34,6 +34,7 @@ from app.modules.outbox.api import (
     FinalizedUnknownDeliveryPort,
     HandlerOutcome,
     InvocationFencePort,
+    OutboxClaim,
     OutboxEventEnvelope,
 )
 
@@ -138,7 +139,11 @@ class PostSubmitDeliveryReconciliationHandler:
             [AsyncSession], PostSubmitDeliveryCauseAuthorizationPort
         ],
         outcomes: Callable[
-            [AsyncSession, ReconciliationInvocationCustody, Callable[[], object]],
+            [
+                AsyncSession,
+                ReconciliationInvocationCustody,
+                Callable[[], Awaitable[OutboxClaim]],
+            ],
             PostSubmitDeliveryOutcomePort,
         ],
         executor: Callable[
@@ -209,10 +214,11 @@ class PostSubmitDeliveryReconciliationHandler:
                 )
                 cause = self._authorization(session)
 
-                async def validate_cause() -> None:
+                async def reconciliation_claim() -> OutboxClaim:
                     await cause.validate_cause(payload, original)
+                    return child.claim
 
-                outcomes = self._outcomes(session, custody, validate_cause)
+                outcomes = self._outcomes(session, custody, reconciliation_claim)
                 generation = await outcomes.observe_delivery_generation(original)
                 await outcomes.apply(original, current_generation=generation)
             return HandlerOutcome.ACKNOWLEDGE
