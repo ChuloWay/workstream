@@ -36,6 +36,13 @@
 
 ## Current boundary
 
+[WS-CLI-001-32](WS-CLI-001-32.md) adds read-only active-guide and exact-guide
+sufficiency/artifact/effective/pre-submit inspection through seven existing
+public GETs. Historical lists expose the backend-capped newest 100 rows;
+exact reads reach older retained IDs. Current-chain reads remain authorized
+observations, not readiness or later-write authority. Manual policy writes
+remain separate.
+
 The backend exposes `GET /api/v1/actors/me` and
 `GET /api/v1/actors/me/authorization-context` in
 `backend/app/api/routes/auth.py`. The selected 29-operation
