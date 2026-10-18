@@ -15,16 +15,38 @@ SHA = "sha256:" + "b" * 64
 REASON = "Adopt the corrected approved context"
 
 
-def invoke(cli, origin, *, source="parent", output="json", flags=(), project=PROJECT, task=TASK, key=KEY):
+def invoke(
+    cli,
+    origin,
+    *,
+    source="parent",
+    output="json",
+    flags=(),
+    project=PROJECT,
+    task=TASK,
+    key=KEY,
+):
     selectors = (
         ("--parent-preparation-id", PARENT, "--parent-preparation-sha256", SHA)
         if source == "parent"
         else ("--routing-manifest-id", MANIFEST)
     )
     return cli(
-        origin, TOKEN, "project", "task", "repair-revision", project, task,
-        "--idempotency-key", key, "--reason", REASON, *selectors, *flags,
-        "-o", output,
+        origin,
+        TOKEN,
+        "project",
+        "task",
+        "repair-revision",
+        project,
+        task,
+        "--idempotency-key",
+        key,
+        "--reason",
+        REASON,
+        *selectors,
+        *flags,
+        "-o",
+        output,
     )
 
 
@@ -35,12 +57,19 @@ def repaired(source="parent", *, clock="running"):
     value["sequence"] = 2 if source == "parent" else 1
     value["outcome"] = "rebased" if source == "parent" else "kept"
     value["direction"] = "forward" if source == "parent" else "kept"
-    value["changes"] = [{"component": "guide", "before": "old\n\x1b[31m", "after": "new"}]
+    value["changes"] = [
+        {"component": "guide", "before": "old\n\x1b[31m", "after": "new"}
+    ]
     if clock == "paused":
         value.update(
-            deadline_at=None, clock_state="paused", remaining_microseconds=123456789,
-            outcome="blocked", disposition="context_blocked", direction=None,
-            target=None, changes=[],
+            deadline_at=None,
+            clock_state="paused",
+            remaining_microseconds=123456789,
+            outcome="blocked",
+            disposition="context_blocked",
+            direction=None,
+            target=None,
+            changes=[],
         )
     return value
 
@@ -54,13 +83,18 @@ def test_exact_parent_and_missing_root_wire_and_clock_projection(cli):
             assert result.returncode == 0 and result.stderr == "", result.stderr
             assert json.loads(result.stdout) == value
             assert requests[-1] == (
-                "POST", f"/api/v1/projects/{PROJECT}/tasks/{TASK}/revision-context/repair",
+                "POST",
+                f"/api/v1/projects/{PROJECT}/tasks/{TASK}/revision-context/repair",
                 "Bearer " + TOKEN,
             )
             assert response["commands"][-1] == (
-                "application/json", [KEY],
-                ({"parent_preparation_id": PARENT, "parent_preparation_sha256": SHA}
-                 if source == "parent" else {"routing_manifest_id": MANIFEST})
+                "application/json",
+                [KEY],
+                (
+                    {"parent_preparation_id": PARENT, "parent_preparation_sha256": SHA}
+                    if source == "parent"
+                    else {"routing_manifest_id": MANIFEST}
+                )
                 | {"reason": REASON},
             )
             text = invoke(cli, origin, source=source, output="text")
@@ -80,7 +114,8 @@ def test_exact_parent_and_missing_root_wire_and_clock_projection(cli):
 def test_invalid_repair_inputs_send_nothing(cli):
     with http_fixture() as (origin, _, requests):
         bad = [
-            ("bad", TASK, KEY, ()), (PROJECT, "bad", KEY, ()),
+            ("bad", TASK, KEY, ()),
+            (PROJECT, "bad", KEY, ()),
             (PROJECT, TASK, "bad", ()),
             (PROJECT, TASK, KEY, ("--routing-manifest-id", MANIFEST)),
             (PROJECT, TASK, KEY, ("--parent-preparation-sha256", "bad")),
@@ -88,14 +123,46 @@ def test_invalid_repair_inputs_send_nothing(cli):
             (PROJECT, TASK, KEY, ("--reason", "é" * 501)),
         ]
         for project, task, key, flags in bad:
-            assert invoke(cli, origin, project=project, task=task, key=key, flags=flags).returncode == 2
+            assert (
+                invoke(
+                    cli, origin, project=project, task=task, key=key, flags=flags
+                ).returncode
+                == 2
+            )
         for args in (
             ("--idempotency-key", KEY, "--reason", REASON),
-            ("--idempotency-key", KEY, "--reason", REASON, "--parent-preparation-id", PARENT),
-            ("--idempotency-key", KEY, "--reason", REASON, "--routing-manifest-id", MANIFEST, "--parent-preparation-id", PARENT),
+            (
+                "--idempotency-key",
+                KEY,
+                "--reason",
+                REASON,
+                "--parent-preparation-id",
+                PARENT,
+            ),
+            (
+                "--idempotency-key",
+                KEY,
+                "--reason",
+                REASON,
+                "--routing-manifest-id",
+                MANIFEST,
+                "--parent-preparation-id",
+                PARENT,
+            ),
             ("--reason", REASON, "--routing-manifest-id", MANIFEST),
         ):
-            result = cli(origin, TOKEN, "project", "task", "repair-revision", PROJECT, TASK, *args, "-o", "json")
+            result = cli(
+                origin,
+                TOKEN,
+                "project",
+                "task",
+                "repair-revision",
+                PROJECT,
+                TASK,
+                *args,
+                "-o",
+                "json",
+            )
             assert_failure(result, "invalid_arguments", 2)
         assert requests == []
 
@@ -113,7 +180,8 @@ def test_malformed_or_substituted_success_is_unknown_not_success(cli):
             good | {"deadline_at": None},
             good | {"remaining_microseconds": 1},
             good | {"disposition": "unknown"},
-            good | {"changes": [{"component": "guide", "before": TOKEN, "after": "new"}]},
+            good
+            | {"changes": [{"component": "guide", "before": TOKEN, "after": "new"}]},
             good | {"extra": 1},
             {k: v for k, v in good.items() if k != "direction"},
             {k: v for k, v in good.items() if k != "prior"},
@@ -125,7 +193,9 @@ def test_malformed_or_substituted_success_is_unknown_not_success(cli):
             assert_failure(result, "invalid_api_response")
             assert json.loads(result.stderr)["error"]["outcome_unknown"] is True
             assert len(requests) == before + 1
-        response["body"] = json.dumps(repaired("manifest") | {"source_routing_manifest_id": TASK}).encode()
+        response["body"] = json.dumps(
+            repaired("manifest") | {"source_routing_manifest_id": TASK}
+        ).encode()
         assert_failure(invoke(cli, origin, source="manifest"), "invalid_api_response")
 
 
@@ -144,9 +214,29 @@ def test_canonical_denial_and_uncertain_write_keep_original_key(cli, tmp_path):
         assert response["commands"][-1][1] == [KEY]
         assert len(requests) == 3
     with goaway_fixture(tmp_path) as (origin, env, requests, _):
-        selectors = ("--parent-preparation-id", PARENT, "--parent-preparation-sha256", SHA)
-        result = cli(origin, TOKEN, "project", "task", "repair-revision", PROJECT, TASK,
-                     "--idempotency-key", KEY, "--reason", REASON, *selectors, "-o", "json", extra_env=env)
+        selectors = (
+            "--parent-preparation-id",
+            PARENT,
+            "--parent-preparation-sha256",
+            SHA,
+        )
+        result = cli(
+            origin,
+            TOKEN,
+            "project",
+            "task",
+            "repair-revision",
+            PROJECT,
+            TASK,
+            "--idempotency-key",
+            KEY,
+            "--reason",
+            REASON,
+            *selectors,
+            "-o",
+            "json",
+            extra_env=env,
+        )
         assert result.returncode == 1 and result.stdout == ""
         assert json.loads(result.stderr)["error"]["outcome_unknown"] is True
         assert len(requests) == 1
