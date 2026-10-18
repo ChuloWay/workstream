@@ -11,14 +11,10 @@ import (
 	"net/http"
 	"net/url"
 	"reflect"
-	"regexp"
 	"strconv"
 	"strings"
 	"unicode/utf8"
 )
-
-var checkerName = regexp.MustCompile(`^[a-z][a-z0-9_.-]{0,99}$`)
-var checkerVersion = regexp.MustCompile(`^[a-z0-9][a-z0-9_.-]{0,49}$`)
 
 // CheckerRegistrySpec is the exact caller-selected immutable specification.
 // Publication does not select or enable a checker for a guide.
@@ -38,7 +34,7 @@ func checkerSpec(raw json.RawMessage) (CheckerRegistrySpec, error) {
 	fields, err := contextObject(raw, &value, []string{
 		"capability_id", "capability_version", "phase", "image_digest", "configuration_schema", "input_schema", "output_schema", "resources",
 	}, nil)
-	if err != nil || !checkerName.MatchString(value.CapabilityID) || !checkerVersion.MatchString(value.CapabilityVersion) ||
+	if err != nil || !postPolicyIdentifier.MatchString(value.CapabilityID) || !postPolicySchemaVersion.MatchString(value.CapabilityVersion) ||
 		(value.Phase != "pre_submit" && value.Phase != "post_submit") || !contextPolicyDigest.MatchString(value.ImageDigest) {
 		return value, errors.New("invalid checker registry specification")
 	}
@@ -46,26 +42,13 @@ func checkerSpec(raw json.RawMessage) (CheckerRegistrySpec, error) {
 	if value.Phase == "post_submit" {
 		inputID = "external_checker_post_submit_input"
 	}
-	if checkerSchema(fields["configuration_schema"], &value.ConfigurationSchema, "") != nil ||
-		checkerSchema(fields["input_schema"], &value.InputSchema, inputID) != nil ||
-		checkerSchema(fields["output_schema"], &value.OutputSchema, "external_checker_result") != nil ||
+	if validateExternalCheckerSchema(fields["configuration_schema"], &value.ConfigurationSchema, "") != nil ||
+		validateExternalCheckerSchema(fields["input_schema"], &value.InputSchema, inputID) != nil ||
+		validateExternalCheckerSchema(fields["output_schema"], &value.OutputSchema, "external_checker_result") != nil ||
 		validateExternalCheckerResources(fields["resources"], &value.Resources) != nil {
 		return value, errors.New("invalid checker registry specification")
 	}
 	return value, nil
-}
-
-func checkerSchema(raw json.RawMessage, value *ExternalCheckerSchema, requiredID string) error {
-	fields, err := contextObject(raw, value, []string{"schema_id", "schema_version", "document", "schema_sha256"}, nil)
-	if err != nil || !checkerName.MatchString(value.SchemaID) || !checkerVersion.MatchString(value.SchemaVersion) ||
-		(requiredID != "" && value.SchemaID != requiredID) || !contextPolicyDigest.MatchString(value.SchemaHash) {
-		return errors.New("invalid checker schema")
-	}
-	var document map[string]json.RawMessage
-	if jsonv2.Unmarshal(fields["document"], &document) != nil || document == nil {
-		return errors.New("checker schema document must be an object")
-	}
-	return nil
 }
 
 func checkerEntry(raw json.RawMessage, selectedID, operationID string) (ExternalCheckerRegistryEntry, error) {
@@ -154,15 +137,13 @@ func sameCheckerSchema(left, right ExternalCheckerSchema) bool {
 	return leftErr == nil && rightErr == nil && reflect.DeepEqual(submitted, returned)
 }
 
-type checkerNumberIdentity struct {
-	integer bool
-	text    string
-}
+type checkerNumberIdentity string
 
 func checkerDocumentIdentity(raw json.RawMessage) (any, error) {
 	// The ordinary v2 `any` decoder loses integer precision above 2^53.
-	// Preserve integer identity while treating equivalent float spellings as
-	// the same parsed value; this is equality, not a digest canonicalizer.
+	// Preserve integer precision while comparing the decimal values that the
+	// backend may persist through PostgreSQL JSONB. This is equality, not a
+	// digest canonicalizer.
 	decoder := json.NewDecoder(bytes.NewReader(raw))
 	decoder.UseNumber()
 	var value any
@@ -197,13 +178,21 @@ func checkerParsedIdentity(value any) (any, error) {
 			if !ok {
 				return nil, errors.New("invalid checker integer")
 			}
-			return checkerNumberIdentity{integer: true, text: integer.String()}, nil
+			return checkerNumberIdentity(integer.String()), nil
 		}
 		floating, err := strconv.ParseFloat(literal, 64)
 		if err != nil || math.IsNaN(floating) || math.IsInf(floating, 0) {
 			return nil, errors.New("invalid checker float")
 		}
-		return checkerNumberIdentity{text: strconv.FormatFloat(floating, 'g', -1, 64)}, nil
+		// Python's JSON float parser rounds to binary64 before PostgreSQL
+		// stores its decimal form. Rat keeps the resulting decimal comparison
+		// lossless, including 1e20 versus its integer spelling and signed zero.
+		decimal := strconv.FormatFloat(floating, 'f', -1, 64)
+		rational, ok := new(big.Rat).SetString(decimal)
+		if !ok {
+			return nil, errors.New("invalid checker float")
+		}
+		return checkerNumberIdentity(rational.RatString()), nil
 	}
 	return value, nil
 }
@@ -302,6 +291,27 @@ func validCheckerSuccessor(raw json.RawMessage, successor *CheckerRetrySuccessor
 	return true
 }
 
+func validCheckerRetryLineage(source *CheckerRetrySource, successor *CheckerRetrySuccessor) bool {
+	if source == nil || successor == nil || source.SourceGeneration == nil || successor.Generation == nil ||
+		successor.Generation.Cmp(new(big.Int).Add(source.SourceGeneration, big.NewInt(1))) != 0 {
+		return false
+	}
+	// A retry creates three new records. Reusing any source or successor
+	// record identity would make the receipt claim a false lineage.
+	seen := map[[16]byte]bool{}
+	for _, id := range []string{
+		source.SourceRequestID, source.SourceRunID, source.SourceResultID,
+		successor.RequestID, successor.RunID, successor.ResultID,
+	} {
+		identity, valid := uuidIdentity(id)
+		if !valid || seen[identity] {
+			return false
+		}
+		seen[identity] = true
+	}
+	return true
+}
+
 func (c *Client) CheckerRetrySources(ctx context.Context, project string, limit int, cursor string) (Result[CheckerRetrySourcePage], error) {
 	var result Result[CheckerRetrySourcePage]
 	if !validUUID(project) || len(project) > 100 || limit < 1 || limit > 100 || len(cursor) > 512 {
@@ -338,7 +348,8 @@ func (c *Client) CheckerRetrySources(ctx context.Context, project string, limit 
 			return result, &Failure{Code: "invalid_api_response"}
 		}
 		if item.RetryReceiptID != nil {
-			if !validUUID(*item.RetryReceiptID) || !validCheckerSuccessor(parts["successor"], item.Successor) {
+			if !validUUID(*item.RetryReceiptID) || !validCheckerSuccessor(parts["successor"], item.Successor) ||
+				!validCheckerRetryLineage(&item.Source, item.Successor) {
 				return result, &Failure{Code: "invalid_api_response"}
 			}
 		}
@@ -383,7 +394,8 @@ func (c *Client) RetryChecker(ctx context.Context, project, sourceRun, reason, k
 	fields, err := contextObject(raw, &receipt, []string{"receipt_id", "source", "successor", "authorization_decision_id"}, nil)
 	if err != nil || !validUUID(receipt.ReceiptID) || !validUUID(receipt.AuthorizationDecisionID) ||
 		!validCheckerSource(fields["source"], &receipt.Source, project, sourceRun) ||
-		!validCheckerSuccessor(fields["successor"], &receipt.Successor) || !c.safeMutationResponse(raw) {
+		!validCheckerSuccessor(fields["successor"], &receipt.Successor) ||
+		!validCheckerRetryLineage(&receipt.Source, &receipt.Successor) || !c.safeMutationResponse(raw) {
 		return result, checkerMutationFailure(&Failure{Code: "invalid_api_response", OutcomeUnknown: true}, "retry outcome unknown; manually replay the exact project, run, reason and key")
 	}
 	return Result[CheckerRetryReceipt]{Raw: raw, Value: receipt}, nil

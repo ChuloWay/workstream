@@ -14,6 +14,9 @@ RESULT = "018f0ebc-7966-7e8d-bc4d-1cae1e000033"
 EVIDENCE = "018f0ebc-7966-7e8d-bc4d-1cae1e000034"
 TASK = "018f0ebc-7966-7e8d-bc4d-1cae1e000035"
 SUBMISSION = "018f0ebc-7966-7e8d-bc4d-1cae1e000036"
+NEXT_REQUEST = "018f0ebc-7966-7e8d-bc4d-1cae1e000040"
+NEXT_RUN = "018f0ebc-7966-7e8d-bc4d-1cae1e000041"
+NEXT_RESULT = "018f0ebc-7966-7e8d-bc4d-1cae1e000042"
 SHA = "sha256:" + "a" * 64
 
 
@@ -74,10 +77,10 @@ def source():
 
 def successor():
     return {
-        "request_id": REQUEST,
+        "request_id": NEXT_REQUEST,
         "request_digest": SHA,
-        "run_id": ENTRY,
-        "result_id": ACTOR,
+        "run_id": NEXT_RUN,
+        "result_id": NEXT_RESULT,
         "generation": 2,
         "event_id": TASK,
         "audit_event_id": SUBMISSION,
@@ -168,7 +171,7 @@ def test_registry_refuses_local_invalid_and_response_substitution(cli, tmp_path)
 def test_registry_large_response_safe_text_and_bearer_reflection(cli, tmp_path):
     value = spec()
     for name in ("configuration_schema", "input_schema", "output_schema"):
-        value[name]["document"]["description"] = "x" * 25_000 + "\u202e"
+        value[name]["document"]["description"] = "x" * 25_000 + "\u202e\u2028\u2029"
     path = tmp_path / "large-checker.json"
     path.write_text(json.dumps(value, ensure_ascii=False))
     with http_fixture() as (origin, response, requests):
@@ -182,6 +185,16 @@ def test_registry_large_response_safe_text_and_bearer_reflection(cli, tmp_path):
         assert "\u202e" not in registered.stdout and "\\u202E" in registered.stdout
         assert len(requests) == 1
 
+        machine = invoke(
+            cli, origin, "registry", "register", "--input", str(path),
+            "--idempotency-key", KEY,
+        )
+        assert machine.returncode == 0 and machine.stderr == "", machine.stderr
+        assert json.loads(machine.stdout) == entry(value)
+        assert machine.stdout.count("\n") == 1
+        assert "\u2028" not in machine.stdout and "\u2029" not in machine.stdout
+        assert "\\u2028" in machine.stdout and "\\u2029" in machine.stdout
+
         response["status"] = 200
         response["body"] = json.dumps(
             entry(value) | {"input_schema": value["input_schema"] | {
@@ -191,22 +204,26 @@ def test_registry_large_response_safe_text_and_bearer_reflection(cli, tmp_path):
         assert_failure(invoke(cli, origin, "registry", "read", ENTRY), "invalid_api_response")
 
 
-def test_registration_compares_schema_numbers_without_float64_integer_collapse(cli, tmp_path):
+def test_registration_compares_postgres_normalized_numbers_without_integer_collapse(cli, tmp_path):
     value = spec()
     value["configuration_schema"]["document"] = {
-        "type": "object", "examples": [9007199254740993, 1.0],
+        "type": "object", "examples": [9007199254740993, -0.0, 1e20],
     }
     path = tmp_path / "numbered-checker.json"
-    path.write_text(json.dumps(value).replace("1.0", "1e0"))
+    path.write_text(json.dumps(value))
     with http_fixture() as (origin, response, requests):
-        response.update(status=201, body=json.dumps(entry(value)).encode())
+        normalized = deepcopy(entry(value))
+        normalized["configuration_schema"]["document"]["examples"] = [
+            9007199254740993, 0, 100000000000000000000,
+        ]
+        response.update(status=201, body=json.dumps(normalized).encode())
         same_value = invoke(
             cli, origin, "registry", "register", "--input", str(path),
             "--idempotency-key", KEY,
         )
         assert same_value.returncode == 0, same_value.stderr
 
-        changed = deepcopy(entry(value))
+        changed = deepcopy(normalized)
         changed["configuration_schema"]["document"]["examples"][0] = 9007199254740992
         response["body"] = json.dumps(changed).encode()
         substituted = invoke(
@@ -216,6 +233,44 @@ def test_registration_compares_schema_numbers_without_float64_integer_collapse(c
         assert_failure(substituted, "invalid_api_response")
         assert json.loads(substituted.stderr)["error"]["outcome_unknown"] is True
         assert len(requests) == 2
+
+
+def test_retry_lineage_rejects_relational_substitutions_on_receipts_and_history(cli):
+    historical = {
+        "project_id": PROJECT,
+        "items": [{
+            "source": source(), "recovery_state": "retried",
+            "created_at": "2026-10-18T10:00:00Z",
+            "completed_at": "2026-10-18T10:01:00Z",
+            "retry_receipt_id": EVIDENCE,
+            "successor": successor(),
+        }],
+        "next_cursor": None,
+    }
+    with http_fixture() as (origin, response, _requests):
+        response["body"] = json.dumps(historical).encode()
+        assert invoke(cli, origin, "retry-sources", PROJECT).returncode == 0
+        for successor_change in (
+            {"generation": 1},
+            {"generation": 3},
+            {"request_id": REQUEST},
+            {"run_id": RUN},
+            {"result_id": RESULT},
+            {"request_id": NEXT_RUN},
+            {"run_id": RESULT},
+        ):
+            bad_history = deepcopy(historical)
+            bad_history["items"][0]["successor"].update(successor_change)
+            response["body"] = json.dumps(bad_history).encode()
+            assert_failure(invoke(cli, origin, "retry-sources", PROJECT), "invalid_api_response")
+
+            bad_receipt = receipt()
+            bad_receipt["successor"].update(successor_change)
+            response.update(status=201, body=json.dumps(bad_receipt).encode())
+            result = invoke(cli, origin, "retry", PROJECT, RUN, "--reason", "fixed", "--idempotency-key", KEY)
+            assert_failure(result, "invalid_api_response")
+            assert json.loads(result.stderr)["error"]["outcome_unknown"] is True
+            response["status"] = 200
 
 
 def test_retry_source_page_and_exact_reason_bound_receipt(cli):

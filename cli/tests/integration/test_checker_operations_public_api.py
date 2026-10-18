@@ -34,6 +34,7 @@ from tests.authorization.admin_access.fixtures import (
 from tests.authorization.admin_access.support import create_project
 from tests.checkers.external.support import registry_spec
 from tests.checkers.execution.test_checker_retry import _failed_source
+from app.modules.checkers.api.external import external_checker_json_hash
 from app.modules.checkers.models import CheckerRetryReceipt, ExternalCheckerRegistryEntryRecord
 
 signed_access = pytest_asyncio.fixture(_signed_access.__wrapped__)
@@ -96,6 +97,27 @@ async def test_operator_registry_and_exact_terminal_retry_through_real_api(
             ) == registered
             await call(outsider, "registry", "read", registered["registry_entry_id"], status=404)
 
+            numeric_payload = registry_spec().model_dump(mode="json")
+            numeric_payload["capability_version"] = "v1.2.4"
+            document = numeric_payload["configuration_schema"]["document"]
+            document["examples"] = [9007199254740993, -0.0, 1e20]
+            numeric_payload["configuration_schema"]["schema_sha256"] = external_checker_json_hash(document)
+            numeric_file = tmp_path / "numeric-checker.json"
+            numeric_file.write_text(json.dumps(numeric_payload))
+            numeric_key = str(uuid4())
+            numeric_entry = await call(
+                admin_access.target, "registry", "register", "--input", str(numeric_file),
+                "--idempotency-key", numeric_key,
+            )
+            assert numeric_entry["configuration_schema"]["document"]["examples"] == document["examples"]
+            assert await call(
+                admin_access.target, "registry", "read", numeric_entry["registry_entry_id"],
+            ) == numeric_entry
+            assert await call(
+                admin_access.target, "registry", "register", "--input", str(numeric_file),
+                "--idempotency-key", numeric_key,
+            ) == numeric_entry
+
             page = await call(admin_access.target, "retry-sources", project, "--limit", "1")
             assert page["project_id"] == project and len(page["items"]) == 1
             assert page["items"][0]["source"]["source_run_id"] == run
@@ -132,7 +154,7 @@ async def test_operator_registry_and_exact_terminal_retry_through_real_api(
             assert after["items"][0]["retry_receipt_id"] == receipt["receipt_id"]
             async with h.factory() as session:
                 assert await session.scalar(select(func.count()).select_from(CheckerRetryReceipt)) == 1
-                assert await session.scalar(select(func.count()).select_from(ExternalCheckerRegistryEntryRecord)) == 1
+                assert await session.scalar(select(func.count()).select_from(ExternalCheckerRegistryEntryRecord)) == 2
 
             revoked = await signed.revoke(admin_access.admin, operator_grant)
             assert revoked.status_code == 200, revoked.text
