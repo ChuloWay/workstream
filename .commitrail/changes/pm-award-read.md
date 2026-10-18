@@ -88,7 +88,12 @@ roles table said neither held it. No action consumed either grant.
 
 ## Review findings
 
-Recorded after the internal security review.
+Internal security review: no blocker or major finding. No caller gains C6
+access; every read evaluator returns the same six values and the kernel
+unpacks them; Operator lost no consumed authority; the recorded decision
+digests the resource sent, with the Project Manager grant matched. Two minor
+stale comments were fixed: the C6 route docstring (published as the OpenAPI
+description) and the CLI `ProjectSummary` comment.
 
 ## Reconciliation
 

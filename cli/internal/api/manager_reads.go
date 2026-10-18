@@ -192,7 +192,7 @@ func validTaskCounts(counts TaskStatusCounts) (*big.Int, bool) {
 	return total, true
 }
 
-// ProjectSummary counts a project's work; award totals are null without exact-project Finance authority.
+// ProjectSummary counts a project's work and lists its award totals.
 func (c *Client) ProjectSummary(ctx context.Context, project string) (Result[ProjectWorkSummary], error) {
 	var result Result[ProjectWorkSummary]
 	path, err := projectReadPath(project, "/summary")
