@@ -186,8 +186,9 @@ class PostSubmitDeliveryReads:
                 project_id=project_id, limit=limit, cursor=cursor,
             )
         )
+        response = PostSubmitDeliveryPage.model_validate(result)
         await self._session.commit()
-        return PostSubmitDeliveryPage.model_validate(result)
+        return response
 
 
 @asynccontextmanager

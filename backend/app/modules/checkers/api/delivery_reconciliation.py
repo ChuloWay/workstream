@@ -9,7 +9,6 @@ from pydantic import AwareDatetime, AfterValidator, BaseModel, ConfigDict, Field
 
 from app.core.hashing import canonical_json_hash
 from app.modules.checkers.api.evaluation_contract import PostSubmissionExecutionRequest
-from app.modules.outbox.api import OutboxEventEnvelope
 
 
 _STRICT = ConfigDict(
@@ -51,6 +50,10 @@ class PostSubmitDeliveryCursorInvalid(ValueError):
 
 class PostSubmitDeliverySourceUnavailable(RuntimeError):
     """An exact TASK-owned source is absent, stale, or internally inconsistent."""
+
+
+class PostSubmitDeliveryRetryable(RuntimeError):
+    """The existing TASK owner refused before effects and may be retried safely."""
 
 
 def _reason(value: str) -> str:
@@ -137,7 +140,7 @@ class PostSubmitDeliverySource(BaseModel):
     classification: Literal["committed", "retry_safe", "unresolved"]
     reconciliation_event_id: UUID | None = None
     reconciliation_state: Literal[
-        "pending", "active", "acknowledged", "unknown", "held"
+        "pending", "active", "acknowledged", "held"
     ] | None = None
 
     @model_validator(mode="after")
@@ -147,7 +150,7 @@ class PostSubmitDeliverySource(BaseModel):
         ):
             raise ValueError("delivery reconciliation identity is incomplete")
         if (
-            self.reconciliation_state in {"unknown", "held"}
+            self.reconciliation_state == "held"
             and self.classification != "unresolved"
         ):
             raise ValueError("uncertain reconciliation child must be held")
@@ -275,6 +278,7 @@ class PostSubmitDeliveryResult(BaseModel):
         if (
             self.source.reconciliation_event_id != self.successor.event_id
             or self.source.reconciliation_state != "pending"
+            or self.source.classification != self.successor.classification
         ):
             raise ValueError("post-submit delivery result differs")
         return self
@@ -316,40 +320,3 @@ class PostSubmitDeliveryAuthorizationPort(Protocol):
     def close(self, handle: object) -> None: ...
 
     async def restage_denial(self, error: PostSubmitDeliveryAuthorityDenied) -> bool: ...
-
-
-class PostSubmitDeliveryCauseAuthorizationPort(Protocol):
-    """Validate the retained human Operator decision as worker cause, not authority."""
-
-    async def validate_cause(
-        self,
-        payload: PostSubmitDeliveryChildPayload,
-        original: OutboxEventEnvelope,
-    ) -> None: ...
-
-
-class PostSubmitDeliveryRequestReadPort(Protocol):
-    """Read one retained request without staging or repairing owner rows."""
-
-    async def read(self, envelope: OutboxEventEnvelope) -> object: ...
-
-
-class PostSubmitDeliveryOutcomePort(Protocol):
-    """TASK routing operation plus nonmutating reconciliation checks."""
-
-    async def observe_delivery_generation(
-        self, envelope: OutboxEventEnvelope,
-    ) -> int | None: ...
-
-    async def classify_uncertain_delivery(
-        self, envelope: OutboxEventEnvelope, *, current_generation: int | None,
-    ) -> Literal["committed", "retry_safe", "unresolved"]: ...
-
-    async def verify_retained_delivery(
-        self, envelope: OutboxEventEnvelope, *, current_generation: int | None,
-    ) -> None: ...
-
-    async def apply(
-        self, envelope: OutboxEventEnvelope, *, current_generation: int | None,
-    ) -> object: ...
-

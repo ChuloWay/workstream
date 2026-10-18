@@ -1,6 +1,6 @@
 """Detached TASK source facts for authorized post-submit routing."""
 
-from typing import Annotated, Literal, Protocol, Self
+from typing import Annotated, Literal, Self
 from uuid import UUID
 
 from pydantic import (
@@ -17,16 +17,10 @@ from pydantic import (
 from app.core.hashing import canonical_json_hash
 from app.modules.tasks.api.transition_audit import TaskPolicyLineage
 from app.modules.tasks.api.revision import RevisionCandidate
-from app.modules.outbox.api import OutboxEventEnvelope
-from app.modules.tasks.api.routing_outcome import TaskRoutingOutcome
 
 _Sha256 = Annotated[StrictStr, Field(pattern=r"^sha256:[0-9a-f]{64}$")]
 _PositiveVersion = Annotated[StrictInt, Field(ge=1, le=2_147_483_647)]
 _ByteCount = Annotated[StrictInt, Field(ge=0, le=9_223_372_036_854_775_807)]
-
-
-class TaskRoutingRequestUnavailable(RuntimeError):
-    """Conceal unavailable or inconsistent post-submit routing preparation."""
 
 
 class TaskPostSubmitSourceProposal(BaseModel):
@@ -239,23 +233,3 @@ class TaskRoutingSourcePreparation(BaseModel):
             if name != "evaluation_request_digest" and getattr(request, name) != getattr(source, name):
                 raise ValueError("routing source selection differs")
         return self
-
-
-class TaskPostSubmitOutcomePort(Protocol):
-    """Existing TASK routing operation plus nonmutating reconciliation checks."""
-
-    async def observe_delivery_generation(
-        self, envelope: OutboxEventEnvelope,
-    ) -> int | None: ...
-
-    async def classify_uncertain_delivery(
-        self, envelope: OutboxEventEnvelope, *, current_generation: int | None,
-    ) -> Literal["committed", "retry_safe", "unresolved"]: ...
-
-    async def verify_retained_delivery(
-        self, envelope: OutboxEventEnvelope, *, current_generation: int | None,
-    ) -> None: ...
-
-    async def apply(
-        self, envelope: OutboxEventEnvelope, *, current_generation: int | None,
-    ) -> TaskRoutingOutcome: ...

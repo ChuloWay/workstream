@@ -124,22 +124,40 @@ async def test_registry_upgrade_targets_public_schema_with_shadow_search_path(
                     f"{shadow}.audit_events",
                 )
                 exact_pairs = (
-                    ("checker.registry.read", "operations.status.read"),
-                    ("operations.checker_retry_source.list", "operations.status.read"),
+                    (
+                        "checker.registry.read",
+                        "operations.status.read",
+                        "operations.reconcile.run",
+                    ),
+                    (
+                        "operations.checker_retry_source.list",
+                        "operations.status.read",
+                        "operations.reconcile.run",
+                    ),
+                    (
+                        "operations.post_submit_delivery.list",
+                        "operations.status.read",
+                        "operations.reconcile.run",
+                    ),
+                    (
+                        "operations.post_submit_delivery.reconcile",
+                        "operations.reconcile.run",
+                        "operations.status.read",
+                    ),
                 )
                 assert "checker.registry.register" in public_definition
                 assert all(
                     action in public_definition and permission in public_definition
-                    for action, permission in exact_pairs
+                    for action, permission, _ in exact_pairs
                 )
                 assert shadow_after == shadow_before
-                for action, permission in exact_pairs:
+                for action, permission, wrong_permission in exact_pairs:
                     await _insert_audit_pair(probe, action_id=action, permission_id=permission)
                     with pytest.raises(asyncpg.CheckViolationError) as error:
                         await _insert_audit_pair(
                             probe,
                             action_id=action,
-                            permission_id="operations.reconcile.run",
+                            permission_id=wrong_permission,
                         )
                     assert error.value.constraint_name == (
                         "ck_audit_events_authorization_action_evidence"
@@ -185,6 +203,83 @@ async def test_operational_read_audit_one_step_downgrade_refuses_without_mutatio
                 )
 
             assert await _audit_constraint_snapshot(url) == before
+        finally:
+            await _drop_test_database_schema(isolated_database_env)
+            await asyncio.to_thread(
+                command.upgrade,
+                _config(),
+                current_schema_revision(),
+            )
+
+
+async def test_delivery_reconciliation_audit_upgrade_and_downgrade_refusal(
+    isolated_database_env,
+    migration_lock,
+) -> None:
+    """0055 adds only the two exact pairs and never mutates on downgrade."""
+    url = isolated_database_env.replace("+asyncpg", "")
+    with migration_lock():
+        await db_session.dispose_engine()
+        await _drop_test_database_schema(isolated_database_env)
+        await asyncio.to_thread(
+            command.upgrade,
+            _config(),
+            "0054_artifact_proof_timing",
+        )
+        before = await _audit_constraint_snapshot(url)
+        assert before[0] == "0054_artifact_proof_timing"
+        try:
+            await asyncio.to_thread(
+                command.upgrade,
+                _config(),
+                "0055_delivery_reconciliation",
+            )
+            after = await _audit_constraint_snapshot(url)
+            assert after[0] == "0055_delivery_reconciliation"
+            assert before[1] != after[1]
+            connection = await asyncpg.connect(url)
+            try:
+                for action, permission, wrong_permission in (
+                    (
+                        "operations.post_submit_delivery.list",
+                        "operations.status.read",
+                        "operations.reconcile.run",
+                    ),
+                    (
+                        "operations.post_submit_delivery.reconcile",
+                        "operations.reconcile.run",
+                        "operations.status.read",
+                    ),
+                ):
+                    await _insert_audit_pair(
+                        connection, action_id=action, permission_id=permission
+                    )
+                    with pytest.raises(asyncpg.CheckViolationError) as error:
+                        await _insert_audit_pair(
+                            connection,
+                            action_id=action,
+                            permission_id=wrong_permission,
+                        )
+                    assert error.value.constraint_name == (
+                        "ck_audit_events_authorization_action_evidence"
+                    )
+            finally:
+                await connection.close()
+
+            retained = await _audit_constraint_snapshot(url)
+            with pytest.raises(
+                RuntimeError,
+                match=(
+                    "Workstream v0.1 migrations cannot be downgraded; "
+                    "recreate the database"
+                ),
+            ):
+                await asyncio.to_thread(
+                    command.downgrade,
+                    _config(),
+                    "0054_artifact_proof_timing",
+                )
+            assert await _audit_constraint_snapshot(url) == retained
         finally:
             await _drop_test_database_schema(isolated_database_env)
             await asyncio.to_thread(

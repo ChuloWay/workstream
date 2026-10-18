@@ -11,7 +11,6 @@ from app.modules.checkers.api.execution import (
     EvaluationCompletion, EvaluationCoordinationPort, VerifiedEvaluationCompletion,
 )
 from app.modules.tasks.api.post_submit_routing import (
-    TaskRoutingRequestUnavailable,
     TaskRoutingRequestFacts,
     TaskRoutingSelection,
     task_routing_request_digest,
@@ -22,6 +21,10 @@ from app.modules.tasks.repository import TaskRepository
 
 
 _OWNER_STRING_IDS = frozenset({"project_id", "task_id", "submission_id", "checker_run_id"})
+
+
+class TaskRoutingRequestUnavailable(RuntimeError):
+    """Conceal unavailable or inconsistent post-submit routing preparation."""
 
 
 async def require_routing_transaction(session: AsyncSession) -> None:

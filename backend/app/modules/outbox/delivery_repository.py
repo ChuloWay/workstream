@@ -195,16 +195,16 @@ class DeliveryRepository:
             ) == "INVOKE_OUTCOME_UNKNOWN",
         )
 
-    async def _children(self, original_ids, child_event_type, *, lock):
+    async def _children(self, originals, child_event_type, *, lock):
         """Return at most one exact child per original, rejecting corrupt multiplicity."""
-        if not original_ids:
+        if not originals:
             return {}
         statement = (
             select(OutboxEvent)
             .where(
                 OutboxEvent.event_type == child_event_type,
                 OutboxEvent.event_version == 1,
-                OutboxEvent.causation_event_id.in_(original_ids),
+                OutboxEvent.causation_event_id.in_(originals),
             )
             .order_by(OutboxEvent.causation_event_id, OutboxEvent.event_id)
             .execution_options(populate_existing=True)
@@ -214,7 +214,7 @@ class DeliveryRepository:
         values = {}
         for event in (await self.session.scalars(statement)).all():
             key = UUID(str(event.causation_event_id))
-            if key in values:
+            if key in values or event.project_id != originals[key]:
                 raise DeliveryUnavailable("outbox_delivery_reconciliation_unavailable")
             values[key] = _child(event)
         return values
@@ -261,7 +261,9 @@ class DeliveryRepository:
         ).all()
         selected = rows[:limit]
         children = await self._children(
-            [row[0].event_id for row in selected], child_event_type, lock=False
+            {UUID(str(row[0].event_id)): row[0].project_id for row in selected},
+            child_event_type,
+            lock=False,
         )
         items = tuple(
             FinalizedUnknownDelivery(
@@ -313,7 +315,9 @@ class DeliveryRepository:
         if row is None:
             return None
         event, attempt = row
-        children = await self._children([event.event_id], child_event_type, lock=lock)
+        children = await self._children(
+            {UUID(str(event.event_id)): event.project_id}, child_event_type, lock=lock
+        )
         return FinalizedUnknownDelivery(
             envelope=_envelope(event, attempt),
             finalized_at=event.finalized_at,

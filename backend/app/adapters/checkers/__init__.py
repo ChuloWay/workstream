@@ -317,7 +317,22 @@ def post_submit_delivery_service(
         evaluation_delivery_request_reader,
         post_submit_delivery_outcome,
     )
-    from app.modules.checkers.delivery_reconciliation import PostSubmitDeliveryService
+    from app.modules.checkers.delivery_reconciliation import (
+        PostSubmitDeliveryService,
+        classify_post_submit_delivery,
+    )
+
+    async def detached_classify(delivery):
+        async with sessions() as source_session, source_session.begin():
+            evaluations = evaluation_coordinator(source_session)
+            return await classify_post_submit_delivery(
+                delivery,
+                evaluations=evaluations,
+                requests=evaluation_delivery_request_reader(
+                    source_session, evaluations
+                ),
+                outcomes=post_submit_delivery_outcome(source_session, sessions),
+            )
 
     return PostSubmitDeliveryService(
         session,
@@ -333,6 +348,7 @@ def post_submit_delivery_service(
             session, context, cursor_secret,
         ),
         authorization=post_submit_delivery_authorization(session, context),
+        detached_classify=detached_classify,
     )
 def post_submission_executor(*, sessions, materialization):
     """Compose the sole executor with exact fixed-service AUTH at both phases."""

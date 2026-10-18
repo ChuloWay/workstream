@@ -228,8 +228,9 @@ finalize and route authority. No service gains an Operator permission.
   this release.
 
 The sole child is the immutable reconciliation receipt. Inspection links it to
-the original attempt and projects that child as pending, active, acknowledged,
-unknown or held without changing the original dead letter.
+the original attempt and projects that child as pending, active, acknowledged
+or held without changing the original dead letter. OUTBOX's internal UNKNOWN
+child state is exposed only as the closed public `held` classification.
 
 ### Alternatives rejected
 

@@ -207,9 +207,7 @@ class ActionId(StrEnum):
     OPERATIONS_CHECKER_RETRY = "operations.checker.retry"
     OPERATIONS_CHECKER_RETRY_SOURCE_LIST = "operations.checker_retry_source.list"
     OPERATIONS_POST_SUBMIT_DELIVERY_LIST = "operations.post_submit_delivery.list"
-    OPERATIONS_POST_SUBMIT_DELIVERY_RECONCILE = (
-        "operations.post_submit_delivery.reconcile"
-    )
+    OPERATIONS_POST_SUBMIT_DELIVERY_RECONCILE = "operations.post_submit_delivery.reconcile"
     SUBMISSION_CREATE = "submission.create"
     REVIEW_QUEUE_READ = "review.queue.read"
     REVIEW_QUEUE_INSPECT = "review.queue.inspect"
@@ -289,7 +287,6 @@ class ActionId(StrEnum):
     PROJECT_SUBMISSION_BUNDLE_PREPARATION_LIST = "project.submission_bundle_preparation.list"
     CONTRIBUTION_POLICY_LIST = "contribution.policy.list"
 
-
 CONTRIBUTION_READ_ACTIONS = frozenset({ActionId.CONTRIBUTION_READ_SELF, ActionId.CONTRIBUTION_READ_PROJECT})
 # Own-work reads under a current exact-project Submitter grant.
 CONTRIBUTOR_WORK_READ_ACTIONS = frozenset({
@@ -319,7 +316,6 @@ HISTORY_READ_ACTIONS = frozenset({
     ActionId.PROJECT_CHECKER_RUN_READ,
 })
 
-
 TASK_LOCKED_CONTEXT_READ_ACTIONS = frozenset({
     ActionId.PROJECT_TASK_LOCKED_CONTEXT_READ, ActionId.OPERATIONS_TASK_LOCKED_CONTEXT_READ,
     ActionId.AUDIT_TASK_LOCKED_CONTEXT_READ,
@@ -331,7 +327,6 @@ TASK_CONCEALED_READ_ACTIONS = TASK_LOCKED_CONTEXT_READ_ACTIONS | frozenset({
     ActionId.TASK_READ, ActionId.TASK_SUBMISSION_REQUIREMENTS_READ,
     ActionId.PROJECT_TASK_READ, ActionId.PROJECT_TASK_SUBMISSION_REQUIREMENTS_READ,
 })
-
 
 @unique
 class ActionOwner(StrEnum):
@@ -836,7 +831,6 @@ NEW_PERMISSION_IDS = frozenset(
     }
 )
 HISTORICAL_PERMISSION_IDS = PERMISSION_IDS - NEW_PERMISSION_IDS
-
 
 def _require_catalogue_counts() -> None:
     """Keep the closed action inventory and permission boundary exact."""

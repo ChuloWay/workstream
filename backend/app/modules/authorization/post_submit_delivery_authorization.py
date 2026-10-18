@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-from uuid import UUID
 
 from sqlalchemy import text
 

@@ -3,15 +3,15 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from typing import Protocol
 
 from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.modules.checkers.api.delivery_reconciliation import (
-    PostSubmitDeliveryCauseAuthorizationPort,
     PostSubmitDeliveryChildPayload,
-    PostSubmitDeliveryOutcomePort,
-    PostSubmitDeliveryRequestReadPort,
+    PostSubmitDeliveryOperationUnavailable,
+    PostSubmitDeliveryRetryable,
     PostSubmitDeliverySourceUnavailable,
 )
 from app.modules.checkers.api.execution import (
@@ -20,13 +20,17 @@ from app.modules.checkers.api.execution import (
     CheckerExecutionUnavailable,
     EvaluationCoordinationPort,
 )
+from app.modules.checkers.api.evaluation_contract import PostSubmissionExecutionRequest
 from app.modules.checkers.delivery_reconciliation import (
+    PostSubmitDeliveryOutcomePort,
+    PostSubmitDeliveryRequestReadPort,
     RECONCILIATION_EVENT,
     SUPPORTED_DELIVERIES,
 )
 from app.modules.outbox.api import (
     CommittedInvocationObservation,
     CommittedInvocationPort,
+    DeliveryUnavailable,
     FinalizedUnknownDeliveryPort,
     HandlerOutcome,
     InvocationFencePort,
@@ -44,8 +48,17 @@ def _matches_child(
         and child.aggregate_type == "outbox_delivery"
         and child.aggregate_id == payload.original_event_id
         and child.causation_event_id == payload.original_event_id
-        and child.claim.project_id == child.claim.project_id
     )
+
+
+class PostSubmitDeliveryCauseAuthorizationPort(Protocol):
+    """Validate the retained human Operator decision as cause, not authority."""
+
+    async def validate_cause(
+        self,
+        payload: PostSubmitDeliveryChildPayload,
+        original: OutboxEventEnvelope,
+    ) -> None: ...
 
 
 def _matches_original(
@@ -129,7 +142,12 @@ class PostSubmitDeliveryReconciliationHandler:
             PostSubmitDeliveryOutcomePort,
         ],
         executor: Callable[
-            [OutboxEventEnvelope, OutboxEventEnvelope, PostSubmitDeliveryChildPayload, object],
+            [
+                OutboxEventEnvelope,
+                OutboxEventEnvelope,
+                PostSubmitDeliveryChildPayload,
+                PostSubmissionExecutionRequest,
+            ],
             object,
         ],
     ) -> None:
@@ -157,69 +175,27 @@ class PostSubmitDeliveryReconciliationHandler:
         if observed is None or observed.claim != child.claim:
             return HandlerOutcome.REJECT
 
-        async with self._sessions() as session, session.begin():
-            deliveries = self._deliveries(session)
-            retained = await deliveries.read_finalized_unknown(
-                project_id=child.claim.project_id,
-                event_id=payload.original_event_id,
-                event_types=SUPPORTED_DELIVERIES,
-                child_event_type=RECONCILIATION_EVENT,
-                lock=False,
-            )
-            if (
-                retained is None
-                or retained.child is None
-                or retained.child.event_id != child.claim.event_id
-                or not _matches_original(retained.envelope, payload)
-            ):
-                return HandlerOutcome.REJECT
-            original = retained.envelope
-            custody = ReconciliationInvocationCustody(
-                child=child,
-                original=original,
-                observer=self._observer,
-                deliveries=deliveries,
-            )
-            cause = self._authorization(session)
-
-            async def validate_cause() -> None:
-                await cause.validate_cause(payload, original)
-
-            if original.event_type == REQUEST_EVENT:
-                evaluations = self._evaluations(session)
-                request = await self._requests(session, evaluations).read(original)
-                facts = await evaluations.classify_uncertain_delivery(request)
-                classification = facts.classification
-                if classification == "committed":
-                    await validate_cause()
-                    if await custody.fence_invocation(original) is None:
-                        return HandlerOutcome.REJECT
-                    return HandlerOutcome.ACKNOWLEDGE
-                if classification != "retry_safe":
-                    return HandlerOutcome.REJECT
-            elif original.event_type == COMPLETION_EVENT:
-                outcomes = self._outcomes(session, custody, validate_cause)
-                generation = await outcomes.observe_delivery_generation(original)
-                classification = await outcomes.classify_uncertain_delivery(
-                    original, current_generation=generation
-                )
-                if classification == "committed":
-                    await outcomes.verify_retained_delivery(
-                        original, current_generation=generation
-                    )
-                    return HandlerOutcome.ACKNOWLEDGE
-                if classification != "retry_safe":
-                    return HandlerOutcome.REJECT
-            else:
-                return HandlerOutcome.REJECT
+        try:
+            async with self._sessions() as session, session.begin():
+                classified = await self._classify_child(session, child, payload)
+        except (
+            PostSubmitDeliverySourceUnavailable,
+            PostSubmitDeliveryOperationUnavailable,
+            CheckerExecutionUnavailable,
+            DeliveryUnavailable,
+        ):
+            return HandlerOutcome.REJECT
+        if isinstance(classified, HandlerOutcome):
+            return classified
+        original, request = classified
 
         # Existing owner operations open their own effect transactions. Their
         # recovery-bound authority repeats currentness, Operator cause, original
         # terminal custody and live child custody before every effect commit.
         if original.event_type == REQUEST_EVENT:
-            result = await self._executor(child, original, payload, request).evaluate_post_submission(
-                request
-            )
+            result = await self._executor(
+                child, original, payload, request
+            ).evaluate_post_submission(request)
             result.validate_request(request)
             return HandlerOutcome.ACKNOWLEDGE
         try:
@@ -240,5 +216,70 @@ class PostSubmitDeliveryReconciliationHandler:
                 generation = await outcomes.observe_delivery_generation(original)
                 await outcomes.apply(original, current_generation=generation)
             return HandlerOutcome.ACKNOWLEDGE
+        except PostSubmitDeliveryRetryable:
+            return HandlerOutcome.RETRY
         except (PostSubmitDeliverySourceUnavailable, CheckerExecutionUnavailable):
             return HandlerOutcome.REJECT
+
+    async def _classify_child(
+        self,
+        session: AsyncSession,
+        child: OutboxEventEnvelope,
+        payload: PostSubmitDeliveryChildPayload,
+    ) -> HandlerOutcome | tuple[
+        OutboxEventEnvelope, PostSubmissionExecutionRequest | None
+    ]:
+        """Return a terminal outcome or the exact source for one safe retry."""
+        deliveries = self._deliveries(session)
+        retained = await deliveries.read_finalized_unknown(
+            project_id=child.claim.project_id,
+            event_id=payload.original_event_id,
+            event_types=SUPPORTED_DELIVERIES,
+            child_event_type=RECONCILIATION_EVENT,
+            lock=False,
+        )
+        if (
+            retained is None
+            or retained.child is None
+            or retained.child.event_id != child.claim.event_id
+            or not _matches_original(retained.envelope, payload)
+        ):
+            return HandlerOutcome.REJECT
+        original = retained.envelope
+        custody = ReconciliationInvocationCustody(
+            child=child,
+            original=original,
+            observer=self._observer,
+            deliveries=deliveries,
+        )
+        cause = self._authorization(session)
+
+        async def validate_cause() -> None:
+            await cause.validate_cause(payload, original)
+
+        if original.event_type == REQUEST_EVENT:
+            evaluations = self._evaluations(session)
+            request = await self._requests(session, evaluations).read(original)
+            facts = await evaluations.classify_uncertain_delivery(request)
+            if facts.classification == "committed":
+                await validate_cause()
+                if await custody.fence_invocation(original) is None:
+                    return HandlerOutcome.REJECT
+                return HandlerOutcome.ACKNOWLEDGE
+            if facts.classification != "retry_safe":
+                return HandlerOutcome.REJECT
+            return original, request
+        if original.event_type == COMPLETION_EVENT:
+            outcomes = self._outcomes(session, custody, validate_cause)
+            generation = await outcomes.observe_delivery_generation(original)
+            classification = await outcomes.classify_uncertain_delivery(
+                original, current_generation=generation
+            )
+            if classification == "committed":
+                await outcomes.verify_retained_delivery(
+                    original, current_generation=generation
+                )
+                return HandlerOutcome.ACKNOWLEDGE
+            if classification == "retry_safe":
+                return original, None
+        return HandlerOutcome.REJECT

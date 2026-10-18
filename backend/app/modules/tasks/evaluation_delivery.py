@@ -19,7 +19,10 @@ from app.modules.outbox.api import (
 )
 from app.modules.tasks.models import SubmissionDispatch
 from app.modules.tasks.submission_dispatch import evaluation_request_event
-from app.modules.tasks.api.evaluation_delivery import EvaluationDeliveryUnavailable
+
+
+class EvaluationDeliveryUnavailable(RuntimeError):
+    """The event and its retained request do not have exact custody."""
 
 
 class EvaluationDeliveryRequestReader:

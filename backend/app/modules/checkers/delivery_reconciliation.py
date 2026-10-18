@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Literal
+from collections.abc import Awaitable, Callable
+from typing import Literal, Protocol
 from uuid import UUID
 
 from pydantic import ValidationError
@@ -17,12 +18,10 @@ from app.modules.checkers.api.delivery_reconciliation import (
     PostSubmitDeliveryConflict,
     PostSubmitDeliveryOperationUnavailable,
     PostSubmitDeliveryPage,
-    PostSubmitDeliveryOutcomePort,
     PostSubmitDeliveryPosition,
     PostSubmitDeliveryPreparation,
     PostSubmitDeliveryQuery,
     PostSubmitDeliveryReadAuthority,
-    PostSubmitDeliveryRequestReadPort,
     PostSubmitDeliveryResult,
     PostSubmitDeliverySource,
     PostSubmitDeliverySuccessor,
@@ -39,6 +38,7 @@ from app.modules.checkers.api.execution import (
     EvaluationCoordinationPort,
     EvaluationCompletion,
 )
+from app.modules.checkers.api.evaluation_contract import PostSubmissionExecutionRequest
 from app.modules.outbox.api import (
     DeliveryUnavailable,
     FinalizedUnknownDelivery,
@@ -48,11 +48,40 @@ from app.modules.outbox.api import (
     OutboxIdempotencyConflict,
     OutboxInputError,
     OutboxPersistenceError,
+    OutboxEventEnvelope,
 )
 
 
 RECONCILIATION_EVENT = POST_SUBMIT_DELIVERY_RECONCILIATION_EVENT
 SUPPORTED_DELIVERIES = POST_SUBMIT_DELIVERY_SUPPORTED_EVENTS
+
+
+class PostSubmitDeliveryRequestReadPort(Protocol):
+    """Read one retained request without staging or repairing owner rows."""
+
+    async def read(
+        self, envelope: OutboxEventEnvelope
+    ) -> PostSubmissionExecutionRequest: ...
+
+
+class PostSubmitDeliveryOutcomePort(Protocol):
+    """TASK routing operation plus nonmutating reconciliation checks."""
+
+    async def observe_delivery_generation(
+        self, envelope: OutboxEventEnvelope,
+    ) -> int | None: ...
+
+    async def classify_uncertain_delivery(
+        self, envelope: OutboxEventEnvelope, *, current_generation: int | None,
+    ) -> Literal["committed", "retry_safe", "unresolved"]: ...
+
+    async def verify_retained_delivery(
+        self, envelope: OutboxEventEnvelope, *, current_generation: int | None,
+    ) -> None: ...
+
+    async def apply(
+        self, envelope: OutboxEventEnvelope, *, current_generation: int | None,
+    ) -> object: ...
 
 
 def _public_source(
@@ -80,8 +109,96 @@ def _public_source(
         error_code=delivery.error_code,
         classification=classification,
         reconciliation_event_id=child.event_id if child is not None else None,
-        reconciliation_state=child.state if child is not None else None,
+        reconciliation_state=(
+            "held" if child is not None and child.state == "unknown"
+            else child.state if child is not None else None
+        ),
     )
+
+
+async def classify_post_submit_delivery(
+    delivery: FinalizedUnknownDelivery,
+    *,
+    evaluations: EvaluationCoordinationPort,
+    requests: PostSubmitDeliveryRequestReadPort,
+    outcomes: PostSubmitDeliveryOutcomePort,
+) -> tuple[Literal["committed", "retry_safe", "unresolved"], UUID, UUID, int]:
+    """Classify through exact source owners; caller chooses the transaction."""
+    if delivery.child is not None and delivery.child.state in {"unknown", "held"}:
+        held = await _post_submit_delivery_identity(delivery, evaluations, requests)
+        return ("unresolved", *held)
+    envelope = delivery.envelope
+    try:
+        if delivery.child is not None:
+            payload = PostSubmitDeliveryChildPayload.model_validate_json(
+                delivery.child.payload_json
+            )
+            return (
+                payload.classification,
+                payload.evaluation_request_id,
+                payload.checker_run_id,
+                payload.evaluation_generation,
+            )
+        if envelope.event_type == REQUEST_EVENT:
+            request = await requests.read(envelope)
+            facts = await evaluations.classify_uncertain_delivery(request)
+            return (
+                facts.classification,
+                facts.request.evaluation_request_id,
+                facts.checker_run_id,
+                facts.request.evaluation_generation,
+            )
+        if envelope.event_type == COMPLETION_EVENT:
+            generation = await outcomes.observe_delivery_generation(envelope)
+            classification = await outcomes.classify_uncertain_delivery(
+                envelope, current_generation=generation,
+            )
+            completion = EvaluationCompletion.model_validate_json(envelope.payload_json)
+            return (
+                classification,
+                completion.reference.request_id,
+                completion.reference.attempt_id,
+                completion.reference.evaluation_generation,
+            )
+    except (
+        CheckerExecutionUnavailable,
+        PostSubmitDeliverySourceUnavailable,
+        DeliveryUnavailable,
+    ):
+        identity = await _post_submit_delivery_identity(
+            delivery, evaluations, requests
+        )
+        return ("unresolved", *identity)
+    identity = await _post_submit_delivery_identity(delivery, evaluations, requests)
+    return ("unresolved", *identity)
+
+
+async def _post_submit_delivery_identity(
+    delivery: FinalizedUnknownDelivery,
+    evaluations: EvaluationCoordinationPort,
+    requests: PostSubmitDeliveryRequestReadPort,
+) -> tuple[UUID, UUID, int]:
+    """Decode only the exact public source identity from the retained envelope."""
+    envelope = delivery.envelope
+    try:
+        if envelope.event_type == REQUEST_EVENT:
+            request = await requests.read(envelope)
+            facts = await evaluations.classify_uncertain_delivery(request)
+            return (
+                facts.request.evaluation_request_id,
+                facts.checker_run_id,
+                facts.request.evaluation_generation,
+            )
+        completion = EvaluationCompletion.model_validate_json(envelope.payload_json)
+        return (
+            completion.reference.request_id,
+            completion.reference.attempt_id,
+            completion.reference.evaluation_generation,
+        )
+    except (TypeError, ValueError, PostSubmitDeliverySourceUnavailable) as exc:
+        raise PostSubmitDeliveryOperationUnavailable(
+            "post_submit_delivery_identity_unavailable"
+        ) from exc
 
 
 class PostSubmitDeliveryService:
@@ -99,26 +216,36 @@ class PostSubmitDeliveryService:
         outcomes: PostSubmitDeliveryOutcomePort,
         read_authority: PostSubmitDeliveryReadAuthority,
         authorization: PostSubmitDeliveryAuthorizationPort,
+        detached_classify: Callable[
+            [FinalizedUnknownDelivery],
+            Awaitable[tuple[Literal["committed", "retry_safe", "unresolved"], UUID, UUID, int]],
+        ],
     ) -> None:
         self._session = session
         self._actor_profile_id = actor_profile_id
         self._deliveries, self._events = deliveries, events
         self._evaluations, self._requests, self._outcomes = evaluations, requests, outcomes
         self._read_authority, self._authorization = read_authority, authorization
+        self._detached_classify = detached_classify
 
     async def discover(self, query: PostSubmitDeliveryQuery) -> PostSubmitDeliveryPage:
-        """Authorize one project page and classify exact durable source facts."""
+        """Authorize one page and classify in detached source-owner custody."""
         query = PostSubmitDeliveryQuery.model_validate(query)
         after = await self._read_authority.authorize_and_decode(query)
-        page = await self._deliveries.list_finalized_unknown(
-            project_id=query.project_id,
-            event_types=SUPPORTED_DELIVERIES,
-            child_event_type=RECONCILIATION_EVENT,
-            after=(after.finalized_at, after.event_id) if after else None,
-            limit=query.limit,
-        )
+        try:
+            page = await self._deliveries.list_finalized_unknown(
+                project_id=query.project_id,
+                event_types=SUPPORTED_DELIVERIES,
+                child_event_type=RECONCILIATION_EVENT,
+                after=(after.finalized_at, after.event_id) if after else None,
+                limit=query.limit,
+            )
+        except DeliveryUnavailable as exc:
+            raise PostSubmitDeliveryOperationUnavailable(
+                "post_submit_delivery_read_unavailable"
+            ) from exc
         items = tuple(
-            _public_source(delivery, await self._classify(delivery))
+            _public_source(delivery, await self._detached_classify(delivery))
             for delivery in page.items
         )
         next_cursor = None
@@ -146,30 +273,18 @@ class PostSubmitDeliveryService:
                 "post_submit_delivery_transaction_required"
             )
         command = PostSubmitDeliveryCommand.model_validate(command)
-        delivery = await self._deliveries.read_finalized_unknown(
-            project_id=command.project_id,
-            event_id=command.event_id,
-            event_types=SUPPORTED_DELIVERIES,
-            child_event_type=RECONCILIATION_EVENT,
-            lock=False,
-        )
+        delivery = await self._read_delivery(command, lock=False)
         if delivery is None:
             raise PostSubmitDeliveryUnavailable("post_submit_delivery_unavailable")
-        classified = await self._classify(delivery)
-        classification = classified[0]
         await self._session.execute(
             text("SELECT pg_catalog.pg_advisory_xact_lock(hashtextextended(:key, 0))"),
             {"key": "post-submit-delivery:" + str(command.event_id)},
         )
-        delivery = await self._deliveries.read_finalized_unknown(
-            project_id=command.project_id,
-            event_id=command.event_id,
-            event_types=SUPPORTED_DELIVERIES,
-            child_event_type=RECONCILIATION_EVENT,
-            lock=False,
-        )
+        delivery = await self._read_delivery(command, lock=False)
         if delivery is None:
             raise PostSubmitDeliveryUnavailable("post_submit_delivery_unavailable")
+        classified = await self._classify(delivery)
+        classification = classified[0]
         if delivery.child is not None:
             return await self._replay(command, delivery, classified)
         if classification == "unresolved":
@@ -179,13 +294,7 @@ class PostSubmitDeliveryService:
         handle = await self._authorization.prepare(preparation)
         try:
             authority = await self._authorization.consume(handle, preparation)
-            locked = await self._deliveries.read_finalized_unknown(
-                project_id=command.project_id,
-                event_id=command.event_id,
-                event_types=SUPPORTED_DELIVERIES,
-                child_event_type=RECONCILIATION_EVENT,
-                lock=True,
-            )
+            locked = await self._read_delivery(command, lock=True)
             if locked is None or locked.envelope != delivery.envelope:
                 raise PostSubmitDeliveryUnavailable("post_submit_delivery_unavailable")
             if locked.child is not None:
@@ -249,6 +358,21 @@ class PostSubmitDeliveryService:
             )
         finally:
             self._authorization.close(handle)
+
+    async def _read_delivery(self, command, *, lock):
+        """Translate OUTBOX storage failures at CHECKERS's public owner seam."""
+        try:
+            return await self._deliveries.read_finalized_unknown(
+                project_id=command.project_id,
+                event_id=command.event_id,
+                event_types=SUPPORTED_DELIVERIES,
+                child_event_type=RECONCILIATION_EVENT,
+                lock=lock,
+            )
+        except DeliveryUnavailable as exc:
+            raise PostSubmitDeliveryOperationUnavailable(
+                "post_submit_delivery_read_unavailable"
+            ) from exc
 
     async def _replay(
         self,
@@ -325,77 +449,20 @@ class PostSubmitDeliveryService:
         Literal["committed", "retry_safe", "unresolved"], UUID, UUID, int
     ]:
         """Delegate current source facts to the exact CHECKERS or TASK owner."""
-        if delivery.child is not None and delivery.child.state in {"unknown", "held"}:
-            held = await self._delivery_identity(delivery)
-            return ("unresolved", *held)
-        envelope = delivery.envelope
-        try:
-            if delivery.child is not None:
-                payload = PostSubmitDeliveryChildPayload.model_validate_json(
-                    delivery.child.payload_json
-                )
-                return (
-                    payload.evaluation_request_id,
-                    payload.checker_run_id,
-                    payload.evaluation_generation,
-                )
-            if envelope.event_type == REQUEST_EVENT:
-                request = await self._requests.read(envelope)
-                facts = await self._evaluations.classify_uncertain_delivery(request)
-                return (
-                    facts.classification,
-                    facts.request.evaluation_request_id,
-                    facts.checker_run_id,
-                    facts.request.evaluation_generation,
-                )
-            if envelope.event_type == COMPLETION_EVENT:
-                generation = await self._outcomes.observe_delivery_generation(envelope)
-                classification = await self._outcomes.classify_uncertain_delivery(
-                    envelope, current_generation=generation,
-                )
-                completion = EvaluationCompletion.model_validate_json(
-                    envelope.payload_json
-                )
-                return (
-                    classification,
-                    completion.reference.request_id,
-                    completion.reference.attempt_id,
-                    completion.reference.evaluation_generation,
-                )
-        except (
-            CheckerExecutionUnavailable,
-            PostSubmitDeliverySourceUnavailable,
-            DeliveryUnavailable,
-        ):
-            identity = await self._delivery_identity(delivery)
-            return ("unresolved", *identity)
-        identity = await self._delivery_identity(delivery)
-        return ("unresolved", *identity)
+        return await classify_post_submit_delivery(
+            delivery,
+            evaluations=self._evaluations,
+            requests=self._requests,
+            outcomes=self._outcomes,
+        )
 
     async def _delivery_identity(
         self, delivery: FinalizedUnknownDelivery,
     ) -> tuple[UUID, UUID, int]:
         """Decode only the exact public source identity from the retained envelope."""
-        envelope = delivery.envelope
-        try:
-            if envelope.event_type == REQUEST_EVENT:
-                request = await self._requests.read(envelope)
-                facts = await self._evaluations.classify_uncertain_delivery(request)
-                return (
-                    facts.request.evaluation_request_id,
-                    facts.checker_run_id,
-                    facts.request.evaluation_generation,
-                )
-            completion = EvaluationCompletion.model_validate_json(envelope.payload_json)
-            return (
-                completion.reference.request_id,
-                completion.reference.attempt_id,
-                completion.reference.evaluation_generation,
-            )
-        except (TypeError, ValueError, PostSubmitDeliverySourceUnavailable) as exc:
-            raise PostSubmitDeliveryOperationUnavailable(
-                "post_submit_delivery_identity_unavailable"
-            ) from exc
+        return await _post_submit_delivery_identity(
+            delivery, self._evaluations, self._requests
+        )
 
     async def restage_denial(self, error: PostSubmitDeliveryAuthorityDenied) -> bool:
         return await self._authorization.restage_denial(error)

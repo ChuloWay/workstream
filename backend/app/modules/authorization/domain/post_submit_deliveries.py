@@ -18,6 +18,9 @@ POST_SUBMIT_DELIVERY_RECONCILE_ACTION = (
     ActionId.OPERATIONS_POST_SUBMIT_DELIVERY_RECONCILE
 )
 POST_SUBMIT_DELIVERY_READ_ACTIONS = frozenset({POST_SUBMIT_DELIVERY_LIST_ACTION})
+POST_SUBMIT_DELIVERY_MUTATION_ACTIONS = frozenset(
+    {POST_SUBMIT_DELIVERY_RECONCILE_ACTION}
+)
 
 
 class PostSubmitDeliveryReadResourceContext(BaseModel):
@@ -56,10 +59,15 @@ class PostSubmitDeliveryResourceContext(BaseModel):
         return self
 
 
+POST_SUBMIT_DELIVERY_RESOURCE_BY_ACTION = {
+    POST_SUBMIT_DELIVERY_RECONCILE_ACTION: PostSubmitDeliveryResourceContext
+}
+
+
 async def post_submit_delivery_read_denial(
     action, resource, context, repository, refresh, lifecycle,
 ):
-    """Lock current human, system Operator grant and project before disclosure."""
+    """Qualify current human, system Operator grant and project without row locks."""
     from app.modules.authorization.runtime import (
         HumanAuthorizationContext,
         PreparedAuthorizationUnsupported,
@@ -74,7 +82,7 @@ async def post_submit_delivery_read_denial(
         return refused, context, None, None, None, False
     if action.availability is not ActionAvailability.ACTIVE:
         return AuthorizationDenialCode.ACTION_UNAVAILABLE, context, None, None, None, False
-    locked = await repository.lock_request_actor(
+    locked = await repository.read_request_actor(
         context.identity_link_id, context.actor_profile_id,
     )
     try:
@@ -89,12 +97,12 @@ async def post_submit_delivery_read_denial(
         action.permission_id,
         scope_project_id=resource.scope_project_id,
         system_scope_only=True,
-        for_update=True,
+        for_update=False,
         allowed_roles=frozenset({AdminRole.OPERATOR}),
     )
     if grant is None:
         return AuthorizationDenialCode.PERMISSION_NOT_GRANTED, context, None, None, None, True
-    if await repository.lock_project(resource.scope_project_id) is None:
+    if not await repository.project_exists(resource.scope_project_id):
         return AuthorizationDenialCode.RESOURCE_NOT_FOUND, context, None, None, None, True
     return (
         None,

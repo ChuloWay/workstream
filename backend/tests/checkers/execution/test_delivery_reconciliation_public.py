@@ -1,0 +1,620 @@
+"""Public PostgreSQL proof for one-shot uncertain post-submit delivery recovery."""
+
+import asyncio
+
+from uuid import UUID
+
+import pytest
+from sqlalchemy import event, text
+from sqlalchemy.engine import Engine
+
+from app.adapters import artifacts as artifact_adapters
+from app.adapters.outbox import production_outbox_delivery
+from app.adapters.tasks import evaluation_completion_handler
+from app.core.identifiers import new_record_id
+from app.modules.outbox.api import FinalizationCause, HandlerOutcome
+from app.modules.checkers.api.delivery_reconciliation import (
+    PostSubmitDeliveryOperationUnavailable,
+)
+from app.modules.reviews.lifecycle.fence import PostgresJointLifecycleMutationFence
+from tests.authentication.fixtures import (
+    auth_database_env as auth_database_env,
+    clear_settings_cache as clear_settings_cache,
+    rsa_signing_material as rsa_signing_material,
+)
+from tests.authorization.admin_access.fixtures import (
+    admin_access as admin_access,
+    signed_access as signed_access,
+)
+from tests.authorization.admin_access.support import create_project
+from tests.post_submit_materialization_helpers import material_fixture
+from tests.reviews.lifecycle.fixtures import (
+    live_acceptance_lifecycle as live_acceptance_lifecycle,
+)
+from tests.tasks.evaluation_delivery.support import delivery_fixture, invoked, outcome, state
+from tests.tasks.post_submit_routing.outcome_support import authorized_routing_source
+
+
+def _paths(project_id, event_id=None):
+    collection = f"/api/v1/operations/projects/{project_id}/post-submit-deliveries"
+    return collection, (
+        f"{collection}/{event_id}/reconcile" if event_id is not None else None
+    )
+
+
+async def _project_facts(factory, project_id):
+    async with factory() as session:
+        row = (
+            await session.execute(
+                text(
+                    """
+                    SELECT
+                      (SELECT count(*) FROM public.task_post_submit_routing_manifests
+                       WHERE project_id=:project) AS manifests,
+                      (SELECT count(*) FROM public.final_acceptances
+                       WHERE project_id=:project) AS acceptances,
+                      (SELECT count(*) FROM public.contribution_records
+                       WHERE project_id=:project) AS contributions,
+                      (SELECT count(*) FROM public.compensation_awards
+                       WHERE project_id=:project) AS awards,
+                      (SELECT count(*) FROM public.audit_events
+                       WHERE project_id=:project
+                         AND action_id='task.post_submit.route') AS routing_audits,
+                      (SELECT count(*) FROM public.outbox_events
+                       WHERE project_id=:project
+                         AND event_type='TaskPostSubmitRouted') AS routing_notices
+                    """
+                ),
+                {"project": str(project_id)},
+            )
+        ).one()
+        return tuple(row)
+
+
+async def _delivery_rows(factory, original_id, child_id=None):
+    async with factory() as session:
+        original = (
+            await session.execute(
+                text(
+                    """
+                    SELECT delivery_state,last_error_code,claim_generation,
+                           payload_digest,payload
+                    FROM public.outbox_events WHERE event_id=:event_id
+                    """
+                ),
+                {"event_id": original_id},
+            )
+        ).one()
+        child = None
+        if child_id is not None:
+            child = (
+                await session.execute(
+                    text(
+                        """
+                        SELECT delivery_state,last_error_code,causation_event_id,
+                               payload_digest,payload
+                        FROM public.outbox_events WHERE event_id=:event_id
+                        """
+                    ),
+                    {"event_id": child_id},
+                )
+            ).one()
+        return tuple(original), tuple(child) if child is not None else None
+
+
+async def _lock_delivery_read_authority_nowait(
+    factory, *, actor_id, grant_id, project_id,
+):
+    """Prove detached source waits retain no AUTH or project row lock."""
+    async with factory.begin() as session:
+        for statement, parameters in (
+            ("SELECT id FROM public.actor_profiles WHERE id=:id FOR UPDATE NOWAIT", {"id": str(actor_id)}),
+            ("SELECT id FROM public.actor_identity_links WHERE actor_profile_id=:id FOR UPDATE NOWAIT", {"id": str(actor_id)}),
+            ("SELECT id FROM public.admin_role_grants WHERE id=:id FOR UPDATE NOWAIT", {"id": str(grant_id)}),
+            ("SELECT id FROM public.projects WHERE id=:id FOR UPDATE NOWAIT", {"id": str(project_id)}),
+        ):
+            assert await session.scalar(text(statement), parameters) is not None
+
+
+async def _discover_one(admin_access, project_id, *, classification):
+    collection, _ = _paths(project_id)
+    response = await admin_access.signed.client.get(
+        collection, headers=admin_access.target.headers
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["project_id"] == str(project_id)
+    assert body["next_cursor"] is None
+    assert len(body["items"]) == 1
+    source = body["items"][0]
+    assert set(source) == {
+        "project_id",
+        "event_id",
+        "event_type",
+        "event_version",
+        "aggregate_id",
+        "evaluation_request_id",
+        "checker_run_id",
+        "evaluation_generation",
+        "claim_generation",
+        "payload_digest",
+        "finalized_at",
+        "delivery_state",
+        "error_code",
+        "classification",
+        "reconciliation_event_id",
+        "reconciliation_state",
+    }
+    assert source["classification"] == classification
+    assert source["delivery_state"] == "dead_letter"
+    assert source["error_code"] == "INVOKE_OUTCOME_UNKNOWN"
+    assert "payload" not in response.text and "outcome_json" not in response.text
+    return source
+
+
+async def _reconcile(admin_access, project_id, event_id, request_key):
+    _, command = _paths(project_id, event_id)
+    assert command is not None
+    return await admin_access.signed.client.post(
+        command,
+        headers=admin_access.target.headers | {"Idempotency-Key": str(request_key)},
+        json={"reason": "Reconcile one exact uncertain post-submit delivery"},
+    )
+
+
+@pytest.mark.asyncio
+async def test_public_operator_retries_proven_no_effect_request_once(
+    tmp_path,
+    auth_database_env,
+    monkeypatch,
+    admin_access,
+) -> None:
+    """A queued generation-zero request may run once behind the immutable child."""
+    async with material_fixture(tmp_path, auth_database_env) as h:
+        operator_grant = await admin_access.signed.grant(
+            admin_access.admin, admin_access.target
+        )
+        prepared = await delivery_fixture(h)
+        original = await invoked(h, prepared)
+        receipt = await prepared.delivery.finalize(
+            original.claim, FinalizationCause.UNKNOWN
+        )
+        assert outcome(receipt)["delivery_state"] == "dead_letter"
+        assert outcome(receipt)["error_code"] == "INVOKE_OUTCOME_UNKNOWN"
+        original_before, _ = await _delivery_rows(h.factory, original.claim.event_id)
+
+        source = await _discover_one(
+            admin_access, h.request.project_id, classification="retry_safe"
+        )
+        assert source["event_id"] == str(original.claim.event_id)
+        assert source["evaluation_request_id"] == str(h.request.evaluation_request_id)
+        assert source["checker_run_id"] == str(h.created.evaluation_attempt_id)
+        assert source["evaluation_generation"] == 1
+        assert source["claim_generation"] == original.claim.claim_generation
+
+        key = new_record_id()
+        created = await _reconcile(
+            admin_access, h.request.project_id, original.claim.event_id, key
+        )
+        assert created.status_code == 201, created.text
+        result = created.json()
+        assert result["source"] == source | {
+            "reconciliation_event_id": result["successor"]["event_id"],
+            "reconciliation_state": "pending",
+        }
+        assert result["successor"]["classification"] == "retry_safe"
+
+        replay = await _reconcile(
+            admin_access, h.request.project_id, original.claim.event_id, key
+        )
+        assert replay.status_code == 201, replay.text
+        assert replay.json()["successor"] == result["successor"]
+        conflict = await _reconcile(
+            admin_access,
+            h.request.project_id,
+            original.claim.event_id,
+            new_record_id(),
+        )
+        assert conflict.status_code == 409, conflict.text
+        revoked = await admin_access.signed.revoke(
+            admin_access.admin,
+            operator_grant,
+            reason="End uncertain delivery reconciliation duty",
+        )
+        assert revoked.status_code == 200, revoked.text
+
+        settings = h.settings.model_copy(
+            update={
+                "external_checker_service_socket": None,
+                "external_checker_material_root": None,
+            }
+        )
+        monkeypatch.setattr("app.core.config.get_settings", lambda: settings)
+        monkeypatch.setattr(
+            artifact_adapters,
+            "worker_post_submission_materialization",
+            lambda *, sessions: h.service,
+        )
+        child_id = UUID(result["successor"]["event_id"])
+        delivered = await production_outbox_delivery(h.factory).deliver(
+            child_id, h.request.project_id, "reconcile-request"
+        )
+        assert outcome(delivered)["delivery_state"] == "acknowledged"
+        completed = await state(h)
+        assert completed["run"]["status"] == "completed"
+        assert completed["events"] == 1
+
+        original_after, child = await _delivery_rows(
+            h.factory, original.claim.event_id, child_id
+        )
+        assert original_after == original_before
+        assert child[:3] == ("acknowledged", None, original.claim.event_id)
+        concealed = await admin_access.signed.client.get(
+            _paths(h.request.project_id)[0], headers=admin_access.target.headers
+        )
+        assert concealed.status_code == 404, concealed.text
+
+
+@pytest.mark.asyncio
+async def test_discovery_source_wait_retains_no_authority_or_project_lock(
+    tmp_path,
+    auth_database_env,
+    admin_access,
+) -> None:
+    """Detached TASK custody cannot cycle through the open read-audit transaction."""
+    async with material_fixture(tmp_path, auth_database_env) as h:
+        grant_id = await admin_access.signed.grant(
+            admin_access.admin, admin_access.target
+        )
+        prepared = await delivery_fixture(h)
+        original = await invoked(h, prepared)
+        await prepared.delivery.finalize(original.claim, FinalizationCause.UNKNOWN)
+        reached_task_lock = asyncio.Event()
+
+        def capture(_conn, _cursor, statement, _parameters, _context, _many):
+            lowered = statement.lower()
+            if "workstream_tasks" in lowered and "for update" in lowered:
+                reached_task_lock.set()
+
+        discovery = None
+        try:
+            async with h.factory() as blocker, blocker.begin():
+                assert await blocker.scalar(
+                    text("SELECT id FROM public.workstream_tasks WHERE id=:id FOR UPDATE"),
+                    {"id": str(h.request.task_id)},
+                ) is not None
+                event.listen(Engine, "before_cursor_execute", capture)
+                discovery = asyncio.create_task(
+                    admin_access.signed.client.get(
+                        _paths(h.request.project_id)[0],
+                        headers=admin_access.target.headers,
+                    )
+                )
+                try:
+                    await asyncio.wait_for(reached_task_lock.wait(), timeout=10)
+                    assert not discovery.done()
+                    await _lock_delivery_read_authority_nowait(
+                        h.factory,
+                        actor_id=admin_access.target.id,
+                        grant_id=grant_id,
+                        project_id=h.request.project_id,
+                    )
+                    async with h.factory() as observer:
+                        allowed = await observer.scalar(text(
+                            "SELECT count(*) FROM public.audit_events "
+                            "WHERE action_id='operations.post_submit_delivery.list'"
+                        ))
+                    assert allowed == 0
+                finally:
+                    event.remove(Engine, "before_cursor_execute", capture)
+            response = await asyncio.wait_for(discovery, timeout=10)
+            assert response.status_code == 200, response.text
+        finally:
+            if discovery is not None and not discovery.done():
+                discovery.cancel()
+                await asyncio.gather(discovery, return_exceptions=True)
+        async with h.factory() as observer:
+            allowed = await observer.scalar(text(
+                "SELECT count(*) FROM public.audit_events "
+                "WHERE action_id='operations.post_submit_delivery.list'"
+            ))
+        assert allowed == 1
+
+
+@pytest.mark.asyncio
+async def test_discovery_classifier_failure_rolls_back_allowed_audit(
+    tmp_path,
+    auth_database_env,
+    admin_access,
+    monkeypatch,
+) -> None:
+    """A detached source failure cannot retain a successful read decision."""
+    async with material_fixture(tmp_path, auth_database_env) as h:
+        await admin_access.signed.grant(admin_access.admin, admin_access.target)
+        prepared = await delivery_fixture(h)
+        original = await invoked(h, prepared)
+        await prepared.delivery.finalize(original.claim, FinalizationCause.UNKNOWN)
+
+        async def unavailable(*_args, **_kwargs):
+            raise PostSubmitDeliveryOperationUnavailable("forced_classifier_failure")
+
+        monkeypatch.setattr(
+            "app.modules.checkers.delivery_reconciliation.classify_post_submit_delivery",
+            unavailable,
+        )
+        response = await admin_access.signed.client.get(
+            _paths(h.request.project_id)[0], headers=admin_access.target.headers
+        )
+        assert response.status_code == 503, response.text
+        async with h.factory() as observer:
+            allowed = await observer.scalar(text(
+                "SELECT count(*) FROM public.audit_events "
+                "WHERE action_id='operations.post_submit_delivery.list'"
+            ))
+        assert allowed == 0
+
+
+@pytest.mark.asyncio
+async def test_public_operator_verifies_committed_acceptance_without_repeating_effects(
+    tmp_path,
+    auth_database_env,
+    live_acceptance_lifecycle,
+) -> None:
+    """Acceptance commit plus acknowledgement loss verifies retained effects only."""
+    admin_access = live_acceptance_lifecycle
+    async with authorized_routing_source(
+        tmp_path,
+        auth_database_env,
+        human_review_required=False,
+        contribution_awards=("project_points",),
+    ) as h:
+        handler = evaluation_completion_handler(sessions=h.factory)
+        assert await handler(h.envelope) is HandlerOutcome.ACKNOWLEDGE
+        effects = await _project_facts(h.factory, h.request.project_id)
+        assert effects == (1, 1, 1, 1, 1, 1)
+        finalized = await h.completion_delivery.finalize(
+            h.envelope.claim, FinalizationCause.UNKNOWN
+        )
+        assert outcome(finalized)["delivery_state"] == "dead_letter"
+        original_before, _ = await _delivery_rows(
+            h.factory, h.envelope.claim.event_id
+        )
+        async with h.factory() as observer:
+            grant_id = await observer.scalar(text(
+                "SELECT id FROM public.admin_role_grants "
+                "WHERE target_actor_profile_id=:actor AND role='operator' "
+                "AND scope_type='system' AND status='active'"
+            ), {"actor": str(admin_access.target.id)})
+        reached_rev_lock = asyncio.Event()
+
+        def capture_rev(_conn, _cursor, statement, _parameters, _context, _many):
+            if "pg_advisory_xact_lock" in statement.lower():
+                reached_rev_lock.set()
+
+        discovery = None
+        try:
+            async with h.factory() as blocker, blocker.begin():
+                fence = PostgresJointLifecycleMutationFence(blocker)
+                generation = await fence.observe_generation()
+                async with fence.hold(generation):
+                    event.listen(Engine, "before_cursor_execute", capture_rev)
+                    discovery = asyncio.create_task(_discover_one(
+                        admin_access, h.request.project_id, classification="committed"
+                    ))
+                    try:
+                        await asyncio.wait_for(reached_rev_lock.wait(), timeout=10)
+                        assert not discovery.done()
+                        await _lock_delivery_read_authority_nowait(
+                            h.factory,
+                            actor_id=admin_access.target.id,
+                            grant_id=grant_id,
+                            project_id=h.request.project_id,
+                        )
+                    finally:
+                        event.remove(Engine, "before_cursor_execute", capture_rev)
+            source = await asyncio.wait_for(discovery, timeout=10)
+        finally:
+            if discovery is not None and not discovery.done():
+                discovery.cancel()
+                await asyncio.gather(discovery, return_exceptions=True)
+        assert source["checker_run_id"] == str(h.result.attempt_id)
+        created = await _reconcile(
+            admin_access,
+            h.request.project_id,
+            h.envelope.claim.event_id,
+            new_record_id(),
+        )
+        assert created.status_code == 201, created.text
+        result = created.json()
+        assert result["successor"]["classification"] == "committed"
+        child_id = UUID(result["successor"]["event_id"])
+
+        delivered = await production_outbox_delivery(h.factory).deliver(
+            child_id, h.request.project_id, "reconcile-completion"
+        )
+        assert outcome(delivered)["delivery_state"] == "acknowledged"
+        assert await _project_facts(h.factory, h.request.project_id) == effects
+        original_after, child = await _delivery_rows(
+            h.factory, h.envelope.claim.event_id, child_id
+        )
+        assert original_after == original_before
+        assert child[:3] == ("acknowledged", None, h.envelope.claim.event_id)
+
+
+@pytest.mark.asyncio
+async def test_public_operator_projects_uncertain_child_as_permanently_held(
+    tmp_path,
+    auth_database_env,
+    admin_access,
+) -> None:
+    """A child UNKNOWN is visible as held and can never create another child."""
+    async with material_fixture(tmp_path, auth_database_env) as h:
+        await admin_access.signed.grant(admin_access.admin, admin_access.target)
+        prepared = await delivery_fixture(h)
+        original = await invoked(h, prepared)
+        await prepared.delivery.finalize(original.claim, FinalizationCause.UNKNOWN)
+        responses = await asyncio.gather(
+            *(
+                _reconcile(
+                    admin_access,
+                    h.request.project_id,
+                    original.claim.event_id,
+                    new_record_id(),
+                )
+                for _ in range(2)
+            )
+        )
+        assert sorted(response.status_code for response in responses) == [201, 409]
+        created = next(response for response in responses if response.status_code == 201)
+        assert created.status_code == 201, created.text
+        child_id = UUID(created.json()["successor"]["event_id"])
+
+        delivery = production_outbox_delivery(h.factory)
+        claim = await delivery.claim(child_id, h.request.project_id, "unknown-child")
+        assert claim is not None
+        envelope = await delivery._begin_invocation(claim)
+        assert envelope is not None
+        child_unknown = await delivery.finalize(claim, FinalizationCause.UNKNOWN)
+        assert outcome(child_unknown)["delivery_state"] == "dead_letter"
+        assert not delivery._registry.can_retry_unknown(envelope.event_type, 1)
+
+        held = await _discover_one(
+            admin_access, h.request.project_id, classification="unresolved"
+        )
+        assert held["reconciliation_event_id"] == str(child_id)
+        assert held["reconciliation_state"] == "held"
+        refused = await _reconcile(
+            admin_access,
+            h.request.project_id,
+            original.claim.event_id,
+            new_record_id(),
+        )
+        assert refused.status_code == 409, refused.text
+
+
+@pytest.mark.asyncio
+async def test_child_reclassifies_source_transition_before_any_effect(
+    tmp_path,
+    auth_database_env,
+    admin_access,
+) -> None:
+    """A scheduled retry-safe child refuses a now-running original source."""
+    async with material_fixture(tmp_path, auth_database_env) as h:
+        await admin_access.signed.grant(admin_access.admin, admin_access.target)
+        prepared = await delivery_fixture(h)
+        original = await invoked(h, prepared)
+        await prepared.delivery.finalize(original.claim, FinalizationCause.UNKNOWN)
+        created = await _reconcile(
+            admin_access,
+            h.request.project_id,
+            original.claim.event_id,
+            new_record_id(),
+        )
+        assert created.status_code == 201, created.text
+        child_id = UUID(created.json()["successor"]["event_id"])
+        before = await _project_facts(h.factory, h.request.project_id)
+
+        async with h.factory.begin() as session:
+            changed = await session.execute(
+                text(
+                    """
+                    UPDATE public.checker_runs
+                    SET status='running', worker_lease_id=:lease,
+                        worker_lease_generation=1,
+                        worker_lease_expires_at=clock_timestamp() + interval '5 minutes',
+                        started_at=clock_timestamp(), execute_evidence_id=:evidence
+                    WHERE id=:run AND status='queued'
+                    """
+                ),
+                {
+                    "run": str(h.created.evaluation_attempt_id),
+                    "lease": new_record_id(),
+                    "evidence": new_record_id(),
+                },
+            )
+            assert changed.rowcount == 1
+
+        delivery = production_outbox_delivery(h.factory)
+        refused = await delivery.deliver(
+            child_id, h.request.project_id, "source-transition"
+        )
+        assert outcome(refused)["delivery_state"] == "dead_letter"
+        assert outcome(refused)["error_code"] == "NON_RETRYABLE"
+        assert await _project_facts(h.factory, h.request.project_id) == before
+        held = await _discover_one(
+            admin_access, h.request.project_id, classification="unresolved"
+        )
+        assert held["reconciliation_event_id"] == str(child_id)
+        assert held["reconciliation_state"] == "held"
+
+
+@pytest.mark.asyncio
+async def test_foreign_scope_and_non_operator_denials_leave_no_child(
+    tmp_path,
+    auth_database_env,
+    admin_access,
+) -> None:
+    """Foreign selectors are concealed pre-lock and denial retains no product write."""
+    async with material_fixture(tmp_path, auth_database_env) as h:
+        prepared = await delivery_fixture(h)
+        original = await invoked(h, prepared)
+        await prepared.delivery.finalize(original.claim, FinalizationCause.UNKNOWN)
+        foreign_project = await create_project("Foreign delivery reconciliation scope")
+        await admin_access.signed.grant(
+            admin_access.admin,
+            admin_access.target,
+            role="project_manager",
+            project_id=h.request.project_id,
+        )
+        statements = []
+
+        def capture(_conn, _cursor, statement, _parameters, _context, _many):
+            statements.append(statement.lower())
+
+        event.listen(Engine, "before_cursor_execute", capture)
+        try:
+            foreign = await _reconcile(
+                admin_access,
+                foreign_project,
+                original.claim.event_id,
+                new_record_id(),
+            )
+        finally:
+            event.remove(Engine, "before_cursor_execute", capture)
+        assert foreign.status_code == 404, foreign.text
+        assert not any(
+            table in statement
+            for statement in statements
+            for table in (
+                "workstream_tasks",
+                "task_assignments",
+                "submissions",
+                "checker_runs",
+                "checker_submission_fences",
+            )
+        )
+
+        denied = await _reconcile(
+            admin_access,
+            h.request.project_id,
+            original.claim.event_id,
+            new_record_id(),
+        )
+        assert denied.status_code == 404, denied.text
+        async with h.factory() as session:
+            children = await session.scalar(
+                text(
+                    "SELECT count(*) FROM public.outbox_events "
+                    "WHERE causation_event_id=:event_id"
+                ),
+                {"event_id": original.claim.event_id},
+            )
+            denials = await session.scalar(
+                text(
+                    "SELECT count(*) FROM public.audit_events "
+                    "WHERE action_id='operations.post_submit_delivery.reconcile' "
+                    "AND after_facts->>'allowed'='false'"
+                )
+            )
+        assert children == 0
+        assert denials == 1

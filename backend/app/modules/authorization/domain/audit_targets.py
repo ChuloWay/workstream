@@ -32,6 +32,27 @@ def _checker_retry_read_target(resource):
     )
 
 
+def _post_submit_delivery_target(resource):
+    from app.modules.authorization.domain.post_submit_deliveries import (
+        PostSubmitDeliveryReadResourceContext,
+        PostSubmitDeliveryResourceContext,
+    )
+
+    if type(resource) not in {
+        PostSubmitDeliveryReadResourceContext,
+        PostSubmitDeliveryResourceContext,
+    }:
+        return None
+    project_id = str(resource.scope_project_id)
+    return (
+        project_id,
+        resource.resource_type,
+        str(resource.resource_id),
+        "project",
+        project_id,
+    )
+
+
 def project_authority_audit_target(
     resource: object, action_id: ActionId,
     *, matched_scope_project_id: UUID | None = None,
@@ -49,10 +70,6 @@ def project_authority_audit_target(
     from app.modules.authorization.domain.checker_registry import ExternalCheckerRegistryResourceContext
     from app.modules.authorization.domain.checker_retry import CheckerRetryPrepareDenialResourceContext, CheckerRetryResourceContext
     from app.modules.authorization.domain.checker_retry_reads import CheckerRetrySourceReadResourceContext
-    from app.modules.authorization.domain.post_submit_deliveries import (
-        PostSubmitDeliveryReadResourceContext,
-        PostSubmitDeliveryResourceContext,
-    )
     from app.modules.authorization.domain.guide_compilation import (
         ProjectGuideCompilationRequestResourceContext,
         ProjectGuideCompilationExecuteResourceContext,
@@ -107,18 +124,8 @@ def project_authority_audit_target(
         return project_id, "checker_run", str(resource.resource_id), "project", project_id
     if type(resource) is CheckerRetrySourceReadResourceContext:
         return _checker_retry_read_target(resource)
-    if type(resource) in {
-        PostSubmitDeliveryReadResourceContext,
-        PostSubmitDeliveryResourceContext,
-    }:
-        project_id = str(resource.scope_project_id)
-        return (
-            project_id,
-            resource.resource_type,
-            str(resource.resource_id),
-            "project",
-            project_id,
-        )
+    if target := _post_submit_delivery_target(resource):
+        return target
     if action_id in SUBMISSION_POLICY_MUTATIONS and isinstance(
         resource, ProjectSubmissionArtifactPolicyMutationResourceContext,
     ):

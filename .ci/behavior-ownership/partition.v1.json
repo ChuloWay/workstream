@@ -754,6 +754,10 @@
     },
     {
       "group": "auth",
+      "target": "backend/app/modules/authorization/domain/post_submit_deliveries.py"
+    },
+    {
+      "group": "auth",
       "target": "backend/app/modules/authorization/domain/post_submit_routing.py"
     },
     {
@@ -891,6 +895,14 @@
     {
       "group": "auth",
       "target": "backend/app/modules/authorization/post_submit_authorization.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/post_submit_delivery_authorization.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/post_submit_delivery_read.py"
     },
     {
       "group": "auth",
@@ -1034,6 +1046,10 @@
     },
     {
       "group": "artifacts",
+      "target": "backend/app/modules/checkers/api/delivery_reconciliation.py"
+    },
+    {
+      "group": "artifacts",
       "target": "backend/app/modules/checkers/api/evaluation_contract.py"
     },
     {
@@ -1091,6 +1107,14 @@
     {
       "group": "artifacts",
       "target": "backend/app/modules/checkers/delivery_authority.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/modules/checkers/delivery_reconciliation.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/modules/checkers/delivery_reconciliation_handler.py"
     },
     {
       "group": "artifacts",
@@ -2197,7 +2221,7 @@
       "target": "backend/scripts/validate_test_lane_evidence.py"
     }
   ],
-  "authority_digest": "1ac5d774755385202a1796090ff90c86b509f9d47add5a9761516139f667985c",
+  "authority_digest": "5077910ca55d4384c7789b61a10554128f9eca3e9040b305985d78a1ea4ecad5",
   "protected_base_commit": "7676ce4347db0c9694962a9b587a20765e16eac6",
   "schema": "workstream.behavior-ownership-partition.v1"
 }
