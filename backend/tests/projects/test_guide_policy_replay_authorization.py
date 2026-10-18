@@ -91,12 +91,9 @@ async def _request(client, case, *, key=None, project_id=None, if_match=None):
     return await getattr(client, case["method"])(path, headers=headers, json=case["body"])
 
 
-async def test_exact_guide_and_policy_receipts_require_current_actor_link_and_project_grant(
-    project_client,
-) -> None:
-    project = await create_project(project_client)
-    foreign = await create_project(project_client)
-    guide = await create_guide(project_client, project["id"], complete_guide_payload())
+async def _original_receipts(client):
+    project = await create_project(client)
+    guide = await create_guide(client, project["id"], complete_guide_payload())
     review, revision = await _selected_policies(guide["id"])
     cases = [
         {
@@ -132,14 +129,46 @@ async def test_exact_guide_and_policy_receipts_require_current_actor_link_and_pr
         },
     ]
     for case in cases:
-        response = await _request(project_client, case)
+        response = await _request(client, case)
         assert response.status_code == 200, response.text
         case["receipt"] = response.json()
+    return project, guide, cases
+
+
+async def _revoke_manager_grants(actor_id, access_grant_id):
+    async with db_session.get_session_factory()() as session:
+        grants = list(
+            (
+                await session.scalars(
+                    select(AdminRoleGrant).where(
+                        AdminRoleGrant.target_actor_profile_id == str(actor_id),
+                        AdminRoleGrant.role == "project_manager",
+                        AdminRoleGrant.status == "active",
+                    )
+                )
+            ).all()
+        )
+        assert len(grants) >= 2
+        for grant in grants:
+            grant.status = "revoked"
+            grant.version = 2
+            grant.revoked_by_actor_profile_id = str(actor_id)
+            grant.revoked_by_admin_role_grant_id = access_grant_id
+            grant.revoked_reason = "Replay authorization regression"
+            grant.revoked_at = datetime.now(UTC)
+        await session.commit()
+
+
+async def test_exact_receipts_remain_historical_after_successors_and_reject_foreign_project(
+    project_client,
+) -> None:
+    project, guide, cases = await _original_receipts(project_client)
+    foreign = await create_project(project_client)
+    for case in cases:
         exact = await _request(project_client, case)
         assert exact.status_code == 200 and exact.json() == case["receipt"]
         wrong_project = await _request(project_client, case, project_id=foreign["id"])
         assert wrong_project.status_code == 409
-
     review_successor = await _request(
         project_client,
         cases[1],
@@ -165,33 +194,21 @@ async def test_exact_guide_and_policy_receipts_require_current_actor_link_and_pr
         response.status_code == 200
         for response in (review_successor, revision_successor, guide_successor)
     )
+    original_counts = await _product_counts(project["id"], guide["id"])
     for case in cases:
         exact = await _request(project_client, case)
         assert exact.status_code == 200 and exact.json() == case["receipt"]
-    original_counts = await _product_counts(project["id"], guide["id"])
+    assert await _product_counts(project["id"], guide["id"]) == original_counts
 
-    actor_id, link_id, access_grant_id = await ensure_access_administrator_bootstrap()
-    async with db_session.get_session_factory()() as session:
-        grants = list(
-            (
-                await session.scalars(
-                    select(AdminRoleGrant).where(
-                        AdminRoleGrant.target_actor_profile_id == str(actor_id),
-                        AdminRoleGrant.role == "project_manager",
-                        AdminRoleGrant.status == "active",
-                    )
-                )
-            ).all()
-        )
-        assert len(grants) >= 2
-        for grant in grants:
-            grant.status = "revoked"
-            grant.version = 2
-            grant.revoked_by_actor_profile_id = str(actor_id)
-            grant.revoked_by_admin_role_grant_id = access_grant_id
-            grant.revoked_reason = "Replay authorization regression"
-            grant.revoked_at = datetime.now(UTC)
-        await session.commit()
+
+async def test_revoked_project_manager_denies_exact_and_fresh_replays_with_audit(
+    project_client,
+) -> None:
+    project, guide, cases = await _original_receipts(project_client)
+    await create_project(project_client)
+    actor_id, _link_id, access_grant_id = await ensure_access_administrator_bootstrap()
+    await _revoke_manager_grants(actor_id, access_grant_id)
+    original_counts = await _product_counts(project["id"], guide["id"])
     for case in cases:
         denied = await _request(project_client, case)
         assert denied.status_code == 403, denied.text
@@ -221,20 +238,30 @@ async def test_exact_guide_and_policy_receipts_require_current_actor_link_and_pr
     current_etags = [
         None,
         policy_selector_etag(
-            review_successor.json()["id"],
-            review_successor.json()["policy_generation"],
-            review_successor.json()["policy_hash"],
+            cases[1]["receipt"]["id"],
+            cases[1]["receipt"]["policy_generation"],
+            cases[1]["receipt"]["policy_hash"],
         ),
         policy_selector_etag(
-            revision_successor.json()["id"],
-            revision_successor.json()["policy_generation"],
-            revision_successor.json()["policy_hash"],
+            cases[2]["receipt"]["id"],
+            cases[2]["receipt"]["policy_generation"],
+            cases[2]["receipt"]["policy_hash"],
         ),
     ]
     for case, current_etag in zip(cases, current_etags, strict=True):
-        denied = await _request(project_client, case, key=uuid4(), if_match=current_etag)
-        assert denied.status_code == 403, denied.text
+        fresh = await _request(project_client, case, key=uuid4(), if_match=current_etag)
+        assert fresh.status_code == 403, fresh.text
+    assert await _product_counts(project["id"], guide["id"]) == original_counts
 
+
+async def test_foreign_only_manager_grant_cannot_retrieve_exact_receipts(
+    project_client,
+) -> None:
+    project, guide, cases = await _original_receipts(project_client)
+    foreign = await create_project(project_client)
+    actor_id, _link_id, access_grant_id = await ensure_access_administrator_bootstrap()
+    await _revoke_manager_grants(actor_id, access_grant_id)
+    original_counts = await _product_counts(project["id"], guide["id"])
     async with db_session.get_session_factory()() as session:
         session.add(
             AdminRoleGrant(
@@ -254,48 +281,31 @@ async def test_exact_guide_and_policy_receipts_require_current_actor_link_and_pr
     for case in cases:
         denied = await _request(project_client, case)
         assert denied.status_code == 403, denied.text
+    assert await _product_counts(project["id"], guide["id"]) == original_counts
 
-    async with db_session.get_session_factory()() as session:
-        session.add(
-            AdminRoleGrant(
-                id=new_record_id(),
-                target_actor_profile_id=str(actor_id),
-                role="project_manager",
-                scope_type="project",
-                scope_project_id=project["id"],
-                status="active",
-                version=1,
-                granted_by_actor_profile_id=str(actor_id),
-                granted_by_admin_role_grant_id=access_grant_id,
-                grant_reason="Test-only restored exact project authority",
-            )
-        )
-        profile = await session.get(ActorProfile, str(actor_id))
-        assert profile is not None
-        profile.status = "suspended"
-        profile.suspended_by = str(actor_id)
-        profile.suspended_at = datetime.now(UTC)
-        profile.suspension_reason = "Replay authorization regression"
-        await session.commit()
-    for case in cases:
-        denied = await _request(project_client, case)
-        assert denied.status_code == 403, denied.text
 
+@pytest.mark.parametrize("loss", ("suspended_actor", "revoked_link"))
+async def test_inactive_actor_or_link_cannot_retrieve_exact_receipts(
+    project_client, loss: str
+) -> None:
+    project, guide, cases = await _original_receipts(project_client)
+    actor_id, link_id, _access_grant_id = await ensure_access_administrator_bootstrap()
+    original_counts = await _product_counts(project["id"], guide["id"])
     async with db_session.get_session_factory()() as session:
-        profile = await session.get(ActorProfile, str(actor_id))
-        link = await session.get(ActorIdentityLink, str(link_id))
-        assert profile is not None and link is not None
-        profile.status = "active"
-        profile.suspended_by = None
-        profile.suspended_at = None
-        profile.suspension_reason = None
-        profile.reactivated_by = str(actor_id)
-        profile.reactivated_at = datetime.now(UTC)
-        profile.reactivation_reason = "Replay authorization regression"
-        link.status = "revoked"
-        link.revoked_by = str(actor_id)
-        link.revoked_at = datetime.now(UTC)
-        link.revoked_reason = "Replay authorization regression"
+        if loss == "suspended_actor":
+            profile = await session.get(ActorProfile, str(actor_id))
+            assert profile is not None
+            profile.status = "suspended"
+            profile.suspended_by = str(actor_id)
+            profile.suspended_at = datetime.now(UTC)
+            profile.suspension_reason = "Replay authorization regression"
+        else:
+            link = await session.get(ActorIdentityLink, str(link_id))
+            assert link is not None
+            link.status = "revoked"
+            link.revoked_by = str(actor_id)
+            link.revoked_at = datetime.now(UTC)
+            link.revoked_reason = "Replay authorization regression"
         await session.commit()
     for case in cases:
         denied = await _request(project_client, case)

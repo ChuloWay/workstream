@@ -38,10 +38,15 @@ Allowed: `backend/app/modules/projects/guide_mutation_service.py`,
 `policy_mutation_service.py`, and `policy_mutation_replay_repository.py` for
 exact replay admission; focused existing/new tests under `backend/tests/` for
 the three public routes and service/race behavior; this record; and only affected
-README/roadmap wording if actual current claims need correction. Reuse existing
+README/roadmap wording if actual current claims need correction. The bounded
+CI structure repair also permits only `.ci/auth-boundaries/TEST_STRUCTURE_DEBT.json`
+for observed debt parity and `.ci/auth-boundaries/assertion-maps/guide-policy-replay-authorization.json`
+for exact old-to-new proof mapping. Reuse existing
 PREP/AUTH owners and stored replay identity; do not scan guide-source history.
 
-Prohibited: CLI #599 files, new AUTH route/action/permission, client-side
+Prohibited: CI workflow, guard script, policy limits or exception changes;
+blanket debt blessing or assertion deletion; CLI #599 files, new AUTH
+route/action/permission, client-side
 authorization, compatibility implementation, backend schema/migration, retained
 data deletion, broader replay rewrites, changed policy semantics, current
 selector refetch, new write on replay, CI weakening, or altered public API
@@ -177,6 +182,8 @@ Separate PR; no merge without explicit approval.
 | Revocation lock diagnosis | Isolated single public case on `a3d1c2685214e1bce4a7b59ddb8e28bc156628d2`, metadata `/tmp/workstream-614-replay-auth-lockdiag.json`; status probe on `6060236a94dfa8cb4b8a77f285220bcf9dc5935d`, metadata `/tmp/workstream-614-replay-auth-lockdiag2.json` | `pg_stat_activity` with `pg_blocking_pids`: waiter PID 1036 blocked by revoker PID 1037 on `transactionid`; SQL was `SELECT actor_profiles ... WHERE actor_profiles.id = $1::UUID FOR UPDATE`. After commit exact replay returned 403 `permission_not_granted`; both isolated DBs/roles cleaned. Hook missed because fixture actor ID is stored string while AUTH argument is UUID. | Test-only identifier comparison normalized; final clean run below passed |
 | Final focused public proof | `backend/scripts/run_isolated_tests.py` on clean `bb1f703745bc21310789d3bdca30d224c8518ce5`, metadata `/tmp/workstream-614-replay-auth-final.json`, running `pytest -q tests/projects/test_guide_policy_replay_authorization.py --tb=short` | Six passed in 70.71s: three-route grant/actor/link denial with audit, historical policy receipts, forced same-key reservation overlap, both policy stale-miss schedules, guide stale-miss, and PostgreSQL revoke/replay lock order; unique database and role cleanup complete | Internal focused review and PR/CI remain outstanding |
 | Static and record checks | Ruff lint on changed backend files; Ruff formatter on new public test and new replay repository; baseline formatter check for five affected existing files; `scripts/check_commitrail_records.py --base-ref 51b86807111ff25b067402219ba0b533e0750f3e`; `scripts/check_markdown_links.py`; `git diff --check` | Lint, new-file formatting, Commitrail, links and whitespace passed. Each of the five pre-existing files already fails whole-file Ruff formatting at base; this PR does not perform unrelated bulk formatting. | CI and reviewer verdicts remain outstanding |
+| Hosted AUTH structure preflight | PR CI `auth-boundary-preflight`, run `39137870063`, job `117706236825`; local inventory at clean `6245ba1cee38cef7f222c5bb472d072f748f0ba0` | `structural_debt_mismatch`: `test_projects.py` frozen file debt 5820 versus actual 5843 lines; new 210-line public test exceeds 120-line function hard limit; three existing debt functions retain exact content/length but have shifted spans. | Repaired locally below; hosted rerun remains outstanding. |
+| AUTH structure repair | Trusted-base `python -m scripts.test_structure_boundary validate --policy ../.ci/auth-boundaries/TEST_STRUCTURE_POLICY.md --ledger ../.ci/auth-boundaries/TEST_STRUCTURE_DEBT.json`; focused `pytest -q tests/projects/test_guide_mutation_replay_service.py`; Ruff lint/format on touched tests | Guard passed without policy/script/workflow change or new debt. The old `test_projects.py` file debt genuinely shrank 5820→5645 lines; five moved service tests retain all 15 exact old assertion spans in the map; unchanged oversized functions have only measured line-span shifts. Five focused service tests passed, and Ruff passed. The former 210-line public test is split into five focused route/authority cases, all below the hard limit. | Rerun affected public PostgreSQL module from a clean candidate; hosted preflight and test-delta review remain outstanding. |
 
 ## Reconciliation
 
