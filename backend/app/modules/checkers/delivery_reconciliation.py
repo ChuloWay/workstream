@@ -244,10 +244,11 @@ class PostSubmitDeliveryService:
             raise PostSubmitDeliveryOperationUnavailable(
                 "post_submit_delivery_read_unavailable"
             ) from exc
-        items = tuple(
-            _public_source(delivery, await self._detached_classify(delivery))
-            for delivery in page.items
-        )
+        projected = []
+        for delivery in page.items:
+            classified = await self._detached_classify(delivery)
+            projected.append(_public_source(delivery, classified))
+        items = tuple(projected)
         next_cursor = None
         if page.has_more and items:
             last = items[-1]
