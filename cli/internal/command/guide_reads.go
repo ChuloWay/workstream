@@ -93,10 +93,11 @@ func addGuideReads(guide *cobra.Command, client func() (*api.Client, error), out
 			if !api.ValidUUID(args[2]) {
 				return errors.New("DOCUMENT_ID must be a UUID")
 			}
-			info, err := os.Lstat(directory)
-			if directory == "" || err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
-				return errors.New("--download must be an existing real directory")
+			root, err := openBoundDownloadRoot(directory)
+			if err != nil {
+				return err
 			}
+			defer root.Close()
 			apiClient, err := client()
 			if err != nil {
 				return err
@@ -117,11 +118,6 @@ func addGuideReads(guide *cobra.Command, client func() (*api.Client, error), out
 			if selected.IngestState != "uploaded" {
 				return &api.Failure{Code: "guide_document_not_uploaded"}
 			}
-			root, err := os.OpenRoot(directory)
-			if err != nil {
-				return errors.New("cannot open download directory")
-			}
-			defer root.Close()
 			name := api.TaskGuideDocument{DocumentID: selected.DocumentID, MediaType: selected.MediaType}.Filename()
 			if err := publishVerifiedDownload(root, name, func(target io.Writer) error {
 				return apiClient.DownloadProjectGuideDocument(cmd.Context(), args[0], args[1], *selected, target)
@@ -141,6 +137,29 @@ func addGuideReads(guide *cobra.Command, client func() (*api.Client, error), out
 	}
 	document.Flags().StringVar(&directory, "download", "", "Required existing directory for the verified original (never overwrite)")
 	guide.AddCommand(document)
+}
+
+// openBoundDownloadRoot pins the checked directory before any remote read.
+// Opening by pathname may follow a symlink swapped in after Lstat; comparing
+// the opened root's inode to the checked one prevents that redirection.
+func openBoundDownloadRoot(directory string) (*os.Root, error) {
+	if directory == "" {
+		return nil, errors.New("--download must be an existing real directory")
+	}
+	checked, err := os.Lstat(directory)
+	if err != nil || !checked.IsDir() || checked.Mode()&os.ModeSymlink != 0 {
+		return nil, errors.New("--download must be an existing real directory")
+	}
+	root, err := os.OpenRoot(directory)
+	if err != nil {
+		return nil, errors.New("cannot open download directory")
+	}
+	opened, err := root.Stat(".")
+	if err != nil || !os.SameFile(checked, opened) {
+		_ = root.Close()
+		return nil, errors.New("download directory changed during open")
+	}
+	return root, nil
 }
 
 // publishVerifiedDownload writes privately, then links the name only after

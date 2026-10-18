@@ -32,6 +32,9 @@ def source_server():
                 status = state["status_code"]
                 body = json.dumps(state["metadata"]).encode()
                 headers = {"Content-Type": "application/json"}
+                callback = state.pop("before_status", None)
+                if callback is not None:
+                    callback()
             self.send_response(status)
             for name, value in headers.items():
                 self.send_header(name, value)
@@ -189,3 +192,24 @@ def test_existing_symlink_or_different_uuid_spelling_cannot_replace_target(cli, 
         failure(invoke(cli, origin, tmp_path, selector=SOURCE.replace("-", "")), "invalid_arguments", exit_code=2)
         assert target.is_symlink() and keep.read_bytes() == b"preserve"
         assert len(state["requests"]) == 1
+
+
+def test_status_time_directory_swap_cannot_redirect_verified_source(cli, tmp_path):
+    selected = tmp_path / "selected"
+    selected.mkdir()
+    original = tmp_path / "original-renamed"
+    replacement = tmp_path / "replacement"
+    replacement.mkdir()
+
+    def swap():
+        selected.rename(original)
+        selected.symlink_to(replacement, target_is_directory=True)
+
+    with source_server() as (origin, state):
+        state["before_status"] = swap
+        result = invoke(cli, origin, selected)
+        assert result.returncode == 0 and result.stderr == "", result.stderr
+        assert (original / (SOURCE + ".json")).read_bytes() == RAW
+        assert list(replacement.iterdir()) == []
+        assert selected.is_symlink()
+        assert len(state["requests"]) == 2

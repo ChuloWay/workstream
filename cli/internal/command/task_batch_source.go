@@ -2,10 +2,8 @@ package command
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
-	"os"
 
 	"github.com/Flow-Research/workstream/cli/internal/api"
 	"github.com/Flow-Research/workstream/cli/internal/taskimport"
@@ -77,10 +75,11 @@ func addTaskBatchSources(batch *cobra.Command, client func() (*api.Client, error
 			if !api.ValidUUID(args[0]) || !api.ValidUUID(args[1]) {
 				return commandError{"invalid_arguments", "PROJECT_ID and SOURCE_ID must be UUIDs"}
 			}
-			info, err := os.Lstat(directory)
-			if directory == "" || err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
-				return commandError{"invalid_arguments", "--download must be an existing real directory"}
+			root, err := openBoundDownloadRoot(directory)
+			if err != nil {
+				return err
 			}
+			defer root.Close()
 			apiClient, err := client()
 			if err != nil {
 				return err
@@ -92,11 +91,6 @@ func addTaskBatchSources(batch *cobra.Command, client func() (*api.Client, error
 			if result.Value.Status != "verified" {
 				return &api.Failure{Code: "task_import_source_not_verified"}
 			}
-			root, err := os.OpenRoot(directory)
-			if err != nil {
-				return errors.New("cannot open download directory")
-			}
-			defer root.Close()
 			name := result.Value.Filename()
 			if err := publishVerifiedDownload(root, name, func(target io.Writer) error {
 				return apiClient.DownloadTaskImportSource(cmd.Context(), args[0], args[1], result.Value, target)
