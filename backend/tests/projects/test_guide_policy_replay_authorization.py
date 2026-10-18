@@ -159,6 +159,42 @@ async def _revoke_manager_grants(actor_id, access_grant_id):
         await session.commit()
 
 
+async def _create_successors(client, cases):
+    review = await _request(
+        client,
+        cases[1],
+        key=uuid4(),
+        if_match=policy_selector_etag(
+            cases[1]["receipt"]["id"],
+            cases[1]["receipt"]["policy_generation"],
+            cases[1]["receipt"]["policy_hash"],
+        ),
+    )
+    revision = await _request(
+        client,
+        cases[2],
+        key=uuid4(),
+        if_match=policy_selector_etag(
+            cases[2]["receipt"]["id"],
+            cases[2]["receipt"]["policy_generation"],
+            cases[2]["receipt"]["policy_hash"],
+        ),
+    )
+    guide = await _request(client, cases[0], key=uuid4())
+    assert all(response.status_code == 200 for response in (review, revision, guide))
+    return [
+        None,
+        policy_selector_etag(
+            review.json()["id"], review.json()["policy_generation"], review.json()["policy_hash"]
+        ),
+        policy_selector_etag(
+            revision.json()["id"],
+            revision.json()["policy_generation"],
+            revision.json()["policy_hash"],
+        ),
+    ]
+
+
 async def test_exact_receipts_remain_historical_after_successors_and_reject_foreign_project(
     project_client,
 ) -> None:
@@ -169,31 +205,7 @@ async def test_exact_receipts_remain_historical_after_successors_and_reject_fore
         assert exact.status_code == 200 and exact.json() == case["receipt"]
         wrong_project = await _request(project_client, case, project_id=foreign["id"])
         assert wrong_project.status_code == 409
-    review_successor = await _request(
-        project_client,
-        cases[1],
-        key=uuid4(),
-        if_match=policy_selector_etag(
-            cases[1]["receipt"]["id"],
-            cases[1]["receipt"]["policy_generation"],
-            cases[1]["receipt"]["policy_hash"],
-        ),
-    )
-    revision_successor = await _request(
-        project_client,
-        cases[2],
-        key=uuid4(),
-        if_match=policy_selector_etag(
-            cases[2]["receipt"]["id"],
-            cases[2]["receipt"]["policy_generation"],
-            cases[2]["receipt"]["policy_hash"],
-        ),
-    )
-    guide_successor = await _request(project_client, cases[0], key=uuid4())
-    assert all(
-        response.status_code == 200
-        for response in (review_successor, revision_successor, guide_successor)
-    )
+    await _create_successors(project_client, cases)
     original_counts = await _product_counts(project["id"], guide["id"])
     for case in cases:
         exact = await _request(project_client, case)
@@ -206,6 +218,7 @@ async def test_revoked_project_manager_denies_exact_and_fresh_replays_with_audit
 ) -> None:
     project, guide, cases = await _original_receipts(project_client)
     await create_project(project_client)
+    current_etags = await _create_successors(project_client, cases)
     actor_id, _link_id, access_grant_id = await ensure_access_administrator_bootstrap()
     await _revoke_manager_grants(actor_id, access_grant_id)
     original_counts = await _product_counts(project["id"], guide["id"])
@@ -235,19 +248,6 @@ async def test_revoked_project_manager_denies_exact_and_fresh_replays_with_audit
             "project.review_policy.update",
             "project.revision_policy.update",
         }
-    current_etags = [
-        None,
-        policy_selector_etag(
-            cases[1]["receipt"]["id"],
-            cases[1]["receipt"]["policy_generation"],
-            cases[1]["receipt"]["policy_hash"],
-        ),
-        policy_selector_etag(
-            cases[2]["receipt"]["id"],
-            cases[2]["receipt"]["policy_generation"],
-            cases[2]["receipt"]["policy_hash"],
-        ),
-    ]
     for case, current_etag in zip(cases, current_etags, strict=True):
         fresh = await _request(project_client, case, key=uuid4(), if_match=current_etag)
         assert fresh.status_code == 403, fresh.text
@@ -259,6 +259,7 @@ async def test_foreign_only_manager_grant_cannot_retrieve_exact_receipts(
 ) -> None:
     project, guide, cases = await _original_receipts(project_client)
     foreign = await create_project(project_client)
+    await _create_successors(project_client, cases)
     actor_id, _link_id, access_grant_id = await ensure_access_administrator_bootstrap()
     await _revoke_manager_grants(actor_id, access_grant_id)
     original_counts = await _product_counts(project["id"], guide["id"])
@@ -289,6 +290,7 @@ async def test_inactive_actor_or_link_cannot_retrieve_exact_receipts(
     project_client, loss: str
 ) -> None:
     project, guide, cases = await _original_receipts(project_client)
+    await _create_successors(project_client, cases)
     actor_id, link_id, _access_grant_id = await ensure_access_administrator_bootstrap()
     original_counts = await _product_counts(project["id"], guide["id"])
     async with db_session.get_session_factory()() as session:
