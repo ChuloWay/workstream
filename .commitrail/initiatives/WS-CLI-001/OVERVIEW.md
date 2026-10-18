@@ -36,6 +36,12 @@
 
 ## Current boundary
 
+[WS-CLI-001-33](WS-CLI-001-33.md) adds `project role-grant candidates PROJECT_ID`
+over the existing exact-project candidate page. A covered Project Manager sees
+only actor UUID and nullable display name with explicit opaque continuation.
+Discovery neither qualifies nor grants actors; backend authority and cursor
+scope remain decisive.
+
 The backend exposes `GET /api/v1/actors/me` and
 `GET /api/v1/actors/me/authorization-context` in
 `backend/app/api/routes/auth.py`. The selected 29-operation
@@ -226,7 +232,7 @@ CLIs. Keep the package independent of backend and MCP runtime dependencies.
     replay. No grant discovery or automatic eligibility.
 21. **WS-CLI-001-21:** Filtered project-grant pagination and exact grant history
    through public GETs, complete qualification/provenance disclosure and fresh
-   authority on each call. No actor discovery or automatic decisions.
+   authority on each call. No unscoped actor directory or automatic decisions.
 22. **WS-CLI-001-22:** Current Finance policy discovery and backend-selected or
    exact retained-version inspection, including empty drafts and complete award
    definitions. No Finance mutation, publication or local readiness decisions.

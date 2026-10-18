@@ -12,6 +12,10 @@ from project_role_read_journey import (
     deny_role_history,
     inspect_revoked_history,
 )
+from contributor_candidate_journey import (
+    inspect_contributor_candidates,
+    deny_contributor_candidates,
+)
 
 
 async def exercise_project_role_decisions(
@@ -80,6 +84,19 @@ async def exercise_project_role_decisions(
     )
     admin = {"Authorization": "Bearer " + control_token}
     covering = await manager_grant()
+    candidate_cursor = await inspect_contributor_candidates(
+        direct,
+        cli,
+        origin,
+        scoped,
+        tokens["cli-manager"],
+        tokens["cli-outsider"],
+        project,
+        foreign_project,
+        manager_id,
+        target,
+        factory,
+    )
     original_covering_id = covering["resource_id"]
     paths = (await direct.get("/openapi.json")).json()["paths"]
     for path, action in (
@@ -309,6 +326,7 @@ async def exercise_project_role_decisions(
     invoke("issue", body, key=issue_key, status=404)
     invoke("revoke", {"reason": "Suspended manager"}, grant=first["id"], status=404)
     deny_role_history(cli, origin, scoped, project, first["id"], read_cursor)
+    deny_contributor_candidates(cli, origin, scoped, project, candidate_cursor)
     await post(
         f"/api/v1/actors/{manager_id}/reactivate",
         {"reason": "Independent scoped revocation"},
@@ -321,6 +339,7 @@ async def exercise_project_role_decisions(
     invoke("issue", body, key=issue_key, status=404)
     invoke("revoke", {"reason": "Revoked manager"}, grant=first["id"], status=404)
     deny_role_history(cli, origin, scoped, project, first["id"], read_cursor)
+    deny_contributor_candidates(cli, origin, scoped, project, candidate_cursor)
     assert await stored() == before
     covering = await manager_grant()
 
