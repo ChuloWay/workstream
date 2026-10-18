@@ -1,6 +1,7 @@
 """Public PostgreSQL proof for one-shot uncertain post-submit delivery recovery."""
 
 import asyncio
+import sys
 
 from uuid import UUID
 
@@ -9,6 +10,7 @@ from sqlalchemy import event, text
 from sqlalchemy.engine import Engine
 
 from app.adapters import artifacts as artifact_adapters
+from app.core import api_controls
 from app.adapters.outbox import production_outbox_delivery
 from app.adapters.tasks import evaluation_completion_handler
 from app.core.identifiers import new_record_id
@@ -206,6 +208,25 @@ async def test_public_operator_retries_proven_no_effect_request_once(
     admin_access,
 ) -> None:
     """A queued generation-zero request may run once behind the immutable child."""
+    captured = []
+    original_error = api_controls.LOGGER.error
+
+    def capture_error(*args, **kwargs):
+        try:
+            error = sys.exception()
+            frames = []
+            traceback = error.__traceback__ if error is not None else None
+            while traceback is not None and len(frames) < 32:
+                filename = traceback.tb_frame.f_code.co_filename
+                if "/backend/" in filename:
+                    frames.append((filename.rsplit("/backend/", 1)[1], traceback.tb_lineno))
+                traceback = traceback.tb_next
+            captured.append((type(error).__name__, tuple(frames)))
+        except Exception:
+            pass
+        return original_error(*args, **kwargs)
+
+    monkeypatch.setattr(api_controls.LOGGER, "error", capture_error)
     async with material_fixture(tmp_path, auth_database_env) as h:
         operator_grant = await admin_access.signed.grant(
             admin_access.admin, admin_access.target
@@ -232,7 +253,7 @@ async def test_public_operator_retries_proven_no_effect_request_once(
         created = await _reconcile(
             admin_access, h.request.project_id, original.claim.event_id, key
         )
-        assert created.status_code == 201, created.text
+        assert created.status_code == 201, f"{created.text}; safe_trace={captured[:2]}"
         result = created.json()
         assert result["source"] == source | {
             "reconciliation_event_id": result["successor"]["event_id"],
