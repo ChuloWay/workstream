@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 
 from app.core.identifiers import new_record_id
 from app.db import session as db_session
@@ -482,15 +482,8 @@ async def test_policy_replay_waits_for_grant_revocation_then_denies(
     assert created.status_code == 200, created.text
     original_counts = await _product_counts(project["id"], guide["id"])
     actor_id, _link_id, access_grant_id = await ensure_access_administrator_bootstrap()
-    entered_actor_lock = asyncio.Event()
     entered_grant_query = asyncio.Event()
-    original_lock = AdminAuthorizationRepository.lock_request_actor
     original_find = AdminAuthorizationRepository.find_effective_grant
-
-    async def signal_actor_lock(self, identity_link_id, actor_profile_id, **kwargs):
-        if actor_profile_id == actor_id:
-            entered_actor_lock.set()
-        return await original_lock(self, identity_link_id, actor_profile_id, **kwargs)
 
     async def signal_grant_query(self, actor_profile_id, permission_id, **kwargs):
         if (
@@ -502,14 +495,12 @@ async def test_policy_replay_waits_for_grant_revocation_then_denies(
         return await original_find(self, actor_profile_id, permission_id, **kwargs)
 
     monkeypatch.setattr(
-        AdminAuthorizationRepository, "lock_request_actor", signal_actor_lock
-    )
-    monkeypatch.setattr(
         AdminAuthorizationRepository, "find_effective_grant", signal_grant_query
     )
     replay_task = None
     revocation_committed = False
     async with db_session.get_session_factory()() as revoker:
+        revoker_pid = await revoker.scalar(text("select pg_backend_pid()"))
         grants = list(
             (
                 await revoker.scalars(
@@ -534,9 +525,34 @@ async def test_policy_replay_waits_for_grant_revocation_then_denies(
         await revoker.flush()
         try:
             replay_task = asyncio.create_task(_request(project_client, case))
-            await asyncio.wait_for(entered_actor_lock.wait(), timeout=5)
-            with pytest.raises(TimeoutError):
-                await asyncio.wait_for(asyncio.shield(replay_task), timeout=0.1)
+            blocked_query = None
+            for _ in range(100):
+                await revoker.execute(text("select pg_stat_clear_snapshot()"))
+                blocked_query = (
+                    await revoker.execute(
+                        text(
+                            "select pid, wait_event_type, wait_event, query "
+                            "from pg_stat_activity where datname = current_database() "
+                            "and pid != pg_backend_pid() "
+                            "and :revoker_pid = any(pg_blocking_pids(pid)) "
+                            "and wait_event_type = 'Lock'"
+                        ),
+                        {"revoker_pid": revoker_pid},
+                    )
+                ).first()
+                if blocked_query is not None or replay_task.done():
+                    break
+                await asyncio.sleep(0.1)
+            assert blocked_query is not None, (
+                "exact replay never waited on the uncommitted revoke; "
+                f"request_status={replay_task.result().status_code if replay_task.done() else 'pending'}"
+            )
+            print(
+                "replay lock dependency: "
+                f"waiter_pid={blocked_query.pid} revoker_pid={revoker_pid} "
+                f"wait_event={blocked_query.wait_event} sql={blocked_query.query}"
+            )
+            assert not replay_task.done()
             await revoker.commit()
             revocation_committed = True
         finally:
