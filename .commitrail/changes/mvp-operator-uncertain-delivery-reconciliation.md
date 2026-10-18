@@ -24,7 +24,7 @@ first backend journey: `PostSubmissionEvaluationRequested` and
 the false-review-policy committed form of the completion delivery; it is not a
 third operation.
 
-## Current behavior
+## Starting behavior
 
 - OUTBOX commits an `invoked` attempt before calling a handler and finalizes an
   interrupted or exceptional invocation as immutable `dead_letter` /
@@ -84,13 +84,23 @@ third operation.
   `operations.post_submit_delivery.list` / `operations.status.read` and
   `operations.post_submit_delivery.reconcile` /
   `operations.reconcile.run`. Add no permission, role, alias or service grant.
+  Extend the existing routing resource, digest and retained-receipt validation
+  to bind an original completion claim and its optional exact reconciliation
+  claim. Ordinary retained contexts and commitments must remain unchanged;
+  neither claim is authority without stored custody and canonical AUTH checks.
 - One coordinated migration file `0055_operational_delivery_reconciliation.py`
   with revision `0055_delivery_reconciliation` after the separately owned
-  `0054_artifact_proof_timing`. The migration may
-  add only those two exact action/permission pairs and the exact
+  `0054_artifact_proof_timing`. The migration adds
+  only those two exact action/permission pairs and the exact
   `outbox_delivery` resource type to the closed audit constraints. The target
   remains the canonical project target; the migration adds no target or
-  invalidation namespace. Include the corresponding Alembic
+  invalidation namespace. It also extends the current routing context/digest
+  functions and invocation guard to validate the terminal original and live
+  reconciliation child, their immutable Operator cause and exact receipt
+  commitments. Preserve every existing ordinary-routing predicate and later
+  remediation/revision extension. Update this unmerged migration rather than
+  adding another migration to preserve an intermediate development version.
+  Include the corresponding Alembic
   head/fingerprint/test updates. It has no S3 runtime dependency; its only
   relationship to `0054` is the required linear schema sequence. Consume the
   canonical published `0054` before authoring `0055` and do not create a
@@ -99,6 +109,9 @@ third operation.
   transaction, concurrency, migration and delivery registration tests; exact
   ownership/lane/action/rate/OpenAPI inventories affected by the new routes and
   modules.
+- `mcp_server/contracts/authorization_context_get.json`, regenerated from the
+  current selected OpenAPI fragment for the two added action identifiers.
+  No MCP tool, permission or runtime behavior is added.
 - `docs/operations_operator_workflow.md` and affected current claims across
   `README.md` and `docs/roadmap_status.md`. Update local roadmap XLSX/CSV only if
   the capability ledger change requires changing those present exports.
@@ -183,9 +196,13 @@ authorization. The existing #588 route remains their sole retry path.
 The original UNKNOWN attempt stays immutable. A successful Operator command
 uses prepared AUTH bound to project, original event/generation/digest, exact
 classification, bounded reason and request key, then appends one immutable
-`PostSubmissionDeliveryReconciliationRequested` event. The child contains only
-the exact original selectors, classification, Operator decision reference and
-request digest; it carries no original payload. OUTBOX idempotency provides
+`PostSubmissionDeliveryReconciliationRequested` event. The child contains
+the exact original selectors, classification, Operator decision reference,
+request digest and canonical bounded Operator authorization resource JSON.
+The private resource includes the command's bounded reason and source facts so
+database custody can recompute the resource and request commitments instead of
+trusting a child-supplied digest. It contains no original event payload and is
+never returned by public inspection. OUTBOX idempotency provides
 same-key replay. Exactly one child may exist for an original attempt. A
 source-level uniqueness guard and locked child lookup make concurrent different
 keys deterministic conflicts; every later different key conflicts after a
@@ -213,6 +230,10 @@ The Operator decision is an immutable cause, not worker authority. The handler
 validates it through a narrow AUTH cause port, while the existing executor and
 routing outcome continue to obtain their current fixed-service execute,
 finalize and route authority. No service gains an Operator permission.
+The original Operator's later revocation does not revoke that retained cause;
+execution still requires the worker's current fixed-service authority. Stored
+cause checks bind the historical human, identity link and system Operator grant
+to the immutable allowed decision without requiring them to remain active.
 
 - For `committed`, the handler delegates to the CHECKERS committed validators or
   the owner-owned read-only TASK retained-outcome verifier and acknowledges the
@@ -230,6 +251,24 @@ finalize and route authority. No service gains an Operator permission.
   its outcome becomes uncertain, the next Operator read reports that one child
   and the original source as held, and no later reconciliation is authorized in
   this release.
+
+For a retry-safe completion, the routing resource retains `claim` as the exact
+original completion claim and binds the child's live claim separately as
+`reconciliation_claim`. Both are included in the recovery receipt commitment.
+The optional field is omitted only when absent; existing nested null fields and
+ordinary receipt digests remain intact. Retained-outcome verification rebuilds
+the same two-claim resource, so an already recovered acceptance can be inspected
+and replayed without another effect.
+
+The routing database guard validates the exact finalized UNKNOWN original,
+the sole linked version-one child, canonical payload and Operator resource,
+request/source/classification commitments, historical allowed Operator event,
+and the child's current invoked, unfinalized, unexpired attempt. Its expected
+claims must equal the stored authorization context. Missing or substituted
+facts reject independently of Python validation. Ordinary completion execution
+continues to require its original live invocation. No trigger is disabled by
+the implementation and the existing acceptance writer and transaction remain
+the only place business effects are created.
 
 The sole child is the immutable reconciliation receipt. Inspection links it to
 the original attempt and projects that child as pending, active, acknowledged
@@ -272,6 +311,16 @@ child state is exposed only as the closed public `held` classification.
   one FinalAcceptance, submitter ContributionRecord and governed award set and
   creates no Review. A no-effect completion may invoke the existing routing
   operation once; partial, stale or inconsistent outcomes remain held.
+- [ ] A real rolled-back acceptance followed by original UNKNOWN can be
+  reconciled through the public command and production delivery wrapper into
+  exactly one routing manifest, FinalAcceptance, submitter contribution and
+  governed award set, with no Review. Original event and attempt rows remain
+  unchanged; inspection, same-key replay and duplicate child delivery retain
+  the recovered effects.
+- [ ] PostgreSQL independently rejects invalid original/child/cause custody
+  through the intended guard. Negative probes preserve otherwise valid payload
+  commitments; removing a key guard makes its corresponding regression fail.
+  Ordinary receipt shape/digest and original completion execution remain valid.
 - [x] Same-key command and response-loss replay return the same recovery event.
   Concurrent or sequential changed keys cannot schedule another child. A child
   that finalizes UNKNOWN remains visibly held and cannot be retried by this
@@ -316,11 +365,13 @@ child state is exposed only as the closed public `held` classification.
 | Existing terminal UNKNOWN attempts are immutable and excluded from automatic replay | Inspect OUTBOX delivery/model/recovery SQL guards and production registry | Confirmed on base | Plan review must challenge whether a child event is the smallest safe execution seam |
 | Request source has a durable no-effect discriminator | Inspect CHECKERS queued/running/terminal state, lease generation and phase evidence | Queued generation zero with no phase evidence is distinct; running or expired-running is uncertain | Real PostgreSQL race/interruption proof required |
 | Completion commit is atomically distinguishable | Inspect `TaskPostSubmitOutcome`, routing manifest and deferred closure | Complete manifest is the retained outcome; absent transaction leaves no committed routing effects | Real false-policy commit/ack-loss and corruption proof required |
-| Existing operations remain sole writers | Recovery-bound typed invocation observation composes the existing executor/outcome owners; committed completion uses the extracted read-only retained-outcome verifier | Focused public PostgreSQL proofs pass without a repeated checker, routing, acceptance, contribution or award effect | The full durable-worker interruption drill remains #555 |
+| Existing operations remain sole writers | Recovery-bound typed invocation observation composes the existing executor/outcome owners; committed completion uses the extracted read-only retained-outcome verifier | Request and committed-completion proofs cover no-repeat behavior; the retry-safe completion proof must also reach production delivery and final acceptance | The full durable-worker interruption drill remains #555 |
 | Public authority remains least privilege | Exact list/status.read and reconcile/reconcile.run pairs; project-targeted `outbox_delivery` audit resource; cause validation while existing owners retain their fixed-service actions | Catalogue/OpenAPI/rate proofs pass; public PostgreSQL denial, revocation and same-key replay proofs pass | No new permission, role or service grant |
-| Migration preserves closed audit vocabularies | Upgrade from 0054 to `0055_delivery_reconciliation`, direct inserts for both exact pairs/resource, wrong pair and target rejection, downgrade refusal | 1/1 focused PostgreSQL migration test passed in 64.20s at `9581e3e5a`; cleanup complete | Final full-suite execution remains repository CI evidence |
-| Request, completion and child custody are source-specific | Seven public PostgreSQL cases plus three independent-session races; immutable original, one child, committed verification, retry-safe execution, held UNKNOWN, source transition and foreign denial | First public path 1/1 at `e4918bc10` (47.25s); committed acceptance 1/1 at `6be05ae89` (29.20s); first five public cases passed at `ef4789198`; final transition/denial/race slice 5/5 at `3e6b61e5c` (162.14s), with isolated cleanup complete | Split-head evidence is exact about its provenance; later changes after `e4918bc10` affect tests, docs and generated ownership data only |
-| Closed contracts and production inventories match the surface | DTO/privacy/idempotency contracts, canonical OUTBOX append validation, AUTH catalogue, OpenAPI, rate, ownership and lane checks | 33/33 focused contracts passed; three focused inventory/API checks passed; boundary, structure, ownership, Commitrail, link and stale-wording checks passed | No generic OUTBOX recovery surface was added |
+| Migration preserves closed audit vocabularies and routing custody | Upgrade from 0054 to `0055_delivery_reconciliation`, exact audit/resource pairs, wrong pair/target rejection, downgrade refusal, ordinary and recovery routing guard proofs | Migration and source-specific PostgreSQL tests must use the final schema fingerprint and exact committed candidate | Final full-suite execution remains repository CI evidence |
+| Missing completion proof discriminates the defect | `test_public_operator_recovers_rolled_back_acceptance_once` runs a real acceptance transaction then rolls it back, finalizes the original UNKNOWN, creates a child through public APIs and delivers it | At `5f2e1c97f`, the intended acknowledgement assertion failed because the child became UNKNOWN; the committed-request control passed; isolated cleanup complete | The repaired production wrapper and exact persisted lineage require the final committed-candidate run |
+| Request, completion and child custody are source-specific | Public PostgreSQL request/completion cases and independent-session races; full original event/attempt snapshots, one child, retained effects, source transition and foreign denial | Includes committed request and completion, retry-safe request and completion, held UNKNOWN and commit/rollback races | Exploratory or earlier split-head runs do not establish final candidate correctness |
+| Routing receipts bind recovery without rewriting retained facts | Pure AUTH substitutions, ordinary fixed digest vectors, exact JSON shape, recovered adapter replay and each child-claim field commitment | 102 focused AUTH contract tests passed during repair, including the new recovery and retained-evidence cases | Final candidate execution and PostgreSQL custody remain separate requirements |
+| Closed contracts and production inventories match the surface | DTO/privacy/idempotency contracts, OUTBOX append validation, AUTH catalogue, OpenAPI, rate, ownership, lane and selected MCP contract checks | 18 MCP contract tests passed against the actual backend OpenAPI after regenerating the one affected fragment | No generic OUTBOX recovery surface or MCP tool was added |
 | Full interruption drill | Parent #555 durable-worker matrix | Deferred | This PR must not claim the complete #555 drill or deployed operation |
 
 ## Review findings
@@ -343,6 +394,12 @@ child state is exposed only as the closed public `held` classification.
 - Architecture/security plan review also required two exact AUTH pairs and the
   required 0055 migration after 0054, plus a closed public `error_code`; both
   are now explicit.
+- Completion-recovery review found that projecting child custody in Python did
+  not satisfy canonical routing AUTH or its database invocation guard. The
+  repair binds explicit original and reconciliation claims through the existing
+  resource, receipt and SQL guard, retains exact private Operator resource
+  facts, and adds the missing rollback-to-acceptance and committed-request
+  proofs. It does not introduce a second writer or reopen the original event.
 
 ## Reconciliation
 
