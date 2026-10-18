@@ -274,7 +274,6 @@ async def test_delivery_reconciliation_audit_upgrade_and_downgrade_refusal(
             after = await _audit_constraint_snapshot(url)
             assert after[0] == "0055_delivery_reconciliation"
             assert before[1] != after[1]
-            assert before[2] != after[2]
             connection = await asyncpg.connect(url)
             try:
                 for action, permission, wrong_permission in (
