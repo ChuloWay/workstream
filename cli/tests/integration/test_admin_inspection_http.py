@@ -56,10 +56,17 @@ GRANT = {
     "revoked_reason": None,
     "revoked_at": None,
 }
-PERMISSIONS = {"items": [{"permission_id": f"test.permission_{i}"} for i in range(82)], "total": 82}
+PERMISSIONS = {
+    "items": [{"permission_id": f"test.permission_{i}"} for i in range(82)],
+    "total": 82,
+}
 DEFINITIONS = {
     "items": [
-        {"role": role, "allowed_scopes": ["system"], "permission_ids": ["actor.profile.read_any"]}
+        {
+            "role": role,
+            "allowed_scopes": ["system"],
+            "permission_ids": ["actor.profile.read_any"],
+        }
         for role in ROLES
     ],
     "total": 5,
@@ -71,37 +78,58 @@ def invoke(cli, origin, *args, output="json", token=TOKEN):
 
 
 def page(items, cursor=None, total=None):
-    return {"items": items, "total": len(items) if total is None else total, "next_cursor": cursor}
+    return {
+        "items": items,
+        "total": len(items) if total is None else total,
+        "next_cursor": cursor,
+    }
 
 
 def test_admin_exact_actor_and_catalogue_wires(cli):
     with http_fixture() as (origin, response, requests):
-        for spelling in (ACTOR, ACTOR.replace("-", ""), "{" + ACTOR + "}", "urn:uuid:" + ACTOR):
+        for spelling in (
+            ACTOR,
+            ACTOR.replace("-", ""),
+            "{" + ACTOR + "}",
+            "urn:uuid:" + ACTOR,
+        ):
             for command, body, suffix in (
                 (("actor", "show", spelling), ACTOR_PROFILE, ""),
                 (("actor", "identity-links", spelling), LINK, "/identity-links"),
             ):
                 response["body"] = json.dumps(body).encode()
                 result = invoke(cli, origin, *command)
-                assert result.returncode == 0 and json.loads(result.stdout) == body, result.stderr
+                assert result.returncode == 0 and json.loads(result.stdout) == body, (
+                    result.stderr
+                )
                 assert requests[-1] == (
-                    "GET", f"/api/v1/actors/{quote(spelling, safe=':')}{suffix}", "Bearer " + TOKEN
+                    "GET",
+                    f"/api/v1/actors/{quote(spelling, safe=':')}{suffix}",
+                    "Bearer " + TOKEN,
                 )
         for command, body, path in (
             ("permissions", PERMISSIONS, "/api/v1/authorization/permissions"),
-            ("role-definitions", DEFINITIONS, "/api/v1/authorization/admin-role-definitions"),
+            (
+                "role-definitions",
+                DEFINITIONS,
+                "/api/v1/authorization/admin-role-definitions",
+            ),
         ):
             response["body"] = json.dumps(body).encode()
             result = invoke(cli, origin, command)
-            assert result.returncode == 0 and json.loads(result.stdout) == body, result.stderr
+            assert result.returncode == 0 and json.loads(result.stdout) == body, (
+                result.stderr
+            )
             assert requests[-1] == ("GET", path, "Bearer " + TOKEN)
         response["body"] = json.dumps(ACTOR_PROFILE).encode()
         text = invoke(cli, origin, "actor", "show", ACTOR, output="text")
         assert text.returncode == 0 and "not authority" in text.stdout
         assert "\u202e" not in text.stdout and "\\u202e" in text.stdout
         service = ACTOR_PROFILE | {
-            "actor_kind": "service", "provisioning_method": "manual_service_provisioning",
-            "service_identity": "workstream.artifact.verifier", "display_name": None,
+            "actor_kind": "service",
+            "provisioning_method": "manual_service_provisioning",
+            "service_identity": "workstream.artifact.verifier",
+            "display_name": None,
         }
         response["body"] = json.dumps(service).encode()
         assert json.loads(invoke(cli, origin, "actor", "show", ACTOR).stdout) == service
@@ -113,47 +141,97 @@ def test_admin_scope_filtered_grants_and_cursor(cli):
         response["body"] = json.dumps(page([GRANT], cursor, 2)).encode()
         for args, expected_path in (
             (("role-grants",), "/api/v1/admin-role-grants"),
-            (("actor", "role-grants", ACTOR.replace("-", "")), f"/api/v1/actors/{ACTOR.replace('-', '')}/admin-role-grants"),
+            (
+                ("actor", "role-grants", ACTOR.replace("-", "")),
+                f"/api/v1/actors/{ACTOR.replace('-', '')}/admin-role-grants",
+            ),
         ):
-            result = invoke(cli, origin, *args, "--scope", "project", "--project-id", PROJECT.replace("-", ""), "--status", "active", "--limit", "1", "--cursor", cursor)
-            assert result.returncode == 0 and json.loads(result.stdout) == page([GRANT], cursor, 2), result.stderr
+            result = invoke(
+                cli,
+                origin,
+                *args,
+                "--scope",
+                "project",
+                "--project-id",
+                PROJECT.replace("-", ""),
+                "--status",
+                "active",
+                "--limit",
+                "1",
+                "--cursor",
+                cursor,
+            )
+            assert result.returncode == 0 and json.loads(result.stdout) == page(
+                [GRANT], cursor, 2
+            ), result.stderr
             url = urlsplit(requests[-1][1])
             assert url.path == expected_path
             assert parse_qs(url.query) == {
-                "scope_type": ["project"], "scope_project_id": [PROJECT.replace("-", "")],
-                "status": ["active"], "limit": ["1"], "cursor": [cursor],
+                "scope_type": ["project"],
+                "scope_project_id": [PROJECT.replace("-", "")],
+                "status": ["active"],
+                "limit": ["1"],
+                "cursor": [cursor],
             }
         system_grant = GRANT | {
-            "scope_type": "system", "scope_project_id": None, "role": "access_administrator",
-            "status": "revoked", "version": 2, "granted_by_ref_kind": "system_principal",
-            "granted_by_ref": "workstream:system:bootstrap", "granted_by_admin_role_grant_id": None,
-            "revoked_by_actor_profile_id": ACTOR, "revoked_by_admin_role_grant_id": KEY,
-            "revoked_reason": "retired", "revoked_at": STAMP,
+            "scope_type": "system",
+            "scope_project_id": None,
+            "role": "access_administrator",
+            "status": "revoked",
+            "version": 2,
+            "granted_by_ref_kind": "system_principal",
+            "granted_by_ref": "workstream:system:bootstrap",
+            "granted_by_admin_role_grant_id": None,
+            "revoked_by_actor_profile_id": ACTOR,
+            "revoked_by_admin_role_grant_id": KEY,
+            "revoked_reason": "retired",
+            "revoked_at": STAMP,
         }
         response["body"] = json.dumps(page([system_grant])).encode()
-        result = invoke(cli, origin, "role-grants", "--scope", "system", "--status", "all")
-        assert result.returncode == 0 and json.loads(result.stdout)["items"] == [system_grant]
-        assert parse_qs(urlsplit(requests[-1][1]).query) == {"scope_type": ["system"], "status": ["all"], "limit": ["50"]}
+        result = invoke(
+            cli, origin, "role-grants", "--scope", "system", "--status", "all"
+        )
+        assert result.returncode == 0 and json.loads(result.stdout)["items"] == [
+            system_grant
+        ]
+        assert parse_qs(urlsplit(requests[-1][1]).query) == {
+            "scope_type": ["system"],
+            "status": ["all"],
+            "limit": ["50"],
+        }
         response["body"] = json.dumps(page([])).encode()
-        assert invoke(cli, origin, "actor", "role-grants", ACTOR, "--scope", "system").returncode == 0
+        assert (
+            invoke(
+                cli, origin, "actor", "role-grants", ACTOR, "--scope", "system"
+            ).returncode
+            == 0
+        )
 
 
 def test_admin_omitted_status_binds_default_active_response_on_both_routes(cli):
     revoked = GRANT | {
-        "status": "revoked", "version": 2,
+        "status": "revoked",
+        "version": 2,
         "revoked_by_actor_profile_id": ACTOR,
         "revoked_by_admin_role_grant_id": KEY,
-        "revoked_reason": "End assignment", "revoked_at": STAMP,
+        "revoked_reason": "End assignment",
+        "revoked_at": STAMP,
     }
     with http_fixture() as (origin, response, requests):
         for args in (("role-grants",), ("actor", "role-grants", ACTOR)):
             response["body"] = json.dumps(page([GRANT])).encode()
-            active = invoke(cli, origin, *args, "--scope", "project", "--project-id", PROJECT)
-            assert active.returncode == 0 and json.loads(active.stdout)["items"] == [GRANT]
+            active = invoke(
+                cli, origin, *args, "--scope", "project", "--project-id", PROJECT
+            )
+            assert active.returncode == 0 and json.loads(active.stdout)["items"] == [
+                GRANT
+            ]
             assert "status" not in parse_qs(urlsplit(requests[-1][1]).query)
 
             response["body"] = json.dumps(page([revoked])).encode()
-            refused = invoke(cli, origin, *args, "--scope", "project", "--project-id", PROJECT)
+            refused = invoke(
+                cli, origin, *args, "--scope", "project", "--project-id", PROJECT
+            )
             assert_failure(refused, "invalid_api_response")
             assert "status" not in parse_qs(urlsplit(requests[-1][1]).query)
 
@@ -183,14 +261,20 @@ def test_admin_rejects_malformed_and_mismatched_success(cli):
             ACTOR_PROFILE | {"actor_profile_id": PROJECT},
             ACTOR_PROFILE | {"actor_kind": "service"},
             ACTOR_PROFILE | {"service_identity": "workstream.artifact.verifier"},
-            ACTOR_PROFILE | {"actor_kind": "service", "service_identity": "workstream.unknown.service"},
+            ACTOR_PROFILE
+            | {
+                "actor_kind": "service",
+                "service_identity": "workstream.unknown.service",
+            },
             ACTOR_PROFILE | {"created_at": None},
             ACTOR_PROFILE | {"extra": "private"},
             {k: v for k, v in ACTOR_PROFILE.items() if k != "last_seen_at"},
             ACTOR_PROFILE | {"display_name": TOKEN},
         ):
             response["body"] = json.dumps(body).encode()
-            assert_failure(invoke(cli, origin, "actor", "show", ACTOR), "invalid_api_response")
+            assert_failure(
+                invoke(cli, origin, "actor", "show", ACTOR), "invalid_api_response"
+            )
         for body in (
             LINK | {"actor_profile_id": PROJECT},
             LINK | {"subject_kind": "agent"},
@@ -198,7 +282,10 @@ def test_admin_rejects_malformed_and_mismatched_success(cli):
             [LINK],
         ):
             response["body"] = json.dumps(body).encode()
-            assert_failure(invoke(cli, origin, "actor", "identity-links", ACTOR), "invalid_api_response")
+            assert_failure(
+                invoke(cli, origin, "actor", "identity-links", ACTOR),
+                "invalid_api_response",
+            )
         for body in (
             page([GRANT | {"target_actor_profile_id": PROJECT}]),
             page([GRANT | {"scope_project_id": ACTOR}]),
@@ -211,13 +298,28 @@ def test_admin_rejects_malformed_and_mismatched_success(cli):
             {"items": [GRANT], "total": 1},
         ):
             response["body"] = json.dumps(body).encode()
-            result = invoke(cli, origin, "actor", "role-grants", ACTOR, "--scope", "project", "--project-id", PROJECT, "--status", "active")
+            result = invoke(
+                cli,
+                origin,
+                "actor",
+                "role-grants",
+                ACTOR,
+                "--scope",
+                "project",
+                "--project-id",
+                PROJECT,
+                "--status",
+                "active",
+            )
             assert_failure(result, "invalid_api_response")
         for command, body in (
             ("permissions", PERMISSIONS | {"total": 81}),
             ("permissions", PERMISSIONS | {"items": [PERMISSIONS["items"][0]] * 82}),
             ("role-definitions", DEFINITIONS | {"items": DEFINITIONS["items"][:-1]}),
-            ("role-definitions", DEFINITIONS | {"items": [DEFINITIONS["items"][0]] * 5}),
+            (
+                "role-definitions",
+                DEFINITIONS | {"items": [DEFINITIONS["items"][0]] * 5},
+            ),
         ):
             response["body"] = json.dumps(body).encode()
             assert_failure(invoke(cli, origin, command), "invalid_api_response")

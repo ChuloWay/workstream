@@ -55,19 +55,43 @@ async def test_admin_inspection_follows_real_authority_and_scope(
     assert_isolated_database_url(env["WORKSTREAM_DATABASE_URL"])
     issuer, audience, secret = flow_settings(env)
     tokens = {
-        name: issue_flow_token(name + "-cli606", [], issuer=issuer, audience=audience, secret=secret)
+        name: issue_flow_token(
+            name + "-cli606", [], issuer=issuer, audience=audience, secret=secret
+        )
         for name in ("admin", "auditor", "scoped", "target", "outsider")
     }
     origin = f"http://127.0.0.1:{find_free_port()}"
     with (tmp_path / "admin-api.log").open("wb") as log:
         process = subprocess.Popen(  # noqa: S603 - fixed local API fixture
-            [sys.executable, "-m", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", origin.rsplit(":", 1)[1], "--log-level", "error", "--no-access-log"],
-            cwd=BACKEND, env=env, stdout=log, stderr=subprocess.STDOUT,
+            [
+                sys.executable,
+                "-m",
+                "uvicorn",
+                "app.main:app",
+                "--host",
+                "127.0.0.1",
+                "--port",
+                origin.rsplit(":", 1)[1],
+                "--log-level",
+                "error",
+                "--no-access-log",
+            ],
+            cwd=BACKEND,
+            env=env,
+            stdout=log,
+            stderr=subprocess.STDOUT,
         )
         try:
             await _ready(origin + "/api/v1/health", process)
-            async with httpx.AsyncClient(base_url=origin, trust_env=False, timeout=20, limits=httpx.Limits(max_keepalive_connections=0)) as direct:
-                openapi = (await direct.get("/openapi.json", timeout=60)).json()["paths"]
+            async with httpx.AsyncClient(
+                base_url=origin,
+                trust_env=False,
+                timeout=20,
+                limits=httpx.Limits(max_keepalive_connections=0),
+            ) as direct:
+                openapi = (await direct.get("/openapi.json", timeout=60)).json()[
+                    "paths"
+                ]
                 for route in (
                     "/api/v1/actors/{actor_profile_id}",
                     "/api/v1/actors/{actor_profile_id}/identity-links",
@@ -84,8 +108,12 @@ async def test_admin_inspection_follows_real_authority_and_scope(
                     profiles[name] = json.loads(result.stdout)["actor_profile_id"]
                 # Canonical local trust-root helper; avoid a second cold Python
                 # subprocess while other isolated CLI lanes share this host.
-                bootstrap_code, bootstrap = await run_bootstrap(UUID(profiles["admin"]), execute=True)
-                assert bootstrap_code == 0 and bootstrap["result_code"] == "bootstrapped"
+                bootstrap_code, bootstrap = await run_bootstrap(
+                    UUID(profiles["admin"]), execute=True
+                )
+                assert (
+                    bootstrap_code == 0 and bootstrap["result_code"] == "bootstrapped"
+                )
 
                 def headers(name: str, key: bool = False) -> dict[str, str]:
                     value = {"Authorization": "Bearer " + tokens[name]}
@@ -93,12 +121,19 @@ async def test_admin_inspection_follows_real_authority_and_scope(
                         value["Idempotency-Key"] = str(uuid4())
                     return value
 
-                async def issue(target: str, role: str, project: str | None = None) -> str:
+                async def issue(
+                    target: str, role: str, project: str | None = None
+                ) -> str:
                     response = await direct.post(
-                        "/api/v1/admin-role-grants", headers=headers("admin", True),
-                        json={"target_actor_profile_id": profiles[target], "role": role,
-                              "scope_type": "project" if project else "system",
-                              "scope_project_id": project, "reason": "CLI inspection authority proof"},
+                        "/api/v1/admin-role-grants",
+                        headers=headers("admin", True),
+                        json={
+                            "target_actor_profile_id": profiles[target],
+                            "role": role,
+                            "scope_type": "project" if project else "system",
+                            "scope_project_id": project,
+                            "reason": "CLI inspection authority proof",
+                        },
                     )
                     assert response.status_code == 201, response.text
                     return response.json()["resource_id"]
@@ -110,44 +145,198 @@ async def test_admin_inspection_follows_real_authority_and_scope(
                 target_grant = await issue("target", "project_manager", project)
                 target = profiles["target"]
                 for command, path in (
-                    (("actor", "show", target.replace("-", "")), f"/api/v1/actors/{target}"),
-                    (("actor", "identity-links", target), f"/api/v1/actors/{target}/identity-links"),
+                    (
+                        ("actor", "show", target.replace("-", "")),
+                        f"/api/v1/actors/{target}",
+                    ),
+                    (
+                        ("actor", "identity-links", target),
+                        f"/api/v1/actors/{target}/identity-links",
+                    ),
                     (("permissions",), "/api/v1/authorization/permissions"),
-                    (("role-definitions",), "/api/v1/authorization/admin-role-definitions"),
+                    (
+                        ("role-definitions",),
+                        "/api/v1/authorization/admin-role-definitions",
+                    ),
                 ):
                     value = inspected(cli, origin, tokens["auditor"], *command)
                     expected = await direct.get(path, headers=headers("auditor"))
                     assert expected.status_code == 200, expected.text
                     assert value == expected.json()
-                assert inspected(cli, origin, tokens["auditor"], "permissions")["total"] == 82
-                assert inspected(cli, origin, tokens["auditor"], "role-definitions")["total"] == 5
+                assert (
+                    inspected(cli, origin, tokens["auditor"], "permissions")["total"]
+                    == 82
+                )
+                assert (
+                    inspected(cli, origin, tokens["auditor"], "role-definitions")[
+                        "total"
+                    ]
+                    == 5
+                )
                 for command, path in (
                     (("role-grants",), "/api/v1/admin-role-grants"),
-                    (("actor", "role-grants", profiles["scoped"]), f"/api/v1/actors/{profiles['scoped']}/admin-role-grants"),
+                    (
+                        ("actor", "role-grants", profiles["scoped"]),
+                        f"/api/v1/actors/{profiles['scoped']}/admin-role-grants",
+                    ),
                 ):
-                    value = inspected(cli, origin, tokens["scoped"], *command, "--scope", "project", "--project-id", project, "--status", "all", "--limit", "1")
-                    expected = await direct.get(path, headers=headers("scoped"), params={"scope_type": "project", "scope_project_id": project, "status": "all", "limit": 1})
-                    assert expected.status_code == 200 and value == expected.json(), expected.text
+                    value = inspected(
+                        cli,
+                        origin,
+                        tokens["scoped"],
+                        *command,
+                        "--scope",
+                        "project",
+                        "--project-id",
+                        project,
+                        "--status",
+                        "all",
+                        "--limit",
+                        "1",
+                    )
+                    expected = await direct.get(
+                        path,
+                        headers=headers("scoped"),
+                        params={
+                            "scope_type": "project",
+                            "scope_project_id": project,
+                            "status": "all",
+                            "limit": 1,
+                        },
+                    )
+                    assert expected.status_code == 200 and value == expected.json(), (
+                        expected.text
+                    )
                     assert value["total"] >= 1
-                first = inspected(cli, origin, tokens["scoped"], "role-grants", "--scope", "project", "--project-id", project, "--limit", "1")
+                first = inspected(
+                    cli,
+                    origin,
+                    tokens["scoped"],
+                    "role-grants",
+                    "--scope",
+                    "project",
+                    "--project-id",
+                    project,
+                    "--limit",
+                    "1",
+                )
                 cursor = first["next_cursor"]
                 assert cursor and first["total"] == 2
-                second = inspected(cli, origin, tokens["scoped"], "role-grants", "--scope", "project", "--project-id", project, "--limit", "1", "--cursor", cursor)
-                direct_second = await direct.get("/api/v1/admin-role-grants", headers=headers("scoped"), params={"scope_type": "project", "scope_project_id": project, "limit": 1, "cursor": cursor})
-                assert direct_second.status_code == 200 and second == direct_second.json()
-                assert {first["items"][0]["grant_id"], second["items"][0]["grant_id"]} == {scoped_grant, target_grant}
-                system = inspected(cli, origin, tokens["auditor"], "actor", "role-grants", profiles["auditor"], "--scope", "system", "--status", "all")
+                second = inspected(
+                    cli,
+                    origin,
+                    tokens["scoped"],
+                    "role-grants",
+                    "--scope",
+                    "project",
+                    "--project-id",
+                    project,
+                    "--limit",
+                    "1",
+                    "--cursor",
+                    cursor,
+                )
+                direct_second = await direct.get(
+                    "/api/v1/admin-role-grants",
+                    headers=headers("scoped"),
+                    params={
+                        "scope_type": "project",
+                        "scope_project_id": project,
+                        "limit": 1,
+                        "cursor": cursor,
+                    },
+                )
+                assert (
+                    direct_second.status_code == 200 and second == direct_second.json()
+                )
+                assert {
+                    first["items"][0]["grant_id"],
+                    second["items"][0]["grant_id"],
+                } == {scoped_grant, target_grant}
+                system = inspected(
+                    cli,
+                    origin,
+                    tokens["auditor"],
+                    "actor",
+                    "role-grants",
+                    profiles["auditor"],
+                    "--scope",
+                    "system",
+                    "--status",
+                    "all",
+                )
                 assert [row["grant_id"] for row in system["items"]] == [system_grant]
-                assert inspected(cli, origin, tokens["scoped"], "actor", "show", target, status=403)["code"] == "permission_not_granted"
-                assert inspected(cli, origin, tokens["scoped"], "role-grants", "--scope", "project", "--project-id", foreign, status=403)["code"] == "scope_not_authorized"
-                assert inspected(cli, origin, tokens["outsider"], "actor", "show", target, status=403)["code"] == "permission_not_granted"
+                assert (
+                    inspected(
+                        cli,
+                        origin,
+                        tokens["scoped"],
+                        "actor",
+                        "show",
+                        target,
+                        status=403,
+                    )["code"]
+                    == "permission_not_granted"
+                )
+                assert (
+                    inspected(
+                        cli,
+                        origin,
+                        tokens["scoped"],
+                        "role-grants",
+                        "--scope",
+                        "project",
+                        "--project-id",
+                        foreign,
+                        status=403,
+                    )["code"]
+                    == "scope_not_authorized"
+                )
+                assert (
+                    inspected(
+                        cli,
+                        origin,
+                        tokens["outsider"],
+                        "actor",
+                        "show",
+                        target,
+                        status=403,
+                    )["code"]
+                    == "permission_not_granted"
+                )
 
-                revoked = await direct.post(f"/api/v1/admin-role-grants/{scoped_grant}/revoke", headers=headers("admin", True), json={"reason": "End CLI inspection proof"})
+                revoked = await direct.post(
+                    f"/api/v1/admin-role-grants/{scoped_grant}/revoke",
+                    headers=headers("admin", True),
+                    json={"reason": "End CLI inspection proof"},
+                )
                 assert revoked.status_code == 200, revoked.text
-                assert inspected(cli, origin, tokens["scoped"], "role-grants", "--scope", "project", "--project-id", project, status=403)["code"] == "permission_not_granted"
-                suspended = await direct.post(f"/api/v1/actors/{profiles['auditor']}/suspend", headers=headers("admin", True), json={"reason": "End CLI inspection proof"})
+                assert (
+                    inspected(
+                        cli,
+                        origin,
+                        tokens["scoped"],
+                        "role-grants",
+                        "--scope",
+                        "project",
+                        "--project-id",
+                        project,
+                        status=403,
+                    )["code"]
+                    == "permission_not_granted"
+                )
+                suspended = await direct.post(
+                    f"/api/v1/actors/{profiles['auditor']}/suspend",
+                    headers=headers("admin", True),
+                    json={"reason": "End CLI inspection proof"},
+                )
                 assert suspended.status_code == 200, suspended.text
-                assert inspected(cli, origin, tokens["auditor"], "permissions", status=403)["code"] == "actor_suspended"
+                assert (
+                    inspected(
+                        cli, origin, tokens["auditor"], "permissions", status=403
+                    )["code"]
+                    == "actor_suspended"
+                )
         finally:
             process.terminate()
             try:
