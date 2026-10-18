@@ -14,6 +14,7 @@ from app.adapters.tasks import evaluation_completion_handler
 from app.core.identifiers import new_record_id
 from app.modules.outbox.api import FinalizationCause, HandlerOutcome
 from app.modules.checkers.api.delivery_reconciliation import (
+    PostSubmitDeliveryChildPayload,
     PostSubmitDeliveryOperationUnavailable,
 )
 from app.modules.reviews.lifecycle.fence import PostgresJointLifecycleMutationFence
@@ -594,32 +595,33 @@ async def test_child_reclassifies_source_transition_before_any_effect(
         child_id = UUID(created.json()["successor"]["event_id"])
         before = await _project_facts(h.factory, h.request.project_id)
 
-        async with h.factory.begin() as session:
-            changed = await session.execute(
-                text(
-                    """
-                    UPDATE public.checker_runs
-                    SET status='running', worker_lease_id=:lease,
-                        worker_lease_generation=1,
-                        worker_lease_expires_at=clock_timestamp() + interval '5 minutes',
-                        started_at=clock_timestamp(), execute_evidence_id=:evidence
-                    WHERE id=:run AND status='queued'
-                    """
-                ),
-                {
-                    "run": str(h.created.evaluation_attempt_id),
-                    "lease": new_record_id(),
-                    "evidence": new_record_id(),
-                },
-            )
-            assert changed.rowcount == 1
-
         delivery = production_outbox_delivery(h.factory)
-        refused = await delivery.deliver(
-            child_id, h.request.project_id, "source-transition"
+        claim = await delivery.claim(child_id, h.request.project_id, "source-transition")
+        assert claim is not None
+        envelope = await delivery._begin_invocation(claim)
+        assert envelope is not None
+        handler = delivery._registry.get(envelope.event_type, envelope.event_version)
+        assert handler is not None
+        payload = PostSubmitDeliveryChildPayload.model_validate_json(envelope.payload_json)
+        # Commit the actual execute phase, as if its worker stopped before I/O.
+        # Its real AUTH event must satisfy the same custody as production.
+        executor = handler._executor(envelope, original, payload, h.request)
+        lease, replay = await executor._claim(h.request)
+        assert replay is None and lease.lease_generation == 1
+        running = await state(h)
+        assert running["run"]["status"] == "running"
+        assert running["run"]["execute_evidence_id"] in running["allows"]
+        assert running["run"]["finalize_evidence_id"] is None
+        assert not h.store.opens
+
+        assert await handler(envelope) is HandlerOutcome.REJECT
+        refused = await delivery.finalize(
+            claim, FinalizationCause.REJECT,
         )
         assert outcome(refused)["delivery_state"] == "dead_letter"
         assert outcome(refused)["error_code"] == "NON_RETRYABLE"
+        assert await state(h) == running
+        assert not h.store.opens
         assert await _project_facts(h.factory, h.request.project_id) == before
         held = await _discover_one(
             admin_access, h.request.project_id, classification="unresolved"
