@@ -417,42 +417,46 @@ class DockerWrapperSourceTests(unittest.TestCase):
             check=False,
         )
 
+    def _candidate_item(self, source: Path) -> dict[str, object]:
+        return {
+            "Id": "candidate-id",
+            "Name": "/ws-terminal-candidate-abc",
+            "Config": {
+                "Labels": {
+                    "workstream.owner": "terminal-benchmark-checker-service-v1",
+                    "workstream.resource-kind": "candidate",
+                    "workstream.attempt": "abc",
+                    "workstream.grant-id": GRANT_ID,
+                    "workstream.request-digest": "sha256:" + "d" * 64,
+                },
+                "User": "65532:65532",
+            },
+            "HostConfig": {
+                "Runtime": "runsc",
+                "NetworkMode": "none",
+                "CapDrop": ["ALL"],
+                "CapAdd": [],
+                "SecurityOpt": ["no-new-privileges"],
+                "ReadonlyRootfs": True,
+                "PidsLimit": 32,
+                "Memory": 536_870_912,
+                "MemorySwap": 536_870_912,
+                "NanoCpus": 1_000_000_000,
+                "Tmpfs": {"/tmp": "rw,noexec,nosuid,nodev,size=16777216"},
+            },
+            "Mounts": [
+                {
+                    "Type": "bind",
+                    "Source": str(source),
+                    "Destination": "/tests",
+                    "RW": False,
+                }
+            ],
+        }
+
     def _run(self, source: Path) -> subprocess.CompletedProcess[str]:
         return self._run_item(
-            {
-                "Id": "candidate-id",
-                "Name": "/ws-terminal-candidate-abc",
-                "Config": {
-                    "Labels": {
-                        "workstream.owner": "terminal-benchmark-checker-service-v1",
-                        "workstream.resource-kind": "candidate",
-                        "workstream.attempt": "abc",
-                        "workstream.grant-id": GRANT_ID,
-                        "workstream.request-digest": "sha256:" + "d" * 64,
-                    },
-                    "User": "65532:65532",
-                },
-                "HostConfig": {
-                    "Runtime": "runsc",
-                    "NetworkMode": "none",
-                    "CapDrop": ["ALL"],
-                    "CapAdd": [],
-                    "SecurityOpt": ["no-new-privileges"],
-                    "ReadonlyRootfs": True,
-                    "PidsLimit": 32,
-                    "Memory": 536_870_912,
-                    "NanoCpus": 1_000_000_000,
-                    "Tmpfs": {"/tmp": "rw,noexec,nosuid,nodev,size=16777216"},
-                },
-                "Mounts": [
-                    {
-                        "Type": "bind",
-                        "Source": str(source),
-                        "Destination": "/tests",
-                        "RW": False,
-                    }
-                ],
-            },
+            self._candidate_item(source),
             "ws-terminal-candidate-abc",
         )
 
@@ -488,6 +492,7 @@ class DockerWrapperSourceTests(unittest.TestCase):
                 "ReadonlyRootfs": False,
                 "PidsLimit": 128,
                 "Memory": 536_870_912,
+                "MemorySwap": 536_870_912,
                 "NanoCpus": 1_000_000_000,
                 "StorageOpt": {"size": "402653184"},
                 "Tmpfs": {"/busybox": "rw,noexec,nosuid,nodev,size=16777216"},
@@ -536,6 +541,23 @@ class DockerWrapperSourceTests(unittest.TestCase):
         ]
         self.assertEqual(arguments[-1], ["launch_rejection:candidate:source"])
         self.assertNotIn(str(self.root), arguments[-1][0])
+
+    def test_oracle_memory_swap_relaxation_is_rejected(self) -> None:
+        item = self._candidate_item(self.tests)
+        host = item["HostConfig"]
+        assert isinstance(host, dict)
+        host["MemorySwap"] = 1_073_741_824
+
+        result = self._run_item(item, "ws-terminal-candidate-abc")
+
+        self.assertEqual(result.returncode, 70, result.stderr)
+        self.assertFalse((self.raw / "launches.ndjson").exists())
+        arguments = [
+            json.loads(line)["argv"]
+            for line in (self.raw / "argv.ndjson").read_text().splitlines()
+        ]
+        [rejection] = arguments[-1]
+        self.assertEqual(rejection, "launch_rejection:candidate:memory_swap")
 
     def test_noncanonical_builder_source_is_rejected_with_fixed_labels(self) -> None:
         grant_root = self.art / "workspaces" / GRANT_ID

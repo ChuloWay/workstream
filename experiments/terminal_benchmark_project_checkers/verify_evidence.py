@@ -91,6 +91,24 @@ MATRIX_CASES = {
     "missing-base": ([], []),
     "interrupted": (["builder"], []),
 }
+CASE_RESULT_FILES = {
+    "complete": "complete-result.json",
+    "no-op-pass": "no-op-pass-result.json",
+    "reference-failure": "reference-failure-result.json",
+    "reference-instability": "reference-instability-result.json",
+    "memory-capacity": "memory-capacity-result.json",
+    "capacity-spoof": "capacity-spoof-result.json",
+    "missing-base": "missing-base-result.json",
+}
+ISOLATION_IMAGE_FIELDS = {
+    "repository",
+    "platform_manifest_digest",
+    "platform_manifest_media_type",
+    "platform_manifest_byte_count",
+    "operating_system",
+    "architecture",
+    "config_image_id",
+}
 VARIANT_FILES = {
     ".dockerignore",
     "environment/Dockerfile",
@@ -464,6 +482,57 @@ def _validate_content(name: str, data: bytes, expected_head: str) -> None:
             raise EvidenceError("proof head differs")
 
 
+def _validate_cross_file_content(values: dict[str, bytes]) -> None:
+    if not {
+        "contract.json",
+        "image-facts.json",
+        "matrix.json",
+        *CASE_RESULT_FILES.values(),
+    }.issubset(values):
+        return
+    contract = _json_object("contract.json", values["contract.json"])
+    image_facts = _json_object("image-facts.json", values["image-facts.json"])
+    matrix = _json_object("matrix.json", values["matrix.json"])
+    expected_isolation = contract.get("isolation")
+    if (
+        contract.get("schema_version")
+        != "workstream.terminal_benchmark_project_checker_contract.v2"
+        or type(expected_isolation) is not dict
+        or set(expected_isolation)
+        != ISOLATION_IMAGE_FIELDS
+        | {"runtime", "isolation_mode", "sandbox_uid", "sandbox_gid"}
+        or expected_isolation.get("runtime") != "runsc"
+        or expected_isolation.get("isolation_mode") != "gvisor"
+        or expected_isolation.get("sandbox_uid") != 65_532
+        or type(expected_isolation.get("sandbox_gid")) is not int
+        or expected_isolation["sandbox_gid"] <= 0
+    ):
+        raise EvidenceError("proof contract isolation differs")
+    checker = image_facts.get("checker")
+    if (
+        set(image_facts) != {"approved_base", "builder", "checker"}
+        or type(checker) is not dict
+        or set(checker) != ISOLATION_IMAGE_FIELDS
+        or any(
+            expected_isolation.get(key) != checker.get(key)
+            for key in ISOLATION_IMAGE_FIELDS
+        )
+    ):
+        raise EvidenceError("isolation image identity differs")
+    cases = matrix.get("cases")
+    if type(cases) is not dict:
+        raise EvidenceError("matrix result identity differs")
+    for case, result_name in CASE_RESULT_FILES.items():
+        result = _json_object(result_name, values[result_name])
+        matrix_case = cases.get(case)
+        if (
+            type(matrix_case) is not dict
+            or matrix_case.get("request_digest") != result.get("request_digest")
+            or result.get("isolation") != expected_isolation
+        ):
+            raise EvidenceError("matrix result identity or isolation differs")
+
+
 def _read_inventory(
     directory: Path,
     allowlist: dict[str, int],
@@ -498,6 +567,7 @@ def _read_inventory(
             if total > MAXIMUM_AGGREGATE_BYTES:
                 raise EvidenceError("evidence aggregate exceeds limit")
             values[name] = data
+        _validate_cross_file_content(values)
         return values
     finally:
         os.close(descriptor)

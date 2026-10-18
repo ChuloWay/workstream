@@ -892,6 +892,8 @@ fn run_builder(
         "--pids-limit".into(),
         "128".into(),
         "--memory".into(),
+        memory.clone(),
+        "--memory-swap".into(),
         memory,
         "--cpus".into(),
         cpus,
@@ -987,6 +989,8 @@ fn run_oracle(
         "--pids-limit".into(),
         "32".into(),
         "--memory".into(),
+        request.memory_bytes.to_string(),
+        "--memory-swap".into(),
         request.memory_bytes.to_string(),
         "--cpus".into(),
         format!("{:.3}", request.cpu_millis as f64 / 1000.0),
@@ -1570,6 +1574,8 @@ if test "$1" = create; then
   printf '%s\n' "$@" > "{capture}"
   previous=
   fsize_matched=
+  memory_matched=
+  memory_swap_matched=
   tmpfs_matched=
   for argument in "$@"; do
     if test "$previous" = --ulimit && test "$argument" = fsize=4096:4096; then
@@ -1578,10 +1584,18 @@ if test "$1" = create; then
     if test "$previous" = --tmpfs && test "$argument" = /busybox:rw,noexec,nosuid,nodev,size=16777216; then
       tmpfs_matched=yes
     fi
+    if test "$previous" = --memory && test "$argument" = 268435456; then
+      memory_matched=yes
+    fi
+    if test "$previous" = --memory-swap && test "$argument" = 268435456; then
+      memory_swap_matched=yes
+    fi
     previous="$argument"
   done
   test "$fsize_matched" = yes || exit 64
   test "$tmpfs_matched" = yes || exit 65
+  test "$memory_matched" = yes || exit 66
+  test "$memory_swap_matched" = yes || exit 67
   exit 0
 fi
 test "$1 $2" = "start --attach" && exit 0
@@ -1627,6 +1641,8 @@ exit 2
         let captured = fs::read_to_string(&capture).unwrap();
         assert!(captured.contains("--ulimit\nfsize=4096:4096\n"));
         assert!(captured.contains("--tmpfs\n/busybox:rw,noexec,nosuid,nodev,size=16777216\n"));
+        assert!(captured.contains("--memory\n268435456\n"));
+        assert!(captured.contains("--memory-swap\n268435456\n"));
 
         assert!(run_builder(
             &execution,
@@ -1642,6 +1658,59 @@ exit 2
             &mut cleanup,
         )
         .is_err());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn oracle_command_applies_equal_memory_and_swap_limits() {
+        let root = temporary_directory("oracle-memory-command");
+        let capture = root.join("arguments");
+        let docker = root.join("docker");
+        fs::write(
+            &docker,
+            format!(
+                r#"#!/bin/sh
+if test "$1" = create; then printf '%s\n' "$@" > "{capture}"; exit 0; fi
+test "$1 $2" = "start --attach" && exit 1
+test "$1 $2" = "container inspect" && printf 'false\n' && exit 0
+exit 2
+"#,
+                capture = capture.display(),
+            ),
+        )
+        .unwrap();
+        fs::set_permissions(&docker, fs::Permissions::from_mode(0o700)).unwrap();
+        let profile = test_profile();
+        let request = request("post_submit");
+        let grant = test_grant(&root);
+        let config = test_service_config(&root, docker);
+        let (_peer, client) = UnixStream::pair().unwrap();
+        let execution = ExecutionContext {
+            config: &config,
+            profile: &profile,
+            request: &request,
+            grant: &grant,
+            client: &client,
+            deadline: Instant::now() + Duration::from_secs(10),
+        };
+        let mut output = OutputMeter::new(4096);
+        let mut cleanup = EmergencyCleanupBudget::new();
+
+        let observation = run_oracle(
+            &execution,
+            "ws-terminal-candidate-a1",
+            &format!("sha256:{}", "4".repeat(64)),
+            false,
+            "a1",
+            &mut output,
+            &mut cleanup,
+        )
+        .unwrap();
+
+        assert_eq!(observation.status, 1);
+        let captured = fs::read_to_string(&capture).unwrap();
+        assert!(captured.contains("--memory\n268435456\n"));
+        assert!(captured.contains("--memory-swap\n268435456\n"));
         fs::remove_dir_all(root).unwrap();
     }
 

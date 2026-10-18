@@ -23,7 +23,9 @@ inside the quota-backed proof state and runs the real checker image over each
 variant before POST. It proves ineffective tests as
 `starter_unexpectedly_passed`, a failing reference as `reference_failed`,
 fresh-host reference output as `reference_unstable`, and a 600 MiB allocation
-as `capacity_exceeded` only when the labeled Docker event records an OOM. A
+as `capacity_exceeded` only when the labeled Docker event records an OOM. Each
+builder and oracle sets equal Docker memory and memory-plus-swap ceilings, so
+host swap cannot absorb that allocation. A
 package that prints a former capacity phrase and exits 2 remains
 `implementation_unavailable`. The final missing-base case removes only the
 run-owned approved-base alias and proves infrastructure failure before a

@@ -13,6 +13,22 @@ import verify_evidence
 
 
 HEAD = "a" * 40
+CHECKER_FACT = {
+    "architecture": "amd64",
+    "config_image_id": "sha256:" + "1" * 64,
+    "operating_system": "linux",
+    "platform_manifest_byte_count": 1_024,
+    "platform_manifest_digest": "sha256:" + "2" * 64,
+    "platform_manifest_media_type": "application/vnd.oci.image.manifest.v1+json",
+    "repository": "localhost:5000/workstream/checker",
+}
+ISOLATION = {
+    **CHECKER_FACT,
+    "isolation_mode": "gvisor",
+    "runtime": "runsc",
+    "sandbox_gid": 999,
+    "sandbox_uid": 65_532,
+}
 
 
 class EvidenceVerifierTests(unittest.TestCase):
@@ -44,6 +60,35 @@ class EvidenceVerifierTests(unittest.TestCase):
                 value = b"bounded diagnostic\n"
             self._write(name, value)
         self._write("proof-head.txt", (HEAD + "\n").encode())
+        self._write(
+            "contract.json",
+            (
+                json.dumps(
+                    {
+                        "configuration": {},
+                        "isolation": ISOLATION,
+                        "registry": {},
+                        "schema_version": "workstream.terminal_benchmark_project_checker_contract.v2",
+                    },
+                    sort_keys=True,
+                )
+                + "\n"
+            ).encode(),
+        )
+        self._write(
+            "image-facts.json",
+            (
+                json.dumps(
+                    {
+                        "approved_base": CHECKER_FACT,
+                        "builder": CHECKER_FACT,
+                        "checker": CHECKER_FACT,
+                    },
+                    sort_keys=True,
+                )
+                + "\n"
+            ).encode(),
+        )
         self._write(
             "matrix.json",
             (
@@ -121,7 +166,7 @@ class EvidenceVerifierTests(unittest.TestCase):
         for index, (name, (outcome, verdict, code)) in enumerate(
             verify_evidence.RESULT_EXPECTATIONS.items()
         ):
-            digest = "sha256:" + format(index + 20, "064x")
+            digest = "sha256:" + format(index + 1, "064x")
             findings = (
                 [] if code is None or outcome != "completed" else [{"code": code}]
             )
@@ -130,7 +175,7 @@ class EvidenceVerifierTests(unittest.TestCase):
                 (
                     json.dumps(
                         {
-                            "isolation": {"runtime": "runsc"},
+                            "isolation": ISOLATION,
                             "request_digest": digest,
                             "result": {
                                 "findings": findings,
@@ -298,6 +343,34 @@ class EvidenceVerifierTests(unittest.TestCase):
         )
         with self.assertRaisesRegex(
             verify_evidence.EvidenceError, "variant file inventory differs"
+        ):
+            self._stage()
+
+    def test_matrix_result_digest_substitution_is_rejected(self) -> None:
+        path = self.raw / "memory-capacity-result.json"
+        value = json.loads(path.read_text(encoding="utf-8"))
+        substituted = "sha256:" + "f" * 64
+        value["request_digest"] = substituted
+        value["result"]["request_digest"] = substituted
+        self._write(
+            "memory-capacity-result.json",
+            (json.dumps(value, sort_keys=True) + "\n").encode(),
+        )
+        with self.assertRaisesRegex(
+            verify_evidence.EvidenceError, "matrix result identity"
+        ):
+            self._stage()
+
+    def test_isolation_substitution_is_rejected(self) -> None:
+        path = self.raw / "reference-failure-result.json"
+        value = json.loads(path.read_text(encoding="utf-8"))
+        value["isolation"]["architecture"] = "arm64"
+        self._write(
+            "reference-failure-result.json",
+            (json.dumps(value, sort_keys=True) + "\n").encode(),
+        )
+        with self.assertRaisesRegex(
+            verify_evidence.EvidenceError, "identity or isolation differs"
         ):
             self._stage()
 

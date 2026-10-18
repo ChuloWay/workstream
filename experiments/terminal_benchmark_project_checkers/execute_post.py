@@ -196,6 +196,13 @@ def _report_unexpected_response(response: ExternalCheckerExecutionResponse) -> N
 
 async def _execute(arguments: argparse.Namespace) -> None:
     contract = json.loads(arguments.contract.read_text(encoding="utf-8"))
+    if (
+        contract.get("schema_version")
+        != "workstream.terminal_benchmark_project_checker_contract.v2"
+        or type(contract.get("isolation")) is not dict
+    ):
+        raise ValueError("proof contract differs")
+    expected_isolation = contract["isolation"]
     registry = _registry_entry_from_json(contract["registry"])
     directories, files, manifest_entries = _inventory(arguments.package)
     semantic_body = {
@@ -308,7 +315,7 @@ async def _execute(arguments: argparse.Namespace) -> None:
                     result = response.result
                     if (
                         response.isolation is None
-                        or response.isolation.runtime != "runsc"
+                        or asdict(response.isolation) != expected_isolation
                     ):
                         raise RuntimeError("POST isolation differs")
                     if arguments.expect == "passed":

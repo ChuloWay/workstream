@@ -102,7 +102,9 @@ the existing quota-backed, root-owned proof state. It changes only these reviewe
   still fails; unique container identities make successful reference output
   digests differ and yield `reference_unstable` without randomness.
 - `memory-capacity`: run a deterministic memory allocation beyond the immutable
-  request limit before test evaluation; the real oracle must report
+  request limit before test evaluation; builder and oracle containers set the
+  same exact Docker memory and combined memory-plus-swap ceiling, so host swap
+  cannot satisfy the allocation. The real oracle must report
   `capacity_exceeded`; the matrix must bind the exact labeled Docker `oom` event
   and owned resources must be absent afterward.
 - `capacity-spoof`: emit the formerly trusted capacity phrase and exit exactly
@@ -123,7 +125,9 @@ The existing successful and interruption attempts remain. After restart
 cleanup, the harness executes the five variants sequentially through the same
 Python ART grant and Rust service. Each response must have the exact request
 identity, expected completed finding or infrastructure code, runsc isolation,
-and empty ART/Docker ownership afterward. Launch reduction binds the exact
+the complete image/runtime/sandbox isolation receipt and empty ART/Docker
+ownership afterward. Launch reduction cross-binds the result request digest
+to the exact
 builder/candidate/reference prefix for each outcome and rejects missing, extra
 or reordered attempts.
 

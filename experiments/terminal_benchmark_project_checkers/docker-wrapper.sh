@@ -261,6 +261,7 @@ if kind == "builder":
         "read_only_root": host.get("ReadonlyRootfs") is False,
         "pids": host.get("PidsLimit") == 128,
         "memory": host.get("Memory") == 536870912,
+        "memory_swap": host.get("MemorySwap") == 536870912,
         "cpu": host.get("NanoCpus") == 1000000000,
         "storage": host.get("StorageOpt") == {"size": "402653184"},
     })
@@ -274,6 +275,7 @@ elif kind in {"candidate", "reference"}:
         "read_only_root": host.get("ReadonlyRootfs") is True,
         "pids": host.get("PidsLimit") == 32,
         "memory": host.get("Memory") == 536870912,
+        "memory_swap": host.get("MemorySwap") == 536870912,
         "cpu": host.get("NanoCpus") == 1000000000,
         "tmpfs": "/tmp" in (host.get("Tmpfs") or {}),
     })
