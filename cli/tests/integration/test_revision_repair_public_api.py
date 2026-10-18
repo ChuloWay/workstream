@@ -21,9 +21,9 @@ from tests.conftest import (  # noqa: E402
 from tests.project_create_fixtures import seed_historical_project  # noqa: E402
 from tests.tasks.post_submit_routing.remediation_support import remediation_source  # noqa: E402
 from tests.tasks.post_submit_routing.support import activate_successor_guide  # noqa: E402
-from tests.tasks.submission_dispatch.test_revision_capacity import (
+from tests.tasks.submission_dispatch.test_revision_capacity import (  # noqa: E402
     _retain_pre_revision_source,
-)  # noqa: E402
+)
 from tests.tasks.test_public_submission_intake import _client  # noqa: E402
 from tests.test_submission_predecessor_custody import _fixture_revision_context  # noqa: E402
 from test_submission_public_api import socket_api  # noqa: E402
@@ -245,7 +245,9 @@ async def test_cli_repairs_missing_root_then_paused_and_running_heads_under_fres
                 async with h.factory() as session, session.begin():
                     await session.execute(
                         text(
-                            "UPDATE public.actor_profiles SET status='suspended' WHERE id=:id"
+                            "UPDATE public.actor_profiles SET status='suspended', "
+                            "suspended_by='cli-repair-proof', suspended_at=clock_timestamp(), "
+                            "suspension_reason='Replay authority revoked' WHERE id=:id"
                         ),
                         {"id": str(h.actor_context.actor_profile_id)},
                     )
