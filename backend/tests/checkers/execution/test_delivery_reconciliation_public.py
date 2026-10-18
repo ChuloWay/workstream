@@ -89,8 +89,10 @@ async def _retained_effect_rows(factory, project_id):
         ),
     )
     async with factory() as session:
-        return tuple(
-            await session.scalar(
+        rows = []
+        for table, predicate in selections:
+            rows.append(
+                await session.scalar(
                 text(
                     "SELECT COALESCE("
                     "jsonb_agg(to_jsonb(row) ORDER BY to_jsonb(row)::text)::text, "
@@ -102,8 +104,8 @@ async def _retained_effect_rows(factory, project_id):
                 ),
                 {"project": str(project_id)},
             )
-            for table, predicate in selections
-        )
+            )
+        return tuple(rows)
 
 
 async def _delivery_rows(factory, original_id, child_id=None):
