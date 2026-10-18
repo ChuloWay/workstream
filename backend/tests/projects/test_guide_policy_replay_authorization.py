@@ -482,8 +482,15 @@ async def test_policy_replay_waits_for_grant_revocation_then_denies(
     assert created.status_code == 200, created.text
     original_counts = await _product_counts(project["id"], guide["id"])
     actor_id, _link_id, access_grant_id = await ensure_access_administrator_bootstrap()
+    entered_actor_lock = asyncio.Event()
     entered_grant_query = asyncio.Event()
+    original_lock = AdminAuthorizationRepository.lock_request_actor
     original_find = AdminAuthorizationRepository.find_effective_grant
+
+    async def signal_actor_lock(self, identity_link_id, actor_profile_id, **kwargs):
+        if actor_profile_id == actor_id:
+            entered_actor_lock.set()
+        return await original_lock(self, identity_link_id, actor_profile_id, **kwargs)
 
     async def signal_grant_query(self, actor_profile_id, permission_id, **kwargs):
         if (
@@ -494,6 +501,9 @@ async def test_policy_replay_waits_for_grant_revocation_then_denies(
             entered_grant_query.set()
         return await original_find(self, actor_profile_id, permission_id, **kwargs)
 
+    monkeypatch.setattr(
+        AdminAuthorizationRepository, "lock_request_actor", signal_actor_lock
+    )
     monkeypatch.setattr(
         AdminAuthorizationRepository, "find_effective_grant", signal_grant_query
     )
@@ -524,7 +534,7 @@ async def test_policy_replay_waits_for_grant_revocation_then_denies(
         await revoker.flush()
         try:
             replay_task = asyncio.create_task(_request(project_client, case))
-            await asyncio.wait_for(entered_grant_query.wait(), timeout=5)
+            await asyncio.wait_for(entered_actor_lock.wait(), timeout=5)
             with pytest.raises(TimeoutError):
                 await asyncio.wait_for(asyncio.shield(replay_task), timeout=0.1)
             await revoker.commit()
@@ -536,6 +546,7 @@ async def test_policy_replay_waits_for_grant_revocation_then_denies(
                 await asyncio.gather(replay_task, return_exceptions=True)
     assert replay_task is not None
     denied = await asyncio.wait_for(replay_task, timeout=5)
+    assert entered_grant_query.is_set()
     assert denied.status_code == 403, denied.text
     assert denied.json()["error"]["code"] == "permission_not_granted"
     assert await _product_counts(project["id"], guide["id"]) == original_counts
