@@ -36,6 +36,11 @@
 
 ## Current boundary
 
+[WS-CLI-001-27](WS-CLI-001-27.md) exposes the seven existing Project Manager
+task requirements/context and exact Submission/checker-history GETs through
+separate project-scoped commands. The backend reauthorizes each page; the CLI
+preserves locked lineage and opaque cursors and makes no lifecycle decision.
+
 The backend exposes `GET /api/v1/actors/me` and
 `GET /api/v1/actors/me/authorization-context` in
 `backend/app/api/routes/auth.py`. The selected 29-operation
