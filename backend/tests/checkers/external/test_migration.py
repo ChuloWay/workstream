@@ -63,7 +63,7 @@ async def _insert_audit_pair(
             $2, '[]'::json, '{}'::json, 'local_authority', false,
             'authorization_evaluation', '{}'::json, 'authority', 1,
             'actor_profile', $3, $4, $5, $6, $7, '{"allowed":true}'::json,
-            clock_timestamp(), $8, $9, $10, $11, $10
+            clock_timestamp(), $8, $9, $10::uuid, $11, $10::text
         )
         """,
         event_id,
