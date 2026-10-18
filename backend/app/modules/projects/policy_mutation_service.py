@@ -411,9 +411,24 @@ class ProjectPolicyMutationService:
         if guide_snapshot is None or guide_snapshot.project_id != str(project_id):
             raise GuideNotFound("guide not found")
         if guide_snapshot.status != "draft":
+            # The optimistic replay miss may precede the first writer's commit.
+            # Recover its exact receipt before treating the now-current guide
+            # state as a new-write precondition.
+            existing = await self._existing(
+                resolved, prepared, action, key, request_digest, project_id, guide_id,
+                kind, expected_selector, response_type,
+            )
+            if existing is not None:
+                return existing
             raise GuideEditBlocked("only draft guides can change policy")
         snapshot_selector = self._guide_selector(kind, guide_snapshot)
         if snapshot_selector != expected_selector:
+            existing = await self._existing(
+                resolved, prepared, action, key, request_digest, project_id, guide_id,
+                kind, expected_selector, response_type,
+            )
+            if existing is not None:
+                return existing
             raise PolicyMutationConflict("policy_precondition_failed")
         if inherit_review_mode and expected_selector is not None:
             predecessor = await self._projects.get_review_policy_by_id(str(predecessor_id))

@@ -114,6 +114,19 @@ classifies the same link/project/guide/digest/hash mismatch, and does not
 update a committed receipt or create a schema dependency. The isolated
 PostgreSQL race must prove one response and one version after this repair.
 
+The optimistic exact-replay lookup can miss an in-flight first writer. On
+policy PUT, if that writer commits before the waiter's unlocked guide snapshot,
+the changed review/revision selector raises a new-write 409 before reservation;
+the same window can encounter a no-longer-draft guide. On guide PATCH, the
+waiter can pass its first miss then wait on project/guide locks until the first
+write commits, and a later status transition could make its draft guard reject
+an exact receipt. Re-read only the exact actor/action/key receipt at these
+new-write precondition boundaries; if present, run its same custody and current
+PREP admission and return it, otherwise preserve the original error. The guide
+waiter already holds its actor/link/grant locks before project/guide, so the
+second PREP takes no new cross-transaction lock edge; close the first unused
+handle on replay. No success decision is consumed twice.
+
 Rejected: possession of a key as authority; scanning an unbounded source
 history to reverse a digest; checking the current policy/snapshot as original;
 fabricating a historical resource for `consume`; a new replay AUTH action or
@@ -160,7 +173,7 @@ Separate PR; no merge without explicit approval.
 | Concurrent reservation diagnosis | Isolated public PostgreSQL run on `c003fee650936f819c1bf443dff43f5e96501a23`, `/tmp/workstream-614-replay-auth-concurrency.json` | One same-key policy PUT returned 200, the other 503 from immutable trigger's JSON whole-row equality on no-op conflict UPDATE; runner cleaned its DB/role | Repaired exact-row lock and revoked-grant race proof require a new clean-head run |
 | Owner feasibility | Read-only trace of routes, PREP/AUTH, replay repositories, guide-create replay and existing tests | Existing `prepare` locks/rechecks actor, link and effective manager grant for original action/project; `close_handle` discards unused capability; both replay records retain original identity/digest/receipt | Runtime denial/concurrency proof remains planned; no final replay resource is consumed |
 | Focused pure verification | `python -m pytest -q backend/tests/test_project_policy_mutations.py backend/tests/projects/review_policy/test_mutation.py`; targeted guide receipt/custody cases from `backend/tests/test_projects.py`; `ruff check` on changed backend files | Policy/legacy suite 30 passed; guide cases 4 passed; later custody/repository cases 6 passed; Ruff passed | Public PostgreSQL and race proof still queued |
-| Native public verification | `backend/scripts/run_isolated_tests.py` with unique DB/role on the shared local PostgreSQL, running `backend/tests/projects/test_guide_policy_replay_authorization.py` | Awaiting coordinated native slot | No #614 public runtime result yet |
+| Native public verification | `backend/scripts/run_isolated_tests.py` on `f052bdb14a87a986483e92ecfc2af0ae24edbfec`, metadata `/tmp/workstream-614-replay-auth-2.json` | Initial public file: 2 passed; race test setup failed 422 due missing required review duration field; DB and role cleanup complete | Correct fixture, prove deterministic stale miss and overlapping reservation, rerun clean head |
 
 ## Reconciliation
 

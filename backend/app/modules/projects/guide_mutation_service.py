@@ -533,6 +533,14 @@ class GuideMutationService:
             raise ProjectNotFound("project not found")
         if guide is None or guide.project_id != str(project_id):
             raise GuideNotFound("guide not found")
+        # A concurrent exact writer may have committed while this request
+        # waited for the guide lock. Its receipt precedes draft/new-edit guards.
+        existing = await self._existing(
+            resolved, prepared, key, digest, caller, project_id, guide_id
+        )
+        if existing is not None:
+            prepared.close_handle(handle)
+            return existing
         if guide.status != "draft":
             raise GuideEditBlocked("only draft guides can be edited")
         predecessor = await self._repo.lock_latest_guide_source_snapshot(

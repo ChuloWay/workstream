@@ -21,6 +21,10 @@ from app.modules.projects.models import (
     ReviewPolicy,
     RevisionPolicy,
 )
+from app.modules.projects.guide_mutation_repository import GuideMutationRepository
+from app.modules.projects.policy_mutation_replay_repository import (
+    PolicyMutationReplayRepository,
+)
 from app.modules.projects.policy_mutation_service import policy_selector_etag
 from app.modules.tasks.models import AuditEvent
 from projects.client_fixtures import (
@@ -299,7 +303,9 @@ async def test_exact_guide_and_policy_receipts_require_current_actor_link_and_pr
     assert await _product_counts(project["id"], guide["id"]) == original_counts
 
 
-async def test_concurrent_same_key_policy_put_preserves_one_receipt(project_client) -> None:
+async def test_concurrent_same_key_policy_put_preserves_one_receipt(
+    project_client, monkeypatch: pytest.MonkeyPatch
+) -> None:
     project = await create_project(project_client)
     guide = await create_guide(project_client, project["id"], complete_guide_payload())
     review, _revision = await _selected_policies(guide["id"])
@@ -311,9 +317,29 @@ async def test_concurrent_same_key_policy_put_preserves_one_receipt(project_clie
         "if_match": policy_selector_etag(review.id, review.policy_generation, review.policy_hash),
         "key": uuid4(),
     }
-    first, second = await asyncio.gather(
-        _request(project_client, case), _request(project_client, case)
-    )
+    both_at_reservation = asyncio.Event()
+    release_reservations = asyncio.Event()
+    original_reserve = PolicyMutationReplayRepository.reserve
+    reservation_calls = 0
+
+    async def overlap_reservations(self, **kwargs):
+        nonlocal reservation_calls
+        if kwargs["idempotency_key"] == case["key"]:
+            reservation_calls += 1
+            if reservation_calls == 2:
+                both_at_reservation.set()
+            await release_reservations.wait()
+        return await original_reserve(self, **kwargs)
+
+    monkeypatch.setattr(PolicyMutationReplayRepository, "reserve", overlap_reservations)
+    first_task = asyncio.create_task(_request(project_client, case))
+    second_task = asyncio.create_task(_request(project_client, case))
+    try:
+        await asyncio.wait_for(both_at_reservation.wait(), timeout=5)
+    finally:
+        release_reservations.set()
+    first, second = await asyncio.gather(first_task, second_task)
+    assert reservation_calls == 2
     assert first.status_code == second.status_code == 200, (first.text, second.text)
     assert first.json() == second.json()
     async with db_session.get_session_factory()() as session:
@@ -335,6 +361,104 @@ async def test_concurrent_same_key_policy_put_preserves_one_receipt(project_clie
         assert record_count == version_count == 1
 
 
+@pytest.mark.parametrize("kind", ("review", "revision"))
+async def test_policy_exact_replay_recovers_after_optimistic_miss_and_successor_commit(
+    project_client, monkeypatch: pytest.MonkeyPatch, kind: str
+) -> None:
+    project = await create_project(project_client)
+    guide = await create_guide(project_client, project["id"], complete_guide_payload())
+    review, revision = await _selected_policies(guide["id"])
+    predecessor = review if kind == "review" else revision
+    case = {
+        "method": "put",
+        "project_id": project["id"],
+        "path": f"/api/v1/projects/{project['id']}/guides/{guide['id']}/{kind}-policy",
+        "body": (
+            {
+                "review_preference_window_seconds": 4800,
+                "review_lease_duration_seconds": 1900,
+            }
+            if kind == "review"
+            else {"max_revision_rounds": 5, "revision_deadline_hours": 72}
+        ),
+        "if_match": policy_selector_etag(
+            predecessor.id, predecessor.policy_generation, predecessor.policy_hash
+        ),
+        "key": uuid4(),
+    }
+    original_find = PolicyMutationReplayRepository.find
+    missed = asyncio.Event()
+    release = asyncio.Event()
+    second_task = None
+    paused = False
+
+    async def pause_after_miss(self, actor_profile_id, action_id, idempotency_key):
+        nonlocal paused
+        found = await original_find(self, actor_profile_id, action_id, idempotency_key)
+        if asyncio.current_task() is second_task and found is None and not paused:
+            paused = True
+            missed.set()
+            await release.wait()
+        return found
+
+    monkeypatch.setattr(PolicyMutationReplayRepository, "find", pause_after_miss)
+    second_task = asyncio.create_task(_request(project_client, case))
+    try:
+        await asyncio.wait_for(missed.wait(), timeout=5)
+        first = await _request(project_client, case)
+        assert first.status_code == 200, first.text
+        first_counts = await _product_counts(project["id"], guide["id"])
+    finally:
+        release.set()
+    second = await asyncio.wait_for(second_task, timeout=5)
+    assert second.status_code == 200 and second.json() == first.json(), second.text
+    assert paused
+    assert await _product_counts(project["id"], guide["id"]) == first_counts
+
+
+async def test_guide_exact_replay_recovers_after_optimistic_miss_and_guide_lock(
+    project_client, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    project = await create_project(project_client)
+    guide = await create_guide(project_client, project["id"], complete_guide_payload())
+    case = {
+        "method": "patch",
+        "project_id": project["id"],
+        "path": f"/api/v1/projects/{project['id']}/guides/{guide['id']}",
+        "body": {"change_summary": "One exact concurrent guide edit"},
+        "if_match": None,
+        "key": uuid4(),
+    }
+    original_find = GuideMutationRepository.find
+    missed = asyncio.Event()
+    release = asyncio.Event()
+    second_task = None
+    paused = False
+
+    async def pause_after_miss(self, actor_profile_id, action_id, idempotency_key):
+        nonlocal paused
+        found = await original_find(self, actor_profile_id, action_id, idempotency_key)
+        if asyncio.current_task() is second_task and found is None and not paused:
+            paused = True
+            missed.set()
+            await release.wait()
+        return found
+
+    monkeypatch.setattr(GuideMutationRepository, "find", pause_after_miss)
+    second_task = asyncio.create_task(_request(project_client, case))
+    try:
+        await asyncio.wait_for(missed.wait(), timeout=5)
+        first = await _request(project_client, case)
+        assert first.status_code == 200, first.text
+        first_counts = await _product_counts(project["id"], guide["id"])
+    finally:
+        release.set()
+    second = await asyncio.wait_for(second_task, timeout=5)
+    assert second.status_code == 200 and second.json() == first.json(), second.text
+    assert paused
+    assert await _product_counts(project["id"], guide["id"]) == first_counts
+
+
 async def test_policy_replay_waits_for_grant_revocation_then_denies(
     project_client, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -345,7 +469,10 @@ async def test_policy_replay_waits_for_grant_revocation_then_denies(
         "method": "put",
         "project_id": project["id"],
         "path": f"/api/v1/projects/{project['id']}/guides/{guide['id']}/review-policy",
-        "body": {"review_preference_window_seconds": 4800},
+        "body": {
+            "review_preference_window_seconds": 4800,
+            "review_lease_duration_seconds": 1900,
+        },
         "if_match": policy_selector_etag(
             review.id, review.policy_generation, review.policy_hash
         ),
