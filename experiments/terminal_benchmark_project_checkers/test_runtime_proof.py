@@ -153,6 +153,49 @@ class OciLayoutFactTests(unittest.TestCase):
             )
 
 
+class InnerDockerTransportTests(unittest.TestCase):
+    def test_pre_runner_forwards_request_stdin_into_dind(self) -> None:
+        proof = Path(__file__).with_name("proof.sh").read_text(encoding="utf-8")
+        start = proof.index("inner_docker_stdin() {")
+        end = proof.index("\n}\n", start) + 2
+        function = proof[start:end]
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            capture = root / "request.json"
+            fake_docker = root / "docker"
+            fake_docker.write_text(
+                "#!/usr/bin/env bash\n"
+                "set -euo pipefail\n"
+                "[[ $# -eq 6 && $1 == exec && $2 == -i "
+                "&& $3 == ws-pilot00-test-dind && $4 == docker "
+                "&& $5 == run && $6 == --rm ]]\n"
+                'cat > "${WS493_TEST_STDIN_CAPTURE:?}"\n',
+                encoding="utf-8",
+            )
+            fake_docker.chmod(0o755)
+            request = '{"schema_version":"external_checker_request.v1"}'
+            environment = os.environ.copy()
+            environment.update(
+                {
+                    "DIND_NAME": "ws-pilot00-test-dind",
+                    "REAL_DOCKER": str(fake_docker),
+                    "WS493_TEST_STDIN_CAPTURE": str(capture),
+                }
+            )
+            result = subprocess.run(
+                ["bash", "-c", f"{function}\ninner_docker_stdin run --rm"],
+                input=request,
+                env=environment,
+                text=True,
+                capture_output=True,
+                timeout=5,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(capture.read_text(encoding="utf-8"), request)
+
+
 class MatrixReducerTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory()

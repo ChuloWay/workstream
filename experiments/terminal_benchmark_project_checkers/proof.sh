@@ -70,6 +70,10 @@ inner_docker() {
   "${REAL_DOCKER}" exec "${DIND_NAME}" docker "$@"
 }
 
+inner_docker_stdin() {
+  "${REAL_DOCKER}" exec -i "${DIND_NAME}" docker "$@"
+}
+
 pilot() {
   PILOT00_RUN_ID="${PILOT_RUN_ID}" \
   PILOT00_STATE_DIR="${STATE_ROOT}" \
@@ -1356,7 +1360,7 @@ run_pre_cases() {
       --contract "${RAW_DIR}/contract.json" \
       --package "${VARIANT_ROOT}/${name}" \
       --output "${work}/${name}.request.json"
-    inner_docker run --rm -i --pull=never \
+    inner_docker_stdin run --rm -i --pull=never \
       --name "${PROOF_PREFIX}-pre-${name}" \
       --label "org.workstream.ws493.pre=${RUN_ID}" \
       --runtime runsc --network none --read-only --user 65532:65532 \
