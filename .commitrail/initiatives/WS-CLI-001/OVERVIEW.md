@@ -30,6 +30,7 @@
   [WS-CLI-001-23](WS-CLI-001-23.md), Finance draft creation, rule replacement, publication and retirement;
   [WS-CLI-001-24](WS-CLI-001-24.md), self/project contribution evidence and exact private CSV export;
   [WS-CLI-001-25](WS-CLI-001-25.md), explicit public ZIP preparation, Submission replay/history and contributor checker findings;
+  [WS-CLI-001-32](WS-CLI-001-32.md), read-only active-guide and retained/current intake-policy inspection;
   [PILOT-13](../../changes/pilot13-assigned-task-guide-documents.md), assigned-task locked-guide listing/download;
   [PILOT-02](../../changes/pilot02-bulk-transitions-cli.md), explicit CSV conversion,
   source custody, atomic import, batch status and whole-batch screen/release.
