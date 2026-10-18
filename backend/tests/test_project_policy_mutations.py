@@ -552,10 +552,27 @@ async def test_replay_repository_owns_claim_classification_and_completion() -> N
         policy_id=str(uuid4()),
         policy_generation=1,
     )
+    assert disposition == "claimed" and selected is record
+
+    session.scalar_values = [None, record]
+    disposition, selected = await repository.reserve(
+        actor_profile_id=actor_id,
+        identity_link_id=link_id,
+        action_id=ActionId.PROJECT_REVIEW_POLICY_UPDATE.value,
+        idempotency_key=key,
+        request_digest=digest,
+        policy_hash="sha256:" + "3" * 64,
+        resource_context_digest=resource_digest,
+        operation_id=operation_id,
+        project_id=project_id,
+        guide_id=guide_id,
+        policy_id=str(uuid4()),
+        policy_generation=1,
+    )
     assert disposition == "pending" and selected is record
 
     record.status = "committed"
-    session.scalar_values = [record_id]
+    session.scalar_values = [None, record]
     disposition, _ = await repository.reserve(
         actor_profile_id=actor_id,
         identity_link_id=link_id,
@@ -573,7 +590,7 @@ async def test_replay_repository_owns_claim_classification_and_completion() -> N
     assert disposition == "replayed"
 
     record.identity_link_id = str(uuid4())
-    session.scalar_values = [record_id]
+    session.scalar_values = [None, record]
     disposition, _ = await repository.reserve(
         actor_profile_id=actor_id,
         identity_link_id=link_id,

@@ -102,6 +102,18 @@ rows, while receipt retrieval acquires no control or caller-admin target after
 its target manager locks. Thus the added lock edges do not point back to a
 lock held by those public revokers; focused PostgreSQL races will test this.
 
+The native same-key race exposed an existing policy-reservation fault: its
+no-op `ON CONFLICT DO UPDATE` fires the immutable replay trigger, whose
+whole-row equality cannot compare the PostgreSQL `json` response column. One
+overlapping PUT returned 503 with `could not identify an equality operator for
+type json`. Within the existing replay repository, use the AUTH reservation
+pattern: `ON CONFLICT DO NOTHING`, then lock the exact
+actor/action/idempotency-key row with `SELECT ... FOR UPDATE` after the
+conflicting insert resolves. This retains the reservation-row -> PREP order,
+classifies the same link/project/guide/digest/hash mismatch, and does not
+update a committed receipt or create a schema dependency. The isolated
+PostgreSQL race must prove one response and one version after this repair.
+
 Rejected: possession of a key as authority; scanning an unbounded source
 history to reverse a digest; checking the current policy/snapshot as original;
 fabricating a historical resource for `consume`; a new replay AUTH action or
@@ -145,6 +157,7 @@ Separate PR; no merge without explicit approval.
 | Claim | Command or proof | Result | Remaining uncertainty |
 |---|---|---|---|
 | Reproduced defect | #599 isolated public socket/PostgreSQL probe on main `51b868071`; unique database metadata `/tmp/workstream-599-config-isolation3.json` | Three fresh 403 controls and three exact revoked-grant replay 200 failures; database/role cleanup complete | This proves grant revocation, not actor/link or race behavior |
+| Concurrent reservation diagnosis | Isolated public PostgreSQL run on `c003fee650936f819c1bf443dff43f5e96501a23`, `/tmp/workstream-614-replay-auth-concurrency.json` | One same-key policy PUT returned 200, the other 503 from immutable trigger's JSON whole-row equality on no-op conflict UPDATE; runner cleaned its DB/role | Repaired exact-row lock and revoked-grant race proof require a new clean-head run |
 | Owner feasibility | Read-only trace of routes, PREP/AUTH, replay repositories, guide-create replay and existing tests | Existing `prepare` locks/rechecks actor, link and effective manager grant for original action/project; `close_handle` discards unused capability; both replay records retain original identity/digest/receipt | Runtime denial/concurrency proof remains planned; no final replay resource is consumed |
 | Focused pure verification | `python -m pytest -q backend/tests/test_project_policy_mutations.py backend/tests/projects/review_policy/test_mutation.py`; targeted guide receipt/custody cases from `backend/tests/test_projects.py`; `ruff check` on changed backend files | Policy/legacy suite 30 passed; guide cases 4 passed; later custody/repository cases 6 passed; Ruff passed | Public PostgreSQL and race proof still queued |
 | Native public verification | `backend/scripts/run_isolated_tests.py` with unique DB/role on the shared local PostgreSQL, running `backend/tests/projects/test_guide_policy_replay_authorization.py` | Awaiting coordinated native slot | No #614 public runtime result yet |

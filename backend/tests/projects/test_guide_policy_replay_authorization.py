@@ -6,12 +6,14 @@ import asyncio
 from datetime import UTC, datetime
 from uuid import uuid4
 
+import pytest
 from sqlalchemy import func, select
 
 from app.core.identifiers import new_record_id
 from app.db import session as db_session
 from app.modules.actors.models import ActorIdentityLink, ActorProfile
 from app.modules.authorization.models import AdminRoleGrant
+from app.modules.authorization.repository import AdminAuthorizationRepository
 from app.modules.projects.models import (
     GuideMutationIdempotencyRecord,
     PolicyMutationIdempotencyRecord,
@@ -20,6 +22,7 @@ from app.modules.projects.models import (
     RevisionPolicy,
 )
 from app.modules.projects.policy_mutation_service import policy_selector_etag
+from app.modules.tasks.models import AuditEvent
 from projects.client_fixtures import (
     auth_headers,
     ensure_access_administrator_bootstrap,
@@ -188,6 +191,29 @@ async def test_exact_guide_and_policy_receipts_require_current_actor_link_and_pr
     for case in cases:
         denied = await _request(project_client, case)
         assert denied.status_code == 403, denied.text
+        assert denied.json()["error"]["code"] == "permission_not_granted"
+    async with db_session.get_session_factory()() as session:
+        denials = (
+            await session.scalars(
+                select(AuditEvent).where(
+                    AuditEvent.event_type == "SensitiveAuthorizationDenied",
+                    AuditEvent.project_id == project["id"],
+                    AuditEvent.denial_code == "permission_not_granted",
+                    AuditEvent.action_id.in_(
+                        (
+                            "project.guide.update",
+                            "project.review_policy.update",
+                            "project.revision_policy.update",
+                        )
+                    ),
+                )
+            )
+        ).all()
+        assert {denial.action_id for denial in denials} == {
+            "project.guide.update",
+            "project.review_policy.update",
+            "project.revision_policy.update",
+        }
     current_etags = [
         None,
         policy_selector_etag(
@@ -259,6 +285,9 @@ async def test_exact_guide_and_policy_receipts_require_current_actor_link_and_pr
         profile.suspended_by = None
         profile.suspended_at = None
         profile.suspension_reason = None
+        profile.reactivated_by = str(actor_id)
+        profile.reactivated_at = datetime.now(UTC)
+        profile.reactivation_reason = "Replay authorization regression"
         link.status = "revoked"
         link.revoked_by = str(actor_id)
         link.revoked_at = datetime.now(UTC)
@@ -304,3 +333,94 @@ async def test_concurrent_same_key_policy_put_preserves_one_receipt(project_clie
             )
         )
         assert record_count == version_count == 1
+
+
+async def test_policy_replay_waits_for_grant_revocation_then_denies(
+    project_client, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    project = await create_project(project_client)
+    guide = await create_guide(project_client, project["id"], complete_guide_payload())
+    review, _revision = await _selected_policies(guide["id"])
+    case = {
+        "method": "put",
+        "project_id": project["id"],
+        "path": f"/api/v1/projects/{project['id']}/guides/{guide['id']}/review-policy",
+        "body": {"review_preference_window_seconds": 4800},
+        "if_match": policy_selector_etag(
+            review.id, review.policy_generation, review.policy_hash
+        ),
+        "key": uuid4(),
+    }
+    created = await _request(project_client, case)
+    assert created.status_code == 200, created.text
+    original_counts = await _product_counts(project["id"], guide["id"])
+    actor_id, _link_id, access_grant_id = await ensure_access_administrator_bootstrap()
+    entered_grant_query = asyncio.Event()
+    original_find = AdminAuthorizationRepository.find_effective_grant
+
+    async def signal_grant_query(self, actor_profile_id, permission_id, **kwargs):
+        if (
+            actor_profile_id == actor_id
+            and str(kwargs.get("scope_project_id")) == project["id"]
+            and kwargs.get("for_update")
+        ):
+            entered_grant_query.set()
+        return await original_find(self, actor_profile_id, permission_id, **kwargs)
+
+    monkeypatch.setattr(
+        AdminAuthorizationRepository, "find_effective_grant", signal_grant_query
+    )
+    replay_task = None
+    revocation_committed = False
+    async with db_session.get_session_factory()() as revoker:
+        grants = list(
+            (
+                await revoker.scalars(
+                    select(AdminRoleGrant)
+                    .where(
+                        AdminRoleGrant.target_actor_profile_id == str(actor_id),
+                        AdminRoleGrant.role == "project_manager",
+                        AdminRoleGrant.status == "active",
+                    )
+                    .with_for_update()
+                )
+            ).all()
+        )
+        assert len(grants) >= 2
+        for grant in grants:
+            grant.status = "revoked"
+            grant.version = 2
+            grant.revoked_by_actor_profile_id = str(actor_id)
+            grant.revoked_by_admin_role_grant_id = access_grant_id
+            grant.revoked_reason = "Concurrent replay authorization regression"
+            grant.revoked_at = datetime.now(UTC)
+        await revoker.flush()
+        try:
+            replay_task = asyncio.create_task(_request(project_client, case))
+            await asyncio.wait_for(entered_grant_query.wait(), timeout=5)
+            with pytest.raises(TimeoutError):
+                await asyncio.wait_for(asyncio.shield(replay_task), timeout=0.1)
+            await revoker.commit()
+            revocation_committed = True
+        finally:
+            if not revocation_committed and replay_task is not None and not replay_task.done():
+                await revoker.rollback()
+                replay_task.cancel()
+                await asyncio.gather(replay_task, return_exceptions=True)
+    assert replay_task is not None
+    denied = await asyncio.wait_for(replay_task, timeout=5)
+    assert denied.status_code == 403, denied.text
+    assert denied.json()["error"]["code"] == "permission_not_granted"
+    assert await _product_counts(project["id"], guide["id"]) == original_counts
+    async with db_session.get_session_factory()() as session:
+        denials = (
+            await session.scalars(
+                select(AuditEvent).where(
+                    AuditEvent.event_type == "SensitiveAuthorizationDenied",
+                    AuditEvent.action_id == "project.review_policy.update",
+                    AuditEvent.project_id == project["id"],
+                    AuditEvent.denial_code == "permission_not_granted",
+                )
+            )
+        ).all()
+        assert len(denials) == 1
