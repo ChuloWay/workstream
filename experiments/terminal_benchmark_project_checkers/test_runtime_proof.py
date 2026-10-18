@@ -157,77 +157,41 @@ class MatrixReducerTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory()
         self.raw = Path(self.temporary.name)
-        self.launches = [
-            {
-                "kind": "checker",
-                "container_id": "c1",
-                "name": "ws-checker-a",
-                "mount_source_identities": build_matrix.SOURCE_IDENTITIES["checker"],
+        self.launches: list[dict[str, object]] = []
+        self.starts: list[dict[str, object]] = []
+        self.digests = {
+            "interrupted": "sha256:" + format(1, "064x"),
+            **{
+                name: "sha256:" + format(index + 2, "064x")
+                for index, name in enumerate(build_matrix.CASES)
             },
-            {
-                "kind": "checker",
-                "container_id": "c2",
-                "name": "ws-checker-b",
-                "mount_source_identities": build_matrix.SOURCE_IDENTITIES["checker"],
-            },
-            {
-                "kind": "builder",
-                "attempt": "dead",
-                "container_id": "b0",
-                "name": "ws-terminal-builder-dead",
-                "mount_source_identities": build_matrix.SOURCE_IDENTITIES["builder"],
-            },
-            {
-                "kind": "builder",
-                "attempt": "good",
-                "container_id": "b1",
-                "name": "ws-terminal-builder-good",
-                "mount_source_identities": build_matrix.SOURCE_IDENTITIES["builder"],
-            },
-            {
-                "kind": "candidate",
-                "attempt": "good",
-                "container_id": "c3",
-                "name": "ws-terminal-candidate-good",
-                "mount_source_identities": build_matrix.SOURCE_IDENTITIES["candidate"],
-            },
-            *[
+        }
+        for index, digest in enumerate(self.digests.values()):
+            self.launches.append(
                 {
-                    "kind": "reference",
-                    "attempt": "good",
-                    "container_id": f"r{index}",
-                    "name": f"ws-terminal-reference-good-{index}",
+                    "kind": "checker",
+                    "container_id": f"checker-{index}",
+                    "name": f"ws-checker-{index}",
                     "mount_source_identities": build_matrix.SOURCE_IDENTITIES[
-                        "reference"
+                        "checker"
                     ],
+                    "request_digest": None,
                 }
-                for index in range(3)
-            ],
-        ]
-        self.starts = [
-            {"argv": ["start", "-a", "-i", "ws-checker-a"], "status": 0},
-            {"argv": ["start", "-a", "-i", "ws-checker-b"], "status": 0},
+            )
+            self.starts.append(
+                {"argv": ["start", "-a", "-i", f"ws-checker-{index}"], "status": 0}
+            )
+        self._add_terminal("interrupted", ["builder"], [])
+        for name, expected in build_matrix.CASES.items():
+            self._write_result(name, expected)
+            self._add_terminal(name, expected["launches"], expected["starts"])
+        _write_json(
+            self.raw / "interrupt.json",
             {
-                "argv": ["start", "--attach", "ws-terminal-builder-good"],
-                "status": 0,
+                "adapter_failure": True,
+                "request_digest": self.digests["interrupted"],
             },
-            {
-                "argv": ["start", "--attach", "ws-terminal-candidate-good"],
-                "status": 1,
-            },
-            *[
-                {
-                    "argv": [
-                        "start",
-                        "--attach",
-                        f"ws-terminal-reference-good-{index}",
-                    ],
-                    "status": 0,
-                }
-                for index in range(3)
-            ],
-        ]
-        _write_json(self.raw / "interrupt.json", {"adapter_failure": True})
+        )
         _write_json(
             self.raw / "restart-cleanup.json",
             {
@@ -236,25 +200,100 @@ class MatrixReducerTests(unittest.TestCase):
                 "unowned_control_preserved": True,
             },
         )
-        for name in ("art-interrupt.json", "art-complete.json"):
-            _write_json(
-                self.raw / name,
-                {"ledger_empty": True, "workspace_empty": True},
-            )
         _write_json(
-            self.raw / "complete-result.json",
-            {
-                "result": {
-                    "findings": [],
-                    "outcome": "completed",
-                    "verdict": "passed",
+            self.raw / "art-interrupt.json",
+            {"ledger_empty": True, "workspace_empty": True},
+        )
+        memory_launch = next(
+            item
+            for item in self.launches
+            if item.get("request_digest") == self.digests["memory-capacity"]
+            and item.get("kind") == "candidate"
+        )
+        _write_ndjson(
+            self.raw / "docker-events.ndjson",
+            [
+                {
+                    "Action": "oom",
+                    "Actor": {
+                        "Attributes": {
+                            "workstream.request-digest": self.digests[
+                                "memory-capacity"
+                            ],
+                            "workstream.resource-kind": "candidate",
+                        },
+                        "ID": memory_launch["container_id"],
+                    },
+                    "Type": "container",
                 }
-            },
+            ],
         )
         self._flush()
 
     def tearDown(self) -> None:
         self.temporary.cleanup()
+
+    def _add_terminal(self, case: str, kinds: list[str], statuses: list[int]) -> None:
+        digest = self.digests[case]
+        attempt = format(len(self.launches), "x")
+        reference = 0
+        for kind, status in zip(kinds, statuses, strict=False):
+            name = build_matrix._launch_name(kind, attempt, reference)
+            if kind == "reference":
+                reference += 1
+            self.launches.append(
+                {
+                    "attempt": attempt,
+                    "container_id": f"container-{len(self.launches)}",
+                    "kind": kind,
+                    "mount_source_identities": build_matrix.SOURCE_IDENTITIES[kind],
+                    "name": name,
+                    "request_digest": digest,
+                }
+            )
+            self.starts.append({"argv": ["start", "--attach", name], "status": status})
+        if len(kinds) > len(statuses):
+            [kind] = kinds[len(statuses) :]
+            self.launches.append(
+                {
+                    "attempt": attempt,
+                    "container_id": f"container-{len(self.launches)}",
+                    "kind": kind,
+                    "mount_source_identities": build_matrix.SOURCE_IDENTITIES[kind],
+                    "name": build_matrix._launch_name(kind, attempt, reference),
+                    "request_digest": digest,
+                }
+            )
+
+    def _write_result(self, name: str, expected: dict[str, object]) -> None:
+        digest = self.digests[name]
+        code = expected["code"]
+        findings = (
+            [{"code": code}]
+            if expected["outcome"] == "completed" and code is not None
+            else []
+        )
+        _write_json(
+            self.raw / str(expected["result"]),
+            {
+                "isolation": {"runtime": "runsc"},
+                "request_digest": digest,
+                "result": {
+                    "findings": findings,
+                    "infrastructure_failure_code": (
+                        code if expected["outcome"] == "infrastructure_failed" else None
+                    ),
+                    "outcome": expected["outcome"],
+                    "request_digest": digest,
+                    "verdict": expected["verdict"],
+                },
+                "schema_version": "workstream.terminal_benchmark_result.v1",
+            },
+        )
+        _write_json(
+            self.raw / str(expected["art"]),
+            {"ledger_empty": True, "workspace_empty": True},
+        )
 
     def _flush(self) -> None:
         _write_ndjson(self.raw / "launches.ndjson", self.launches)
@@ -263,15 +302,17 @@ class MatrixReducerTests(unittest.TestCase):
     def test_exact_matrix_is_accepted(self) -> None:
         value = build_matrix.reduce_matrix(self.raw, HEAD)
         self.assertEqual(value["head_sha"], HEAD)
+        self.assertTrue(value["memory_oom_event"])
 
     def test_extra_partial_attempt_is_rejected(self) -> None:
         self.launches.append(
             {
-                "kind": "candidate",
                 "attempt": "extra",
                 "container_id": "extra",
-                "name": "ws-terminal-candidate-extra",
+                "kind": "candidate",
                 "mount_source_identities": build_matrix.SOURCE_IDENTITIES["candidate"],
+                "name": "ws-terminal-candidate-extra",
+                "request_digest": self.digests["complete"],
             }
         )
         self._flush()
@@ -279,9 +320,31 @@ class MatrixReducerTests(unittest.TestCase):
             build_matrix.reduce_matrix(self.raw, HEAD)
 
     def test_duplicate_start_is_rejected(self) -> None:
-        self.starts.append(self.starts[3].copy())
+        self.starts.append(self.starts[-1].copy())
         self._flush()
         with self.assertRaisesRegex(ValueError, "start observations differ"):
+            build_matrix.reduce_matrix(self.raw, HEAD)
+
+    def test_wrong_classification_is_rejected(self) -> None:
+        path = self.raw / "capacity-spoof-result.json"
+        value = json.loads(path.read_text())
+        value["result"]["infrastructure_failure_code"] = "capacity_exceeded"
+        _write_json(path, value)
+        with self.assertRaisesRegex(ValueError, "infrastructure result differs"):
+            build_matrix.reduce_matrix(self.raw, HEAD)
+
+    def test_missing_memory_oom_event_is_rejected(self) -> None:
+        _write_ndjson(
+            self.raw / "docker-events.ndjson",
+            [
+                {
+                    "Action": "die",
+                    "Actor": {"Attributes": {}, "ID": "other"},
+                    "Type": "container",
+                }
+            ],
+        )
+        with self.assertRaisesRegex(ValueError, "memory OOM event differs"):
             build_matrix.reduce_matrix(self.raw, HEAD)
 
 
@@ -365,6 +428,7 @@ class DockerWrapperSourceTests(unittest.TestCase):
                         "workstream.resource-kind": "candidate",
                         "workstream.attempt": "abc",
                         "workstream.grant-id": GRANT_ID,
+                        "workstream.request-digest": "sha256:" + "d" * 64,
                     },
                     "User": "65532:65532",
                 },
@@ -406,6 +470,7 @@ class DockerWrapperSourceTests(unittest.TestCase):
                     "workstream.resource-kind": "builder",
                     "workstream.attempt": "abc",
                     "workstream.grant-id": GRANT_ID,
+                    "workstream.request-digest": "sha256:" + "d" * 64,
                 },
                 "User": "0:0",
             },

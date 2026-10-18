@@ -18,6 +18,19 @@ sweep has completed before the absence check. A second request must build succes
 the unchanged starter with exit 1, and pass three fresh reference containers
 with stable observations.
 
+The extended matrix derives five exact HEAD-bound, PRE-valid package variants
+inside the quota-backed proof state and runs the real checker image over each
+variant before POST. It proves ineffective tests as
+`starter_unexpectedly_passed`, a failing reference as `reference_failed`,
+fresh-host reference output as `reference_unstable`, and a 600 MiB allocation
+as `capacity_exceeded` only when the labeled Docker event records an OOM. A
+package that prints a former capacity phrase and exits 2 remains
+`implementation_unavailable`. The final missing-base case removes only the
+run-owned approved-base alias and proves infrastructure failure before a
+builder or oracle launch. The configured PID ceiling remains enforced, but the
+matrix does not claim a forced PID-limit hit because this runtime seam has no
+trusted enforcement event comparable to Docker OOM state.
+
 Preparation is the only phase that uses external networking. DIND and all
 product sandboxes are externally networkless during execution. The trusted
 checksum-pinned crane binary first acquires exact builder/base OCI layouts on
@@ -51,7 +64,7 @@ both before use. Preparation also creates a copied-executable Python 3.12 venv
 inside the root-owned control tree, synchronizes the frozen backend dev lock
 with the pinned `uv`, and executes a fixed-UID import probe before POST. Its
 Python sources are a read-only, no-follow copy of only the Git-tracked backend
-application, two fixed proof drivers and public package, bounded to 4,096 files
+application, four fixed proof drivers and public package, bounded to 4,096 files
 and 64 MiB. The expected HEAD tree selects the files, and every copied source
 must match its HEAD blob. The proof revalidates the head-bound exact inventory,
 ownership, modes, sizes and hashes before the matrix and each service start.
@@ -61,7 +74,8 @@ resources:
 
 ```bash
 cd experiments/terminal_benchmark_project_checkers
-python3 -m unittest -q test_verify_evidence test_runtime_proof
+python3 -m unittest -q \
+  test_prepare_variants test_verify_evidence test_runtime_proof
 PYTHONPATH=../../backend:. ../../backend/.venv/bin/python -B -m unittest -q \
   test_execute_post_contract
 ```

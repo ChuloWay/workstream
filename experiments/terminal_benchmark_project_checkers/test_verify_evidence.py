@@ -57,15 +57,18 @@ class EvidenceVerifierTests(unittest.TestCase):
                             "restart_swept_owned": True,
                             "unowned_control_preserved": True,
                         },
-                        "complete": {
-                            "builder_exit": 0,
-                            "candidate_exit": 1,
-                            "outcome": "completed",
-                            "owned_resources_absent": True,
-                            "reference_exits": [0, 0, 0],
-                            "stable": True,
-                            "verdict": "passed",
+                        "cases": {
+                            name: {
+                                "launches": launches,
+                                "request_digest": "sha256:" + format(index + 1, "064x"),
+                                "start_statuses": statuses,
+                            }
+                            for index, (name, (launches, statuses)) in enumerate(
+                                verify_evidence.MATRIX_CASES.items()
+                            )
                         },
+                        "memory_oom_event": True,
+                        "owned_resources_absent": True,
                     },
                     sort_keys=True,
                 )
@@ -111,13 +114,111 @@ class EvidenceVerifierTests(unittest.TestCase):
                 + "\n"
             ).encode(),
         )
-        for name in ("art-interrupt.json", "art-complete.json"):
+        for name in (
+            item for item in verify_evidence.INITIAL_FILES if item.startswith("art-")
+        ):
             self._write(name, b'{"ledger_empty":true,"workspace_empty":true}\n')
+        for index, (name, (outcome, verdict, code)) in enumerate(
+            verify_evidence.RESULT_EXPECTATIONS.items()
+        ):
+            digest = "sha256:" + format(index + 20, "064x")
+            findings = (
+                [] if code is None or outcome != "completed" else [{"code": code}]
+            )
+            self._write(
+                name,
+                (
+                    json.dumps(
+                        {
+                            "isolation": {"runtime": "runsc"},
+                            "request_digest": digest,
+                            "result": {
+                                "findings": findings,
+                                "infrastructure_failure_code": (
+                                    code if outcome == "infrastructure_failed" else None
+                                ),
+                                "outcome": outcome,
+                                "request_digest": digest,
+                                "verdict": verdict,
+                            },
+                            "schema_version": "workstream.terminal_benchmark_result.v1",
+                        },
+                        sort_keys=True,
+                    )
+                    + "\n"
+                ).encode(),
+            )
         self._write(
             "restart-cleanup.json",
             b'{"owned_containers_absent":true,"owned_images_absent":true,'
             b'"unowned_control_preserved":true}\n',
         )
+        pre_names = (
+            "capacity-spoof",
+            "memory-capacity",
+            "no-op-pass",
+            "reference-failure",
+            "reference-instability",
+        )
+        self._write(
+            "pre-results.json",
+            (
+                json.dumps(
+                    {
+                        "head_sha": HEAD,
+                        "schema_version": "workstream.terminal_benchmark_pre_proof.v1",
+                        "variants": {
+                            name: {
+                                "request_digest": "sha256:"
+                                + format(index + 40, "064x"),
+                                "result_digest": "sha256:" + format(index + 50, "064x"),
+                                "result_sha256": format(index + 60, "064x"),
+                            }
+                            for index, name in enumerate(pre_names)
+                        },
+                    },
+                    sort_keys=True,
+                )
+                + "\n"
+            ).encode(),
+        )
+        self._write(
+            "variant-inventory.json",
+            (
+                json.dumps(
+                    {
+                        "head_sha": HEAD,
+                        "schema_version": "workstream.terminal_benchmark_negative_packages.v1",
+                        "variants": [
+                            {
+                                "changed_path": changed_path,
+                                "changed_sha256": format(index + 70, "064x"),
+                                "entries": [
+                                    {
+                                        "byte_count": 10,
+                                        "path": path,
+                                        "sha256": format(file_index + 80, "064x"),
+                                    }
+                                    for file_index, path in enumerate(
+                                        sorted(verify_evidence.VARIANT_FILES)
+                                    )
+                                ],
+                                "name": name,
+                            }
+                            for index, (name, changed_path) in enumerate(
+                                sorted(verify_evidence.VARIANT_CHANGED_PATHS.items())
+                            )
+                        ],
+                    },
+                    sort_keys=True,
+                )
+                + "\n"
+            ).encode(),
+        )
+        self._write(
+            "timing-prepare.json", b'{"duration_seconds":120,"phase":"prepare"}\n'
+        )
+        self._write("timing-run.json", b'{"duration_seconds":90,"phase":"run"}\n')
 
     def _stage(self, name: str = "stage") -> Path:
         destination = self.root / name
@@ -133,6 +234,7 @@ class EvidenceVerifierTests(unittest.TestCase):
                     "schema_version": verify_evidence.SCHEMA,
                     "head_sha": HEAD,
                     "dind_absent": True,
+                    "duration_seconds": 30,
                     "loop_detached": True,
                     "outer_owned_resources_absent": True,
                     "raw_state_deleted": True,
@@ -168,6 +270,7 @@ class EvidenceVerifierTests(unittest.TestCase):
                     "schema_version": verify_evidence.SCHEMA,
                     "head_sha": HEAD,
                     "dind_absent": False,
+                    "duration_seconds": 30,
                     "loop_detached": True,
                     "outer_owned_resources_absent": True,
                     "raw_state_deleted": True,
@@ -183,6 +286,19 @@ class EvidenceVerifierTests(unittest.TestCase):
     def test_extra_entry_is_rejected(self) -> None:
         self._write("unexpected.json", b"{}\n")
         with self.assertRaisesRegex(verify_evidence.EvidenceError, "inventory differs"):
+            self._stage()
+
+    def test_variant_inventory_substitution_is_rejected(self) -> None:
+        path = self.raw / "variant-inventory.json"
+        value = json.loads(path.read_text(encoding="utf-8"))
+        value["variants"][0]["entries"][0]["path"] = "unexpected.py"
+        self._write(
+            "variant-inventory.json",
+            (json.dumps(value, sort_keys=True) + "\n").encode(),
+        )
+        with self.assertRaisesRegex(
+            verify_evidence.EvidenceError, "variant file inventory differs"
+        ):
             self._stage()
 
     def test_symlink_and_fifo_are_rejected(self) -> None:

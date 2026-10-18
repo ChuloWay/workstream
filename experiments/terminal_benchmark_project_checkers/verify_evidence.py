@@ -13,17 +13,24 @@ import stat
 import tempfile
 
 
-SCHEMA = "workstream.terminal_benchmark_project_checker_proof.v1"
+SCHEMA = "workstream.terminal_benchmark_project_checker_proof.v2"
 HEAD = re.compile(r"[0-9a-f]{40}")
 INITIAL_FILES = {
     "art-complete.json": 65_536,
+    "art-capacity-spoof.json": 65_536,
     "art-interrupt.json": 65_536,
+    "art-memory-capacity.json": 65_536,
+    "art-missing-base.json": 65_536,
+    "art-no-op-pass.json": 65_536,
+    "art-reference-failure.json": 65_536,
+    "art-reference-instability.json": 65_536,
     "argv.ndjson": 262_144,
     "base-boundary.log": 8_192,
     "builder-boundary.log": 8_192,
     "cache-inventory.json": 2_097_152,
     "command-results.ndjson": 262_144,
     "complete-result.json": 65_536,
+    "capacity-spoof-result.json": 65_536,
     "contract.json": 131_072,
     "docker-events.ndjson": 262_144,
     "harness.json": 65_536,
@@ -31,17 +38,76 @@ INITIAL_FILES = {
     "interrupt.json": 65_536,
     "launches.ndjson": 262_144,
     "matrix.json": 65_536,
+    "memory-capacity-result.json": 65_536,
+    "missing-base-result.json": 65_536,
+    "no-op-pass-result.json": 65_536,
+    "pre-results.json": 65_536,
     "proof-head.txt": 64,
     "quota.json": 65_536,
     "restart-cleanup.json": 65_536,
+    "reference-failure-result.json": 65_536,
+    "reference-instability-result.json": 65_536,
     "service-complete.log": 131_072,
     "service-interrupt.log": 131_072,
     "tool-versions.json": 65_536,
+    "variant-inventory.json": 65_536,
+    "timing-prepare.json": 8_192,
+    "timing-run.json": 8_192,
     "verifier-tests.json": 8_192,
 }
 FINAL_ONLY = {"cleanup-receipt.json": 65_536}
 MANIFEST = "manifest.json"
 MAXIMUM_AGGREGATE_BYTES = 4 * 1024 * 1024
+RESULT_EXPECTATIONS = {
+    "complete-result.json": ("completed", "passed", None),
+    "no-op-pass-result.json": ("completed", "failed", "starter_unexpectedly_passed"),
+    "reference-failure-result.json": ("completed", "failed", "reference_failed"),
+    "reference-instability-result.json": ("completed", "failed", "reference_unstable"),
+    "memory-capacity-result.json": ("infrastructure_failed", None, "capacity_exceeded"),
+    "capacity-spoof-result.json": (
+        "infrastructure_failed",
+        None,
+        "implementation_unavailable",
+    ),
+    "missing-base-result.json": (
+        "infrastructure_failed",
+        None,
+        "implementation_unavailable",
+    ),
+}
+MATRIX_CASES = {
+    "complete": (
+        ["builder", "candidate", "reference", "reference", "reference"],
+        [0, 1, 0, 0, 0],
+    ),
+    "no-op-pass": (["builder", "candidate"], [0, 0]),
+    "reference-failure": (["builder", "candidate", "reference"], [0, 1, 1]),
+    "reference-instability": (
+        ["builder", "candidate", "reference", "reference"],
+        [0, 1, 0, 0],
+    ),
+    "memory-capacity": (["builder", "candidate"], [0, 137]),
+    "capacity-spoof": (["builder", "candidate"], [0, 2]),
+    "missing-base": ([], []),
+    "interrupted": (["builder"], []),
+}
+VARIANT_FILES = {
+    ".dockerignore",
+    "environment/Dockerfile",
+    "instruction.md",
+    "solution/program.py",
+    "task.toml",
+    "tests/cases.json",
+    "tests/test_task.py",
+    "workspace/program.py",
+}
+VARIANT_CHANGED_PATHS = {
+    "capacity-spoof": "tests/test_task.py",
+    "memory-capacity": "tests/test_task.py",
+    "no-op-pass": "tests/test_task.py",
+    "reference-failure": "solution/program.py",
+    "reference-instability": "tests/test_task.py",
+}
 
 
 class EvidenceError(ValueError):
@@ -150,12 +216,12 @@ def _validate_content(name: str, data: bytes, expected_head: str) -> None:
         value = _json_object(name, data)
         if name == "matrix.json":
             interrupted = value.get("interrupted")
-            complete = value.get("complete")
+            cases = value.get("cases")
             if (
                 value.get("schema_version") != SCHEMA
                 or value.get("head_sha") != expected_head
                 or type(interrupted) is not dict
-                or type(complete) is not dict
+                or type(cases) is not dict
                 or interrupted
                 != {
                     "adapter_failure": True,
@@ -163,18 +229,27 @@ def _validate_content(name: str, data: bytes, expected_head: str) -> None:
                     "restart_swept_owned": True,
                     "unowned_control_preserved": True,
                 }
-                or complete
-                != {
-                    "builder_exit": 0,
-                    "candidate_exit": 1,
-                    "outcome": "completed",
-                    "owned_resources_absent": True,
-                    "reference_exits": [0, 0, 0],
-                    "stable": True,
-                    "verdict": "passed",
-                }
+                or value.get("owned_resources_absent") is not True
+                or value.get("memory_oom_event") is not True
+                or set(cases) != set(MATRIX_CASES)
             ):
                 raise EvidenceError("matrix evidence is incomplete")
+            request_digests = []
+            for case, (launches, starts) in MATRIX_CASES.items():
+                item = cases.get(case)
+                if (
+                    type(item) is not dict
+                    or set(item) != {"launches", "request_digest", "start_statuses"}
+                    or item.get("launches") != launches
+                    or item.get("start_statuses") != starts
+                    or not isinstance(item.get("request_digest"), str)
+                    or re.fullmatch(r"sha256:[0-9a-f]{64}", item["request_digest"])
+                    is None
+                ):
+                    raise EvidenceError("matrix case evidence is incomplete")
+                request_digests.append(item["request_digest"])
+            if len(set(request_digests)) != len(MATRIX_CASES):
+                raise EvidenceError("matrix request identity differs")
         elif name == "quota.json":
             required = {
                 "backing_filesystem": "xfs",
@@ -202,12 +277,135 @@ def _validate_content(name: str, data: bytes, expected_head: str) -> None:
             }
             if any(value.get(key) != expected for key, expected in required.items()):
                 raise EvidenceError("harness boundary evidence is incomplete")
-        elif name in {"art-interrupt.json", "art-complete.json"}:
+        elif name == "pre-results.json":
+            variants = value.get("variants")
+            expected_names = {
+                "capacity-spoof",
+                "memory-capacity",
+                "no-op-pass",
+                "reference-failure",
+                "reference-instability",
+            }
+            if (
+                value.get("schema_version")
+                != "workstream.terminal_benchmark_pre_proof.v1"
+                or value.get("head_sha") != expected_head
+                or type(variants) is not dict
+                or set(variants) != expected_names
+            ):
+                raise EvidenceError("PRE result evidence is incomplete")
+            request_digests = []
+            for item in variants.values():
+                if (
+                    type(item) is not dict
+                    or set(item) != {"request_digest", "result_digest", "result_sha256"}
+                    or re.fullmatch(
+                        r"sha256:[0-9a-f]{64}", str(item.get("request_digest"))
+                    )
+                    is None
+                    or re.fullmatch(
+                        r"sha256:[0-9a-f]{64}", str(item.get("result_digest"))
+                    )
+                    is None
+                    or re.fullmatch(r"[0-9a-f]{64}", str(item.get("result_sha256")))
+                    is None
+                ):
+                    raise EvidenceError("PRE variant evidence differs")
+                request_digests.append(item["request_digest"])
+            if len(set(request_digests)) != len(expected_names):
+                raise EvidenceError("PRE request identity differs")
+        elif name == "variant-inventory.json":
+            variants = value.get("variants")
+            if (
+                value.get("schema_version")
+                != "workstream.terminal_benchmark_negative_packages.v1"
+                or value.get("head_sha") != expected_head
+                or type(variants) is not list
+                or len(variants) != len(VARIANT_CHANGED_PATHS)
+            ):
+                raise EvidenceError("variant inventory header differs")
+            names = []
+            for variant in variants:
+                if type(variant) is not dict:
+                    raise EvidenceError("variant inventory entry differs")
+                variant_name = variant.get("name")
+                entries = variant.get("entries")
+                if (
+                    set(variant)
+                    != {"changed_path", "changed_sha256", "entries", "name"}
+                    or variant_name not in VARIANT_CHANGED_PATHS
+                    or variant.get("changed_path")
+                    != VARIANT_CHANGED_PATHS[variant_name]
+                    or re.fullmatch(r"[0-9a-f]{64}", str(variant.get("changed_sha256")))
+                    is None
+                    or type(entries) is not list
+                    or len(entries) != len(VARIANT_FILES)
+                ):
+                    raise EvidenceError("variant inventory entry differs")
+                paths = []
+                total = 0
+                for entry in entries:
+                    if (
+                        type(entry) is not dict
+                        or set(entry) != {"byte_count", "path", "sha256"}
+                        or entry.get("path") not in VARIANT_FILES
+                        or type(entry.get("byte_count")) is not int
+                        or not 0 <= entry["byte_count"] <= 1_048_576
+                        or re.fullmatch(r"[0-9a-f]{64}", str(entry.get("sha256")))
+                        is None
+                    ):
+                        raise EvidenceError("variant file inventory differs")
+                    paths.append(entry["path"])
+                    total += entry["byte_count"]
+                if (
+                    set(paths) != VARIANT_FILES
+                    or len(paths) != len(set(paths))
+                    or total > 8_388_608
+                ):
+                    raise EvidenceError("variant file inventory differs")
+                names.append(variant_name)
+            if names != sorted(VARIANT_CHANGED_PATHS):
+                raise EvidenceError("variant inventory order differs")
+        elif name.startswith("art-"):
             if (
                 value.get("workspace_empty") is not True
                 or value.get("ledger_empty") is not True
             ):
                 raise EvidenceError("ART cleanup evidence is incomplete")
+        elif name in RESULT_EXPECTATIONS:
+            outcome, verdict, code = RESULT_EXPECTATIONS[name]
+            result = value.get("result")
+            isolation = value.get("isolation")
+            request_digest = value.get("request_digest")
+            if (
+                value.get("schema_version") != "workstream.terminal_benchmark_result.v1"
+                or type(result) is not dict
+                or type(isolation) is not dict
+                or isolation.get("runtime") != "runsc"
+                or not isinstance(request_digest, str)
+                or re.fullmatch(r"sha256:[0-9a-f]{64}", request_digest) is None
+                or result.get("request_digest") != request_digest
+                or result.get("outcome") != outcome
+                or result.get("verdict") != verdict
+            ):
+                raise EvidenceError("POST result evidence differs")
+            findings = result.get("findings")
+            if outcome == "completed":
+                expected_codes = [] if code is None else [code]
+                if (
+                    result.get("infrastructure_failure_code") is not None
+                    or not isinstance(findings, list)
+                    or [
+                        finding.get("code")
+                        for finding in findings
+                        if isinstance(finding, dict)
+                    ]
+                    != expected_codes
+                    or len(findings) != len(expected_codes)
+                ):
+                    raise EvidenceError("completed result evidence differs")
+            elif findings != [] or result.get("infrastructure_failure_code") != code:
+                raise EvidenceError("infrastructure result evidence differs")
         elif name == "restart-cleanup.json":
             if value != {
                 "owned_containers_absent": True,
@@ -231,6 +429,21 @@ def _validate_content(name: str, data: bytes, expected_head: str) -> None:
                 raise EvidenceError("cleanup receipt head differs")
             if any(value.get(key) != expected for key, expected in required.items()):
                 raise EvidenceError("cleanup receipt is incomplete")
+            if (
+                type(value.get("duration_seconds")) is not int
+                or not 0 <= value["duration_seconds"] <= 300
+            ):
+                raise EvidenceError("cleanup timing evidence differs")
+        elif name in {"timing-prepare.json", "timing-run.json"}:
+            expected_phase = name.removeprefix("timing-").removesuffix(".json")
+            maximum = 1_200 if expected_phase == "prepare" else 1_500
+            if (
+                set(value) != {"duration_seconds", "phase"}
+                or value.get("phase") != expected_phase
+                or type(value.get("duration_seconds")) is not int
+                or not 0 <= value["duration_seconds"] <= maximum
+            ):
+                raise EvidenceError("phase timing evidence differs")
     elif name.endswith(".ndjson"):
         if b"\x00" in data:
             raise EvidenceError(f"evidence contains NUL: {name}")

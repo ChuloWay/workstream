@@ -49,12 +49,15 @@ readonly BACKEND_PYTHON="${BACKEND_RUNTIME}/bin/python"
 readonly PYTHON_SOURCE_ROOT="${CONTROL_ROOT}/python-source"
 readonly BACKEND_SOURCE="${PYTHON_SOURCE_ROOT}/backend"
 readonly EXECUTE_POST="${PYTHON_SOURCE_ROOT}/scripts/execute_post.py"
+readonly EXECUTE_PRE="${PYTHON_SOURCE_ROOT}/scripts/execute_pre.py"
 readonly MATRIX_BUILDER="${PYTHON_SOURCE_ROOT}/scripts/build_matrix.py"
+readonly VARIANT_PREPARER="${PYTHON_SOURCE_ROOT}/scripts/prepare_variants.py"
 readonly REAL_DOCKER="$(readlink -f "$(command -v docker)")"
 readonly DOCKER_WRAPPER_SOURCE="$(readlink -f "${SCRIPT_DIR}/docker-wrapper.sh")"
 readonly DOCKER_WRAPPER="${CONTROL_ROOT}/docker-wrapper.sh"
 readonly PILOT_PROBE="${REPOSITORY_ROOT}/experiments/pilot00_gvisor_offline/probe.sh"
 readonly PACKAGE="${PYTHON_SOURCE_ROOT}/package"
+readonly VARIANT_ROOT="${STATE_ROOT}/negative-packages"
 readonly CRANE_ROOT="${RUNNER_TEMP_ROOT}/ws493-crane"
 readonly CRANE_BINARY="${CRANE_ROOT}/crane"
 readonly CRANE_ARCHIVE="${RUNNER_TEMP_ROOT}/ws493-crane.tar.gz"
@@ -90,7 +93,12 @@ value = json.loads(sys.argv[2])
 payload = (json.dumps(value, sort_keys=True, separators=(",", ":")) + "\n").encode()
 descriptor = os.open(destination, os.O_CREAT | os.O_EXCL | os.O_WRONLY | os.O_NOFOLLOW, 0o600)
 try:
-    os.write(descriptor, payload)
+    view = memoryview(payload)
+    while view:
+        written = os.write(descriptor, view)
+        if written <= 0:
+            raise OSError("PRE summary write made no progress")
+        view = view[written:]
     os.fsync(descriptor)
 finally:
     os.close(descriptor)
@@ -600,7 +608,9 @@ expected_head = sys.argv[3]
 prefixes = (
     "backend/app",
     "experiments/terminal_benchmark_project_checkers/execute_post.py",
+    "experiments/terminal_benchmark_project_checkers/execute_pre.py",
     "experiments/terminal_benchmark_project_checkers/build_matrix.py",
+    "experiments/terminal_benchmark_project_checkers/prepare_variants.py",
     "pilots/terminal_benchmark/packages/ledger-reconcile",
 )
 if (
@@ -637,7 +647,9 @@ tracked.sort(key=lambda item: item[0])
 paths = [path for path, _ in tracked]
 required = {
     Path("experiments/terminal_benchmark_project_checkers/execute_post.py"),
+    Path("experiments/terminal_benchmark_project_checkers/execute_pre.py"),
     Path("experiments/terminal_benchmark_project_checkers/build_matrix.py"),
+    Path("experiments/terminal_benchmark_project_checkers/prepare_variants.py"),
 }
 package_prefix = Path("pilots/terminal_benchmark/packages/ledger-reconcile")
 if (
@@ -923,6 +935,12 @@ prepare_contract() {
   create_control_custody
   stage_python_sources
   python_sources_valid
+  /usr/bin/python3 "${VARIANT_PREPARER}" prepare \
+    "${PACKAGE}" "${VARIANT_ROOT}" "${EXPECTED_HEAD}"
+  /usr/bin/python3 "${VARIANT_PREPARER}" verify \
+    "${VARIANT_ROOT}" "${EXPECTED_HEAD}"
+  write_owned_json "${RAW_DIR}/variant-inventory.json" \
+    "$(/usr/bin/python3 "${VARIANT_PREPARER}" evidence "${VARIANT_ROOT}" "${EXPECTED_HEAD}")"
   [[ -x /usr/bin/python3 && -x "${BACKEND_BOOTSTRAP_UV}" ]]
   [[ "$(/usr/bin/python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')" == 3.12 ]]
   /usr/bin/python3 -m venv --copies "${BACKEND_RUNTIME}"
@@ -1001,6 +1019,7 @@ PY
 }
 
 prepare() {
+  local started_at=${SECONDS}
   for command in docker git python3 cargo rustc truncate losetup mkfs.xfs mount findmnt mountpoint xfs_quota setpriv flock timeout; do
     require_command "${command}"
   done
@@ -1027,11 +1046,13 @@ prepare() {
     install -m 0600 -o "${OWNER_UID}" -g "${DOCKER_GID}" /dev/null "${RAW_DIR}/${name}"
   done
   PYTHONPATH="${SCRIPT_DIR}" python3 -m unittest -q \
-    test_verify_evidence test_runtime_proof
+    test_prepare_variants test_verify_evidence test_runtime_proof
   PYTHONPATH="${BACKEND_SOURCE}:${PYTHON_SOURCE_ROOT}/scripts:${SCRIPT_DIR}" \
     "${BACKEND_PYTHON}" -B -m unittest -q test_execute_post_contract
   write_owned_json "${RAW_DIR}/verifier-tests.json" \
-    '{"passed":true,"suites":["test_execute_post_contract","test_verify_evidence","test_runtime_proof"]}'
+    '{"passed":true,"suites":["test_execute_post_contract","test_prepare_variants","test_verify_evidence","test_runtime_proof"]}'
+  write_owned_json "${RAW_DIR}/timing-prepare.json" \
+    "{\"duration_seconds\":$((SECONDS - started_at)),\"phase\":\"prepare\"}"
 }
 
 service_environment() {
@@ -1253,7 +1274,7 @@ for command in commands:
     command_trace.append({"kind": kind, "status": status})
     if len(argv) >= 2 and argv[0] == "start":
         start_statuses.append(status)
-if len(command_trace) > 256 or len(start_statuses) > 8:
+if len(command_trace) > 256 or len(start_statuses) > 32:
     raise SystemExit(1)
 allowed_rejection_checks = {
     "bind_mount_count", "busybox_tmpfs", "cache_destination",
@@ -1262,7 +1283,7 @@ allowed_rejection_checks = {
     "cap_chown", "cap_dac_override", "cap_drop", "cap_fowner", "cap_sys_chroot", "cpu",
     "destinations", "kind", "memory", "mount_count", "name", "network", "pids",
     "project_destination", "project_read_only", "project_source", "read_only_root",
-    "read_write", "runtime", "security", "socket_destination", "socket_source", "source",
+    "read_write", "request_digest", "runtime", "security", "socket_destination", "socket_source", "source",
     "storage", "tmpfs", "user",
 }
 launch_rejections = []
@@ -1307,11 +1328,106 @@ print(
 PY
 }
 
+run_post_case() {
+  local name="$1" expectation="$2" code="$3"
+  local -a expected=()
+  if [[ -n "${code}" ]]; then
+    expected=(--expected-code "${code}")
+  fi
+  run_as_owner "${BACKEND_PYTHON}" "${EXECUTE_POST}" \
+    --contract "${RAW_DIR}/contract.json" \
+    --package "${VARIANT_ROOT}/${name}" \
+    --scratch "${ART_ROOT}" --socket "${SOCKET_PATH}" \
+    --expect "${expectation}" "${expected[@]}" \
+    --output "${RAW_DIR}/${name}-result.json" \
+    --art-output "${RAW_DIR}/art-${name}.json"
+  positive_owned_absence
+}
+
+run_pre_cases() {
+  local checker work name
+  checker="$(recorded_image_reference checker)"
+  work="${CONTROL_ROOT}/pre"
+  [[ ! -e "${work}" && ! -L "${work}" ]]
+  install -d -m 0700 "${work}"
+  for name in capacity-spoof memory-capacity no-op-pass reference-failure reference-instability; do
+    PYTHONPATH="${BACKEND_SOURCE}:${PYTHON_SOURCE_ROOT}/scripts" \
+      "${BACKEND_PYTHON}" "${EXECUTE_PRE}" request \
+      --contract "${RAW_DIR}/contract.json" \
+      --package "${VARIANT_ROOT}/${name}" \
+      --output "${work}/${name}.request.json"
+    inner_docker run --rm -i --pull=never \
+      --name "${PROOF_PREFIX}-pre-${name}" \
+      --label "org.workstream.ws493.pre=${RUN_ID}" \
+      --runtime runsc --network none --read-only --user 65532:65532 \
+      --cap-drop ALL --security-opt no-new-privileges \
+      --pids-limit 32 --memory 536870912 --cpus 1 \
+      --tmpfs /tmp:rw,noexec,nosuid,nodev,size=16777216 \
+      --mount "type=bind,src=${VARIANT_ROOT}/${name},dst=/work/input,readonly" \
+      "${checker}" <"${work}/${name}.request.json" >"${work}/${name}.result.json"
+    PYTHONPATH="${BACKEND_SOURCE}:${PYTHON_SOURCE_ROOT}/scripts" \
+      "${BACKEND_PYTHON}" "${EXECUTE_PRE}" verify \
+      --request "${work}/${name}.request.json" \
+      --result "${work}/${name}.result.json" \
+      --output "${work}/${name}.fact.json"
+  done
+  [[ -z "$(inner_docker ps -aq --no-trunc --filter "label=org.workstream.ws493.pre=${RUN_ID}")" ]]
+  python3 - "${work}" "${RAW_DIR}/pre-results.json" "${EXPECTED_HEAD}" <<'PY'
+import json
+import os
+import sys
+from pathlib import Path
+
+root, destination, head = Path(sys.argv[1]), Path(sys.argv[2]), sys.argv[3]
+names = [
+    "capacity-spoof", "memory-capacity", "no-op-pass",
+    "reference-failure", "reference-instability",
+]
+facts = {}
+for name in names:
+    value = json.loads((root / f"{name}.fact.json").read_text(encoding="utf-8"))
+    if set(value) != {"request_digest", "result_digest", "result_sha256"}:
+        raise SystemExit("PRE fact differs")
+    facts[name] = value
+if len({value["request_digest"] for value in facts.values()}) != len(names):
+    raise SystemExit("PRE request identities were not fresh")
+payload = (
+    json.dumps(
+        {
+            "head_sha": head,
+            "schema_version": "workstream.terminal_benchmark_pre_proof.v1",
+            "variants": facts,
+        },
+        separators=(",", ":"),
+        sort_keys=True,
+    )
+    + "\n"
+).encode()
+descriptor = os.open(destination, os.O_CREAT | os.O_EXCL | os.O_WRONLY | os.O_NOFOLLOW, 0o600)
+try:
+    view = memoryview(payload)
+    while view:
+        written = os.write(descriptor, view)
+        if written <= 0:
+            raise OSError("PRE evidence write made no progress")
+        view = view[written:]
+    os.fsync(descriptor)
+finally:
+    os.close(descriptor)
+PY
+  chown "${OWNER_UID}:${DOCKER_GID}" "${RAW_DIR}/pre-results.json"
+  chmod 0600 "${RAW_DIR}/pre-results.json"
+  rm -rf "${work}"
+}
+
 run_matrix() {
+  local started_at=${SECONDS}
   [[ "$(id -u)" -eq 0 ]]
   assert_source_head
   control_custody_valid
   python_sources_valid
+  /usr/bin/python3 "${VARIANT_PREPARER}" verify \
+    "${VARIANT_ROOT}" "${EXPECTED_HEAD}"
   local event_since
   event_since="$(date +%s)"
   local control="${PROOF_PREFIX}-unowned-control"
@@ -1442,11 +1558,38 @@ PY
   printf 'ws493_matrix=complete_executor_started\n'
   run_as_owner "${BACKEND_PYTHON}" "${EXECUTE_POST}" \
     --contract "${RAW_DIR}/contract.json" --package "${PACKAGE}" --scratch "${ART_ROOT}" \
-    --socket "${SOCKET_PATH}" --expect complete --output "${RAW_DIR}/complete-result.json" \
+    --socket "${SOCKET_PATH}" --expect passed --output "${RAW_DIR}/complete-result.json" \
     --art-output "${RAW_DIR}/art-complete.json"
   printf 'ws493_matrix=complete_executor_finished\n'
   positive_owned_absence
   [[ "$(inner_docker inspect "${control}" --format '{{index .Config.Labels "org.workstream.ws493.control"}}')" == "${RUN_ID}" ]]
+
+  run_pre_cases
+  printf 'ws493_matrix=pre_cases_finished\n'
+  printf 'ws493_matrix=negative_cases_started\n'
+  run_post_case no-op-pass finding starter_unexpectedly_passed
+  run_post_case reference-failure finding reference_failed
+  run_post_case reference-instability finding reference_unstable
+  run_post_case memory-capacity infrastructure capacity_exceeded
+  run_post_case capacity-spoof infrastructure implementation_unavailable
+  printf 'ws493_matrix=negative_cases_finished\n'
+
+  local approved_base
+  approved_base="$(recorded_image_reference approved_base)"
+  inner_docker image rm -f "${approved_base}" >/dev/null
+  if inner_docker image inspect "${approved_base}" >/dev/null 2>&1; then
+    printf 'ws493_matrix=approved_base_removal_failed\n' >&2 || true
+    return 1
+  fi
+  run_as_owner "${BACKEND_PYTHON}" "${EXECUTE_POST}" \
+    --contract "${RAW_DIR}/contract.json" --package "${PACKAGE}" \
+    --scratch "${ART_ROOT}" --socket "${SOCKET_PATH}" \
+    --expect infrastructure --expected-code implementation_unavailable \
+    --output "${RAW_DIR}/missing-base-result.json" \
+    --art-output "${RAW_DIR}/art-missing-base.json"
+  positive_owned_absence
+  printf 'ws493_matrix=missing_base_finished\n'
+
   inner_docker rm -f -v "${control}" >/dev/null
   kill -TERM "$(cat "${SERVICE_PID_FILE}")"
   wait "${second_service_job}" || true
@@ -1540,6 +1683,8 @@ PY
   rm -f "${docker_events_capture}"
   run_as_owner "${BACKEND_PYTHON}" "${MATRIX_BUILDER}" \
     --raw "${RAW_DIR}" --head "${EXPECTED_HEAD}" --output "${RAW_DIR}/matrix.json"
+  write_owned_json "${RAW_DIR}/timing-run.json" \
+    "{\"duration_seconds\":$((SECONDS - started_at)),\"phase\":\"run\"}"
   find "${RAW_DIR}" -maxdepth 1 -type f -exec chmod 0600 {} +
   [[ -z "$(find "${RAW_DIR}" -mindepth 1 -maxdepth 1 ! -type f -print -quit)" ]]
 }
@@ -1550,6 +1695,7 @@ stage_evidence() {
 }
 
 cleanup() {
+  local started_at=${SECONDS}
   [[ "$(id -u)" -eq 0 ]]
   local control_owned=false control_safe=true
   if [[ -e "${CONTROL_ROOT}" || -L "${CONTROL_ROOT}" ]]; then
@@ -1606,11 +1752,11 @@ cleanup() {
   rmdir "${MOUNT_ROOT}" 2>/dev/null || true
   if [[ ! -e "${RAW_DEVICE_FILE}" && ! -e "${STATE_ROOT}" ]]; then deleted=true; fi
   rm -f "${CLEANUP_RECEIPT}"
-  python3 - "${CLEANUP_RECEIPT}" "${EXPECTED_HEAD}" "${outer_absent}" "${unmounted}" "${detached}" "${deleted}" <<'PY'
+  python3 - "${CLEANUP_RECEIPT}" "${EXPECTED_HEAD}" "${outer_absent}" "${unmounted}" "${detached}" "${deleted}" "$((SECONDS - started_at))" <<'PY'
 import json, os, sys
 truth = lambda value: value == "true"
 body = {
-    "schema_version": "workstream.terminal_benchmark_project_checker_proof.v1",
+    "schema_version": "workstream.terminal_benchmark_project_checker_proof.v2",
     "head_sha": sys.argv[2],
     "dind_absent": truth(sys.argv[3]),
     "registry_absent": truth(sys.argv[3]),
@@ -1618,6 +1764,7 @@ body = {
     "xfs_unmounted": truth(sys.argv[4]),
     "loop_detached": truth(sys.argv[5]),
     "raw_state_deleted": truth(sys.argv[6]),
+    "duration_seconds": int(sys.argv[7]),
 }
 with open(sys.argv[1], "x", encoding="utf-8") as stream:
     json.dump(body, stream, separators=(",", ":"), sort_keys=True)

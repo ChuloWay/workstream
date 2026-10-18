@@ -167,9 +167,7 @@ def _report_unexpected_response(response: ExternalCheckerExecutionResponse) -> N
         )
         payload_bytes = payload.encode()
         maximum_payload_bytes = (
-            _MAX_DIAGNOSTIC_LINE_BYTES
-            - len(_UNEXPECTED_RESPONSE_PREFIX.encode())
-            - 1
+            _MAX_DIAGNOSTIC_LINE_BYTES - len(_UNEXPECTED_RESPONSE_PREFIX.encode()) - 1
         )
         if len(payload_bytes) > maximum_payload_bytes:
             payload = json.dumps(
@@ -304,20 +302,45 @@ async def _execute(arguments: argparse.Namespace) -> None:
                         "request_digest": request.request_digest,
                     }
                 else:
-                    if arguments.expect != "complete":
+                    if arguments.expect == "interrupted":
                         _report_unexpected_response(response)
                         raise RuntimeError("interrupted request unexpectedly completed")
+                    result = response.result
                     if (
-                        response.result.outcome != "completed"
-                        or response.result.verdict != "passed"
-                        or response.result.findings
-                        or response.isolation is None
+                        response.isolation is None
                         or response.isolation.runtime != "runsc"
                     ):
-                        raise RuntimeError("complete POST result differs")
+                        raise RuntimeError("POST isolation differs")
+                    if arguments.expect == "passed":
+                        valid = (
+                            result.outcome == "completed"
+                            and result.verdict == "passed"
+                            and not result.findings
+                            and result.infrastructure_failure_code is None
+                        )
+                    elif arguments.expect == "finding":
+                        valid = (
+                            result.outcome == "completed"
+                            and result.verdict == "failed"
+                            and result.infrastructure_failure_code is None
+                            and [finding.code for finding in result.findings]
+                            == [arguments.expected_code]
+                        )
+                    else:
+                        valid = (
+                            result.outcome == "infrastructure_failed"
+                            and result.verdict is None
+                            and not result.findings
+                            and result.infrastructure_failure_code
+                            == arguments.expected_code
+                        )
+                    if not valid:
+                        _report_unexpected_response(response)
+                        raise RuntimeError("POST result differs")
                     outcome = {
-                        "schema_version": "workstream.terminal_benchmark_complete.v1",
-                        "result": response.result.model_dump(mode="json"),
+                        "request_digest": request.request_digest,
+                        "schema_version": "workstream.terminal_benchmark_result.v1",
+                        "result": result.model_dump(mode="json"),
                         "isolation": asdict(response.isolation),
                     }
     finally:
@@ -344,10 +367,19 @@ def main() -> None:
     parser.add_argument("--package", type=Path, required=True)
     parser.add_argument("--scratch", type=Path, required=True)
     parser.add_argument("--socket", type=Path, required=True)
-    parser.add_argument("--expect", choices=("interrupted", "complete"), required=True)
+    parser.add_argument(
+        "--expect",
+        choices=("interrupted", "passed", "finding", "infrastructure"),
+        required=True,
+    )
+    parser.add_argument("--expected-code")
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--art-output", type=Path, required=True)
     arguments = parser.parse_args()
+    if (arguments.expect in {"finding", "infrastructure"}) != bool(
+        arguments.expected_code
+    ):
+        parser.error("--expected-code is required only for finding/infrastructure")
     asyncio.run(_execute(arguments))
 
 

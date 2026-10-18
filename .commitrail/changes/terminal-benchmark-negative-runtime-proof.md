@@ -89,8 +89,8 @@ a contributor-output capacity-spoof control.
 
 One bounded preparation helper copies the exact HEAD-bound public package into
 fixed named proof variants using no-follow regular-file reads, a closed eight
-file/four directory inventory, count/byte ceilings and atomic publication below
-the existing root-owned control tree. It changes only these reviewed text files:
+file/four directory inventory, count/byte ceilings and atomic publication in
+the existing quota-backed, root-owned proof state. It changes only these reviewed text files:
 
 - `no-op-pass`: replace `tests/test_task.py` with a nonempty successful test so
   the unchanged starter exits zero and yields `starter_unexpectedly_passed`.
@@ -203,7 +203,7 @@ reduction; no case receives an unbounded or resettable workflow allowance.
 |---|---|---|---|
 | Current proof boundary | Inspect merged #594 service, PRE contract, workflow, matrix and run `39058870579` | One successful and one interruption path are implemented and hosted-green | Negative packages and forced memory exhaustion are not exercised |
 | Fixed-recipe feasibility | Trace exact PRE Dockerfile and projected builder context through `validate_fixed_text`, `project_build_context` and `run_builder` | No contributor-controlled build instruction exists after PRE | Plan review must confirm source metadata/path/storage cannot produce a distinct work failure |
-| Fixture contracts | Focused stdlib tests for variant preparation and PRE invocation | Planned | Source tests do not replace hosted runsc execution |
+| Fixture contracts | Focused stdlib tests for variant preparation, retained inventory and PRE request/result binding | Source checks pass; root-custody cases require the hosted root phase | Source tests do not replace hosted runsc execution |
 | Result classification | Locked Rust workspace tests including real builder command-path regression | Planned | Fake Docker proves mapping, not Docker/runsc behavior |
 | Real negative/resource matrix | Existing path-scoped hosted workflow on exact PR head | Planned | Development runner evidence is not deployed production proof |
 | Evidence closure | Matrix reducer, evidence verifier, owned cleanup receipt and mutation probes | Planned | Production activation and #555 journey remain separate |
