@@ -230,7 +230,9 @@ async def test_source_download_verifies_public_custody_and_fresh_read_authority(
             "--download", str(revoked_destination),
         )
         assert denied.returncode == 1 and denied.stdout == ""
-        assert json.loads(denied.stderr)["error"]["status"] == 403
+        error = json.loads(denied.stderr)["error"]
+        assert error["status"] == 404 and error["code"] == "task_import_source_not_found"
+        assert not error.get("outcome_unknown", False)
         assert list(revoked_destination.iterdir()) == []
 
 
