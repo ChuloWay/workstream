@@ -721,7 +721,10 @@ CLI never follows finding paths or exposes provider/private management fields.
 History and findings lists fetch one page only; use the returned opaque cursor
 explicitly (up to 1024 characters; no local decoding). `--run` cannot be combined with pagination flags. Revision change
 summary is available through `task context` as `revision_context.changes`,
-not in the current public history rows.
+not in the current public history rows. Human-readable submission/history output
+points to that separate current-context read; it does not fetch or attach today's
+revision context to a historical submission. JSON output remains the exact
+authorized submission/history response.
 History projects `rejected` with `status_reason=revision_limit_reached` after
 immediate exhaustion, or `revision_deadline_expired` after timeout. Both come
 from immutable TASK receipts without editing the original Submission.
