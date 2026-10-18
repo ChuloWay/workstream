@@ -1,7 +1,7 @@
 # Reconcile uncertain post-submit delivery without repeating effects
 
 - Initiative: None
-- Durable disposition: Planned
+- Durable disposition: Complete
 - Intended merge outcome: An authorized system Operator can inspect exact
   uncertain post-submit request and completion deliveries, hold ambiguous
   effects, and schedule one source-specific reconciliation that verifies
@@ -252,37 +252,37 @@ child state is exposed only as the closed public `held` classification.
 
 ## Acceptance criteria
 
-- [ ] A current system Operator can list bounded exact request/completion
+- [x] A current system Operator can list bounded exact request/completion
   UNKNOWN attempts for one project with signed stable pagination, source run and
   generation, delivery attempt state and one of committed/retry-safe/unresolved;
   the response contains no raw payload, artifact/provider data, credential or
   private assignment identity.
-- [ ] Wrong actor kind, absent/revoked/non-Operator grant, foreign project,
+- [x] Wrong actor kind, absent/revoked/non-Operator grant, foreign project,
   malformed cursor, wrong source/generation, changed-key payload and stale
   source fail closed with canonical concealed/conflict/unavailable behavior,
   denial evidence and no product or recovery event.
-- [ ] A terminal CHECKERS request result is reconciled by an acknowledged child
+- [x] A terminal CHECKERS request result is reconciled by an acknowledged child
   without another external execution, result, completion event or business
   audit. A queued generation-zero request may execute once through the existing
   owner; running, expired-running and partially evidenced requests remain held.
-- [ ] A complete routing manifest is reconciled without calling the routing
+- [x] A complete routing manifest is reconciled without calling the routing
   operation or acceptance participation. The owner-owned verifier checks the
   database closure, exact source/manifest, authorization/audit/outcome notice
   and branch effects. False-policy acceptance commit/ack-loss retains exactly
   one FinalAcceptance, submitter ContributionRecord and governed award set and
   creates no Review. A no-effect completion may invoke the existing routing
   operation once; partial, stale or inconsistent outcomes remain held.
-- [ ] Same-key command and response-loss replay return the same recovery event.
+- [x] Same-key command and response-loss replay return the same recovery event.
   Concurrent or sequential changed keys cannot schedule another child. A child
   that finalizes UNKNOWN remains visibly held and cannot be retried by this
   surface. Transaction,
   AUTH/audit, append, handler and commit failures roll back their caller-owned
   writes, while already committed business effects are detected on the next
   observation rather than repeated.
-- [ ] The recovery event remains absent from `retry_unknown`; an UNKNOWN child
+- [x] The recovery event remains absent from `retry_unknown`; an UNKNOWN child
   is projected as held by later authorized reads from durable source facts, and
   no later reconciliation command or event is allowed.
-- [ ] Real PostgreSQL tests interrupt request execution before invocation,
+- [x] Real PostgreSQL tests interrupt request execution before invocation,
   during an uncertain external phase and after finalization; interrupt
   completion before commit and after false-policy acceptance commit; and assert
   exact locks, immutable original attempts, complete/unchanged effects,
@@ -290,7 +290,7 @@ child state is exposed only as the closed public `held` classification.
   commit/rollback against recovery and race two command keys. Handler tests move
   the source between command and child execution and require fresh committed,
   retry-safe or held classification before any effect.
-- [ ] Production registration, AUTH/action/audit pairs, OpenAPI, route-rate
+- [x] Production registration, AUTH/action/audit pairs, OpenAPI, route-rate
   controls, ownership and test-lane catalogues include only the exact new
   surface. Current Operator workflow and roadmap describe the delivered limit;
   #581/#555 remain open for the full durable-worker interruption drill.
@@ -316,8 +316,11 @@ child state is exposed only as the closed public `held` classification.
 | Existing terminal UNKNOWN attempts are immutable and excluded from automatic replay | Inspect OUTBOX delivery/model/recovery SQL guards and production registry | Confirmed on base | Plan review must challenge whether a child event is the smallest safe execution seam |
 | Request source has a durable no-effect discriminator | Inspect CHECKERS queued/running/terminal state, lease generation and phase evidence | Queued generation zero with no phase evidence is distinct; running or expired-running is uncertain | Real PostgreSQL race/interruption proof required |
 | Completion commit is atomically distinguishable | Inspect `TaskPostSubmitOutcome`, routing manifest and deferred closure | Complete manifest is the retained outcome; absent transaction leaves no committed routing effects | Real false-policy commit/ack-loss and corruption proof required |
-| Existing operations can remain sole writers | Inject a recovery-bound typed invocation observer/fence into existing executor/outcome composition | Planned | Architecture/security review and exact integration proof required |
-| Public authority can remain least privilege | `operations.post_submit_delivery.list` / `operations.status.read` and `operations.post_submit_delivery.reconcile` / `operations.reconcile.run`; handler validates the Operator decision only as cause and existing owners use their current service actions | Planned | Required 0055 audit-pair migration and revocation/substitution proof |
+| Existing operations remain sole writers | Recovery-bound typed invocation observation composes the existing executor/outcome owners; committed completion uses the extracted read-only retained-outcome verifier | Focused public PostgreSQL proofs pass without a repeated checker, routing, acceptance, contribution or award effect | The full durable-worker interruption drill remains #555 |
+| Public authority remains least privilege | Exact list/status.read and reconcile/reconcile.run pairs; project-targeted `outbox_delivery` audit resource; cause validation while existing owners retain their fixed-service actions | Catalogue/OpenAPI/rate proofs pass; public PostgreSQL denial, revocation and same-key replay proofs pass | No new permission, role or service grant |
+| Migration preserves closed audit vocabularies | Upgrade from 0054 to `0055_delivery_reconciliation`, direct inserts for both exact pairs/resource, wrong pair and target rejection, downgrade refusal | 1/1 focused PostgreSQL migration test passed in 64.20s at `9581e3e5a`; cleanup complete | Final full-suite execution remains repository CI evidence |
+| Request, completion and child custody are source-specific | Seven public PostgreSQL cases plus three independent-session races; immutable original, one child, committed verification, retry-safe execution, held UNKNOWN, source transition and foreign denial | First public path 1/1 at `e4918bc10` (47.25s); committed acceptance 1/1 at `6be05ae89` (29.20s); first five public cases passed at `ef4789198`; final transition/denial/race slice 5/5 at `3e6b61e5c` (162.14s), with isolated cleanup complete | Split-head evidence is exact about its provenance; later changes after `e4918bc10` affect tests, docs and generated ownership data only |
+| Closed contracts and production inventories match the surface | DTO/privacy/idempotency contracts, canonical OUTBOX append validation, AUTH catalogue, OpenAPI, rate, ownership and lane checks | 33/33 focused contracts passed; three focused inventory/API checks passed; boundary, structure, ownership, Commitrail, link and stale-wording checks passed | No generic OUTBOX recovery surface was added |
 | Full interruption drill | Parent #555 durable-worker matrix | Deferred | This PR must not claim the complete #555 drill or deployed operation |
 
 ## Review findings
@@ -343,11 +346,11 @@ child state is exposed only as the closed public `held` classification.
 
 ## Reconciliation
 
-- Current-source reconciliation: based on main
-  `51b86807111ff25b067402219ba0b533e0750f3e`, including merged #588 known-terminal
-  Operator recovery, #589 registry/AUTH audit pairs, #592 S3 activation, #590
-  hosted release configuration and #597 identity lifecycle. S3 separately owns
-  the next `0054`; this change reserves no competing migration.
+- Current-source reconciliation: stacked on canonical artifact-proof timing
+  source `2a67bf6d9`, which contains `0054_artifact_proof_timing` and is based on
+  main `51b86807111ff25b067402219ba0b533e0750f3e`. This change owns the single
+  linear `0055_delivery_reconciliation` migration; `0054` remains byte-for-byte
+  under its original owner and is not a runtime dependency of recovery.
 - Next usable boundary: after this focused source-specific recovery passes,
   #555 must run the complete durable-worker interruption matrix against the
   supported public path before #581 can close.
