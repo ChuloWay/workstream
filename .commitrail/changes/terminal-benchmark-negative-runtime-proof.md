@@ -1,7 +1,7 @@
 # PILOT-06B — Terminal benchmark negative runtime proof
 
 - Initiative: None
-- Durable disposition: Planned
+- Durable disposition: Complete
 - Intended merge outcome: The existing terminal-benchmark runsc proof executes PRE-valid negative packages for no-op, reference failure, reference instability, forced memory exhaustion and a capacity-spoof control, while every nonzero fixed-recipe builder exit is classified as infrastructure or capacity rather than contributor work.
 
 ## Intent
@@ -156,35 +156,36 @@ reduction; no case receives an unbounded or resettable workflow allowance.
 
 ## Acceptance criteria
 
-- [ ] A source-level invariant and real `run_builder` regression prove that the
+- [x] A source-level invariant and real `run_builder` regression prove that the
   fixed admitted recipe has no contributor-controlled failing build step;
   non-capacity builder exits return `implementation_unavailable`, and builder
   OOM or trusted Kaniko capacity signals return `capacity_exceeded`. This is a
   command-path classification regression, not a claim that every resource has
   been exhausted in a real container.
-- [ ] The exact project checker image accepts every derived variant under PRE
+- [x] The exact project checker image accepts every derived variant under PRE
   before any POST continuation launches.
-- [ ] A real runsc candidate returns the completed work finding
+- [x] A real runsc candidate returns the completed work finding
   `starter_unexpectedly_passed` for the ineffective-test variant.
-- [ ] Real runsc references return `reference_failed` and
+- [x] Real runsc references return `reference_failed` and
   `reference_unstable` for the respective variants, with the instability case
   using distinct fresh container identities and successful exits.
-- [ ] A real runsc memory case returns infrastructure `capacity_exceeded`, with
+- [x] A real runsc memory case returns infrastructure `capacity_exceeded`, with
   an exact labeled OOM event and no work finding. A
   contributor-controlled capacity phrase cannot produce that classification.
-- [ ] A real missing harness-owned approved-base image returns infrastructure
+- [x] A real missing harness-owned approved-base image returns infrastructure
   `implementation_unavailable` before builder/oracle launch and without network
   fallback.
-- [ ] Every case binds its exact request/result/isolation facts, launch prefix,
-  ART unwind and positive Docker/image absence; unknown or partial attempts fail
-  the reducer and verifier.
-- [ ] Interrupted and successful controls still pass unchanged, the unowned
+- [x] Every result-bearing case binds its exact request/result/isolation facts
+  and launch prefix. The interrupted case separately proves adapter failure,
+  ART unwind, restart cleanup and unowned-control preservation; unknown or
+  partial attempts fail the reducer and verifier.
+- [x] Interrupted and successful controls still pass unchanged, the unowned
   control survives, and final workflow cleanup proves DIND/registry absence,
   XFS unmount, loop detach and deletion of raw state.
-- [ ] Focused unit/mutation tests discriminate fixture substitution, omitted
+- [x] Focused unit/mutation tests discriminate fixture substitution, omitted
   cases, wrong classification, loosened launch expectations and weakened
   cleanup; locked Rust workspace tests and the hosted exact-head proof pass.
-- [ ] The roadmap and issue handoff distinguish this hosted development proof
+- [x] The roadmap and issue handoff distinguish this hosted development proof
   from exact registration, approved activation, production-limit selection and
   deployed Workstream operation owned by #555.
 
@@ -205,12 +206,11 @@ reduction; no case receives an unbounded or resettable workflow allowance.
 
 | Claim | Command or proof | Result | Remaining uncertainty |
 |---|---|---|---|
-| Current proof boundary | Inspect merged #594 service, PRE contract, workflow, matrix and run `39058870579` | One successful and one interruption path are implemented and hosted-green | Negative packages and forced memory exhaustion are not exercised |
-| Fixed-recipe feasibility | Trace exact PRE Dockerfile and projected builder context through `validate_fixed_text`, `project_build_context` and `run_builder` | No contributor-controlled build instruction exists after PRE | Plan review must confirm source metadata/path/storage cannot produce a distinct work failure |
-| Fixture contracts | Focused stdlib tests for variant preparation, retained inventory and PRE request/result binding | Source checks pass; root-custody cases require the hosted root phase | Source tests do not replace hosted runsc execution |
-| Result classification | Locked Rust workspace tests including real builder command-path regression | Planned | Fake Docker proves mapping, not Docker/runsc behavior |
-| Real negative/resource matrix | Existing path-scoped hosted workflow on exact PR head | Planned | Development runner evidence is not deployed production proof |
-| Evidence closure | Matrix reducer, evidence verifier, owned cleanup receipt and mutation probes | Planned | Production activation and #555 journey remain separate |
+| Previous proof boundary | Inspect merged #594 service, PRE contract, workflow, matrix and run `39058870579` | The existing successful and interrupted controls were retained; this change adds the negative cases without replacing their custody or cleanup proof | Historical baseline evidence does not itself prove the new cases |
+| Fixed-recipe classification | Trace the exact PRE Dockerfile and projected builder context through `validate_fixed_text`, `project_build_context` and `run_builder`; Backend `external-checker-runtime` job `117655838847` in run `39120606770` | PASS on exact source head `1136e8f78936c9878ace4242ac262ac6223fa4a2`: 5 SDK, 38 service and 9 project-image tests. The service tests include fixed-recipe builder classification and exact memory/swap command construction | Fake-Docker command tests remain source-level evidence; the hosted matrix below supplies real Docker/runsc behavior |
+| Fixture and evidence contracts | Hosted preparation in run `39120606782` executes `test_prepare_variants`, `test_verify_evidence`, `test_runtime_proof` and `test_execute_post_contract` | PASS on exact head `1136e8f78936c9878ace4242ac262ac6223fa4a2`: 34 proof/verifier tests and 3 staged contract tests, including the root-only custody cases | Focused validation is bounded to the checked-in public package and proof environment |
+| Real negative/resource matrix | Path-scoped `Terminal benchmark project checker proof` run `39120606782`, job `117655263940`, artifact `12133689792` | PASS on exact head `1136e8f78936c9878ace4242ac262ac6223fa4a2`: PRE accepted all five variants; runsc POST produced `starter_unexpectedly_passed`, `reference_failed`, `reference_unstable`, trusted OOM `capacity_exceeded`, spoofed-text `implementation_unavailable`, and missing-base `implementation_unavailable`; prepare took 87 seconds and the matrix 127 seconds | Development DIND/runsc evidence is not deployed production proof; forced PID exhaustion remains unproved |
+| Evidence and cleanup closure | Exact-head artifact `12133689792`; workflow log SHA-256 `ba423a794c642401efb5eedfa52f88fde01ee088ffe942226822ebe95174b381` | Matrix v2 binds all seven result-bearing request/launch/result/isolation sequences and the labeled OOM event. Its separate interrupted entry proves adapter failure, ART unwind, restart cleanup and unowned-control preservation. Cleanup proves DIND/registry/resource absence, XFS unmount, loop detach and raw-state deletion; upload zip digest is `b708f2a0b08ed0149da304713b63571df84dd604224240b17da055721aefc7f9` | Exact terminal registration, approved activation, production-limit selection and the #555 deployed journey remain separate |
 
 ## Review findings
 
@@ -226,12 +226,28 @@ reduction; no case receives an unbounded or resettable workflow allowance.
 - Plan findings `CI-493-NP-01/02`: the workflow must select this new record and
   must use the explicit 90-minute job/80-minute step budget above so expanded
   proof execution cannot consume cleanup time.
+- Implementation finding `QA493-NEG-001`: memory exhaustion was initially
+  under-specified because Docker swap could extend the memory ceiling. Builder
+  and oracle commands now set equal memory and memory-swap limits, and both the
+  Rust command regression and wrapper profile checks bind the exact value.
+- Implementation finding `QA493-NEG-002`: the first evidence contract did not
+  cross-bind every matrix request digest to its result or compare the complete
+  isolation receipt. Contract v2 derives the receipt from verified image facts
+  and fixed service identity, and the final verifier rejects digest or receipt
+  substitution.
+- The first hosted attempt exposed missing outer stdin forwarding for the real
+  PRE image. The dedicated PRE transport now uses outer `docker exec -i`, with
+  an exact argv and byte-for-byte stdin regression. A later test-only fixture
+  repair created its declared temporary directory before writing. Exact-head
+  locked Rust and full hosted proof runs passed after both repairs.
 
 ## Reconciliation
 
 - Current-source reconciliation: based on `origin/main` at
   `51b86807111ff25b067402219ba0b533e0750f3e`; merged #594 owns the checker and
   proof harness. Later main changes must be inspected before readiness.
+- Durable outcome: the bounded negative runtime proof and its exact evidence are
+  complete. The standalone change does not close issue #493's deployment work.
 - Next usable boundary: #555 registers and activates the exact checker entry,
   chooses production limits and runs the connected deployed contribution drill.
 - Remaining risks: GitHub-hosted isolated DIND/runsc remains development proof;
