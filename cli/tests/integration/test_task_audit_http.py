@@ -74,7 +74,7 @@ def test_audit_reads_use_exact_routes_and_safe_complete_output(cli):
         text = evidence(cli, origin, output="text")
         assert text.returncode == 0 and text.stderr == "", text.stderr
         assert "Event: " in text.stdout and "Next cursor: " in text.stdout
-        assert "\u202e" not in text.stdout and "\\u202e" in text.stdout
+        assert "\u202e" not in text.stdout and "\\u202e" in text.stdout.lower()
         assert "\x1b" not in text.stdout
 
         selected = json.dumps(CURSOR, separators=(",", ":"))

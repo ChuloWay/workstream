@@ -30,6 +30,7 @@
   [WS-CLI-001-23](WS-CLI-001-23.md), Finance draft creation, rule replacement, publication and retirement;
   [WS-CLI-001-24](WS-CLI-001-24.md), self/project contribution evidence and exact private CSV export;
   [WS-CLI-001-25](WS-CLI-001-25.md), explicit public ZIP preparation, Submission replay/history and contributor checker findings;
+  [WS-CLI-001-34](WS-CLI-001-34.md), exact-project task audit context and bounded cursor-based evidence reads;
   [PILOT-13](../../changes/pilot13-assigned-task-guide-documents.md), assigned-task locked-guide listing/download;
   [PILOT-02](../../changes/pilot02-bulk-transitions-cli.md), explicit CSV conversion,
   source custody, atomic import, batch status and whole-batch screen/release.
@@ -241,8 +242,9 @@ CLIs. Keep the package independent of backend and MCP runtime dependencies.
    delivered in this package; reuse it rather than duplicate it.
 25. **WS-CLI-001-25 / PILOT-12:** Public ZIP preparation with exact caller key,
    separate admission-backed creation/replay, and bounded submission/checker
-   history. No automatic retry/polling or inferred acceptance. Revision-change
-   summary awaits #495's public field; full public setup integration is #552.
+   history. No automatic retry/polling or inferred acceptance. Revision changes
+   are available through current task context, not immutable submission
+   history; full public setup integration is #552.
    Unfinished human review/revision is not current CLI implementation scope.
 26. **Optional TUI:** Add a focused public queue/evidence view after its API
    workflow is complete. Never require a TUI for agents or scripts.
