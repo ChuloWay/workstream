@@ -12,6 +12,12 @@ contribution-evidence exports:
 |---|---|
 | `workstream whoami` | `GET /api/v1/actors/me` |
 | `workstream profile update` | `PATCH /api/v1/actors/me` |
+| `workstream admin actor show ACTOR_ID` | `GET /api/v1/actors/ACTOR_ID` |
+| `workstream admin actor identity-links ACTOR_ID` | `GET /api/v1/actors/ACTOR_ID/identity-links` (one link object) |
+| `workstream admin actor role-grants ACTOR_ID --scope system\|project [--project-id UUID]` | `GET /api/v1/actors/ACTOR_ID/admin-role-grants` |
+| `workstream admin role-grants --scope system\|project [--project-id UUID]` | `GET /api/v1/admin-role-grants` |
+| `workstream admin permissions` | `GET /api/v1/authorization/permissions` |
+| `workstream admin role-definitions` | `GET /api/v1/authorization/admin-role-definitions` |
 | `workstream contributions [--project UUID]` | `GET /api/v1/actors/me/contributions` |
 | `workstream project contributions PROJECT_ID` | `GET /api/v1/projects/PROJECT_ID/contributions/export` |
 | `workstream project access PROJECT_ID` | `GET /api/v1/actors/me/authorization-context?project_id=PROJECT_ID` |
@@ -135,7 +141,20 @@ Oversized, malformed, wrong-scope or credential-reflecting responses are errors,
 not partial exports. Backend authorization errors and over-limit refusals remain
 distinct from client response validation failures.
 
-The table above is the delivered command inventory. PILOT-02 supplies the
+The table above is the delivered command inventory. Privileged `admin` reads
+are separate from `whoami` and caller-owned `profile update`. Actor selectors
+must be exact UUIDs; there is no actor enumeration. `identity-links` returns
+one privacy-bounded link object despite the plural route. Both grant-history
+commands require `--scope system|project`; project scope additionally requires
+`--project-id UUID`, which system scope forbids. They accept optional `--status
+active|revoked|all` (default active), `--limit 1..100` (default 50), and an
+opaque `--cursor` from a prior page with the same selectors. Each invocation
+fetches one page and sends the caller's bearer to the public API; the backend
+checks current scope and authority. Grant histories and catalogues are
+observations, not authorization for a later action. Output is text or complete
+JSON, with bounded responses and no credential reflection.
+
+PILOT-02 supplies the
 [batch conversion/import/screen/release commands](#prepare-a-task-import-json-source)
 in the same CLI; contribution-evidence reads do not depend on using batch import.
 Submission preparation, creation and history commands are described below;

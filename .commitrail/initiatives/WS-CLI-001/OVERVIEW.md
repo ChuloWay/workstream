@@ -36,6 +36,12 @@
 
 ## Current boundary
 
+[WS-CLI-001-28](WS-CLI-001-28.md) adds six existing privileged public reads:
+exact actor profile/identity-link inspection, explicitly scoped actor/admin grant
+history pages, and permission/role-definition catalogues. These commands remain
+separate from self-profile operations, preserve opaque cursors and backend
+disclosure, and never treat observed grants as local authorization.
+
 The backend exposes `GET /api/v1/actors/me` and
 `GET /api/v1/actors/me/authorization-context` in
 `backend/app/api/routes/auth.py`. The selected 29-operation
