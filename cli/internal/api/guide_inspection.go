@@ -54,6 +54,11 @@ func inspectString(fields inspectionObject, name string) (string, bool) {
 	return value, strings.TrimSpace(value) != ""
 }
 
+func inspectNonblank(fields inspectionObject, name string) bool {
+	_, valid := inspectString(fields, name)
+	return valid
+}
+
 func inspectID(fields inspectionObject, name string) (string, bool) {
 	value, valid := inspectString(fields, name)
 	return value, valid && validUUID(value)
@@ -103,10 +108,6 @@ func inspectBool(fields inspectionObject, name string) bool {
 	return (string(fields[name]) == "true" || string(fields[name]) == "false") && json.Unmarshal(fields[name], &value) == nil
 }
 
-func inspectOptionalBool(fields inspectionObject, name string) bool {
-	return string(fields[name]) == "null" || inspectBool(fields, name)
-}
-
 func inspectArray(fields inspectionObject, name string, max int) ([]json.RawMessage, bool) {
 	var entries []json.RawMessage
 	if json.Unmarshal(fields[name], &entries) != nil {
@@ -115,18 +116,37 @@ func inspectArray(fields inspectionObject, name string, max int) ([]json.RawMess
 	return entries, entries != nil && len(entries) <= max
 }
 
-func inspectStringArray(fields inspectionObject, name string, max int) bool {
-	entries, valid := inspectArray(fields, name, max)
+func inspectStringArray(fields inspectionObject, name string) bool {
+	entries, valid := inspectArray(fields, name, maxGuideInspectionBytes)
 	if !valid {
 		return false
 	}
 	for _, entry := range entries {
 		var item string
-		if json.Unmarshal(entry, &item) != nil || strings.TrimSpace(item) == "" {
+		if string(entry) == "null" || json.Unmarshal(entry, &item) != nil {
 			return false
 		}
 	}
 	return true
+}
+
+func inspectLiteralArray(fields inspectionObject, name string, max int, allowed ...string) bool {
+	entries, valid := inspectArray(fields, name, max)
+	if !valid || len(entries) == 0 {
+		return false
+	}
+	for _, entry := range entries {
+		var item string
+		if json.Unmarshal(entry, &item) != nil || !oneOf(item, allowed...) {
+			return false
+		}
+	}
+	return true
+}
+
+func inspectLiteral(fields inspectionObject, name string, allowed ...string) bool {
+	value, valid := inspectString(fields, name)
+	return valid && oneOf(value, allowed...)
 }
 
 func inspectDictionary(fields inspectionObject, name string) bool {
@@ -189,7 +209,7 @@ func validateArtifactPolicy(raw json.RawMessage, project, guide, selected string
 	_, _, linkOK := inspectGuideLink(fields, project, guide)
 	_, _, snapshotOK := inspectSnapshotLink(fields)
 	status, statusOK := inspectString(fields, "lifecycle_status")
-	return fields, idOK && (selected == "" || sameUUID(id, selected)) && linkOK && snapshotOK && inspectStringValue(fields, "policy_version") && statusOK && oneOf(status, "draft", "approved", "superseded") && inspectDictionary(fields, "policy_body") && inspectHashValue(fields, "policy_hash") && inspectStringValue(fields, "derivation_source") && inspectStringArray(fields, "source_material_refs", 200) && inspectStringValue(fields, "created_by") && inspectTime(fields, "created_at") && inspectTime(fields, "updated_at") && inspectOptionalStringOrNull(fields, "derivation_agent_name", "derivation_agent_version", "approved_by_role", "approved_by_actor", "change_summary") && inspectOptionalTime(fields, "approved_at") && inspectOptionalID(fields, "supersedes_policy_id") && inspectOptionalTime(fields, "superseded_at")
+	return fields, idOK && (selected == "" || sameUUID(id, selected)) && linkOK && snapshotOK && inspectStringValue(fields, "policy_version") && statusOK && oneOf(status, "draft", "approved", "superseded") && inspectDictionary(fields, "policy_body") && inspectHashValue(fields, "policy_hash") && inspectStringValue(fields, "derivation_source") && inspectStringArray(fields, "source_material_refs") && inspectStringValue(fields, "created_by") && inspectTime(fields, "created_at") && inspectTime(fields, "updated_at") && inspectOptionalStringOrNull(fields, "derivation_agent_name", "derivation_agent_version", "approved_by_role", "approved_by_actor", "change_summary") && inspectOptionalTime(fields, "approved_at") && inspectOptionalID(fields, "supersedes_policy_id") && inspectOptionalTime(fields, "superseded_at")
 }
 
 func inspectHashValue(fields inspectionObject, name string) bool {
@@ -225,7 +245,7 @@ func validatePreSubmitPolicy(raw json.RawMessage, project, guide string, active 
 	_, _, snapshotOK := inspectSnapshotLink(fields)
 	_, effectiveOK := inspectID(fields, "effective_policy_id")
 	status, statusOK := inspectString(fields, "lifecycle_status")
-	return fields, idOK && linkOK && snapshotOK && effectiveOK && inspectHashValue(fields, "effective_policy_hash") && statusOK && status == "compiled" && inspectStringArray(fields, "checker_names", 200) && inspectStringValue(fields, "created_by") && inspectTime(fields, "created_at") && inspectOptionalStringOrNull(fields, "compiler_version") && inspectOptionalHash(fields, "compiled_bundle_hash") && inspectOptionalID(fields, "supersedes_pre_submit_checker_policy_id") && inspectOptionalTime(fields, "superseded_at") && (!active || inspectDictionary(fields, "checker_configs"))
+	return fields, idOK && linkOK && snapshotOK && effectiveOK && inspectHashValue(fields, "effective_policy_hash") && statusOK && status == "compiled" && inspectStringArray(fields, "checker_names") && inspectStringValue(fields, "created_by") && inspectTime(fields, "created_at") && inspectOptionalStringOrNull(fields, "compiler_version") && inspectHashValue(fields, "compiled_bundle_hash") && inspectOptionalID(fields, "supersedes_pre_submit_checker_policy_id") && inspectOptionalTime(fields, "superseded_at") && (!active || inspectDictionary(fields, "checker_configs"))
 }
 
 func validateActiveAssociated(raw json.RawMessage, name, project, guideVersion string) bool {
@@ -255,16 +275,21 @@ func validateActiveAssociated(raw json.RawMessage, name, project, guideVersion s
 	switch name {
 	case "post_submit_checker_policy":
 		status, statusOK := inspectString(entry, "lifecycle_status")
-		return statusOK && status == "approved" && inspectStringArray(entry, "required_checkers", 200) && inspectStringArray(entry, "warning_checkers", 200) && inspectStringArray(entry, "blocking_severities", 20) && inspectOptionalHash(entry, "policy_hash") && inspectOptionalID(entry, "projection_operation_id") && inspectOptionalID(entry, "approval_operation_id") && inspectOptionalTime(entry, "approved_at")
+		return statusOK && status == "approved" && inspectStringArray(entry, "required_checkers") && inspectStringArray(entry, "warning_checkers") && inspectStringArray(entry, "blocking_severities") && inspectHashValue(entry, "policy_hash") && inspectIDValue(entry, "projection_operation_id") && inspectIDValue(entry, "approval_operation_id") && inspectTime(entry, "approved_at")
 	case "review_policy":
 		format, formatOK := inspectString(entry, "semantics_format")
 		status, statusOK := inspectString(entry, "semantics_status")
-		return inspectInteger(entry, "policy_generation", 1) && inspectOptionalHash(entry, "policy_hash") && inspectBool(entry, "human_review_required") && formatOK && oneOf(format, "v1", "v2") && statusOK && oneOf(status, "complete", "legacy_incomplete") && inspectOptionalID(entry, "supersedes_policy_id") && inspectOptionalInteger(entry, "review_preference_window_seconds", 1) && inspectOptionalInteger(entry, "review_lease_duration_seconds", 1) && inspectOptionalInteger(entry, "max_active_review_leases_per_reviewer", 1) && inspectOptionalBool(entry, "self_review_allowed") && inspectOptionalStringOrNull(entry, "reject_policy", "finding_evidence_requirement") && inspectBool(entry, "requires_second_review") && inspectStringArray(entry, "allowed_decisions", 3) && inspectStringArray(entry, "minimum_finding_fields", 50)
+		return inspectInteger(entry, "policy_generation", 1) && inspectHashValue(entry, "policy_hash") && inspectBool(entry, "human_review_required") && formatOK && oneOf(format, "v1", "v2") && (format != "v1" || string(entry["human_review_required"]) == "true") && statusOK && status == "complete" && inspectOptionalID(entry, "supersedes_policy_id") && inspectInteger(entry, "review_preference_window_seconds", 1) && inspectInteger(entry, "review_lease_duration_seconds", 1) && string(entry["max_active_review_leases_per_reviewer"]) == "1" && string(entry["self_review_allowed"]) == "false" && inspectLiteral(entry, "reject_policy", "close_task") && inspectLiteral(entry, "finding_evidence_requirement", "optional", "required_for_blocking", "required_for_all") && string(entry["requires_second_review"]) == "false" && inspectLiteralArray(entry, "allowed_decisions", maxGuideInspectionBytes, "accept", "needs_revision", "reject") && inspectStringArray(entry, "minimum_finding_fields")
 	case "revision_policy":
 		status, statusOK := inspectString(entry, "semantics_status")
-		return inspectInteger(entry, "policy_generation", 1) && inspectOptionalHash(entry, "policy_hash") && statusOK && oneOf(status, "complete", "legacy_incomplete") && inspectOptionalID(entry, "supersedes_policy_id") && inspectInteger(entry, "max_revision_rounds", 0) && inspectInteger(entry, "revision_deadline_hours", 1) && inspectStringArray(entry, "allowed_resubmission_states", 20) && inspectOptionalStringOrNull(entry, "reviewer_reassignment_rule")
+		return inspectInteger(entry, "policy_generation", 1) && inspectHashValue(entry, "policy_hash") && statusOK && status == "complete" && inspectOptionalID(entry, "supersedes_policy_id") && inspectInteger(entry, "max_revision_rounds", 0) && inspectInteger(entry, "revision_deadline_hours", 1) && inspectLiteralArray(entry, "allowed_resubmission_states", 1, "needs_revision") && inspectOptionalStringOrNull(entry, "reviewer_reassignment_rule")
 	}
 	return false
+}
+
+func inspectIDValue(fields inspectionObject, name string) bool {
+	_, valid := inspectID(fields, name)
+	return valid
 }
 
 func guideInspectionPath(project, guide, suffix string) (string, error) {
@@ -439,7 +464,7 @@ func (c *Client) ActiveGuide(ctx context.Context, project string) (Result[json.R
 	guideProject, projectOK := inspectID(guide, "project_id")
 	guideVersion, versionOK := inspectString(guide, "version")
 	status, statusOK := inspectString(guide, "status")
-	if !idOK || !projectOK || !sameUUID(guideProject, project) || !versionOK || !statusOK || status != "active" || !inspectOptionalID(guide, "activation_operation_id") || string(guide["activation_operation_id"]) == "null" || !inspectOptionalID(guide, "contribution_policy_id") || !inspectOptionalID(guide, "contribution_policy_version_id") || !inspectTime(guide, "created_at") || !inspectTime(guide, "updated_at") || !inspectOptionalTime(guide, "effective_at") || string(guide["effective_at"]) == "null" || !inspectOptionalTime(guide, "superseded_at") {
+	if !idOK || !projectOK || !sameUUID(guideProject, project) || !versionOK || !statusOK || status != "active" || !inspectIDValue(guide, "activation_operation_id") || !inspectOptionalID(guide, "contribution_policy_id") || !inspectOptionalID(guide, "contribution_policy_version_id") || !inspectNonblank(guide, "approved_by") || !inspectTime(guide, "created_at") || !inspectTime(guide, "updated_at") || !inspectTime(guide, "effective_at") || !inspectOptionalTime(guide, "superseded_at") {
 		return result, &Failure{Code: "invalid_api_response"}
 	}
 	snapshot, ok := inspectObject(fields["guide_source_snapshot"], []string{"id", "project_id", "guide_id", "guide_version", "manifest_schema_version", "manifest_json", "bundle_hash", "captured_by", "captured_at", "items"})
@@ -503,7 +528,7 @@ func (c *Client) ActiveGuide(ctx context.Context, project string) (Result[json.R
 	preEffectiveHash, _ := inspectHash(pre, "effective_policy_hash")
 	sufficiencyStatus, _ := inspectString(sufficiency, "status")
 	submissionStatus, _ := inspectString(submission, "lifecycle_status")
-	if !oneOf(sufficiencyStatus, "passed", "passed_with_warnings") || submissionStatus != "approved" || !sameUUID(effectiveSubmissionID, submissionID) || !sameUUID(preEffectiveID, effectiveID) || preSubmissionHash != submissionHash || preEffectiveHash != effectiveHash {
+	if !oneOf(sufficiencyStatus, "passed", "passed_with_warnings") || submissionStatus != "approved" || !inspectLiteral(submission, "approved_by_role", "admin", "project_manager") || !inspectNonblank(submission, "approved_by_actor") || !inspectTime(submission, "approved_at") || !sameUUID(effectiveSubmissionID, submissionID) || !sameUUID(preEffectiveID, effectiveID) || preSubmissionHash != submissionHash || preEffectiveHash != effectiveHash {
 		return result, &Failure{Code: "invalid_api_response"}
 	}
 	for _, name := range []string{"post_submit_checker_policy", "review_policy", "revision_policy"} {

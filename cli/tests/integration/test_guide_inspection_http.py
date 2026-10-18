@@ -163,8 +163,8 @@ def active_guide():
             "blocking_severities": [],
             "policy_hash": HASH,
             "lifecycle_status": "approved",
-            "projection_operation_id": None,
-            "approval_operation_id": None,
+            "projection_operation_id": EFFECTIVE,
+            "approval_operation_id": PRE,
             "approved_at": WHEN,
             "created_at": WHEN,
         },
@@ -437,6 +437,77 @@ def test_active_chain_substitution_and_reflected_bearer_fail_closed(cli):
         response["body"] = json.dumps(value).encode()
         assert_failure(
             cli(origin, TOKEN, "-o", "json", *command), "invalid_api_response"
+        )
+
+
+@pytest.mark.parametrize(
+    ("section", "field", "bad"),
+    [
+        ("guide", "approved_by", None),
+        ("submission_artifact_policy", "approved_by_actor", None),
+        ("submission_artifact_policy", "approved_at", None),
+        ("post_submit_checker_policy", "policy_hash", None),
+        ("post_submit_checker_policy", "projection_operation_id", None),
+        ("post_submit_checker_policy", "approval_operation_id", None),
+        ("post_submit_checker_policy", "approved_at", None),
+        ("review_policy", "semantics_status", "legacy_incomplete"),
+        ("review_policy", "policy_hash", None),
+        ("review_policy", "review_preference_window_seconds", None),
+        ("review_policy", "max_active_review_leases_per_reviewer", 2),
+        ("review_policy", "self_review_allowed", True),
+        ("review_policy", "reject_policy", "reopen_task"),
+        ("review_policy", "finding_evidence_requirement", "unknown"),
+        ("review_policy", "requires_second_review", True),
+        ("review_policy", "allowed_decisions", ["accept", "unknown"]),
+        ("review_policy", "allowed_decisions", []),
+        ("revision_policy", "semantics_status", "legacy_incomplete"),
+        ("revision_policy", "policy_hash", None),
+        ("revision_policy", "allowed_resubmission_states", ["rejected"]),
+        ("revision_policy", "allowed_resubmission_states", []),
+    ],
+)
+def test_active_current_policy_semantics_fail_closed(cli, section, field, bad):
+    with http_fixture() as (origin, response, _requests):
+        value = active_guide()
+        value[section][field] = bad
+        response["body"] = json.dumps(value).encode()
+        assert_failure(
+            cli(origin, TOKEN, "-o", "json", *CASES[0][0]),
+            "invalid_api_response",
+        )
+
+
+def test_schema_string_arrays_allow_blank_members_and_current_pre_hash_is_required(cli):
+    with http_fixture() as (origin, response, _requests):
+        value = active_guide()
+        value["review_policy"]["minimum_finding_fields"] = [""]
+        value["review_policy"]["allowed_decisions"] = ["accept"] * 4
+        response["body"] = json.dumps(value).encode()
+        result = cli(origin, TOKEN, "-o", "json", *CASES[0][0])
+        assert result.returncode == 0, result.stderr
+
+        policy = pre_policy()
+        policy["compiled_bundle_hash"] = None
+        response["body"] = json.dumps(policy).encode()
+        assert_failure(
+            cli(origin, TOKEN, "-o", "json", *CASES[6][0]),
+            "invalid_api_response",
+        )
+
+
+def test_active_review_policy_format_preserves_v2_automatic_acceptance_mode(cli):
+    with http_fixture() as (origin, response, _requests):
+        value = active_guide()
+        value["review_policy"]["human_review_required"] = False
+        response["body"] = json.dumps(value).encode()
+        result = cli(origin, TOKEN, "-o", "json", *CASES[0][0])
+        assert result.returncode == 0, result.stderr
+
+        value["review_policy"]["semantics_format"] = "v1"
+        response["body"] = json.dumps(value).encode()
+        assert_failure(
+            cli(origin, TOKEN, "-o", "json", *CASES[0][0]),
+            "invalid_api_response",
         )
 
 
