@@ -513,12 +513,15 @@ async def test_validate_iam_accepts_only_exact_roles_trusts_attachments_and_poli
     trusts = _trust_policies()
     iam = _IamClient(trusts)
     session = _Session(iam=iam)
-    proof = AwsArtifactLiveProof(_settings(tmp_path, trust_policies=trusts), session)
+    settings = _settings(tmp_path, trust_policies=trusts).model_copy(
+        update={"artifact_s3_region": "eu-west-1"}
+    )
+    proof = AwsArtifactLiveProof(settings, session)
 
     await proof._validate_iam()
 
     assert session.requests[0][0] == "iam"
-    assert session.requests[0][1]["region_name"] == "us-east-1"
+    assert session.requests[0][1]["region_name"] == "eu-west-1"
     assert [call for call in iam.calls if call[0] == "get_role"] == [
         ("get_role", "workstream-runtime"),
         ("get_role", "workstream-readiness"),
@@ -534,12 +537,15 @@ async def test_validate_iam_accepts_only_exact_roles_trusts_attachments_and_poli
 async def test_validate_access_analyzer_uses_configured_region(tmp_path: Path) -> None:
     trusts = _trust_policies()
     session = _Session(accessanalyzer=_AccessAnalyzerClient())
-    proof = AwsArtifactLiveProof(_settings(tmp_path, trust_policies=trusts), session)
+    settings = _settings(tmp_path, trust_policies=trusts).model_copy(
+        update={"artifact_s3_region": "eu-west-1"}
+    )
+    proof = AwsArtifactLiveProof(settings, session)
 
     await proof._validate_access_analyzer(json.dumps(_bucket_policy()))
 
     assert session.requests[0][0] == "accessanalyzer"
-    assert session.requests[0][1]["region_name"] == "us-east-1"
+    assert session.requests[0][1]["region_name"] == "eu-west-1"
 
 
 @pytest.mark.asyncio

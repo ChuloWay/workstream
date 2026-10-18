@@ -1,7 +1,7 @@
 # AWS activation failure and timing corrections
 
 - Initiative: None
-- Durable disposition: Planned
+- Durable disposition: Complete
 - Intended merge outcome: Bind proof clients to the configured AWS region, reserve and enforce proof-sequence time, and keep configuration outages recoverable.
 
 ## Intent
@@ -11,7 +11,7 @@ contribution drill. A merged configuration path is not proof of a deployed
 provider. This change repairs the existing ART path, without provisioning AWS
 or expanding the product workflow.
 
-## Current behavior
+## Pre-change behavior
 
 Main `51b868071` includes #592 and #595, with one migration head
 `0053_project_reads`. The proof-only adapter constructs IAM and Access Analyzer
@@ -45,6 +45,10 @@ database duration check must use PostgreSQL time.
   discriminating regression cases, valid expiry fixtures, upgrade/downgrade
   proof and the combined head fingerprint. Update the existing lane catalogue
   only if adding a test file becomes necessary; prefer the current modules.
+- `.ci/auth-boundaries/TEST_STRUCTURE_DEBT.json`:
+  relocate the two touched unavailability tests from the frozen oversized
+  admission module into the existing terminal-custody module, preserving every
+  original assertion. Refresh exact inventory without changing guard limits.
 - `docs/spec_artifact_storage_service.md`, `docs/operations_artifact_storage.md`,
   `docs/roadmap_status.md` and this record: affected guarantees and remaining
   deployment proof, with local roadmap exports only if present.
@@ -100,19 +104,19 @@ negative proofs and uncertain-delivery reconciliation; CLI is separately owned.
 
 ## Acceptance criteria
 
-- [ ] Both proof clients receive the configured region without introducing an
+- [x] Both proof clients receive the configured region without introducing an
   ambient-region fallback.
-- [ ] A valid maximum-budget configuration passes and a larger budget rejects;
+- [x] A valid maximum-budget configuration passes and a larger budget rejects;
   the fixed allowance cannot be changed by environment input.
-- [ ] ART and direct SQL reject an otherwise valid overlong group, including a
+- [x] ART and direct SQL reject an otherwise valid overlong group, including a
   backdated activation timestamp; an ordered recent group succeeds. Removing
   the duration predicate makes the intended negative assertion fail.
-- [ ] A separately invoked 0053 -> 0054 upgrade preserves existing records and
+- [x] A separately invoked 0053 -> 0054 upgrade preserves existing records and
   installs the guard; a one-revision downgrade refuses without altering state.
-- [ ] Lazy configuration failures during put observation and verification retain
+- [x] Lazy configuration failures during put observation and verification retain
   recoverable facts and no false conflict/integrity receipt. Live-proof expiry,
   genuine missing/mismatched bytes, replay and retained custody remain protected.
-- [ ] Current docs and roadmap state the repaired source guarantee, conditional
+- [x] Current docs and roadmap state the repaired source guarantee, conditional
   cadence assumption, and remaining authorized live AWS/hosted proof accurately.
 
 ## Risk and review routing
@@ -127,10 +131,11 @@ negative proofs and uncertain-delivery reconciliation; CLI is separately owned.
 
 | Claim | Command or proof | Result | Remaining uncertainty |
 |---|---|---|---|
-| Merged defects | Inspect main adapter, Settings and ART observation branches | Confirmed | Repair not implemented by this record |
-| Region/configuration | Existing focused Python tests with independent substitutions | Planned | No live AWS |
-| Database clock and migration | Isolated PostgreSQL control, backdated insertion, separate upgrade/refusal and guard-removal probe | Planned | Local host resources must be measured before execution |
-| Full integration | Required hosted Backend, repository gates and focused internal reviews | Planned | No hosted product deployment |
+| Merged defects | Inspect the main adapter, Settings and ART observation branches | Three defects repaired through existing owners | No deployment is implied |
+| Region/configuration | Configuration and proof-adapter tests, including non-default configured region | 260 passed | No live AWS |
+| Database clock and migration | PostgreSQL activation/terminal cases plus separate predecessor upgrade, retained-row snapshots, one-step refusal and lazy-stream failure tests | 26 activation/terminal and 8 migration/admission tests passed; owned databases cleaned | Provider observations are controlled; no AWS transport |
+| Discriminating timing proof | Remove only the new SQL duration predicate in an isolated database, run the exact regression, then restore the function | Intended `DID NOT RAISE DBAPIError`; cleanup confirmed | Demonstrates this guard, not all database predicates |
+| Integration gate | Required hosted Backend and repository checks; exact target and review freshness are recorded in the PR | Mandatory before readiness | No hosted product deployment |
 
 ## Review findings
 
@@ -141,6 +146,27 @@ isolated test custody, and preserves live-proof-specific catches before the
 configuration catch at all three observation branches. Source timing enforcement
 uses the database clock, not a caller-authored activation timestamp. An earlier
 fixture rejection is not terminal-expiry proof.
+
+Implementation review found no product-source blocker. Finalization corrected
+the record's stale planned wording and retained the deployment limitations.
+Hosted preflight also caught growth in the frozen oversized admission test file;
+the two touched tests now live in the existing ART terminal-custody module. All
+original assertions remain, structural debt shrinks, and no gate is relaxed.
+
+## Retained test proof
+
+The two complete tests move from `backend/tests/test_artifact_admission.py` to
+`backend/tests/test_artifact_provider_activation_terminal_postgresql.py` under
+their original names. Neither is split or removed. An AST comparison against
+main `51b868071` confirms all 28 original assertions remain; parameterized lazy
+configuration failures strengthen the original unavailable/retry cases. The
+admission file shrinks, its exact debt inventory is refreshed, and structural
+limits and validator scope remain unchanged.
+
+| Original and retained test name | Primary invariant |
+|---|---|
+| `test_put_observation_unavailable_retries_then_exhausts_without_facts` | Recoverable observation failure exhausts only its retry budget, without false receipts or replicas |
+| `test_verification_unavailable_retries_then_exhausts` | Recoverable stream failure preserves retry state and creates no verification receipt |
 
 ## Reconciliation
 
