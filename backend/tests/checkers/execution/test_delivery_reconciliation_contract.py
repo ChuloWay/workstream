@@ -12,6 +12,7 @@ from app.modules.audit.schemas import (
     AuthorityAuditEventInput,
     AuthorityEventType,
 )
+from app.modules.outbox.api import OutboxAppendInput
 from app.modules.checkers.api.delivery_reconciliation import (
     PostSubmitDeliveryChildPayload,
     PostSubmitDeliveryCommand,
@@ -140,7 +141,7 @@ def test_child_payload_excludes_raw_private_fields(preparation, field) -> None:
         checker_run_id=source.checker_run_id,
         evaluation_generation=source.evaluation_generation,
         classification=source.classification,
-        reconciliation_request_key=preparation.command.request_key,
+        reconciliation_request_id=preparation.command.request_key,
         request_digest=post_submit_delivery_request_digest(preparation),
         authorization_decision_id=new_record_id(),
         authorization_resource_digest="sha256:" + "2" * 64,
@@ -156,6 +157,42 @@ def test_child_payload_excludes_raw_private_fields(preparation, field) -> None:
         ((field,), "extra_forbidden")
     ]
     assert private_value not in str(caught.value)
+
+
+def test_child_payload_passes_canonical_outbox_privacy_validation(preparation) -> None:
+    source = preparation.source
+    child = PostSubmitDeliveryChildPayload(
+        original_event_id=source.event_id,
+        original_claim_generation=source.claim_generation,
+        original_payload_digest=source.payload_digest,
+        original_event_type=source.event_type,
+        original_event_version=source.event_version,
+        evaluation_request_id=source.evaluation_request_id,
+        checker_run_id=source.checker_run_id,
+        evaluation_generation=source.evaluation_generation,
+        classification=source.classification,
+        reconciliation_request_id=preparation.command.request_key,
+        request_digest=post_submit_delivery_request_digest(preparation),
+        authorization_decision_id=new_record_id(),
+        authorization_resource_digest="sha256:" + "2" * 64,
+        operator_actor_profile_id=preparation.command.actor_profile_id,
+        operator_identity_link_id=new_record_id(),
+    )
+
+    appended = OutboxAppendInput(
+        event_type="PostSubmissionDeliveryReconciliationRequested",
+        event_version=1,
+        aggregate_type="outbox_delivery",
+        aggregate_id=source.event_id,
+        project_id=source.project_id,
+        correlation_id=str(preparation.command.request_key),
+        causation_event_id=source.event_id,
+        idempotency_key="post-submit-reconcile:" + str(source.event_id),
+        payload=child.model_dump(mode="json"),
+    )
+    assert appended.payload["reconciliation_request_id"] == str(
+        preparation.command.request_key
+    )
 
 
 @pytest.mark.parametrize(
@@ -182,7 +219,7 @@ def test_request_digest_binds_command_and_source(preparation, section, field, re
     assert post_submit_delivery_request_digest(changed) != original
 
 
-@pytest.mark.parametrize("change", ["event", "state", "classification"])
+@pytest.mark.parametrize("change", ["event", "classification"])
 def test_result_binds_successor_identity_state_and_classification(source, change) -> None:
     child = PostSubmitDeliverySuccessor(
         event_id=new_record_id(),
@@ -201,14 +238,43 @@ def test_result_binds_successor_identity_state_and_classification(source, change
     values = result.model_dump()
     if change == "event":
         values["successor"]["event_id"] = new_record_id()
-    elif change == "state":
-        values["source"]["reconciliation_state"] = "active"
     else:
         values["successor"]["classification"] = "retry_safe"
     PostSubmitDeliverySource.model_validate(values["source"])
     PostSubmitDeliverySuccessor.model_validate(values["successor"])
     with pytest.raises(ValidationError, match="post-submit delivery result differs"):
         PostSubmitDeliveryResult.model_validate(values)
+
+
+@pytest.mark.parametrize(
+    "state,current_classification",
+    [("active", "retry_safe"), ("acknowledged", "committed"), ("held", "unresolved")],
+)
+def test_replay_result_preserves_successor_with_current_child_projection(
+    source, state, current_classification,
+) -> None:
+    child = PostSubmitDeliverySuccessor(
+        event_id=new_record_id(),
+        payload_digest="sha256:" + "4" * 64,
+        occurred_at=source.finalized_at,
+        classification="retry_safe",
+    )
+    projected = PostSubmitDeliverySource.model_validate(
+        source.model_dump()
+        | {
+            "classification": current_classification,
+            "reconciliation_event_id": child.event_id,
+            "reconciliation_state": state,
+        }
+    )
+
+    result = PostSubmitDeliveryResult(
+        source=projected,
+        successor=child,
+        authorization_decision_id=new_record_id(),
+    )
+    assert result.source.reconciliation_state == state
+    assert result.successor.classification == "retry_safe"
 
 
 @pytest.mark.asyncio

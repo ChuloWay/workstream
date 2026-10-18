@@ -141,7 +141,7 @@ class PostSubmitDeliveryAuthorization:
                 actor_profile_id=payload.operator_actor_profile_id,
                 project_id=original.claim.project_id,
                 event_id=original.claim.event_id,
-                request_id=payload.reconciliation_request_key,
+                request_id=payload.reconciliation_request_id,
                 resource_digest=payload.authorization_resource_digest,
             )
         ):

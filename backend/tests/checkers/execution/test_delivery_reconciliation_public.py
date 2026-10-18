@@ -285,6 +285,23 @@ async def test_public_operator_retries_proven_no_effect_request_once(
         )
         assert original_after == original_before
         assert child[:3] == ("acknowledged", None, original.claim.event_id)
+        replay_grant = await admin_access.signed.grant(
+            admin_access.admin, admin_access.target
+        )
+        acknowledged_replay = await _reconcile(
+            admin_access, h.request.project_id, original.claim.event_id, key
+        )
+        assert acknowledged_replay.status_code == 201, acknowledged_replay.text
+        assert acknowledged_replay.json()["source"]["reconciliation_state"] == (
+            "acknowledged"
+        )
+        assert acknowledged_replay.json()["successor"] == result["successor"]
+        replay_revoked = await admin_access.signed.revoke(
+            admin_access.admin,
+            replay_grant,
+            reason="End retained reconciliation inspection duty",
+        )
+        assert replay_revoked.status_code == 200, replay_revoked.text
         concealed = await admin_access.signed.client.get(
             _paths(h.request.project_id)[0], headers=admin_access.target.headers
         )
@@ -499,19 +516,24 @@ async def test_public_operator_projects_uncertain_child_as_permanently_held(
         prepared = await delivery_fixture(h)
         original = await invoked(h, prepared)
         await prepared.delivery.finalize(original.claim, FinalizationCause.UNKNOWN)
+        request_keys = (new_record_id(), new_record_id())
         responses = await asyncio.gather(
             *(
                 _reconcile(
                     admin_access,
                     h.request.project_id,
                     original.claim.event_id,
-                    new_record_id(),
+                    request_key,
                 )
-                for _ in range(2)
+                for request_key in request_keys
             )
         )
         assert sorted(response.status_code for response in responses) == [201, 409]
-        created = next(response for response in responses if response.status_code == 201)
+        created_index = next(
+            index for index, response in enumerate(responses) if response.status_code == 201
+        )
+        created = responses[created_index]
+        created_key = request_keys[created_index]
         assert created.status_code == 201, created.text
         child_id = UUID(created.json()["successor"]["event_id"])
 
@@ -529,6 +551,16 @@ async def test_public_operator_projects_uncertain_child_as_permanently_held(
         )
         assert held["reconciliation_event_id"] == str(child_id)
         assert held["reconciliation_state"] == "held"
+        held_replay = await _reconcile(
+            admin_access,
+            h.request.project_id,
+            original.claim.event_id,
+            created_key,
+        )
+        assert held_replay.status_code == 201, held_replay.text
+        assert held_replay.json()["source"]["reconciliation_state"] == "held"
+        assert held_replay.json()["source"]["classification"] == "unresolved"
+        assert held_replay.json()["successor"] == created.json()["successor"]
         refused = await _reconcile(
             admin_access,
             h.request.project_id,

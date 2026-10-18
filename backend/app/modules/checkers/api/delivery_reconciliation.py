@@ -236,7 +236,7 @@ class PostSubmitDeliveryChildPayload(BaseModel):
     checker_run_id: UUID
     evaluation_generation: int = Field(ge=1)
     classification: Literal["committed", "retry_safe"]
-    reconciliation_request_key: UUID
+    reconciliation_request_id: UUID
     request_digest: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
     authorization_decision_id: UUID
     authorization_resource_digest: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
@@ -277,8 +277,11 @@ class PostSubmitDeliveryResult(BaseModel):
     def exact_child(self):
         if (
             self.source.reconciliation_event_id != self.successor.event_id
-            or self.source.reconciliation_state != "pending"
-            or self.source.classification != self.successor.classification
+            or self.source.reconciliation_state is None
+            or (
+                self.source.reconciliation_state == "pending"
+                and self.source.classification != self.successor.classification
+            )
         ):
             raise ValueError("post-submit delivery result differs")
         return self

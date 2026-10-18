@@ -312,7 +312,7 @@ class PostSubmitDeliveryService:
                 checker_run_id=source.checker_run_id,
                 evaluation_generation=source.evaluation_generation,
                 classification=classification,
-                reconciliation_request_key=command.request_key,
+                reconciliation_request_id=command.request_key,
                 request_digest=post_submit_delivery_request_digest(preparation),
                 authorization_decision_id=authority.decision_id,
                 authorization_resource_digest=authority.resource_digest,
