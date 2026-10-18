@@ -118,9 +118,11 @@ async def _delivery_rows(factory, original_id, child_id=None):
             await session.execute(
                 text(
                     """
-                    SELECT delivery_state,last_error_code,claim_generation,
-                           payload_digest,payload
-                    FROM public.outbox_events WHERE event_id=:event_id
+                    SELECT to_jsonb(e)::text,
+                           (SELECT jsonb_agg(to_jsonb(a) ORDER BY a.claim_generation)::text
+                            FROM public.outbox_delivery_attempts a
+                            WHERE a.event_id=e.event_id)
+                    FROM public.outbox_events e WHERE e.event_id=:event_id
                     """
                 ),
                 {"event_id": original_id},
