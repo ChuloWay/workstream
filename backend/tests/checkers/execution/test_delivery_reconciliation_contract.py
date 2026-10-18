@@ -7,6 +7,11 @@ import pytest
 
 from app.core.identifiers import new_record_id
 from app.api.deps.checker_recovery import PostSubmitDeliveryReads
+from app.modules.audit.schemas import (
+    ActorReferenceKind,
+    AuthorityAuditEventInput,
+    AuthorityEventType,
+)
 from app.modules.checkers.api.delivery_reconciliation import (
     PostSubmitDeliveryChildPayload,
     PostSubmitDeliveryCommand,
@@ -223,3 +228,43 @@ async def test_read_response_validation_precedes_authority_audit_commit() -> Non
     with pytest.raises(ValidationError):
         await reads.discover(new_record_id(), limit=50, cursor=None)
     assert session.commits == 0
+
+
+def test_delivery_audit_resource_keeps_project_as_its_only_target_namespace() -> None:
+    event_id = new_record_id()
+    project_id = new_record_id()
+    source_id = new_record_id()
+    values = {
+        "event_id": event_id,
+        "event_type": AuthorityEventType.SENSITIVE_AUTHORIZATION_ALLOWED,
+        "entity_type": "authorization_decision",
+        "entity_id": str(event_id),
+        "actor_ref_kind": ActorReferenceKind.ACTOR_PROFILE,
+        "actor_ref": str(new_record_id()),
+        "request_id": new_record_id(),
+        "correlation_id": new_record_id(),
+        "permission_id": "operations.reconcile.run",
+        "action_id": "operations.post_submit_delivery.reconcile",
+        "project_id": str(project_id),
+        "resource_type": "outbox_delivery",
+        "resource_id": str(source_id),
+        "target_ref_kind": "project",
+        "target_ref_id": str(project_id),
+        "reason": "authorization_evaluation",
+        "after_facts": {
+            "allowed": True,
+            "resource_context_digest": "sha256:" + "a" * 64,
+        },
+    }
+
+    admitted = AuthorityAuditEventInput.model_validate(values)
+    assert (admitted.resource_type, admitted.target_ref_kind) == (
+        "outbox_delivery",
+        "project",
+    )
+    for field in ("target_ref_kind", "invalidation_target_kind"):
+        candidate = values | {field: "outbox_delivery"}
+        if field == "invalidation_target_kind":
+            candidate["invalidation_target_ref"] = str(source_id)
+        with pytest.raises(TypeError, match="invalid authority audit input"):
+            AuthorityAuditEventInput.model_validate(candidate)

@@ -46,7 +46,6 @@ _RESOURCE_TYPES = frozenset(
 _UUID_TARGET_KINDS = frozenset(
     {
         "joint_lifecycle_control",
-        "outbox_delivery",
         "actor_profile",
         "actor_identity_link",
         "admin_role_grant",
