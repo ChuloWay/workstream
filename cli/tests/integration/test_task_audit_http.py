@@ -48,11 +48,15 @@ PAGE = {"project_id": PROJECT, "task_id": TASK, "items": [ITEM], "next_cursor": 
 
 
 def locked(cli, origin, output="json"):
-    return cli(origin, TOKEN, "audit", "task", "locked-context", PROJECT, TASK, "-o", output)
+    return cli(
+        origin, TOKEN, "audit", "task", "locked-context", PROJECT, TASK, "-o", output
+    )
 
 
 def evidence(cli, origin, *flags, output="json"):
-    return cli(origin, TOKEN, "audit", "task", "evidence", PROJECT, TASK, *flags, "-o", output)
+    return cli(
+        origin, TOKEN, "audit", "task", "evidence", PROJECT, TASK, *flags, "-o", output
+    )
 
 
 def test_audit_reads_use_exact_routes_and_safe_complete_output(cli):
@@ -78,7 +82,9 @@ def test_audit_reads_use_exact_routes_and_safe_complete_output(cli):
         assert "\x1b" not in text.stdout
 
         selected = json.dumps(CURSOR, separators=(",", ":"))
-        response["body"] = json.dumps(PAGE | {"items": [], "next_cursor": None}).encode()
+        response["body"] = json.dumps(
+            PAGE | {"items": [], "next_cursor": None}
+        ).encode()
         continued = evidence(cli, origin, "--limit", "1", "--cursor", selected)
         assert continued.returncode == 0 and continued.stderr == "", continued.stderr
         assert json.loads(continued.stdout)["items"] == []
@@ -100,7 +106,11 @@ def test_audit_context_rejects_non_audit_or_malformed_projection(cli):
         LOCKED | {"locked_guide_source_snapshot_id": "not-a-uuid"},
         LOCKED | {"locked_post_submit_checker_policy_body_summary": {}},
         LOCKED | {"locked_guide_version": TOKEN},
-        {key: value for key, value in LOCKED.items() if key != "locked_review_policy_hash"},
+        {
+            key: value
+            for key, value in LOCKED.items()
+            if key != "locked_review_policy_hash"
+        },
     )
     with http_fixture() as (origin, response, _requests):
         for value in malformed:
@@ -118,7 +128,10 @@ def test_audit_evidence_rejects_malformed_scope_events_and_cursor(cli):
         PAGE | {"items": [ITEM | {"assignment_id": EVENT}]},
         PAGE | {"items": [ITEM | {"authorization_decision_id": None}]},
         PAGE | {"items": [ITEM | {"from_status": 1}]},
-        PAGE | {"items": [{key: value for key, value in ITEM.items() if key != "to_status"}]},
+        PAGE
+        | {
+            "items": [{key: value for key, value in ITEM.items() if key != "to_status"}]
+        },
         PAGE | {"items": [ITEM, ITEM]},
         PAGE | {"items": [], "next_cursor": CURSOR},
         PAGE | {"next_cursor": CURSOR | {"task_id": PROJECT}},
@@ -154,9 +167,13 @@ def test_audit_cursor_is_exact_scoped_json_and_bad_inputs_never_dispatch(cli):
     with http_fixture() as (origin, response, requests):
         response["body"] = json.dumps(PAGE).encode()
         for cursor in bad:
-            assert_failure(evidence(cli, origin, "--cursor", cursor), "invalid_arguments", 2)
+            assert_failure(
+                evidence(cli, origin, "--cursor", cursor), "invalid_arguments", 2
+            )
         assert requests == []
-        bad_project = cli(origin, TOKEN, "audit", "task", "evidence", TASK, "bad", "-o", "json")
+        bad_project = cli(
+            origin, TOKEN, "audit", "task", "evidence", TASK, "bad", "-o", "json"
+        )
         assert_failure(bad_project, "invalid_arguments", 2)
         assert requests == []
 
@@ -164,7 +181,9 @@ def test_audit_cursor_is_exact_scoped_json_and_bad_inputs_never_dispatch(cli):
 def test_audit_denial_and_body_limit_do_not_disclose_or_partially_print(cli):
     with http_fixture() as (origin, response, _requests):
         response["status"] = 404
-        response["body"] = b'{"error":{"code":"project_authorization_resource_not_found"}}'
+        response["body"] = (
+            b'{"error":{"code":"project_authorization_resource_not_found"}}'
+        )
         for call in (locked, evidence):
             result = call(cli, origin)
             assert_failure(result, "project_authorization_resource_not_found")

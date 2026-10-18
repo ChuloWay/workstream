@@ -21,7 +21,9 @@ from tests.contributions.exports.conftest import (
     clear_settings_cache as clear_settings_cache,
     rsa_signing_material as rsa_signing_material,
 )
-from tests.conftest import pagination_cursor_hmac_secret as pagination_cursor_hmac_secret
+from tests.conftest import (
+    pagination_cursor_hmac_secret as pagination_cursor_hmac_secret,
+)
 from tests.authorization.admin_access.fixtures import (
     signed_access as _signed_access,
     admin_access as _admin_access,
@@ -39,7 +41,9 @@ admin_access = pytest_asyncio.fixture(_admin_access.__wrapped__)
 
 @pytest.mark.asyncio
 async def test_audit_task_reads_real_public_api_scope_and_fresh_authority(
-    cli, auth_database_env, admin_access,
+    cli,
+    auth_database_env,
+    admin_access,
 ):
     project, manager, task = await task_case(admin_access)
     other = await create_project("Existing foreign audit project")
@@ -56,11 +60,17 @@ async def test_audit_task_reads_real_public_api_scope_and_fresh_authority(
     async with db_session.get_session_factory()() as session, session.begin():
         ready = await session.get(WorkstreamTask, str(task))
         empty_task = new_record_id()
-        session.add(WorkstreamTask(
-            id=str(empty_task), project_id=str(project), title="Empty evidence",
-            description="Fixture task", source_type=ready.source_type,
-            status="draft", created_by=ready.created_by,
-        ))
+        session.add(
+            WorkstreamTask(
+                id=str(empty_task),
+                project_id=str(project),
+                title="Empty evidence",
+                description="Fixture task",
+                source_type=ready.source_type,
+                status="draft",
+                created_by=ready.created_by,
+            )
+        )
 
     app = admin_access.signed.client._transport.app
     sock = socket.socket()
@@ -76,10 +86,21 @@ async def test_audit_task_reads_real_public_api_scope_and_fresh_authority(
                 assert not serve.done(), "real API server exited"
                 await asyncio.sleep(0.01)
 
-        async def call(actor, operation, project_id=project, task_id=task, *flags, status=None):
+        async def call(
+            actor, operation, project_id=project, task_id=task, *flags, status=None
+        ):
             result = await asyncio.to_thread(
-                cli, origin, actor.token, "-o", "json", "audit", "task",
-                operation, str(project_id), str(task_id), *flags,
+                cli,
+                origin,
+                actor.token,
+                "-o",
+                "json",
+                "audit",
+                "task",
+                operation,
+                str(project_id),
+                str(task_id),
+                *flags,
             )
             if status is not None:
                 assert result.returncode == 1 and result.stdout == "", result.stderr
@@ -90,7 +111,12 @@ async def test_audit_task_reads_real_public_api_scope_and_fresh_authority(
 
         spec = (await admin_access.signed.client.get("/openapi.json")).json()["paths"]
         for suffix in ("locked-context", "evidence"):
-            assert "get" in spec[f"/api/v1/audit/projects/{{project_id}}/tasks/{{task_id}}/{suffix}"]
+            assert (
+                "get"
+                in spec[
+                    f"/api/v1/audit/projects/{{project_id}}/tasks/{{task_id}}/{suffix}"
+                ]
+            )
 
         context = await call(auditor, "locked-context")
         direct = await admin_access.signed.client.get(
@@ -118,11 +144,15 @@ async def test_audit_task_reads_real_public_api_scope_and_fresh_authority(
 
         empty = await call(auditor, "evidence", project, empty_task)
         assert empty == {
-            "project_id": str(project), "task_id": str(empty_task),
-            "items": [], "next_cursor": None,
+            "project_id": str(project),
+            "task_id": str(empty_task),
+            "items": [],
+            "next_cursor": None,
         }
         for actor, scope in (
-            (manager, project), (outsider, project), (foreign_auditor, project),
+            (manager, project),
+            (outsider, project),
+            (foreign_auditor, project),
             (auditor, other),
         ):
             await call(actor, "locked-context", scope, task, status=404)
@@ -131,7 +161,17 @@ async def test_audit_task_reads_real_public_api_scope_and_fresh_authority(
         revoked = await admin_access.signed.revoke(admin_access.admin, grant)
         assert revoked.status_code == 200, revoked.text
         await call(auditor, "locked-context", status=404)
-        await call(auditor, "evidence", project, task, "--limit", "1", "--cursor", cursor, status=404)
+        await call(
+            auditor,
+            "evidence",
+            project,
+            task,
+            "--limit",
+            "1",
+            "--cursor",
+            cursor,
+            status=404,
+        )
     finally:
         server.should_exit = True
         await asyncio.wait_for(serve, 30)
