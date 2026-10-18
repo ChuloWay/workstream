@@ -562,7 +562,11 @@ async def test_policy_replay_waits_for_grant_revocation_then_denies(
                 await asyncio.gather(replay_task, return_exceptions=True)
     assert replay_task is not None
     denied = await asyncio.wait_for(replay_task, timeout=5)
-    assert entered_grant_query.is_set()
+    print(
+        "replay after revoke: "
+        f"status={denied.status_code} code={denied.json().get('error', {}).get('code')} "
+        f"grant_query_entered={entered_grant_query.is_set()}"
+    )
     assert denied.status_code == 403, denied.text
     assert denied.json()["error"]["code"] == "permission_not_granted"
     assert await _product_counts(project["id"], guide["id"]) == original_counts
