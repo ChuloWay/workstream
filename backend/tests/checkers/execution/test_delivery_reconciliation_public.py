@@ -34,7 +34,10 @@ from tests.reviews.lifecycle.fixtures import (
     live_acceptance_lifecycle as live_acceptance_lifecycle,
 )
 from tests.tasks.evaluation_delivery.support import delivery_fixture, invoked, outcome, state
-from tests.tasks.post_submit_routing.outcome_support import authorized_routing_source
+from tests.tasks.post_submit_routing.outcome_support import (
+    apply_outcome,
+    authorized_routing_source,
+)
 
 
 def _paths(project_id, event_id=None):
@@ -199,6 +202,122 @@ async def _reconcile(admin_access, project_id, event_id, request_key):
         headers=admin_access.target.headers | {"Idempotency-Key": str(request_key)},
         json={"reason": "Reconcile one exact uncertain post-submit delivery"},
     )
+
+
+@pytest.mark.asyncio
+async def test_public_operator_recovers_rolled_back_acceptance_once(
+    tmp_path, auth_database_env, live_acceptance_lifecycle,
+) -> None:
+    """An UNKNOWN completion with rolled-back effects accepts under its live child."""
+    admin_access = live_acceptance_lifecycle
+    async with authorized_routing_source(
+        tmp_path, auth_database_env, human_review_required=False,
+        contribution_awards=("project_points",),
+    ) as h:
+        async with h.factory() as session:
+            await session.begin()
+            staged = await apply_outcome(session, h, 2)
+            assert staged.final_acceptance_id is not None
+            await session.rollback()
+        assert await _project_facts(h.factory, h.request.project_id) == (0,) * 6
+        finalized = await h.completion_delivery.finalize(
+            h.envelope.claim, FinalizationCause.UNKNOWN
+        )
+        assert outcome(finalized)["error_code"] == "INVOKE_OUTCOME_UNKNOWN"
+        original_before, _ = await _delivery_rows(h.factory, h.envelope.claim.event_id)
+        await _discover_one(admin_access, h.request.project_id, classification="retry_safe")
+        key = new_record_id()
+        created = await _reconcile(
+            admin_access, h.request.project_id, h.envelope.claim.event_id, key
+        )
+        assert created.status_code == 201, created.text
+        successor = created.json()["successor"]
+        assert successor["classification"] == "retry_safe"
+        child_id = UUID(successor["event_id"])
+        delivery = production_outbox_delivery(h.factory)
+        delivered = await delivery.deliver(child_id, h.request.project_id, "recover-completion")
+        assert outcome(delivered)["delivery_state"] == "acknowledged", outcome(delivered)
+        assert await _project_facts(h.factory, h.request.project_id) == (1,) * 6
+        async with h.factory() as session:
+            actual = (await session.execute(text("""
+                SELECT a.project_id=:project, a.task_id=:task, a.submission_id=:submission,
+                       a.source_review_id IS NULL, c.source_review_id IS NULL,
+                       c.contributor_id=s.contributor_id,
+                       c.source_final_acceptance_id=a.id,
+                       c.source_task_assignment_id=s.task_assignment_id,
+                       c.contribution_policy_version_id=s.contribution_policy_version_id,
+                       c.artifact_hash=s.package_hash,
+                       t.status='accepted', s.attempt_status='accepted',
+                       m.completion_event_id=:original
+                FROM public.final_acceptances a
+                JOIN public.contribution_records c ON c.source_final_acceptance_id=a.id
+                JOIN public.submissions s ON s.id=a.submission_id
+                JOIN public.workstream_tasks t ON t.id=a.task_id
+                JOIN public.task_post_submit_routing_manifests m
+                  ON m.id=a.source_routing_manifest_id
+                WHERE a.project_id=:project
+            """), {
+                "project": h.request.project_id, "task": h.request.task_id,
+                "submission": h.request.submission_id, "original": h.envelope.claim.event_id,
+            })).one()
+            assert tuple(actual) == (True,) * 13
+            assert await session.scalar(text("SELECT count(*) FROM public.reviews")) == 0
+        retained = await _retained_effect_rows(h.factory, h.request.project_id)
+        original_after, child = await _delivery_rows(h.factory, h.envelope.claim.event_id, child_id)
+        assert original_after == original_before
+        assert child[:3] == ("acknowledged", None, h.envelope.claim.event_id)
+        replay = await _reconcile(admin_access, h.request.project_id, h.envelope.claim.event_id, key)
+        assert replay.status_code == 201, replay.text
+        assert replay.json()["successor"] == successor
+        await delivery.deliver(child_id, h.request.project_id, "duplicate-completion")
+        assert await _retained_effect_rows(h.factory, h.request.project_id) == retained
+        assert (await _delivery_rows(h.factory, h.envelope.claim.event_id))[0] == original_before
+
+
+@pytest.mark.asyncio
+async def test_public_operator_verifies_committed_request_without_execution(
+    tmp_path, auth_database_env, admin_access, monkeypatch,
+) -> None:
+    """A committed checker result is acknowledged without executing it again."""
+    async with material_fixture(tmp_path, auth_database_env) as h:
+        await admin_access.signed.grant(admin_access.admin, admin_access.target)
+        prepared = await delivery_fixture(h)
+        original = await invoked(h, prepared)
+        assert await prepared.handler(original) is HandlerOutcome.ACKNOWLEDGE
+        completed = await state(h)
+        assert completed["run"]["status"] == "completed"
+        assert completed["events"] == 1
+        opens = tuple(h.store.opens)
+        await prepared.delivery.finalize(original.claim, FinalizationCause.UNKNOWN)
+        original_before, _ = await _delivery_rows(h.factory, original.claim.event_id)
+        await _discover_one(admin_access, h.request.project_id, classification="committed")
+        key = new_record_id()
+        created = await _reconcile(admin_access, h.request.project_id, original.claim.event_id, key)
+        assert created.status_code == 201, created.text
+        successor = created.json()["successor"]
+        assert successor["classification"] == "committed"
+
+        async def forbidden_execution(*_args, **_kwargs):
+            pytest.fail("committed request recovery must not execute the checker again")
+
+        monkeypatch.setattr(
+            "app.modules.checkers.execution.PostSubmissionExecutor.evaluate_post_submission",
+            forbidden_execution,
+        )
+        child_id = UUID(successor["event_id"])
+        delivery = production_outbox_delivery(h.factory)
+        receipt = await delivery.deliver(child_id, h.request.project_id, "verify-request")
+        assert outcome(receipt)["delivery_state"] == "acknowledged", outcome(receipt)
+        assert await state(h) == completed
+        assert tuple(h.store.opens) == opens
+        original_after, child = await _delivery_rows(h.factory, original.claim.event_id, child_id)
+        assert original_after == original_before
+        assert child[:3] == ("acknowledged", None, original.claim.event_id)
+        replay = await _reconcile(admin_access, h.request.project_id, original.claim.event_id, key)
+        assert replay.status_code == 201, replay.text
+        assert replay.json()["successor"] == successor
+        await delivery.deliver(child_id, h.request.project_id, "duplicate-request")
+        assert await state(h) == completed
 
 
 @pytest.mark.asyncio
