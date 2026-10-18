@@ -86,11 +86,14 @@ third operation.
   `operations.reconcile.run`. Add no permission, role, alias or service grant.
 - One coordinated migration numbered `0055_operational_delivery_reconciliation`
   after the separately owned `0054_artifact_proof_timing`. The migration may
-  add only those two exact action/permission pairs to the closed audit
-  constraint and the corresponding Alembic head/fingerprint/test updates. It
-  has no S3 runtime dependency; its only relationship to `0054` is the required
-  linear schema sequence. Consume the canonical published `0054` before
-  authoring `0055` and do not create a sibling migration.
+  add only those two exact action/permission pairs and the exact
+  `outbox_delivery` resource type to the closed audit constraints. The target
+  remains the canonical project target; the migration adds no target or
+  invalidation namespace. Include the corresponding Alembic
+  head/fingerprint/test updates. It has no S3 runtime dependency; its only
+  relationship to `0054` is the required linear schema sequence. Consume the
+  canonical published `0054` before authoring `0055` and do not create a
+  sibling migration.
 - Focused real PostgreSQL request/completion recovery, public API, AUTH,
   transaction, concurrency, migration and delivery registration tests; exact
   ownership/lane/action/rate/OpenAPI inventories affected by the new routes and
