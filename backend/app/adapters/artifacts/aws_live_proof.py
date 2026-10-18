@@ -322,7 +322,11 @@ class AwsArtifactLiveProof:
         }
         workload_roles = frozenset(role_policies)
         trust_subjects: dict[str, frozenset[tuple[str, str]]] = {}
-        async with self._session.create_client("iam", config=self._config) as iam:
+        async with self._session.create_client(
+            "iam",
+            region_name=self._required(self._settings.artifact_s3_region),
+            config=self._config,
+        ) as iam:
             for role_arn, (expected_policy, expected_trust_digest) in role_policies.items():
                 role_name = role_arn.rsplit("/", 1)[-1]
                 role = await iam.get_role(RoleName=role_name)
@@ -382,7 +386,11 @@ class AwsArtifactLiveProof:
 
     async def _validate_access_analyzer(self, bucket_policy_text: str) -> None:
         """Require a finding-free bucket policy that grants no public object access."""
-        async with self._session.create_client("accessanalyzer", config=self._config) as analyzer:
+        async with self._session.create_client(
+            "accessanalyzer",
+            region_name=self._required(self._settings.artifact_s3_region),
+            config=self._config,
+        ) as analyzer:
             validation = await analyzer.validate_policy(
                 policyDocument=bucket_policy_text,
                 policyType="RESOURCE_POLICY",

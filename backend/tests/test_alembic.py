@@ -136,6 +136,7 @@ def test_v01_graph_has_one_root_and_head() -> None:
 
     assert [revision.revision for revision in revisions] == [
         HEAD_REVISION,
+        "0053_project_reads",
         "0052_artifact_provider_proof",
         "0051_operational_read_audit",
         "0050_contributor_reads",
@@ -328,6 +329,7 @@ def test_repeated_upgrade_head_preserves_current_database(
     "0050_contributor_reads",
     "0051_operational_read_audit",
     "0052_artifact_provider_proof",
+    "0053_project_reads",
 ])
 def test_preceding_head_upgrades_to_current_without_recreation(
     isolated_database_env: str, migration_lock, installed_revision: str,
@@ -363,6 +365,69 @@ def test_preceding_head_upgrades_to_current_without_recreation(
     assert after["versions"] == [HEAD_REVISION]
     assert after["reference_rows"] == before["reference_rows"]
     assert repeated == after
+
+
+async def test_proof_timing_upgrade_preserves_evidence_and_refuses_one_step_downgrade(
+    tmp_path, isolated_database_env, migration_lock,
+):
+    """Existing immutable proofs survive the new insert-only timing restriction."""
+    from datetime import timedelta
+    from uuid import uuid4
+
+    from sqlalchemy import text
+    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+    from app.adapters.artifacts.s3_compatible import aws_s3_namespace_fingerprint
+    from tests.test_artifact_provider_activation_postgresql import (
+        _insert_activation_direct, _insert_group, _settings,
+    )
+
+    async def retained(factory):
+        async with factory() as session:
+            rows = {}
+            for table in ("artifact_provider_probe_results", "artifact_provider_activations"):
+                result = await session.execute(text(
+                    f"SELECT to_jsonb(t)::text,tableoid::bigint,xmin::text "
+                    f"FROM public.{table} t ORDER BY id"
+                ))
+                rows[table] = [tuple(row) for row in result]
+            return rows
+
+    with migration_lock():
+        await _execute(isolated_database_env, "drop schema public cascade; create schema public")
+        await asyncio.to_thread(command.upgrade, _alembic_config(), "0053_project_reads")
+        engine = create_async_engine(isolated_database_env)
+        factory = async_sessionmaker(engine, expire_on_commit=False)
+        try:
+            settings = _settings(tmp_path)
+            results = await _insert_group(
+                factory, settings, aws_s3_namespace_fingerprint(settings), uuid4(),
+                started_at_offsets={"runtime_immutability": timedelta(seconds=121)},
+            )
+            async with factory() as session, session.begin():
+                await _insert_activation_direct(session, results)
+            before = await retained(factory)
+            assert len(before["artifact_provider_probe_results"]) == 3
+            assert len(before["artifact_provider_activations"]) == 1
+            # A separate Alembic invocation must admit the actual predecessor.
+            await asyncio.to_thread(command.upgrade, _alembic_config(), HEAD_REVISION)
+            assert await retained(factory) == before
+            async with factory() as session:
+                assert await session.scalar(text("SELECT version_num FROM alembic_version")) == HEAD_REVISION
+                guard = await session.scalar(text(
+                    "SELECT pg_get_functiondef('public.guard_artifact_provider_activation()'::regprocedure)"
+                ))
+                assert "clock_timestamp()-runtime.started_at" in guard
+            with pytest.raises(RuntimeError, match="cannot be downgraded"):
+                await asyncio.to_thread(command.downgrade, _alembic_config(), "0053_project_reads")
+            assert await retained(factory) == before
+            async with factory() as session:
+                assert await session.scalar(text("SELECT version_num FROM alembic_version")) == HEAD_REVISION
+                assert await session.scalar(text(
+                    "SELECT pg_get_functiondef('public.guard_artifact_provider_activation()'::regprocedure)"
+                )) == guard
+        finally:
+            await engine.dispose()
 
 
 async def test_revision_upgrade_retains_policy_source_and_running_window(
