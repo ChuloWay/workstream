@@ -49,7 +49,7 @@ PROJECT_SUMMARY = {
     "submissions": SUMMARY_BODY["submissions"],
     "acceptance_rate": 0.0,
     "checker_infrastructure_failures": 2,
-    "award_totals": None,
+    "award_totals": [],
 }
 READS = (
     ("submissions", "/submissions", PROJECT_SUBMISSION),
@@ -126,24 +126,24 @@ def test_project_filters_reach_the_query(cli):
         }
 
 
-def test_summary_distinguishes_hidden_and_visible_award_totals(cli):
+def test_summary_prints_the_project_award_totals(cli):
     with http_fixture() as (origin, response, requests):
         response["body"] = json.dumps(PROJECT_SUMMARY).encode()
         result = cli(origin, TOKEN, "project", "summary", PROJECT)
         assert result.returncode == 0, result.stderr
         assert "Acceptance rate: 0.0000\n" in result.stdout
         assert "Checker infrastructure failures: 2\n" in result.stdout
-        assert "Award totals: not shown" in result.stdout
+        assert "Award total" not in result.stdout
         assert requests[-1][1] == f"/api/v1/projects/{PROJECT}/summary"
-        visible = PROJECT_SUMMARY | {
+        awarded = PROJECT_SUMMARY | {
             "award_totals": [
                 {"instrument": "money", "unit": "USD", "quantity": "12.50"}
             ]
         }
-        response["body"] = json.dumps(visible).encode()
+        response["body"] = json.dumps(awarded).encode()
         result = cli(origin, TOKEN, "project", "summary", PROJECT, "-o", "json")
         assert result.returncode == 0, result.stderr
-        assert json.loads(result.stdout) == visible
+        assert json.loads(result.stdout) == awarded
         text = cli(origin, TOKEN, "project", "summary", PROJECT).stdout
         assert "Award total: money USD 12.50\n" in text
 
@@ -180,6 +180,7 @@ def test_project_reads_reject_malformed_success(cli):
             PROJECT_SUMMARY | {"project_id": other_project},
             PROJECT_SUMMARY | {"tasks": TASK_COUNTS | {"retired": 0}},
             {k: v for k, v in PROJECT_SUMMARY.items() if k != "award_totals"},
+            PROJECT_SUMMARY | {"award_totals": None},
             PROJECT_SUMMARY
             | {
                 "award_totals": [

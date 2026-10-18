@@ -2240,7 +2240,7 @@ def test_administrative_role_policy_and_definition_responses_are_exact() -> None
             admin_role.read admin_role.grant admin_role.revoke audit.read audit.export""".split(),
         AdminRole.OPERATOR: """project.read project.setup_diagnostic.read
             project.effective_policy.read review.queue.inspect review.lease.force_release
-            contribution.read_project compensation.award.read operations.status.read
+            contribution.read_project operations.status.read
             operations.timer.run operations.reconcile.run operations.outbox.retry
             operations.projection.rebuild operations.task.start_override
             operations.submission_gate.repair operations.checker.retry artifact.binding.read

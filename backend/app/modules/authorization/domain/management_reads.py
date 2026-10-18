@@ -5,7 +5,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
-from app.modules.authorization.catalogue import ActionAvailability, ActionId, PermissionId
+from app.modules.authorization.catalogue import ActionAvailability, ActionId
 from app.modules.authorization.domain.audit import AuthorizationDenialCode, MatchedAuthorityKind
 from app.modules.authorization.schemas import AdminRole
 
@@ -46,18 +46,12 @@ class ProjectManagementReadResourceContext(BaseModel):
     scope_project_id: UUID
     actor_profile_id: UUID
     request_digest: str = Field(pattern=_DIGEST)
-    # Set only by the evaluator on a summary it allows: the exact-project
-    # Finance grant it locked, so the recorded decision digest binds the
-    # award-total disclosure. Callers never supply it.
-    award_totals_grant_id: UUID | None = None
 
     @model_validator(mode="after")
     def exact_project(self):
         """Project collections and summaries name the project itself."""
         if self.resource_type not in _PROJECT_MEMBER_RESOURCES and self.resource_id != self.scope_project_id:
             raise ValueError("project management read differs from its project")
-        if self.award_totals_grant_id is not None and self.resource_type != "project_work_summary":
-            raise ValueError("only the project summary discloses award totals")
         return self
 
 
@@ -66,11 +60,9 @@ async def management_read_denial(action, resource, context, repository, refresh,
 
     Project Manager reads accept a system or exact-project Project Manager
     grant; the policy version list accepts the same scopes for Finance
-    Authority. No contributor or other administrative role is admitted. The
-    summary also resolves an exact-project Finance Authority grant (the
-    PILOT-10 precedent; a system Finance grant does not disclose) and returns
-    the evaluated resource naming it, which the kernel records. Every result
-    ends with the resource the decision records.
+    Authority. No contributor or other administrative role is admitted; the
+    Project Manager role holds ``compensation.award.read``, so the summary's
+    award totals need no second grant.
     """
     from app.modules.authorization.runtime import (
         HumanAuthorizationContext, PreparedAuthorizationUnsupported,
@@ -79,25 +71,24 @@ async def management_read_denial(action, resource, context, repository, refresh,
     refused = AuthorizationDenialCode.RESOURCE_GUARD_DENIED
     if (not isinstance(context, HumanAuthorizationContext)
             or type(resource) is not ProjectManagementReadResourceContext):
-        return refused, context, None, None, None, False, resource
+        return refused, context, None, None, None, False
     try:
         resource = ProjectManagementReadResourceContext.model_validate(resource)
     except ValidationError:
-        return refused, context, None, None, None, False, resource
+        return refused, context, None, None, None, False
     if (resource.actor_profile_id != context.actor_profile_id
-            or resource.award_totals_grant_id is not None
             or MANAGEMENT_RESOURCE_BY_ACTION.get(action.action_id) != resource.resource_type):
-        return refused, context, None, None, None, False, resource
+        return refused, context, None, None, None, False
     if action.availability is not ActionAvailability.ACTIVE:
-        return AuthorizationDenialCode.ACTION_UNAVAILABLE, context, None, None, None, False, resource
+        return AuthorizationDenialCode.ACTION_UNAVAILABLE, context, None, None, None, False
     locked = await repository.lock_request_actor(context.identity_link_id, context.actor_profile_id)
     try:
         context = refresh(locked, context)
     except PreparedAuthorizationUnsupported as exc:
-        return exc.denial_code, context, None, None, None, True, resource
+        return exc.denial_code, context, None, None, None, True
     denial = lifecycle(context)
     if denial is not None:
-        return denial, context, None, None, None, True, resource
+        return denial, context, None, None, None, True
     role = (AdminRole.FINANCE_AUTHORITY if action.action_id in _FINANCE_ACTIONS
             else AdminRole.PROJECT_MANAGER)
     grant = await repository.find_effective_grant(
@@ -105,20 +96,9 @@ async def management_read_denial(action, resource, context, repository, refresh,
         for_update=True, allowed_roles=frozenset({role}),
     )
     if grant is None:
-        return AuthorizationDenialCode.PERMISSION_NOT_GRANTED, context, None, None, None, True, resource
-    evaluated = resource
-    if action.action_id is ActionId.PROJECT_SUMMARY_READ:
-        finance = await repository.find_effective_grant(
-            context.actor_profile_id, PermissionId.COMPENSATION_AWARD_READ,
-            scope_project_id=resource.scope_project_id, exact_project_scope=True, for_update=True,
-            allowed_roles=frozenset({AdminRole.FINANCE_AUTHORITY}),
-        )
-        if finance is not None:
-            evaluated = ProjectManagementReadResourceContext.model_validate(
-                {**resource.model_dump(), "award_totals_grant_id": UUID(str(finance.id))},
-            )
+        return AuthorizationDenialCode.PERMISSION_NOT_GRANTED, context, None, None, None, True
     project = await repository.lock_project(resource.scope_project_id)
     if project is None:
-        return AuthorizationDenialCode.RESOURCE_NOT_FOUND, context, None, None, None, True, resource
+        return AuthorizationDenialCode.RESOURCE_NOT_FOUND, context, None, None, None, True
     return (None, context, MatchedAuthorityKind.ADMIN_ROLE_GRANT, UUID(str(grant.id)),
-            resource.scope_project_id, True, evaluated)
+            resource.scope_project_id, True)

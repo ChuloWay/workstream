@@ -43,15 +43,15 @@ type ProjectAssignmentPage struct {
 // TaskStatusCounts holds one count per closed task status.
 type TaskStatusCounts map[string]*big.Int
 
-// ProjectWorkSummary carries award totals only for an exact-project Finance caller.
+// ProjectWorkSummary carries the project's award totals, empty when no award exists.
 type ProjectWorkSummary struct {
-	ProjectID                     string               `json:"project_id"`
-	Tasks                         TaskStatusCounts     `json:"tasks"`
-	Assignments                   AssignmentCounts     `json:"assignments"`
-	Submissions                   AttemptCounts        `json:"submissions"`
-	AcceptanceRate                *float64             `json:"acceptance_rate"`
-	CheckerInfrastructureFailures *big.Int             `json:"checker_infrastructure_failures"`
-	AwardTotals                   *[]CompensationAward `json:"award_totals"`
+	ProjectID                     string              `json:"project_id"`
+	Tasks                         TaskStatusCounts    `json:"tasks"`
+	Assignments                   AssignmentCounts    `json:"assignments"`
+	Submissions                   AttemptCounts       `json:"submissions"`
+	AcceptanceRate                *float64            `json:"acceptance_rate"`
+	CheckerInfrastructureFailures *big.Int            `json:"checker_infrastructure_failures"`
+	AwardTotals                   []CompensationAward `json:"award_totals"`
 }
 
 type TaskImportBatchSummary struct {
@@ -204,10 +204,10 @@ func (c *Client) ProjectSummary(ctx context.Context, project string) (Result[Pro
 		return result, err
 	}
 	var value ProjectWorkSummary
-	fields, err := contextObject(raw, &value, []string{"project_id", "tasks", "assignments", "submissions", "checker_infrastructure_failures"}, nil)
+	fields, err := contextObject(raw, &value, []string{"project_id", "tasks", "assignments", "submissions", "checker_infrastructure_failures", "award_totals"}, nil)
 	var assignments AssignmentCounts
 	var attempts AttemptCounts
-	if err != nil || !requiredNullable(fields, "acceptance_rate", "award_totals") || !sameUUID(value.ProjectID, project) ||
+	if err != nil || !requiredNullable(fields, "acceptance_rate") || value.AwardTotals == nil || !sameUUID(value.ProjectID, project) ||
 		contextObjectError(fields["assignments"], &assignments, "active", "closed") ||
 		contextObjectError(fields["submissions"], &attempts, attemptStatuses...) ||
 		!nonNegative(assignments.Active, assignments.Closed, attempts.EvaluationPending, attempts.ReviewPending,
@@ -223,15 +223,13 @@ func (c *Client) ProjectSummary(ctx context.Context, project string) (Result[Pro
 		(rate != nil && (math.IsNaN(*rate) || *rate < 0 || *rate > 1)) {
 		return result, &Failure{Code: "invalid_api_response"}
 	}
-	if value.AwardTotals != nil {
-		seen := map[[2]string]bool{}
-		for _, award := range *value.AwardTotals {
-			key := [2]string{award.Instrument, award.Unit}
-			if !validCompensationAward(award) || seen[key] {
-				return result, &Failure{Code: "invalid_api_response"}
-			}
-			seen[key] = true
+	seen := map[[2]string]bool{}
+	for _, award := range value.AwardTotals {
+		key := [2]string{award.Instrument, award.Unit}
+		if !validCompensationAward(award) || seen[key] {
+			return result, &Failure{Code: "invalid_api_response"}
 		}
+		seen[key] = true
 	}
 	value.Assignments, value.Submissions = assignments, attempts
 	return Result[ProjectWorkSummary]{Raw: raw, Value: value}, nil
