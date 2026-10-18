@@ -493,6 +493,7 @@ CHECKER_DELIVERY_MODULES = (
     "tests/checkers/execution/test_checker_retry_migration.py",
     "tests/checkers/execution/test_delivery_reconciliation_concurrency.py",
     "tests/checkers/execution/test_delivery_reconciliation_contract.py",
+    "tests/checkers/execution/test_delivery_reconciliation_custody.py",
     "tests/checkers/execution/test_delivery_reconciliation_public.py",
     "tests/test_post_submit_materialization.py",
     "tests/test_post_submit_selection.py",
