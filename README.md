@@ -172,8 +172,9 @@ You need Git, Docker Engine, and Docker Compose v2.
 ## Use the command-line client
 
 The [Workstream CLI](cli/README.md) is a terminal client for the public API.
-You can use it to set up projects, find and claim tasks, submit work, and
-export contribution records. It sends your Flow token, from
+You can use it to set up projects, find and claim tasks, submit work, read
+authorized task audit context and evidence, and export contribution records.
+It sends your Flow token, from
 `WORKSTREAM_TOKEN`, with each request.
 
 ## Repository layout

@@ -6,7 +6,7 @@ plus draft project/guide declaration and original upload, exact-project inspecti
 contributor work discovery, claim/start, locked guide documents and governing
 context/intake requirements, explicit batch import/screen/release, Finance
 policy management, explicit ZIP preparation/submission, checker findings and
-contribution-evidence exports:
+contribution-evidence exports and exact Audit Authority task reads:
 
 | Command | Public API |
 |---|---|
@@ -34,6 +34,8 @@ contribution-evidence exports:
 | `workstream project guide document PROJECT_ID GUIDE_ID DOCUMENT_ID --download DIR` | `GET /api/v1/projects/PROJECT_ID/guides/GUIDE_ID/documents/DOCUMENT_ID/content` |
 | `workstream project tasks PROJECT_ID [--status S] [--assignee UUID] [--import-batch UUID] [--updated-since TIME]` | `GET /api/v1/projects/PROJECT_ID/tasks` |
 | `workstream project task PROJECT_ID TASK_ID` | `GET /api/v1/projects/PROJECT_ID/tasks/TASK_ID` |
+| `workstream audit task locked-context PROJECT_ID TASK_ID` | `GET /api/v1/audit/projects/PROJECT_ID/tasks/TASK_ID/locked-context` |
+| `workstream audit task evidence PROJECT_ID TASK_ID [--limit N] [--cursor JSON]` | `GET /api/v1/audit/projects/PROJECT_ID/tasks/TASK_ID/evidence` |
 | `workstream project submissions PROJECT_ID [--task UUID] [--status S] [--submitter UUID] [--updated-since TIME] [--limit N] [--cursor TOKEN]` | `GET /api/v1/projects/PROJECT_ID/submissions` |
 | `workstream project assignments PROJECT_ID [--state active\|closed] [--limit N] [--cursor TOKEN]` | `GET /api/v1/projects/PROJECT_ID/assignments` |
 | `workstream project summary PROJECT_ID` | `GET /api/v1/projects/PROJECT_ID/summary` |
@@ -140,6 +142,31 @@ The table above is the delivered command inventory. PILOT-02 supplies the
 in the same CLI; contribution-evidence reads do not depend on using batch import.
 Submission preparation, creation and history commands are described below;
 manager revision repair and human-review commands are outside this CLI inventory.
+
+## Read task audit context and evidence
+
+```sh
+workstream audit task locked-context PROJECT_ID TASK_ID --output json
+workstream audit task evidence PROJECT_ID TASK_ID --limit 50 --output json
+workstream audit task evidence PROJECT_ID TASK_ID --limit 50 --cursor '{"project_id":"...","task_id":"...","created_at":"...","event_id":"..."}' --output json
+```
+
+These are separate covered Audit Authority reads, not manager or contributor
+views. Locked context contains historical lineage IDs, generations and hashes,
+not policy bodies, work content or the manager-only checker summary. Evidence
+returns only fixed lifecycle event facts, stored actor attribution and optional
+assignment/authorization-decision references. Both commands require exact
+project/task UUIDs; the server checks current authority on every request and
+conceals absent, foreign and denied resources. A successful read is no grant for
+a later page or write.
+
+Evidence returns one page of 1–100 events (default 50). To continue, pass the
+JSON object from `next_cursor` as one `--cursor` argument with the same project,
+task and limit. The CLI validates its four-field structure and exact scope,
+then forwards it unchanged; it neither follows pages automatically nor treats
+the cursor as authorization. A page is one statement snapshot, not a durable
+full audit export. Output remains bounded and terminal-safe. Keep audit output
+private; it includes stored actor attribution.
 
 ## Build and use
 
