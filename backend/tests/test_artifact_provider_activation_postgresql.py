@@ -97,7 +97,12 @@ async def _insert_group(
     return ids
 
 
-async def _insert_activation_direct(session, results: dict[str, UUID]) -> UUID:
+async def _insert_activation_direct(
+    session,
+    results: dict[str, UUID],
+    *,
+    backdate_activated_at: bool = False,
+) -> UUID:
     """Insert an otherwise canonical activation without using the ART coordinator."""
     activation_id = new_record_id()
     await session.execute(
@@ -119,7 +124,9 @@ async def _insert_activation_direct(session, results: dict[str, UUID]) -> UUID:
               readiness.readiness_trust_policy_sha256,readiness.readiness_policy_arn,
               readiness.negative_role_arn,readiness.negative_trust_policy_sha256,
               readiness.bootstrap_principal_arn,readiness.bucket_policy_sha256,
-              readiness.group_nonce,clock_timestamp(),
+              readiness.group_nonce,
+              CASE WHEN :backdate_activated_at
+                THEN runtime.started_at ELSE clock_timestamp() END,
               least(readiness.expires_at,runtime.expires_at,negative.expires_at)
             FROM artifact_provider_probe_results readiness,
                  artifact_provider_probe_results runtime,
@@ -134,6 +141,7 @@ async def _insert_activation_direct(session, results: dict[str, UUID]) -> UUID:
             "readiness_id": str(results["readiness"]),
             "runtime_id": str(results["runtime_immutability"]),
             "negative_id": str(results["negative_access"]),
+            "backdate_activated_at": backdate_activated_at,
         },
     )
     return activation_id
@@ -259,6 +267,69 @@ async def test_activation_trigger_rejects_probes_started_before_runtime_complete
                 {"id": str(activation_id)},
             )
         assert str(stored_id) == str(activation_id)
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_activation_rejects_proof_sequence_beyond_fixed_allowance(
+    isolated_database_env: str,
+    tmp_path: Path,
+) -> None:
+    settings = _settings(tmp_path)
+    namespace = aws_s3_namespace_fingerprint(settings)
+    engine = create_async_engine(isolated_database_env)
+    factory = async_sessionmaker(engine, expire_on_commit=False)
+    group_nonce = uuid4()
+    try:
+        await _insert_group(
+            factory,
+            settings,
+            namespace,
+            group_nonce,
+            started_at_offsets={"runtime_immutability": timedelta(seconds=121)},
+        )
+        with pytest.raises(
+            ArtifactProviderLiveProofRequiredError,
+            match="proof sequence exceeded its fixed allowance",
+        ):
+            async with factory() as session, session.begin():
+                await coordinate_artifact_provider_activation(
+                    session,
+                    settings,
+                    namespace_fingerprint=namespace,
+                    group_nonce=group_nonce,
+                )
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_activation_trigger_rejects_proof_sequence_beyond_fixed_allowance(
+    isolated_database_env: str,
+    tmp_path: Path,
+) -> None:
+    settings = _settings(tmp_path)
+    namespace = aws_s3_namespace_fingerprint(settings)
+    engine = create_async_engine(isolated_database_env)
+    factory = async_sessionmaker(engine, expire_on_commit=False)
+    try:
+        results = await _insert_group(
+            factory,
+            settings,
+            namespace,
+            uuid4(),
+            started_at_offsets={"runtime_immutability": timedelta(seconds=121)},
+        )
+        with pytest.raises(DBAPIError) as failure:
+            async with factory() as session, session.begin():
+                await _insert_activation_direct(
+                    session,
+                    results,
+                    backdate_activated_at=True,
+                )
+        assert failure.value.orig.sqlstate == "23514"  # type: ignore[attr-defined]
+        assert "proof sequence exceeded fixed allowance" in str(failure.value.orig)
     finally:
         await engine.dispose()
 

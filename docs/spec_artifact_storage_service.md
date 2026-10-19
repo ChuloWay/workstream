@@ -753,9 +753,22 @@ does not delete them.
 
 Production startup and every AWS provider I/O load an exact matching unexpired
 activation before calling AWS. v0.1 caps probe/activation validity at 15 minutes
-and schedules all three probes plus coordination every 5 minutes. Expiry or any
-release, namespace, role, policy-digest, or proof-version drift fails closed
-with `artifact_provider_live_proof_required` before provider I/O. MinIO protocol
+and schedules all three probes plus coordination every 5 minutes. The complete
+runtime, readiness, negative-access and coordination sequence has a fixed
+120-second v0.1 allowance. Native AWS configuration requires
+`max(operation_total_deadline, complete_read_deadline) + persistence_margin +
+clock_safety_margin + proof_sequence_allowance + refresh_interval <=
+activation_validity`. The coordinator and activation-table trigger require the
+authoritative database clock at activation insertion minus
+`runtime.started_at` to remain within `proof_sequence_allowance`; the live
+deployment also measures that interval, successive runtime start times and
+commit latency. At maximum budgets, 300-second proof starts and a 120-second
+sequence leave no scheduling or commit-latency slack. Deployments must start
+earlier or configure smaller operation deadlines for margin; the arithmetic is
+not a continuous-availability guarantee. A late or missed group fails closed.
+Expiry or any release, namespace, role, policy-digest, or
+proof-version drift fails closed with
+`artifact_provider_live_proof_required` before provider I/O. MinIO protocol
 conformance never activates production AWS.
 
 This bounded proof model treats authorized AWS infrastructure administrators

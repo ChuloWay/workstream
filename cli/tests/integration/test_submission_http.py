@@ -503,6 +503,24 @@ def test_submission_history_and_findings_are_bounded_and_preserve_evidence(cli):
         assert result.returncode == 0 and json.loads(result.stdout) == CHECKER
         assert requests[-1][1] == f"/api/v1/submissions/{SUBMISSION}/checker-runs/{RUN}"
         assert len(requests) == 4
+        # History does not carry current revision preparation. Explain the
+        # distinct read without silently fetching or attaching today's context.
+        for args, value in (
+            (("submission", "show", SUBMISSION), HISTORY),
+            (("task", "submissions", TASK), page),
+        ):
+            respond(response, value)
+            before = len(requests)
+            shown = cli(origin, TOKEN, *args)
+            assert shown.returncode == 0, shown.stderr
+            assert "not included in" in shown.stdout
+            assert f"workstream task context {TASK}" in shown.stdout
+            assert (
+                "current task revision context, not historical submission context"
+                in shown.stdout
+            )
+            assert "unavailable in the current public API" not in shown.stdout
+            assert len(requests) == before + 1
         coverage = CHECKER | {
             "results": [
                 CHECKER["results"][0]
