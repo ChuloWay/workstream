@@ -3,6 +3,8 @@
 import json
 from urllib.parse import parse_qs, quote, urlsplit
 
+import pytest
+
 from test_contributor_task_mutations import KEY, canonical_error
 from test_http_boundary import ACTOR, PROJECT, TOKEN, assert_failure, http_fixture
 
@@ -34,7 +36,7 @@ LINK = {
     "subject_kind": "human",
     "status": "active",
     "linked_at": STAMP,
-    "last_verified_at": None,
+    "last_verified_at": STAMP,
     "revoked_at": None,
     "reactivated_at": None,
 }
@@ -234,6 +236,137 @@ def test_admin_omitted_status_binds_default_active_response_on_both_routes(cli):
             )
             assert_failure(refused, "invalid_api_response")
             assert "status" not in parse_qs(urlsplit(requests[-1][1]).query)
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"status": "active", "suspended_at": STAMP},
+        {"status": "active", "deactivated_at": STAMP},
+        {"status": "suspended", "suspended_at": None},
+        {"status": "deactivated", "deactivated_at": None},
+    ],
+)
+def test_admin_actor_response_integrity_rejects_impossible_lifecycle(cli, changes):
+    with http_fixture() as (origin, response, _requests):
+        response["body"] = json.dumps(ACTOR_PROFILE | changes).encode()
+        assert_failure(
+            invoke(cli, origin, "actor", "show", ACTOR), "invalid_api_response"
+        )
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"status": "active", "revoked_at": STAMP},
+        {"status": "revoked", "revoked_at": None},
+    ],
+)
+def test_admin_identity_link_response_integrity_rejects_impossible_lifecycle(
+    cli, changes
+):
+    with http_fixture() as (origin, response, _requests):
+        response["body"] = json.dumps(LINK | changes).encode()
+        assert_failure(
+            invoke(cli, origin, "actor", "identity-links", ACTOR),
+            "invalid_api_response",
+        )
+
+
+def test_admin_actor_and_link_reactivated_history_remains_readable(cli):
+    with http_fixture() as (origin, response, _requests):
+        for actor in (
+            ACTOR_PROFILE | {"status": "active", "reactivated_at": STAMP},
+            ACTOR_PROFILE | {"status": "suspended", "suspended_at": STAMP},
+            ACTOR_PROFILE
+            | {
+                "status": "deactivated",
+                "suspended_at": STAMP,
+                "deactivated_at": STAMP,
+            },
+        ):
+            response["body"] = json.dumps(actor).encode()
+            result = invoke(cli, origin, "actor", "show", ACTOR)
+            assert result.returncode == 0 and json.loads(result.stdout) == actor, (
+                result.stderr
+            )
+        for link in (
+            LINK | {"status": "active", "reactivated_at": STAMP},
+            LINK | {"status": "revoked", "revoked_at": STAMP},
+        ):
+            response["body"] = json.dumps(link).encode()
+            result = invoke(cli, origin, "actor", "identity-links", ACTOR)
+            assert result.returncode == 0 and json.loads(result.stdout) == link, (
+                result.stderr
+            )
+
+
+REVOKED_GRANT = GRANT | {
+    "status": "revoked",
+    "version": 2,
+    "revoked_by_actor_profile_id": ACTOR,
+    "revoked_by_admin_role_grant_id": KEY,
+    "revoked_reason": "End assignment",
+    "revoked_at": STAMP,
+}
+
+
+@pytest.mark.parametrize(
+    "grant",
+    [
+        REVOKED_GRANT | {"status": "active"},
+        REVOKED_GRANT | {"version": 1},
+        REVOKED_GRANT | {"revoked_at": None},
+        REVOKED_GRANT | {"revoked_reason": ""},
+        REVOKED_GRANT | {"revoked_reason": "é" * 251},
+        GRANT | {"version": 2},
+        GRANT | {"revoked_at": STAMP},
+        GRANT | {"role": "operator"},
+        GRANT | {"role": "access_administrator"},
+    ],
+)
+def test_admin_grant_response_integrity_rejects_impossible_scope_or_lifecycle(
+    cli, grant
+):
+    with http_fixture() as (origin, response, _requests):
+        response["body"] = json.dumps(page([grant])).encode()
+        for args in (("role-grants",), ("actor", "role-grants", ACTOR)):
+            assert_failure(
+                invoke(
+                    cli,
+                    origin,
+                    *args,
+                    "--scope",
+                    "project",
+                    "--project-id",
+                    PROJECT,
+                    "--status",
+                    "all",
+                ),
+                "invalid_api_response",
+            )
+
+
+def test_admin_grant_active_and_revoked_history_remains_readable(cli):
+    with http_fixture() as (origin, response, _requests):
+        response["body"] = json.dumps(
+            page([GRANT, REVOKED_GRANT | {"grant_id": PROJECT}])
+        ).encode()
+        result = invoke(
+            cli,
+            origin,
+            "role-grants",
+            "--scope",
+            "project",
+            "--project-id",
+            PROJECT,
+            "--status",
+            "all",
+        )
+        assert result.returncode == 0 and json.loads(result.stdout)["items"] == [
+            GRANT,
+            REVOKED_GRANT | {"grant_id": PROJECT},
+        ], result.stderr
 
 
 def test_admin_rejects_bad_inputs_without_dispatch(cli):

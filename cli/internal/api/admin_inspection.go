@@ -119,7 +119,23 @@ func (c *Client) AdminActor(ctx context.Context, actor string) (Result[AdminActo
 		!optionalTime(value.SuspendedAt) || !optionalTime(value.ReactivatedAt) || !optionalTime(value.DeactivatedAt) || !c.safeMutationResponse(raw) {
 		return result, &Failure{Code: "invalid_api_response"}
 	}
+	if !validAdminActorLifecycle(value) {
+		return result, &Failure{Code: "invalid_api_response"}
+	}
 	return Result[AdminActor]{Raw: raw, Value: value}, nil
+}
+
+func validAdminActorLifecycle(value AdminActor) bool {
+	switch value.Status {
+	case "active":
+		return value.SuspendedAt == nil && value.DeactivatedAt == nil
+	case "suspended":
+		return value.SuspendedAt != nil && value.DeactivatedAt == nil
+	case "deactivated":
+		// A deactivated actor may retain an earlier suspension timestamp.
+		return value.DeactivatedAt != nil
+	}
+	return false
 }
 
 func (c *Client) AdminIdentityLink(ctx context.Context, actor string) (Result[AdminIdentityLink], error) {
@@ -139,6 +155,9 @@ func (c *Client) AdminIdentityLink(ctx context.Context, actor string) (Result[Ad
 		!oneOf(value.SubjectKind, "human", "service") || !oneOf(value.Status, "active", "revoked") ||
 		!validTime(value.LinkedAt) || !optionalTime(value.LastVerifiedAt) || !optionalTime(value.RevokedAt) ||
 		!optionalTime(value.ReactivatedAt) || !c.safeMutationResponse(raw) {
+		return result, &Failure{Code: "invalid_api_response"}
+	}
+	if (value.Status == "active") != (value.RevokedAt == nil) {
 		return result, &Failure{Code: "invalid_api_response"}
 	}
 	return Result[AdminIdentityLink]{Raw: raw, Value: value}, nil
@@ -246,9 +265,8 @@ func validAdminGrant(raw json.RawMessage, value *AdminRoleGrant, actor *string, 
 		!validAdminRole(value.Role) || value.ScopeType != query.Scope ||
 		(value.ScopeProjectID == nil) != (query.ProjectID == nil) ||
 		(value.ScopeProjectID != nil && !sameUUID(*value.ScopeProjectID, *query.ProjectID)) ||
-		!oneOf(value.Status, "active", "revoked") ||
 		(expectedStatus != "all" && value.Status != expectedStatus) ||
-		!oneOf(strconv.Itoa(value.Version), "1", "2") ||
+		!validAdminGrantScopeAndLifecycle(*value) ||
 		!oneOf(value.GrantedByRefKind, "actor_profile", "system_principal") ||
 		value.GrantedByRef == "" ||
 		(value.GrantedByRefKind == "actor_profile" && !validUUID(value.GrantedByRef)) ||
@@ -258,6 +276,23 @@ func validAdminGrant(raw json.RawMessage, value *AdminRoleGrant, actor *string, 
 		return false
 	}
 	return true
+}
+
+func validAdminGrantScopeAndLifecycle(value AdminRoleGrant) bool {
+	if value.ScopeType == "project" && oneOf(value.Role, "access_administrator", "operator") {
+		return false
+	}
+	switch value.Status {
+	case "active":
+		return value.Version == 1 && value.RevokedByActorProfileID == nil &&
+			value.RevokedByAdminRoleGrantID == nil && value.RevokedReason == nil && value.RevokedAt == nil
+	case "revoked":
+		return value.Version == 2 && value.RevokedByActorProfileID != nil &&
+			value.RevokedByAdminRoleGrantID != nil && value.RevokedReason != nil &&
+			len(*value.RevokedReason) >= 1 && len(*value.RevokedReason) <= 500 &&
+			value.RevokedAt != nil
+	}
+	return false
 }
 
 func (c *Client) AdminPermissions(ctx context.Context) (Result[PermissionCatalogue], error) {
