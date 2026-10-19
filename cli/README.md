@@ -1155,8 +1155,8 @@ declared document that is not uploaded fails with `guide_document_not_uploaded`.
 with the submitter or contributor and the same fields as `me submissions` and
 `me assignments`. `summary` counts tasks by status, claims by state and attempts
 by outcome, with the acceptance rate (accepted over decided attempts) and
-post-submission checker infrastructure failures; award totals appear only when
-you also hold an exact-project Finance Authority grant and are otherwise null.
+post-submission checker infrastructure failures, and the project's award totals
+per instrument and unit (none when no award exists).
 `import-batches` lists native task import batches with state and member counts.
 `preparations` lists every contributor's ZIP preparations, newest first, with
 finding counts only; `--outcome failed` shows intake checks that blocked a ZIP.

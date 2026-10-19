@@ -309,7 +309,7 @@ policies, a side-effect-free activation readiness dry run that reports the
 unmet activation conditions it evaluates (a check whose inputs are missing is
 not evaluated) with activation's own refusal code, verified
 read-back of an uploaded guide original, every attempt and claim, a project
-summary (award totals only alongside an exact-project Finance Authority grant),
+summary with award totals,
 task import batches and ZIP preparations with finding counts; plus the Finance
 list of every ContributionPolicy version. The CLI `project guide
 list|show|readiness|document`, `project submissions|assignments|summary|import-batches`,
@@ -1127,7 +1127,7 @@ Delivered foundations (bounded local journey proven; no deployment claim)
     -> PILOT-READ-3 Project Manager reads C1-C9 + Finance policy list D1
          guides, activation readiness (same conditions as activation), project
          submissions/assignments/summary, import batches, failed preparations;
-         award totals only with an exact-project Finance grant; read-only
+         summary award totals under the Project Manager grant; read-only
 
 Proven bounded local first-layer drill (public guide inputs, recorded inference, local Flow-compatible auth)
   Original guide + examples -> recorded Celery setup -> separate PRE/POST approval

@@ -36,7 +36,6 @@ class Grants(ContributionGrants):
     def __init__(self, context, *grants):
         super().__init__(context)
         self.grants = grants
-        self.finance_grant_id = new_record_id()
 
     async def find_effective_grant(self, actor_id, permission, **filters):
         assert actor_id == self.context.actor_profile_id and filters["for_update"] is True
@@ -45,8 +44,7 @@ class Grants(ContributionGrants):
         for role, scope in self.grants:
             if (role in filters["allowed_roles"] and permission in permissions_for(role)
                     and (scope == filters["scope_project_id"] or scope == "system" and not exact)):
-                grant_id = self.finance_grant_id if exact else self.grant_id
-                return type("Grant", (), {"id": str(grant_id)})()
+                return type("Grant", (), {"id": str(self.grant_id)})()
         return None
 
     async def lock_project(self, project_id):
@@ -160,9 +158,7 @@ class Kernel:
         self.required.append((action, resource, result[0]))
         if result[0] is not None:
             raise PermissionError(result[0])
-        # The kernel digests the resource the evaluator returns.
-        self.recorded = result[6]
-        return SimpleNamespace(resource_context_digest=authorization_resource_digest(result[6]))
+        return SimpleNamespace(resource_context_digest=authorization_resource_digest(resource))
 
 
 def request_for(repository, action, *, query=(), cursor=None):
@@ -173,61 +169,25 @@ def request_for(repository, action, *, query=(), cursor=None):
     )
 
 
-@pytest.mark.parametrize("finance,visible", [(None, False), ("system", False), ("project", True)])
-async def test_award_totals_need_an_exact_project_finance_grant(finance, visible):
+async def test_the_summary_needs_only_the_project_manager_grant():
+    # The Project Manager role holds compensation.award.read, so award totals
+    # need no second grant: actor, the manager grant, then Project.
     repository = Grants(principal(), (AdminRole.PROJECT_MANAGER, "system"))
-    if finance is not None:
-        repository.grants += ((AdminRole.FINANCE_AUTHORITY,
-                               repository.project_id if finance == "project" else finance),)
-    kernel = Kernel(repository)
-    adapter = ProjectManagementReadAuthorization(kernel, None)
+    assert PermissionId.COMPENSATION_AWARD_READ in permissions_for(AdminRole.PROJECT_MANAGER)
+    adapter = ProjectManagementReadAuthorization(Kernel(repository), None)
     grant = await adapter.authorize(request_for(repository, ActionId.PROJECT_SUMMARY_READ))
     assert grant.project_id == repository.project_id and grant.position is None
-    assert grant.award_totals_visible is visible
-    # The evaluator locks actor, the Project Manager grant, the exact-project
-    # Finance grant, then Project, and records the Finance grant it disclosed.
     assert repository.calls == [
-        "actor", (PermissionId.PROJECT_TASK_MANAGE, frozenset({AdminRole.PROJECT_MANAGER}), False),
-        (PermissionId.COMPENSATION_AWARD_READ, frozenset({AdminRole.FINANCE_AUTHORITY}), True), "project",
+        "actor", (PermissionId.PROJECT_TASK_MANAGE, frozenset({AdminRole.PROJECT_MANAGER}), False), "project",
     ]
-    assert kernel.recorded.award_totals_grant_id == (repository.finance_grant_id if visible else None)
 
 
-async def test_the_recorded_summary_decision_differs_when_totals_are_disclosed():
-    digests = {}
-    for finance in (None, "project"):
-        repository = Grants(principal())
-        repository.grants = ((AdminRole.PROJECT_MANAGER, repository.project_id),)
-        if finance:
-            repository.grants += ((AdminRole.FINANCE_AUTHORITY, repository.project_id),)
-        resource = resource_for(repository, ActionId.PROJECT_SUMMARY_READ)
-        result = await evaluate(repository, ActionId.PROJECT_SUMMARY_READ, resource)
-        assert result[0] is None and result[3] == repository.grant_id
-        digests[finance] = (authorization_resource_digest(resource), authorization_resource_digest(result[6]))
-    withheld_sent, withheld_recorded = digests[None]
-    disclosed_sent, disclosed_recorded = digests["project"]
-    assert withheld_recorded == withheld_sent
-    assert disclosed_recorded != disclosed_sent
-
-
-async def test_a_caller_cannot_claim_an_award_disclosure():
-    repository = Grants(principal(), (AdminRole.PROJECT_MANAGER, "system"))
-    resource = resource_for(repository, ActionId.PROJECT_SUMMARY_READ, award_totals_grant_id=new_record_id())
-    result = await evaluate(repository, ActionId.PROJECT_SUMMARY_READ, resource)
-    assert result[0] is AuthorizationDenialCode.RESOURCE_GUARD_DENIED and repository.calls == []
-    with pytest.raises(ValueError, match="only the project summary"):
-        resource_for(repository, ActionId.PROJECT_SUBMISSION_LIST, award_totals_grant_id=new_record_id())
-
-
-async def test_other_reads_never_disclose_award_totals():
-    repository = Grants(principal(), (AdminRole.PROJECT_MANAGER, "system"),
-                        (AdminRole.FINANCE_AUTHORITY, "system"))
-    repository.grants += ((AdminRole.FINANCE_AUTHORITY, repository.project_id),)
-    kernel = Kernel(repository)
-    adapter = ProjectManagementReadAuthorization(kernel, SECRET)
-    grant = await adapter.authorize(request_for(repository, ActionId.PROJECT_ASSIGNMENT_LIST))
-    assert grant.award_totals_visible is False and kernel.recorded.award_totals_grant_id is None
-    assert all(call[0] is not PermissionId.COMPENSATION_AWARD_READ for call in repository.calls[1:-1])
+@pytest.mark.parametrize("role", [AdminRole.FINANCE_AUTHORITY, AdminRole.OPERATOR, AdminRole.AUDIT_AUTHORITY])
+async def test_award_reading_roles_cannot_read_the_project_summary(role):
+    repository = Grants(principal(), (role, "system"))
+    repository.grants += ((role, repository.project_id),)
+    result = await evaluate(repository, ActionId.PROJECT_SUMMARY_READ)
+    assert result[0] is AuthorizationDenialCode.PERMISSION_NOT_GRANTED and "project" not in repository.calls
 
 
 async def test_cursor_is_bound_to_the_exact_query_and_checked_after_authority():

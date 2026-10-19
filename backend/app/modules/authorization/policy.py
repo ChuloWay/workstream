@@ -37,7 +37,6 @@ ADMIN_ROLE_PERMISSIONS = MappingProxyType(
             PermissionId.REVIEW_QUEUE_INSPECT,
             PermissionId.REVIEW_LEASE_FORCE_RELEASE,
             PermissionId.CONTRIBUTION_READ_PROJECT,
-            PermissionId.COMPENSATION_AWARD_READ,
             PermissionId.OPERATIONS_STATUS_READ,
             PermissionId.OPERATIONS_TIMER_RUN,
             PermissionId.OPERATIONS_RECONCILE_RUN,
