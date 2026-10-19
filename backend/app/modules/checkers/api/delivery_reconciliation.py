@@ -347,6 +347,12 @@ class PostSubmitDeliveryAuthorizationPort(Protocol):
         facts: PostSubmitDeliveryPreparation,
     ) -> PostSubmitDeliveryAuthorityReceipt: ...
 
+    async def authorize_replay(
+        self,
+        handle: object,
+        facts: PostSubmitDeliveryPreparation,
+    ) -> None: ...
+
     async def validate_replay(
         self,
         handle: object,

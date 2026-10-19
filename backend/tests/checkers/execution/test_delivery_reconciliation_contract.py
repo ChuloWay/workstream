@@ -15,16 +15,24 @@ from app.modules.audit.schemas import (
 )
 
 
-from app.modules.outbox.api import OutboxAppendInput
+from app.modules.outbox.api import (
+    FinalizedUnknownDelivery,
+    OutboxAppendInput,
+    OutboxClaim,
+    OutboxEventEnvelope,
+    ReconciliationChildObservation,
+)
 from app.modules.checkers.api.delivery_reconciliation import (
     PostSubmitDeliveryChildPayload,
     PostSubmitDeliveryCommand,
+    PostSubmitDeliveryConflict,
     PostSubmitDeliveryPreparation,
     PostSubmitDeliveryResult,
     PostSubmitDeliverySource,
     PostSubmitDeliverySuccessor,
     post_submit_delivery_request_digest,
 )
+from app.modules.checkers.delivery_reconciliation import PostSubmitDeliveryService
 
 
 _AUTHORIZATION_RESOURCE_JSON = '{"resource_context":{}}'
@@ -226,6 +234,98 @@ def test_request_digest_binds_command_and_source(preparation, section, field, re
     values[section][field] = new_record_id() if replacement is None else replacement
     changed = PostSubmitDeliveryPreparation.model_validate(values)
     assert post_submit_delivery_request_digest(changed) != original
+
+
+@pytest.mark.asyncio
+async def test_changed_replay_authorizes_before_disclosing_retained_conflict(
+    preparation,
+) -> None:
+    """A substituted caller cannot learn that one exact child already exists."""
+    source = preparation.source
+    child_payload = PostSubmitDeliveryChildPayload(
+        original_event_id=source.event_id,
+        original_claim_generation=source.claim_generation,
+        original_payload_digest=source.payload_digest,
+        original_event_type=source.event_type,
+        original_event_version=source.event_version,
+        evaluation_request_id=source.evaluation_request_id,
+        checker_run_id=source.checker_run_id,
+        evaluation_generation=source.evaluation_generation,
+        classification=source.classification,
+        reconciliation_request_id=preparation.command.request_key,
+        request_digest=post_submit_delivery_request_digest(preparation),
+        authorization_decision_id=new_record_id(),
+        authorization_resource_digest=_AUTHORIZATION_RESOURCE_DIGEST,
+        authorization_resource_json=_AUTHORIZATION_RESOURCE_JSON,
+        operator_actor_profile_id=preparation.command.actor_profile_id,
+        operator_identity_link_id=new_record_id(),
+    )
+    claimed_at = datetime(2026, 10, 18, tzinfo=timezone.utc)
+    claim = OutboxClaim(
+        event_id=source.event_id,
+        project_id=source.project_id,
+        payload_digest=source.payload_digest,
+        claim_generation=source.claim_generation,
+        claim_owner="contract-test",
+        claimed_at=claimed_at,
+        claim_expires_at=datetime(2026, 10, 18, 0, 5, tzinfo=timezone.utc),
+    )
+    delivery = FinalizedUnknownDelivery(
+        envelope=OutboxEventEnvelope(
+            claim=claim,
+            event_type=source.event_type,
+            event_version=source.event_version,
+            aggregate_type="checker_evaluation",
+            aggregate_id=source.aggregate_id,
+            correlation_id=str(source.evaluation_request_id),
+            causation_event_id=None,
+            idempotency_key="contract-test",
+            occurred_at=claimed_at,
+            payload_json="{}",
+        ),
+        finalized_at=source.finalized_at,
+        error_code="INVOKE_OUTCOME_UNKNOWN",
+        child=ReconciliationChildObservation(
+            event_id=new_record_id(),
+            payload_digest="sha256:" + "2" * 64,
+            payload_json=child_payload.model_dump_json(),
+            occurred_at=claimed_at,
+            state="pending",
+        ),
+    )
+    changed = preparation.command.model_copy(
+        update={"reason": "Substituted retained reconciliation reason"}
+    )
+    calls: list[str] = []
+
+    class Authority:
+        async def prepare(self, _facts):
+            calls.append("prepare")
+            return object()
+
+        async def authorize_replay(self, _handle, _facts):
+            calls.append("authorize_replay")
+
+        async def validate_replay(self, *_args):
+            calls.append("validate_replay")
+
+        def close(self, _handle):
+            calls.append("close")
+
+    service = object.__new__(PostSubmitDeliveryService)
+    service._authorization = Authority()
+    with pytest.raises(PostSubmitDeliveryConflict):
+        await service._replay(
+            changed,
+            delivery,
+            (
+                source.classification,
+                source.evaluation_request_id,
+                source.checker_run_id,
+                source.evaluation_generation,
+            ),
+        )
+    assert calls == ["prepare", "authorize_replay", "close"]
 
 
 @pytest.mark.parametrize("change", ["event", "classification"])

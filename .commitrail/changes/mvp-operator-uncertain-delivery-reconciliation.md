@@ -210,6 +210,15 @@ pending, active, acknowledged or UNKNOWN child. This first release deliberately
 holds a child whose own outcome is UNKNOWN rather than adding child generations
 or another recovery mechanism.
 
+Every retained-child command evaluates fresh current Operator authority before
+returning an exact replay or disclosing a request conflict. Fresh replay
+authorization is separate from retained-decision matching because the latter
+can succeed only for the original request digest; this preserves the authorized
+changed-request `409` contract while a non-Operator or revoked caller receives
+the same concealed denial for exact and substituted requests. Conflict rollback,
+denial restaging, the immutable child and historical cause validation remain
+owned by their existing transactions.
+
 Public qualification and branch selection are detached, nonmutating
 observations and grant no authority. Request mutation follows the existing
 `DeliveryExecutionAuthority` TASK/AUTH/CHECKERS order and fences the original
@@ -371,6 +380,7 @@ progress or outcome. An acknowledged child can therefore retain a
 | Completion commit is atomically distinguishable | Public retained-outcome verification plus rollback-to-UNKNOWN recovery through the production delivery wrapper | Final candidate `060ccfb82`: committed and retry-safe completion paths retained exact routing, FinalAcceptance, contribution and awards with no Review or repeat effect | The full hosted interruption matrix remains #555 |
 | Existing operations remain sole writers | Recovery-bound typed invocation observation composes the existing executor/outcome owners; committed completion uses the extracted read-only retained-outcome verifier | Final public PostgreSQL proof reached the existing executor/outcome and acceptance owners; response-loss replay retained the exact effects | The full durable-worker interruption drill remains #555 |
 | Public authority remains least privilege | Exact list/status.read and reconcile/reconcile.run pairs; project-targeted `outbox_delivery` audit resource; cause validation while existing owners retain their fixed-service actions | Final public 9/9 proof includes denial, revocation and same-key replay; catalogue, OpenAPI and route-rate inventories pass | No new permission, role or service grant |
+| Retained-child outcomes require current authority | Pure replay call-order regression plus a public revoked-Operator exact replay, changed reason and changed key, followed by active-Operator replay/conflict controls | The pre-repair pure regression observed no authority calls before conflict; the repaired pure regression passes. Exact public PostgreSQL proof is pending on the frozen repair candidate | Full hosted lanes will re-run the complete public module and structure checks |
 | Migration preserves closed audit vocabularies and routing custody | Upgrade from 0054 to `0055_delivery_reconciliation`, exact audit/resource pairs, wrong pair/target rejection, downgrade refusal, ordinary and recovery routing guard proofs | Final candidate `060ccfb82`: migration plus independent-session concurrency 4/4 passed in 117.97s; schema fingerprint is `83cd646aa391c0a74e0e856f85313a1c5a97c9839b0f88450090e27f2967998f`; cleanup complete | Repository-wide migration coverage remains CI evidence |
 | Completion defect is directly discriminated | `test_public_operator_recovers_rolled_back_acceptance_once` rolls back a real acceptance, finalizes the original UNKNOWN, creates a child publicly and delivers it after Operator revocation | The pre-repair assertion failed at `5f2e1c97f` when the child became UNKNOWN; the repaired final candidate passed through acknowledgement, exact effect lineage and replay in the public 9/9 batch | No deployed-worker claim is inferred from focused PostgreSQL proof |
 | Request, completion and command concurrency are source-specific | Public PostgreSQL request/completion cases and independent-session races; full original event/attempt snapshots, one child, retained effects, source transition and foreign denial | Final candidate `060ccfb82`: public 9/9 and migration/concurrency 4/4 passed with zero skips and isolated cleanup complete | Earlier exploratory runs are not used as final-candidate evidence |
@@ -405,14 +415,20 @@ progress or outcome. An acknowledged child can therefore retain a
   resource, receipt and SQL guard, retains exact private Operator resource
   facts, and adds the missing rollback-to-acceptance and committed-request
   proofs. It does not introduce a second writer or reopen the original event.
+- `REC-581-SEC-REPLAY-001` reproduced an information oracle in retained-child
+  replay: the request digest conflicted before fresh Operator authority. The
+  repair splits fresh replay authorization from retained-decision matching,
+  evaluates it before the digest outcome, and keeps exact replay, valid
+  Operator conflict, denial restaging and one-child custody unchanged.
 
 ## Reconciliation
 
-- Current-source reconciliation: stacked on canonical artifact-proof timing
-  source `2a67bf6d9`, which contains `0054_artifact_proof_timing` and is based on
-  main `51b86807111ff25b067402219ba0b533e0750f3e`. This change owns the single
-  linear `0055_delivery_reconciliation` migration; `0054` remains byte-for-byte
-  under its original owner and is not a runtime dependency of recovery.
+- Current-source reconciliation: current main
+  `af8c0c32a35858287eb49ce388245b7408377004` contains the merged artifact-proof
+  timing prerequisite and the later CLI and terminal-checker work. This change
+  still owns the single linear `0055_delivery_reconciliation` migration;
+  `0054` remains byte-for-byte under its original owner and is not a runtime
+  dependency of recovery.
 - Next usable boundary: after this focused source-specific recovery passes,
   #555 must run the complete durable-worker interruption matrix against the
   supported public path before #581 can close.

@@ -422,10 +422,13 @@ class PostSubmitDeliveryService:
             command=command,
             source=scheduled_source,
         )
-        if payload.request_digest != post_submit_delivery_request_digest(preparation):
-            raise PostSubmitDeliveryConflict("post_submit_delivery_request_conflict")
         handle = await self._authorization.prepare(preparation)
         try:
+            await self._authorization.authorize_replay(handle, preparation)
+            if payload.request_digest != post_submit_delivery_request_digest(preparation):
+                raise PostSubmitDeliveryConflict(
+                    "post_submit_delivery_request_conflict"
+                )
             await self._authorization.validate_replay(
                 handle,
                 preparation,

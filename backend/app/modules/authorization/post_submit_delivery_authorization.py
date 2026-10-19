@@ -89,16 +89,14 @@ class PostSubmitDeliveryAuthorization:
             ),
         )
 
-    async def validate_replay(
-        self, handle, facts, original_link_id, decision_id,
-    ) -> None:
+    async def authorize_replay(self, handle, facts) -> None:
+        """Evaluate current Operator authority before any retained-child outcome."""
         facts = PostSubmitDeliveryPreparation.model_validate(facts)
         if handle != facts:
             raise PostSubmitDeliveryOperationUnavailable(
                 "post_submit_delivery_replay_unavailable"
             )
         self._require_context(facts)
-        resource = self._resource(facts, original_link_id)
         try:
             await self._kernel.require(
                 POST_SUBMIT_DELIVERY_RECONCILE_ACTION,
@@ -108,6 +106,18 @@ class PostSubmitDeliveryAuthorization:
             raise PostSubmitDeliveryAuthorityDenied(
                 "post_submit_delivery_replay_unavailable"
             ) from exc
+
+    async def validate_replay(
+        self, handle, facts, original_link_id, decision_id,
+    ) -> None:
+        """Match the retained child to its original immutable Operator decision."""
+        facts = PostSubmitDeliveryPreparation.model_validate(facts)
+        if handle != facts:
+            raise PostSubmitDeliveryOperationUnavailable(
+                "post_submit_delivery_replay_unavailable"
+            )
+        self._require_context(facts)
+        resource = self._resource(facts, original_link_id)
         if not await self._decision_matches(
             decision_id=decision_id,
             actor_profile_id=facts.command.actor_profile_id,

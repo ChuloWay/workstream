@@ -196,13 +196,20 @@ async def _discover_one(admin_access, project_id, *, classification):
     return source
 
 
-async def _reconcile(admin_access, project_id, event_id, request_key):
+async def _reconcile(
+    admin_access,
+    project_id,
+    event_id,
+    request_key,
+    *,
+    reason="Reconcile one exact uncertain post-submit delivery",
+):
     _, command = _paths(project_id, event_id)
     assert command is not None
     return await admin_access.signed.client.post(
         command,
         headers=admin_access.target.headers | {"Idempotency-Key": str(request_key)},
-        json={"reason": "Reconcile one exact uncertain post-submit delivery"},
+        json={"reason": reason},
     )
 
 
@@ -449,6 +456,97 @@ async def test_public_operator_retries_proven_no_effect_request_once(
             _paths(h.request.project_id)[0], headers=admin_access.target.headers
         )
         assert concealed.status_code == 404, concealed.text
+
+
+@pytest.mark.asyncio
+async def test_retained_child_authorizes_before_replay_or_conflict(
+    tmp_path,
+    auth_database_env,
+    admin_access,
+) -> None:
+    """A retained child cannot disclose replay or conflict before fresh authority."""
+    async with material_fixture(tmp_path, auth_database_env) as h:
+        grant_id = await admin_access.signed.grant(
+            admin_access.admin, admin_access.target
+        )
+        prepared = await delivery_fixture(h)
+        original = await invoked(h, prepared)
+        await prepared.delivery.finalize(original.claim, FinalizationCause.UNKNOWN)
+        key = new_record_id()
+        created = await _reconcile(
+            admin_access, h.request.project_id, original.claim.event_id, key
+        )
+        assert created.status_code == 201, created.text
+        successor = created.json()["successor"]
+        async with h.factory() as observer:
+            denials_before = await observer.scalar(text(
+                "SELECT count(*) FROM public.audit_events "
+                "WHERE action_id='operations.post_submit_delivery.reconcile' "
+                "AND after_facts->>'allowed'='false'"
+            ))
+
+        revoked = await admin_access.signed.revoke(
+            admin_access.admin,
+            grant_id,
+            reason="End retained reconciliation replay duty",
+        )
+        assert revoked.status_code == 200, revoked.text
+        denied_exact = await _reconcile(
+            admin_access, h.request.project_id, original.claim.event_id, key
+        )
+        denied_payload = await _reconcile(
+            admin_access,
+            h.request.project_id,
+            original.claim.event_id,
+            key,
+            reason="Substitute the retained reconciliation reason",
+        )
+        denied_key = await _reconcile(
+            admin_access,
+            h.request.project_id,
+            original.claim.event_id,
+            new_record_id(),
+        )
+        assert [
+            (response.status_code, response.json()["error"]["code"])
+            for response in (denied_exact, denied_payload, denied_key)
+        ] == [(404, "resource_not_found")] * 3
+        async with h.factory() as observer:
+            denials_after = await observer.scalar(text(
+                "SELECT count(*) FROM public.audit_events "
+                "WHERE action_id='operations.post_submit_delivery.reconcile' "
+                "AND after_facts->>'allowed'='false'"
+            ))
+            children = await observer.scalar(text(
+                "SELECT count(*) FROM public.outbox_events "
+                "WHERE causation_event_id=:event_id"
+            ), {"event_id": original.claim.event_id})
+        assert denials_after == denials_before + 3
+        assert children == 1
+
+        await admin_access.signed.grant(admin_access.admin, admin_access.target)
+        replay = await _reconcile(
+            admin_access, h.request.project_id, original.claim.event_id, key
+        )
+        assert replay.status_code == 201, replay.text
+        assert replay.json()["successor"] == successor
+        conflict_payload = await _reconcile(
+            admin_access,
+            h.request.project_id,
+            original.claim.event_id,
+            key,
+            reason="Substitute the retained reconciliation reason",
+        )
+        conflict_key = await _reconcile(
+            admin_access,
+            h.request.project_id,
+            original.claim.event_id,
+            new_record_id(),
+        )
+        assert [response.status_code for response in (conflict_payload, conflict_key)] == [
+            409,
+            409,
+        ]
 
 
 @pytest.mark.asyncio
