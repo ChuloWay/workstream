@@ -510,7 +510,7 @@ async def test_retained_child_authorizes_before_replay_or_conflict(
         assert [
             (response.status_code, response.json()["error"]["code"])
             for response in (denied_exact, denied_payload, denied_key)
-        ] == [(404, "resource_not_found")] * 3
+        ] == [(404, "post_submit_delivery_not_found")] * 3
         async with h.factory() as observer:
             denials_after = await observer.scalar(text(
                 "SELECT count(*) FROM public.audit_events "
