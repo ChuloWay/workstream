@@ -11,9 +11,16 @@ import (
 	"strings"
 )
 
-// These two historical collections are server-capped at the newest 100 rows.
-// They have no cursor contract; older known IDs use the exact show operation.
-const maxGuideInspectionBytes = 16 * 1024 * 1024
+const (
+	maxGuideInspectionBytes          = 16 * 1024 * 1024
+	maxGuideInspectionCollectionRows = 100
+	// The largest server-produced row is an artifact policy. Its three
+	// 100-entry rule lists and bounded string fields serialize below 4 MiB.
+	maxGuideInspectionRecordBytes = 4 * 1024 * 1024
+	// Historical collections have no cursor contract. The server returns up
+	// to 100 complete rows, so the wire bound must admit all of them.
+	maxGuideInspectionCollectionBytes = maxGuideInspectionCollectionRows*(maxGuideInspectionRecordBytes+1) + 1
+)
 
 type inspectionObject map[string]json.RawMessage
 
@@ -300,8 +307,8 @@ func guideInspectionPath(project, guide, suffix string) (string, error) {
 	return path + suffix, nil
 }
 
-func (c *Client) guideInspection(ctx context.Context, path string) (json.RawMessage, error) {
-	raw, err := c.requestWithResponseLimit(ctx, http.MethodGet, path, "", nil, "", http.StatusOK, maxGuideInspectionBytes)
+func (c *Client) guideInspection(ctx context.Context, path string, responseLimit int) (json.RawMessage, error) {
+	raw, err := c.requestWithResponseLimit(ctx, http.MethodGet, path, "", nil, "", http.StatusOK, responseLimit)
 	if err != nil {
 		return nil, err
 	}
@@ -317,16 +324,19 @@ func (c *Client) GuideSufficiencyReports(ctx context.Context, project, guide str
 	if err != nil {
 		return result, err
 	}
-	raw, err := c.guideInspection(ctx, path)
+	raw, err := c.guideInspection(ctx, path, maxGuideInspectionCollectionBytes)
 	if err != nil {
 		return result, err
 	}
 	var entries []json.RawMessage
-	if json.Unmarshal(raw, &entries) != nil || entries == nil || len(entries) > 100 {
+	if json.Unmarshal(raw, &entries) != nil || entries == nil || len(entries) > maxGuideInspectionCollectionRows {
 		return result, &Failure{Code: "invalid_api_response"}
 	}
 	seen := map[[16]byte]bool{}
 	for _, entry := range entries {
+		if len(entry) > maxGuideInspectionRecordBytes {
+			return result, &Failure{Code: "invalid_api_response"}
+		}
 		fields, ok := validateSufficiency(entry, project, guide, "")
 		if !ok {
 			return result, &Failure{Code: "invalid_api_response"}
@@ -350,7 +360,7 @@ func (c *Client) GuideSufficiencyReport(ctx context.Context, project, guide, rep
 	if err != nil {
 		return result, err
 	}
-	raw, err := c.guideInspection(ctx, path)
+	raw, err := c.guideInspection(ctx, path, maxGuideInspectionBytes)
 	if err != nil {
 		return result, err
 	}
@@ -366,16 +376,19 @@ func (c *Client) GuideArtifactPolicies(ctx context.Context, project, guide strin
 	if err != nil {
 		return result, err
 	}
-	raw, err := c.guideInspection(ctx, path)
+	raw, err := c.guideInspection(ctx, path, maxGuideInspectionCollectionBytes)
 	if err != nil {
 		return result, err
 	}
 	var entries []json.RawMessage
-	if json.Unmarshal(raw, &entries) != nil || entries == nil || len(entries) > 100 {
+	if json.Unmarshal(raw, &entries) != nil || entries == nil || len(entries) > maxGuideInspectionCollectionRows {
 		return result, &Failure{Code: "invalid_api_response"}
 	}
 	seen := map[[16]byte]bool{}
 	for _, entry := range entries {
+		if len(entry) > maxGuideInspectionRecordBytes {
+			return result, &Failure{Code: "invalid_api_response"}
+		}
 		fields, ok := validateArtifactPolicy(entry, project, guide, "")
 		if !ok {
 			return result, &Failure{Code: "invalid_api_response"}
@@ -399,7 +412,7 @@ func (c *Client) GuideArtifactPolicy(ctx context.Context, project, guide, policy
 	if err != nil {
 		return result, err
 	}
-	raw, err := c.guideInspection(ctx, path)
+	raw, err := c.guideInspection(ctx, path, maxGuideInspectionBytes)
 	if err != nil {
 		return result, err
 	}
@@ -415,7 +428,7 @@ func (c *Client) GuideEffectiveArtifactPolicy(ctx context.Context, project, guid
 	if err != nil {
 		return result, err
 	}
-	raw, err := c.guideInspection(ctx, path)
+	raw, err := c.guideInspection(ctx, path, maxGuideInspectionBytes)
 	if err != nil {
 		return result, err
 	}
@@ -431,7 +444,7 @@ func (c *Client) GuidePreSubmitPolicy(ctx context.Context, project, guide string
 	if err != nil {
 		return result, err
 	}
-	raw, err := c.guideInspection(ctx, path)
+	raw, err := c.guideInspection(ctx, path, maxGuideInspectionBytes)
 	if err != nil {
 		return result, err
 	}
@@ -448,7 +461,7 @@ func (c *Client) ActiveGuide(ctx context.Context, project string) (Result[json.R
 	if err != nil {
 		return result, err
 	}
-	raw, err := c.guideInspection(ctx, path)
+	raw, err := c.guideInspection(ctx, path, maxGuideInspectionBytes)
 	if err != nil {
 		return result, err
 	}

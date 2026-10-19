@@ -76,6 +76,47 @@ def artifact_policy():
     }
 
 
+def large_artifact_policy_body():
+    """Build a large canonical body within the backend's bounded policy fields."""
+    return {
+        "schema_version": "project_submission_artifact_policy.v1",
+        "required_artifacts": [
+            {
+                "key": f"artifact-{index:03d}" + "k" * 80,
+                "path": f"deliverables/{index:03d}/" + "p" * 480,
+                "hash_required": True,
+                "required": True,
+                "description": "d" * 1000,
+            }
+            for index in range(100)
+        ],
+        "required_evidence": [
+            {
+                "key": f"evidence-{index:03d}" + "k" * 80,
+                "label": "l" * 200,
+                "hash_required": True,
+                "required": True,
+                "description": "d" * 1000,
+            }
+            for index in range(60)
+        ],
+        "forbidden_artifacts": [],
+        "attestation_terms": [],
+        "manifest_required": True,
+        "artifact_hash_required": True,
+        "artifact_hash_algorithm": "sha256",
+        "allowed_storage_schemes": ["local", "s3", "r2"],
+        "maximum_file_size_bytes": None,
+        "maximum_package_size_bytes": None,
+        "maximum_archive_entries": None,
+        "maximum_archive_size_bytes": None,
+        "packaging": {
+            "package_required": False,
+            "allowed_package_formats": [],
+        },
+    }
+
+
 def effective_policy():
     return {
         "id": EFFECTIVE,
@@ -353,6 +394,39 @@ def test_exact_uuid_selectors_and_bounded_historical_collections(cli):
             assert_failure(
                 cli(origin, TOKEN, "-o", "json", *command), "invalid_api_response"
             )
+
+
+def test_server_bounded_large_artifact_policy_collection_is_accepted(cli):
+    with http_fixture() as (origin, response, requests):
+        policy_body = large_artifact_policy_body()
+        rows = [
+            artifact_policy()
+            | {
+                "id": f"018f0ebc-7966-7e8d-bc4d-{index:012x}",
+                "policy_body": policy_body,
+            }
+            for index in range(70)
+        ]
+        response["body"] = json.dumps(rows, separators=(",", ":")).encode()
+        assert len(response["body"]) > 16 * 1024 * 1024
+
+        result = cli(origin, TOKEN, "-o", "json", *CASES[3][0], process_timeout=30)
+
+        assert result.returncode == 0, result.stderr
+        assert len(json.loads(result.stdout)) == 70
+        assert requests == [("GET", CASES[3][1], "Bearer " + TOKEN)]
+
+
+def test_oversized_historical_collection_record_is_rejected(cli):
+    with http_fixture() as (origin, response, _requests):
+        value = artifact_policy()
+        value["policy_body"] = {"oversized": "x" * (4 * 1024 * 1024)}
+        response["body"] = json.dumps([value], separators=(",", ":")).encode()
+
+        assert_failure(
+            cli(origin, TOKEN, "-o", "json", *CASES[3][0]),
+            "invalid_api_response",
+        )
 
 
 def test_full_integer_range_and_malformed_report_fields(cli):

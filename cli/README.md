@@ -194,8 +194,10 @@ and preserving the successful API JSON.
 Exit status is `0` for success, `1` for API/network/response failure, and `2`
 for invalid arguments or configuration. JSON requests time out after 12 seconds;
 JSON responses default to a 64 KiB bound (guide declaration and document-bearing
-work context and grant history use 2 MiB wire bounds; exact guide proposals use 8 MiB,
-administrative guide inspection uses 16 MiB). Original downloads stream to private files,
+work context and grant history use 2 MiB wire bounds; exact guide proposals use 8 MiB;
+single/current administrative guide inspection uses 16 MiB; its two historical
+collections admit the backend's complete newest-100 response with a 4 MiB per-row
+bound). Original downloads stream to private files,
 bounded by the advertised byte count and ART's 512 MiB hard ceiling. Downloads
 and original uploads allow up to two minutes for response headers and ten minutes overall,
 including transfer; connection/TLS timeouts and redirect/proxy refusal remain.
