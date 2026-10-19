@@ -202,13 +202,15 @@ async def _reconcile(
     event_id,
     request_key,
     *,
+    actor=None,
     reason="Reconcile one exact uncertain post-submit delivery",
 ):
     _, command = _paths(project_id, event_id)
     assert command is not None
+    caller = actor or admin_access.target
     return await admin_access.signed.client.post(
         command,
-        headers=admin_access.target.headers | {"Idempotency-Key": str(request_key)},
+        headers=caller.headers | {"Idempotency-Key": str(request_key)},
         json={"reason": reason},
     )
 
@@ -484,6 +486,27 @@ async def test_retained_child_authorizes_before_replay_or_conflict(
                 "WHERE action_id='operations.post_submit_delivery.reconcile' "
                 "AND after_facts->>'allowed'='false'"
             ))
+        state_before_denials = await state(h)
+
+        async def denied_variants(actor):
+            return (
+                await _reconcile(
+                    admin_access, h.request.project_id, original.claim.event_id, key,
+                    actor=actor,
+                ),
+                await _reconcile(
+                    admin_access, h.request.project_id, original.claim.event_id, key,
+                    actor=actor,
+                    reason="Substitute the retained reconciliation reason",
+                ),
+                await _reconcile(
+                    admin_access, h.request.project_id, original.claim.event_id,
+                    new_record_id(), actor=actor,
+                ),
+            )
+
+        non_operator = await admin_access.signed.actor("non-operator-replay")
+        denied_non_operator = await denied_variants(non_operator)
 
         revoked = await admin_access.signed.revoke(
             admin_access.admin,
@@ -491,26 +514,11 @@ async def test_retained_child_authorizes_before_replay_or_conflict(
             reason="End retained reconciliation replay duty",
         )
         assert revoked.status_code == 200, revoked.text
-        denied_exact = await _reconcile(
-            admin_access, h.request.project_id, original.claim.event_id, key
-        )
-        denied_payload = await _reconcile(
-            admin_access,
-            h.request.project_id,
-            original.claim.event_id,
-            key,
-            reason="Substitute the retained reconciliation reason",
-        )
-        denied_key = await _reconcile(
-            admin_access,
-            h.request.project_id,
-            original.claim.event_id,
-            new_record_id(),
-        )
+        denied_revoked = await denied_variants(admin_access.target)
         assert [
             (response.status_code, response.json()["error"]["code"])
-            for response in (denied_exact, denied_payload, denied_key)
-        ] == [(404, "post_submit_delivery_not_found")] * 3
+            for response in denied_non_operator + denied_revoked
+        ] == [(404, "post_submit_delivery_not_found")] * 6
         async with h.factory() as observer:
             denials_after = await observer.scalar(text(
                 "SELECT count(*) FROM public.audit_events "
@@ -521,8 +529,9 @@ async def test_retained_child_authorizes_before_replay_or_conflict(
                 "SELECT count(*) FROM public.outbox_events "
                 "WHERE causation_event_id=:event_id"
             ), {"event_id": original.claim.event_id})
-        assert denials_after == denials_before + 3
+        assert denials_after == denials_before + 6
         assert children == 1
+        assert await state(h) == state_before_denials
 
         await admin_access.signed.grant(admin_access.admin, admin_access.target)
         replay = await _reconcile(
