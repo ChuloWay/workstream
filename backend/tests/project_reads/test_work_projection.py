@@ -83,8 +83,8 @@ async def test_summary_acceptance_rate_follows_decided_attempts(task_client, mon
     assert summary["submissions"]["needs_revision"] == 1 and summary["acceptance_rate"] == 0.0
 
 
-def test_summary_rate_is_accepted_over_decided_and_totals_follow_disclosure():
-    """Pure rule: pending attempts are not decided; hidden totals are null, visible totals exact."""
+def test_summary_rate_is_accepted_over_decided_and_totals_are_exact():
+    """Pure rule: pending attempts are not decided; award totals are exact, empty without awards."""
     counts = ProjectWorkCounts(
         tasks=TaskStatusCounts(**dict.fromkeys(TaskStatusCounts.model_fields, 0)),
         assignments=ContributorAssignmentCounts(active=0, closed=0),
@@ -93,8 +93,8 @@ def test_summary_rate_is_accepted_over_decided_and_totals_follow_disclosure():
         ),
     )
     project = new_record_id()
-    hidden = ProjectWorkSummary.from_facts(project, counts, 0, None)
-    assert hidden.acceptance_rate == 3 / 6 and hidden.award_totals is None
+    empty = ProjectWorkSummary.from_facts(project, counts, 0, ())
+    assert empty.acceptance_rate == 3 / 6 and empty.award_totals == ()
     visible = ProjectWorkSummary.from_facts(project, counts, 2, (
         ContributorAwardTotal("money", "USD", Decimal("12.50")),
     ))

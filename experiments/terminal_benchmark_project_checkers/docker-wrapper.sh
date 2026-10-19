@@ -110,6 +110,7 @@ name = str(item.get("Name", "")).removeprefix("/")
 if terminal_owned:
     kind = labels.get("workstream.resource-kind")
     attempt = labels.get("workstream.attempt")
+    request_digest = labels.get("workstream.request-digest")
     expected = {
         "builder": f"ws-terminal-builder-{attempt}",
         "candidate": f"ws-terminal-candidate-{attempt}",
@@ -121,6 +122,7 @@ if terminal_owned:
 else:
     kind = "checker"
     attempt = labels.get("workstream.external-checker-attempt")
+    request_digest = None
     valid_name = bool(re.fullmatch(r"ws-checker-[0-9a-f]{1,32}", name)) and attempt == name.removeprefix("ws-checker-")
 host = item.get("HostConfig", {})
 config = item.get("Config", {})
@@ -218,6 +220,11 @@ checks = {
         {"/var/run/docker.sock", "/run/docker.sock"} & set(sources.values())
     ),
 }
+if terminal_owned:
+    checks["request_digest"] = bool(
+        isinstance(request_digest, str)
+        and re.fullmatch(r"sha256:[0-9a-f]{64}", request_digest)
+    )
 if kind == "builder":
     cap_add = sorted(host.get("CapAdd") or [])
     tmpfs_options = set((host.get("Tmpfs") or {}).get("/busybox", "").split(","))
@@ -254,6 +261,7 @@ if kind == "builder":
         "read_only_root": host.get("ReadonlyRootfs") is False,
         "pids": host.get("PidsLimit") == 128,
         "memory": host.get("Memory") == 536870912,
+        "memory_swap": host.get("MemorySwap") == 536870912,
         "cpu": host.get("NanoCpus") == 1000000000,
         "storage": host.get("StorageOpt") == {"size": "402653184"},
     })
@@ -267,6 +275,7 @@ elif kind in {"candidate", "reference"}:
         "read_only_root": host.get("ReadonlyRootfs") is True,
         "pids": host.get("PidsLimit") == 32,
         "memory": host.get("Memory") == 536870912,
+        "memory_swap": host.get("MemorySwap") == 536870912,
         "cpu": host.get("NanoCpus") == 1000000000,
         "tmpfs": "/tmp" in (host.get("Tmpfs") or {}),
     })
@@ -299,6 +308,7 @@ record = {
     "name": name,
     "network": host.get("NetworkMode"),
     "read_only_root": host.get("ReadonlyRootfs"),
+    "request_digest": request_digest,
     "runtime": host.get("Runtime"),
     "user": config.get("User"),
 }
