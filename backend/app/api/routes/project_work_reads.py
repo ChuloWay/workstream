@@ -55,9 +55,9 @@ async def list_project_assignments(
     responses=_ERRORS, openapi_extra={"x-workstream-action-id": "project.summary.read"},
 )
 async def read_project_summary(project_id: UUID, reads: Reads) -> ProjectWorkSummary:
-    """Task, claim and attempt counts, acceptance rate and checker infrastructure failures.
+    """Task, claim and attempt counts, acceptance rate, checker infrastructure failures and award totals.
 
-    Award totals appear only for a caller who also holds an exact-project Finance Authority grant.
+    Award totals list the project's earned awards per instrument and unit, empty when none exist.
     """
     return await reads.summary(project_id)
 

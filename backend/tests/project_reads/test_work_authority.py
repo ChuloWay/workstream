@@ -9,7 +9,7 @@ from app.db import session as db_session
 from app.modules.tasks.models import AuditEvent
 from tests.test_tasks import auth_headers, create_active_project, set_dev_actor
 from .support import (
-    AUDITOR, EXACT_MANAGER, FINANCE, MANAGER, OPERATOR, OWNER, as_admin, as_manager, get_ok, project_path,
+    AUDITOR, EXACT_MANAGER, FINANCE, OPERATOR, OWNER, as_admin, as_manager, get_ok, project_path,
     submitted_case,
 )
 
@@ -83,25 +83,16 @@ async def test_each_read_commits_one_exact_decision(task_client, monkeypatch):
     assert all(row.matched_grant_id is not None for row in rows[:-1])
 
 
-async def test_award_totals_need_an_exact_project_finance_grant_and_the_decision_records_it(
+async def test_a_covering_project_manager_reads_award_totals_without_a_finance_grant(
     task_client, monkeypatch,
 ):
     project, _task, _submission = await submitted_case(task_client, monkeypatch)
     as_manager(monkeypatch)
-    assert (await get_ok(task_client, project_path(project, "/summary")))["award_totals"] is None
-    # A system Finance grant does not disclose one project's totals.
-    await as_admin(task_client, monkeypatch, MANAGER, "finance_authority")
-    assert (await get_ok(task_client, project_path(project, "/summary")))["award_totals"] is None
-    await as_admin(task_client, monkeypatch, MANAGER, "finance_authority", project=project)
     assert (await get_ok(task_client, project_path(project, "/summary")))["award_totals"] == []
     async with db_session.get_session_factory()() as session:
-        rows = (await session.scalars(select(AuditEvent).where(
+        [row] = (await session.scalars(select(AuditEvent).where(
             AuditEvent.action_id == "project.summary.read",
-        ).order_by(AuditEvent.created_at))).all()
-    withheld, system_finance, disclosed = (row.after_facts["resource_context_digest"] for row in rows)
-    # The same request records the same evidence until the evaluator locks an
-    # exact-project Finance grant; that disclosure changes the recorded digest.
-    assert withheld == system_finance != disclosed
-    # The Project Manager grant stays the matched authority for the action.
-    assert len({row.matched_grant_id for row in rows}) == 1 and rows[0].matched_grant_id is not None
+        ))).all()
+    # The Project Manager grant is the only matched authority for the summary.
+    assert row.event_type == "SensitiveAuthorizationAllowed" and row.matched_grant_id is not None
 

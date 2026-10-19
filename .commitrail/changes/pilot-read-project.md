@@ -168,6 +168,7 @@ filters, and is the template this change follows).
   - C5 lists a project's closed assignments with the A2 own-facts rule: a
     closed claim projects only the facts PR2 shows its contributor.
   - C6 award totals require an exact-project Finance Authority grant
+    (superseded by `pm-award-read.md`: the Project Manager grant suffices)
     alongside the Project Manager grant, as the roles table states. The
     evaluator matches only a Finance Authority grant for this, so the
     Project Manager's `compensation.award.read` entry in `policy.py` grants

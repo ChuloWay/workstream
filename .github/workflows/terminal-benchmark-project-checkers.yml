@@ -5,6 +5,7 @@ on:
     types: [opened, synchronize, reopened]
     paths:
       - ".github/workflows/terminal-benchmark-project-checkers.yml"
+      - ".commitrail/changes/terminal-benchmark-negative-runtime-proof.md"
       - ".commitrail/changes/terminal-benchmark-project-checkers.md"
       - "experiments/pilot00_gvisor_offline/**"
       - "experiments/terminal_benchmark_project_checkers/**"
@@ -37,7 +38,7 @@ permissions:
 jobs:
   isolated-runtime-proof:
     runs-on: ubuntu-24.04
-    timeout-minutes: 40
+    timeout-minutes: 90
     env:
       WS493_EXPECTED_HEAD: ${{ github.event.pull_request.head.sha }}
       WS493_RUN_ID: ${{ github.run_id }}-${{ github.run_attempt }}
@@ -46,12 +47,14 @@ jobs:
 
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        timeout-minutes: 5
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           persist-credentials: false
           fetch-depth: 0
 
       - name: Bind the exact pull-request head
+        timeout-minutes: 2
         shell: bash
         run: |
           set -euo pipefail
@@ -61,6 +64,7 @@ jobs:
           "${PROOF_SCRIPT}" preflight
 
       - name: Install the exact quota and language tools
+        timeout-minutes: 15
         shell: bash
         run: |
           set -euo pipefail
@@ -90,6 +94,7 @@ jobs:
           UV_PROJECT_ENVIRONMENT=.venv .venv/bin/uv sync --frozen --extra dev
 
       - name: Prepare exact images and quota-backed isolated DIND
+        timeout-minutes: 20
         shell: bash
         run: |
           set -euo pipefail
@@ -101,15 +106,17 @@ jobs:
             timeout --signal=TERM --kill-after=15s 1200 \
             "${PROOF_SCRIPT}" prepare
 
-      - name: Execute the interrupted and complete POST matrix
+      - name: Execute the interrupted, complete, and negative POST matrix
+        timeout-minutes: 25
         shell: bash
         run: |
           set -euo pipefail
           sudo --preserve-env=WS493_EXPECTED_HEAD,WS493_RUN_ID,RUNNER_TEMP \
-            env "PATH=${PATH}" timeout --signal=TERM --kill-after=15s 900 \
+            env "PATH=${PATH}" timeout --signal=TERM --kill-after=15s 1500 \
             "${PROOF_SCRIPT}" run
 
       - name: Stage the bounded nonsecret evidence
+        timeout-minutes: 2
         shell: bash
         run: |
           set -euo pipefail
@@ -118,15 +125,17 @@ jobs:
 
       - name: Remove exact owned runtime resources
         if: always()
+        timeout-minutes: 5
         shell: bash
         run: |
           set -euo pipefail
           sudo --preserve-env=WS493_EXPECTED_HEAD,WS493_RUN_ID,RUNNER_TEMP \
-            env "PATH=${PATH}" timeout --signal=TERM --kill-after=15s 180 \
+            env "PATH=${PATH}" timeout --signal=TERM --kill-after=15s 300 \
             "${PROOF_SCRIPT}" cleanup
 
       - name: Verify the final staged evidence
         if: success()
+        timeout-minutes: 3
         shell: bash
         run: |
           set -euo pipefail
@@ -135,6 +144,7 @@ jobs:
 
       - name: Upload the verified nonsecret proof
         if: success()
+        timeout-minutes: 3
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: terminal-benchmark-project-checker-${{ github.event.pull_request.head.sha }}-${{ github.run_attempt }}
