@@ -68,15 +68,10 @@ class ProjectManagementReadPosition:
 
 @dataclass(frozen=True, slots=True)
 class ProjectManagementReadGrant:
-    """The authorized project, the decoded position and the award-total disclosure.
-
-    ``award_totals_visible`` is true only for a project summary read whose
-    caller also holds a current exact-project Finance Authority grant.
-    """
+    """The authorized project and the decoded position."""
 
     project_id: UUID
     position: ProjectManagementReadPosition | None
-    award_totals_visible: bool = False
 
 
 class ProjectManagementReadCursorInvalid(ValueError):
