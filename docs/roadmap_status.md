@@ -318,7 +318,10 @@ them. Preparation does
 not create a Submission; readiness recovery is an explicit same-key POST replay,
 not a polling GET. PILOT-08 exposes frozen revision-change summaries through
 contributor task context and requires the exact preparation acknowledgement for
-checker-remediation intake. Native CLI proof uses fixture-arranged prerequisites;
+checker-remediation intake. CLI submission/history text distinguishes the absence
+of that summary in historical responses from the separate current task-context
+read; it never substitutes current context for historical submission evidence.
+Native CLI proof uses fixture-arranged prerequisites;
 the separate #552 API and Celery drill connects public guide inputs to governed
 outcomes. Full native CLI setup-to-submission proof remains separate.
 No public project-list
