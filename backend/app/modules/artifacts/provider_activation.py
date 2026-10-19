@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from app.core.config import (
     ARTIFACT_AWS_ACTIVATION_VALIDITY_SECONDS,
     ARTIFACT_AWS_CLOCK_SAFETY_MARGIN_SECONDS,
+    ARTIFACT_AWS_PROOF_SEQUENCE_ALLOWANCE_SECONDS,
     Settings,
 )
 from app.core.hashing import canonical_json_hash
@@ -438,6 +439,12 @@ async def coordinate_artifact_provider_activation(
     now = await session.scalar(select(func.clock_timestamp()))
     if now is None:
         raise ArtifactProviderLiveProofRequiredError("database time is unavailable")
+    if now - runtime.started_at > timedelta(
+        seconds=ARTIFACT_AWS_PROOF_SEQUENCE_ALLOWANCE_SECONDS
+    ):
+        raise ArtifactProviderLiveProofRequiredError(
+            "AWS artifact proof sequence exceeded its fixed allowance"
+        )
     superseded = await session.scalar(
         select(ArtifactProviderActivation)
         .where(

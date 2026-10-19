@@ -748,7 +748,10 @@ CLI never follows finding paths or exposes provider/private management fields.
 History and findings lists fetch one page only; use the returned opaque cursor
 explicitly (up to 1024 characters; no local decoding). `--run` cannot be combined with pagination flags. Revision change
 summary is available through `task context` as `revision_context.changes`,
-not in the current public history rows.
+not in the current public history rows. Human-readable submission/history output
+points to that separate current-context read; it does not fetch or attach today's
+revision context to a historical submission. JSON output remains the exact
+authorized submission/history response.
 History projects `rejected` with `status_reason=revision_limit_reached` after
 immediate exhaustion, or `revision_deadline_expired` after timeout. Both come
 from immutable TASK receipts without editing the original Submission.
@@ -1182,8 +1185,8 @@ declared document that is not uploaded fails with `guide_document_not_uploaded`.
 with the submitter or contributor and the same fields as `me submissions` and
 `me assignments`. `summary` counts tasks by status, claims by state and attempts
 by outcome, with the acceptance rate (accepted over decided attempts) and
-post-submission checker infrastructure failures; award totals appear only when
-you also hold an exact-project Finance Authority grant and are otherwise null.
+post-submission checker infrastructure failures, and the project's award totals
+per instrument and unit (none when no award exists).
 `import-batches` lists native task import batches with state and member counts.
 `preparations` lists every contributor's ZIP preparations, newest first, with
 finding counts only; `--outcome failed` shows intake checks that blocked a ZIP.
