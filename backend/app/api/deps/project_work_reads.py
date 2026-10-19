@@ -30,9 +30,8 @@ class ProjectWorkSummary(BaseModel):
 
     ``acceptance_rate`` is accepted over decided attempts (accepted,
     needs_revision, rejected) and null before any attempt is decided.
-    ``award_totals`` is null unless the caller also holds a current
-    exact-project Finance Authority grant; then it lists every instrument and
-    unit total, empty when no award exists.
+    ``award_totals`` lists every instrument and unit total of the project's
+    immutable awards, empty when no award exists; it is not a payment claim.
     """
 
     model_config = _FROZEN
@@ -42,18 +41,18 @@ class ProjectWorkSummary(BaseModel):
     submissions: ContributorSubmissionCounts
     acceptance_rate: float | None = Field(ge=0, le=1)
     checker_infrastructure_failures: int = Field(ge=0)
-    award_totals: tuple[AwardTotal, ...] | None
+    award_totals: tuple[AwardTotal, ...]
 
     @classmethod
     def from_facts(cls, project_id: UUID, counts: ProjectWorkCounts, failures: int, totals) -> "ProjectWorkSummary":
-        """Build the summary from TASK counts, the CHECKERS count and optional compensation totals."""
+        """Build the summary from TASK counts, the CHECKERS count and compensation totals."""
         attempts = counts.submissions
         decided = attempts.accepted + attempts.needs_revision + attempts.rejected
         return cls(
             project_id=project_id, tasks=counts.tasks, assignments=counts.assignments, submissions=attempts,
             acceptance_rate=attempts.accepted / decided if decided else None,
             checker_infrastructure_failures=failures,
-            award_totals=None if totals is None else tuple(
+            award_totals=tuple(
                 AwardTotal(instrument=total.instrument_type, unit=total.unit_code, quantity=format(total.quantity, "f"))
                 for total in totals
             ),
@@ -123,14 +122,13 @@ class ProjectWorkReadOperation:
         return await self._runner.run(request, read)
 
     async def summary(self, project_id: UUID) -> ProjectWorkSummary:
-        """C6: counts, acceptance rate, infrastructure failures, and award totals only under Finance."""
+        """C6: counts, acceptance rate, infrastructure failures and award totals."""
         request = self._runner.request("project.summary.read", project_id, {})
 
         async def read(grant):
             counts = await self._work.count_work(grant.project_id)
             failures = await self._checkers.count_infrastructure_failures(grant.project_id)
-            totals = (await self._awards.read_project_award_totals(grant.project_id)
-                      if grant.award_totals_visible else None)
+            totals = await self._awards.read_project_award_totals(grant.project_id)
             return ProjectWorkSummary.from_facts(grant.project_id, counts, failures, totals)
 
         return await self._runner.run(request, read)

@@ -91,10 +91,10 @@ or the exact project; own means record-level ownership still applies.
 | Task claim/start | no | explicit recovery only | no | no | no | exact project under guards | no |
 | Submission create/read | no | operational projection only | management projection only | no | read covered | own assignment | read-for-review only |
 | Own projects, claims, attempts, preparations and totals | own grants only | own grants only | own grants only | own grants only | own grants only | own records, exact project under current grant | own grants only |
-| Project guides, submissions, assignments, summary, import batches and preparations | no | no | covered | award totals only with an exact-project grant alongside a Project Manager grant | no | no | no |
+| Project guides, submissions, assignments, summary, import batches and preparations | no | no | covered, including summary award totals | no | no | no | no |
 | Human review decision | no | no | no without reviewer grant | no | no | no | exact project under review guards |
 | Adjudication action | no | no | no | no | no | no | no |
-| Compensation award read and delivery reconciliation | no | no | no | covered | read covered | no | no |
+| Compensation award read and delivery reconciliation | no | no | award read covered | covered | read covered | no | no |
 | Fulfillment result recording | no | no | no | no; authenticated WS-CON adapter callback only | read covered | no | no |
 | Audit read/export | authority history system | operational system | project covered | finance covered | covered | own chain only | assigned chain only |
 
@@ -131,8 +131,9 @@ The Project Manager reads under `/api/v1/projects/{project_id}` (`guides`,
 `documents/{document_id}/content`, `submissions`, `assignments`, `summary`,
 `task-import-batches` and `submission-bundle-preparations`) require a current
 Project Manager grant covering the project, system or exact. The summary
-includes award totals only when the caller also holds a current exact-project
-Finance Authority grant; a system Finance grant does not add them.
+always includes the project's award totals per instrument and unit, because
+the Project Manager role holds `compensation.award.read`; no Finance grant is
+needed. Award totals are earned facts, not payment or fulfillment claims.
 `GET /api/v1/projects/{project_id}/contribution-policies` lists every policy
 version under a covering Finance Authority grant. Any other caller, including
 a contributor of the project, receives the concealed not-found response.

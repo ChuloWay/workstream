@@ -116,7 +116,7 @@ EXPECTED_ROLE_CONTRACT = (
 actor.identity_link.read actor.identity_link.revoke actor.identity_link.reactivate actor.service.provision
 admin_role.read admin_role.grant admin_role.revoke audit.read audit.export"""),
     ("operator", ("system",), """project.read project.setup_diagnostic.read project.effective_policy.read review.queue.inspect
-review.lease.force_release contribution.read_project compensation.award.read operations.status.read
+review.lease.force_release contribution.read_project operations.status.read
 operations.timer.run operations.reconcile.run operations.outbox.retry operations.projection.rebuild
 operations.task.start_override operations.submission_gate.repair operations.checker.retry
 artifact.binding.read artifact.replica.read artifact.receipt.read artifact.verification_job.read
