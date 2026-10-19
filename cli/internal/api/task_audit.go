@@ -132,6 +132,13 @@ func positive(values ...*big.Int) bool {
 	return true
 }
 
+// Python's datetime used by the audit API cannot represent year zero. Check
+// the parsed timestamp's stated local year, not its UTC-converted year.
+func validAuditTime(value string) bool {
+	parsed, err := time.Parse(time.RFC3339Nano, value)
+	return err == nil && parsed.Year() >= 1 && parsed.Year() <= 9999
+}
+
 func auditCursor(raw string, project, task string) error {
 	if !validTaskCursor(raw) {
 		return errors.New("cursor must be backend next_cursor JSON of at most 512 characters")
@@ -140,7 +147,7 @@ func auditCursor(raw string, project, task string) error {
 	_, err := contextObject(json.RawMessage(raw), &cursor,
 		[]string{"project_id", "task_id", "created_at", "event_id"}, nil)
 	if err != nil || !sameUUID(cursor.ProjectID, project) || !sameUUID(cursor.TaskID, task) ||
-		!validTime(cursor.CreatedAt) || !validUUID(cursor.EventID) {
+		!validAuditTime(cursor.CreatedAt) || !validUUID(cursor.EventID) {
 		return errors.New("cursor must be backend next_cursor JSON for this project and task")
 	}
 	return nil
@@ -150,7 +157,7 @@ func validAuditEvent(raw json.RawMessage, value AuditTaskEvent) bool {
 	var ignored AuditTaskEvent
 	fields, err := contextObject(raw, &ignored, []string{"event_id", "event_type", "actor_id", "created_at"}, nil)
 	if err != nil || !requiredNullable(fields, "from_status", "to_status", "assignment_id", "authorization_decision_id") ||
-		!validUUID(value.EventID) || !validTime(value.CreatedAt) ||
+		!validUUID(value.EventID) || !validAuditTime(value.CreatedAt) ||
 		!optionalUUID(value.AssignmentID) || !optionalUUID(value.AuthorizationDecisionID) {
 		return false
 	}
@@ -210,7 +217,7 @@ func (c *Client) AuditEvidence(ctx context.Context, project, task string, limit 
 			[]string{"project_id", "task_id", "created_at", "event_id"}, nil)
 		if cursorErr != nil || len(cursorFields) != 4 || len(items) == 0 ||
 			!sameUUID(page.NextCursor.ProjectID, project) || !sameUUID(page.NextCursor.TaskID, task) ||
-			!sameUUID(page.NextCursor.EventID, page.Items[len(page.Items)-1].EventID) || !validTime(page.NextCursor.CreatedAt) {
+			!sameUUID(page.NextCursor.EventID, page.Items[len(page.Items)-1].EventID) || !validAuditTime(page.NextCursor.CreatedAt) {
 			return result, invalidAuditResponse()
 		}
 		cursorTime, _ := time.Parse(time.RFC3339Nano, page.NextCursor.CreatedAt)

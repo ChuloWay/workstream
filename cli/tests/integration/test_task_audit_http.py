@@ -3,6 +3,8 @@
 import json
 from urllib.parse import parse_qs, urlsplit
 
+import pytest
+
 from test_http_boundary import PROJECT, TOKEN, assert_failure, http_fixture
 
 TASK = "018f0ebc-7966-7e8d-bc4d-1cae1e000003"
@@ -176,6 +178,64 @@ def test_audit_cursor_is_exact_scoped_json_and_bad_inputs_never_dispatch(cli):
         )
         assert_failure(bad_project, "invalid_arguments", 2)
         assert requests == []
+
+
+@pytest.mark.parametrize(
+    "stamp",
+    (
+        "0001-01-01T00:00:00Z",
+        "0001-01-01T00:00:00+01:00",
+        "9999-12-31T23:59:59Z",
+        "9999-12-31T23:59:59-01:00",
+    ),
+)
+def test_audit_time_year_boundaries_remain_valid(cli, stamp):
+    with http_fixture() as (origin, response, requests):
+        item = ITEM | {"created_at": stamp}
+        cursor = CURSOR | {"created_at": stamp}
+        page = PAGE | {"items": [item], "next_cursor": cursor}
+        response["body"] = json.dumps(page).encode()
+        result = evidence(cli, origin, "--limit", "1")
+        assert result.returncode == 0 and result.stderr == "", result.stderr
+        assert json.loads(result.stdout) == page
+
+        selected = json.dumps(cursor, separators=(",", ":"))
+        response["body"] = json.dumps(
+            PAGE | {"items": [], "next_cursor": None}
+        ).encode()
+        result = evidence(cli, origin, "--limit", "1", "--cursor", selected)
+        assert result.returncode == 0 and result.stderr == "", result.stderr
+        assert parse_qs(urlsplit(requests[-1][1]).query)["cursor"] == [selected]
+
+
+@pytest.mark.parametrize("surface", ("event", "returned_cursor", "supplied_cursor"))
+def test_audit_time_rejects_python_impossible_year_zero(cli, surface):
+    impossible = "0000-12-31T23:00:00-01:00"
+    with http_fixture() as (origin, response, requests):
+        if surface == "event":
+            response["body"] = json.dumps(
+                PAGE
+                | {"items": [ITEM | {"created_at": impossible}], "next_cursor": None}
+            ).encode()
+            assert_failure(evidence(cli, origin), "invalid_api_response")
+        elif surface == "returned_cursor":
+            # Go considers these instants equal. Python cannot represent the
+            # cursor's local year 0000 even though page equality passes.
+            response["body"] = json.dumps(
+                PAGE
+                | {
+                    "items": [ITEM | {"created_at": "0001-01-01T00:00:00Z"}],
+                    "next_cursor": CURSOR | {"created_at": impossible},
+                }
+            ).encode()
+            assert_failure(evidence(cli, origin), "invalid_api_response")
+        else:
+            response["body"] = json.dumps(PAGE).encode()
+            selected = json.dumps(CURSOR | {"created_at": impossible})
+            assert_failure(
+                evidence(cli, origin, "--cursor", selected), "invalid_arguments", 2
+            )
+            assert requests == []
 
 
 def test_audit_denial_and_body_limit_do_not_disclose_or_partially_print(cli):
