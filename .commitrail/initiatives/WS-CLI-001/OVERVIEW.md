@@ -42,6 +42,45 @@ against the returned size/SHA-256 before publishing a private, non-overwriting
 local file. Source custody and fresh read authorization remain backend-owned;
 the CLI never reads a provider URL or storage key directly.
 
+Current public-only completion plan (inventory at main `51b868071`): FastAPI
+OpenAPI declares 125 non-health method/path operations, of which 69 have CLI
+coverage. Counts are an inventory, not a runtime certification or a coverage
+target, and predate the source-download addition above. Contributor `me`
+browsing, preparation reads, manager work browsing, guide
+list/show/readiness/document reads and contribution-policy listing are
+also delivered by the merged PILOT read work; reuse those owners.
+
+The baseline's remaining 56 operations are grouped below. Each issue is a
+bounded client outcome, implemented in its own worktree/PR; split further if its
+concrete diff would be unreviewable. The #605 row is delivered by
+[WS-CLI-001-31](WS-CLI-001-31.md); the other rows remain planned here.
+Existing #499 owns the history/current revision-context presentation correction.
+
+| Issue | Public-client boundary | Operations |
+|---|---|---:|
+| [#599](https://github.com/Flow-Research/workstream/issues/599) | Guide edit and review/revision policy configuration | 3 |
+| [#600](https://github.com/Flow-Research/workstream/issues/600) | Active guide, sufficiency and intake policy inspection | 7 |
+| [#601](https://github.com/Flow-Research/workstream/issues/601) | Governed sufficiency/manual artifact-policy writes | 4 |
+| [#602](https://github.com/Flow-Research/workstream/issues/602) | Manager task context and submission/checker evidence | 7 |
+| [#603](https://github.com/Flow-Research/workstream/issues/603) | Exact revision-context repair | 1 |
+| [#604](https://github.com/Flow-Research/workstream/issues/604) | Contributor-candidate discovery | 1 |
+| [#605](https://github.com/Flow-Research/workstream/issues/605) | Retained task-import source download, delivered by [WS-CLI-001-31](WS-CLI-001-31.md) | 1 |
+| [#606](https://github.com/Flow-Research/workstream/issues/606) | Actor/admin authority inspection | 6 |
+| [#607](https://github.com/Flow-Research/workstream/issues/607) | Actor/identity lifecycle and administrative writes | 8 |
+| [#608](https://github.com/Flow-Research/workstream/issues/608) | External-checker registry and explicit retry | 4 |
+| [#609](https://github.com/Flow-Research/workstream/issues/609) | Operator task inspection/start override | 3 |
+| [#610](https://github.com/Flow-Research/workstream/issues/610) | Task audit context/evidence | 2 |
+| [#611](https://github.com/Flow-Research/workstream/issues/611) | Artifact operator inspection/recovery | 9 |
+
+Start independent guide configuration, manager evidence, admin inspection and
+checker operations in parallel. Inspection informs subsequent manual mutations
+and repair; each PR must still build independently or declare its exact stacked
+dependency. Root registrations are additive; shared transport changes have one
+owner and are reused rather than copied. Each PR reconciles its own README and
+roadmap claims, while the lead coordinates overview/index changes. No generic
+raw-HTTP executor, private backend path, new business rules or eager TUI is needed.
+No material product decision is missing for these existing-contract clients.
+
 The backend exposes `GET /api/v1/actors/me` and
 `GET /api/v1/actors/me/authorization-context` in
 `backend/app/api/routes/auth.py`. The selected 29-operation
@@ -248,7 +287,9 @@ CLIs. Keep the package independent of backend and MCP runtime dependencies.
 25. **WS-CLI-001-25 / PILOT-12:** Public ZIP preparation with exact caller key,
    separate admission-backed creation/replay, and bounded submission/checker
    history. No automatic retry/polling or inferred acceptance. Revision-change
-   summary awaits #495's public field; full public setup integration is #552.
+   summaries are available through current task context, not historical rows;
+   [WS-CLI-001-30](WS-CLI-001-30.md) corrects the remaining text. The separate
+   #552 public setup/worker drill is delivered; full native CLI journey proof remains.
    Unfinished human review/revision is not current CLI implementation scope.
 26. **Optional TUI:** Add a focused public queue/evidence view after its API
    workflow is complete. Never require a TUI for agents or scripts.
