@@ -106,11 +106,7 @@ func addManagerReads(project *cobra.Command, client func() (*api.Client, error),
 				count(v.CheckerInfrastructureFailures)); err != nil {
 				return err
 			}
-			if v.AwardTotals == nil {
-				_, err = fmt.Fprintln(stdout, "Award totals: not shown (needs Finance Authority on this project)")
-				return err
-			}
-			for _, award := range *v.AwardTotals {
+			for _, award := range v.AwardTotals {
 				if _, err := fmt.Fprintf(stdout, "Award total: %s %s %s\n",
 					safeText(award.Instrument), safeText(award.Unit), safeText(award.Quantity)); err != nil {
 					return err

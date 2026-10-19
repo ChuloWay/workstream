@@ -128,7 +128,7 @@ func addSubmissionCommands(root, task *cobra.Command, client func() (*api.Client
 		if *output == "json" {
 			return writeSafeJSON(stdout, result.Raw)
 		}
-		return writeTaskContextFields(stdout, []contextField{{"Submission history", result.Value}, {"Revision change summary", "unavailable in the current public API"}})
+		return writeTaskContextFields(stdout, []contextField{{"Submission history", result.Value}, {"Revision change summary", "not included in submission history; use workstream task context " + args[0] + " for current task revision context, not historical submission context"}})
 	}
 	task.AddCommand(history)
 	submission := &cobra.Command{Use: "submission", Short: "Read authorized submission history and checker findings"}
@@ -144,7 +144,7 @@ func addSubmissionCommands(root, task *cobra.Command, client func() (*api.Client
 		if *output == "json" {
 			return writeSafeJSON(stdout, result.Raw)
 		}
-		return writeTaskContextFields(stdout, []contextField{{"Submission", result.Value}, {"Revision change summary", "unavailable in the current public API"}})
+		return writeTaskContextFields(stdout, []contextField{{"Submission", result.Value}, {"Revision change summary", "not included in this submission response; use workstream task context " + result.Value.Task + " for current task revision context, not historical submission context"}})
 	}})
 	var run, cursorValue string
 	var limit int

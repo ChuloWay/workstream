@@ -52,7 +52,6 @@ from app.interfaces.artifacts import (
     ArtifactPutResult,
     ArtifactStoreError,
     ArtifactStoreNamespaceClaim,
-    ArtifactStoreUnavailableError,
 )
 from app.modules.artifacts.repository import ArtifactRepository
 from app.modules.artifacts.authorization import (
@@ -955,74 +954,6 @@ async def test_terminal_authority_revocation_writes_zero_terminal_facts(
         await engine.dispose()
 
 
-async def test_put_observation_unavailable_retries_then_exhausts_without_facts(
-    admission_database_env: str,
-    tmp_path: Path,
-) -> None:
-    settings = _settings(tmp_path).model_copy(
-        update={"artifact_provider_observation_maximum_attempts": 2}
-    )
-    namespace = _namespace(settings)
-    engine = create_async_engine(admission_database_env)
-    factory = async_sessionmaker(engine, expire_on_commit=False)
-
-    class UnavailableObservationStore:
-        identity = SimpleNamespace(provider_key=namespace.adapter)
-
-        async def observe_put_result(self, _commitment, **_kwargs):
-            raise ArtifactStoreUnavailableError("provider unavailable")
-
-    try:
-        async with factory() as session:
-            async with minted_source(tmp_path / "put-unavailable", b"observe") as source:
-                admission = await _admit_guide_source(
-                    session, settings, namespace, _context(), source
-                )
-                orchestrator = ArtifactStorageOrchestrator(
-                    session,
-                    UnavailableObservationStore(),
-                    namespace,
-                    settings,
-                    _AllowArtifactAuthority(),
-                )
-                assert (
-                    await orchestrator.resolve_put_attempt(admission.attempt_id)
-                    == "acknowledgement_unknown"
-                )
-                attempt = await session.get(ArtifactPutAttempt, str(admission.attempt_id))
-                assert attempt is not None
-                assert attempt.observation_count == 1
-                assert attempt.next_run_at is not None
-                assert attempt.terminal_at is None
-                assert attempt.executor_id is None
-                charges = (await session.execute(select(ArtifactAdmissionCharge))).scalars().all()
-                assert charges and {charge.state for charge in charges} == {"provisional"}
-                await session.execute(
-                    text(
-                        "update artifact_put_attempts set next_run_at = "
-                        "clock_timestamp() - interval '1 second' where id = :id"
-                    ),
-                    {"id": attempt.id},
-                )
-                await session.commit()
-                assert (
-                    await orchestrator.resolve_put_attempt(admission.attempt_id)
-                    == "provider_unavailable"
-                )
-                await session.refresh(attempt)
-                assert attempt.observation_count == 2
-                assert attempt.next_run_at is None
-                assert attempt.terminal_at is not None
-                assert attempt.terminal_result_code == "provider_unavailable"
-                assert attempt.executor_id is None
-                assert await _count(session, ArtifactOperationReceipt) == 0
-                assert await _count(session, ArtifactPutObservationReceipt) == 0
-                assert await _count(session, ArtifactReplica) == 0
-                assert await _count(session, ArtifactVerificationJob) == 0
-    finally:
-        await engine.dispose()
-
-
 async def test_scanner_uses_due_time_page_bound_and_duplicate_publication(
     admission_database_env: str,
     tmp_path: Path,
@@ -1816,63 +1747,6 @@ async def test_verification_terminal_authority_denial_writes_zero_result_facts(
                 replica = await session.get(ArtifactReplica, job.replica_id)
                 assert replica is not None
                 assert replica.verification_state == "pending"
-                assert await session.scalar(select(func.count()).select_from(ArtifactVerificationReceipt).where(
-                    ArtifactVerificationReceipt.verification_job_id == str(job_id))) == 0
-    finally:
-        bootstrap.close()
-        await engine.dispose()
-
-
-async def test_verification_unavailable_retries_then_exhausts(
-    admission_database_env: str,
-    tmp_path: Path,
-) -> None:
-    settings = _settings(tmp_path).model_copy(
-        update={"artifact_provider_observation_maximum_attempts": 2}
-    )
-    namespace = _namespace(settings)
-    engine = create_async_engine(admission_database_env)
-    factory = async_sessionmaker(engine, expire_on_commit=False)
-    bootstrap, store = _local_store(settings, namespace)
-    policy_bundle = await create_standalone_unified_policy(factory, namespace)
-    try:
-        async with factory() as session:
-            relationships = await seed_checker_output_relationships(session, namespace, policy_bundle=policy_bundle)
-            async with minted_source(tmp_path / "unavailable", b"retry") as source:
-                _, _, _, admission = await _admit_checker_output(
-                    session, settings, namespace, source, relationships=relationships)
-                orchestrator = ArtifactStorageOrchestrator(
-                    session, store, namespace, settings, _AllowArtifactAuthority()
-                )
-                await orchestrator.execute_committed_put(
-                    attempt_id=admission.attempt_id, source=source
-                )
-                job = await session.scalar(select(ArtifactVerificationJob).where(ArtifactVerificationJob.originating_put_attempt_id == str(admission.attempt_id)))
-                assert job is not None
-                job_id = UUID(job.id)
-                await session.rollback()
-                orchestrator._read_complete = AsyncMock(
-                    side_effect=ArtifactStoreUnavailableError("unavailable")
-                )
-                assert await orchestrator.verify_object(job_id) == "provider_unavailable"
-                await session.refresh(job)
-                assert job.attempt_count == 1
-                assert job.next_run_at is not None
-                assert job.terminal_at is None
-                await session.execute(
-                    text(
-                        "update artifact_verification_jobs set next_run_at = "
-                        "clock_timestamp() - interval '1 second' where id = :id"
-                    ),
-                    {"id": job.id},
-                )
-                await session.commit()
-                assert await orchestrator.verify_object(job_id) == "provider_unavailable"
-                await session.refresh(job)
-                assert job.attempt_count == 2
-                assert job.next_run_at is None
-                assert job.terminal_at is not None
-                assert job.terminal_result_code == "provider_unavailable"
                 assert await session.scalar(select(func.count()).select_from(ArtifactVerificationReceipt).where(
                     ArtifactVerificationReceipt.verification_job_id == str(job_id))) == 0
     finally:

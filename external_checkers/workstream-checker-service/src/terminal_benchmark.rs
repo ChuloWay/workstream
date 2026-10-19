@@ -370,7 +370,7 @@ struct OracleObservation {
 
 enum BuilderOutcome {
     Succeeded,
-    WorkFailure,
+    InfrastructureFailure,
     CapacityFailure,
 }
 
@@ -490,9 +490,7 @@ pub(super) fn execute_terminal_benchmark(
             RemovalOutcome::Unsettled => return Err("implementation_unavailable"),
         }
         containers.retain(|item| item != &builder);
-        if let Some(result) = builder_result(request, builder_outcome)? {
-            return Ok(result);
-        }
+        builder_result(builder_outcome)?;
         let tar_size = fs::metadata(&tar)
             .map_err(|_| "implementation_unavailable")?
             .len();
@@ -620,18 +618,10 @@ fn work_failure(
     .map_err(|_| "invalid_output")
 }
 
-fn builder_result(
-    request: &ValidatedRequest,
-    outcome: BuilderOutcome,
-) -> Result<Option<Value>, &'static str> {
+fn builder_result(outcome: BuilderOutcome) -> Result<(), &'static str> {
     match outcome {
-        BuilderOutcome::Succeeded => Ok(None),
-        BuilderOutcome::WorkFailure => work_failure(
-            request,
-            "build_failed",
-            "Submitted Dockerfile did not build.",
-        )
-        .map(Some),
+        BuilderOutcome::Succeeded => Ok(()),
+        BuilderOutcome::InfrastructureFailure => Err("implementation_unavailable"),
         BuilderOutcome::CapacityFailure => Err("capacity_exceeded"),
     }
 }
@@ -902,6 +892,8 @@ fn run_builder(
         "--pids-limit".into(),
         "128".into(),
         "--memory".into(),
+        memory.clone(),
+        "--memory-swap".into(),
         memory,
         "--cpus".into(),
         cpus,
@@ -947,10 +939,12 @@ fn run_builder(
     if started.status.success() {
         return Ok(BuilderOutcome::Succeeded);
     }
-    if container_oom(execution, name, output, cleanup)? || output_indicates_capacity(&started) {
+    if container_oom(execution, name, output, cleanup)?
+        || builder_output_indicates_capacity(&started)
+    {
         return Ok(BuilderOutcome::CapacityFailure);
     }
-    Ok(BuilderOutcome::WorkFailure)
+    Ok(BuilderOutcome::InfrastructureFailure)
 }
 
 fn docker_file_size_limit(limit: u64) -> String {
@@ -996,6 +990,8 @@ fn run_oracle(
         "32".into(),
         "--memory".into(),
         request.memory_bytes.to_string(),
+        "--memory-swap".into(),
+        request.memory_bytes.to_string(),
         "--cpus".into(),
         format!("{:.3}", request.cpu_millis as f64 / 1000.0),
         "--tmpfs".into(),
@@ -1035,9 +1031,7 @@ fn run_oracle(
         output,
         cleanup,
     )?;
-    if !result.status.success()
-        && (container_oom(execution, name, output, cleanup)? || output_indicates_capacity(&result))
-    {
+    if !result.status.success() && container_oom(execution, name, output, cleanup)? {
         return Err("capacity_exceeded");
     }
     let mut observed = Sha256::new();
@@ -1079,7 +1073,7 @@ fn container_oom(
     }
 }
 
-fn output_indicates_capacity(output: &BoundedCommandOutput) -> bool {
+fn builder_output_indicates_capacity(output: &BoundedCommandOutput) -> bool {
     [&output.stdout, &output._stderr].into_iter().any(|bytes| {
         String::from_utf8_lossy(bytes)
             .to_ascii_lowercase()
@@ -1434,7 +1428,7 @@ mod tests {
     }
 
     #[test]
-    fn build_and_oracle_work_failures_are_distinct_completed_results() {
+    fn builder_infrastructure_and_oracle_work_results_remain_distinct() {
         let request = request("post_submit");
         let finding_code = |result: &Value| {
             result["findings"][0]["code"]
@@ -1443,9 +1437,6 @@ mod tests {
                 .to_owned()
         };
 
-        let build = builder_result(&request, BuilderOutcome::WorkFailure)
-            .unwrap()
-            .unwrap();
         let starter = candidate_result(
             &request,
             &OracleObservation {
@@ -1481,22 +1472,21 @@ mod tests {
         .unwrap();
 
         assert_eq!(
-            [build, starter, reference, unstable].map(|result| finding_code(&result)),
+            [starter, reference, unstable].map(|result| finding_code(&result)),
             [
-                "build_failed",
                 "starter_unexpectedly_passed",
                 "reference_failed",
                 "reference_unstable",
             ]
         );
-        assert!(builder_result(&request, BuilderOutcome::Succeeded)
-            .unwrap()
-            .is_none());
+        assert_eq!(builder_result(BuilderOutcome::Succeeded), Ok(()));
         assert_eq!(
-            builder_result(&request, BuilderOutcome::CapacityFailure)
-                .err()
-                .as_deref(),
-            Some("capacity_exceeded")
+            builder_result(BuilderOutcome::InfrastructureFailure),
+            Err("implementation_unavailable")
+        );
+        assert_eq!(
+            builder_result(BuilderOutcome::CapacityFailure),
+            Err("capacity_exceeded")
         );
         assert!(candidate_result(
             &request,
@@ -1507,6 +1497,16 @@ mod tests {
         )
         .unwrap()
         .is_none());
+        assert_eq!(
+            candidate_result(
+                &request,
+                &OracleObservation {
+                    status: 2,
+                    output_digest: format!("sha256:{}", "6".repeat(64)),
+                },
+            ),
+            Err("implementation_unavailable")
+        );
     }
 
     #[test]
@@ -1574,6 +1574,8 @@ if test "$1" = create; then
   printf '%s\n' "$@" > "{capture}"
   previous=
   fsize_matched=
+  memory_matched=
+  memory_swap_matched=
   tmpfs_matched=
   for argument in "$@"; do
     if test "$previous" = --ulimit && test "$argument" = fsize=4096:4096; then
@@ -1582,10 +1584,18 @@ if test "$1" = create; then
     if test "$previous" = --tmpfs && test "$argument" = /busybox:rw,noexec,nosuid,nodev,size=16777216; then
       tmpfs_matched=yes
     fi
+    if test "$previous" = --memory && test "$argument" = 268435456; then
+      memory_matched=yes
+    fi
+    if test "$previous" = --memory-swap && test "$argument" = 268435456; then
+      memory_swap_matched=yes
+    fi
     previous="$argument"
   done
   test "$fsize_matched" = yes || exit 64
   test "$tmpfs_matched" = yes || exit 65
+  test "$memory_matched" = yes || exit 66
+  test "$memory_swap_matched" = yes || exit 67
   exit 0
 fi
 test "$1 $2" = "start --attach" && exit 0
@@ -1631,6 +1641,8 @@ exit 2
         let captured = fs::read_to_string(&capture).unwrap();
         assert!(captured.contains("--ulimit\nfsize=4096:4096\n"));
         assert!(captured.contains("--tmpfs\n/busybox:rw,noexec,nosuid,nodev,size=16777216\n"));
+        assert!(captured.contains("--memory\n268435456\n"));
+        assert!(captured.contains("--memory-swap\n268435456\n"));
 
         assert!(run_builder(
             &execution,
@@ -1646,6 +1658,131 @@ exit 2
             &mut cleanup,
         )
         .is_err());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn oracle_command_applies_equal_memory_and_swap_limits() {
+        let root = temporary_directory("oracle-memory-command");
+        fs::create_dir(&root).unwrap();
+        let capture = root.join("arguments");
+        let docker = root.join("docker");
+        fs::write(
+            &docker,
+            format!(
+                r#"#!/bin/sh
+if test "$1" = create; then printf '%s\n' "$@" > "{capture}"; exit 0; fi
+test "$1 $2" = "start --attach" && exit 1
+test "$1 $2" = "container inspect" && printf 'false\n' && exit 0
+exit 2
+"#,
+                capture = capture.display(),
+            ),
+        )
+        .unwrap();
+        fs::set_permissions(&docker, fs::Permissions::from_mode(0o700)).unwrap();
+        let profile = test_profile();
+        let request = request("post_submit");
+        let grant = test_grant(&root);
+        let config = test_service_config(&root, docker);
+        let (_peer, client) = UnixStream::pair().unwrap();
+        let execution = ExecutionContext {
+            config: &config,
+            profile: &profile,
+            request: &request,
+            grant: &grant,
+            client: &client,
+            deadline: Instant::now() + Duration::from_secs(10),
+        };
+        let mut output = OutputMeter::new(4096);
+        let mut cleanup = EmergencyCleanupBudget::new();
+
+        let observation = run_oracle(
+            &execution,
+            "ws-terminal-candidate-a1",
+            &format!("sha256:{}", "4".repeat(64)),
+            false,
+            "a1",
+            &mut output,
+            &mut cleanup,
+        )
+        .unwrap();
+
+        assert_eq!(observation.status, 1);
+        let captured = fs::read_to_string(&capture).unwrap();
+        assert!(captured.contains("--memory\n268435456\n"));
+        assert!(captured.contains("--memory-swap\n268435456\n"));
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn builder_command_distinguishes_capacity_from_other_fixed_recipe_failures() {
+        let root = temporary_directory("builder-classification-command");
+        let context = root.join("context");
+        let runtime = root.join("runtime");
+        fs::create_dir_all(&context).unwrap();
+        fs::create_dir(&runtime).unwrap();
+        let docker = root.join("docker");
+        fs::write(
+            &docker,
+            r#"#!/bin/sh
+if test "$1" = create; then exit 0; fi
+if test "$1 $2" = "start --attach"; then
+  case "$3" in
+    *-success) exit 0 ;;
+    *-capacity) echo 'resource temporarily unavailable' >&2; exit 2 ;;
+    *-infrastructure) echo 'fixed recipe builder failed' >&2; exit 2 ;;
+  esac
+fi
+if test "$1 $2" = "container inspect"; then printf 'false\n'; exit 0; fi
+exit 64
+"#,
+        )
+        .unwrap();
+        fs::set_permissions(&docker, fs::Permissions::from_mode(0o700)).unwrap();
+        let profile = test_profile();
+        let request = request("post_submit");
+        let grant = test_grant(&root);
+        let config = test_service_config(&root, docker);
+        let (_peer, client) = UnixStream::pair().unwrap();
+        let execution = ExecutionContext {
+            config: &config,
+            profile: &profile,
+            request: &request,
+            grant: &grant,
+            client: &client,
+            deadline: Instant::now() + Duration::from_secs(10),
+        };
+        let run = |name: &str| {
+            let mut output = OutputMeter::new(65_536);
+            let mut cleanup = EmergencyCleanupBudget::new();
+            run_builder(
+                &execution,
+                BuilderInputs {
+                    context: &context,
+                    runtime: &runtime,
+                    name,
+                    tag: "workstream.local/terminal-benchmark-candidate:test",
+                    attempt_id: "test",
+                    candidate_tar_byte_limit: 4096,
+                },
+                &mut output,
+                &mut cleanup,
+            )
+        };
+
+        assert!(matches!(
+            run("ws-terminal-builder-success"),
+            Ok(BuilderOutcome::Succeeded)
+        ));
+        assert!(matches!(
+            run("ws-terminal-builder-capacity"),
+            Ok(BuilderOutcome::CapacityFailure)
+        ));
+        assert!(matches!(
+            run("ws-terminal-builder-infrastructure"),
+            Ok(BuilderOutcome::InfrastructureFailure)
+        ));
         fs::remove_dir_all(root).unwrap();
     }
 
