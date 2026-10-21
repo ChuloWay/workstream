@@ -81,6 +81,10 @@ short-lived database activation; no proof bypass or new storage owner is needed.
   with narrowly scoped necessary read actions. Each proof identity must also
   prove that its certificate is denied assumption of both other roles; network,
   certificate, helper or timeout errors do not count as authorization denial.
+  The pinned helper exposes an AWS error-code token, not an HTTP status:
+  require the exact `AccessDeniedException` token for each wrong-role attempt,
+  bracketed by successful own-role credential acquisition, within a bounded
+  probe window. Never enable debug or retain raw stderr; no second signer.
 - The hosted Linux/Docker profile uses certificate mounts and the official
   helper. No EC2 metadata dependency. Separate proof jobs receive only their
   own identity; runtime never receives readiness/negative keys or CA signing key.
@@ -108,6 +112,10 @@ short-lived database activation; no proof bypass or new storage owner is needed.
 - [ ] A reproducible provisioning guide covers offline CA custody, separate
   certificates/roles, renewable sessions, certificate renewal, revocation,
   three proof jobs and retained-data restrictions.
+- [ ] An integrated proof exercises upload, exact verified read-back/download
+  and the setup agent opening only its assigned guide documents through the
+  selected provider; retained bytes and hashes match. The real AWS execution
+  of this journey is separately pending provisioned certificates/roles.
 - [ ] Existing AWS/MinIO, settings, release and activation regressions pass.
   Real helper/local process tests are distinguished from unexecuted live AWS
   trust, permission and ZIP custody proof.
