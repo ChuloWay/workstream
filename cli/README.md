@@ -3,6 +3,7 @@
 An independent Go client for Workstream's public REST API, for humans and
 agents using the terminal. It provides human self-profile reads and editing,
 plus draft project/guide declaration and original upload, exact-project inspection, authority reads, manager task browsing and
+administrative active-guide/intake-policy inspection,
 contributor work discovery, claim/start, locked guide documents and governing
 context/intake requirements, explicit batch import/screen/release, Finance
 policy management, explicit ZIP preparation/submission, checker findings,
@@ -39,6 +40,13 @@ contribution-evidence exports:
 | `workstream project guide show PROJECT_ID GUIDE_ID` | `GET /api/v1/projects/PROJECT_ID/guides/GUIDE_ID` |
 | `workstream project guide readiness PROJECT_ID GUIDE_ID` | `GET /api/v1/projects/PROJECT_ID/guides/GUIDE_ID/activation-readiness` |
 | `workstream project guide document PROJECT_ID GUIDE_ID DOCUMENT_ID --download DIR` | `GET /api/v1/projects/PROJECT_ID/guides/GUIDE_ID/documents/DOCUMENT_ID/content` |
+| `workstream project active-guide PROJECT_ID` | `GET /api/v1/projects/PROJECT_ID/active-guide` |
+| `workstream project guide sufficiency list PROJECT_ID GUIDE_ID` | `GET /api/v1/projects/PROJECT_ID/guides/GUIDE_ID/sufficiency-reports` |
+| `workstream project guide sufficiency show PROJECT_ID GUIDE_ID REPORT_ID` | `GET /api/v1/projects/PROJECT_ID/guides/GUIDE_ID/sufficiency-reports/REPORT_ID` |
+| `workstream project guide artifact-policy list PROJECT_ID GUIDE_ID` | `GET /api/v1/projects/PROJECT_ID/guides/GUIDE_ID/submission-artifact-policies` |
+| `workstream project guide artifact-policy show PROJECT_ID GUIDE_ID POLICY_ID` | `GET /api/v1/projects/PROJECT_ID/guides/GUIDE_ID/submission-artifact-policies/POLICY_ID` |
+| `workstream project guide artifact-policy effective PROJECT_ID GUIDE_ID` | `GET /api/v1/projects/PROJECT_ID/guides/GUIDE_ID/effective-submission-artifact-policy` |
+| `workstream project guide pre-submit-policy PROJECT_ID GUIDE_ID` | `GET /api/v1/projects/PROJECT_ID/guides/GUIDE_ID/pre-submit-checker-policy` |
 | `workstream project tasks PROJECT_ID [--status S] [--assignee UUID] [--import-batch UUID] [--updated-since TIME]` | `GET /api/v1/projects/PROJECT_ID/tasks` |
 | `workstream project task PROJECT_ID TASK_ID` | `GET /api/v1/projects/PROJECT_ID/tasks/TASK_ID` |
 | `workstream project task-requirements PROJECT_ID TASK_ID` | `GET /api/v1/projects/PROJECT_ID/tasks/TASK_ID/submission-requirements` |
@@ -219,7 +227,10 @@ and preserving the successful API JSON.
 Exit status is `0` for success, `1` for API/network/response failure, and `2`
 for invalid arguments or configuration. JSON requests time out after 12 seconds;
 JSON responses default to a 64 KiB bound (guide declaration and document-bearing
-work context and grant history use 2 MiB wire bounds; exact guide proposals use 8 MiB). Original downloads stream to private files,
+work context and grant history use 2 MiB wire bounds; exact guide proposals use 8 MiB;
+single/current administrative guide inspection uses 16 MiB; its two historical
+collections admit the backend's complete newest-100 response with a 4 MiB per-row
+bound). Original downloads stream to private files,
 bounded by the advertised byte count and ART's 512 MiB hard ceiling. Downloads
 and original uploads allow up to two minutes for response headers and ten minutes overall,
 including transfer; connection/TLS timeouts and redirect/proxy refusal remain.
@@ -1246,6 +1257,13 @@ workstream project guide list PROJECT_ID --status active
 workstream project guide show PROJECT_ID GUIDE_ID --output json
 workstream project guide readiness PROJECT_ID GUIDE_ID
 workstream project guide document PROJECT_ID GUIDE_ID DOCUMENT_ID --download ./originals
+workstream project active-guide PROJECT_ID --output json
+workstream project guide sufficiency list PROJECT_ID GUIDE_ID --output json
+workstream project guide sufficiency show PROJECT_ID GUIDE_ID REPORT_ID --output json
+workstream project guide artifact-policy list PROJECT_ID GUIDE_ID --output json
+workstream project guide artifact-policy show PROJECT_ID GUIDE_ID POLICY_ID --output json
+workstream project guide artifact-policy effective PROJECT_ID GUIDE_ID --output json
+workstream project guide pre-submit-policy PROJECT_ID GUIDE_ID --output json
 workstream project submissions PROJECT_ID --status review_pending --updated-since 2026-10-01T00:00:00Z
 workstream project assignments PROJECT_ID --state active
 workstream project summary PROJECT_ID --output json
@@ -1253,8 +1271,9 @@ workstream project import-batches PROJECT_ID
 workstream project preparations PROJECT_ID --outcome failed
 ```
 
-These reads require a current Project Manager grant covering the project; any
-other caller, project, guide or document is reported as not found. `guide list`
+The existing guide list/detail/readiness/document and project-wide queue reads
+require a current Project Manager grant covering the project; another caller,
+project, guide or document is reported as not found. `guide list`
 shows each guide version with its stored `draft`, `active` or `superseded`
 status. `guide show` returns the declared documents with ingest state and
 SHA-256, the selected review and revision policy values and the latest setup
@@ -1265,6 +1284,19 @@ missing is not evaluated), and it activates, consumes and reserves nothing.
 `guide document` downloads one uploaded original into an existing directory,
 verifies it against the declared SHA-256 and never overwrites a file; a
 declared document that is not uploaded fails with `guide_document_not_uploaded`.
+
+The seven administrative inspection commands above read existing public API
+projections. A covering Project Manager, scoped Audit Authority or system
+Operator may inspect them; Finance, Access Administrator, contributor and service
+credentials cannot. `sufficiency list` and `artifact-policy list` return the
+server's newest 100 canonical rows without a cursor. Use their exact `show`
+commands for a known older report or policy ID. The effective, pre-submit and
+active-guide reads concern the current approved chain only; draft, superseded,
+incomplete or stale bindings remain concealed by the backend. `active-guide`
+includes the locked non-compensation policy context, not a readiness calculation
+or a credential for a later write. Every invocation reauthorizes through the
+backend. Text is terminal-escaped; `--output json` preserves the complete
+successful public response.
 
 `submissions` and `assignments` list every attempt and claim in the project
 with the submitter or contributor and the same fields as `me submissions` and
