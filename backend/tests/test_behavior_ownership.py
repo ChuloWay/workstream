@@ -2588,9 +2588,13 @@ def test_aws_activation_ownership_accepts_only_exact_targets():
     retained = "backend/app/core/config.py"
     additions = {
         "backend/app/adapters/artifacts/aws_live_proof.py",
+        "backend/app/adapters/artifacts/aws_roles_anywhere.py",
+        "backend/app/adapters/artifacts/aws_roles_anywhere_proof.py",
         "backend/app/modules/artifacts/provider_activation.py",
         "backend/scripts/aws_artifact_provider_proof.py",
+        "backend/scripts/aws_roles_anywhere_config.py",
     }
+    assert ownership.AWS_ARTIFACT_ACTIVATION_TARGETS == additions
     trusted = _partition([retained])
     current = _partition(sorted({retained, *additions}))
     ownership._validate_additive_partition_transition(current, trusted)

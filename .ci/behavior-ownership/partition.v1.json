@@ -6,6 +6,14 @@
     },
     {
       "group": "artifacts",
+      "target": "backend/app/adapters/artifacts/aws_roles_anywhere.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/adapters/artifacts/aws_roles_anywhere_proof.py"
+    },
+    {
+      "group": "artifacts",
       "target": "backend/app/adapters/artifacts/internal_workers.py"
     },
     {
@@ -2130,6 +2138,10 @@
     },
     {
       "group": "shared",
+      "target": "backend/scripts/aws_roles_anywhere_config.py"
+    },
+    {
+      "group": "shared",
       "target": "backend/scripts/behavior_ownership.py"
     },
     {
@@ -2221,7 +2233,7 @@
       "target": "backend/scripts/validate_test_lane_evidence.py"
     }
   ],
-  "authority_digest": "3895ed69e502958e49b26a2069ab5afa9b2f6be6dc41ea682265d29d39577544",
+  "authority_digest": "69ba84207bde47178fce2062650bd53ff1285c552a6c1597ed2d84c640ac480d",
   "protected_base_commit": "7676ce4347db0c9694962a9b587a20765e16eac6",
   "schema": "workstream.behavior-ownership-partition.v1"
 }
