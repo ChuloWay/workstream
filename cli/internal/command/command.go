@@ -167,11 +167,12 @@ func Run(args []string, stdout, stderr io.Writer, getenv environment, version st
 		},
 	})
 	root.AddCommand(project)
-	addContributorTasks(root, client, &output, stdout)
-	addContributorReads(root, client, &output, stdout)
 	operations := &cobra.Command{Use: "operations", Short: "Explicit system Operator operations"}
+	addCheckerOperations(operations, client, &output, stdout)
 	addOperatorTasks(operations, client, &output, stdout)
 	root.AddCommand(operations)
+	addContributorTasks(root, client, &output, stdout)
+	addContributorReads(root, client, &output, stdout)
 
 	err := root.ExecuteContext(context.Background())
 	if err == nil {
@@ -204,11 +205,12 @@ func writeJSON(w io.Writer, raw json.RawMessage) error {
 }
 
 func writeSafeJSON(w io.Writer, raw json.RawMessage) error {
-	// Preserve JSON values while keeping literal C1/bidi/format controls out
-	// of terminals. JSON already escapes C0 controls inside strings.
+	// Preserve JSON values while keeping literal controls, format marks and
+	// Unicode line/paragraph separators out of terminals. JSON already
+	// escapes C0 controls inside strings.
 	var safe strings.Builder
 	for _, r := range string(bytes.TrimSpace(raw)) {
-		if r >= 0x7f && (unicode.IsControl(r) || unicode.Is(unicode.Cf, r)) {
+		if r >= 0x7f && (unicode.IsControl(r) || unicode.Is(unicode.Cf, r) || r == '\u2028' || r == '\u2029') {
 			if r <= 0xffff {
 				fmt.Fprintf(&safe, "\\u%04x", r)
 			} else {
