@@ -787,3 +787,68 @@ async def test_manager_authored_runtime_guards_admission_configuration_and_acces
 
     assert await runtime.cleanup_resources(Custody(())) is True
     assert await runtime.cleanup_resources(Custody(("unexpected",))) is False
+
+
+async def test_manager_authored_runtime_rejects_rules_the_citation_rule_would_not_catch(monkeypatch):
+    """Exactly-one and resolvable-reference rules fail on their own, not via coverage."""
+    monkeypatch.delenv("OPENAI_API_KEY")
+    valid_ref = {"document": SOURCE_SHA256}
+    second_id = uuid4()
+    # The first rules document cites the second, so every document is cited.
+    duplicated, bodies = _manager_material(
+        _rules(findings=[{"severity": "info", "code": "guide.ready", "message": "Complete.",
+                          "evidence_refs": [valid_ref, {"document": f"{second_id}.md"}]}]),
+        extra=(_rules(setup_notes=["Second rules document."]),), source_ids=(None, second_id))
+    unresolved, unresolved_bodies = _manager_material(_rules(findings=[
+        {"severity": "info", "code": "guide.ready", "message": "Complete.",
+         "evidence_refs": [valid_ref, {"document": "sha256:" + "0" * 64}]}]))
+    for compilation_context, documents in ((duplicated, bodies), (unresolved, unresolved_bodies)):
+        with pytest.raises(ProjectGuideCompilationInvalidOutputError) as caught:
+            await _manager_compile(compilation_context, _DirectGrant(compilation_context, documents))
+        assert caught.value.failure_code == "schema_invalid"
+
+
+async def test_manager_authored_runtime_ignores_non_candidates_and_survives_deep_nesting(monkeypatch):
+    from app.adapters.project_agents.manager_authored import MAXIMUM_RULES_DOCUMENT_BYTES
+
+    monkeypatch.delenv("OPENAI_API_KEY")
+    nested = b'{"format": "workstream.project_guide_rules.v1", "x": ' + b"[" * 200_000 + b"]" * 200_000 + b"}"
+    oversized = _rules(setup_notes=["Padding."]).replace(
+        b'"setup_notes"', b'"pad": "' + b" " * MAXIMUM_RULES_DOCUMENT_BYTES + b'", "setup_notes"')
+    for body in (nested, oversized):
+        compilation_context, bodies = _manager_material(body)
+        grant = _DirectGrant(compilation_context, bodies)
+        with pytest.raises(ProjectGuideCompilationInvalidOutputError) as caught:
+            await _manager_compile(compilation_context, grant)
+        assert caught.value.failure_code == "schema_invalid"
+        assert len(grant.recorded) == 2
+    # Rules JSON stored under a non-Markdown media type is read but never treated as rules.
+    compilation_context, bodies = _manager_material(_rules())
+    pdf, rules_doc = compilation_context.material.documents
+    relabeled = compilation_context.material.model_copy(update={"documents": (
+        pdf, rules_doc.model_copy(update={"media_type": "application/pdf"}))})
+    compilation_context = compilation_context.model_copy(update={"material": relabeled})
+    with pytest.raises(ProjectGuideCompilationInvalidOutputError) as caught:
+        await _manager_compile(compilation_context, _DirectGrant(compilation_context, bodies))
+    assert caught.value.failure_code == "schema_invalid"
+
+
+async def test_manager_authored_runtime_refuses_a_substituted_document_version(monkeypatch):
+    from contextlib import asynccontextmanager
+    from io import BytesIO
+    from app.modules.projects.api.guide_documents import OpenGuideDocument
+
+    monkeypatch.delenv("OPENAI_API_KEY")
+    compilation_context, bodies = _manager_material(_rules())
+    grant = _DirectGrant(compilation_context, bodies)
+
+    @asynccontextmanager
+    async def substituted(handle):
+        document = compilation_context.material.documents[0]
+        with BytesIO(bodies[document.sha256]) as reader:
+            yield OpenGuideDocument(document.model_copy(update={"ingest_id": uuid4()}), reader)
+
+    grant.capabilities.documents.open = substituted
+    with pytest.raises(ProjectAgentRuntimeError, match="document access failed"):
+        await _manager_compile(compilation_context, grant)
+    assert grant.recorded == []

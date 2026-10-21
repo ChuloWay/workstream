@@ -22,6 +22,7 @@ from app.interfaces.project_agents import (
     invalid_compilation_failure_code,
     project_guide_compilation_prompt_bytes,
     require_complete_project_guide_compilation_result,
+    require_ready_result_cites_every_document,
     validate_project_guide_compilation_result,
 )
 
@@ -155,8 +156,7 @@ class OpenAIAgentSdkProjectGuideRuntime:
                          for ref in references}
         if not cited_handles <= opened:
             raise ValueError("compilation cites unopened source material")
-        if result.status != "guide_blocked" and cited_handles != set(document_handles.values()):
-            raise ValueError("ready compilation does not account for every assigned document")
+        require_ready_result_cites_every_document(context, result)
         return result
 
     async def _run(self, context: ProjectGuideCompilationContext, prompt: str,

@@ -32,6 +32,7 @@ from app.interfaces.project_agents import (
     ProjectGuideCompilationResult,
     invalid_compilation_failure_code,
     require_complete_project_guide_compilation_result,
+    require_ready_result_cites_every_document,
     validate_project_guide_compilation_result,
 )
 from app.interfaces.project_guide_runtime import (
@@ -153,8 +154,9 @@ def _rules_candidate(body: bytes) -> object | None:
         return None
     try:
         value = json.loads(body.decode("utf-8"))
-    except ValueError:
-        # A Markdown original that merely starts with a brace is not a rules document.
+    except (ValueError, RecursionError):
+        # Undecodable, malformed or pathologically nested JSON is not a rules
+        # document; with no valid candidate the attempt ends as schema_invalid.
         return None
     if isinstance(value, dict) and value.get("format") == RULES_DOCUMENT_FORMAT:
         return value
@@ -185,15 +187,7 @@ def _compile_rules(
     result = ProjectGuideCompilationResult.model_validate(body)
     require_complete_project_guide_compilation_result(result)
     validate_project_guide_compilation_result(context, result)
-    cited = {
-        ref.source_item_id
-        for field in _EVIDENCE_FIELDS
-        for item in getattr(result, field)
-        for ref in item.evidence_refs
-    }
-    if (result.status != "guide_blocked"
-            and cited != {item.source_item_id for item in context.material.documents}):
-        raise ValueError("ready compilation does not cite every assigned document")
+    require_ready_result_cites_every_document(context, result)
     return result
 
 

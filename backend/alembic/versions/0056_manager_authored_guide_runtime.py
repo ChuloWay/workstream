@@ -39,7 +39,7 @@ _ALLOCATION_PREDECESSOR = (
 )
 _ALLOCATION_CURRENT = (
     "        if tg_op='INSERT' then\n"
-    "          if attempt.runtime_configuration->>'model_provider' = 'none' then\n"
+    "          if attempt.runtime_configuration->>'model_provider' is not distinct from 'none' then\n"
     "            raise exception 'provider-free guide runtime allocates no provider resources'\n"
     "              using errcode='23514';\n"
     "          end if;\n"

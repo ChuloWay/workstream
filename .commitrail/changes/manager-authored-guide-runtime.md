@@ -192,8 +192,47 @@ configuration (a second source of truth beside `model_provider`).
 
 ## Review findings
 
-Recorded in the pull request after the focused security, architecture and QA
-review of the frozen candidate.
+Focused security, architecture (with reuse) and QA/test-delta reviews ran on
+candidate `7f42f7682`; no blocking finding. Dispositions:
+
+- Security SEC-MAR-01 (should-fix): deeply nested rules JSON raised
+  `RecursionError`, which escaped as a runtime failure and left the attempt
+  provider-uncertain. Fixed: parse failures including `RecursionError` make the
+  original a non-candidate, so the attempt ends `schema_invalid`; covered by a
+  200,000-level nesting test.
+- Security SEC-MAR-02 (nit): the allocation refusal compared provider with `=`.
+  Fixed to `is not distinct from 'none'`.
+- Security SEC-MAR-03 (nit): a direct-read row is not bound to the consumed ART
+  read-authorization record. Accepted: the hosted attachment chain is equally
+  application-written; binding reads to authorization decisions would be a
+  separate custody change for both runtimes.
+- Architecture ARCH-1 (should-fix): the rules document is an ordinary guide
+  original visible to every locked-guide reader, including contributors.
+  Documented in README and the operations manual; hiding it would need a
+  manifest change, which is out of scope.
+- Architecture ARCH-2 (should-fix): the hosted release still requires the
+  OpenAI key file. README, manual and roadmap now scope "no key" to the native
+  workflow; a conditional hosted secret is a possible follow-up.
+- Architecture DEDUP-1/DEDUP-2/NIT-3: the ready-coverage rule is now one shared
+  `require_ready_result_cites_every_document` used by both runtimes; the
+  provider-free value is one constant `PROVIDER_FREE`; the custody lock flag is
+  renamed `in_flight`.
+- Architecture NIT-4: a transient read failure leaves a provider-free attempt
+  provider-uncertain, as for any runtime failure. Accepted as existing
+  behavior.
+- QA-01/QA-02 (medium): the duplicate-rules and unresolvable-reference tests
+  failed only through the citation rule. Added cases where every document is
+  cited; re-ran both mutations (exactly-one guard removed; unresolvable
+  references dropped) and each new test now fails under its mutation.
+- QA-03 (low): the Python null-attachment branch of
+  `require_compilation_document_access` has no independent test because the
+  database guard refuses such rows first. Accepted as defense in depth.
+- QA-04 (low): added tests for an oversized Markdown candidate, rules JSON under
+  a non-Markdown media type, and a substituted document version. Timeout and
+  cancellation reuse the hosted runtime's pattern and remain untested here.
+- Coordination: PR #633 also adds `0056`; whichever merges second renumbers its
+  migration and refreshes `alembic/env.py`, `tests/test_alembic.py` and the
+  schema fingerprint.
 
 ## Reconciliation
 

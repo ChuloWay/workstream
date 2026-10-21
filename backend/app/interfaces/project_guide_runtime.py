@@ -12,6 +12,8 @@ from app.interfaces.external_services import ExternalServiceAdapterIdentity
 
 MANAGER_AUTHORED_RUNTIME_KEY = "manager_authored"
 """The only runtime that performs no inference and allocates no provider resources."""
+PROVIDER_FREE = "none"
+"""Provider, API and model value recorded when no inference runs."""
 
 ProjectGuideModelProvider = Literal["openai", "none"]
 ProjectGuideModelApi = Literal["responses", "none"]
@@ -27,7 +29,7 @@ def require_project_guide_runtime_pairing(
     """
     provider_free = runtime_key == MANAGER_AUTHORED_RUNTIME_KEY
     if provider_free:
-        if (model_provider, model_api, model) != ("none", "none", "none"):
+        if (model_provider, model_api, model) != (PROVIDER_FREE,) * 3:
             raise ValueError("manager-authored guide runtime requires provider, API and model none")
     elif (model_provider, model_api) != ("openai", "responses"):
         raise ValueError("guide runtime provider and API must be openai and responses")
@@ -91,7 +93,7 @@ class ProjectGuideRuntimeConfiguration(BaseModel):
     @property
     def provider_free(self) -> bool:
         """Return whether this attempt runs no inference and owns no provider resources."""
-        return self.model_provider == "none"
+        return self.model_provider == PROVIDER_FREE
 
     @property
     def adapter_identity(self) -> ExternalServiceAdapterIdentity:

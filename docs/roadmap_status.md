@@ -1286,8 +1286,9 @@ v0.1 is not ready until all of the following are true:
   public review/revision configuration, separate PRE/POST approvals, Finance
   publication, activation and both policy outcomes. It does not establish live
   model quality or deployment readiness. See the [connected proof](../.commitrail/changes/public-guide-to-contribution-proof.md).
-  The provider-free `manager_authored` runtime removes the provider dependency
-  from setup but proves nothing about model quality.
+  The provider-free `manager_authored` runtime removes the inference dependency
+  from local setup (the hosted release still requires its OpenAI key file) and
+  proves nothing about model quality.
 - Publish the reviewed backend and checker-service source builds, substitute
   their registry digests and the approved exact checker cache into the prepared
   release configuration, and rerun its full host preflight. Then prove actual

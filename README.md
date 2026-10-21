@@ -294,8 +294,10 @@ support guide artifact ingestion. Committed original-document readiness runs one
 and stops at findings and draft proposals; manager review/approval remains separate.
 
 To compile guides without any model provider, select the manager-authored
-runtime instead. It needs no `OPENAI_API_KEY` and no `agents` extra, makes no
-network call and allocates no provider resources:
+runtime instead. In this native workflow it needs no `OPENAI_API_KEY` and no
+`agents` extra, makes no network call and allocates no provider resources. The
+hosted release configuration still requires its OpenAI key file regardless of
+runtime:
 
 ```bash
 WORKSTREAM_PROJECT_AGENT_RUNTIME=manager_authored
@@ -312,7 +314,9 @@ outside Workstream can write it. The runtime opens and records every original,
 converts the rules document into the same untrusted compilation result a model
 returns, and then the unchanged validation, proposal review, approvals,
 correction and activation apply. The attempt's stored configuration records
-`manager_authored` and `none`, so the absence of inference is explicit. See
+`manager_authored` and `none`, so the absence of inference is explicit. The
+rules document is an ordinary guide original: every reader of the locked guide,
+including contributors, can open it, so keep internal notes out of it. See
 [Manager-authored guide rules](docs/operations_project_operating_manual.md#manager-authored-guide-rules)
 for the format and a sample.
 

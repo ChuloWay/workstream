@@ -596,6 +596,22 @@ def validate_project_guide_compilation_result(
         raise ValueError("supported compilation requirements must have one binding")
 
 
+def require_ready_result_cites_every_document(
+    context: ProjectGuideCompilationContext,
+    result: ProjectGuideCompilationResult,
+) -> None:
+    """Require a ready result to cite every assigned original at least once."""
+    cited = {
+        ref.source_item_id
+        for item in (*result.findings, *result.requirements, *result.capability_suggestions)
+        for ref in item.evidence_refs
+    }
+    if result.status != "guide_blocked" and cited != {
+        item.source_item_id for item in context.material.documents
+    }:
+        raise ValueError("ready compilation does not account for every assigned document")
+
+
 def validate_post_submission_bindings(
     result: ProjectGuideCompilationResult,
     capabilities: ExternalCheckerCapabilityProjection,

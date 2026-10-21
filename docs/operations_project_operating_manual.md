@@ -334,6 +334,10 @@ to `none`). The compilation then runs no inference: the Project Manager
 supplies the compilation result in a rules document uploaded with the guide.
 The rules can come from a person, a deterministic generator or any AI tool
 outside Workstream. Workstream treats them exactly like model output.
+The rules document is an ordinary guide original, so every reader of the
+locked guide, including contributors, can open it; keep internal notes out of
+it. The hosted release configuration still requires its OpenAI key file
+regardless of the selected runtime.
 
 The runtime identifies the rules document by content, because guide manifests
 carry no source filenames and JSON is not an admitted guide media type:
