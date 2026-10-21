@@ -92,6 +92,10 @@ def test_checker_delivery_and_routing_preparation_partition_every_node_once() ->
         "tests/checkers/execution/test_checker_retry_history_replay.py",
         "tests/checkers/execution/test_checker_retry_http.py",
         "tests/checkers/execution/test_checker_retry_migration.py",
+        "tests/checkers/execution/test_delivery_reconciliation_concurrency.py",
+        "tests/checkers/execution/test_delivery_reconciliation_contract.py",
+        "tests/checkers/execution/test_delivery_reconciliation_custody.py",
+        "tests/checkers/execution/test_delivery_reconciliation_public.py",
         "tests/test_post_submit_materialization.py",
         "tests/test_post_submit_selection.py",
         "tests/test_checker_output_custody.py",
@@ -267,8 +271,8 @@ def test_semantic_family_membership_has_an_independent_fingerprint() -> None:
             "b655b72178300395f0a46987c4eadd8878ed5b8872d2e8cea287c42692894d35",
         ),
         "project": (
-            203,
-            "728dc21df5e023637d10b3aa1394ff957916b5b9ca8e44039a9832a8ca20f58f",
+            207,
+            "7f53dc49b4e8dc7d9b9d4bf060bf7ae1db8a9b13ad073538b589943c87738784",
         ),
         "task": (
             95,
@@ -340,9 +344,9 @@ def test_project_lane_ownership_has_an_independent_fingerprint() -> None:
         )
         + "\n"
     )
-    assert len(catalogue.PROJECT_PARTITIONED_MODULES) == 203
+    assert len(catalogue.PROJECT_PARTITIONED_MODULES) == 207
     assert hashlib.sha256(canonical.encode()).hexdigest() == (
-        "9340b8d8069726517d557d67f8554f31e0ebb189de3d7ea5c4b7247854bbd71d"
+        "e40156743513e7df3d6359246403a4c333929902c8ab62a412678090d32fed22"
     )
 
 

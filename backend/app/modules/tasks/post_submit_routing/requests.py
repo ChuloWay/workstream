@@ -24,7 +24,7 @@ _OWNER_STRING_IDS = frozenset({"project_id", "task_id", "submission_id", "checke
 
 
 class TaskRoutingRequestUnavailable(RuntimeError):
-    """Conceal unavailable or inconsistent request preparation."""
+    """Conceal unavailable or inconsistent post-submit routing preparation."""
 
 
 async def require_routing_transaction(session: AsyncSession) -> None:
@@ -59,10 +59,49 @@ class TaskRoutingRequests:
         request, _ = await self._stage(event_id, completion)
         return request
 
+    async def observe_unstaged(
+        self, event_id: UUID, completion: EvaluationCompletion,
+    ) -> VerifiedEvaluationCompletion:
+        """Validate the exact current source while proving no request was staged."""
+        _, verified, selection, digest, prior = await self._validated(
+            event_id, completion
+        )
+        if prior is not None:
+            raise TaskRoutingRequestUnavailable("routing_request_already_staged")
+        # Recompute the digest through the same value path used by staging.
+        if digest != task_routing_request_digest(selection):
+            raise TaskRoutingRequestUnavailable("routing_request_unavailable")
+        return verified
+
     async def _stage(
         self, event_id: UUID, completion: EvaluationCompletion,
     ) -> tuple[TaskRoutingRequestFacts, VerifiedEvaluationCompletion]:
         """Share the checked completion with owner-local source preparation."""
+        _, verified, selection, digest, prior = await self._validated(
+            event_id, completion
+        )
+        if prior is None:
+            prior = TaskRoutingRequest(
+                **{key: str(value) if key in _OWNER_STRING_IDS else value
+                   for key, value in selection.model_dump().items()},
+                route_operation_id=new_record_id(),
+                routing_manifest_id=new_record_id(), route_request_digest=digest,
+            )
+            self._session.add(prior)
+            await self._session.flush()
+        facts = TaskRoutingRequestFacts(**{
+            key: UUID(getattr(prior, key)) if key in _OWNER_STRING_IDS else getattr(prior, key)
+            for key in TaskRoutingRequestFacts.model_fields
+        })
+        if (
+            facts.route_request_digest != digest
+            or facts.model_dump(include=set(TaskRoutingSelection.model_fields)) != selection.model_dump()
+        ):
+            raise TaskRoutingRequestUnavailable("routing_request_conflict")
+        return facts, verified
+
+    async def _validated(self, event_id: UUID, completion: EvaluationCompletion):
+        """Share one nonmutating source/currentness validation with stage and recovery."""
         await require_routing_transaction(self._session)
         completion = EvaluationCompletion.model_validate(completion)
         if (
@@ -107,22 +146,4 @@ class TaskRoutingRequests:
             TaskRoutingRequest.checker_run_id == str(selection.checker_run_id),
             TaskRoutingRequest.result_digest == selection.result_digest,
         ).execution_options(populate_existing=True))
-        if prior is None:
-            prior = TaskRoutingRequest(
-                **{key: str(value) if key in _OWNER_STRING_IDS else value
-                   for key, value in selection.model_dump().items()},
-                route_operation_id=new_record_id(),
-                routing_manifest_id=new_record_id(), route_request_digest=digest,
-            )
-            self._session.add(prior)
-            await self._session.flush()
-        facts = TaskRoutingRequestFacts(**{
-            key: UUID(getattr(prior, key)) if key in _OWNER_STRING_IDS else getattr(prior, key)
-            for key in TaskRoutingRequestFacts.model_fields
-        })
-        if (
-            facts.route_request_digest != digest
-            or facts.model_dump(include=set(TaskRoutingSelection.model_fields)) != selection.model_dump()
-        ):
-            raise TaskRoutingRequestUnavailable("routing_request_conflict")
-        return facts, verified
+        return submission, verified, selection, digest, prior

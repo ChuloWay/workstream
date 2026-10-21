@@ -21,6 +21,9 @@ from app.api.deps.checker_recovery import (
     CheckerRetryCommands, CheckerRetryReads,
     get_checker_retry_commands, get_checker_retry_reads,
     require_checker_retry_human,
+    PostSubmitDeliveryCommands, PostSubmitDeliveryReads,
+    get_post_submit_delivery_commands, get_post_submit_delivery_reads,
+    require_post_submit_delivery_human,
 )
 
 from app.api.deps.history import HistoryReadOperation, get_history_reads
@@ -39,6 +42,11 @@ from app.modules.checkers.api import (
 )
 from app.modules.checkers.api.execution import (
     CheckerRetryPublicResult, CheckerRetryRequest, CheckerRetrySourcePage,
+)
+from app.modules.checkers.api.delivery_reconciliation import (
+    PostSubmitDeliveryPage,
+    PostSubmitDeliveryRequest,
+    PostSubmitDeliveryResult,
 )
 
 
@@ -97,6 +105,58 @@ CHECKER_RETRY_KEY_PARAMETER = {
     "required": True,
     "schema": {"type": "string", "format": "uuid"},
 }
+
+POST_SUBMIT_DELIVERY_KEY_PARAMETER = {
+    "name": "Idempotency-Key",
+    "in": "header",
+    "required": True,
+    "schema": {"type": "string", "format": "uuid"},
+}
+
+
+@router.get(
+    "/operations/projects/{project_id}/post-submit-deliveries",
+    response_model=PostSubmitDeliveryPage,
+    dependencies=[Depends(enforce_authorization_read_rate_limit)],
+    openapi_extra={
+        "x-workstream-action-id": "operations.post_submit_delivery.list",
+    },
+)
+async def list_uncertain_post_submit_deliveries(
+    project_id: UUID,
+    reads: Annotated[
+        PostSubmitDeliveryReads, Depends(get_post_submit_delivery_reads)
+    ],
+    limit: Annotated[int, Query(ge=1, le=100)] = 50,
+    cursor: Annotated[str | None, Query(max_length=512)] = None,
+) -> PostSubmitDeliveryPage:
+    """List privacy-bounded exact terminal UNKNOWN post-submit attempts."""
+    return await reads.discover(project_id, limit=limit, cursor=cursor)
+
+
+@router.post(
+    "/operations/projects/{project_id}/post-submit-deliveries/{event_id}/reconcile",
+    response_model=PostSubmitDeliveryResult,
+    status_code=201,
+    dependencies=[
+        Depends(enforce_admin_mutation_rate_limit),
+        Depends(require_post_submit_delivery_human),
+    ],
+    openapi_extra={
+        "x-workstream-action-id": "operations.post_submit_delivery.reconcile",
+        "parameters": [POST_SUBMIT_DELIVERY_KEY_PARAMETER],
+    },
+)
+async def reconcile_uncertain_post_submit_delivery(
+    project_id: UUID,
+    event_id: UUID,
+    payload: PostSubmitDeliveryRequest,
+    commands: Annotated[
+        PostSubmitDeliveryCommands, Depends(get_post_submit_delivery_commands)
+    ],
+) -> PostSubmitDeliveryResult:
+    """Append or exactly replay the sole authorized reconciliation child."""
+    return await commands.reconcile(project_id, event_id, payload)
 
 
 @router.get(
