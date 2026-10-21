@@ -36,24 +36,31 @@
 
 ## Current boundary
 
+[WS-CLI-001-27](WS-CLI-001-27.md) exposes the seven existing Project Manager
+task requirements/context and exact Submission/checker-history GETs through
+separate project-scoped commands. The backend reauthorizes each page; the CLI
+preserves locked lineage and opaque cursors and makes no lifecycle decision.
+
 Current public-only completion plan (inventory at main `51b868071`): FastAPI
 OpenAPI declares 125 non-health method/path operations, of which 69 have CLI
 coverage. Counts are an inventory, not a runtime certification or a coverage
-target. Contributor `me` browsing, preparation reads, manager work browsing,
+target, and predate the manager-evidence addition above. Contributor `me`
+browsing, preparation reads, manager work browsing,
 guide list/show/readiness/document reads and contribution-policy listing are
 also delivered by the merged PILOT read work; reuse those owners.
 
-The remaining 56 operations are grouped below. Each issue is a bounded client
+The baseline's remaining 56 operations are grouped below. Each issue is a bounded client
 outcome, implemented in its own worktree/PR; split an issue further if its
-concrete diff would be unreviewable. All rows remain planned until implemented.
-Existing #499 owns the history/current revision-context presentation correction.
+concrete diff would be unreviewable. The #602 row is delivered by
+[WS-CLI-001-27](WS-CLI-001-27.md); the other rows remain planned here.
+WS-CLI-001-30 delivers #499's history/current revision-context presentation correction.
 
-| Issue | Planned public-client boundary | Operations |
+| Issue | Public-client boundary | Operations |
 |---|---|---:|
 | [#599](https://github.com/Flow-Research/workstream/issues/599) | Guide edit and review/revision policy configuration | 3 |
 | [#600](https://github.com/Flow-Research/workstream/issues/600) | Active guide, sufficiency and intake policy inspection | 7 |
 | [#601](https://github.com/Flow-Research/workstream/issues/601) | Governed sufficiency/manual artifact-policy writes | 4 |
-| [#602](https://github.com/Flow-Research/workstream/issues/602) | Manager task context and submission/checker evidence | 7 |
+| [#602](https://github.com/Flow-Research/workstream/issues/602) | Manager task context and submission/checker evidence, delivered by [WS-CLI-001-27](WS-CLI-001-27.md) | 7 |
 | [#603](https://github.com/Flow-Research/workstream/issues/603) | Exact revision-context repair | 1 |
 | [#604](https://github.com/Flow-Research/workstream/issues/604) | Contributor-candidate discovery | 1 |
 | [#605](https://github.com/Flow-Research/workstream/issues/605) | Retained task-import source download | 1 |
@@ -64,8 +71,8 @@ Existing #499 owns the history/current revision-context presentation correction.
 | [#610](https://github.com/Flow-Research/workstream/issues/610) | Task audit context/evidence | 2 |
 | [#611](https://github.com/Flow-Research/workstream/issues/611) | Artifact operator inspection/recovery | 9 |
 
-Start independent guide configuration, manager evidence, admin inspection and
-checker operations in parallel. Inspection informs subsequent manual mutations
+Continue only the remaining boundaries in the inventory above; delivered rows
+are not new assignments. Inspection informs subsequent manual mutations
 and repair; each PR must still build independently or declare its exact stacked
 dependency. Root registrations are additive; shared transport changes have one
 owner and are reused rather than copied. Each PR reconciles its own README and
