@@ -1,17 +1,21 @@
 # Local Agent Loop Stack
 
 This runbook extends the [local pilot stack](local-pilot.md) so that one
-persistent Compose project can accept agent work through the existing public
-contributor flow. It adds the external checker service, a networkless proof
-checker image and the operator steps that register the checker, provision
-service identities, configure a no-human-review project and activate the
-acceptance lifecycle.
+persistent Compose project has the checker, identities and lifecycle that agent
+work through the existing public contributor flow needs. It adds the external
+checker service, a networkless proof checker image and the operator steps that
+register the checker, provision service identities, configure a
+no-human-review project and activate the acceptance lifecycle.
 
-It uses only existing public APIs and owner operations. It does not create a
-guide, approve policies, bypass the checker or write lifecycle facts directly.
-Guide compilation, which selects the registered checker into the locked
+The contributor flow cannot run until guide rules select the checker. Guide
+compilation, which selects the registered checker into the locked
 pre-submission and post-submission policies, is a separate decision and is a
 placeholder step below.
+
+It uses only existing public APIs and owner operations. It declares a draft
+guide only to hold the review and revision policies. It does not compile,
+approve or activate a guide, bypass the checker or write lifecycle facts
+directly.
 
 ## What the overlay adds
 
@@ -77,10 +81,14 @@ ignored by Git.
 
 ## Bring up the profile
 
-Start the `backend` profile and the registry, but not the checker yet. The
-checker service refuses to start without at least one cached image:
+Confirm that the daemon uses the default data root, which the material path
+assumes, then start the `backend` profile and the registry, but not the checker
+yet. The checker service refuses to start without at least one cached image.
+The `--profile backend` flag overrides `COMPOSE_PROFILES` from `.env`, so the
+first `up` does not start the checker:
 
 ```bash
+test "$(docker info --format '{{.DockerRootDir}}')" = /var/lib/docker
 docker compose --profile backend up --build --wait
 docker compose up --wait checker-registry
 ```
@@ -110,15 +118,22 @@ If the Docker credential helper hangs during `pull` or `push`, run the command
 with an empty client configuration, for example
 `DOCKER_CONFIG="$(mktemp -d)" docker compose ...`.
 
-Rebuilding the proof checker changes its digest. Rerun `publish_local.py`,
-recreate the checker with `docker compose up --wait --force-recreate checker`,
-and register the new digest; existing registry entries are immutable.
+Rebuilding the proof checker changes its digest. The registry holds one
+immutable entry per phase, capability and version, so rerun `publish_local.py`
+with a new `--capability-version` (for example `v2`), recreate the checker with
+`docker compose up --wait --force-recreate checker`, and register the two new
+bodies. Registering a new digest under an existing version returns
+`external_checker_registry_conflict`.
 
 ## Create operators and service identities
 
-Use the [local pilot identity steps](local-pilot.md#create-distinct-identities-and-grant-authority)
-for `API_URL`, `curl_with_token`, `new_key` and the one-time Access
-Administrator bootstrap. This runbook uses these Flow subjects:
+Take only `API_URL`, `curl_with_token` and `new_key` from the
+[local pilot identity steps](local-pilot.md#create-distinct-identities-and-grant-authority);
+do not run its bootstrap. The Access Administrator bootstrap is irreversible and
+runs once per database. On a new database, run the bootstrap below once. If the
+database is already bootstrapped, skip that command and use the existing
+Access Administrator subject wherever this runbook says `local-access-admin`.
+This runbook uses these Flow subjects:
 
 | Subject | Role |
 |---|---|
@@ -217,8 +232,10 @@ error finding exists:
 `proof.json` claims. It does not confirm that the pull request, commit or CI
 run exist, that the CI run belongs to the commit, or that the pull request was
 merged. A passing verdict means well-formed claims, not independently verified
-work. Pair it with human review, or with a checker that has trusted access to
-the evidence, when the claim itself must be trusted.
+work. With `human_review_required:false`, a well-formed but false proof
+would reach automatic FinalAcceptance. Do not use this checker alone to gate
+acceptance that leads to compensation; pair it with human review, or with a
+checker that has trusted access to the evidence, when the claim must be true.
 
 ## Create the manager project and the agent submitter
 
@@ -267,11 +284,14 @@ curl_with_token "$MANAGER_TOKEN" --fail --silent --show-error -X PUT \
   "$GUIDE_ROOT/revision-policy" | jq
 ```
 
-With `human_review_required:false`, passing required checks invoke the same
-authorized FinalAcceptance operation that a human `accept` uses. No Review or
-reviewer contribution is created.
+With `human_review_required:false`, TASK routing invokes the same authorized
+FinalAcceptance operation as a human `accept` after required checks pass,
+without a Review, ReviewLease or reviewer contribution. This path is not yet
+drilled on this stack.
 
-Finance publishes an UNPAID ContributionPolicy for the project:
+Finance publishes an UNPAID ContributionPolicy for the project. Record the
+`contribution_policy_id` and `contribution_policy_version_id` from the `create`
+output as `POLICY_ID` and `VERSION_ID`:
 
 ```bash
 printf '{"name":"Agent loop contributions"}\n' > .local-agent-loop/policy-name.json
@@ -279,9 +299,9 @@ printf '%s\n' '{"rules":[{"contribution_type":"accepted_submission","compensatio
   > .local-agent-loop/policy-rules.json
 ws_as local-finance project contribution-policy create "$PROJECT_ID" \
   --input .local-agent-loop/policy-name.json --idempotency-key "$(uuidgen | tr 'A-Z' 'a-z')" -o json
-ws_as local-finance project contribution-policy update "$PROJECT_ID" POLICY_ID VERSION_ID \
+ws_as local-finance project contribution-policy update "$PROJECT_ID" "$POLICY_ID" "$VERSION_ID" \
   --input .local-agent-loop/policy-rules.json --idempotency-key "$(uuidgen | tr 'A-Z' 'a-z')" -o json
-ws_as local-finance project contribution-policy publish "$PROJECT_ID" POLICY_ID VERSION_ID \
+ws_as local-finance project contribution-policy publish "$PROJECT_ID" "$POLICY_ID" "$VERSION_ID" \
   --idempotency-key "$(uuidgen | tr 'A-Z' 'a-z')" -o json
 ```
 
@@ -302,7 +322,8 @@ Automatic FinalAcceptance commits new effects only while the joint review
 lifecycle is `live`. A new database starts `disabled`. The script runs the owner
 `JointLifecycleController` with the operator's own AUTH decision, one committed
 transition per step (`disabled -> shadow -> live`). Rerunning at the target
-phase prints `unchanged`:
+phase prints `unchanged` without making an AUTH decision, because nothing
+changes:
 
 ```bash
 docker compose exec -T backend python scripts/transition_review_lifecycle.py \
@@ -311,15 +332,23 @@ docker compose exec -T backend python scripts/transition_review_lifecycle.py \
   --actor-profile-id "$OPERATOR_ID" --phase live
 ```
 
-Going live is refused while any retained FinalAcceptance lacks a valid routing
-receipt. Leaving `live` uses the owner's draining path and is not part of this
+The script does not authenticate its caller. Anyone who can run
+`docker compose exec backend` already holds the database credentials, so naming
+an operator's profile ID is acceptable only on this local stack; AUTH still
+requires that operator's current grant. Going live is refused while any
+retained FinalAcceptance lacks a valid routing receipt. Leaving `live` uses the owner's draining path and is not part of this
 script.
 
 ## Contributor flow for the agent
 
-After guide activation and task release, the agent works as `agent-claude`:
+After guide activation and task release, the agent works as `agent-claude`.
+`TASK_ID`, `ASSIGNMENT_ID`, `READY_ADMISSION_ID` and `SUBMISSION_ID` come from
+the preceding outputs:
 
 ```bash
+CLAIM_KEY="$(uuidgen | tr 'A-Z' 'a-z')"
+START_KEY="$(uuidgen | tr 'A-Z' 'a-z')"
+PREPARE_KEY="$(uuidgen | tr 'A-Z' 'a-z')"
 ws_as agent-claude task ready "$PROJECT_ID" -o json
 ws_as agent-claude task claim TASK_ID --idempotency-key "$CLAIM_KEY" -o json
 ws_as agent-claude task start TASK_ID --idempotency-key "$START_KEY" -o json

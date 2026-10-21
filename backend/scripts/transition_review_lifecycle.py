@@ -3,8 +3,10 @@
 
 The system Operator named by ``--actor-profile-id`` must hold a current
 ``operator`` grant; the existing AUTH decision, not this script, grants the
-transition. Each step is one ``JointLifecycleController.transition`` commit.
-Running the script again at the target phase changes nothing.
+transition. The script does not authenticate its caller: whoever can run it
+already holds the database credentials, so it is a local operator tool only.
+Each step is one ``JointLifecycleController.transition`` commit. Running the
+script again at the target phase changes nothing.
 """
 
 from __future__ import annotations
@@ -113,14 +115,12 @@ async def _current_phase() -> str:
         return control.phase
 
 
-async def run(actor_profile_id: UUID, target: str, reason: str) -> dict:
-    """Walk the allowed edges to ``target``; an existing target is a no-op."""
+async def run(actor_profile_id: UUID, target: str, reason: str, steps: list[dict]) -> dict:
+    """Walk forward to ``target``, appending each committed step; a reached target is a no-op."""
     try:
         start = await _current_phase()
-        steps = [
-            await _transition_once(actor_profile_id, phase, reason)
-            for phase in phase_path(start, target)
-        ]
+        for phase in phase_path(start, target):
+            steps.append(await _transition_once(actor_profile_id, phase, reason))
         return {
             "result_code": "changed" if steps else "unchanged",
             "previous_phase": start,
@@ -137,13 +137,19 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--phase", choices=[phase.value for phase in TARGET_PHASES], required=True)
     parser.add_argument("--reason", default="Local agent loop lifecycle activation")
     args = parser.parse_args(argv)
+    steps: list[dict] = []
     try:
-        output = asyncio.run(run(args.actor_profile_id, args.phase, args.reason))
+        output = asyncio.run(run(args.actor_profile_id, args.phase, args.reason, steps))
     except JointLifecycleUnavailable as error:
-        print(json.dumps({"result_code": "unavailable", "detail": str(error)}))
+        print(json.dumps({"result_code": "unavailable", "detail": str(error), "steps": steps}))
         return 3
-    except Exception as error:  # noqa: BLE001 - authorization denials stay privacy-bounded.
-        print(json.dumps({"result_code": "failed", "error_type": type(error).__name__}))
+    except Exception as error:  # noqa: BLE001 - AUTH and database detail stay privacy-bounded.
+        # Steps already listed were committed; the failed step was rolled back.
+        print(
+            json.dumps(
+                {"result_code": "failed", "error_type": type(error).__name__, "steps": steps}
+            )
+        )
         return 1
     print(json.dumps(output, sort_keys=True))
     return 0

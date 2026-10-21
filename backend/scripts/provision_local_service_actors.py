@@ -15,6 +15,7 @@ import json
 import os
 import sys
 import time
+from urllib.parse import urlsplit
 from uuid import UUID, uuid5
 
 import httpx
@@ -64,13 +65,22 @@ def classify(status_code: int, body: object) -> str:
     return f"failed:{status_code}:{code or 'unknown'}"
 
 
-def _post(client: httpx.Client, token: str, identity: str, subject: str) -> httpx.Response:
+def safe_api_url(value: str) -> bool:
+    """Send the administrator bearer only to loopback HTTP or to HTTPS."""
+    parts = urlsplit(value)
+    loopback = parts.hostname in {"127.0.0.1", "localhost", "::1"}
+    return (parts.scheme == "https" or (parts.scheme == "http" and loopback)) and not (
+        parts.username or parts.password
+    )
+
+
+def _post(client: httpx.Client, admin_subject: str, identity: str, subject: str) -> httpx.Response:
     """Send one request; resend the same key after an administrative rate limit."""
     for attempt in range(_RATE_LIMIT_ATTEMPTS):
         response = client.post(
             "/api/v1/service-actors",
             headers={
-                "Authorization": f"Bearer {token}",
+                "Authorization": f"Bearer {issue_token(admin_subject, lifetime_seconds=120)}",
                 "Idempotency-Key": idempotency_key(identity, subject),
             },
             json={
@@ -88,11 +98,11 @@ def _post(client: httpx.Client, token: str, identity: str, subject: str) -> http
 
 
 def provision(
-    client: httpx.Client, token: str, identities: tuple[str, ...], prefix: str
+    client: httpx.Client, admin_subject: str, identities: tuple[str, ...], prefix: str
 ) -> dict[str, str]:
     results = {}
     for identity in identities:
-        response = _post(client, token, identity, subject_for(identity, prefix))
+        response = _post(client, admin_subject, identity, subject_for(identity, prefix))
         try:
             body = response.json()
         except ValueError:
@@ -118,10 +128,12 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
     identities = tuple(args.identity or JOURNEY_SERVICE_IDENTITIES)
+    if not safe_api_url(args.api_url):
+        print(json.dumps({"result_code": "invalid_api_url"}))
+        return 2
     try:
-        token = issue_token(args.admin_subject, lifetime_seconds=600)
         with httpx.Client(base_url=args.api_url, timeout=30) as client:
-            results = provision(client, token, identities, args.subject_prefix)
+            results = provision(client, args.admin_subject, identities, args.subject_prefix)
     except (RuntimeError, ValueError, httpx.HTTPError) as error:
         print(json.dumps({"result_code": "failed", "error_type": type(error).__name__}))
         return 1

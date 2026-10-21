@@ -15,8 +15,10 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from pathlib import Path
 import re
+import stat
 import sys
 from urllib.parse import urlsplit
 
@@ -78,11 +80,14 @@ def evaluate_proof(raw: bytes | None) -> list[dict[str, object]]:
 
 
 def read_proof(input_root: Path) -> bytes | None:
-    """Read at most one byte past the limit from a regular proof file."""
-    path = input_root / PROOF_PATH
-    if path.is_symlink() or not path.is_file():
+    """Read at most one byte past the limit from a regular, non-linked proof file."""
+    try:
+        descriptor = os.open(input_root / PROOF_PATH, os.O_RDONLY | os.O_NOFOLLOW)
+    except OSError:
         return None
-    with path.open("rb") as handle:
+    with os.fdopen(descriptor, "rb") as handle:
+        if not stat.S_ISREG(os.fstat(handle.fileno()).st_mode):
+            return None
         return handle.read(MAX_PROOF_BYTES + 1)
 
 

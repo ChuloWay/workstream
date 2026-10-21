@@ -8,6 +8,7 @@ from pathlib import Path
 from uuid import uuid4
 
 import pytest
+import yaml
 
 from app.modules.checkers.api.external import (
     ExternalCheckerExecutionResult,
@@ -60,9 +61,19 @@ def _codes(raw: bytes | None) -> list[str]:
 def test_valid_proof_passes_with_backend_valid_result() -> None:
     assert checker.evaluate_proof(_encoded()) == []
     for phase in ("pre_submit", "post_submit"):
-        result = checker.build_result(_request(phase), [])
+        request = _request(phase)
+        result = checker.build_result(request, [])
         parsed = ExternalCheckerExecutionResult.model_validate_json(json.dumps(result))
         assert (parsed.verdict, parsed.findings, parsed.phase) == ("passed", (), phase)
+        assert (
+            parsed.request_digest,
+            str(parsed.registry_entry_id),
+            parsed.registry_entry_digest,
+        ) == (
+            request["request_digest"],
+            request["registry"]["registry_entry_id"],
+            request["registry"]["entry_digest"],
+        )
 
 
 @pytest.mark.parametrize(
@@ -130,17 +141,31 @@ def test_published_registry_bodies_are_backend_valid_for_both_phases() -> None:
     digest = "sha256:" + "d" * 64
     for phase in ("pre_submit", "post_submit"):
         spec = ExternalCheckerRegistrySpec.model_validate(
-            publish_local.registry_spec(phase, digest)
+            publish_local.registry_spec(phase, digest, "v2")
         )
-        assert (spec.phase, spec.image_digest, spec.capability_id) == (
+        assert (spec.phase, spec.image_digest, spec.capability_id, spec.capability_version) == (
             phase,
             digest,
             "harnessy.work_proof",
+            "v2",
         )
-    socket = publish_local.service_config(
+    with pytest.raises(SystemExit):
+        publish_local.publish("localhost:5000@registry.example", "harnessy-proof")
+
+
+def test_published_service_paths_match_the_compose_overlay() -> None:
+    """The service config and the overlay must name the same daemon and socket paths."""
+    overlay = yaml.safe_load(
+        (CHECKER_ROOT.parents[1] / "docker-compose.agent-loop.yml").read_text()
+    )
+    environment = overlay["x-agent-loop-backend"]["environment"]
+    config = publish_local.service_config(
         {"operating_system": "linux", "architecture": "arm64"},
-        compose_project="x" * 64,
+        compose_project="${COMPOSE_PROJECT_NAME}",
         sandbox_uid=501,
         sandbox_gid=20,
-    )["socket_path"]
-    assert len(socket.encode()) <= 107
+    )
+    assert config["material_root"] == environment["WORKSTREAM_EXTERNAL_CHECKER_MATERIAL_ROOT"]
+    assert config["material_root"] == environment["WORKSTREAM_ARTIFACT_SCRATCH_ROOT"]
+    assert config["socket_path"] == environment["WORKSTREAM_EXTERNAL_CHECKER_SERVICE_SOCKET"]
+    assert len(config["socket_path"].encode()) <= 107

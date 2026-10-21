@@ -12,7 +12,7 @@ architecture. This change was not run on a macOS host, so file sharing,
 Docker Desktop resource limits, sleep/resume and both Apple Silicon and Intel
 startup remain unverified here.
 
-To run the external checker service and accept agent work on this stack, add
+To add the external checker service and prepare this stack for agent work, use
 the [local agent loop overlay](local-agent-loop.md).
 
 ## Configure one checkout

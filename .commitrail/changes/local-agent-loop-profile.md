@@ -85,6 +85,11 @@ contribution facts.
   `Idempotency-Key` per identity and a bounded `Retry-After` wait. The
   lifecycle script runs the owner controller with the operator's own AUTH
   decision and supports only the forward `disabled -> shadow -> live` path.
+- **Copied composition, not imported.** `publish_local.py` follows
+  `experiments/pilot04_external_checker_runtime/run_probe.py` (`_image_identity`)
+  and the lifecycle script follows `tests/reviews/lifecycle/transition_support.py`.
+  Operator tools must not import experiments or test support, so the small
+  pieces are repeated here with their sources named.
 - Rejected: a separate local checker Dockerfile (the release image runs under
   `user:` override), host bind mounts for socket or material, and a combined
   "self-host" bootstrap command that would hide authority decisions.
@@ -121,7 +126,7 @@ contribution facts.
 | Claim | Command or proof | Result | Remaining uncertainty |
 |---|---|---|---|
 | Checker logic and result contract | `tests/checkers/external/test_harnessy_proof_checker.py` | Passes; results validate through `ExternalCheckerExecutionResult.model_validate_json` | None for the stated rules |
-| Script behavior | `tests/test_local_pilot_scripts.py` | Passes | Live behavior shown only by the drill |
+| Script behavior | `tests/test_local_pilot_scripts.py` | Passes (phase path, keys, 429 resend, URL guard) | `run`, `_transition_once`, `publish()`, `checker.main()` and exit codes are shown only by the drill |
 | Docker Desktop runtime | Separate Compose project drill on Apple Silicon (see PR) | Health, two real executions, registration, provisioning, lifecycle | Intel Docker Desktop and native Linux not run |
 | Persistent-stack FinalAcceptance | Not run | Blocked by guide rules | Remains |
 

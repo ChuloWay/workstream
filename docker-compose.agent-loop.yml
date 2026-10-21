@@ -99,7 +99,13 @@ services:
       checker-volumes-init:
         condition: service_completed_successfully
     healthcheck:
-      test: [CMD-SHELL, "test -S /run/ws-checker/checker.sock"]
+      # Connect rather than `test -S`: a socket left on the volume by a killed
+      # run must not report health before the new process binds it.
+      test:
+        - CMD
+        - python3
+        - -c
+        - "import socket; s = socket.socket(socket.AF_UNIX); s.settimeout(2); s.connect('/run/ws-checker/checker.sock'); s.close()"
       interval: 5s
       timeout: 5s
       retries: 12

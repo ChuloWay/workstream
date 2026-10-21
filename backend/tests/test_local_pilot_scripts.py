@@ -11,6 +11,7 @@ import re
 import subprocess
 from types import SimpleNamespace
 
+import httpx
 import jwt
 import pytest
 
@@ -237,9 +238,7 @@ def test_runbook_curl_helper_keeps_token_private_and_cleans_header(
 
 
 def test_runbook_curl_helper_cleans_header_when_shell_is_signalled(tmp_path: Path) -> None:
-    completed, report, token = _run_guide_curl_helper(
-        tmp_path, exit_status=143, signal_parent=True
-    )
+    completed, report, token = _run_guide_curl_helper(tmp_path, exit_status=143, signal_parent=True)
 
     assert completed.returncode == 143
     assert report["header"] == f"Authorization: Bearer {token}\n"
@@ -278,7 +277,9 @@ def test_lifecycle_script_refuses_to_leave_live_or_draining(current, target) -> 
 def test_service_actor_script_replays_with_stable_keys_and_reports_existing() -> None:
     script = service_actor_script
     first = script.idempotency_key("workstream.outbox.dispatcher", "local-outbox.dispatcher")
-    assert first == script.idempotency_key("workstream.outbox.dispatcher", "local-outbox.dispatcher")
+    assert first == script.idempotency_key(
+        "workstream.outbox.dispatcher", "local-outbox.dispatcher"
+    )
     assert first != script.idempotency_key("workstream.outbox.dispatcher", "other-subject")
     existing = {"error": {"code": "service_identity_already_provisioned"}}
     linked = {"error": {"code": "identity_subject_already_linked"}}
@@ -286,3 +287,38 @@ def test_service_actor_script_replays_with_stable_keys_and_reports_existing() ->
     assert script.classify(409, existing) == "existing"
     assert script.classify(409, linked) == "failed:409:identity_subject_already_linked"
     assert script.classify(403, None) == "failed:403:unknown"
+
+
+def test_service_actor_script_resends_the_same_key_after_rate_limit(monkeypatch) -> None:
+    script = service_actor_script
+    monkeypatch.setattr(script, "issue_token", lambda subject, lifetime_seconds: "t")
+    delays: list[int] = []
+    monkeypatch.setattr(script.time, "sleep", delays.append)
+    replies = iter([(429, {"Retry-After": "999"}), (429, {"Retry-After": "soon"}), (201, {})])
+    keys: list[str] = []
+
+    def handler(request):
+        keys.append(request.headers["Idempotency-Key"])
+        status, headers = next(replies)
+        return httpx.Response(status, headers=headers, json={})
+
+    with httpx.Client(transport=httpx.MockTransport(handler), base_url="http://x") as client:
+        results = script.provision(client, "admin", ("workstream.outbox.dispatcher",), "p")
+    assert results == {"workstream.outbox.dispatcher": "provisioned"}
+    assert len(set(keys)) == 1 and len(keys) == 3
+    assert delays == [60, 5]
+
+
+@pytest.mark.parametrize(
+    ("url", "allowed"),
+    [
+        ("http://127.0.0.1:8000", True),
+        ("http://localhost:8000", True),
+        ("https://api.example", True),
+        ("http://api.example", False),
+        ("http://user:pass@127.0.0.1:8000", False),
+        ("ftp://127.0.0.1", False),
+    ],
+)
+def test_service_actor_script_sends_the_admin_bearer_only_to_safe_urls(url, allowed) -> None:
+    assert service_actor_script.safe_api_url(url) is allowed

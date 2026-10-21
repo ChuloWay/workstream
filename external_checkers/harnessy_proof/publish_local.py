@@ -18,6 +18,7 @@ import argparse
 import hashlib
 import json
 from pathlib import Path
+import re
 import subprocess
 import sys
 from urllib.request import Request, urlopen
@@ -28,7 +29,6 @@ MANIFEST_TYPES = (
     "application/vnd.docker.distribution.manifest.v2+json",
 )
 CAPABILITY_ID = "harnessy.work_proof"
-CAPABILITY_VERSION = "v1"
 INPUT_SCHEMA_IDS = {
     "pre_submit": "external_checker_pre_submit_input",
     "post_submit": "external_checker_post_submit_input",
@@ -59,11 +59,11 @@ def _schema(schema_id: str) -> dict[str, object]:
     }
 
 
-def registry_spec(phase: str, image_digest: str) -> dict[str, object]:
+def registry_spec(phase: str, image_digest: str, capability_version: str) -> dict[str, object]:
     """One immutable registry body; PRE and POST share the image and limits."""
     return {
         "capability_id": CAPABILITY_ID,
-        "capability_version": CAPABILITY_VERSION,
+        "capability_version": capability_version,
         "phase": phase,
         "image_digest": image_digest,
         "configuration_schema": _schema("harnessy.work_proof.configuration"),
@@ -101,14 +101,16 @@ def _docker(*arguments: str) -> str:
 
 def publish(registry: str, repository: str) -> dict[str, object]:
     """Build, push and resolve one single-platform manifest by digest."""
-    if registry.split(":", 1)[0] not in {"localhost", "127.0.0.1"}:
+    if re.fullmatch(r"(localhost|127\.0\.0\.1):[0-9]{1,5}", registry) is None:
         raise SystemExit("the proof checker publishes only to a loopback registry")
     tagged = f"{registry}/{repository}:local"
+    # Docker progress goes to stderr so stdout carries only the final JSON summary.
     subprocess.run(
         ["docker", "build", "--provenance=false", "--sbom=false", "--tag", tagged, str(HERE)],
         check=True,
+        stdout=sys.stderr,
     )
-    subprocess.run(["docker", "push", tagged], check=True)
+    subprocess.run(["docker", "push", tagged], check=True, stdout=sys.stderr)
     request = Request(
         f"http://{registry}/v2/{repository}/manifests/local",
         method="HEAD",
@@ -144,6 +146,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--sandbox-uid", type=int, required=True)
     parser.add_argument("--sandbox-gid", type=int, required=True)
     parser.add_argument("--out-dir", type=Path, required=True)
+    # The registry holds one immutable entry per phase, capability and version,
+    # so a rebuilt image (new digest) needs a new version.
+    parser.add_argument("--capability-version", default="v1")
     args = parser.parse_args(argv)
     image = publish(args.registry, args.repository)
     args.out_dir.mkdir(parents=True, exist_ok=True)
@@ -154,8 +159,12 @@ def main(argv: list[str] | None = None) -> int:
             sandbox_uid=args.sandbox_uid,
             sandbox_gid=args.sandbox_gid,
         ),
-        "registry-pre.json": registry_spec("pre_submit", image["platform_manifest_digest"]),
-        "registry-post.json": registry_spec("post_submit", image["platform_manifest_digest"]),
+        "registry-pre.json": registry_spec(
+            "pre_submit", image["platform_manifest_digest"], args.capability_version
+        ),
+        "registry-post.json": registry_spec(
+            "post_submit", image["platform_manifest_digest"], args.capability_version
+        ),
     }
     for name, value in outputs.items():
         (args.out_dir / name).write_text(json.dumps(value, indent=2) + "\n", encoding="utf-8")
