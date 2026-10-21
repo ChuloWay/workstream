@@ -1,8 +1,8 @@
-# External checker test harness isolation
+# Backend test isolation and metadata check identity
 
 - Initiative: None
 - Durable disposition: Complete
-- Intended merge outcome: Run every Rust workspace test with isolated harness scheduling while retaining explicit concurrency proofs.
+- Intended merge outcome: Isolate Rust harness scheduling and keep metadata edits from replacing required Backend proof.
 
 ## Intent
 
@@ -15,17 +15,28 @@ and succeeds after it exits. Even an exploratory self-exec replacement failed
 parallel stress in another fixture; it was discarded rather than shipped as a
 complete fix.
 
+A second failure was in the description-edit mirror: it published a failed
+required `test` while the real proof was still queued. Metadata edits must not
+replace, infer or manufacture that proof.
+
 ## Bounded change
 
 Allowed files are this record, `.github/workflows/backend.yml`, the existing
-workflow contract assertion in `backend/tests/test_ci_lane_catalogue.py`, and the
+workflow contracts in `backend/tests/test_ci_lane_catalogue.py` and
+`scripts/test_lightweight_agent_gates.py`, and the
 focused checks explanation in `docs/operations_backend_testing.md`. The existing Rust
 workspace command adds `-- --test-threads=1`, serializing independent test cases.
 Tests requiring concurrency still create and join their own threads. All Rust
 source, assertions, workspace members and test selection remain unchanged.
 
+For same-repository title/description edits only, couple a distinct
+`metadata-only` final-check name with a skipped job. Remove the mirror/polling
+step. Preserve `test`/`draft-test`, dependencies and failure validation for actual
+proof events, including base retargets and fork edits. Preserve workflow triggers
+and the separate metadata concurrency group.
+
 Do not change CLI branches, production handling, limits, timeouts, test selection,
-workflow triggers, required status, or add retries. The independent project-page
+required proof or branch protection, or add retries. The independent project-page
 timing failure does not authorize relaxing its one-second budget.
 
 ## Acceptance criteria
@@ -35,18 +46,25 @@ timing failure does not authorize relaxing its one-second budget.
   selected.
 - Real kernel exact-size and oversize rejection proof remains unchanged.
 - The concurrency tests retain their explicit client/worker threads and checks.
-- Existing workflow and gate contract tests pass. No fail-open fan-in or skip is
-  added. Removing the serial-harness flag makes the existing workflow contract
+- Existing workflow and gate contract tests pass. No fail-open fan-in or proof
+  omission is added. Removing the serial-harness flag makes the existing workflow contract
   assertion fail on the original command.
 - The original service suite passes repeated serial runs; this is bounded
   stability evidence, not a guarantee against every future environment failure.
+- Metadata-only runs never publish required `test` or `draft-test`. Event cases
+  cover metadata, base retargets, forks, source/state changes and pushes. Mutating
+  the distinct name or skip condition must fail the focused contract. Hosted
+  verification must confirm the distinct skipped check.
+- Actual proof aggregation continues to reject failed, cancelled, skipped or
+  missing required components; no metadata success stands in for test execution.
 
 ## Risk and review routing
 
-- Risk class: L1, required CI command scheduling.
+- Risk class: L1, required CI command scheduling and check identity.
 - Reviewers: CI integrity, QA/test delta and focused documentation review.
 - Human focus: complete test selection, explicit concurrency retained, and exit
   propagation; only incidental overlap between independent tests is removed.
+  Metadata-only success cannot satisfy the required proof check.
 
 ## Evidence
 
@@ -60,6 +78,11 @@ timing failure does not authorize relaxing its one-second budget.
   suite or MinIO proof.
 - An optional local Clippy run with `-D warnings` rejects an unchanged large enum;
   it is not an existing required check and this repair does not suppress it.
+
+- Workflow contracts cover the metadata/proof event matrix and retain the
+  failed/cancelled/skipped prerequisite checks. Mutations replacing the distinct
+  metadata name with `test` and removing the metadata skip guard each fail the
+  intended regression assertion.
 
 ## Reconciliation
 

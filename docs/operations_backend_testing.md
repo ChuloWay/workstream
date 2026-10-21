@@ -148,14 +148,12 @@ the required check even on an unchanged commit; an older green draft result
 cannot satisfy it.
 Base-branch edits also start a fresh run bound to the new base. On a PR from a
 branch in this repository, a title or description edit starts a separate run
-that neither cancels nor repeats proof. Its required `test` job finds the newest
-other Backend run for the same head, PR, base branch and base commit whose
-`scope` job ran. On a fork PR, the run has no PR binding to check, so an edit
-restarts full proof as before. If that run's `test` job has finished, the edit run
-reports its result. If that job does not exist yet, the edit run fails at once:
-the proof run creates its own `test` check later, and that newer check replaces
-the failure. The edit run waits only while that `test` job already exists but
-has not finished. Without a proof run, it fails.
+that neither cancels nor repeats proof. Its final job is named `metadata-only`
+and skipped; this informational check cannot satisfy required `test`. The
+original proof-producing run alone owns `test` (or `draft-test` for a draft).
+Missing, pending or failed proof stays missing, pending or failed: a metadata
+edit never mirrors or replaces its outcome. Fork PR edits continue to run fresh
+proof, as do source changes and readiness changes.
 
 The explicit inventory lives in `backend/scripts/test_lane_catalogue.py`.
 Authorization preflight runs alongside all sixteen lanes when backend proof is
