@@ -13,7 +13,10 @@ from app.modules.projects.api import (
     ProjectLockedPolicyContextUnavailable,
 )
 from app.modules.tasks.api.post_submit_routing import (
-    TaskPostSubmitSourceProposal, TaskRoutingSourcePreparation, TaskRevisionExhaustionFacts,
+    TaskPostSubmitSourceProposal,
+    TaskRoutingSourceObservation,
+    TaskRoutingSourcePreparation,
+    TaskRevisionExhaustionFacts,
 )
 from app.core.identifiers import new_record_id
 from app.modules.projects.api.policy_lineage import RevisionPolicySemantics
@@ -49,9 +52,21 @@ class TaskRoutingSourcePreparer:
         await require_routing_transaction(self._session)
         completion = EvaluationCompletion.model_validate_json(completion.model_dump_json())
         with self._session.no_autoflush:
-            return await self._prepare(event_id, completion)
+            return await self._prepare(event_id, completion, stage=True)
 
-    async def _prepare(self, event_id, completion):
+    async def observe_unstaged(
+        self, event_id: UUID, completion: EvaluationCompletion,
+    ) -> TaskRoutingSourceObservation:
+        """Prove exact current source and policy without reserving routing identities."""
+        await require_routing_transaction(self._session)
+        completion = EvaluationCompletion.model_validate_json(completion.model_dump_json())
+        with self._session.no_autoflush:
+            observed = await self._prepare(event_id, completion, stage=False)
+        if type(observed) is not TaskRoutingSourceObservation:
+            raise TaskRoutingRequestUnavailable("routing_source_observation_unavailable")
+        return observed
+
+    async def _prepare(self, event_id, completion, *, stage):
         task = await self._tasks.lock_project_task(completion.project_id, completion.task_id)
         if task is None:
             raise TaskRoutingRequestUnavailable("routing_source_unavailable")
@@ -145,16 +160,21 @@ class TaskRoutingSourcePreparer:
             # PROJECT custody precedes the CHECKERS fence, so the candidate is
             # selected before the result shows whether this is a coverage return.
             candidate = await select_candidate(self._projects, context)
-        request, verified = await self._requests._stage(event_id, completion)
+        if stage:
+            request, verified = await self._requests._stage(event_id, completion)
+        else:
+            request = None
+            verified = await self._requests.observe_unstaged(event_id, completion)
         if (
             revision_round is not None and revision_round == policy.max_revision_rounds
             and not coverage_gap_without_failure(verified.result)
         ):
             candidate = None
-            exhaustion = TaskRevisionExhaustionFacts(
-                exhaustion_receipt_id=new_record_id(), revision_round=revision_round,
-                max_revision_rounds=policy.max_revision_rounds,
-            )
+            if stage:
+                exhaustion = TaskRevisionExhaustionFacts(
+                    exhaustion_receipt_id=new_record_id(), revision_round=revision_round,
+                    max_revision_rounds=policy.max_revision_rounds,
+                )
         material = verified.material
         if not (
             material.admission_id == UUID(submission.submission_bundle_admission_id)
@@ -183,6 +203,16 @@ class TaskRoutingSourcePreparer:
             ))
             if predecessor is None or predecessor.task_id != submission.task_id:
                 raise TaskRoutingRequestUnavailable("routing_source_unavailable")
+        if not stage:
+            return TaskRoutingSourceObservation(
+                project_id=completion.project_id,
+                task_id=completion.task_id,
+                submission_id=completion.submission_id,
+                completion_event_id=event_id,
+                checker_run_id=completion.reference.attempt_id,
+                routing_recommendation=completion.routing_recommendation,
+                human_review_required=human_review_required,
+            )
         source = TaskPostSubmitSourceProposal(
             id=request.routing_manifest_id,
             project_id=completion.project_id,

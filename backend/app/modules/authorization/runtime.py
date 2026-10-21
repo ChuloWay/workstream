@@ -25,6 +25,7 @@ from app.modules.authorization.domain.project_create import ProjectCreateResourc
 from app.modules.authorization.domain import (
     checker_registry, checker_retry, checker_retry_reads, contribution_reads,
     contributor_reads, management_reads, submission_history, task_authority, task_queues,
+    post_submit_deliveries,
 )
 from app.modules.authorization.domain.guide_mutations import (
     ProjectGuideMutationResourceContext, ProjectGuideMutationPrepareDenialResourceContext,
@@ -1058,6 +1059,8 @@ AuthorizationResourceContext = (
     | management_reads.ProjectManagementReadResourceContext |
     submission_history.HistoryReadResourceContext | task_queues.QueueReadResourceContext
     | checker_retry_reads.CheckerRetrySourceReadResourceContext
+    | post_submit_deliveries.PostSubmitDeliveryReadResourceContext
+    | post_submit_deliveries.PostSubmitDeliveryResourceContext
     | task_authority.TaskAuthorityResourceContext | ActorSelfResourceContext
     | ProjectReadResourceContext | ProjectDiagnosticReadResourceContext
     | ProjectPolicyReadResourceContext
