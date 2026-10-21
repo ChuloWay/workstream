@@ -5,7 +5,8 @@ agents using the terminal. It provides human self-profile reads and editing,
 plus draft project/guide declaration and original upload, exact-project inspection, authority reads, manager task browsing and
 contributor work discovery, claim/start, locked guide documents and governing
 context/intake requirements, explicit batch import/screen/release, Finance
-policy management, explicit ZIP preparation/submission, checker findings and
+policy management, explicit ZIP preparation/submission, checker findings,
+system-Operator checker registration and terminal recovery, and
 contribution-evidence exports:
 
 | Command | Public API |
@@ -69,6 +70,10 @@ contribution-evidence exports:
 | `workstream project contribution-policy update PROJECT_ID POLICY_ID VERSION_ID --input FILE --idempotency-key UUID` | `PUT /api/v1/projects/PROJECT_ID/contribution-policies/POLICY_ID/versions/VERSION_ID` |
 | `workstream project contribution-policy publish PROJECT_ID POLICY_ID VERSION_ID --idempotency-key UUID` | `POST /api/v1/projects/PROJECT_ID/contribution-policies/POLICY_ID/versions/VERSION_ID/publication` |
 | `workstream project contribution-policy retire PROJECT_ID POLICY_ID VERSION_ID --idempotency-key UUID` | `POST /api/v1/projects/PROJECT_ID/contribution-policies/POLICY_ID/versions/VERSION_ID/retirement` |
+| `workstream operations checker registry register --input FILE --idempotency-key UUID` | `POST /api/v1/operations/external-checker-registry` |
+| `workstream operations checker registry read ENTRY_ID` | `GET /api/v1/operations/external-checker-registry/ENTRY_ID` |
+| `workstream operations checker retry-sources PROJECT_ID [--limit N] [--cursor TOKEN]` | `GET /api/v1/operations/projects/PROJECT_ID/checker-retry-sources` |
+| `workstream operations checker retry PROJECT_ID SOURCE_RUN_ID --reason TEXT --idempotency-key UUID` | `POST /api/v1/operations/projects/PROJECT_ID/checker-runs/SOURCE_RUN_ID/retry` |
 | `workstream task ready PROJECT_ID` | `GET /api/v1/projects/PROJECT_ID/tasks/ready` |
 | `workstream task prepare TASK_ID --assignment UUID --file ZIP --idempotency-key UUID` (revision: add predecessor and exact preparation ID/SHA-256) | `POST /api/v1/tasks/TASK_ID/submission-bundle-preparations` |
 | `workstream task submit TASK_ID --assignment UUID --admission UUID` | `POST /api/v1/tasks/TASK_ID/submissions` |
@@ -146,8 +151,8 @@ distinct from client response validation failures.
 The table above is the delivered command inventory. PILOT-02 supplies the
 [batch conversion/import/screen/release commands](#prepare-a-task-import-json-source)
 in the same CLI; contribution-evidence reads do not depend on using batch import.
-Submission preparation, creation and history commands are described below;
-manager revision repair and human-review commands are outside this CLI inventory.
+Submission preparation, creation, history and manager revision repair are
+described below; human-review commands remain outside this CLI inventory.
 
 ## Build and use
 
@@ -1422,6 +1427,52 @@ later edits. Complete 4xx replies with a parseable Workstream error envelope
 even when sensitive metadata is suppressed. A gateway 4xx without that envelope
 is uncertain too; HTTP status alone does not establish a Workstream denial.
 
+## Operator checker registration and terminal recovery
+
+The `operations checker` commands consume four existing public `/api/v1`
+operations. They require a current system Operator grant on every call; a prior
+read is not authority for a later write. Registry publication stores an
+immutable definition but does not select, enable, execute or activate a checker.
+
+```sh
+workstream operations checker registry register --input checker.json --idempotency-key UUID -o json
+workstream operations checker registry read ENTRY_ID -o json
+workstream operations checker retry-sources PROJECT_ID --limit 50 -o json
+workstream operations checker retry-sources PROJECT_ID --limit 50 --cursor 'OPAQUE_CURSOR' -o json
+workstream operations checker retry PROJECT_ID SOURCE_RUN_ID --reason 'Verified infrastructure restored' --idempotency-key UUID -o json
+```
+
+`checker.json` is one closed `ExternalCheckerRegistrySpec` object with
+`capability_id`, `capability_version`, `phase` (`pre_submit` or `post_submit`),
+`image_digest` (`sha256:` and 64 lowercase hexadecimal digits),
+`configuration_schema`, `input_schema`, `output_schema` and `resources`.
+Each schema has `schema_id`, `schema_version`, an object `document`, and
+`schema_sha256`; input schema IDs are
+`external_checker_pre_submit_input` or
+`external_checker_post_submit_input` according to phase, and the output schema
+ID is `external_checker_result`. Resources are `cpu_millis` (100..64000),
+`memory_bytes` (16777216..68719476736), `deadline_ms` (100..3600000) and
+`maximum_output_bytes` (256..65536). The file is read once as a regular JSON
+file, at most 1 MiB, and sent unchanged. The CLI checks its closed wire shape,
+phase identities and bounds; the backend validates JSON Schema semantics and
+computes each canonical schema/entry digest. An entry read returns the exact
+server-selected UUIDv7 entry and immutable specification, not a latest alias.
+
+`retry-sources` returns only one project-bound page (1..100 items) and its
+opaque `next_cursor`; the CLI never follows pages automatically. The backend
+marks each source `eligible`, `retried` with its retained successor, or
+`not_current`. Only an exact finalized post-submit infrastructure failure can
+be retried, after the named problem has been restored. The retry command
+requires an explicit reason of 1..500 characters without ASCII controls and a
+caller-owned UUID key. It sends one POST, creates no Review, acceptance,
+contribution or award, and never enables an external checker. On a lost or
+malformed response, `error.outcome_unknown` is true: manually replay the
+unchanged project, source run, reason and key. A fresh backend authority check
+also applies to exact replay. There is no preflight authority check, automatic
+retry, cached source eligibility or local policy decision. JSON output is the
+complete validated public response; text output safely escapes terminal
+controls.
+
 ## Verification
 
 Behavior tests invoke the built executable from outside the repository, with
@@ -1471,6 +1522,12 @@ Hosted CLI verification partitions the complete integration directory into
 task/general HTTP, guide HTTP, native API, native self-service and native batch
 groups. The contribution HTTP and native API tests remain included; no group
 replaces or skips another. Local conversion rule tests supplement process tests.
+Operator checker proof uses the built binary against adversarial HTTP and one
+isolated signed FastAPI/PostgreSQL journey: exact registry publication/read and
+replay, terminal-source discovery, explicit retry/replay, foreign selection and
+grant-revocation denial. The source's infrastructure failure is arranged by a
+real backend worker fixture. This does not prove hosted OCI execution, external
+Flow issuer integration or S3 custody.
 
 ```sh
 go mod verify
