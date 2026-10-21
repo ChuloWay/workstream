@@ -74,6 +74,15 @@ rollback, concurrency, retry and real storage/database proof. Real API drills
 complement these tests; they do not replace controlled failure-path tests.
 
 ## Focused checks
+
+The external checker Rust gate runs `cargo test --workspace --locked --
+--test-threads=1` from `external_checkers/`. Its kernel file-limit test forks the
+test process. Running independent tests concurrently can leave their transient
+writable fixture descriptors in that child, causing executable-file-busy errors.
+Serial harness execution keeps all workspace tests selected; tests that exercise
+concurrency still create and join their own threads. Keep failure propagation
+and those internal concurrency checks intact.
+
 The API-guard tests are statically DB-free:
 
 ```bash
