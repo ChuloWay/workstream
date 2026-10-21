@@ -154,6 +154,10 @@ func oneOf(value string, allowed ...string) bool {
 	return false
 }
 
+func validAdminRole(value string) bool {
+	return oneOf(value, "access_administrator", "operator", "project_manager", "finance_authority", "audit_authority")
+}
+
 var attemptStatuses = []string{"evaluation_pending", "review_pending", "accepted", "needs_revision", "rejected"}
 
 func (q PageQuery) encode() (string, error) { return q.encodeWith(attemptStatuses) }
@@ -248,7 +252,7 @@ func decodeActorProject(raw json.RawMessage) (ActorProject, bool) {
 		}
 	}
 	for _, role := range value.AdminRoles {
-		if !oneOf(role, "access_administrator", "operator", "project_manager", "finance_authority", "audit_authority") {
+		if !validAdminRole(role) {
 			return value, false
 		}
 	}
