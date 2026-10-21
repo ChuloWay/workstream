@@ -25,6 +25,9 @@ from app.modules.checkers.api.evaluation_contract import (
     PostSubmissionExecutionRequest,
     validate_execution_request,
 )
+from app.modules.checkers.api.delivery_reconciliation import (
+    PostSubmitRequestDeliveryFacts,
+)
 from app.modules.checkers.api.selected_post_submit import (
     SelectedPostSubmitCurrentResultReference,
 )
@@ -246,6 +249,93 @@ class EvaluationCoordinator:
         # Terminal custody already recomputed this routing under the locked policy.
         return CompletedEvaluation(
             reference=reference, routing_recommendation=run.routing_recommendation, result=result
+        )
+
+    async def classify_uncertain_delivery(
+        self, request: PostSubmissionExecutionRequest,
+    ) -> PostSubmitRequestDeliveryFacts:
+        """Classify one original UNKNOWN request from exact current CHECKERS custody."""
+        request = validate_execution_request(request)
+        with self._session.no_autoflush:
+            await self._lock_task_scope(request)
+            run = await ExecutionRepository(self._session).lock_current(request)
+        if run.status == "queued":
+            retry_safe = (
+                run.worker_lease_generation == 0
+                and run.worker_lease_id is None
+                and run.worker_lease_expires_at is None
+                and run.started_at is None
+                and run.execute_evidence_id is None
+                and run.finalize_evidence_id is None
+                and run.result_json is None
+                and run.result_digest is None
+                and run.input_materialization_evidence_id is None
+                and run.material_custody is None
+                and run.completion_event_id is None
+                and run.completed_at is None
+                and run.failure_code is None
+                and run.outcome_source == "none"
+                and run.routing_recommendation == "not_evaluated"
+                and run.passed_count == run.warning_count == run.failed_count
+                == run.blocking_count == 0
+            )
+            return PostSubmitRequestDeliveryFacts(
+                request=request,
+                checker_run_id=UUID(str(run.id)),
+                classification="retry_safe" if retry_safe else "unresolved",
+            )
+        if run.status == "infrastructure_failed":
+            from app.modules.checkers.checker_retry import (
+                require_finalized_infrastructure_source,
+            )
+
+            retained, _ = require_finalized_infrastructure_source(run)
+            if retained != request:
+                raise CheckerExecutionUnavailable(
+                    "checker_uncertain_delivery_source_unavailable"
+                )
+            return PostSubmitRequestDeliveryFacts(
+                request=request,
+                checker_run_id=UUID(str(run.id)),
+                classification="committed",
+                terminal_outcome="infrastructure_failed",
+            )
+        if run.status == "completed":
+            result = stored_result(run)
+            reference = SelectedPostSubmitCurrentResultReference(
+                **result.model_dump(
+                    include=set(SelectedPostSubmitCurrentResultReference.model_fields)
+                    - {"schema_version"}
+                )
+            )
+            try:
+                completion_event_id = UUID(str(run.completion_event_id))
+                completion = EvaluationCompletion(
+                    project_id=request.project_id,
+                    task_id=request.task_id,
+                    submission_id=request.submission_id,
+                    reference=reference,
+                    routing_recommendation=run.routing_recommendation,
+                    output_binding_ids=(),
+                    execute_evidence_id=UUID(run.execute_evidence_id),
+                    finalize_evidence_id=UUID(run.finalize_evidence_id),
+                )
+            except (TypeError, ValueError) as exc:
+                raise CheckerExecutionUnavailable(
+                    "checker_uncertain_delivery_source_unavailable"
+                ) from exc
+            await self.require_current_completion(completion_event_id, completion)
+            return PostSubmitRequestDeliveryFacts(
+                request=request,
+                checker_run_id=UUID(str(run.id)),
+                classification="committed",
+                terminal_outcome="completed",
+                completion_event_id=completion_event_id,
+            )
+        return PostSubmitRequestDeliveryFacts(
+            request=request,
+            checker_run_id=UUID(str(run.id)),
+            classification="unresolved",
         )
 
     async def require_current_completion(

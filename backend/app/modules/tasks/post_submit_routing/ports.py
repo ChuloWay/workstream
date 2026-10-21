@@ -22,6 +22,8 @@ class PreparedRoutingAuthority(Protocol):
         claim: OutboxClaim,
         effects: TaskAcceptedEffectsRequest | None,
         authorized_generation: int | None,
+        *,
+        reconciliation_claim: OutboxClaim | None = None,
     ) -> RoutingAuthorityFacts:
         """Consume genuine route authority over source, delivery claim and consequence."""
         ...

@@ -16,6 +16,7 @@ CONTEXT_DIGEST_RESOURCE_TYPES = (
     "submission_creation",
     "submission_binding",
     "outbox_event",
+    "outbox_delivery",
     "checker_run",
     "selected_pre_submit_run",
     "task_post_submit_routing_manifest",
@@ -67,6 +68,7 @@ CONTEXT_DIGEST_RESOURCE_TYPES = (
 AuthorizationDecisionResourceType = Literal[
     "joint_lifecycle_control",
     "outbox_event",
+    "outbox_delivery",
     "checker_run",
     "selected_pre_submit_run",
     "task_post_submit_routing_manifest",

@@ -92,6 +92,7 @@ func addTaskReads(project *cobra.Command, client func() (*api.Client, error), ou
 		},
 	}
 	addManagerTaskWrites(task, client, output, stdout)
+	addRevisionRepair(task, client, output, stdout)
 	project.AddCommand(task)
 }
 

@@ -206,6 +206,8 @@ class ActionId(StrEnum):
     OPERATIONS_SUBMISSION_GATE_REPAIR = "operations.submission_gate.repair"
     OPERATIONS_CHECKER_RETRY = "operations.checker.retry"
     OPERATIONS_CHECKER_RETRY_SOURCE_LIST = "operations.checker_retry_source.list"
+    OPERATIONS_POST_SUBMIT_DELIVERY_LIST = "operations.post_submit_delivery.list"
+    OPERATIONS_POST_SUBMIT_DELIVERY_RECONCILE = "operations.post_submit_delivery.reconcile"
     SUBMISSION_CREATE = "submission.create"
     REVIEW_QUEUE_READ = "review.queue.read"
     REVIEW_QUEUE_INSPECT = "review.queue.inspect"
@@ -285,7 +287,6 @@ class ActionId(StrEnum):
     PROJECT_SUBMISSION_BUNDLE_PREPARATION_LIST = "project.submission_bundle_preparation.list"
     CONTRIBUTION_POLICY_LIST = "contribution.policy.list"
 
-
 CONTRIBUTION_READ_ACTIONS = frozenset({ActionId.CONTRIBUTION_READ_SELF, ActionId.CONTRIBUTION_READ_PROJECT})
 # Own-work reads under a current exact-project Submitter grant.
 CONTRIBUTOR_WORK_READ_ACTIONS = frozenset({
@@ -315,7 +316,6 @@ HISTORY_READ_ACTIONS = frozenset({
     ActionId.PROJECT_CHECKER_RUN_READ,
 })
 
-
 TASK_LOCKED_CONTEXT_READ_ACTIONS = frozenset({
     ActionId.PROJECT_TASK_LOCKED_CONTEXT_READ, ActionId.OPERATIONS_TASK_LOCKED_CONTEXT_READ,
     ActionId.AUDIT_TASK_LOCKED_CONTEXT_READ,
@@ -327,7 +327,6 @@ TASK_CONCEALED_READ_ACTIONS = TASK_LOCKED_CONTEXT_READ_ACTIONS | frozenset({
     ActionId.TASK_READ, ActionId.TASK_SUBMISSION_REQUIREMENTS_READ,
     ActionId.PROJECT_TASK_READ, ActionId.PROJECT_TASK_SUBMISSION_REQUIREMENTS_READ,
 })
-
 
 @unique
 class ActionOwner(StrEnum):
@@ -644,6 +643,8 @@ ACTION_DEFINITIONS = (
     ),
     _active(ActionId.OPERATIONS_CHECKER_RETRY, PermissionId.OPERATIONS_CHECKER_RETRY, ActionOwner.AUTH_14),
     _active(ActionId.OPERATIONS_CHECKER_RETRY_SOURCE_LIST, PermissionId.OPERATIONS_STATUS_READ, ActionOwner.AUTH_14),
+    _active(ActionId.OPERATIONS_POST_SUBMIT_DELIVERY_LIST, PermissionId.OPERATIONS_STATUS_READ, ActionOwner.AUTH_14),
+    _active(ActionId.OPERATIONS_POST_SUBMIT_DELIVERY_RECONCILE, PermissionId.OPERATIONS_RECONCILE_RUN, ActionOwner.AUTH_14),
     _active(ActionId.CHECKER_REGISTRY_READ, PermissionId.OPERATIONS_STATUS_READ, ActionOwner.PILOT_04),
     _active(ActionId.CHECKER_REGISTRY_REGISTER, PermissionId.OPERATIONS_RECONCILE_RUN, ActionOwner.PILOT_04),
     _active(ActionId.SUBMISSION_CREATE, PermissionId.SUBMISSION_CREATE, ActionOwner.AUTH_14),
@@ -831,10 +832,9 @@ NEW_PERMISSION_IDS = frozenset(
 )
 HISTORICAL_PERMISSION_IDS = PERMISSION_IDS - NEW_PERMISSION_IDS
 
-
 def _require_catalogue_counts() -> None:
     """Keep the closed action inventory and permission boundary exact."""
-    if len(PERMISSION_IDS) != 82 or len(ACTION_IDS) != 174:
+    if len(PERMISSION_IDS) != 82 or len(ACTION_IDS) != 176:
         raise RuntimeError("authorization catalogue count mismatch")
     if len(HISTORICAL_PERMISSION_IDS) != 49 or len(NEW_PERMISSION_IDS) != 33:
         raise RuntimeError("authorization permission boundary mismatch")
@@ -985,6 +985,8 @@ def _index_actions(definitions: tuple[ActionDefinition, ...]) -> MappingProxyTyp
         ActionId.PROJECT_TASK_READ, ActionId.PROJECT_TASK_SUBMISSION_REQUIREMENTS_READ,
         ActionId.AUDIT_TASK_EVIDENCE_READ, ActionId.OPERATIONS_CHECKER_RETRY,
         ActionId.OPERATIONS_CHECKER_RETRY_SOURCE_LIST,
+        ActionId.OPERATIONS_POST_SUBMIT_DELIVERY_LIST,
+        ActionId.OPERATIONS_POST_SUBMIT_DELIVERY_RECONCILE,
     } | TASK_LOCKED_CONTEXT_READ_ACTIONS | HISTORY_READ_ACTIONS | PROJECT_MANAGEMENT_READ_ACTIONS:
         raise RuntimeError("authorization active action boundary mismatch")
     _validate_action_definitions(definitions)

@@ -2538,6 +2538,39 @@ def test_retry_ownership_does_not_allow_a_parallel_checker_runner():
         })), trusted)
 
 
+def test_delivery_reconciliation_ownership_allows_only_the_source_specific_seams():
+    targets = ownership.ARCH_04F5_DELIVERY_RECONCILIATION_TARGETS
+    assert targets == {
+        "backend/app/modules/authorization/domain/post_submit_deliveries.py",
+        "backend/app/modules/authorization/post_submit_delivery_authorization.py",
+        "backend/app/modules/authorization/post_submit_delivery_read.py",
+        "backend/app/modules/checkers/api/delivery_reconciliation.py",
+        "backend/app/modules/checkers/delivery_reconciliation.py",
+        "backend/app/modules/checkers/delivery_reconciliation_handler.py",
+    }
+    retained = "backend/app/core/config.py"
+    trusted = _partition([retained])
+    ownership._validate_additive_partition_transition(
+        _partition(sorted({retained, *targets})), trusted,
+    )
+    with pytest.raises(
+        ownership.BehaviorOwnershipError,
+        match="untrusted_partition_change",
+    ):
+        ownership._validate_additive_partition_transition(
+            _partition(
+                sorted(
+                    {
+                        retained,
+                        *targets,
+                        "backend/app/modules/checkers/generic_redrive.py",
+                    }
+                )
+            ),
+            trusted,
+        )
+
+
 def test_revision_ownership_does_not_allow_a_parallel_exhaustion_writer():
     retained = "backend/app/core/config.py"
     trusted = _partition([retained])

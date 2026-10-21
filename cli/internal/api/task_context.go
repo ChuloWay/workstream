@@ -195,15 +195,25 @@ func (c *Client) SubmissionRequirements(ctx context.Context, selector string) (R
 	if err != nil {
 		return result, err
 	}
+	value, err := decodeSubmissionRequirements(raw, selector, "")
+	if err != nil || !c.safeMutationResponse(raw) {
+		return result, &Failure{Code: "invalid_api_response"}
+	}
+	return Result[SubmissionRequirements]{Raw: raw, Value: value}, nil
+}
+
+func decodeSubmissionRequirements(raw json.RawMessage, task, project string) (SubmissionRequirements, error) {
 	var value SubmissionRequirements
+	bad := &Failure{Code: "invalid_api_response"}
 	fields, err := contextObject(raw, &value, []string{
 		"task_id", "project_id", "guide_version", "required_packet_fields", "required_artifacts", "required_evidence",
 		"forbidden_artifacts", "attestation_terms", "manifest_required", "artifact_hash_required", "artifact_hash_algorithm",
 		"allowed_storage_schemes", "storage_reference_rules", "packaging",
 	}, []string{"required_packet_fields", "attestation_terms", "allowed_storage_schemes"})
-	if err != nil || !sameUUID(value.TaskID, selector) || !validUUID(value.ProjectID) ||
+	if err != nil || !sameUUID(value.TaskID, task) || !validUUID(value.ProjectID) ||
+		(project != "" && !sameUUID(value.ProjectID, project)) ||
 		strings.TrimSpace(value.GuideVersion) == "" || value.ArtifactHashAlgorithm != "sha256" {
-		return result, &Failure{Code: "invalid_api_response"}
+		return value, bad
 	}
 	for _, group := range []struct {
 		key      string
@@ -215,7 +225,7 @@ func (c *Client) SubmissionRequirements(ctx context.Context, selector string) (R
 	} {
 		var entries []json.RawMessage
 		if err := jsonv2.Unmarshal(fields[group.key], &entries); err != nil || entries == nil {
-			return result, &Failure{Code: "invalid_api_response"}
+			return value, bad
 		}
 		for index, entry := range entries {
 			var target any
@@ -228,26 +238,32 @@ func (c *Client) SubmissionRequirements(ctx context.Context, selector string) (R
 				target = &value.ForbiddenArtifacts[index]
 			}
 			if _, err := contextObject(entry, target, group.required, nil); err != nil {
-				return result, &Failure{Code: "invalid_api_response"}
+				return value, bad
 			}
 		}
 	}
 	if _, err := contextObject(fields["storage_reference_rules"], &value.StorageReferenceRules, []string{
 		"allowed_storage_schemes", "allowed_uri_prefixes", "credentials_allowed", "query_strings_allowed", "fragments_allowed", "path_traversal_allowed",
 	}, []string{"allowed_storage_schemes", "allowed_uri_prefixes"}); err != nil {
-		return result, &Failure{Code: "invalid_api_response"}
+		return value, bad
 	}
 	// The optional format array may be absent/null. A null member decodes to
 	// an empty string, which the closed public format set below rejects.
 	if _, err := contextObject(fields["packaging"], &value.Packaging, []string{"package_required"}, nil); err != nil {
-		return result, &Failure{Code: "invalid_api_response"}
+		return value, bad
 	}
 	for _, format := range value.Packaging.AllowedPackageFormats {
 		if format != "zip" && format != "tar" && format != "tar.gz" && format != "tar.zst" {
-			return result, &Failure{Code: "invalid_api_response"}
+			return value, bad
 		}
 	}
-	return Result[SubmissionRequirements]{Raw: raw, Value: value}, nil
+	for _, maximum := range []*big.Int{value.MaximumFileSizeBytes, value.MaximumPackageSizeBytes,
+		value.MaximumArchiveEntries, value.MaximumArchiveSizeBytes} {
+		if maximum != nil && maximum.Sign() <= 0 {
+			return value, bad
+		}
+	}
+	return value, nil
 }
 
 // contextObject extends the shared closed decoder with required non-null
