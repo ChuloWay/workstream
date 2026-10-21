@@ -11,6 +11,10 @@ from app.modules.authorization.domain.checker_retry_reads import (
     CHECKER_RETRY_READ_ACTIONS,
     checker_retry_read_denial,
 )
+from app.modules.authorization.domain.post_submit_deliveries import (
+    POST_SUBMIT_DELIVERY_READ_ACTIONS,
+    post_submit_delivery_read_denial,
+)
 from app.modules.authorization.domain.contribution_reads import contribution_read_denial
 from app.modules.authorization.domain.contributor_reads import contributor_read_denial
 from app.modules.authorization.domain.management_reads import management_read_denial
@@ -20,7 +24,8 @@ from app.modules.authorization.domain.task_queues import TASK_QUEUE_ACTIONS, que
 
 READ_ACTIONS = (
     TASK_QUEUE_ACTIONS | HISTORY_READ_ACTIONS | CONTRIBUTION_READ_ACTIONS
-    | CONTRIBUTOR_READ_ACTIONS | CHECKER_RETRY_READ_ACTIONS | PROJECT_MANAGEMENT_READ_ACTIONS
+    | CONTRIBUTOR_READ_ACTIONS | CHECKER_RETRY_READ_ACTIONS
+    | POST_SUBMIT_DELIVERY_READ_ACTIONS | PROJECT_MANAGEMENT_READ_ACTIONS
     | {ActionId.PROJECT_READ}
 )
 
@@ -41,6 +46,8 @@ async def read_denial(action, resource, context, repository, refresh, lifecycle,
         evaluator = contributor_read_denial
     elif action.action_id in CHECKER_RETRY_READ_ACTIONS:
         evaluator = checker_retry_read_denial
+    elif action.action_id in POST_SUBMIT_DELIVERY_READ_ACTIONS:
+        evaluator = post_submit_delivery_read_denial
     else:
         raise TypeError("unsupported closed read action")
     return await evaluator(action, resource, context, repository, refresh, lifecycle)

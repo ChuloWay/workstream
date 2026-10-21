@@ -38,7 +38,9 @@ from app.modules.outbox.api import (
 )
 
 
-def _source_from_run(run: CheckerRun) -> tuple[PostSubmissionExecutionRequest, CheckerRetrySource]:
+def require_finalized_infrastructure_source(
+    run: CheckerRun,
+) -> tuple[PostSubmissionExecutionRequest, CheckerRetrySource]:
     """Require a real terminal result/finalization before any new Operator effect."""
     if (
         run.status != "infrastructure_failed" or run.finalize_evidence_id is None
@@ -368,7 +370,7 @@ class CheckerRetryService:
         ).execution_options(populate_existing=True))
         if source_run is None:
             raise CheckerRetrySourceUnavailable("checker_retry_source_unavailable")
-        locked_request, source = _source_from_run(source_run)
+        locked_request, source = require_finalized_infrastructure_source(source_run)
         if locked_request != source_request:
             raise CheckerRetrySourceUnavailable("checker_retry_source_unavailable")
         if existing is not None:
