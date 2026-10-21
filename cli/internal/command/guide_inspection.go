@@ -22,7 +22,7 @@ func addGuideInspection(project, guide *cobra.Command, client func() (*api.Clien
 			return writeGuideInspection(stdout, *output, "Current active-guide context (not later-write authority)", result, err)
 		},
 	})
-	sufficiency := &cobra.Command{Use: "sufficiency", Short: "Inspect retained guide sufficiency evidence"}
+	sufficiency := &cobra.Command{Use: "sufficiency", Short: "Inspect reports, record human diagnostics, or acknowledge eligible warnings (not approval or activation)"}
 	sufficiency.AddCommand(&cobra.Command{
 		Use: "list PROJECT_ID GUIDE_ID", Short: "Inspect the newest 100 canonical reports; exact show reaches older retained IDs", Args: cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {

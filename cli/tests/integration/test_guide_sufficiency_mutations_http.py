@@ -14,6 +14,13 @@ ACK = (
 )
 
 
+def test_sufficiency_namespace_help_includes_the_human_writes(cli):
+    result = cli("http://127.0.0.1:1", TOKEN, "project", "guide", "--help")
+    assert result.returncode == 0 and result.stderr == "", result.stderr
+    assert "Inspect reports, record human diagnostics, or acknowledge eligible warnings" in result.stdout
+    assert "not approval or activation" in result.stdout
+
+
 def input_file(tmp_path, body):
     path = tmp_path / "request.json"
     path.write_text(body, encoding="utf-8")

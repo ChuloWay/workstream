@@ -40,6 +40,8 @@
   [WS-CLI-001-35](WS-CLI-001-35.md), deliberate exact-source manager revision-context repair;
   [WS-CLI-001-36](WS-CLI-001-36.md), status-only Operator task browsing,
   exact locked-context inspection and explicit reasoned start override;
+  [WS-CLI-001-38](WS-CLI-001-38.md), keyed human guide sufficiency diagnostics
+  and eligible warning acknowledgement through existing public POSTs;
   [PILOT-13](../../changes/pilot13-assigned-task-guide-documents.md), assigned-task locked-guide listing/download;
   [PILOT-02](../../changes/pilot02-bulk-transitions-cli.md), explicit CSV conversion,
   source custody, atomic import, batch status and whole-batch screen/release.
@@ -58,6 +60,14 @@ public GETs. Historical lists expose the backend-capped newest 100 rows;
 exact reads reach older retained IDs. Current-chain reads remain authorized
 observations, not readiness or later-write authority. Manual policy writes
 remain separate.
+
+[WS-CLI-001-38](WS-CLI-001-38.md) adds human-only sufficiency report creation and
+eligible warning acknowledgement to that guide namespace. The backend checks
+current Project Manager authority, draft/source lineage, warning eligibility
+and replay. Neither write produces an authoritative compiled setup result,
+approves policy or activates a guide. Issue #601 still has two manual artifact-
+policy POST/PATCH operations outstanding; owner-produced setup followed by
+public success remains unproven for them.
 
 [WS-CLI-001-29](WS-CLI-001-29.md) adds explicit system-Operator commands for
 immutable external-checker registry registration/read and project-bound
@@ -112,7 +122,7 @@ revision-context presentation correction.
 |---|---|---:|
 | [#599](https://github.com/Flow-Research/workstream/issues/599) | Guide edit and review/revision policy configuration | 3 |
 | [#600](https://github.com/Flow-Research/workstream/issues/600) | Active guide, sufficiency and intake policy inspection, delivered by [WS-CLI-001-32](WS-CLI-001-32.md) | 7 |
-| [#601](https://github.com/Flow-Research/workstream/issues/601) | Governed sufficiency/manual artifact-policy writes | 4 |
+| [#601](https://github.com/Flow-Research/workstream/issues/601) | Two human sufficiency writes in [WS-CLI-001-38](WS-CLI-001-38.md); manual artifact-policy POST/PATCH remain separate pending real owner-produced setup proof | 4 (2 covered) |
 | [#602](https://github.com/Flow-Research/workstream/issues/602) | Manager task context and submission/checker evidence, delivered by [WS-CLI-001-27](WS-CLI-001-27.md) | 7 |
 | [#603](https://github.com/Flow-Research/workstream/issues/603) | Exact revision-context repair, delivered by [WS-CLI-001-35](WS-CLI-001-35.md) | 1 |
 | [#604](https://github.com/Flow-Research/workstream/issues/604) | Contributor-candidate discovery, delivered by [WS-CLI-001-33](WS-CLI-001-33.md) | 1 |
