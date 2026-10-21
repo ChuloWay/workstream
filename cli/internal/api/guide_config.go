@@ -141,7 +141,7 @@ func (c *Client) EditGuide(ctx context.Context, project, guide string, body json
 }
 
 func validIfMatchHeader(value string) bool {
-	if value == "" || len(value) > 256 {
+	if value == "" || len(value) > 256 || value[0] == ' ' || value[len(value)-1] == ' ' {
 		return false
 	}
 	for _, r := range value {
@@ -243,7 +243,7 @@ func (c *Client) configurePolicy(ctx context.Context, project, guide string, bod
 		return result, guideConfigFailure(&Failure{Code: "invalid_api_response", OutcomeUnknown: true}, true)
 	}
 	if kind == "review" {
-		if !validConfiguredReview(value, review, fields) {
+		if !validConfiguredReview(value, review, fields, predecessor == nil) {
 			return result, guideConfigFailure(&Failure{Code: "invalid_api_response", OutcomeUnknown: true}, true)
 		}
 	} else if !validConfiguredRevision(value, revision, fields) {
@@ -278,7 +278,7 @@ func sameBigInt(left, right *big.Int) bool {
 	return left != nil && right != nil && left.Cmp(right) == 0
 }
 
-func validConfiguredReview(value PolicyConfigured, input reviewPolicyInput, fields map[string]json.RawMessage) bool {
+func validConfiguredReview(value PolicyConfigured, input reviewPolicyInput, fields map[string]json.RawMessage, initial bool) bool {
 	if value.HumanReviewRequired == nil || value.SemanticsFormat == nil || *value.SemanticsFormat != "v2" ||
 		value.ReviewPreferenceWindowSeconds == nil || value.ReviewPreferenceWindowSeconds.Sign() <= 0 ||
 		value.ReviewLeaseDurationSeconds == nil || value.ReviewLeaseDurationSeconds.Sign() <= 0 ||
@@ -297,6 +297,9 @@ func validConfiguredReview(value PolicyConfigured, input reviewPolicyInput, fiel
 		}
 	}
 	if _, present := fields["human_review_required"]; present && *value.HumanReviewRequired != *input.HumanReviewRequired {
+		return false
+	}
+	if _, present := fields["human_review_required"]; !present && initial && !*value.HumanReviewRequired {
 		return false
 	}
 	if _, present := fields["max_active_review_leases_per_reviewer"]; present && !sameBigInt(value.MaxActiveReviewLeasesPerReviewer, input.MaxActiveReviewLeasesPerReviewer) {

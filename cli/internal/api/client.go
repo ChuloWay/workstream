@@ -262,8 +262,8 @@ func validStatus(value string) bool {
 }
 
 func validTime(value string) bool {
-	_, err := time.Parse(time.RFC3339Nano, value)
-	return err == nil
+	parsed, err := time.Parse(time.RFC3339Nano, value)
+	return err == nil && parsed.Year() >= 1
 }
 
 // Compare UUID values, not selector spelling. Keep the original selector on the

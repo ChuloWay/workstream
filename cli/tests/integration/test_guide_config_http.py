@@ -195,6 +195,37 @@ def test_policy_put_exact_header_body_and_large_integers(cli, tmp_path):
         assert response["request_headers"][-1]["If-Match"] == predecessor
 
 
+def test_initial_review_default_receipt_and_successor_inheritance(cli, tmp_path):
+    body = {
+        "review_preference_window_seconds": 3600,
+        "review_lease_duration_seconds": 1800,
+    }
+    path = input_file(tmp_path, body)
+    with http_fixture() as (origin, response, requests):
+        response["body"] = json.dumps(
+            review_reply(body) | {"human_review_required": False}
+        ).encode()
+        unknown(
+            invoke(cli, origin, "set-review-policy", path, match='"no-current-policy"')
+        )
+        assert len(requests) == 1
+
+        initial = review_reply(body)
+        response["body"] = json.dumps(initial).encode()
+        accepted = invoke(
+            cli, origin, "set-review-policy", path, match='"no-current-policy"'
+        )
+        assert accepted.returncode == 0 and json.loads(accepted.stdout) == initial
+
+        predecessor = f'"{POLICY}.1.{"a" * 64}"'
+        inherited = review_reply(body, generation=2, predecessor=POLICY)
+        inherited["human_review_required"] = False
+        response["body"] = json.dumps(inherited).encode()
+        successor = invoke(cli, origin, "set-review-policy", path, match=predecessor)
+        assert successor.returncode == 0 and json.loads(successor.stdout) == inherited
+        assert len(requests) == 3
+
+
 def test_config_input_and_header_refusals_send_no_request(cli, tmp_path):
     with http_fixture() as (origin, response, requests):
         path = input_file(tmp_path, review_body())
@@ -217,7 +248,14 @@ def test_config_input_and_header_refusals_send_no_request(cli, tmp_path):
                 2,
             )
         path = input_file(tmp_path, review_body())
-        for match in (None, "", "x\r\nInjected: x", "x" * 257):
+        for match in (
+            None,
+            "",
+            ' "no-current-policy"',
+            '"no-current-policy" ',
+            "x\r\nInjected: x",
+            "x" * 257,
+        ):
             assert_failure(
                 invoke(cli, origin, "set-review-policy", path, match=match),
                 "invalid_arguments",
@@ -229,6 +267,30 @@ def test_config_input_and_header_refusals_send_no_request(cli, tmp_path):
             2,
         )
         assert requests == [] and response["commands"] == []
+
+
+def test_year_zero_created_at_receipts_are_unknown(cli, tmp_path):
+    with http_fixture() as (origin, response, requests):
+        response["body"] = json.dumps(
+            guide_reply("new") | {"created_at": "0000-01-01T00:00:00Z"}
+        ).encode()
+        unknown(
+            invoke(cli, origin, "edit", input_file(tmp_path, {"change_summary": "new"}))
+        )
+
+        response["body"] = json.dumps(
+            review_reply() | {"created_at": "0000-01-01T00:00:00Z"}
+        ).encode()
+        unknown(
+            invoke(
+                cli,
+                origin,
+                "set-review-policy",
+                input_file(tmp_path, review_body()),
+                match='"no-current-policy"',
+            )
+        )
+        assert len(requests) == 2
 
 
 def test_mismatched_successes_are_unknown_and_never_printed(cli, tmp_path):

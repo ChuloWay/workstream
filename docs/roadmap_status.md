@@ -643,9 +643,10 @@ cannot be reused as post-submission review-gate evidence. See the
   [CLI guide configuration](../.commitrail/initiatives/WS-CLI-001/WS-CLI-001-26.md)
   exposes the public draft-guide PATCH and separate review/revision policy PUTs.
   Caller-owned keys and exact `If-Match` selectors preserve replay and stale
-  precondition boundaries; backend authorization for new writes, policy semantics
-  and activation remain decisive. This CLI exposure is blocked by the
-  [exact-replay authority defect](https://github.com/Flow-Research/workstream/issues/614).
+  precondition boundaries; backend authorization for new writes and exact
+  replays, policy semantics and activation remain decisive. The backend
+  [exact-replay authority correction](https://github.com/Flow-Research/workstream/pull/621)
+  does not transfer authorization decisions to the CLI.
   [CLI guide original upload](../.commitrail/initiatives/WS-CLI-001/WS-CLI-001-10.md)
   sends one declared document through the public binary POST, with bounded
   streaming, explicit replay custody and SHA-256/size-bound storage receipts.
