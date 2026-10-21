@@ -1,8 +1,10 @@
 """Counterexamples for the release-image evidence verifier."""
 
+import ast
 import copy
 import json
 from pathlib import Path
+import re
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -12,6 +14,36 @@ from scripts import verify_hosted_release_images as proof
 
 
 class ReleaseImageProofTests(unittest.TestCase):
+    def test_helper_pins_match_runtime_download_and_image_verification(self):
+        root = Path(__file__).resolve().parents[1]
+        runtime = ast.parse(
+            (root / "backend/app/adapters/artifacts/aws_roles_anywhere.py").read_text()
+        )
+        pins = [
+            ast.literal_eval(node.value)
+            for node in runtime.body
+            if isinstance(node, ast.Assign)
+            and any(
+                isinstance(target, ast.Name)
+                and target.id == "_AWS_SIGNING_HELPER_SHA256_BY_MACHINE"
+                for target in node.targets
+            )
+        ]
+        self.assertEqual(pins, [proof.ROLES_ANYWHERE_HELPER_SHA256])
+        dockerfile = (root / "docker/backend/Dockerfile.release").read_text()
+        downloads = re.findall(
+            r"ADD --checksum=sha256:([0-9a-f]{64})\s+\\\n\s+"
+            r"https://rolesanywhere\.amazonaws\.com/releases/[^/]+/"
+            r"(X86_64|Aarch64)/Linux/Amzn2023/aws_signing_helper",
+            dockerfile,
+        )
+        self.assertEqual(len(downloads), 2)
+        machines = {"X86_64": "x86_64", "Aarch64": "aarch64"}
+        self.assertEqual(
+            {machines[architecture]: digest for digest, architecture in downloads},
+            proof.ROLES_ANYWHERE_HELPER_SHA256,
+        )
+
     def setUp(self):
         self.source = {"app/main.py": "a" * 64, "uv.lock": "b" * 64}
         self.packages = {"openai-agents": "0.22.2", "jsonschema": "4.26.0"}

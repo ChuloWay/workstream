@@ -268,15 +268,6 @@ services:
         uid: "${WORKSTREAM_RUNTIME_UID}"
         gid: "${WORKSTREAM_RUNTIME_GID}"
         mode: 0400
-    volumes:
-      - type: bind
-        source: ${WORKSTREAM_ARTIFACT_S3_ROLES_ANYWHERE_RUNTIME_CERTIFICATE_HOST_FILE:?set the private runtime certificate path}
-        target: /run/workstream-roles-anywhere/certificate.pem
-        read_only: true
-      - type: bind
-        source: ${WORKSTREAM_ARTIFACT_S3_ROLES_ANYWHERE_RUNTIME_PRIVATE_KEY_HOST_FILE:?set the private runtime key path}
-        target: /run/workstream-roles-anywhere/private-key.pem
-        read_only: true
     command:
       - python
       - -m

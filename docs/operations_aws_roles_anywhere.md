@@ -28,13 +28,14 @@ Use one offline pilot CA and exactly three leaf identities:
 
 | Identity | Certificate subject CN | Selected role | Mounted into |
 |---|---|---|---|
-| runtime | exact runtime role basename | runtime role | API, Celery execution process, Beat; runtime proof job |
+| runtime | exact runtime role basename | runtime role | API, Celery execution process; runtime proof job |
 | readiness | exact readiness role basename | readiness role | readiness proof job only |
 | negative | exact negative role basename | negative role | negative proof job only |
 
 The CA private key, OpenSSL database, CRL signing state, readiness private key,
 and negative private key must never enter the long-lived application
-containers. The credential-free coordinator receives only the database secret.
+containers. Beat receives no certificate or private key: it schedules work using
+the database and broker. The credential-free coordinator receives only the database secret.
 Do not configure static AWS keys, an AWS profile, EC2 metadata, web identity, a
 credential-process file, or another signing helper.
 
@@ -148,8 +149,39 @@ archive stay on the offline CA system.
 
 ## Provision the closed AWS trust
 
-Use an authorized provisioning identity only for this section. It is not a
-runtime credential. Start from the reviewed repository root, record its absolute
+Use an authorized provisioning identity only for this section. A dedicated IAM
+user with an access key is supported for this temporary setup administration;
+its credentials must stay separate from the application environment. An existing
+authorized provisioning role is also supported. Neither identity is a runtime
+credential.
+
+Have an account administrator grant only the actions needed for the declared
+resource names. Use two stages because AWS assigns the trust-anchor and profile
+IDs when creating them:
+
+1. Allow creation of the three exact IAM roles and two exact managed policies,
+   attach each policy only to its matching role, and allow `iam:PassRole` only
+   for those roles with `iam:PassedToService=rolesanywhere.amazonaws.com`.
+   Allow `rolesanywhere:CreateTrustAnchor` and `rolesanywhere:CreateProfile` in
+   the selected region; create both resources **without tags**. Do not grant
+   wildcard tag, read, or attribute-mapping access. If needed, permit creation
+   of the exact Roles Anywhere service-linked role with
+   `iam:AWSServiceName=rolesanywhere.amazonaws.com`. Grant the bucket-control
+   reads and writes below only for the declared bucket, with no direct object
+   read, write, or delete actions.
+2. After both create responses supply their ARNs, have the account administrator
+   replace the setup policy with exact-resource read/mapping access described
+   below and `iam:CreatePolicyVersion` only for the readiness policy. The setup
+   identity does not need permission to modify its own IAM policy.
+
+This is trusted setup administration. Exact resource names do not constrain the
+contents of submitted trust policies, managed policies, CA bundles, or bucket
+policies. In particular, bucket-policy administration can grant data access.
+Review those generated documents before applying them; do not give this setup
+identity to application processes. Remove its temporary permissions and access
+key after provisioning. Ongoing proof jobs use their own certificate identities.
+
+Start from the reviewed repository root, record its absolute
 path, and use one separate private provisioning directory for every command in
 this section:
 
@@ -206,7 +238,7 @@ one document.
       "private_key_host_file": "/etc/workstream/roles-anywhere/negative-private-key.pem"
     }
   },
-  "bootstrap_principal_arn": "arn:aws:iam::123456789012:role/workstream-bootstrap"
+  "bootstrap_principal_arn": "arn:aws:iam::123456789012:user/workstream-provisioner"
 }
 ```
 
@@ -226,8 +258,9 @@ READINESS_POLICY_NAME=${READINESS_POLICY_ARN##*/}
 export AWS_REGION BUCKET RUNTIME_POLICY_ARN READINESS_POLICY_ARN
 ```
 
-Create the certificate-bundle trust anchor from the transferred public CA and
-retain both the create and read responses:
+Create the untagged certificate-bundle trust anchor from the transferred public
+CA and retain its create response. Its read response is collected after the
+exact-resource permissions are installed:
 
 ```sh
 python3 - ca.cert.pem > trust-anchor-input.json <<'PY'
@@ -255,9 +288,6 @@ path.write_text(json.dumps(document, indent=2) + "\n")
 PY
 TRUST_ANCHOR_ID=$(python3 -c \
   'import json; print(json.load(open("trust-anchor-create.json"))["trustAnchor"]["trustAnchorId"])')
-aws rolesanywhere get-trust-anchor \
-  --trust-anchor-id "$TRUST_ANCHOR_ID" --region "$AWS_REGION" \
-  > trust-anchor-read.json
 ```
 
 Generate the role trust policies and closed profile request. This performs no
@@ -324,10 +354,8 @@ Do not add an enabled lifecycle rule that can expire or delete completed objects
 under the configured private prefix. The generated bucket policy permits object
 data only through the runtime role and denies unconditional writes.
 
-Create the profile from `profile_create_parameters` with the three exact role
-ARNs and a 3600-second duration. The profile must add only the issuer-CN and
-subject-CN mappings used by the generated trust policies. Roles Anywhere may
-create a broader default SAN mapping, so remove it explicitly:
+Create the untagged profile from `profile_create_parameters` with the three exact
+role ARNs and a 3600-second duration:
 
 ```sh
 aws rolesanywhere create-profile \
@@ -335,6 +363,23 @@ aws rolesanywhere create-profile \
   --region "$AWS_REGION" > profile-create.json
 PROFILE_ID=$(python3 -c \
   'import json; print(json.load(open("profile-create.json"))["profile"]["profileId"])')
+```
+
+Before continuing, have the account administrator replace the setup policy.
+Use `trustAnchor.trustAnchorArn` from `trust-anchor-create.json` for
+`rolesanywhere:GetTrustAnchor`. Use `profile.profileArn` from
+`profile-create.json` for `rolesanywhere:GetProfile`,
+`rolesanywhere:PutAttributeMapping`, and `rolesanywhere:DeleteAttributeMapping`.
+Retain only the necessary exact-role/policy read access and allow
+`iam:CreatePolicyVersion` on the readiness policy alone. Remove the initial
+creation, role attachment, pass-role, and bucket-administration grants. Do not
+substitute wildcard resource ARNs or add tag permissions.
+
+The profile must add only the issuer-CN and subject-CN mappings used by the
+generated trust policies. Roles Anywhere may create a broader default SAN
+mapping, so remove it explicitly. Collect both exact-resource read responses:
+
+```sh
 aws rolesanywhere put-attribute-mapping --profile-id "$PROFILE_ID" \
   --certificate-field x509Issuer --mapping-rules specifier=CN \
   --region "$AWS_REGION"
@@ -345,6 +390,9 @@ aws rolesanywhere delete-attribute-mapping --profile-id "$PROFILE_ID" \
   --certificate-field x509SAN --region "$AWS_REGION"
 aws rolesanywhere get-profile --profile-id "$PROFILE_ID" \
   --region "$AWS_REGION" > profile-read.json
+aws rolesanywhere get-trust-anchor \
+  --trust-anchor-id "$TRUST_ANCHOR_ID" --region "$AWS_REGION" \
+  > trust-anchor-read.json
 ```
 
 Set the real `profile_arn` from the retained create response, then generate the

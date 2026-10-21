@@ -653,7 +653,7 @@ def validate_compose(rendered: dict[str, Any]) -> None:
         ROLES_ANYWHERE_CERTIFICATE_TARGET: None,
         ROLES_ANYWHERE_PRIVATE_KEY_TARGET: None,
     }
-    for name in ROLE_SECRET_FILE_KEYS:
+    for name in ("api", "worker"):
         mounts = _service_mounts(services[name])
         for target, expected_source in identity_mounts.items():
             mount = mounts.get(str(target))
@@ -677,6 +677,12 @@ def validate_compose(rendered: dict[str, Any]) -> None:
         raise PreflightError(
             "Roles Anywhere certificate and private key mounts must be distinct"
         )
+    beat_mounts = _service_mounts(services["beat"])
+    if {str(target) for target in identity_mounts}.intersection(beat_mounts) or any(
+        mount.get("source") in identity_mounts.values()
+        for mount in beat_mounts.values()
+    ):
+        raise PreflightError("Beat must not receive the AWS runtime identity")
     proof_sources: list[str] = []
     for name in ("aws-proof-runtime", "aws-proof-readiness", "aws-proof-negative"):
         service = services[name]

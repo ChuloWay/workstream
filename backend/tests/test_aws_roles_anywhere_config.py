@@ -27,6 +27,11 @@ from app.adapters.artifacts.aws_live_proof import (
     _validate_readiness_policy,
     _validate_runtime_policy,
 )
+from app.core.aws_roles_anywhere import (
+    RolesAnywhereResourceType,
+    roles_anywhere_resource_scope,
+)
+from app.core.config import Settings
 from app.core.hashing import canonical_json_hash
 from scripts.aws_roles_anywhere_config import (
     ConfigurationGenerationError,
@@ -35,6 +40,7 @@ from scripts.aws_roles_anywhere_config import (
     generate_bootstrap_templates,
     generate_configuration,
 )
+from tests.artifact_store_helpers import artifact_admission_limit_settings
 
 
 _ACCOUNT = "123456789012"
@@ -185,6 +191,134 @@ def test_generation_reuses_canonical_resource_digests_and_closes_trust(
     assert environment["WORKSTREAM_ARTIFACT_S3_BUCKET_POLICY_SHA256"] == (
         canonical_json_hash(templates["bucket_policy"])
     )
+
+
+def _settings_from_generated_environment(
+    tmp_path: Path,
+    environment: dict[str, str],
+) -> Settings:
+    def generated(name: str) -> str:
+        return environment[f"WORKSTREAM_{name.upper()}"]
+
+    return Settings(
+        **artifact_admission_limit_settings(),
+        environment="production",
+        artifact_store_backend="s3_compatible",
+        artifact_scratch_root=tmp_path / "scratch",
+        artifact_s3_provider_profile="aws_s3",
+        artifact_s3_region=generated("artifact_s3_region"),
+        artifact_s3_bucket=generated("artifact_s3_bucket"),
+        artifact_s3_private_prefix=generated("artifact_s3_private_prefix"),
+        artifact_s3_addressing_style="virtual",
+        artifact_s3_credential_mode="aws_workload_identity",
+        artifact_s3_aws_workload_identity_method=generated(
+            "artifact_s3_aws_workload_identity_method"
+        ),
+        release_id=generated("release_id"),
+        artifact_s3_runtime_role_arn=generated("artifact_s3_runtime_role_arn"),
+        artifact_s3_runtime_trust_policy_sha256=generated(
+            "artifact_s3_runtime_trust_policy_sha256"
+        ),
+        artifact_s3_runtime_policy_arn=generated("artifact_s3_runtime_policy_arn"),
+        artifact_s3_readiness_role_arn=generated("artifact_s3_readiness_role_arn"),
+        artifact_s3_readiness_trust_policy_sha256=generated(
+            "artifact_s3_readiness_trust_policy_sha256"
+        ),
+        artifact_s3_readiness_policy_arn=generated("artifact_s3_readiness_policy_arn"),
+        artifact_s3_negative_role_arn=generated("artifact_s3_negative_role_arn"),
+        artifact_s3_negative_trust_policy_sha256=generated(
+            "artifact_s3_negative_trust_policy_sha256"
+        ),
+        artifact_s3_bootstrap_principal_arn=generated("artifact_s3_bootstrap_principal_arn"),
+        artifact_s3_bucket_policy_sha256=generated("artifact_s3_bucket_policy_sha256"),
+        artifact_s3_roles_anywhere_trust_anchor_arn=generated(
+            "artifact_s3_roles_anywhere_trust_anchor_arn"
+        ),
+        artifact_s3_roles_anywhere_trust_anchor_sha256=generated(
+            "artifact_s3_roles_anywhere_trust_anchor_sha256"
+        ),
+        artifact_s3_roles_anywhere_profile_arn=generated("artifact_s3_roles_anywhere_profile_arn"),
+        artifact_s3_roles_anywhere_profile_sha256=generated(
+            "artifact_s3_roles_anywhere_profile_sha256"
+        ),
+        artifact_s3_roles_anywhere_role_arn=generated("artifact_s3_runtime_role_arn"),
+        artifact_s3_roles_anywhere_certificate_file=(
+            "/run/workstream-roles-anywhere/certificate.pem"
+        ),
+        artifact_s3_roles_anywhere_private_key_file=(
+            "/run/workstream-roles-anywhere/private-key.pem"
+        ),
+        artifact_s3_operation_total_timeout_seconds=300,
+        artifact_complete_read_deadline_seconds=300,
+        artifact_terminal_persistence_margin_seconds=120,
+    )
+
+
+def test_generated_environment_round_trips_through_canonical_settings(
+    tmp_path: Path,
+    resource_inputs: tuple[dict[str, object], dict[str, object], dict[str, object]],
+) -> None:
+    environment, _templates = generate_configuration(*resource_inputs)
+    settings = _settings_from_generated_environment(tmp_path, environment)
+
+    assert settings.artifact_s3_roles_anywhere_trust_anchor_arn == _ANCHOR
+    assert settings.artifact_s3_roles_anywhere_profile_arn == _PROFILE
+
+
+def test_generated_iam_user_bootstrap_principal_round_trips_through_settings(
+    tmp_path: Path,
+    resource_inputs: tuple[dict[str, object], dict[str, object], dict[str, object]],
+) -> None:
+    operator, anchor, profile = resource_inputs
+    principal = f"arn:aws:iam::{_ACCOUNT}:user/workstream-provisioner"
+    operator["bootstrap_principal_arn"] = principal
+
+    environment, _templates = generate_configuration(operator, anchor, profile)
+    settings = _settings_from_generated_environment(tmp_path, environment)
+
+    assert settings.artifact_s3_bootstrap_principal_arn == principal
+
+
+@pytest.mark.parametrize(
+    ("resource_type", "resource_id"),
+    [("trust-anchor", "deadbeef"), ("profile", "cafebabe")],
+)
+def test_generator_rejects_matching_noncanonical_resource_arns(
+    resource_inputs: tuple[dict[str, object], dict[str, object], dict[str, object]],
+    resource_type: RolesAnywhereResourceType,
+    resource_id: str,
+) -> None:
+    operator, anchor, profile = deepcopy(resource_inputs)
+    malformed = f"arn:aws:rolesanywhere:{_REGION}:{_ACCOUNT}:{resource_type}/{resource_id}"
+    assert (
+        roles_anywhere_resource_scope(
+            malformed,
+            resource_type=resource_type,
+        )
+        is None
+    )
+    if resource_type == "trust-anchor":
+        operator["trust_anchor_arn"] = malformed
+        anchor["trustAnchor"]["trustAnchorArn"] = malformed
+    else:
+        operator["profile_arn"] = malformed
+        profile["profile"]["profileArn"] = malformed
+
+    with pytest.raises(ConfigurationGenerationError, match="ARN scope differs"):
+        generate_configuration(operator, anchor, profile)
+
+
+def test_generator_rejects_distinct_role_arns_with_the_same_certificate_cn(
+    resource_inputs: tuple[dict[str, object], dict[str, object], dict[str, object]],
+) -> None:
+    operator, _anchor, _profile = resource_inputs
+    operator["profile_arn"] = None
+    operator["roles"]["readiness"]["role_arn"] = (
+        f"arn:aws:iam::{_ACCOUNT}:role/readiness-path/workstream-runtime"
+    )
+
+    with pytest.raises(ConfigurationGenerationError, match="role basenames must be distinct"):
+        generate_bootstrap_templates(operator)
 
 
 def test_bootstrap_templates_do_not_require_a_fabricated_profile(

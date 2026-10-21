@@ -100,12 +100,14 @@ startup, and an unrelated secret is neither mounted nor loaded. The loader
 independently requires the running identity and mode `0400`, performs no shell
 evaluation and never prints a value. Do not put AWS static keys in these files.
 This external-host profile selects Roles Anywhere and mounts the runtime leaf
-certificate/key read-only into API, worker and Beat. The checker controller
-receives no AWS identity. Three profile-gated proof jobs receive their own leaf
-pairs one at a time; the coordinator receives no certificate. EC2 instance-role
-authentication remains an independent native-AWS application method, but it is
-not this hosted topology. Follow the complete CA, AWS, renewal and revocation
-procedure in
+certificate/key read-only into API and worker. Beat keeps only its database and
+broker secrets: its startup guard validates the stored provider activation and
+namespace without constructing the S3 adapter or signing helper. The checker
+controller receives no AWS identity. Three profile-gated proof jobs receive
+their own leaf pairs one at a time; the coordinator receives no certificate.
+EC2 instance-role authentication remains an independent native-AWS application
+method, but it is not this hosted topology. Follow the complete CA, AWS, renewal
+and revocation procedure in
 [`docs/operations_aws_roles_anywhere.md`](../../docs/operations_aws_roles_anywhere.md).
 
 Set the immutable release digest and every exact AWS role, managed-policy,

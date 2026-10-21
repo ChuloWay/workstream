@@ -92,6 +92,9 @@ short-lived database activation; no proof bypass or new storage owner is needed.
 - The hosted Linux/Docker profile uses certificate mounts and the official
   helper. No EC2 metadata dependency. Separate proof jobs receive only their
   own identity; runtime never receives readiness/negative keys or CA signing key.
+  Beat schedules work with database/broker access and receives no certificate
+  or private key. A proof command explicitly binds its selected role to its
+  probe mode; the application session factory remains runtime-only by default.
 - Generate configuration digests and policy templates from the same canonical
   validation helpers. Operator configuration should be a small input document
   plus certificate paths, not hand-computed hashes or parallel policy logic.
@@ -158,6 +161,16 @@ IAM trust digests cannot bind mutable CA/profile state. The design now includes
 explicit persistent bindings and the complete cross-role denial matrix. Final
 plan security/architecture review passed against clean head `574746155`;
 implementation and live deployment evidence remain separate requirements.
+
+Implementation review found that proof jobs were incorrectly constructed through
+the runtime-only session default, generator ARN validation differed from Settings,
+and Beat received an unnecessary private key. The repairs bind production proof
+construction to its exact mode, share canonical resource validation, and remove
+Beat's identity mounts. Command-level role-selection tests, generator-to-Settings
+round trips, and rendered-topology counterexamples protect those boundaries.
+Helper download/runtime/verifier hashes also have a shared parity regression.
+The temporary provisioning instructions create untagged resources before an
+administrator replaces creation grants with exact returned-resource permissions.
 
 ## Reconciliation
 

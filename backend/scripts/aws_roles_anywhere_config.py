@@ -19,6 +19,12 @@ from app.adapters.artifacts.aws_roles_anywhere_proof import (
     normalize_roles_anywhere_trust_anchor,
     validate_roles_anywhere_trust_policy,
 )
+from app.core.aws_roles_anywhere import (
+    RolesAnywhereResourceType,
+    iam_principal_scope,
+    roles_anywhere_region_matches_partition,
+    roles_anywhere_resource_scope,
+)
 from app.core.hashing import canonical_json_hash
 from app.core.s3_validation import (
     is_canonical_s3_bucket,
@@ -32,11 +38,6 @@ _MAX_INPUT_BYTES = 1024 * 1024
 _ROLE_ARN = re.compile(
     r"arn:(?P<partition>aws(?:-us-gov|-cn)?):iam::(?P<account>[0-9]{12}):role/"
     r"(?P<name>[A-Za-z0-9+=,.@_/-]{1,128})\Z"
-)
-_ROLES_ANYWHERE_ARN = re.compile(
-    r"arn:(?P<partition>aws(?:-us-gov|-cn)?):rolesanywhere:"
-    r"(?P<region>[a-z0-9-]+):(?P<account>[0-9]{12}):"
-    r"(?P<kind>trust-anchor|profile)/[0-9a-f-]+\Z"
 )
 _POLICY_ARN = re.compile(
     r"arn:(?P<partition>aws(?:-us-gov|-cn)?):iam::(?P<account>[0-9]{12}):policy/"
@@ -147,6 +148,19 @@ def _require_distinct_identity_paths(roles: Mapping[str, object]) -> None:
         )
     if len(set(paths)) != 6:
         raise ConfigurationGenerationError("certificate identity paths must be distinct")
+
+
+def _role_arns(
+    role_rows: Mapping[str, tuple[str, str | None, str, str]],
+) -> list[str]:
+    """Return three roles only when their ARNs and certificate CNs are distinct."""
+    role_arns = [row[0] for row in role_rows.values()]
+    if len(set(role_arns)) != 3:
+        raise ConfigurationGenerationError("workload role ARNs must be distinct")
+    role_basenames = [arn.rsplit("/", 1)[-1] for arn in role_arns]
+    if len(set(role_basenames)) != 3:
+        raise ConfigurationGenerationError("workload role basenames must be distinct")
+    return role_arns
 
 
 def _trust_policy(
@@ -289,9 +303,7 @@ def generate_bootstrap_templates(
     role_rows = {
         name: _role_details(roles[name], name) for name in ("runtime", "readiness", "negative")
     }
-    role_arns = [row[0] for row in role_rows.values()]
-    if len(set(role_arns)) != 3:
-        raise ConfigurationGenerationError("workload role ARNs must be distinct")
+    role_arns = _role_arns(role_rows)
     scopes = {(row[2], row[3]) for row in role_rows.values()}
     if len(scopes) != 1:
         raise ConfigurationGenerationError("workload roles must share one partition and account")
@@ -308,22 +320,21 @@ def generate_bootstrap_templates(
     if source["profile_arn"] is not None:
         raise ConfigurationGenerationError("bootstrap profile ARN must be null")
     bootstrap = _text(source["bootstrap_principal_arn"], "bootstrap principal ARN")
-    bootstrap_match = _ROLE_ARN.fullmatch(bootstrap)
-    if bootstrap_match is None or (
-        bootstrap_match.group("partition"),
-        bootstrap_match.group("account"),
-    ) != (partition, account_id):
+    if iam_principal_scope(bootstrap) != (partition, account_id):
         raise ConfigurationGenerationError("bootstrap principal ARN scope differs")
     release_id = _text(source["release_id"], "release ID")
     if _SHA256_IDENTITY.fullmatch(release_id) is None:
         raise ConfigurationGenerationError("release ID is invalid")
     trust_anchor_arn = _text(source["trust_anchor_arn"], "trust anchor ARN")
-    match = _ROLES_ANYWHERE_ARN.fullmatch(trust_anchor_arn)
+    anchor_scope = roles_anywhere_resource_scope(
+        trust_anchor_arn,
+        resource_type="trust-anchor",
+    )
     if (
-        match is None
-        or match.group("kind") != "trust-anchor"
-        or (match.group("partition"), match.group("account")) != (partition, account_id)
-        or match.group("region") != region
+        anchor_scope is None
+        or (anchor_scope[0], anchor_scope[2]) != (partition, account_id)
+        or anchor_scope[1] != region
+        or not roles_anywhere_region_matches_partition(region, partition)
     ):
         raise ConfigurationGenerationError("Roles Anywhere trust-anchor ARN scope differs")
     trust_policies: dict[str, dict[str, object]] = {}
@@ -377,9 +388,7 @@ def generate_configuration(
     role_rows = {
         name: _role_details(roles[name], name) for name in ("runtime", "readiness", "negative")
     }
-    role_arns = [row[0] for row in role_rows.values()]
-    if len(set(role_arns)) != 3:
-        raise ConfigurationGenerationError("workload role ARNs must be distinct")
+    role_arns = _role_arns(role_rows)
     scopes = {(row[2], row[3]) for row in role_rows.values()}
     if len(scopes) != 1:
         raise ConfigurationGenerationError("workload roles must share one partition and account")
@@ -387,13 +396,17 @@ def generate_configuration(
     region = _text(source["region"], "region")
     trust_anchor_arn = _text(source["trust_anchor_arn"], "trust anchor ARN")
     profile_arn = _text(source["profile_arn"], "profile ARN")
-    for arn, kind in ((trust_anchor_arn, "trust-anchor"), (profile_arn, "profile")):
-        match = _ROLES_ANYWHERE_ARN.fullmatch(arn)
+    resources: tuple[tuple[str, RolesAnywhereResourceType], ...] = (
+        (trust_anchor_arn, "trust-anchor"),
+        (profile_arn, "profile"),
+    )
+    for arn, kind in resources:
+        resource_scope = roles_anywhere_resource_scope(arn, resource_type=kind)
         if (
-            match is None
-            or match.group("kind") != kind
-            or (match.group("partition"), match.group("account")) != (partition, account_id)
-            or match.group("region") != region
+            resource_scope is None
+            or (resource_scope[0], resource_scope[2]) != (partition, account_id)
+            or resource_scope[1] != region
+            or not roles_anywhere_region_matches_partition(region, partition)
         ):
             raise ConfigurationGenerationError(f"Roles Anywhere {kind} ARN scope differs")
     try:

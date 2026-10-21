@@ -191,7 +191,7 @@ class HostedReleaseConfigTests(unittest.TestCase):
                 else:
                     self.assertNotIn(key, services[name]["environment"])
         self.assertNotIn("secrets", services["checker-service"])
-        for name in preflight.ROLE_SECRET_FILE_KEYS:
+        for name in ("api", "worker"):
             mounts = preflight._service_mounts(services[name])
             self.assertEqual(
                 mounts[str(preflight.ROLES_ANYWHERE_CERTIFICATE_TARGET)]["source"],
@@ -200,6 +200,8 @@ class HostedReleaseConfigTests(unittest.TestCase):
             self.assertTrue(
                 mounts[str(preflight.ROLES_ANYWHERE_PRIVATE_KEY_TARGET)]["read_only"]
             )
+        beat_mounts = preflight._service_mounts(services["beat"])
+        self.assertEqual(beat_mounts, {})
         checker_mounts = preflight._service_mounts(services["checker-service"])
         self.assertNotIn(
             str(preflight.ROLES_ANYWHERE_CERTIFICATE_TARGET), checker_mounts
@@ -624,6 +626,16 @@ class HostedReleaseConfigTests(unittest.TestCase):
             if mount["target"] == str(preflight.ROLES_ANYWHERE_PRIVATE_KEY_TARGET):
                 mount["read_only"] = False
         cases.append(("writable runtime identity", writable_identity))
+        beat_identity = copy.deepcopy(rendered)
+        beat_identity["services"]["beat"]["volumes"] = [
+            copy.deepcopy(rendered["services"]["api"]["volumes"][-1])
+        ]
+        cases.append(("runtime identity exposed to Beat", beat_identity))
+        relocated_beat_identity = copy.deepcopy(rendered)
+        relocated_mount = copy.deepcopy(rendered["services"]["api"]["volumes"][-1])
+        relocated_mount["target"] = "/run/unrelated/private.pem"
+        relocated_beat_identity["services"]["beat"]["volumes"] = [relocated_mount]
+        cases.append(("runtime identity relocated into Beat", relocated_beat_identity))
         checker_identity = copy.deepcopy(rendered)
         checker_identity["services"]["checker-service"]["volumes"].append(
             copy.deepcopy(rendered["services"]["api"]["volumes"][-1])

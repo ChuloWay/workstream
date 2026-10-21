@@ -9,7 +9,6 @@ import ipaddress
 import json
 import os
 import re
-from uuid import UUID
 from collections.abc import Callable, Mapping
 from functools import lru_cache
 from pathlib import Path
@@ -25,6 +24,11 @@ from pydantic_settings import (
     SettingsConfigDict,
 )
 
+from app.core.aws_roles_anywhere import (
+    iam_principal_scope,
+    roles_anywhere_region_matches_partition,
+    roles_anywhere_resource_scope,
+)
 from app.core.s3_validation import (
     canonical_minio_endpoint,
     is_canonical_s3_bucket,
@@ -62,9 +66,6 @@ _AWS_IAM_ROLE_ARN = re.compile(
 )
 _AWS_IAM_POLICY_ARN = re.compile(
     r"^arn:(?:aws|aws-us-gov|aws-cn):iam::[0-9]{12}:policy/[A-Za-z0-9+=,.@_/-]{1,512}$"
-)
-_AWS_IAM_PRINCIPAL_ARN = re.compile(
-    r"^arn:(?:aws|aws-us-gov|aws-cn):iam::[0-9]{12}:(?:root|(?:role|user)/[A-Za-z0-9+=,.@_/-]{1,512})$"
 )
 _ALTERNATE_VALIDATION_RESTORES_SECRETS: ContextVar[bool] = ContextVar(
     "alternate_validation_restores_secrets",
@@ -754,10 +755,7 @@ class Settings(BaseSettings):
             raise ValueError("native AWS S3 managed policies must be distinct")
         if (
             self.artifact_s3_bootstrap_principal_arn is None
-            or _AWS_IAM_PRINCIPAL_ARN.fullmatch(
-                self.artifact_s3_bootstrap_principal_arn
-            )
-            is None
+            or iam_principal_scope(self.artifact_s3_bootstrap_principal_arn) is None
         ):
             raise ValueError("native AWS S3 requires an exact bootstrap principal ARN")
         exact_arns = (*role_arns, *policy_arns, self.artifact_s3_bootstrap_principal_arn)
@@ -818,11 +816,11 @@ class Settings(BaseSettings):
         if any(value is None for value in execution_values):
             raise ValueError("Roles Anywhere execution identity settings must be complete")
 
-        trust_anchor_scope = _roles_anywhere_resource_scope(
+        trust_anchor_scope = roles_anywhere_resource_scope(
             self.artifact_s3_roles_anywhere_trust_anchor_arn,
             resource_type="trust-anchor",
         )
-        profile_scope = _roles_anywhere_resource_scope(
+        profile_scope = roles_anywhere_resource_scope(
             self.artifact_s3_roles_anywhere_profile_arn,
             resource_type="profile",
         )
@@ -833,7 +831,7 @@ class Settings(BaseSettings):
                 "Roles Anywhere resources must share one partition, region and account"
             )
         partition, region, account = trust_anchor_scope
-        if region != self.artifact_s3_region or not _region_matches_partition(
+        if region != self.artifact_s3_region or not roles_anywhere_region_matches_partition(
             region,
             partition,
         ):
@@ -860,42 +858,6 @@ class Settings(BaseSettings):
         assert certificate_file is not None and private_key_file is not None
         if not certificate_file.is_absolute() or not private_key_file.is_absolute():
             raise ValueError("Roles Anywhere identity paths must be absolute")
-
-
-def _roles_anywhere_resource_scope(
-    value: str | None,
-    *,
-    resource_type: Literal["trust-anchor", "profile"],
-) -> tuple[str, str, str] | None:
-    """Return a canonical Roles Anywhere partition/region/account scope."""
-    if value is None:
-        return None
-    match = re.fullmatch(
-        rf"arn:(aws|aws-us-gov|aws-cn):rolesanywhere:"
-        rf"([a-z0-9-]+):([0-9]{{12}}):{resource_type}/"
-        rf"([0-9a-f]{{8}}-[0-9a-f]{{4}}-[0-9a-f]{{4}}-"
-        rf"[0-9a-f]{{4}}-[0-9a-f]{{12}})",
-        value,
-    )
-    if match is None:
-        return None
-    resource_id = match.group(4)
-    try:
-        canonical_id = str(UUID(resource_id))
-    except ValueError:
-        return None
-    if canonical_id != resource_id:
-        return None
-    return match.group(1), match.group(2), match.group(3)
-
-
-def _region_matches_partition(region: str, partition: str) -> bool:
-    """Reject cross-partition Roles Anywhere resource locations."""
-    if partition == "aws-cn":
-        return region.startswith("cn-")
-    if partition == "aws-us-gov":
-        return region.startswith("us-gov-")
-    return not region.startswith(("cn-", "us-gov-"))
 
 
 @lru_cache

@@ -234,6 +234,10 @@
     },
     {
       "group": "shared",
+      "target": "backend/app/core/aws_roles_anywhere.py"
+    },
+    {
+      "group": "shared",
       "target": "backend/app/core/cancellation.py"
     },
     {
@@ -2233,7 +2237,7 @@
       "target": "backend/scripts/validate_test_lane_evidence.py"
     }
   ],
-  "authority_digest": "69ba84207bde47178fce2062650bd53ff1285c552a6c1597ed2d84c640ac480d",
+  "authority_digest": "3ae5fb030ae9d9dada7b2a5166547677bcfa2522826315819c75abc26b80cf82",
   "protected_base_commit": "7676ce4347db0c9694962a9b587a20765e16eac6",
   "schema": "workstream.behavior-ownership-partition.v1"
 }
