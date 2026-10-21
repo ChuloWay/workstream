@@ -1704,10 +1704,11 @@ replay, terminal-source discovery, explicit retry/replay, foreign selection and
 grant-revocation denial. The source's infrastructure failure is arranged by a
 real backend worker fixture. This does not prove hosted OCI execution, external
 Flow issuer integration or S3 custody.
-Delivery CLI proof uses built-process hostile HTTP and an owner-produced UNKNOWN
-source through signed public FastAPI/PostgreSQL. It verifies page binding, one
-keyed child, exact replay and fresh revocation denial, not a hosted interruption
-or S3 custody drill.
+Delivery CLI built-process hostile HTTP proof covers response boundaries. A
+separate signed public FastAPI/PostgreSQL test is present for an owner-produced
+UNKNOWN source, one keyed child, exact replay and fresh revocation denial; its
+native run remains pending. Neither test establishes a hosted interruption or
+S3 custody drill.
 
 ```sh
 go mod verify

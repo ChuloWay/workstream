@@ -5,6 +5,7 @@ import json
 from urllib.parse import parse_qs, urlsplit
 
 from test_http_boundary import PROJECT, TOKEN, assert_failure, http_fixture
+from test_contributor_task_mutations import canonical_error
 
 EVENT = "018f0ebc-7966-7e8d-bc4d-1cae1e000201"
 CHILD = "018f0ebc-7966-7e8d-bc4d-1cae1e000202"
@@ -228,28 +229,37 @@ def test_delivery_reconcile_rejects_crossed_receipts_and_unknown_outcomes(cli):
         response["drop"] = False
         response["status"] = 404
         response["body"] = json.dumps(
+            canonical_error("post_submit_delivery_not_found")
+        ).encode()
+        command = (
+            "reconcile",
+            PROJECT,
+            EVENT,
+            "--reason",
+            "Manual check",
+            "--idempotency-key",
+            KEY,
+        )
+        before = len(requests)
+        denied = invoke(cli, origin, *command)
+        assert_failure(denied, "post_submit_delivery_not_found")
+        assert "outcome_unknown" not in json.loads(denied.stderr)["error"]
+        assert len(requests) == before + 1
+
+        # A gateway's code-shaped but incomplete 404 cannot prove no effect.
+        response["body"] = json.dumps(
             {
                 "error": {
                     "code": "post_submit_delivery_not_found",
                     "message": "Not found",
-                    "correlation_id": OTHER,
                 }
             }
         ).encode()
-        assert_failure(
-            invoke(
-                cli,
-                origin,
-                "reconcile",
-                PROJECT,
-                EVENT,
-                "--reason",
-                "Manual check",
-                "--idempotency-key",
-                KEY,
-            ),
-            "post_submit_delivery_not_found",
-        )
+        before = len(requests)
+        incomplete = invoke(cli, origin, *command)
+        assert_failure(incomplete, "post_submit_delivery_not_found")
+        assert json.loads(incomplete.stderr)["error"]["outcome_unknown"] is True
+        assert len(requests) == before + 1
 
 
 def test_delivery_reconcile_invalid_arguments_do_not_send(cli):
