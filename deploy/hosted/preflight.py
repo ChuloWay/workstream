@@ -362,28 +362,35 @@ def validate_private_host_inputs(values: dict[str, str]) -> None:
     gid = _positive_id(values, "WORKSTREAM_RUNTIME_GID")
     _private_metadata(SCRATCH_ROOT, kind="directory", uid=uid, gid=gid, mode=0o700)
     _private_metadata(SOCKET_ROOT, kind="directory", uid=uid, gid=gid, mode=0o700)
-    _private_metadata(
+    private_paths = [
         Path(values["WORKSTREAM_CHECKER_CONFIG_FILE"]),
-        kind="file",
-        uid=uid,
-        gid=gid,
-        mode=0o400,
-    )
-    for key in SECRET_FILE_KEYS:
-        _private_metadata(Path(values[key]), kind="file", uid=uid, gid=gid, mode=0o400)
-    identity_paths = [Path(values[key]) for key in ROLES_ANYWHERE_HOST_FILE_KEYS]
-    for path in identity_paths:
+        *(Path(values[key]) for key in SECRET_FILE_KEYS),
+        *(Path(values[key]) for key in ROLES_ANYWHERE_HOST_FILE_KEYS),
+    ]
+    for path in private_paths:
         _private_metadata(path, kind="file", uid=uid, gid=gid, mode=0o400)
     try:
-        identities = [path.stat() for path in identity_paths]
-        if any(
-            os.path.samestat(left, right)
-            for index, left in enumerate(identities)
-            for right in identities[index + 1 :]
-        ):
-            raise PreflightError("Roles Anywhere identities must be distinct files")
+        shared_roots = (
+            SCRATCH_ROOT.resolve(strict=True),
+            SOCKET_ROOT.resolve(strict=True),
+        )
+        resolved_paths = [path.resolve(strict=True) for path in private_paths]
+    except (OSError, RuntimeError) as exc:
+        raise PreflightError("private host input identity is unavailable") from exc
+    if any(
+        path.is_relative_to(root) for path in resolved_paths for root in shared_roots
+    ):
+        raise PreflightError("private host inputs must remain outside shared roots")
+    try:
+        identities = [path.stat() for path in private_paths]
     except OSError as exc:
-        raise PreflightError("Roles Anywhere runtime identity is unavailable") from exc
+        raise PreflightError("private host input identity is unavailable") from exc
+    if any(
+        os.path.samestat(left, right)
+        for index, left in enumerate(identities)
+        for right in identities[index + 1 :]
+    ):
+        raise PreflightError("private host inputs must be distinct files")
     try:
         docker_socket = DOCKER_SOCKET.stat()
     except OSError as exc:
@@ -559,7 +566,37 @@ def _service_mounts(service: dict[str, Any]) -> dict[str, dict[str, Any]]:
     }
 
 
-def validate_compose(rendered: dict[str, Any]) -> None:
+def _validate_exact_bind_mounts(
+    service_name: str,
+    service: dict[str, Any],
+    expected: dict[str, tuple[str, bool]],
+) -> None:
+    raw_mounts = service.get("volumes")
+    if raw_mounts is None:
+        raw_mounts = []
+    mounts = _service_mounts(service)
+    if (
+        not isinstance(raw_mounts, list)
+        or len(raw_mounts) != len(expected)
+        or len(mounts) != len(expected)
+        or set(mounts) != set(expected)
+    ):
+        raise PreflightError(
+            f"{service_name} bind mounts differ from the release profile"
+        )
+    for target, (source, read_only) in expected.items():
+        mount = mounts[target]
+        if (
+            mount.get("type") != "bind"
+            or mount.get("source") != source
+            or mount.get("read_only", False) is not read_only
+        ):
+            raise PreflightError(
+                f"{service_name} bind mount differs from the release profile: {target}"
+            )
+
+
+def validate_compose(rendered: dict[str, Any], values: dict[str, str]) -> None:
     """Check the rendered release process and privilege topology."""
     services = rendered.get("services")
     if not isinstance(services, dict) or set(services) != {
@@ -611,6 +648,89 @@ def validate_compose(rendered: dict[str, Any]) -> None:
         raise PreflightError("API, worker and Beat must use one exact backend image")
     if any(services[name]["image"] != backend_image for name in PROOF_SERVICES):
         raise PreflightError("AWS proof jobs must use the exact backend image")
+    runtime_identity_mounts = {
+        str(ROLES_ANYWHERE_CERTIFICATE_TARGET): (
+            values[
+                "WORKSTREAM_ARTIFACT_S3_ROLES_ANYWHERE_RUNTIME_CERTIFICATE_HOST_FILE"
+            ],
+            True,
+        ),
+        str(ROLES_ANYWHERE_PRIVATE_KEY_TARGET): (
+            values[
+                "WORKSTREAM_ARTIFACT_S3_ROLES_ANYWHERE_RUNTIME_PRIVATE_KEY_HOST_FILE"
+            ],
+            True,
+        ),
+    }
+    shared_backend_mounts = {
+        str(SCRATCH_ROOT): (str(SCRATCH_ROOT), False),
+        str(SOCKET_ROOT): (str(SOCKET_ROOT), False),
+    }
+    expected_mounts = {
+        "checker-service": {
+            "/etc/workstream/checker-service.json": (
+                values["WORKSTREAM_CHECKER_CONFIG_FILE"],
+                True,
+            ),
+            str(SCRATCH_ROOT): (str(SCRATCH_ROOT), True),
+            str(SOCKET_ROOT): (str(SOCKET_ROOT), False),
+            str(DOCKER_SOCKET): (str(DOCKER_SOCKET), False),
+        },
+        "api": shared_backend_mounts | runtime_identity_mounts,
+        "worker": shared_backend_mounts | runtime_identity_mounts,
+        "beat": {},
+        "aws-proof-runtime": runtime_identity_mounts,
+        "aws-proof-readiness": {
+            str(ROLES_ANYWHERE_CERTIFICATE_TARGET): (
+                values[
+                    "WORKSTREAM_ARTIFACT_S3_ROLES_ANYWHERE_READINESS_CERTIFICATE_HOST_FILE"
+                ],
+                True,
+            ),
+            str(ROLES_ANYWHERE_PRIVATE_KEY_TARGET): (
+                values[
+                    "WORKSTREAM_ARTIFACT_S3_ROLES_ANYWHERE_READINESS_PRIVATE_KEY_HOST_FILE"
+                ],
+                True,
+            ),
+        },
+        "aws-proof-negative": {
+            str(ROLES_ANYWHERE_CERTIFICATE_TARGET): (
+                values[
+                    "WORKSTREAM_ARTIFACT_S3_ROLES_ANYWHERE_NEGATIVE_CERTIFICATE_HOST_FILE"
+                ],
+                True,
+            ),
+            str(ROLES_ANYWHERE_PRIVATE_KEY_TARGET): (
+                values[
+                    "WORKSTREAM_ARTIFACT_S3_ROLES_ANYWHERE_NEGATIVE_PRIVATE_KEY_HOST_FILE"
+                ],
+                True,
+            ),
+        },
+        "aws-proof-coordinate": {},
+    }
+    for name, mounts in expected_mounts.items():
+        _validate_exact_bind_mounts(name, services[name], mounts)
+    expected_secret_files = {
+        secret_name: values[key]
+        for key, (secret_name, _target) in SECRET_FILE_TARGETS.items()
+    }
+    rendered_secrets = rendered.get("secrets")
+    if not isinstance(rendered_secrets, dict) or set(rendered_secrets) != set(
+        expected_secret_files
+    ):
+        raise PreflightError("release Compose secrets differ from the release profile")
+    for name, expected_file in expected_secret_files.items():
+        secret = rendered_secrets[name]
+        if (
+            not isinstance(secret, dict)
+            or secret.get("file") != expected_file
+            or set(secret) - {"name", "file"}
+        ):
+            raise PreflightError(
+                f"release Compose secret file differs from configuration: {name}"
+            )
     checker = services["checker-service"]
     if checker.get("network_mode") != "none" or checker.get("ports"):
         raise PreflightError("checker controller must be networkless and unpublished")
@@ -622,101 +742,12 @@ def validate_compose(rendered: dict[str, Any]) -> None:
         or not re.fullmatch(r"[1-9][0-9]*", checker_groups[0])
     ):
         raise PreflightError("checker controller must use only the Docker socket group")
-    checker_mounts = _service_mounts(checker)
-    docker_mount = checker_mounts.get(str(DOCKER_SOCKET))
-    material_mount = checker_mounts.get(str(SCRATCH_ROOT))
-    socket_mount = checker_mounts.get(str(SOCKET_ROOT))
-    config_mount = checker_mounts.get("/etc/workstream/checker-service.json")
-    if docker_mount is None or docker_mount.get("source") != str(DOCKER_SOCKET):
-        raise PreflightError("checker controller lacks the exact Docker socket")
-    if material_mount is None or material_mount.get("source") != str(SCRATCH_ROOT):
-        raise PreflightError(
-            "checker material path differs between host and controller"
-        )
-    if material_mount.get("read_only") is not True:
-        raise PreflightError("checker controller material view must be read-only")
-    if socket_mount is None or socket_mount.get("source") != str(SOCKET_ROOT):
-        raise PreflightError("checker controller lacks the exact private socket path")
-    if socket_mount.get("read_only") is True:
-        raise PreflightError("checker controller socket path must be writable")
-    if config_mount is None or config_mount.get("read_only") is not True:
-        raise PreflightError("checker controller config must be mounted read-only")
-    for target in (
-        ROLES_ANYWHERE_CERTIFICATE_TARGET,
-        ROLES_ANYWHERE_PRIVATE_KEY_TARGET,
-    ):
-        if str(target) in checker_mounts:
-            raise PreflightError(
-                "checker controller must not receive the AWS runtime identity"
-            )
-    for name in ("api", "worker"):
-        mounts = _service_mounts(services[name])
-        for path in (SCRATCH_ROOT, SOCKET_ROOT):
-            mount = mounts.get(str(path))
-            if mount is None or mount.get("source") != str(path):
-                raise PreflightError(f"{name} does not preserve exact host path {path}")
-            if mount.get("read_only") is True:
-                raise PreflightError(f"{name} requires a writable private path {path}")
-    identity_mounts = {
-        ROLES_ANYWHERE_CERTIFICATE_TARGET: None,
-        ROLES_ANYWHERE_PRIVATE_KEY_TARGET: None,
-    }
-    for name in ("api", "worker"):
-        mounts = _service_mounts(services[name])
-        for target, expected_source in identity_mounts.items():
-            mount = mounts.get(str(target))
-            source = mount.get("source") if mount is not None else None
-            if (
-                mount is None
-                or not isinstance(source, str)
-                or not Path(source).is_absolute()
-                or mount.get("read_only") is not True
-            ):
-                raise PreflightError(
-                    f"{name} lacks the exact read-only Roles Anywhere identity mount"
-                )
-            if expected_source is None:
-                identity_mounts[target] = source
-            elif source != expected_source:
-                raise PreflightError(
-                    "backend roles must share one runtime certificate identity"
-                )
-    if len(set(identity_mounts.values())) != 2:
-        raise PreflightError(
-            "Roles Anywhere certificate and private key mounts must be distinct"
-        )
-    beat_mounts = _service_mounts(services["beat"])
-    if beat_mounts:
-        raise PreflightError("Beat must not receive host mounts")
-    proof_sources: list[str] = []
     for name in ("aws-proof-runtime", "aws-proof-readiness", "aws-proof-negative"):
         service = services[name]
         if service.get("profiles") != ["aws-proof"]:
             raise PreflightError(f"{name} is not isolated behind the proof profile")
-        mounts = _service_mounts(service)
-        if set(mounts) != {
-            str(ROLES_ANYWHERE_CERTIFICATE_TARGET),
-            str(ROLES_ANYWHERE_PRIVATE_KEY_TARGET),
-        }:
-            raise PreflightError(f"{name} receives an unexpected host mount")
-        for target in identity_mounts:
-            mount = mounts[str(target)]
-            source = mount.get("source")
-            if (
-                not isinstance(source, str)
-                or not Path(source).is_absolute()
-                or mount.get("read_only") is not True
-            ):
-                raise PreflightError(f"{name} has an unsafe certificate identity mount")
-            proof_sources.append(source)
-    if len(set(proof_sources)) != 6 or proof_sources[0:2] != list(
-        identity_mounts.values()
-    ):
-        raise PreflightError(
-            "AWS proof jobs must use three distinct certificate identities"
-        )
     coordinator = services["aws-proof-coordinate"]
-    if coordinator.get("profiles") != ["aws-proof"] or _service_mounts(coordinator):
+    if coordinator.get("profiles") != ["aws-proof"]:
         raise PreflightError("AWS proof coordinator must remain credential-free")
     expected_roles = {
         "aws-proof-runtime": "WORKSTREAM_ARTIFACT_S3_RUNTIME_ROLE_ARN",
@@ -901,7 +932,7 @@ def main() -> int:
             Path(values["WORKSTREAM_CHECKER_CONFIG_FILE"])
         )
         validate_checker_config(checker_config, values)
-        validate_compose(render_compose(args.env_file, values))
+        validate_compose(render_compose(args.env_file, values), values)
         if args.configuration_only:
             print(
                 "configuration valid; host identity, runsc/cache, cloud, health and recovery checks skipped"

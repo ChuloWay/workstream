@@ -127,7 +127,7 @@ class HostedReleaseConfigTests(unittest.TestCase):
         preflight.validate_environment(self.environment)
         preflight.validate_checker_config(self.checker, self.environment)
         rendered = preflight.render_compose(self.environment_path, self.environment)
-        preflight.validate_compose(rendered)
+        preflight.validate_compose(rendered, self.environment)
         self.assertEqual(
             set(rendered["services"]),
             {"api", "worker", "beat", "checker-service", *preflight.PROOF_SERVICES},
@@ -176,6 +176,14 @@ class HostedReleaseConfigTests(unittest.TestCase):
             target[0] for target in preflight.SECRET_FILE_TARGETS.values()
         }
         self.assertEqual(set(rendered["secrets"]), expected_secrets)
+        for key, (secret_name, _target) in preflight.SECRET_FILE_TARGETS.items():
+            self.assertEqual(
+                rendered["secrets"][secret_name]["file"],
+                self.environment[key],
+            )
+        for service in services.values():
+            self.assertNotIn("volumes_from", service)
+            self.assertNotIn("configs", service)
         for name, file_keys in preflight.ROLE_SECRET_FILE_KEYS.items():
             self.assertEqual(
                 services[name]["environment"]["WORKSTREAM_RELEASE_ROLE"], name
@@ -223,7 +231,7 @@ class HostedReleaseConfigTests(unittest.TestCase):
 
         self.assertEqual(rendered["services"]["beat"]["volumes_from"], ["api:ro"])
         with self.assertRaisesRegex(preflight.PreflightError, "inherit"):
-            preflight.validate_compose(rendered)
+            preflight.validate_compose(rendered, self.environment)
 
     def test_actual_render_rejects_config_backed_by_runtime_private_key(self) -> None:
         compose_text = preflight.COMPOSE_PATH.read_text(encoding="utf-8").replace(
@@ -251,7 +259,103 @@ class HostedReleaseConfigTests(unittest.TestCase):
             str(self.runtime_private_key),
         )
         with self.assertRaisesRegex(preflight.PreflightError, "Compose configs"):
-            preflight.validate_compose(rendered)
+            preflight.validate_compose(rendered, self.environment)
+
+    def test_actual_render_rejects_extra_backend_identity_binds(self) -> None:
+        compose_text = preflight.COMPOSE_PATH.read_text(encoding="utf-8")
+        cases = (
+            (
+                "API readiness key",
+                "    depends_on:\n      checker-service:\n",
+                "WORKSTREAM_ARTIFACT_S3_ROLES_ANYWHERE_READINESS_PRIVATE_KEY_HOST_FILE",
+                "/run/unrelated/readiness-key.pem",
+            ),
+            (
+                "API negative key",
+                "    depends_on:\n      checker-service:\n",
+                "WORKSTREAM_ARTIFACT_S3_ROLES_ANYWHERE_NEGATIVE_PRIVATE_KEY_HOST_FILE",
+                "/run/unrelated/negative-key.pem",
+            ),
+            (
+                "worker readiness certificate",
+                "    depends_on:\n      api:\n",
+                "WORKSTREAM_ARTIFACT_S3_ROLES_ANYWHERE_READINESS_CERTIFICATE_HOST_FILE",
+                "/run/unrelated/readiness-certificate.pem",
+            ),
+        )
+        for label, marker, source_key, target in cases:
+            with self.subTest(label=label):
+                extra_bind = (
+                    "      - type: bind\n"
+                    f"        source: ${{{source_key}}}\n"
+                    f"        target: {target}\n"
+                    "        read_only: true\n"
+                )
+                rendered = self._render_modified_compose(
+                    compose_text.replace(marker, extra_bind + marker, 1)
+                )
+                service_name = "worker" if label.startswith("worker") else "api"
+                rendered_mounts = preflight._service_mounts(
+                    rendered["services"][service_name]
+                )
+                self.assertEqual(
+                    rendered_mounts[target]["source"],
+                    self.environment[source_key],
+                )
+                with self.assertRaisesRegex(
+                    preflight.PreflightError,
+                    f"{service_name} bind mounts differ",
+                ):
+                    preflight.validate_compose(rendered, self.environment)
+
+    def test_actual_render_rejects_checker_hardlink_identity_bind(self) -> None:
+        private_key_alias = self.root / "runtime-key-checker-alias.pem"
+        os.link(self.runtime_private_key, private_key_alias)
+        marker = (
+            "    healthcheck:\n"
+            '      test: [CMD-SHELL, "test -S /run/workstream-checker/checker.sock'
+        )
+        extra_bind = (
+            "      - type: bind\n"
+            f"        source: {private_key_alias}\n"
+            "        target: /run/unrelated/key.pem\n"
+            "        read_only: true\n"
+        )
+        compose_text = preflight.COMPOSE_PATH.read_text(encoding="utf-8").replace(
+            marker,
+            extra_bind + marker,
+            1,
+        )
+        rendered = self._render_modified_compose(compose_text)
+
+        checker_mounts = preflight._service_mounts(
+            rendered["services"]["checker-service"]
+        )
+        self.assertEqual(
+            checker_mounts["/run/unrelated/key.pem"]["source"],
+            str(private_key_alias),
+        )
+        with self.assertRaisesRegex(preflight.PreflightError, "checker-service bind"):
+            preflight.validate_compose(rendered, self.environment)
+
+    def test_actual_render_rejects_secret_file_substitution(self) -> None:
+        compose_text = preflight.COMPOSE_PATH.read_text(encoding="utf-8").replace(
+            "${WORKSTREAM_DATABASE_URL_FILE:?set the private database URL file}",
+            "${WORKSTREAM_ARTIFACT_S3_ROLES_ANYWHERE_RUNTIME_PRIVATE_KEY_HOST_FILE}",
+            1,
+        )
+        rendered = self._render_modified_compose(compose_text)
+
+        self.assertEqual(
+            rendered["secrets"]["database_url"]["file"],
+            str(self.runtime_private_key),
+        )
+        self.assertEqual(
+            {item["source"] for item in rendered["services"]["beat"]["secrets"]},
+            {"database_url", "celery_broker_url"},
+        )
+        with self.assertRaisesRegex(preflight.PreflightError, "database_url"):
+            preflight.validate_compose(rendered, self.environment)
 
     def test_compose_secret_mode_encodings_preserve_owner_only_read(self) -> None:
         rendered = preflight.render_compose(self.environment_path, self.environment)
@@ -261,7 +365,7 @@ class HostedReleaseConfigTests(unittest.TestCase):
                 for secret in candidate["services"][role]["secrets"]:
                     secret["mode"] = mode
             with self.subTest(valid_mode=mode):
-                preflight.validate_compose(candidate)
+                preflight.validate_compose(candidate, self.environment)
         for mode in (400, 256.0, "400", "0444", 0o444, "0600", 0o600, True, None):
             candidate = copy.deepcopy(rendered)
             candidate["services"]["api"]["secrets"][0]["mode"] = mode
@@ -269,7 +373,7 @@ class HostedReleaseConfigTests(unittest.TestCase):
                 self.subTest(invalid_mode=mode),
                 self.assertRaisesRegex(preflight.PreflightError, "mounted secrets"),
             ):
-                preflight.validate_compose(candidate)
+                preflight.validate_compose(candidate, self.environment)
 
     def test_render_and_compose_operation_ignore_hostile_ambient_environment(
         self,
@@ -715,7 +819,7 @@ class HostedReleaseConfigTests(unittest.TestCase):
         cases.append(("runtime identity exposed to checker", checker_identity))
         for label, changed in cases:
             with self.subTest(label=label), self.assertRaises(preflight.PreflightError):
-                preflight.validate_compose(changed)
+                preflight.validate_compose(changed, self.environment)
 
     def test_private_metadata_rejects_empty_broad_and_linked_files(self) -> None:
         private_file = self.root / "secret"
@@ -810,6 +914,73 @@ class HostedReleaseConfigTests(unittest.TestCase):
                 )
                 with self.assertRaises(preflight.PreflightError):
                     preflight.validate_private_host_inputs(environment)
+            environment["WORKSTREAM_DOCKER_SOCKET_GID"] = str(
+                docker_socket.stat().st_gid
+            )
+            scratch_secret = scratch / "openai-secret"
+            scratch_secret.write_text("private", encoding="utf-8")
+            scratch_secret.chmod(0o400)
+            os.chown(scratch_secret, self.runtime_uid, self.runtime_gid)
+            scratch_alias = self.root / "scratch-alias"
+            scratch_alias.symlink_to(scratch, target_is_directory=True)
+            environment["OPENAI_API_KEY_FILE"] = str(
+                scratch_alias / scratch_secret.name
+            )
+            with (
+                patch.object(preflight, "SCRATCH_ROOT", scratch),
+                patch.object(preflight, "SOCKET_ROOT", socket_root),
+                patch.object(preflight, "DOCKER_SOCKET", docker_socket),
+                self.assertRaisesRegex(
+                    preflight.PreflightError, "outside shared roots"
+                ),
+            ):
+                preflight.validate_private_host_inputs(environment)
+            environment["OPENAI_API_KEY_FILE"] = str(secret_paths[-1])
+            socket_identity = socket_root / "negative-key.pem"
+            socket_identity.write_text("private", encoding="utf-8")
+            socket_identity.chmod(0o400)
+            os.chown(socket_identity, self.runtime_uid, self.runtime_gid)
+            negative_key = (
+                "WORKSTREAM_ARTIFACT_S3_ROLES_ANYWHERE_NEGATIVE_PRIVATE_KEY_HOST_FILE"
+            )
+            original_negative_key = environment[negative_key]
+            environment[negative_key] = str(socket_identity)
+            with (
+                patch.object(preflight, "SCRATCH_ROOT", scratch),
+                patch.object(preflight, "SOCKET_ROOT", socket_root),
+                patch.object(preflight, "DOCKER_SOCKET", docker_socket),
+                self.assertRaisesRegex(
+                    preflight.PreflightError, "outside shared roots"
+                ),
+            ):
+                preflight.validate_private_host_inputs(environment)
+            environment[negative_key] = original_negative_key
+            runtime_key = (
+                "WORKSTREAM_ARTIFACT_S3_ROLES_ANYWHERE_RUNTIME_PRIVATE_KEY_HOST_FILE"
+            )
+            original_runtime_key = environment[runtime_key]
+            secret_alias = self.root / "openai-secret-runtime-key-alias"
+            os.link(secret_paths[-1], secret_alias)
+            environment[runtime_key] = str(secret_alias)
+            with (
+                patch.object(preflight, "SCRATCH_ROOT", scratch),
+                patch.object(preflight, "SOCKET_ROOT", socket_root),
+                patch.object(preflight, "DOCKER_SOCKET", docker_socket),
+                self.assertRaisesRegex(preflight.PreflightError, "distinct files"),
+            ):
+                preflight.validate_private_host_inputs(environment)
+            environment[runtime_key] = original_runtime_key
+            checker_alias = self.root / "checker-negative-key-alias"
+            os.link(checker, checker_alias)
+            environment[negative_key] = str(checker_alias)
+            with (
+                patch.object(preflight, "SCRATCH_ROOT", scratch),
+                patch.object(preflight, "SOCKET_ROOT", socket_root),
+                patch.object(preflight, "DOCKER_SOCKET", docker_socket),
+                self.assertRaisesRegex(preflight.PreflightError, "distinct files"),
+            ):
+                preflight.validate_private_host_inputs(environment)
+            environment[negative_key] = original_negative_key
             same_identity = self.root / "same-identity"
             same_identity.write_text("private", encoding="utf-8")
             same_identity.chmod(0o400)
@@ -825,9 +996,6 @@ class HostedReleaseConfigTests(unittest.TestCase):
                 patch.object(preflight, "DOCKER_SOCKET", docker_socket),
                 self.assertRaisesRegex(preflight.PreflightError, "distinct files"),
             ):
-                environment["WORKSTREAM_DOCKER_SOCKET_GID"] = str(
-                    docker_socket.stat().st_gid
-                )
                 preflight.validate_private_host_inputs(environment)
         finally:
             listener.close()

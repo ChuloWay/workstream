@@ -35,7 +35,7 @@ def main() -> int:
     try:
         values = parse_environment(args.env_file)
         validate_environment(values)
-        validate_compose(render_compose(args.env_file, values))
+        validate_compose(render_compose(args.env_file, values), values)
         launch = args.compose_arguments and args.compose_arguments[0] in {"up", "proof"}
         if launch:
             checker_config = load_checker_config(Path(values["WORKSTREAM_CHECKER_CONFIG_FILE"]))
