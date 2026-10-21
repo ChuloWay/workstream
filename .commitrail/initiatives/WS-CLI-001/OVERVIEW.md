@@ -83,7 +83,7 @@ revision-context presentation correction.
 | [#601](https://github.com/Flow-Research/workstream/issues/601) | Governed sufficiency/manual artifact-policy writes | 4 |
 | [#602](https://github.com/Flow-Research/workstream/issues/602) | Manager task context and submission/checker evidence, delivered by [WS-CLI-001-27](WS-CLI-001-27.md) | 7 |
 | [#603](https://github.com/Flow-Research/workstream/issues/603) | Exact revision-context repair, delivered by [WS-CLI-001-35](WS-CLI-001-35.md) | 1 |
-| [#604](https://github.com/Flow-Research/workstream/issues/604) | Contributor-candidate discovery | 1 |
+| [#604](https://github.com/Flow-Research/workstream/issues/604) | Contributor-candidate discovery, delivered by [WS-CLI-001-33](WS-CLI-001-33.md) | 1 |
 | [#605](https://github.com/Flow-Research/workstream/issues/605) | Retained task-import source download | 1 |
 | [#606](https://github.com/Flow-Research/workstream/issues/606) | Actor/admin authority inspection | 6 |
 | [#607](https://github.com/Flow-Research/workstream/issues/607) | Actor/identity lifecycle and administrative writes | 8 |
