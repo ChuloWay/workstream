@@ -678,11 +678,8 @@ def validate_compose(rendered: dict[str, Any]) -> None:
             "Roles Anywhere certificate and private key mounts must be distinct"
         )
     beat_mounts = _service_mounts(services["beat"])
-    if {str(target) for target in identity_mounts}.intersection(beat_mounts) or any(
-        mount.get("source") in identity_mounts.values()
-        for mount in beat_mounts.values()
-    ):
-        raise PreflightError("Beat must not receive the AWS runtime identity")
+    if beat_mounts:
+        raise PreflightError("Beat must not receive host mounts")
     proof_sources: list[str] = []
     for name in ("aws-proof-runtime", "aws-proof-readiness", "aws-proof-negative"):
         service = services[name]

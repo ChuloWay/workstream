@@ -636,6 +636,32 @@ class HostedReleaseConfigTests(unittest.TestCase):
         relocated_mount["target"] = "/run/unrelated/private.pem"
         relocated_beat_identity["services"]["beat"]["volumes"] = [relocated_mount]
         cases.append(("runtime identity relocated into Beat", relocated_beat_identity))
+        arbitrary_beat_volume = copy.deepcopy(rendered)
+        unrelated_file = self.root / "unrelated-volume"
+        unrelated_file.write_text("unrelated", encoding="utf-8")
+        arbitrary_beat_volume["services"]["beat"]["volumes"] = [
+            {
+                "type": "bind",
+                "source": str(unrelated_file),
+                "target": "/run/unrelated/value",
+                "read_only": True,
+            }
+        ]
+        cases.append(("arbitrary Beat volume", arbitrary_beat_volume))
+        hardlink_beat_identity = copy.deepcopy(rendered)
+        private_key_alias = self.root / "runtime-private-key-alias.pem"
+        os.link(self.runtime_private_key, private_key_alias)
+        hardlink_beat_identity["services"]["beat"]["volumes"] = [
+            {
+                "type": "bind",
+                "source": str(private_key_alias),
+                "target": "/run/unrelated/key.pem",
+                "read_only": True,
+            }
+        ]
+        cases.append(
+            ("hardlink runtime identity exposed to Beat", hardlink_beat_identity)
+        )
         checker_identity = copy.deepcopy(rendered)
         checker_identity["services"]["checker-service"]["volumes"].append(
             copy.deepcopy(rendered["services"]["api"]["volumes"][-1])
