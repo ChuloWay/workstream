@@ -2301,36 +2301,39 @@ mod tests {
 
     #[test]
     fn socket_startup_preserves_live_and_foreign_paths() {
-        let (root, config) = test_config();
-        let live = UnixListener::bind(&config.socket_path).unwrap();
-        fs::set_permissions(&config.socket_path, fs::Permissions::from_mode(0o600)).unwrap();
+        let (live_root, live_config) = test_config();
+        let live = UnixListener::bind(&live_config.socket_path).unwrap();
+        fs::set_permissions(&live_config.socket_path, fs::Permissions::from_mode(0o600)).unwrap();
         assert_eq!(
-            OwnedSocketListener::bind(&config.socket_path).unwrap_err(),
+            OwnedSocketListener::bind(&live_config.socket_path).unwrap_err(),
             "socket listener already active"
         );
-        assert!(config.socket_path.exists());
+        assert!(live_config.socket_path.exists());
         drop(live);
-        fs::remove_file(&config.socket_path).unwrap();
+        fs::remove_dir_all(live_root).unwrap();
 
-        fs::write(&config.socket_path, b"foreign").unwrap();
+        let (foreign_root, foreign_config) = test_config();
+        fs::write(&foreign_config.socket_path, b"foreign").unwrap();
         assert_eq!(
-            OwnedSocketListener::bind(&config.socket_path).unwrap_err(),
+            OwnedSocketListener::bind(&foreign_config.socket_path).unwrap_err(),
             "socket path is not an owned socket"
         );
-        assert_eq!(fs::read(&config.socket_path).unwrap(), b"foreign");
-        fs::remove_file(&config.socket_path).unwrap();
-        let target = config.socket_path.with_extension("target");
+        assert_eq!(fs::read(&foreign_config.socket_path).unwrap(), b"foreign");
+        fs::remove_dir_all(foreign_root).unwrap();
+
+        let (symlink_root, symlink_config) = test_config();
+        let target = symlink_config.socket_path.with_extension("target");
         fs::write(&target, b"foreign").unwrap();
-        symlink(&target, &config.socket_path).unwrap();
+        symlink(&target, &symlink_config.socket_path).unwrap();
         assert_eq!(
-            OwnedSocketListener::bind(&config.socket_path).unwrap_err(),
+            OwnedSocketListener::bind(&symlink_config.socket_path).unwrap_err(),
             "socket path is not an owned socket"
         );
-        assert!(fs::symlink_metadata(&config.socket_path)
+        assert!(fs::symlink_metadata(&symlink_config.socket_path)
             .unwrap()
             .file_type()
             .is_symlink());
-        fs::remove_dir_all(root).unwrap();
+        fs::remove_dir_all(symlink_root).unwrap();
     }
 
     #[test]
