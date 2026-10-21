@@ -19,6 +19,8 @@ from app.core.config import Settings
 
 bucket_script = importlib.import_module("scripts.ensure_local_minio_bucket")
 token_script = importlib.import_module("scripts.issue_local_flow_token")
+lifecycle_script = importlib.import_module("scripts.transition_review_lifecycle")
+service_actor_script = importlib.import_module("scripts.provision_local_service_actors")
 LOCAL_PILOT_GUIDE = Path(__file__).parents[2] / "docs" / "engineering" / "local-pilot.md"
 
 
@@ -251,3 +253,36 @@ def test_runbook_routes_authorization_headers_through_private_helper() -> None:
 
     assert guide.count("Authorization: Bearer") == 1
     assert '-H "Authorization: Bearer' not in guide
+
+
+@pytest.mark.parametrize(
+    ("current", "target", "steps"),
+    [
+        ("disabled", "shadow", ["shadow"]),
+        ("disabled", "live", ["shadow", "live"]),
+        ("shadow", "live", ["live"]),
+        ("live", "live", []),
+        ("shadow", "shadow", []),
+    ],
+)
+def test_lifecycle_script_walks_only_forward_activation(current, target, steps) -> None:
+    assert lifecycle_script.phase_path(current, target) == steps
+
+
+@pytest.mark.parametrize(("current", "target"), [("live", "shadow"), ("draining", "live")])
+def test_lifecycle_script_refuses_to_leave_live_or_draining(current, target) -> None:
+    with pytest.raises(lifecycle_script.JointLifecycleUnavailable):
+        lifecycle_script.phase_path(current, target)
+
+
+def test_service_actor_script_replays_with_stable_keys_and_reports_existing() -> None:
+    script = service_actor_script
+    first = script.idempotency_key("workstream.outbox.dispatcher", "local-outbox.dispatcher")
+    assert first == script.idempotency_key("workstream.outbox.dispatcher", "local-outbox.dispatcher")
+    assert first != script.idempotency_key("workstream.outbox.dispatcher", "other-subject")
+    existing = {"error": {"code": "service_identity_already_provisioned"}}
+    linked = {"error": {"code": "identity_subject_already_linked"}}
+    assert script.classify(201, {}) == "provisioned"
+    assert script.classify(409, existing) == "existing"
+    assert script.classify(409, linked) == "failed:409:identity_subject_already_linked"
+    assert script.classify(403, None) == "failed:403:unknown"

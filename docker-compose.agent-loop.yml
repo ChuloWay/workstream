@@ -1,0 +1,112 @@
+# Local agent-loop overlay for docker-compose.yml. Opt in from the checkout's
+# .env with COMPOSE_FILE=docker-compose.yml:docker-compose.agent-loop.yml and
+# COMPOSE_PROFILES=backend,agent-loop. See docs/engineering/local-agent-loop.md.
+#
+# The Rust checker service starts checker images with
+# `docker run --mount type=bind,src=<material path>`. The Docker daemon resolves
+# that source inside the Docker VM (or Linux host), so the material root is the
+# named volume's own daemon path, mounted at that same path in API, worker, beat
+# and checker. This assumes the default /var/lib/docker data root.
+#
+# The socket lives on a second named volume. Docker Desktop host-shared paths
+# refuse chmod on Unix sockets, and AF_UNIX paths must stay within 107 bytes.
+
+x-agent-loop-backend: &agent-loop-backend
+  environment:
+    WORKSTREAM_ARTIFACT_SCRATCH_ROOT: /var/lib/docker/volumes/${COMPOSE_PROJECT_NAME}-checker-material/_data
+    WORKSTREAM_EXTERNAL_CHECKER_MATERIAL_ROOT: /var/lib/docker/volumes/${COMPOSE_PROJECT_NAME}-checker-material/_data
+    WORKSTREAM_EXTERNAL_CHECKER_SERVICE_SOCKET: /run/ws-checker/checker.sock
+  volumes:
+    - checker_material:/var/lib/docker/volumes/${COMPOSE_PROJECT_NAME}-checker-material/_data
+    - checker_socket:/run/ws-checker
+  depends_on:
+    checker-volumes-init:
+      condition: service_completed_successfully
+
+services:
+  backend: *agent-loop-backend
+  worker: *agent-loop-backend
+  beat: *agent-loop-backend
+
+  # Named-volume roots start root-owned 0755. The scratch manager and checker
+  # service both require a private 0700 root owned by the runtime UID.
+  checker-volumes-init:
+    profiles: ["backend"]
+    image: ${COMPOSE_PROJECT_NAME}-backend:local
+    pull_policy: never
+    user: "0:0"
+    network_mode: none
+    environment:
+      MATERIAL_ROOT: /var/lib/docker/volumes/${COMPOSE_PROJECT_NAME}-checker-material/_data
+      RUNTIME_OWNER: "${LOCAL_UID:-1000}:${LOCAL_GID:-1000}"
+    command:
+      - /bin/sh
+      - -c
+      - |
+        set -eu
+        for directory in "$$MATERIAL_ROOT" /run/ws-checker; do
+          chown "$$RUNTIME_OWNER" "$$directory"
+          chmod 0700 "$$directory"
+        done
+    volumes:
+      - checker_material:/var/lib/docker/volumes/${COMPOSE_PROJECT_NAME}-checker-material/_data
+      - checker_socket:/run/ws-checker
+
+  # Loopback-only registry so the daemon records a platform-manifest digest.
+  checker-registry:
+    profiles: ["agent-loop"]
+    image: registry:2.8.3@sha256:a3d8aaa63ed8681a604f1dea0aa03f100d5895b6a58ace528858a7b332415373
+    ports:
+      - "127.0.0.1:${WORKSTREAM_CHECKER_REGISTRY_HOST_PORT:-15000}:5000"
+    volumes:
+      - checker_registry:/var/lib/registry
+
+  checker:
+    profiles: ["agent-loop"]
+    build:
+      context: .
+      dockerfile: docker/checker/Dockerfile.release
+    image: ${COMPOSE_PROJECT_NAME}-checker:local
+    init: true
+    user: "${LOCAL_UID:-1000}:${LOCAL_GID:-1000}"
+    # Docker socket access is root-equivalent on the daemon. Docker Desktop
+    # exposes the socket as root:root 0660 (GID 0); Linux uses the docker group.
+    group_add: ["${WORKSTREAM_DOCKER_SOCKET_GID:-0}"]
+    command: [/etc/workstream/checker-service.json]
+    network_mode: none
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    restart: on-failure:5
+    environment:
+      DOCKER_CONFIG: /tmp/docker-config
+    tmpfs:
+      - /tmp:mode=0700,uid=${LOCAL_UID:-1000},gid=${LOCAL_GID:-1000}
+    volumes:
+      - type: bind
+        source: ${WORKSTREAM_CHECKER_CONFIG_FILE:?set WORKSTREAM_CHECKER_CONFIG_FILE in .env}
+        target: /etc/workstream/checker-service.json
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: volume
+        source: checker_material
+        target: /var/lib/docker/volumes/${COMPOSE_PROJECT_NAME}-checker-material/_data
+        read_only: true
+      - checker_socket:/run/ws-checker
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      checker-volumes-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: [CMD-SHELL, "test -S /run/ws-checker/checker.sock"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+volumes:
+  checker_material:
+    name: ${COMPOSE_PROJECT_NAME}-checker-material
+  checker_socket:
+  checker_registry:
