@@ -168,6 +168,7 @@ func Run(args []string, stdout, stderr io.Writer, getenv environment, version st
 		},
 	})
 	root.AddCommand(project)
+	addTaskAudit(root, client, &output, stdout)
 	operations := &cobra.Command{Use: "operations", Short: "Explicit system Operator operations"}
 	addCheckerOperations(operations, client, &output, stdout)
 	addOperatorTasks(operations, client, &output, stdout)
