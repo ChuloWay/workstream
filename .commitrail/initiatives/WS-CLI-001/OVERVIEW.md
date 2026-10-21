@@ -40,11 +40,19 @@
   [WS-CLI-001-35](WS-CLI-001-35.md), deliberate exact-source manager revision-context repair;
   [WS-CLI-001-36](WS-CLI-001-36.md), status-only Operator task browsing,
   exact locked-context inspection and explicit reasoned start override;
+  [WS-CLI-001-40](WS-CLI-001-40.md), exact-project uncertain delivery inspection and explicit reconciliation;
   [PILOT-13](../../changes/pilot13-assigned-task-guide-documents.md), assigned-task locked-guide listing/download;
   [PILOT-02](../../changes/pilot02-bulk-transitions-cli.md), explicit CSV conversion,
   source custody, atomic import, batch status and whole-batch screen/release.
 
 ## Current boundary
+
+[WS-CLI-001-40](WS-CLI-001-40.md) exposes the two public post-submit delivery
+operations added after the inventory baseline below. `operations delivery list`
+returns one authorized page; `operations delivery reconcile` explicitly requests
+one exact event's governed reconciliation with a reason and caller-owned key.
+Classification, current authority and recovery effects remain backend-owned.
+This is not known-terminal checker retry or artifact-custody recovery.
 
 The Operator commands `operations task list`, `operations task locked-context`
 and `operations task start` use three existing public routes. Their restricted
