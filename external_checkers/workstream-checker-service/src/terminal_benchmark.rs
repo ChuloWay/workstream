@@ -1512,48 +1512,86 @@ mod tests {
     #[test]
     fn kernel_file_size_limit_allows_exact_bytes_and_rejects_plus_one() {
         const LIMIT: usize = 4096;
+        const CHILD_PATH: &str = "WS_CHECKER_FSIZE_TEST_CHILD_PATH";
+        const SENTINEL_PATH: &str = "WS_CHECKER_FSIZE_TEST_SENTINEL_PATH";
+        const SENTINEL_FD: &str = "WS_CHECKER_FSIZE_TEST_SENTINEL_FD";
+
+        if let Some(path) = std::env::var_os(CHILD_PATH) {
+            let sentinel_path = PathBuf::from(std::env::var_os(SENTINEL_PATH).unwrap());
+            let sentinel_fd: i32 = std::env::var(SENTINEL_FD).unwrap().parse().unwrap();
+            let sentinel = fs::metadata(sentinel_path).unwrap();
+            let inherited = fs::metadata(format!("/proc/self/fd/{sentinel_fd}"))
+                .ok()
+                .map(|metadata| (metadata.dev(), metadata.ino()));
+            assert_ne!(inherited, Some((sentinel.dev(), sentinel.ino())));
+
+            let file = OpenOptions::new().write(true).open(path).unwrap();
+            let descriptor = file.as_raw_fd();
+            let limit = libc::rlimit {
+                rlim_cur: LIMIT as libc::rlim_t,
+                rlim_max: LIMIT as libc::rlim_t,
+            };
+            // SAFETY: this fresh test process alone changes its file-size limit.
+            unsafe {
+                libc::signal(libc::SIGXFSZ, libc::SIG_IGN);
+                assert_eq!(libc::setrlimit(libc::RLIMIT_FSIZE, &limit), 0);
+                let exact = [b'x'; LIMIT];
+                assert_eq!(
+                    libc::write(descriptor, exact.as_ptr().cast(), exact.len()),
+                    LIMIT as isize
+                );
+                let extra = [b'y'; 1];
+                assert_eq!(
+                    libc::write(descriptor, extra.as_ptr().cast(), extra.len()),
+                    -1
+                );
+            }
+            assert_eq!(
+                std::io::Error::last_os_error().raw_os_error(),
+                Some(libc::EFBIG)
+            );
+            return;
+        }
+
         let root = temporary_directory("file-size-limit");
         fs::create_dir(&root).unwrap();
         let path = root.join("candidate.tar");
-        let file = OpenOptions::new()
+        OpenOptions::new()
             .create_new(true)
             .write(true)
             .mode(0o600)
             .open(&path)
             .unwrap();
-        let descriptor = file.as_raw_fd();
-        // SAFETY: the child performs only libc calls on inherited storage and
-        // descriptors before `_exit`; the parent waits for that exact child.
-        let pid = unsafe { libc::fork() };
-        assert!(pid >= 0);
-        if pid == 0 {
-            let limit = libc::rlimit {
-                rlim_cur: LIMIT as libc::rlim_t,
-                rlim_max: LIMIT as libc::rlim_t,
-            };
-            unsafe {
-                libc::signal(libc::SIGXFSZ, libc::SIG_IGN);
-                if libc::setrlimit(libc::RLIMIT_FSIZE, &limit) != 0 {
-                    libc::_exit(10);
-                }
-                let exact = [b'x'; LIMIT];
-                if libc::write(descriptor, exact.as_ptr().cast(), exact.len()) != LIMIT as isize {
-                    libc::_exit(11);
-                }
-                let extra = [b'y'; 1];
-                if libc::write(descriptor, extra.as_ptr().cast(), extra.len()) != -1 {
-                    libc::_exit(12);
-                }
-                libc::_exit(0);
-            }
-        }
-        drop(file);
-        let mut status = 0;
-        // SAFETY: `pid` is the positive PID returned by fork and `status` is writable.
-        assert_eq!(unsafe { libc::waitpid(pid, &mut status, 0) }, pid);
-        assert!(libc::WIFEXITED(status));
-        assert_eq!(libc::WEXITSTATUS(status), 0);
+        let sentinel_path = root.join("sentinel");
+        let sentinel = OpenOptions::new()
+            .create_new(true)
+            .write(true)
+            .mode(0o600)
+            .open(&sentinel_path)
+            .unwrap();
+        let sentinel_fd = sentinel.as_raw_fd();
+        // SAFETY: these calls inspect and lock this test's live sentinel descriptor.
+        assert_ne!(
+            unsafe { libc::fcntl(sentinel_fd, libc::F_GETFD) } & libc::FD_CLOEXEC,
+            0
+        );
+        assert_eq!(
+            unsafe { libc::flock(sentinel_fd, libc::LOCK_EX | libc::LOCK_NB) },
+            0
+        );
+        let status = std::process::Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "terminal_benchmark::tests::kernel_file_size_limit_allows_exact_bytes_and_rejects_plus_one",
+            ])
+            .env(CHILD_PATH, &path)
+            .env(SENTINEL_PATH, &sentinel_path)
+            .env(SENTINEL_FD, sentinel_fd.to_string())
+            .status()
+            .unwrap();
+        assert!(status.success());
         assert_eq!(fs::metadata(&path).unwrap().len(), LIMIT as u64);
+        drop(sentinel);
         fs::remove_dir_all(root).unwrap();
     }
 
