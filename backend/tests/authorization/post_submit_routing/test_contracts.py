@@ -1,8 +1,10 @@
 """Pure exact-value proofs for hidden post-submit routing preparation."""
 
 from datetime import timedelta
+from itertools import count
+import json
 from types import SimpleNamespace
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from pydantic import ValidationError
@@ -66,6 +68,128 @@ def test_valid_policy_branch_resources(human_review_required, recommendation):
                 "final_acceptance_id": resource.consequence.task_effects.final_acceptance_id
             }
         )
+
+
+@pytest.mark.parametrize(
+    ("human", "recommendation", "expected_digest"),
+    (
+        (True, "allow_review", "sha256:8cfc04b178042fdcf7e70f44fdad25f3e04f46087bd5ebcfb50d2340d7a744a6"),
+        (False, "allow_review", "sha256:fa8ebbb72a95334188c2dacd6aff04e064b0246b10245e03383cc84b7e92ffc1"),
+        (False, "needs_revision", "sha256:5583c5b9a02973e2fe6f31b2bea122200c0f77f00b9fa6d47324bdf8816b26c0"),
+    ),
+)
+def test_ordinary_retained_receipt_digest_is_unchanged(
+    monkeypatch, human, recommendation, expected_digest,
+):
+    """Ordinary immutable receipt commitments survive adding recovery provenance."""
+    from tests.authorization.post_submit_routing import support
+    from tests.tasks.post_submit_routing import contract_fixtures
+
+    sequence = count(1)
+
+    def identity():
+        return UUID(f"01900000-0000-7000-8000-{next(sequence):012x}")
+
+    monkeypatch.setattr(support, "new_record_id", identity)
+    monkeypatch.setattr(contract_fixtures, "new_record_id", identity)
+    resource = resource_for(human_review_required=human, routing_recommendation=recommendation)
+    assert resource.reconciliation_claim is None
+    assert post_submit_routing_resource_digest(resource) == expected_digest
+
+
+@pytest.mark.parametrize("recovering", [False, True])
+async def test_routing_adapter_serializes_only_present_recovery_provenance(recovering):
+    """New recovery metadata must not drop retained null source facts."""
+    from app.adapters.auth import _PreparedTaskRoutingAdapter
+    from app.modules.tasks.api.post_submit_routing import TaskRoutingSourcePreparation
+
+    resource = resource_for()
+    child = resource.claim.model_copy(update={"event_id": new_record_id()}) if recovering else None
+    captured = []
+    replays = []
+    decision_id = new_record_id()
+
+    async def consume(value):
+        captured.append(value)
+        return SimpleNamespace(
+            authorization_decision_event_id=decision_id,
+            actor_profile_id=resource.router_actor_id,
+            actor_identity_link_id=resource.router_identity_link_id,
+        )
+
+    async def validate_replay(value, *receipt_ids):
+        replays.append((value, receipt_ids))
+
+    adapter = _PreparedTaskRoutingAdapter(SimpleNamespace(
+        actor_profile_id=resource.router_actor_id,
+        identity_link_id=resource.router_identity_link_id,
+        consume=consume,
+        validate_replay=validate_replay,
+    ))
+    source = TaskRoutingSourcePreparation(source=resource.source, request=resource.request)
+    retained = await adapter.consume(
+        source,
+        resource.claim, None, None, reconciliation_claim=child,
+    )
+    context = json.loads(retained.context_json)
+    expected = resource.model_dump(mode="json", exclude={"reconciliation_claim"})
+    if child is not None:
+        expected["reconciliation_claim"] = child.model_dump(mode="json")
+    assert context == expected
+    assert "predecessor_submission_id" in context["source"]
+    assert context["source"]["predecessor_submission_id"] is None
+    assert "predecessor_submission_version" in context["source"]
+    assert context["source"]["predecessor_submission_version"] is None
+    assert captured[0].claim == resource.claim
+    assert captured[0].reconciliation_claim == child
+    await adapter.validate_replay(source, retained, None, None)
+    assert replays == [(
+        captured[0], (decision_id, resource.router_actor_id, resource.router_identity_link_id)
+    )]
+
+
+@pytest.mark.parametrize("field", ["project_id", "event_id"])
+def test_reconciliation_claim_rejects_wrong_project_or_original_event(field):
+    resource = resource_for()
+    child = resource.claim.model_copy(update={"event_id": new_record_id()})
+    valid = PostSubmitRoutingResourceContext(
+        **(resource.model_dump() | {"reconciliation_claim": child})
+    )
+    assert valid.validate_identity() is valid
+    changed = new_record_id() if field == "project_id" else resource.claim.event_id
+    invalid = child.model_copy(update={field: changed})
+    with pytest.raises(ValidationError, match="routing reconciliation claim differs"):
+        PostSubmitRoutingResourceContext(
+            **(resource.model_dump() | {"reconciliation_claim": invalid})
+        )
+    with pytest.raises(ValueError, match="routing reconciliation claim differs"):
+        post_submit_routing_resource_digest(
+            valid.model_copy(update={"reconciliation_claim": invalid})
+        )
+
+
+@pytest.mark.parametrize(
+    "field", ["event_id", "payload_digest", "claim_generation", "claim_owner", "claimed_at", "claim_expires_at"],
+)
+def test_reconciliation_digest_binds_each_child_claim_fact(field):
+    ordinary = resource_for()
+    child = ordinary.claim.model_copy(update={"event_id": new_record_id()})
+    resource = PostSubmitRoutingResourceContext(
+        **(ordinary.model_dump() | {"reconciliation_claim": child})
+    )
+    digest = post_submit_routing_resource_digest(resource)
+    assert digest != post_submit_routing_resource_digest(ordinary)
+    value = getattr(child, field)
+    changed = (
+        new_record_id() if field == "event_id" else SHA_B if field == "payload_digest"
+        else value + 1 if field == "claim_generation"
+        else "different-child-owner" if field == "claim_owner"
+        else value + timedelta(microseconds=1)
+    )
+    altered = PostSubmitRoutingResourceContext(**(
+        resource.model_dump() | {"reconciliation_claim": child.model_copy(update={field: changed})}
+    ))
+    assert post_submit_routing_resource_digest(altered) != digest
 
 
 @pytest.mark.parametrize("human", [True, False])

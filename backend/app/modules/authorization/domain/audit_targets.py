@@ -32,6 +32,27 @@ def _checker_retry_read_target(resource):
     )
 
 
+def _post_submit_delivery_target(resource):
+    from app.modules.authorization.domain.post_submit_deliveries import (
+        PostSubmitDeliveryReadResourceContext,
+        PostSubmitDeliveryResourceContext,
+    )
+
+    if type(resource) not in {
+        PostSubmitDeliveryReadResourceContext,
+        PostSubmitDeliveryResourceContext,
+    }:
+        return None
+    project_id = str(resource.scope_project_id)
+    return (
+        project_id,
+        resource.resource_type,
+        str(resource.resource_id),
+        "project",
+        project_id,
+    )
+
+
 def project_authority_audit_target(
     resource: object, action_id: ActionId,
     *, matched_scope_project_id: UUID | None = None,
@@ -103,6 +124,8 @@ def project_authority_audit_target(
         return project_id, "checker_run", str(resource.resource_id), "project", project_id
     if type(resource) is CheckerRetrySourceReadResourceContext:
         return _checker_retry_read_target(resource)
+    if target := _post_submit_delivery_target(resource):
+        return target
     if action_id in SUBMISSION_POLICY_MUTATIONS and isinstance(
         resource, ProjectSubmissionArtifactPolicyMutationResourceContext,
     ):
