@@ -356,7 +356,10 @@ async def _seed_snapshot_item(engine: AsyncEngine, values: dict[str, UUID]) -> N
 
 
 async def _seed_artifact_custody(
-    session: AsyncSession, values: dict[str, UUID], namespace=None
+    session: AsyncSession,
+    values: dict[str, UUID],
+    namespace=None,
+    provider_object_ref: str | None = None,
 ) -> None:
     from datetime import datetime, timezone
 
@@ -398,7 +401,7 @@ async def _seed_artifact_custody(
         namespace_fingerprint=namespace_row.namespace_fingerprint,
         adapter=namespace_row.adapter,
         provider_profile=namespace_row.provider_profile,
-        provider_object_ref=f"fixtures/{CONTENT_ID}",
+        provider_object_ref=provider_object_ref or f"fixtures/{CONTENT_ID}",
         verification_state="pending",
         availability_state="unknown",
         integrity_state="unknown",
@@ -450,7 +453,12 @@ async def _seed_artifact_custody(
 
 
 async def seed_database(
-    database_url: str, *, generations: int = 1, guide_version="v1", namespace=None
+    database_url: str,
+    *,
+    generations: int = 1,
+    guide_version="v1",
+    namespace=None,
+    provider_object_ref: str | None = None,
 ) -> dict[str, UUID]:
     """Seed only canonical parent rows needed by hidden persistence tests."""
     values = ids()
@@ -460,7 +468,12 @@ async def seed_database(
         await _seed_snapshot_item(engine, values)
         factory = async_sessionmaker(engine, expire_on_commit=False)
         async with factory() as session, session.begin():
-            await _seed_artifact_custody(session, values, namespace)
+            await _seed_artifact_custody(
+                session,
+                values,
+                namespace,
+                provider_object_ref,
+            )
     finally:
         await engine.dispose()
     return values

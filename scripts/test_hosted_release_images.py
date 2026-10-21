@@ -20,6 +20,10 @@ class ReleaseImageProofTests(unittest.TestCase):
             "source": self.source,
             "packages": self.packages,
             "loader": self.loader,
+            "roles_anywhere_helper": next(
+                iter(proof.ROLES_ANYWHERE_HELPER_SHA256.values())
+            ),
+            "proof_command_timeout": True,
         }
         self.checker = {
             "status": 1,
@@ -44,6 +48,14 @@ class ReleaseImageProofTests(unittest.TestCase):
         altered = copy.deepcopy(self.backend)
         altered["loader"] = "e" * 64
         with self.assertRaisesRegex(ValueError, "secret loader"):
+            proof.verify_backend(altered, self.source, self.packages, self.loader)
+        altered = copy.deepcopy(self.backend)
+        altered["roles_anywhere_helper"] = "0" * 64
+        with self.assertRaisesRegex(ValueError, "Roles Anywhere helper"):
+            proof.verify_backend(altered, self.source, self.packages, self.loader)
+        altered = copy.deepcopy(self.backend)
+        altered["proof_command_timeout"] = False
+        with self.assertRaisesRegex(ValueError, "proof timeout command"):
             proof.verify_backend(altered, self.source, self.packages, self.loader)
 
     def test_missing_agent_or_added_dev_only_package_rejects(self):
@@ -137,6 +149,13 @@ class ReleaseImageProofTests(unittest.TestCase):
             loader.write_text("loader")
             with (
                 patch.object(proof, "LOADER", str(loader)),
+                patch.object(proof, "ROLES_ANYWHERE_HELPER", str(loader)),
+                patch.object(proof.platform, "machine", return_value="x86_64"),
+                patch.dict(
+                    proof.ROLES_ANYWHERE_HELPER_SHA256,
+                    {"x86_64": proof.file_hash(loader)},
+                    clear=True,
+                ),
                 patch.object(proof.os, "getuid", return_value=10001),
                 patch.object(proof, "checked", return_value=b""),
                 patch.object(proof, "source_inventory", return_value={}),
@@ -155,6 +174,63 @@ class ReleaseImageProofTests(unittest.TestCase):
                         self.assertRaisesRegex(ValueError, "loader mode"),
                     ):
                         proof.inside_backend()
+
+    def test_helper_must_have_pinned_identity_and_nonwritable_mode(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            loader = root / "loader"
+            helper = root / "aws_signing_helper"
+            loader.write_bytes(b"loader")
+            helper.write_bytes(b"helper")
+            loader.chmod(0o555)
+            helper.chmod(0o555)
+            digest = proof.file_hash(helper)
+            with (
+                patch.object(proof, "LOADER", str(loader)),
+                patch.object(proof, "ROLES_ANYWHERE_HELPER", str(helper)),
+                patch.object(proof.platform, "machine", return_value="x86_64"),
+                patch.dict(
+                    proof.ROLES_ANYWHERE_HELPER_SHA256,
+                    {"x86_64": digest},
+                    clear=True,
+                ),
+                patch.object(proof.os, "getuid", return_value=10001),
+                patch.object(proof, "checked", return_value=b""),
+                patch.object(proof, "source_inventory", return_value={}),
+                patch.object(
+                    proof.importlib.metadata, "distributions", return_value=[]
+                ),
+            ):
+                self.assertEqual(
+                    proof.inside_backend()["roles_anywhere_helper"], digest
+                )
+                helper.chmod(0o755)
+                with self.assertRaisesRegex(ValueError, "helper mode"):
+                    proof.inside_backend()
+
+    def test_backend_manifest_requires_the_proof_timeout_command(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            loader = root / "loader"
+            helper = root / "aws_signing_helper"
+            loader.write_bytes(b"loader")
+            helper.write_bytes(b"helper")
+            loader.chmod(0o555)
+            helper.chmod(0o555)
+            with (
+                patch.object(proof, "LOADER", str(loader)),
+                patch.object(proof, "ROLES_ANYWHERE_HELPER", str(helper)),
+                patch.object(proof, "PROOF_COMMAND_TIMEOUT", str(root / "missing")),
+                patch.object(proof.platform, "machine", return_value="x86_64"),
+                patch.dict(
+                    proof.ROLES_ANYWHERE_HELPER_SHA256,
+                    {"x86_64": proof.file_hash(helper)},
+                    clear=True,
+                ),
+                patch.object(proof.os, "getuid", return_value=10001),
+                self.assertRaisesRegex(ValueError, "proof timeout command"),
+            ):
+                proof.inside_backend()
 
     def test_checker_failure_must_be_exact_not_timeout_or_arbitrary_error(self):
         proof.verify_checker(self.checker)
@@ -242,6 +318,7 @@ class ReleaseImageProofTests(unittest.TestCase):
                 "checker_lock_sha256",
                 "loader_sha256",
                 "checker_binary_sha256",
+                "roles_anywhere_helper_sha256",
             )
         }
         evidence.update(

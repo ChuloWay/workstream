@@ -46,6 +46,9 @@ from botocore.utils import (
     get_current_datetime,
 )
 
+from app.adapters.artifacts.aws_roles_anywhere import (
+    create_roles_anywhere_credential_provider,
+)
 from app.core.config import Settings
 from app.core.hashing import canonical_json_hash
 from app.core.s3_validation import (
@@ -371,11 +374,13 @@ _ALLOWED_AWS_ENVIRONMENT_BY_METHOD = {
     "assume-role-with-web-identity": _WEB_IDENTITY_SOURCE_ENVIRONMENT,
     "container-role": frozenset({"AWS_CONTAINER_CREDENTIALS_RELATIVE_URI"}),
     "iam-role": frozenset({"AWS_EC2_METADATA_V1_DISABLED"}),
+    "roles-anywhere": frozenset(),
 }
 _AWS_SOURCE_ENVIRONMENT_BY_METHOD = {
     "assume-role-with-web-identity": _WEB_IDENTITY_SOURCE_ENVIRONMENT,
     "container-role": _CONTAINER_SOURCE_ENVIRONMENT,
     "iam-role": _IAM_ROLE_SOURCE_ENVIRONMENT,
+    "roles-anywhere": frozenset(),
 }
 
 
@@ -1208,7 +1213,7 @@ def validate_aws_workload_identity_environment(
             or _CONTAINER_RELATIVE_URI.fullmatch(relative_uri) is None
         ):
             raise ArtifactConfigurationError("AWS container identity location is invalid")
-    else:
+    elif selected == "iam-role":
         if environment.get("AWS_EC2_METADATA_V1_DISABLED", "false").lower() != "true":
             raise ArtifactConfigurationError("AWS instance identity requires IMDSv2")
 
@@ -1285,6 +1290,11 @@ def create_isolated_aws_workload_identity_session(
                     proxies={},
                 ),
             )
+        )
+    elif selected == "roles-anywhere":
+        provider = create_roles_anywhere_credential_provider(
+            settings,
+            require_runtime_role=True,
         )
     else:
         raise ArtifactConfigurationError("AWS workload identity method is unsupported")

@@ -370,11 +370,14 @@ verification and AWS workload identity, and binds the existing checker service
 to a dedicated Docker/runsc host with exact private material paths and cached
 image identities. It carries the required release digest and exact AWS
 role/policy/trust/bucket-policy identities into every long-running process
-environment. The integrated canonical S3 Settings owner validates their format
+environment. The external-host credential integration uses AWS Roles Anywhere
+with dedicated certificate identities, preserving the same S3 adapter and
+activation guards; it does not require EC2 or interactive login. The integrated
+canonical S3 Settings owner validates their format
 and relationships at startup; image proof first exercises that owner directly.
 Its preflight proves
-local configuration and host prerequisites only. The role-isolated AWS proof-job
-profile, deployment, active cloud/IAM identity, representative resource limits,
+local configuration and host prerequisites only. Provisioned role-isolated AWS
+proof jobs, deployment, active cloud/IAM identity, representative resource limits,
 diagnostic privacy/outage behavior, drain/restart and isolated backup/restore
 remain environment evidence for #583 and the parent release drill.
 
@@ -480,7 +483,11 @@ cannot be reused as post-submission review-gate evidence. See the
   volumes and real S3-protocol tests remain unchanged. Native AWS composition
   is guarded by immutable, exact three-probe activations bound to reviewed role
   trust-policy digests and distinct workload subjects at startup, each SDK call
-  and provider-derived terminal commit. Proof clients use the configured region;
+  and provider-derived terminal commit. Certificate-based external hosting also
+  binds the exact Roles Anywhere trust-anchor and profile state. The
+  [setup guide](operations_aws_roles_anywhere.md) covers generated configuration,
+  private certificate custody and renewal; no live AWS access is implied.
+  Proof clients use the configured region;
   settings reserve a fixed 120-second proof sequence, and ART/PostgreSQL reject
   overlong activation using database time. Lazy configuration outages remain
   recoverable instead of becoming false integrity conflicts. The

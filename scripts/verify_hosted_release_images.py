@@ -8,6 +8,7 @@ import importlib.metadata
 import json
 import os
 from pathlib import Path
+import platform
 import re
 import resource
 import stat
@@ -30,6 +31,12 @@ MAX_FILES = 4096
 MAX_BYTES = 64 * 1024 * 1024
 OUTPUT_LIMIT = 2 * 1024 * 1024
 LOADER = "/usr/local/bin/workstream-release-entrypoint"
+ROLES_ANYWHERE_HELPER = "/usr/local/bin/aws_signing_helper"
+PROOF_COMMAND_TIMEOUT = "/usr/bin/timeout"
+ROLES_ANYWHERE_HELPER_SHA256 = {
+    "x86_64": "beec9ed1c492d93db809890f16713e3556353294b823c2184ad4e891f1b2b54d",
+    "aarch64": "3d131aa888cd56da446f9c6bb460b1f0569f6c7edc74eae6193a2fe3928883ba",
+}
 CHECKER = "/usr/local/bin/workstream-checker-service"
 CHECKER_ERROR = "external checker service unavailable: configuration unavailable\n"
 
@@ -163,10 +170,30 @@ def installed_packages() -> dict[str, str]:
 def inside_backend() -> dict:
     require(os.getuid() == 10001, "backend runtime user changed")
     require(stat.S_IMODE(Path(LOADER).lstat().st_mode) == 0o555, "loader mode changed")
+    helper = Path(ROLES_ANYWHERE_HELPER)
+    machine = platform.machine()
+    require(machine in ROLES_ANYWHERE_HELPER_SHA256, "helper architecture unsupported")
+    require(stat.S_IMODE(helper.lstat().st_mode) == 0o555, "helper mode changed")
+    timeout = Path(PROOF_COMMAND_TIMEOUT)
+    try:
+        timeout_info = timeout.lstat()
+    except OSError as exc:
+        raise ValueError("proof timeout command unavailable") from exc
+    require(
+        stat.S_ISREG(timeout_info.st_mode) and os.access(timeout, os.X_OK),
+        "proof timeout command unavailable",
+    )
+    helper_hash = file_hash(helper)
+    require(
+        helper_hash == ROLES_ANYWHERE_HELPER_SHA256[machine],
+        "helper identity changed",
+    )
     checked(["/bin/uv", "--no-cache", "pip", "check", "--python", sys.executable])
     return {
         "source": source_inventory(Path("/workspace/backend")),
         "loader": file_hash(Path(LOADER)),
+        "roles_anywhere_helper": helper_hash,
+        "proof_command_timeout": True,
         "packages": installed_packages(),
     }
 
@@ -189,6 +216,13 @@ def verify_backend(actual: dict, inventory: dict, packages: dict, loader: str) -
         actual["packages"] == packages, "backend production package closure differs"
     )
     require(actual["loader"] == loader, "backend secret loader differs")
+    require(
+        actual["roles_anywhere_helper"] in ROLES_ANYWHERE_HELPER_SHA256.values(),
+        "Roles Anywhere helper differs",
+    )
+    require(
+        actual["proof_command_timeout"] is True, "proof timeout command unavailable"
+    )
 
 
 def verify_checker(actual: dict) -> None:
@@ -210,7 +244,7 @@ def image_metadata(image: str, role: str) -> str:
     info = actual[0]
     config = info["Config"]
     require(
-        info["Os"] == "linux" and info["Architecture"] == "amd64",
+        info["Os"] == "linux" and info["Architecture"] in {"amd64", "arm64"},
         "image platform differs",
     )
     require(config["User"] == "workstream", "image default user differs")
@@ -310,6 +344,9 @@ def inspect_image(image: str, role: str, owner: str) -> dict:
                 b"ValueError: source symlink refused": "source symlink refused",
                 b"ValueError: source special file refused": "source special file refused",
                 b"ValueError: loader mode changed": "loader mode changed",
+                b"ValueError: proof timeout command unavailable": (
+                    "proof timeout command unavailable"
+                ),
                 b"ValueError: backend runtime user changed": "runtime user changed",
                 b"ValueError: checker runtime user changed": "runtime user changed",
             }
@@ -335,6 +372,7 @@ def write_evidence(path: Path, evidence: dict) -> None:
             "checker_lock_sha256",
             "loader_sha256",
             "checker_binary_sha256",
+            "roles_anywhere_helper_sha256",
         },
         "evidence shape differs",
     )
@@ -389,12 +427,8 @@ def main() -> None:
     loader = file_hash(root / "docker/backend/release-entrypoint.sh")
     backend_id = image_metadata(args.backend_image, "backend")
     checker_id = image_metadata(args.checker_image, "checker")
-    verify_backend(
-        inspect_image(backend_id, "backend", args.container_owner),
-        inventory,
-        packages,
-        loader,
-    )
+    backend = inspect_image(backend_id, "backend", args.container_owner)
+    verify_backend(backend, inventory, packages, loader)
     checker = inspect_image(checker_id, "checker", args.container_owner)
     verify_checker(checker)
     require(
@@ -418,6 +452,7 @@ def main() -> None:
             "checker_lock_sha256": file_hash(root / "external_checkers/Cargo.lock"),
             "loader_sha256": loader,
             "checker_binary_sha256": checker["binary"],
+            "roles_anywhere_helper_sha256": backend["roles_anywhere_helper"],
         },
     )
     print("Release image source, packages, metadata and bounded smoke checks passed.")

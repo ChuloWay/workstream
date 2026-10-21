@@ -1,7 +1,7 @@
 # AWS Roles Anywhere — unattended artifact access on an external host
 
 - Initiative: None
-- Durable disposition: Planned
+- Durable disposition: Complete
 - Intended merge outcome: the existing native AWS artifact adapter and hosted Linux release can authenticate through dedicated certificate identities without EC2 or interactive login; live AWS activation remains a deployment prerequisite.
 
 ## Intent
@@ -12,7 +12,7 @@ has no existing application CA. Supply one supported external-host path, its
 provisioning instructions and proof; do not require an IAM application user or
 permanent AWS keys. Preserve the first automated contribution journey.
 
-## Current behavior
+## Starting behavior
 
 `backend/app/adapters/artifacts/s3_compatible.py` installs an isolated credential
 resolver for one selected workload identity. `aws_live_proof.py` verifies exact
@@ -33,9 +33,13 @@ short-lived database activation; no proof bypass or new storage owner is needed.
   Associated schema fingerprint and migration regressions are included.
 - `backend/tests/test_aws_*.py`, affected config/storage tests and focused new
   Roles Anywhere tests; test allocation/ownership inventories only as required.
-- `docker/backend/Dockerfile.release`, `deploy/hosted/`, related image/config
-  tests, `backend/.env.example`, artifact/deployment operator documentation,
-  affected roadmap statements, and this record.
+- `docker/backend/Dockerfile.release`, its release entrypoint, `deploy/hosted/`,
+  the existing release-environment loader, related image/config tests,
+  `backend/scripts/aws_roles_anywhere_config.py`, `backend/.env.example`,
+  artifact/deployment operator documentation, the canonical artifact-storage
+  specification, README setup navigation, affected roadmap statements, and this record.
+- Focused consumer composition tests and necessary exact-custody fixture
+  extensions for assigned guide access; no product route or permission changes.
 
 ### Not allowed
 
@@ -97,26 +101,26 @@ short-lived database activation; no proof bypass or new storage owner is needed.
 
 ## Acceptance criteria
 
-- [ ] Explicit Roles Anywhere settings construct only that credential provider;
+- [x] Explicit Roles Anywhere settings construct only that credential provider;
   absent/mixed/foreign configuration rejects before helper or cloud I/O.
-- [ ] Valid helper output yields refreshable credentials; malformed, expired,
+- [x] Valid helper output yields refreshable credentials; malformed, expired,
   oversized, failed, hanging or cancelled execution rejects safely with no
   secrets retained in error/log text and no lingering owned process.
-- [ ] Certificate identity cannot assume another of the three roles. Closed
+- [x] Certificate identity cannot assume another of the three roles. Closed
   trust, account/region/anchor/profile substitutions and broad trust reject;
   readiness/negative roles still cannot access artifact content.
-- [ ] Existing activation evidence cannot authorize changed Roles Anywhere
+- [x] Existing activation evidence cannot authorize changed Roles Anywhere
   security bindings; identity changes require matching fresh proof.
-- [ ] Hosted configuration mounts only the intended certificate/key, rejects
+- [x] Hosted configuration mounts only the intended certificate/key, rejects
   unsafe mounts/modes and unavailable helper, and works without EC2 metadata.
-- [ ] A reproducible provisioning guide covers offline CA custody, separate
+- [x] A reproducible provisioning guide covers offline CA custody, separate
   certificates/roles, renewable sessions, certificate renewal, revocation,
   three proof jobs and retained-data restrictions.
-- [ ] An integrated proof exercises upload, exact verified read-back/download
+- [x] An integrated proof exercises upload, exact verified read-back/download
   and the setup agent opening only its assigned guide documents through the
   selected provider; retained bytes and hashes match. The real AWS execution
   of this journey is separately pending provisioned certificates/roles.
-- [ ] Existing AWS/MinIO, settings, release and activation regressions pass.
+- [x] Existing AWS/MinIO, settings, release and activation regressions pass.
   Real helper/local process tests are distinguished from unexecuted live AWS
   trust, permission and ZIP custody proof.
 
@@ -128,12 +132,23 @@ short-lived database activation; no proof bypass or new storage owner is needed.
 - Human review focus: host credential custody, CA operations, exact-role
   separation, no ambient fallback, proof coverage versus real AWS evidence.
 
+This exceeds the usual L1 size guideline because one usable credential path
+requires the existing activation schema, release image, isolated proof jobs and
+operator configuration to agree. The user explicitly requested this complete
+S3 integration in one PR. Review is divided by those existing owners; no new
+product lifecycle or alternative storage subsystem is introduced.
+
 ## Evidence
 
 | Claim | Command or proof | Result | Remaining uncertainty |
 |---|---|---|---|
-| Current owner gap | inspect native AWS credential resolver, live proof and hosted preflight | EC2-only hosted topology; Roles Anywhere absent | integration implementation pending |
-| New behavior | focused configuration/provider/trust tests and hosted release tests (to implement) | pending | local tests cannot prove AWS enforcement |
+| Credential/configuration/proof contracts | focused credential, settings, proof, activation and lane suite | 484 passed locally | no live AWS authorization claim |
+| Immutable activation and terminal custody | isolated PostgreSQL activation and terminal regressions; focused null-field discriminator | 38 passed plus focused discriminator | hosted complete-suite evidence remains separate |
+| Retained-data migration | separate-invocation predecessor upgrade and targeted downgrade refusal | passed; isolated database cleanup confirmed | no production migration executed |
+| S3 consumer composition | real helper subprocess, actual SDK signing and loopback HTTP with isolated PostgreSQL | exact sealed upload/readback, refreshed credentials, scoped guide access and scratch cleanup passed | loopback transport does not prove AWS policy enforcement |
+| Hosted configuration | generator/normalizer and release configuration/image-contract tests | passed locally | release image build and real deployment remain separate |
+| Owner boundaries | architecture and authorization boundary tests | 127 passed locally | no new storage owner or public route |
+| Existing public guide integration | isolated PostgreSQL/MinIO batch | timed out after 900 seconds; cleanup confirmed; not credited as a pass | complete hosted suite required |
 | Real pilot | provision three identities, run existing proof modes, then public ZIP contribution drill | pending | AWS resources and certificates not provisioned |
 
 ## Review findings
@@ -141,12 +156,13 @@ short-lived database activation; no proof bypass or new storage owner is needed.
 Initial security/architecture inspection identified that existing release and
 IAM trust digests cannot bind mutable CA/profile state. The design now includes
 explicit persistent bindings and the complete cross-role denial matrix. Final
-plan review precedes implementation.
+plan security/architecture review passed against clean head `574746155`;
+implementation and live deployment evidence remain separate requirements.
 
 ## Reconciliation
 
-- Current-source reconciliation: based on main `c59230613`; open PRs concern CLI
-  and deferred contributor leases, not this adapter/deployment boundary.
+- Current-source reconciliation: based on main `3f373f840`; preserve its CLI source-download
+  capability and roadmap updates alongside this adapter/deployment boundary.
 - Next usable boundary: provision identities and run live AWS activation and
   the public contribution drill tracked by #582/#555.
 - Remaining risks: certificate signing-key custody and renewal are operational

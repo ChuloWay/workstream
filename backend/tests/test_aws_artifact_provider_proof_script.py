@@ -68,7 +68,7 @@ async def test_probe_run_executes_transport_then_persists_its_actual_observation
         observed_principal_arn=_RUNTIME_ROLE,
         passed=True,
         error_code=None,
-        evidence={"suite": "aws-s3-live-v1", "exact_readback": True},
+        evidence={"suite": "aws-s3-identity-custody", "exact_readback": True},
     )
 
     class _Proof:

@@ -11,7 +11,7 @@ from aiobotocore.credentials import (
 )
 from botocore.exceptions import MetadataRetrievalError, ReadTimeoutError
 
-from app.adapters.artifacts import s3_compatible
+from app.adapters.artifacts import aws_roles_anywhere, s3_compatible
 from app.core.config import Settings
 from tests.artifact_store_helpers import artifact_admission_limit_settings
 from app.interfaces.artifacts import ArtifactConfigurationError
@@ -19,7 +19,7 @@ from tests.assertion_helpers import assert_secret_not_retained
 
 
 def _aws_settings(tmp_path: Path, method: str = "container-role") -> Settings:
-    return Settings(
+    values: dict[str, object] = dict(
         **artifact_admission_limit_settings(),
         environment="production",
         artifact_store_backend="s3_compatible",
@@ -58,6 +58,25 @@ def _aws_settings(tmp_path: Path, method: str = "container-role") -> Settings:
         artifact_complete_read_deadline_seconds=300,
         artifact_terminal_persistence_margin_seconds=120,
     )
+    if method == "roles-anywhere":
+        values.update(
+            artifact_s3_roles_anywhere_trust_anchor_arn=(
+                "arn:aws:rolesanywhere:us-east-1:123456789012:"
+                "trust-anchor/11111111-1111-4111-8111-111111111111"
+            ),
+            artifact_s3_roles_anywhere_trust_anchor_sha256="sha256:" + "6" * 64,
+            artifact_s3_roles_anywhere_profile_arn=(
+                "arn:aws:rolesanywhere:us-east-1:123456789012:"
+                "profile/22222222-2222-4222-8222-222222222222"
+            ),
+            artifact_s3_roles_anywhere_profile_sha256="sha256:" + "7" * 64,
+            artifact_s3_roles_anywhere_role_arn=(
+                "arn:aws:iam::123456789012:role/workstream-runtime"
+            ),
+            artifact_s3_roles_anywhere_certificate_file=tmp_path / "certificate.pem",
+            artifact_s3_roles_anywhere_private_key_file=tmp_path / "private-key.pem",
+        )
+    return Settings(**values)
 
 
 def _container_environment(tmp_path: Path, **overrides: str) -> dict[str, str]:
@@ -87,6 +106,15 @@ def _iam_environment(tmp_path: Path, **overrides: str) -> dict[str, str]:
         "HOME": str(tmp_path),
         "AWS_EC2_METADATA_V1_DISABLED": "true",
     }
+    environment.update(overrides)
+    return environment
+
+
+def _roles_anywhere_environment(
+    tmp_path: Path,
+    **overrides: str,
+) -> dict[str, str]:
+    environment = {"HOME": str(tmp_path)}
     environment.update(overrides)
     return environment
 
@@ -207,6 +235,7 @@ def test_service_specific_endpoint_override_fails_before_session_construction(
         ("assume-role-with-web-identity", _web_identity_environment),
         ("container-role", _container_environment),
         ("iam-role", _iam_environment),
+        ("roles-anywhere", _roles_anywhere_environment),
     ],
 )
 def test_unapproved_sdk_environment_controls_fail_before_session_construction(
@@ -276,6 +305,13 @@ def test_default_credential_files_fail_before_resolver_loading(
                 AWS_CONTAINER_CREDENTIALS_FULL_URI="http://127.0.0.1:9/credentials",
             ),
         ),
+        (
+            "roles-anywhere",
+            lambda tmp_path: {
+                "HOME": str(tmp_path),
+                "AWS_CONTAINER_CREDENTIALS_RELATIVE_URI": "/v2/credentials/poison",
+            },
+        ),
     ],
 )
 def test_unselected_workload_identity_sources_fail_before_resolver_loading(
@@ -312,6 +348,12 @@ def test_unselected_workload_identity_sources_fail_before_resolver_loading(
             _iam_environment,
             s3_compatible._SanitizedInstanceMetadataProvider,  # noqa: SLF001
             "iam-role",
+        ),
+        (
+            "roles-anywhere",
+            _roles_anywhere_environment,
+            aws_roles_anywhere.RolesAnywhereCredentialProvider,
+            "roles-anywhere",
         ),
     ],
 )

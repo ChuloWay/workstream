@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 import sys
+from uuid import UUID
 
 from preflight import (
     PreflightError,
@@ -18,6 +19,7 @@ from preflight import (
     validate_docker_runtime,
     validate_environment,
     validate_private_host_inputs,
+    run_proof_group,
 )
 
 
@@ -34,11 +36,20 @@ def main() -> int:
         values = parse_environment(args.env_file)
         validate_environment(values)
         validate_compose(render_compose(args.env_file, values))
-        if args.compose_arguments and args.compose_arguments[0] == "up":
+        launch = args.compose_arguments and args.compose_arguments[0] in {"up", "proof"}
+        if launch:
             checker_config = load_checker_config(Path(values["WORKSTREAM_CHECKER_CONFIG_FILE"]))
             validate_checker_config(checker_config, values)
             validate_private_host_inputs(values)
             validate_docker_runtime(checker_config, values)
+        if args.compose_arguments and args.compose_arguments[0] == "proof":
+            if len(args.compose_arguments) != 3 or args.compose_arguments[1] != "--group-nonce":
+                raise PreflightError("proof requires one explicit group nonce")
+            try:
+                group_nonce = UUID(args.compose_arguments[2])
+            except ValueError as exc:
+                raise PreflightError("proof group nonce is invalid") from exc
+            return run_proof_group(args.env_file, values, group_nonce)
         return run_compose(args.env_file, values, args.compose_arguments)
     except PreflightError as exc:
         print(f"hosted Compose command failed: {exc}", file=sys.stderr)

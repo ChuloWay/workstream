@@ -55,6 +55,30 @@ def _settings(tmp_path: Path) -> Settings:
     )
 
 
+def _roles_anywhere_settings(tmp_path: Path) -> Settings:
+    """Select the exact mutable certificate resources for custody tests."""
+    return _settings(tmp_path).model_copy(
+        update={
+            "artifact_s3_aws_workload_identity_method": "roles-anywhere",
+            "artifact_s3_roles_anywhere_trust_anchor_arn": (
+                "arn:aws:rolesanywhere:us-east-1:123456789012:trust-anchor/"
+                "01234567-89ab-cdef-0123-456789abcdef"
+            ),
+            "artifact_s3_roles_anywhere_trust_anchor_sha256": "sha256:" + "6" * 64,
+            "artifact_s3_roles_anywhere_profile_arn": (
+                "arn:aws:rolesanywhere:us-east-1:123456789012:profile/"
+                "11234567-89ab-cdef-0123-456789abcdef"
+            ),
+            "artifact_s3_roles_anywhere_profile_sha256": "sha256:" + "7" * 64,
+            "artifact_s3_roles_anywhere_role_arn": (
+                "arn:aws:iam::123456789012:role/workstream-runtime"
+            ),
+            "artifact_s3_roles_anywhere_certificate_file": tmp_path / "identity.crt",
+            "artifact_s3_roles_anywhere_private_key_file": tmp_path / "identity.key",
+        }
+    )
+
+
 async def _insert_group(
     factory,
     settings: Settings,
@@ -114,7 +138,9 @@ async def _insert_activation_direct(
               aws_partition,aws_account_id,region,runtime_role_arn,
               runtime_trust_policy_sha256,runtime_policy_arn,readiness_role_arn,
               readiness_trust_policy_sha256,readiness_policy_arn,negative_role_arn,
-              negative_trust_policy_sha256,bootstrap_principal_arn,bucket_policy_sha256,
+              negative_trust_policy_sha256,roles_anywhere_trust_anchor_arn,
+              roles_anywhere_trust_anchor_sha256,roles_anywhere_profile_arn,
+              roles_anywhere_profile_sha256,bootstrap_principal_arn,bucket_policy_sha256,
               group_nonce,activated_at,expires_at)
             SELECT :activation_id,readiness.id,runtime.id,negative.id,NULL,
               readiness.proof_version,readiness.release_id,readiness.namespace_fingerprint,
@@ -123,6 +149,10 @@ async def _insert_activation_direct(
               readiness.runtime_policy_arn,readiness.readiness_role_arn,
               readiness.readiness_trust_policy_sha256,readiness.readiness_policy_arn,
               readiness.negative_role_arn,readiness.negative_trust_policy_sha256,
+              readiness.roles_anywhere_trust_anchor_arn,
+              readiness.roles_anywhere_trust_anchor_sha256,
+              readiness.roles_anywhere_profile_arn,
+              readiness.roles_anywhere_profile_sha256,
               readiness.bootstrap_principal_arn,readiness.bucket_policy_sha256,
               readiness.group_nonce,
               CASE WHEN :backdate_activated_at
@@ -190,6 +220,273 @@ async def test_overlapping_exact_groups_activate_and_latest_is_selected_determin
                 {"id": second_id},
             )
         assert str(predecessor) == str(first_id)
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_direct_activation_rejects_one_mixed_roles_anywhere_profile_digest(
+    isolated_database_env: str,
+    tmp_path: Path,
+) -> None:
+    """The database guard independently compares all four mutable custody fields."""
+    settings = _roles_anywhere_settings(tmp_path)
+    namespace = aws_s3_namespace_fingerprint(settings)
+    engine = create_async_engine(isolated_database_env)
+    factory = async_sessionmaker(engine, expire_on_commit=False)
+    group_nonce = uuid4()
+    changed = settings.model_copy(
+        update={"artifact_s3_roles_anywhere_profile_sha256": "sha256:" + "8" * 64}
+    )
+    try:
+        results = await _insert_group(
+            factory,
+            settings,
+            namespace,
+            group_nonce,
+            settings_by_type={"negative_access": changed},
+        )
+        with pytest.raises(DBAPIError, match="activation proof group is invalid"):
+            async with factory() as session, session.begin():
+                await _insert_activation_direct(session, results)
+        # Test-of-test: the same otherwise-valid rows are admitted when the
+        # activation comparison predicate is transactionally removed.
+        async with factory() as session:
+            transaction = await session.begin()
+            try:
+                await session.execute(
+                    text(
+                        """
+                        CREATE OR REPLACE FUNCTION public.guard_artifact_provider_activation()
+                        RETURNS trigger LANGUAGE plpgsql
+                        SET search_path=pg_catalog,public,pg_temp AS $$
+                        BEGIN
+                          IF TG_OP<>'INSERT' THEN
+                            RAISE EXCEPTION 'artifact provider activations are immutable'
+                              USING ERRCODE='55000';
+                          END IF;
+                          RETURN NEW;
+                        END $$
+                        """
+                    )
+                )
+                accepted_id = await _insert_activation_direct(session, results)
+                assert await session.scalar(
+                    text("select id from artifact_provider_activations where id=:id"),
+                    {"id": str(accepted_id)},
+                ) == accepted_id
+            finally:
+                await transaction.rollback()
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("custody_values", "constraint_name"),
+    [
+        (
+            {
+                "anchor_arn": None,
+                "anchor_sha256": "sha256:" + "6" * 64,
+                "profile_arn": (
+                    "arn:aws:rolesanywhere:us-east-1:123456789012:profile/"
+                    "11234567-89ab-cdef-0123-456789abcdef"
+                ),
+                "profile_sha256": "sha256:" + "7" * 64,
+            },
+            "ck_artifact_provider_probe_results_roles_anywhere_custody",
+        ),
+        (
+            {
+                "anchor_arn": (
+                    "arn:aws:rolesanywhere:us-east-1:123456789012:trust-anchor/"
+                    "01234567-89ab-cdef-0123-456789abcdef"
+                ),
+                "anchor_sha256": None,
+                "profile_arn": (
+                    "arn:aws:rolesanywhere:us-east-1:123456789012:profile/"
+                    "11234567-89ab-cdef-0123-456789abcdef"
+                ),
+                "profile_sha256": "sha256:" + "7" * 64,
+            },
+            "ck_artifact_provider_probe_results_roles_anywhere_custody",
+        ),
+        (
+            {
+                "anchor_arn": (
+                    "arn:aws:rolesanywhere:us-east-1:123456789012:trust-anchor/"
+                    "01234567-89ab-cdef-0123-456789abcdef"
+                ),
+                "anchor_sha256": "sha256:" + "6" * 64,
+                "profile_arn": None,
+                "profile_sha256": "sha256:" + "7" * 64,
+            },
+            "ck_artifact_provider_probe_results_roles_anywhere_custody",
+        ),
+        (
+            {
+                "anchor_arn": (
+                    "arn:aws:rolesanywhere:us-east-1:123456789012:trust-anchor/"
+                    "01234567-89ab-cdef-0123-456789abcdef"
+                ),
+                "anchor_sha256": "sha256:" + "6" * 64,
+                "profile_arn": (
+                    "arn:aws:rolesanywhere:us-east-1:123456789012:profile/"
+                    "11234567-89ab-cdef-0123-456789abcdef"
+                ),
+                "profile_sha256": None,
+            },
+            "ck_artifact_provider_probe_results_roles_anywhere_custody",
+        ),
+        (
+            {
+                "anchor_arn": (
+                    "arn:aws:rolesanywhere:us-west-2:123456789012:trust-anchor/"
+                    "01234567-89ab-cdef-0123-456789abcdef"
+                ),
+                "anchor_sha256": "sha256:" + "6" * 64,
+                "profile_arn": (
+                    "arn:aws:rolesanywhere:us-east-1:123456789012:profile/"
+                    "11234567-89ab-cdef-0123-456789abcdef"
+                ),
+                "profile_sha256": "sha256:" + "7" * 64,
+            },
+            "ck_artifact_provider_probe_results_roles_anywhere_custody",
+        ),
+    ],
+)
+async def test_probe_database_requires_all_or_exact_scoped_roles_anywhere_custody(
+    isolated_database_env: str,
+    tmp_path: Path,
+    custody_values: dict[str, str | None],
+    constraint_name: str,
+) -> None:
+    settings = _settings(tmp_path)
+    namespace = aws_s3_namespace_fingerprint(settings)
+    engine = create_async_engine(isolated_database_env)
+    factory = async_sessionmaker(engine, expire_on_commit=False)
+    try:
+        rows = await _insert_group(factory, settings, namespace, uuid4())
+        with pytest.raises(IntegrityError) as failure:
+            async with factory() as session, session.begin():
+                await session.execute(
+                    text(
+                        """
+                        INSERT INTO artifact_provider_probe_results (
+                          id,probe_type,proof_version,result,release_id,namespace_fingerprint,
+                          aws_partition,aws_account_id,region,runtime_role_arn,
+                          runtime_trust_policy_sha256,runtime_policy_arn,readiness_role_arn,
+                          readiness_trust_policy_sha256,readiness_policy_arn,negative_role_arn,
+                          negative_trust_policy_sha256,roles_anywhere_trust_anchor_arn,
+                          roles_anywhere_trust_anchor_sha256,roles_anywhere_profile_arn,
+                          roles_anywhere_profile_sha256,bootstrap_principal_arn,
+                          expected_principal_arn,observed_principal_arn,bucket_policy_sha256,
+                          group_nonce,evidence_sha256,error_code,started_at,completed_at,expires_at)
+                        SELECT :id,probe_type,proof_version,result,release_id,namespace_fingerprint,
+                          aws_partition,aws_account_id,region,runtime_role_arn,
+                          runtime_trust_policy_sha256,runtime_policy_arn,readiness_role_arn,
+                          readiness_trust_policy_sha256,readiness_policy_arn,negative_role_arn,
+                          negative_trust_policy_sha256,:anchor_arn,:anchor_sha256,
+                          :profile_arn,:profile_sha256,bootstrap_principal_arn,
+                          expected_principal_arn,observed_principal_arn,bucket_policy_sha256,
+                          :group_nonce,evidence_sha256,error_code,started_at,completed_at,expires_at
+                        FROM artifact_provider_probe_results WHERE id=:source_id
+                        """
+                    ),
+                    {
+                        **custody_values,
+                        "id": str(new_record_id()),
+                        "group_nonce": str(uuid4()),
+                        "source_id": str(rows["readiness"]),
+                    },
+                )
+        assert integrity_constraint_name(failure.value) == constraint_name
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_activation_database_requires_each_roles_anywhere_custody_field(
+    isolated_database_env: str,
+    tmp_path: Path,
+) -> None:
+    """Each nullable column is mandatory when an activation carries custody."""
+    settings = _roles_anywhere_settings(tmp_path)
+    namespace = aws_s3_namespace_fingerprint(settings)
+    engine = create_async_engine(isolated_database_env)
+    factory = async_sessionmaker(engine, expire_on_commit=False)
+    try:
+        results = await _insert_group(factory, settings, namespace, uuid4())
+        async with factory() as session, session.begin():
+            activation_id = await _insert_activation_direct(session, results)
+
+        async with factory() as session:
+            transaction = await session.begin()
+            try:
+                await session.execute(
+                    text(
+                        """
+                        CREATE OR REPLACE FUNCTION public.guard_artifact_provider_activation()
+                        RETURNS trigger LANGUAGE plpgsql
+                        SET search_path=pg_catalog,public,pg_temp AS $$
+                        BEGIN
+                          RETURN NEW;
+                        END $$
+                        """
+                    )
+                )
+                for field in (
+                    "roles_anywhere_trust_anchor_arn",
+                    "roles_anywhere_trust_anchor_sha256",
+                    "roles_anywhere_profile_arn",
+                    "roles_anywhere_profile_sha256",
+                ):
+                    with pytest.raises(IntegrityError) as failure:
+                        async with session.begin_nested():
+                            await session.execute(
+                                text(
+                                    f"UPDATE artifact_provider_activations SET {field}=NULL "
+                                    "WHERE id=:id"
+                                ),
+                                {"id": str(activation_id)},
+                            )
+                    assert integrity_constraint_name(failure.value) == (
+                        "ck_artifact_provider_activations_roles_anywhere_custody"
+                    )
+            finally:
+                await transaction.rollback()
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_roles_anywhere_runtime_cannot_reuse_cross_method_activation(
+    isolated_database_env: str,
+    tmp_path: Path,
+) -> None:
+    container_settings = _settings(tmp_path)
+    roles_settings = _roles_anywhere_settings(tmp_path)
+    namespace = aws_s3_namespace_fingerprint(container_settings)
+    engine = create_async_engine(isolated_database_env)
+    factory = async_sessionmaker(engine, expire_on_commit=False)
+    group_nonce = uuid4()
+    try:
+        await _insert_group(factory, container_settings, namespace, group_nonce)
+        async with factory() as session, session.begin():
+            await coordinate_artifact_provider_activation(
+                session,
+                container_settings,
+                namespace_fingerprint=namespace,
+                group_nonce=group_nonce,
+            )
+        with pytest.raises(
+            ArtifactProviderLiveProofRequiredError,
+            match="requires fresh exact live proof",
+        ):
+            await SqlAlchemyArtifactProviderActivationGuard(
+                factory, roles_settings
+            ).select_for_call(namespace_fingerprint=namespace)
     finally:
         await engine.dispose()
 
