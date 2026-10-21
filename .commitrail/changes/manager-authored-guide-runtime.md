@@ -230,6 +230,13 @@ candidate `7f42f7682`; no blocking finding. Dispositions:
 - QA-04 (low): added tests for an oversized Markdown candidate, rules JSON under
   a non-Markdown media type, and a substituted document version. Timeout and
   cancellation reuse the hosted runtime's pattern and remain untested here.
+- Replay on `b92e71363`: security, architecture and QA passed. QA-05 (low): the
+  duplicate case only caught a "first candidate wins" regression; both rules
+  documents now cite each other. The oversized-candidate test cannot isolate
+  the byte-limit check, which is redundant behind the bounded read; accepted.
+  Security noted, unverified, that lone-surrogate escapes in prose might fail
+  the evidence guard's `jsonb` cast and leave the attempt provider-uncertain;
+  the hosted runtime shares this pre-existing exposure.
 - Coordination: PR #633 also adds `0056`; whichever merges second renumbers its
   migration and refreshes `alembic/env.py`, `tests/test_alembic.py` and the
   schema fingerprint.

@@ -793,12 +793,15 @@ async def test_manager_authored_runtime_rejects_rules_the_citation_rule_would_no
     """Exactly-one and resolvable-reference rules fail on their own, not via coverage."""
     monkeypatch.delenv("OPENAI_API_KEY")
     valid_ref = {"document": SOURCE_SHA256}
-    second_id = uuid4()
-    # The first rules document cites the second, so every document is cited.
+    first_id, second_id = uuid4(), uuid4()
+    # Each rules document cites the other, so whichever one a regression chose,
+    # every document would be cited and only the exactly-one rule can reject.
     duplicated, bodies = _manager_material(
         _rules(findings=[{"severity": "info", "code": "guide.ready", "message": "Complete.",
                           "evidence_refs": [valid_ref, {"document": f"{second_id}.md"}]}]),
-        extra=(_rules(setup_notes=["Second rules document."]),), source_ids=(None, second_id))
+        extra=(_rules(findings=[{"severity": "info", "code": "guide.ready", "message": "Complete.",
+                                 "evidence_refs": [valid_ref, {"document": f"{first_id}.md"}]}]),),
+        source_ids=(first_id, second_id))
     unresolved, unresolved_bodies = _manager_material(_rules(findings=[
         {"severity": "info", "code": "guide.ready", "message": "Complete.",
          "evidence_refs": [valid_ref, {"document": "sha256:" + "0" * 64}]}]))
