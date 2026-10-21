@@ -24,8 +24,8 @@ env:
 
 jobs:
   scope:
-    # Description-only edits change no proof inputs; `test` mirrors the
-    # existing run for this head instead of repeating it.
+    # Description-only edits change no proof inputs and publish no required
+    # check; the original proof run retains sole ownership of its result.
     if: ${{ !(github.event.action == 'edited' && !github.event.changes.base && github.event.pull_request.head.repo.full_name == github.repository) }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -252,7 +252,10 @@ jobs:
         run: |
           set -euo pipefail
           cargo fmt --all --check
-          cargo test --workspace --locked
+          # The kernel-limit proof forks the process; sibling fixture writes
+          # must not leave writable executable descriptors in that child.
+          # Tests that exercise concurrency create their own threads.
+          cargo test --workspace --locked -- --test-threads=1
 
   lanes:
     needs: [scope, minio-image]
@@ -809,73 +812,16 @@ jobs:
           retention-days: 7
 
   test:
-    name: ${{ github.event_name == 'pull_request' && github.event.pull_request.draft && 'draft-test' || 'test' }}
-    if: ${{ always() }}
+    # Skipping a job still named `test` would falsely satisfy branch protection.
+    # Metadata runs use a distinct dynamic identity, leaving real proof untouched.
+    # GitHub may display the unevaluated name expression for this skipped path.
+    name: ${{ github.event_name == 'pull_request' && github.event.action == 'edited' && !github.event.changes.base && github.event.pull_request.head.repo.full_name == github.repository && 'metadata-only' || github.event_name == 'pull_request' && github.event.pull_request.draft && 'draft-test' || 'test' }}
+    if: ${{ always() && !(github.event_name == 'pull_request' && github.event.action == 'edited' && !github.event.changes.base && github.event.pull_request.head.repo.full_name == github.repository) }}
     needs: [scope, auth-boundary-preflight, external-checker-runtime, lanes, minio-image, cli-public-contract, mcp-contract, full-suite]
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
-      - name: Mirror the existing proof for a description-only edit
-        if: ${{ github.event.action == 'edited' && !github.event.changes.base && github.event.pull_request.head.repo.full_name == github.repository }}
-        env:
-          GH_TOKEN: ${{ github.token }}
-          REPOSITORY: ${{ github.repository }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          BASE_REF: ${{ github.event.pull_request.base.ref }}
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          EXPECTED_JOB: ${{ github.event.pull_request.draft && 'draft-test' || 'test' }}
-          RUN_ID: ${{ github.run_id }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          # The proof is the newest other Backend run for this exact head, this
-          # PR, this base branch and base commit whose scope job did not skip.
-          proof=""
-          for run in $(gh api --paginate "repos/${REPOSITORY}/actions/workflows/backend.yml/runs?head_sha=${HEAD_SHA}&event=pull_request&per_page=100" \
-                --jq '.workflow_runs[]' \
-              | jq -rs --argjson self "${RUN_ID}" --argjson pr "${PR_NUMBER}" --arg base "${BASE_REF}" --arg base_sha "${BASE_SHA}" \
-                'sort_by(.created_at) | reverse | .[] | select(.id != $self)
-                 | select(any(.pull_requests[]?; .number == $pr and .base.ref == $base and .base.sha == $base_sha)) | .id'); do
-            scope=$(gh api "repos/${REPOSITORY}/actions/runs/${run}/jobs?per_page=100" \
-              --jq '[.jobs[] | select(.name == "scope")][0].conclusion // "pending"')
-            if [[ "${scope}" != skipped ]]; then
-              proof="${run}"
-              break
-            fi
-          done
-          if [[ -z "${proof}" ]]; then
-            echo "No Backend proof exists for ${HEAD_SHA}." >&2
-            exit 1
-          fi
-          # The proof creates its final check only after its prerequisites
-          # finish. If that check does not exist yet, it will be created after
-          # this one and replace it, so fail now instead of holding a runner.
-          # Once it exists, wait only for that short job and report its result.
-          for _ in $(seq 1 60); do
-            job=$(gh api "repos/${REPOSITORY}/actions/runs/${proof}/jobs?per_page=100" \
-              | jq -c --arg name "${EXPECTED_JOB}" '[.jobs[] | select(.name == $name)][0] // empty')
-            if [[ -z "${job}" ]]; then
-              if [[ "$(gh api "repos/${REPOSITORY}/actions/runs/${proof}" --jq .status)" == completed ]]; then
-                echo "Proof run ${proof} has no ${EXPECTED_JOB} check." >&2
-              else
-                echo "Proof run ${proof} is still running; its own ${EXPECTED_JOB} check will replace this one." >&2
-              fi
-              exit 1
-            fi
-            if [[ "$(jq -r .status <<<"${job}")" == completed ]]; then
-              conclusion=$(jq -r '.conclusion // "missing"' <<<"${job}")
-              echo "Mirroring run ${proof}: ${EXPECTED_JOB} ${conclusion}."
-              test "${conclusion}" = success
-              exit 0
-            fi
-            sleep 30
-          done
-          echo "Proof run ${proof}: ${EXPECTED_JOB} did not complete in time." >&2
-          exit 1
-
       - name: Require the selected draft scope or complete merge proof
-        if: ${{ !(github.event.action == 'edited' && !github.event.changes.base && github.event.pull_request.head.repo.full_name == github.repository) }}
         env:
           SCOPE_RESULT: ${{ needs.scope.result }}
           FULL_SUITE: ${{ needs.scope.outputs.full_suite }}
