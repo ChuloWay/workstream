@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 
 	"github.com/Flow-Research/workstream/cli/internal/api"
 	"github.com/spf13/cobra"
@@ -146,6 +147,7 @@ func openBoundDownloadRoot(directory string) (*os.Root, error) {
 	if directory == "" {
 		return nil, errors.New("--download must be an existing real directory")
 	}
+	directory = filepath.Clean(directory)
 	checked, err := os.Lstat(directory)
 	if err != nil || !checked.IsDir() || checked.Mode()&os.ModeSymlink != 0 {
 		return nil, errors.New("--download must be an existing real directory")

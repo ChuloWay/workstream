@@ -276,6 +276,10 @@ def test_guide_reads_reject_malformed_success(cli):
 
 
 def test_guide_reads_refuse_invalid_arguments_before_any_request(cli, tmp_path):
+    real = tmp_path / "real"
+    real.mkdir()
+    link = tmp_path / "link"
+    link.symlink_to(real, target_is_directory=True)
     with http_fixture() as (origin, _response, requests):
         for args in (
             ("list", "not-a-uuid"),
@@ -291,6 +295,14 @@ def test_guide_reads_refuse_invalid_arguments_before_any_request(cli, tmp_path):
                 DOCUMENT,
                 "--download",
                 str(tmp_path / "missing"),
+            ),
+            (
+                "document",
+                PROJECT,
+                GUIDE,
+                DOCUMENT,
+                "--download",
+                f"{link}/",
             ),
         ):
             assert_failure(

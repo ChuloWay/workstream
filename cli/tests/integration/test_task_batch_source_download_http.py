@@ -132,6 +132,7 @@ def test_unsafe_destination_and_invalid_selectors_never_contact_api(cli, tmp_pat
     with source_server() as (origin, state):
         for destination, project, selector in (
             (link, PROJECT, SOURCE),
+            (f"{link}/", PROJECT, SOURCE),
             (tmp_path / "missing", PROJECT, SOURCE),
             (real, "../private", SOURCE),
             (real, PROJECT, "../private"),
