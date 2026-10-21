@@ -39,6 +39,10 @@ the database and broker. The credential-free coordinator receives only the datab
 Do not configure static AWS keys, an AWS profile, EC2 metadata, web identity, a
 credential-process file, or another signing helper.
 
+The hosted profile rejects inherited volumes (`volumes_from`) and Compose
+`configs` on every service. Only the declared, validated volumes and role-specific
+secrets may supply files; Beat has no host volumes.
+
 The release image installs the official `aws_signing_helper` 1.8.5 at
 `/usr/local/bin/aws_signing_helper`. The Docker build and image verifier pin
 these SHA-256 identities:

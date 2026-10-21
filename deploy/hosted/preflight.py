@@ -575,6 +575,14 @@ def validate_compose(rendered: dict[str, Any]) -> None:
     for name, service in services.items():
         if not isinstance(service, dict) or service.get("build") is not None:
             raise PreflightError(f"release service cannot build at runtime: {name}")
+        if "volumes_from" in service:
+            raise PreflightError(
+                f"release service must not inherit another service's volumes: {name}"
+            )
+        if "configs" in service:
+            raise PreflightError(
+                f"release service must not receive Compose configs: {name}"
+            )
         image = service.get("image")
         if not isinstance(image, str) or not IMAGE_REFERENCE.fullmatch(image):
             raise PreflightError(f"release service image is mutable: {name}")

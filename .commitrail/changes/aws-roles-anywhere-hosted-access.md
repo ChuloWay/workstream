@@ -95,6 +95,8 @@ short-lived database activation; no proof bypass or new storage owner is needed.
   Beat schedules work with database/broker access and receives no certificate
   or private key. A proof command explicitly binds its selected role to its
   probe mode; the application session factory remains runtime-only by default.
+  The hosted profile rejects inherited volumes and Compose configs across all
+  services, retaining only validated direct volumes and role-specific secrets.
 - Generate configuration digests and policy templates from the same canonical
   validation helpers. Operator configuration should be a small input document
   plus certificate paths, not hand-computed hashes or parallel policy logic.
@@ -169,6 +171,9 @@ construction to its exact mode, share canonical resource validation, and remove
 Beat's identity mounts. Command-level role-selection tests, generator-to-Settings
 round trips, and rendered-topology counterexamples protect those boundaries.
 Helper download/runtime/verifier hashes also have a shared parity regression.
+Actual Compose rendering regressions cover inherited API volumes and a config
+backed by the runtime private key, closing file-delivery forms that a direct
+volume-only check cannot inspect.
 The temporary provisioning instructions create untagged resources before an
 administrator replaces creation grants with exact returned-resource permissions.
 

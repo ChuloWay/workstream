@@ -106,6 +106,12 @@ class HostedReleaseConfigTests(unittest.TestCase):
         self.environment_path.write_text(environment_text, encoding="utf-8")
         self.environment = preflight.parse_environment(self.environment_path)
 
+    def _render_modified_compose(self, compose_text: str) -> dict[str, object]:
+        compose_path = self.root / "compose.yml"
+        compose_path.write_text(compose_text, encoding="utf-8")
+        with patch.object(preflight, "COMPOSE_PATH", compose_path):
+            return preflight.render_compose(self.environment_path, self.environment)
+
     def test_roles_anywhere_timer_is_bounded_and_five_minute(self) -> None:
         guide = ROLES_ANYWHERE_GUIDE.read_text(encoding="utf-8")
         self.assertIn("OnCalendar=*-*-* *:0/5:00", guide)
@@ -206,6 +212,46 @@ class HostedReleaseConfigTests(unittest.TestCase):
         self.assertNotIn(
             str(preflight.ROLES_ANYWHERE_CERTIFICATE_TARGET), checker_mounts
         )
+
+    def test_actual_render_rejects_beat_inheriting_api_volumes(self) -> None:
+        compose_text = preflight.COMPOSE_PATH.read_text(encoding="utf-8").replace(
+            "  beat:\n    <<: *backend-runtime\n",
+            "  beat:\n    <<: *backend-runtime\n    volumes_from:\n      - api:ro\n",
+            1,
+        )
+        rendered = self._render_modified_compose(compose_text)
+
+        self.assertEqual(rendered["services"]["beat"]["volumes_from"], ["api:ro"])
+        with self.assertRaisesRegex(preflight.PreflightError, "inherit"):
+            preflight.validate_compose(rendered)
+
+    def test_actual_render_rejects_config_backed_by_runtime_private_key(self) -> None:
+        compose_text = preflight.COMPOSE_PATH.read_text(encoding="utf-8").replace(
+            "  beat:\n    <<: *backend-runtime\n",
+            "  beat:\n    <<: *backend-runtime\n"
+            "    configs:\n"
+            "      - source: runtime_private_key\n"
+            "        target: /run/unrelated/key.pem\n",
+            1,
+        )
+        compose_text += (
+            "\nconfigs:\n"
+            "  runtime_private_key:\n"
+            "    file: "
+            "${WORKSTREAM_ARTIFACT_S3_ROLES_ANYWHERE_RUNTIME_PRIVATE_KEY_HOST_FILE}\n"
+        )
+        rendered = self._render_modified_compose(compose_text)
+
+        self.assertEqual(
+            rendered["services"]["beat"]["configs"][0]["target"],
+            "/run/unrelated/key.pem",
+        )
+        self.assertEqual(
+            rendered["configs"]["runtime_private_key"]["file"],
+            str(self.runtime_private_key),
+        )
+        with self.assertRaisesRegex(preflight.PreflightError, "Compose configs"):
+            preflight.validate_compose(rendered)
 
     def test_compose_secret_mode_encodings_preserve_owner_only_read(self) -> None:
         rendered = preflight.render_compose(self.environment_path, self.environment)
