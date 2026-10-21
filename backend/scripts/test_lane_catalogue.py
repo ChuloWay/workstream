@@ -372,6 +372,8 @@ PROJECT_MODULES = (
     "tests/projects/guide_compilation/finalization/test_replay.py",
     "tests/projects/guide_compilation/finalization/test_service.py",
     "tests/projects/guide_compilation/finalization/test_structure.py",
+    "tests/projects/test_guide_mutation_replay_service.py",
+    "tests/projects/test_guide_policy_replay_authorization.py",
     "tests/projects/post_policy/test_public_api.py",
     "tests/projects/post_policy/test_public_recovery.py",
     "tests/projects/post_policy/test_delivery_worker.py",

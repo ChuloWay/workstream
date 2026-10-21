@@ -426,11 +426,13 @@ progress or outcome. An acknowledged child can therefore retain a
 ## Reconciliation
 
 - Current-source reconciliation: current main
-  `af8c0c32a35858287eb49ce388245b7408377004` contains the merged artifact-proof
-  timing prerequisite and the later CLI and terminal-checker work. This change
-  still owns the single linear `0055_delivery_reconciliation` migration;
-  `0054` remains byte-for-byte under its original owner and is not a runtime
-  dependency of recovery.
+  `1ed27c4a63ec0b6773619f2962f321a816c88f83` contains the merged artifact-proof
+  timing prerequisite, the later CLI and terminal-checker work, and fresh
+  replay authority for retained draft-guide and review/revision-policy writes.
+  That guide-policy authority remains separate from this Operator recovery
+  surface. This change still owns the single linear
+  `0055_delivery_reconciliation` migration; `0054` remains byte-for-byte under
+  its original owner and is not a runtime dependency of recovery.
 - Next usable boundary: after this focused source-specific recovery passes,
   #555 must run the complete durable-worker interruption matrix against the
   supported public path before #581 can close.
