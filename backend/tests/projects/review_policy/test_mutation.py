@@ -1,12 +1,13 @@
 """Actual policy writer semantics with bounded repository/authority doubles."""
 
 from copy import deepcopy
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from pydantic import ValidationError
 
 from app.core.hashing import canonical_json_hash
+from app.modules.authorization.runtime import authorization_resource_digest
 from app.modules.projects.policy_mutation_service import (
     NO_CURRENT_POLICY_ETAG,
     PolicyMutationConflict,
@@ -116,6 +117,15 @@ async def test_legacy_response_recovery_defaults_true_and_retains_v1_hash():
     )
     record.response_json = old
     record.policy_hash = old["policy_hash"]
+    record.resource_context_digest = authorization_resource_digest(
+        case[0]._resource(
+            kind="review", policy_id=UUID(record.policy_id),
+            operation_id=record.operation_id, request_digest=record.request_digest,
+            project_id=case[5], guide_id=case[6], guide_version=old["guide_version"],
+            generation=record.policy_generation, final_digest=record.policy_hash,
+            predecessor_id=None, predecessor_generation=None, predecessor_digest=None,
+        )
+    )
 
     async def unexpected_lookup(*_):
         raise AssertionError("exact replay must precede current policy lookup")
