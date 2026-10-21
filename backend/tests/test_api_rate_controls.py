@@ -1036,6 +1036,13 @@ CHECKER_RECOVERY_RATE_BINDINGS = {
         "POST",
         "/operations/projects/{project_id}/checker-runs/{source_run_id}/retry",
     ): {enforce_admin_mutation_rate_limit},
+    ("GET", "/operations/projects/{project_id}/post-submit-deliveries"): {
+        enforce_authorization_read_rate_limit
+    },
+    (
+        "POST",
+        "/operations/projects/{project_id}/post-submit-deliveries/{event_id}/reconcile",
+    ): {enforce_admin_mutation_rate_limit},
 }
 
 
