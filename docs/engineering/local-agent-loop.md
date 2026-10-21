@@ -23,11 +23,12 @@ placeholder step below.
 | `checker-registry` | `agent-loop` | Loopback-only OCI registry, so the daemon records a platform-manifest digest |
 | `checker` | `agent-loop` | The existing Rust checker service (`docker/checker/Dockerfile.release`) in `docker-dev` isolation with the `runc` runtime |
 
-The overlay also gives `backend`, `worker` and `beat` two shared named volumes:
+The overlay also gives the API, Celery worker and beat services two shared
+named volumes:
 
 - **Material root.** The volume `<project>-checker-material` is mounted at its
   own Docker daemon path, `/var/lib/docker/volumes/<project>-checker-material/_data`,
-  in the API, worker, beat and checker containers. The checker starts each
+  in the API, Celery worker, beat and checker containers. The checker starts each
   checker image with `docker run --mount type=bind,src=<material path>`. The
   daemon resolves that source in the Docker VM (or on the Linux host), so the
   path must be identical everywhere. `WORKSTREAM_ARTIFACT_SCRATCH_ROOT` and
@@ -41,7 +42,7 @@ The overlay also gives `backend`, `worker` and `beat` two shared named volumes:
   stay within 107 bytes.
 
 The checker runs as `LOCAL_UID:LOCAL_GID`, the same identity as the API and
-worker, because the socket is `0600` and the service requires each grant
+Celery worker, because the socket is `0600` and the service requires each grant
 directory to be owned by its sandbox UID. It has no network, a read-only root,
 no capabilities and `no-new-privileges`. It mounts the Docker socket, which is
 root-equivalent access to the daemon: use this profile only on a development
@@ -51,7 +52,7 @@ Linux host, set it to the `docker` group ID (`getent group docker`).
 
 Docker Desktop on Apple Silicon (including M4) can advertise OpenSSL CPU
 features that crash PyCA's bundled OpenSSL with `SIGILL`. The backend
-development image already sets `OPENSSL_armcap=0`, so the API, worker and beat
+development image already sets `OPENSSL_armcap=0`, so the API, Celery worker and beat
 use the generic implementation. The checker service (Rust and the Docker CLI)
 and the proof checker (standard-library Python without TLS) do not load that
 OpenSSL, so the overlay adds no further default.
@@ -76,11 +77,12 @@ ignored by Git.
 
 ## Bring up the profile
 
-Start the base services and the registry, but not the checker yet. The checker
-service refuses to start without at least one cached image:
+Start the `backend` profile and the registry, but not the checker yet. The
+checker service refuses to start without at least one cached image:
 
 ```bash
-docker compose up --build --wait backend worker beat checker-registry
+docker compose --profile backend up --build --wait
+docker compose up --wait checker-registry
 ```
 
 Build and publish the proof checker, then write the checker-service
