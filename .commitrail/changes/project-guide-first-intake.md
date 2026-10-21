@@ -1,7 +1,7 @@
 # Project guide first — terminal systems authoring inputs
 
 - Initiative: None
-- Durable disposition: Planned
+- Durable disposition: Complete
 - Intended merge outcome: Remove the fixed-project pilot implementation and supply original guide/example/task inputs for genuine setup-driven onboarding.
 
 ## Intent
@@ -12,10 +12,10 @@ approval; a guide must not be rewritten to fit an existing test fixture.
 
 ## Current behavior
 
-`pilots/terminal_benchmark/guide.md` combines contributor requirements with PRE,
+Before this change, `pilots/terminal_benchmark/guide.md` combined contributor requirements with PRE,
 POST, registry, lifecycle and policy instructions. The corresponding Rust checker
-accepts five exact task IDs, eight fixed files and one fixed Python recipe.
-That bounded corpus proves its own implementation, not arbitrary project setup.
+accepted five exact task IDs, eight fixed files and one fixed Python recipe.
+That bounded corpus proved its own implementation, not arbitrary project setup.
 
 ## Bounded change
 
@@ -64,17 +64,17 @@ retirement does not claim that arbitrary nested builds already work.
 
 ## Acceptance criteria
 
-- [ ] A PM can read the guide and example without Workstream implementation knowledge.
-- [ ] Five meaningful task-authoring briefs and guide inputs validate against
+- [x] A PM can read the guide and example without Workstream implementation knowledge.
+- [x] Five meaningful task-authoring briefs and guide inputs validate against
   current public schemas; task-local acceptance/rejection fields remain optional.
-- [ ] Neither examples nor guide impose a fixed task inventory, language, single
+- [x] Neither examples nor guide impose a fixed task inventory, language, single
   source file, image digest or private provider dependency.
-- [ ] Onboarding notes distinguish setup suggestions, engineering implementation,
+- [x] Onboarding notes distinguish setup suggestions, engineering implementation,
   registry, fresh proposal/approval, activation and task screening/release.
-- [ ] Required unsupported checks remain visible and block activation; existing
+- [x] Required unsupported checks remain visible and block activation; existing
   sample checker proof is not presented as support for this guide.
-- [ ] No fixed five-task checker, private plan protocol, named runtime profile or sample-only proof remains active; ordinary Backend lanes and release-image triggers remain intact.
-- [ ] Generic Rust and Python materialization/runtime tests retain exact custody, cleanup, resource and result-contract protections.
+- [x] No fixed five-task checker, private plan protocol, named runtime profile or sample-only proof remains active; ordinary Backend lanes and release-image triggers remain intact.
+- [x] Generic Rust and Python materialization/runtime tests retain exact custody, cleanup, resource and result-contract protections.
 
 ## Risk and review routing
 
@@ -88,8 +88,18 @@ retirement does not claim that arbitrary nested builds already work.
 | Claim | Command or proof | Result | Remaining uncertainty |
 |---|---|---|---|
 | Public input shape | ProjectGuideCreate and parse_task_import on checked-in JSON | Guide/example and five distinct briefs validate; optional criteria omitted | No live setup inference |
-| Retained runtime protections | Rust workspace; Python external-runtime and artifact-preparation selection | Initial Rust 26 tests and Python 105 tests pass; final boundary regression and PostgreSQL selection follow | No live project journey |
-| Documentation coherence | Links, stale wording, diff, focused review | Pending | No checker implementation or product activation |
+| Retained runtime protections | `cargo test --workspace --locked --offline`; Python external-runtime and artifact-preparation selection | 28 Rust and 105 Python tests pass; removed configuration rejects, generic result handling and cleanup remain | No live project journey |
+| POST materialization and quotas | Owned PostgreSQL runner: native POST grant/lease test and aggregate-quota test | Both pass; database cleanup confirmed | Broad local module run hit its 900-second limit with incomplete failure output and is not passing evidence; full module remains part of required CI |
+| Provider custody | Owned PostgreSQL/MinIO runner: exact materialization readback and revocation | Pass; owned database and bucket cleanup confirmed | Local MinIO, not a hosted storage deployment |
+| Documentation and boundaries | Markdown links, stale wording, diff, module/test boundaries, Commitrail validation and focused review | Pass; stale catalogue and upload-trigger wording corrected | No checker implementation or product activation |
+
+Runtime proofs bind to source candidate `17390e92`; the final change to this
+record only reconciles evidence and intended disposition. The initial broad
+database invocation omitted the MinIO endpoint and timed out; its partial output
+does not establish a module result. The separate successful storage invocation
+configured the endpoint and redirected the existing test helper to the runner's
+owned bucket without changing product code. Exact-head hosted results and review
+freshness belong to the PR, not this durable record.
 
 ## Review findings
 
@@ -103,12 +113,14 @@ must reject while the generic configuration shape remains accepted. The generic
 private-output test protects result handling but is not presented as a test that
 failed the old POST-only continuation. Documentation review corrected the glossary's
 superseded catalogue definition and the onboarding trigger: the final declared
-document upload queues setup automatically. Clean-target replay remains required.
+document upload queues setup automatically. The final record removes superseded
+intermediate test counts and transient review wording and records the integrated
+main boundary.
 
 ## Reconciliation
 
-- Current-source reconciliation: main `4ad0812e0`; task audit CLI is merged and
-  does not change these input contracts. #576/#555 remain the project preparation
+- Current-source reconciliation: main `c6d916cc1`; task audit and Operator task CLI are merged and
+  do not change these input contracts. #576/#555 remain the project preparation
   and connected journey owners.
 - Next usable boundary: PM review of the guide and illustrative work, then live
   setup against the registry and explicit engineering handoff for missing checks.
