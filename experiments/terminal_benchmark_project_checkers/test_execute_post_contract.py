@@ -4,11 +4,19 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+import json
+from pathlib import Path
+import tempfile
 from uuid import UUID
 import unittest
 
 from app.core.identifiers import new_record_id
-from app.modules.checkers.api.external import PostSubmitExternalCheckerIdentity
+from app.modules.checkers.api.external import (
+    ExternalCheckerExecutionRequest,
+    PostSubmitExternalCheckerIdentity,
+    make_external_checker_execution_result,
+)
+import execute_pre
 from execute_post import _post_material, _registry_entry_from_json
 from prepare_contract import _registry_entry
 
@@ -52,6 +60,64 @@ class RegistryJsonBoundaryTests(unittest.TestCase):
         )
 
         self.assertEqual(material.role, "submission_archive")
+
+    def test_pre_driver_uses_the_real_pre_phase_and_verifies_a_bound_pass(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            contract = root / "contract.json"
+            request_path = root / "request.json"
+            result_path = root / "result.json"
+            fact_path = root / "fact.json"
+            entry = _registry_entry("sha256:" + "a" * 64)
+            contract.write_text(
+                json.dumps(
+                    {
+                        "configuration": {
+                            "external_task_id": "terminal-ledger-reconcile",
+                            "schema_version": "terminal_benchmark_project.v1",
+                        },
+                        "registry": entry.model_dump(mode="json"),
+                    }
+                ),
+                encoding="utf-8",
+            )
+            package = (
+                Path(__file__).parents[2]
+                / "pilots/terminal_benchmark/packages/ledger-reconcile"
+            )
+
+            execute_pre.request(contract, package, request_path)
+            request = ExternalCheckerExecutionRequest.model_validate_json(
+                request_path.read_text(encoding="utf-8")
+            )
+            self.assertEqual(request.identity.phase, "pre_submit")
+            self.assertEqual(request.registry.phase, "pre_submit")
+            self.assertNotEqual(
+                request.registry.registry_entry_id, entry.registry_entry_id
+            )
+            self.assertEqual(
+                [item.role for item in request.materials], ["submission_archive"]
+            )
+            result = make_external_checker_execution_result(
+                request_digest=request.request_digest,
+                registry_entry_id=request.registry.registry_entry_id,
+                registry_entry_digest=request.registry.entry_digest,
+                phase="pre_submit",
+                outcome="completed",
+                verdict="passed",
+                findings=(),
+                infrastructure_failure_code=None,
+            )
+            result_path.write_text(
+                result.model_dump_json() + "\n",
+                encoding="utf-8",
+            )
+
+            execute_pre.verify(request_path, result_path, fact_path)
+
+            fact = json.loads(fact_path.read_text(encoding="utf-8"))
+            self.assertEqual(fact["request_digest"], request.request_digest)
+            self.assertEqual(fact["result_digest"], result.result_digest)
 
 
 if __name__ == "__main__":

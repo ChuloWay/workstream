@@ -12,7 +12,6 @@ from app.modules.authorization.catalogue import ActionId
 from app.modules.authorization.domain.management_reads import (
     MANAGEMENT_RESOURCE_BY_ACTION, ProjectManagementReadResourceContext,
 )
-from app.modules.authorization.domain.resource_digest import authorization_resource_digest
 from app.modules.authorization.kernel import AuthorizationService
 from app.modules.authorization.pagination import AuthorizationReadCursorCodec, InvalidPaginationCursor
 
@@ -59,7 +58,7 @@ class ProjectManagementReadAuthorization:
             scope_project_id=request.project_id, actor_profile_id=request.actor_profile_id,
             request_digest=digest,
         )
-        decision = await self._kernel.require(action, resource)
+        await self._kernel.require(action, resource)
         position = None
         if cursor is not None:
             try:
@@ -67,14 +66,7 @@ class ProjectManagementReadAuthorization:
             except InvalidPaginationCursor as exc:
                 raise ProjectManagementReadCursorInvalid("Invalid project management read cursor") from exc
             position = ProjectManagementReadPosition(timestamp, record_id)
-        # The evaluator alone resolves and locks the exact-project Finance grant
-        # and records it in the decision's resource digest; a summary decision
-        # recorded over the resource as sent withholds award totals.
-        award_totals_visible = (
-            action is ActionId.PROJECT_SUMMARY_READ
-            and decision.resource_context_digest != authorization_resource_digest(resource)
-        )
-        return ProjectManagementReadGrant(request.project_id, position, award_totals_visible)
+        return ProjectManagementReadGrant(request.project_id, position)
 
     def encode(self, request: ProjectManagementReadRequest, position: ProjectManagementReadPosition) -> str:
         """Sign the last returned row's boundary for the same exact query."""
