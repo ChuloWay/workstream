@@ -30,14 +30,21 @@
   [WS-CLI-001-23](WS-CLI-001-23.md), Finance draft creation, rule replacement, publication and retirement;
   [WS-CLI-001-24](WS-CLI-001-24.md), self/project contribution evidence and exact private CSV export;
   [WS-CLI-001-25](WS-CLI-001-25.md), explicit public ZIP preparation, Submission replay/history and contributor checker findings;
-  [WS-CLI-001-27](WS-CLI-001-27.md), seven exact-project manager task-context and retained Submission/checker evidence reads;
-  [WS-CLI-001-33](WS-CLI-001-33.md), exact-project privacy-safe contributor-candidate discovery;
+  [WS-CLI-001-27](WS-CLI-001-27.md), manager task-context and retained Submission/checker evidence reads;
+  [WS-CLI-001-29](WS-CLI-001-29.md), Operator checker registry and exact retry commands;
   [WS-CLI-001-35](WS-CLI-001-35.md), deliberate exact-source manager revision-context repair;
   [PILOT-13](../../changes/pilot13-assigned-task-guide-documents.md), assigned-task locked-guide listing/download;
   [PILOT-02](../../changes/pilot02-bulk-transitions-cli.md), explicit CSV conversion,
   source custody, atomic import, batch status and whole-batch screen/release.
 
 ## Current boundary
+
+[WS-CLI-001-29](WS-CLI-001-29.md) adds explicit system-Operator commands for
+immutable external-checker registry registration/read and project-bound
+known-terminal checker retry-source listing/retry through four existing public
+REST routes. Registration does not enable execution; source reads do not authorize
+later retry, and exact replay rechecks backend authority. Hosted operation and
+CLI distribution remain separate.
 
 [WS-CLI-001-27](WS-CLI-001-27.md) exposes the seven existing Project Manager
 task requirements/context and exact Submission/checker-history GETs through
@@ -53,7 +60,7 @@ scope remain decisive.
 Current public-only completion plan (inventory at main `51b868071`): FastAPI
 OpenAPI declares 125 non-health method/path operations, of which 69 have CLI
 coverage. Counts are an inventory, not a runtime certification or a coverage
-target, and predate the manager-evidence addition above. Contributor `me`
+target, and predate the manager-evidence and checker additions above. Contributor `me`
 browsing, preparation reads, manager work browsing,
 guide list/show/readiness/document reads and contribution-policy listing are
 also delivered by the merged PILOT read work; reuse those owners.
@@ -73,11 +80,11 @@ revision-context presentation correction.
 | [#601](https://github.com/Flow-Research/workstream/issues/601) | Governed sufficiency/manual artifact-policy writes | 4 |
 | [#602](https://github.com/Flow-Research/workstream/issues/602) | Manager task context and submission/checker evidence, delivered by [WS-CLI-001-27](WS-CLI-001-27.md) | 7 |
 | [#603](https://github.com/Flow-Research/workstream/issues/603) | Exact revision-context repair, delivered by [WS-CLI-001-35](WS-CLI-001-35.md) | 1 |
-| [#604](https://github.com/Flow-Research/workstream/issues/604) | Contributor-candidate discovery — delivered by [WS-CLI-001-33](WS-CLI-001-33.md) | 1 |
+| [#604](https://github.com/Flow-Research/workstream/issues/604) | Contributor-candidate discovery | 1 |
 | [#605](https://github.com/Flow-Research/workstream/issues/605) | Retained task-import source download | 1 |
 | [#606](https://github.com/Flow-Research/workstream/issues/606) | Actor/admin authority inspection | 6 |
 | [#607](https://github.com/Flow-Research/workstream/issues/607) | Actor/identity lifecycle and administrative writes | 8 |
-| [#608](https://github.com/Flow-Research/workstream/issues/608) | External-checker registry and explicit retry | 4 |
+| [#608](https://github.com/Flow-Research/workstream/issues/608) | External-checker registry and explicit retry, delivered by [WS-CLI-001-29](WS-CLI-001-29.md) | 4 |
 | [#609](https://github.com/Flow-Research/workstream/issues/609) | Operator task inspection/start override | 3 |
 | [#610](https://github.com/Flow-Research/workstream/issues/610) | Task audit context/evidence | 2 |
 | [#611](https://github.com/Flow-Research/workstream/issues/611) | Artifact operator inspection/recovery | 9 |
