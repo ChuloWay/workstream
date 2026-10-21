@@ -96,7 +96,7 @@ only actor UUID and nullable display name with explicit opaque continuation.
 Discovery neither qualifies nor grants actors; backend authority and cursor
 scope remain decisive.
 
-Current public-only completion plan (inventory at main `51b868071`): FastAPI
+Public-only completion baseline (inventory at main `51b868071`): FastAPI
 OpenAPI declares 125 non-health method/path operations, of which 69 have CLI
 coverage. Counts are an inventory, not a runtime certification or a coverage
 target, and predate the delivered additions above. Contributor `me`
@@ -130,7 +130,16 @@ revision-context presentation correction.
 | [#608](https://github.com/Flow-Research/workstream/issues/608) | External-checker registry and explicit retry, delivered by [WS-CLI-001-29](WS-CLI-001-29.md) | 4 |
 | [#609](https://github.com/Flow-Research/workstream/issues/609) | Operator task inspection/start override, delivered by [WS-CLI-001-36](WS-CLI-001-36.md) | 3 |
 | [#610](https://github.com/Flow-Research/workstream/issues/610) | Task audit context/evidence — delivered by [WS-CLI-001-34](WS-CLI-001-34.md) | 2 |
-| [#611](https://github.com/Flow-Research/workstream/issues/611) | Artifact operator inspection/recovery | 9 |
+| [#611](https://github.com/Flow-Research/workstream/issues/611) | Artifact operator inspection/recovery; production authority is not activated, so no usable CLI boundary yet | 9 |
+
+After that baseline, #617 added two live post-submit delivery discovery and
+reconciliation operations. [#634](https://github.com/Flow-Research/workstream/issues/634)
+tracks their public CLI client separately; the baseline counts do not include them.
+For #611, mounted routes are not usable capability: the production dependencies
+still return denying artifact operator/recovery authorities. Positive tests with
+authority overrides do not establish production availability. Backend activation
+must precede CLI implementation; no dormant commands or client-side bypass belong
+in this initiative.
 
 Continue only the remaining boundaries in the inventory above; delivered rows
 are not new assignments. Inspection informs subsequent manual mutations
@@ -139,7 +148,8 @@ dependency. Root registrations are additive; shared transport changes have one
 owner and are reused rather than copied. Each PR reconciles its own README and
 roadmap claims, while the lead coordinates overview/index changes. No generic
 raw-HTTP executor, private backend path, new business rules or eager TUI is needed.
-No material product decision is missing for these existing-contract clients.
+The usable existing-contract clients require no new product policy. Activating
+#611's backend authority is a separate authorization change, not CLI scope.
 
 The backend exposes `GET /api/v1/actors/me` and
 `GET /api/v1/actors/me/authorization-context` in

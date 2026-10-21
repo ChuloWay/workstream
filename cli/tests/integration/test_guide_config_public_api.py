@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 import subprocess
 import sys
+import tempfile
 from uuid import uuid4
 
 import httpx
@@ -72,7 +73,12 @@ async def test_guide_configuration_public_socket_replay_and_fresh_authority(
         "cli-outsider": token(outsider),
     }
     origin = f"http://127.0.0.1:{find_free_port()}"
-    log = (tmp_path / "guide-config-api.log").open("wb")
+    # pytest's rotating tmp_path can disappear while another isolated runner
+    # starts; retain a private startup log only when this journey fails.
+    log = tempfile.NamedTemporaryFile(
+        prefix="workstream-599-api-", suffix=".log", delete=False
+    )
+    completed = False
     process = subprocess.Popen(  # noqa: S603 - owned production API process
         [
             sys.executable,
@@ -93,7 +99,10 @@ async def test_guide_configuration_public_socket_replay_and_fresh_authority(
         stderr=subprocess.STDOUT,
     )
     try:
-        await _ready(origin + "/api/v1/health", process)
+        try:
+            await _ready(origin + "/api/v1/health", process)
+        except AssertionError as exc:
+            raise AssertionError(f"{exc}; API startup log: {log.name}") from exc
         async with httpx.AsyncClient(
             base_url=origin,
             trust_env=False,
@@ -176,6 +185,7 @@ async def test_guide_configuration_public_socket_replay_and_fresh_authority(
                 headers=manager_header,
             )
             assert hidden.status_code in (403, 404)
+            completed = True
     finally:
         process.terminate()
         try:
@@ -184,4 +194,6 @@ async def test_guide_configuration_public_socket_replay_and_fresh_authority(
             process.kill()
             await asyncio.to_thread(process.wait, timeout=10)
         log.close()
+        if completed:
+            Path(log.name).unlink(missing_ok=True)
         await engine.dispose()
