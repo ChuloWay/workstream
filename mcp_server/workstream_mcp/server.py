@@ -25,7 +25,7 @@ from workstream_mcp.schemas import (
     profile_output_schema,
     profile_update_output_schema,
 )
-from workstream_mcp.tools import access_reads, actor_lifecycle, admin_grants
+from workstream_mcp.tools import access_reads, actor_lifecycle, admin_grants, projects
 from workstream_mcp.tools.context import (
     TOOL_NAME as AUTHORIZATION_CONTEXT_TOOL_NAME,
 )
@@ -107,6 +107,7 @@ def create_app(settings: Settings) -> Starlette:
     access_definitions = access_reads.definitions()
     admin_grant_definitions = admin_grants.definitions()
     actor_lifecycle_definitions = actor_lifecycle.definitions()
+    project_definitions = projects.definitions()
     gateway: WorkstreamGateway | None = None
 
     async def list_tools(
@@ -121,6 +122,7 @@ def create_app(settings: Settings) -> Starlette:
                 *admin_grant_definitions,
                 *actor_lifecycle_definitions,
                 *access_definitions[3:],
+                *project_definitions,
             ]
         )
 
@@ -134,6 +136,7 @@ def create_app(settings: Settings) -> Starlette:
             *access_reads.TOOL_NAMES,
             *admin_grants.TOOL_NAMES,
             *actor_lifecycle.TOOL_NAMES,
+            *projects.TOOL_NAMES,
         }:
             return adapter_failure("unknown_tool", status=404)
         arguments = params.arguments if params.arguments is not None else {}
@@ -165,6 +168,10 @@ def create_app(settings: Settings) -> Starlette:
             )
         if params.name in actor_lifecycle.TOOL_NAMES:
             return await actor_lifecycle.invoke(
+                gateway, params.name, bearer, correlation_id, arguments
+            )
+        if params.name in projects.TOOL_NAMES:
+            return await projects.invoke(
                 gateway, params.name, bearer, correlation_id, arguments
             )
         return await invoke_context(gateway, bearer, correlation_id, arguments)
