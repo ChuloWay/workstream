@@ -44,6 +44,7 @@ func addGuideInspection(project, guide *cobra.Command, client func() (*api.Clien
 			return writeGuideInspection(stdout, *output, "Retained sufficiency report (not readiness)", result, err)
 		},
 	})
+	addGuideSufficiencyMutations(sufficiency, client, output, stdout)
 	guide.AddCommand(sufficiency)
 	artifact := &cobra.Command{Use: "artifact-policy", Short: "Inspect retained and effective submission artifact policy"}
 	artifact.AddCommand(&cobra.Command{

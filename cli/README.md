@@ -3,7 +3,8 @@
 An independent Go client for Workstream's public REST API, for humans and
 agents using the terminal. It provides human self-profile reads and editing,
 plus draft project/guide declaration and original upload, exact-project inspection, authority reads, manager task browsing and
-administrative active-guide/intake-policy inspection,
+administrative active-guide/intake-policy inspection and explicit human guide
+sufficiency diagnostics,
 contributor work discovery, claim/start, locked guide documents and governing
 context/intake requirements, explicit batch import/screen/release, Finance
 policy management, explicit ZIP preparation/submission, checker findings,
@@ -43,6 +44,8 @@ contribution-evidence exports and exact Audit Authority task reads:
 | `workstream project active-guide PROJECT_ID` | `GET /api/v1/projects/PROJECT_ID/active-guide` |
 | `workstream project guide sufficiency list PROJECT_ID GUIDE_ID` | `GET /api/v1/projects/PROJECT_ID/guides/GUIDE_ID/sufficiency-reports` |
 | `workstream project guide sufficiency show PROJECT_ID GUIDE_ID REPORT_ID` | `GET /api/v1/projects/PROJECT_ID/guides/GUIDE_ID/sufficiency-reports/REPORT_ID` |
+| `workstream project guide sufficiency create PROJECT_ID GUIDE_ID --input FILE --idempotency-key UUID` | `POST /api/v1/projects/PROJECT_ID/guides/GUIDE_ID/sufficiency-reports` |
+| `workstream project guide sufficiency acknowledge-warnings PROJECT_ID GUIDE_ID REPORT_ID --input FILE --idempotency-key UUID` | `POST /api/v1/projects/PROJECT_ID/guides/GUIDE_ID/sufficiency-reports/REPORT_ID/acknowledge-warnings` |
 | `workstream project guide artifact-policy list PROJECT_ID GUIDE_ID` | `GET /api/v1/projects/PROJECT_ID/guides/GUIDE_ID/submission-artifact-policies` |
 | `workstream project guide artifact-policy show PROJECT_ID GUIDE_ID POLICY_ID` | `GET /api/v1/projects/PROJECT_ID/guides/GUIDE_ID/submission-artifact-policies/POLICY_ID` |
 | `workstream project guide artifact-policy effective PROJECT_ID GUIDE_ID` | `GET /api/v1/projects/PROJECT_ID/guides/GUIDE_ID/effective-submission-artifact-policy` |
@@ -1302,6 +1305,8 @@ workstream project guide document PROJECT_ID GUIDE_ID DOCUMENT_ID --download ./o
 workstream project active-guide PROJECT_ID --output json
 workstream project guide sufficiency list PROJECT_ID GUIDE_ID --output json
 workstream project guide sufficiency show PROJECT_ID GUIDE_ID REPORT_ID --output json
+workstream project guide sufficiency create PROJECT_ID GUIDE_ID --input ./report.json --idempotency-key UUID
+workstream project guide sufficiency acknowledge-warnings PROJECT_ID GUIDE_ID REPORT_ID --input ./acknowledgement.json --idempotency-key UUID
 workstream project guide artifact-policy list PROJECT_ID GUIDE_ID --output json
 workstream project guide artifact-policy show PROJECT_ID GUIDE_ID POLICY_ID --output json
 workstream project guide artifact-policy effective PROJECT_ID GUIDE_ID --output json
@@ -1339,6 +1344,18 @@ includes the locked non-compensation policy context, not a readiness calculation
 or a credential for a later write. Every invocation reauthorizes through the
 backend. Text is terminal-escaped; `--output json` preserves the complete
 successful public response.
+
+The two sufficiency writes require a current covering human Project Manager
+grant. `create` records one human diagnostic against the current draft guide's
+source snapshot; its JSON file needs `source_snapshot_id`, `status` (`passed`,
+`blocked` or `passed_with_warnings`), and may include `findings` and `summary`.
+`acknowledge-warnings` accepts a JSON object with an optional
+`acknowledgement_note` (use `{}` for no note) for an eligible warning report.
+The backend checks guide/snapshot lineage, report status, authority, duplicates
+and exact replay; neither command runs setup, approves policy or activates a
+guide. Retain the same UUID key and unchanged input file for a manual replay
+after an uncertain outcome. These commands do not create or update artifact
+policies.
 
 `submissions` and `assignments` list every attempt and claim in the project
 with the submitter or contributor and the same fields as `me submissions` and
