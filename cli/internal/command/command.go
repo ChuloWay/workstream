@@ -107,6 +107,7 @@ func Run(args []string, stdout, stderr io.Writer, getenv environment, version st
 	update.Flags().BoolVar(&clearContactEmail, "clear-contact-email", false, "Clear your profile contact text")
 	profile.AddCommand(update)
 	root.AddCommand(profile)
+	addAdminInspection(root, client, &output, stdout)
 
 	project := &cobra.Command{Use: "project", Short: "Public project operations"}
 	addTaskReads(project, client, &output, stdout)
