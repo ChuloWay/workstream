@@ -69,6 +69,7 @@ contribution-evidence exports:
 | `workstream project task-batch source-declare PROJECT_ID --input FILE --idempotency-key UUID` | `POST /api/v1/projects/PROJECT_ID/task-import-sources` |
 | `workstream project task-batch source-upload PROJECT_ID SOURCE_ID --input FILE` | `PUT /api/v1/projects/PROJECT_ID/task-import-sources/SOURCE_ID/content` |
 | `workstream project task-batch source-status PROJECT_ID SOURCE_ID` | `GET /api/v1/projects/PROJECT_ID/task-import-sources/SOURCE_ID` |
+| `workstream project task-batch source-download PROJECT_ID SOURCE_ID --download DIR` | Authorized source status and `GET /api/v1/projects/PROJECT_ID/task-import-sources/SOURCE_ID/content` |
 | `workstream project task-batch import PROJECT_ID SOURCE_ID --idempotency-key UUID` | `POST /api/v1/projects/PROJECT_ID/task-import-batches` |
 | `workstream project task-batch status PROJECT_ID BATCH_ID` | `GET /api/v1/projects/PROJECT_ID/task-import-batches/BATCH_ID` |
 | `workstream project task-batch screen PROJECT_ID BATCH_ID --idempotency-key UUID [--reason TEXT]` | `POST /api/v1/projects/PROJECT_ID/task-import-batches/BATCH_ID/screen` |
@@ -900,6 +901,8 @@ workstream project task-batch convert-csv --input briefs.csv --out briefs.json -
 workstream project task-batch source-declare PROJECT_ID --input briefs.json --idempotency-key SOURCE_UUID --output json
 workstream project task-batch source-upload PROJECT_ID SOURCE_ID --input briefs.json --output json
 workstream project task-batch source-status PROJECT_ID SOURCE_ID --output json
+mkdir source-originals
+workstream project task-batch source-download PROJECT_ID SOURCE_ID --download source-originals --output json
 ```
 
 Conversion is local and needs no token or API configuration. It accepts quoted
@@ -910,6 +913,14 @@ file is never overwritten. The report names the SHA-256 and byte count of the
 complete generated JSON, including its final newline. Upload those exact bytes.
 Workstream retains the converted JSON source; this does not retain the original
 CSV. Retain that original separately if your own workflow requires it.
+Download requires a currently verified source and an existing real directory.
+The CLI reads current source metadata, then independently asks the public API
+for its content; both requests remain subject to backend authorization. It
+checks the exact original SHA-256 and byte count and writes `SOURCE_ID.json`
+privately before publishing. An existing file or symlink is never overwritten;
+failed reads leave no partial download. JSON output names the downloaded file
+and source metadata, not the source bytes or storage coordinates. A successful
+read does not authorize a later import or other write.
 
 | CSV header | JSON task field | Conversion |
 | --- | --- | --- |
@@ -969,7 +980,8 @@ source/batch, action, reason and key. SCREEN/RELEASE replay also requires every
 member to retain its original post-state, locked context and unassigned custody;
 later Task changes or revoked authority can prevent recovery with the same key.
 Import, SCREEN and RELEASE wait up to three minutes for their complete atomic
-response. Status and source operations retain the normal twelve-second deadline.
+response. Source download uses the bounded original-transfer budget; status and
+other source operations retain the normal twelve-second deadline.
 These are request budgets; an interrupted or timed-out write can still require
 the same manual recovery above.
 
