@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"unicode"
 	"unicode/utf8"
 )
 
@@ -67,8 +68,17 @@ func validAdminReason(reason string) bool {
 	return utf8.ValidString(reason) && len(reason) >= 1 && len(reason) <= 500 && !strings.ContainsRune(reason, 0)
 }
 
+// Python str.strip treats these four ASCII separators as whitespace in
+// addition to Unicode White_Space. Keep local input checks aligned with the
+// public Pydantic validators; the backend still makes the final decision.
+func adminPythonStrip(value string) string {
+	return strings.TrimFunc(value, func(r rune) bool {
+		return unicode.IsSpace(r) || (r >= '\x1c' && r <= '\x1f')
+	})
+}
+
 func validLifecycleReason(reason string) bool {
-	normalized := strings.TrimSpace(reason)
+	normalized := adminPythonStrip(reason)
 	return utf8.ValidString(reason) && len(normalized) >= 1 && len(normalized) <= 500 && !strings.ContainsRune(reason, 0)
 }
 
@@ -91,7 +101,7 @@ func (c *Client) ProvisionServiceActor(ctx context.Context, body json.RawMessage
 	var input serviceActorInput
 	if err := validAdminMutationBody(body, &input, []string{"service_identity", "subject", "reason"}); err != nil ||
 		!validServiceIdentity(input.ServiceIdentity) || len(input.Subject) == 0 || len(input.Subject) > 200 ||
-		strings.TrimSpace(input.Subject) != input.Subject || strings.ContainsRune(input.Subject, 0) ||
+		adminPythonStrip(input.Subject) != input.Subject || strings.ContainsRune(input.Subject, 0) ||
 		!utf8.ValidString(input.Subject) || !utf8.ValidString(input.Reason) || len(input.Reason) < 1 || len(input.Reason) > 500 ||
 		!validAdminKey(key) {
 		return result, errors.New("--input must contain a service identity, bounded subject and provision reason; --idempotency-key must be a UUID")
@@ -151,6 +161,7 @@ func (c *Client) IssueAdminGrant(ctx context.Context, body json.RawMessage, key 
 	var input adminGrantIssueInput
 	if err := validAdminMutationBody(body, &input, []string{"target_actor_profile_id", "role", "scope_type", "reason"}); err != nil ||
 		!validUUID(input.TargetActorProfileID) || !validAdminRole(input.Role) || !validAdminScope(input.ScopeType) ||
+		(oneOf(input.Role, "access_administrator", "operator") && input.ScopeType != "system") ||
 		(input.ScopeType == "project") != (input.ScopeProjectID != nil) ||
 		(input.ScopeProjectID != nil && !validUUID(*input.ScopeProjectID)) ||
 		!validAdminReason(input.Reason) || !validAdminKey(key) {

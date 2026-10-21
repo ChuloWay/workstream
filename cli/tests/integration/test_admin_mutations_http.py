@@ -190,18 +190,36 @@ def test_admin_input_contracts_preserve_distinct_reason_and_scope_semantics(
         file.write_text(json.dumps({"reason": "  lifecycle  "}))
         assert invoke(cli, origin, file, "actor", "suspend", ACTOR).returncode == 0
         assert response["commands"][-1][2] == {"reason": "  lifecycle  "}
+        for separator in "\x1c\x1d\x1e\x1f":
+            python_stripped = {"reason": separator + "x" * 500}
+            file.write_text(json.dumps(python_stripped))
+            assert invoke(cli, origin, file, "actor", "suspend", ACTOR).returncode == 0
+            assert response["commands"][-1][2] == python_stripped
 
         invalid = (
             (("service-actor", "provision"), service_body() | {"subject": " space "}),
+            *(
+                (
+                    ("service-actor", "provision"),
+                    service_body() | {"subject": sep + "subject"},
+                )
+                for sep in "\x1c\x1d\x1e\x1f"
+            ),
             (
                 ("service-actor", "provision"),
                 service_body() | {"service_identity": "arbitrary"},
             ),
             (("actor", "suspend", ACTOR), {"reason": "  "}),
+            *(
+                (("actor", "suspend", ACTOR), {"reason": sep})
+                for sep in "\x1c\x1d\x1e\x1f"
+            ),
             (("actor", "suspend", ACTOR), {"reason": "\x00"}),
             (("identity-link", "revoke", LINK), {"reason": "é" * 251}),
             (("role-grants", "issue"), grant_body() | {"scope_project_id": None}),
             (("role-grants", "issue"), grant_body() | {"role": "arbitrary"}),
+            (("role-grants", "issue"), grant_body() | {"role": "access_administrator"}),
+            (("role-grants", "issue"), grant_body() | {"role": "operator"}),
             (("role-grants", "revoke", GRANT), {"reason": "\x00"}),
             (("role-grants", "revoke", GRANT), {"reason": ""}),
         )
@@ -232,6 +250,11 @@ def test_admin_input_contracts_preserve_distinct_reason_and_scope_semantics(
         for body in (system, system | {"scope_project_id": None}):
             file.write_text(json.dumps(body))
             assert invoke(cli, origin, file, "role-grants", "issue").returncode == 0
+        for role in ("project_manager", "finance_authority", "audit_authority"):
+            project = grant_body() | {"role": role}
+            file.write_text(json.dumps(project))
+            assert invoke(cli, origin, file, "role-grants", "issue").returncode == 0
+            assert response["commands"][-1][2] == project
 
 
 @pytest.mark.parametrize(

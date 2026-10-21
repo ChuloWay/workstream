@@ -8,10 +8,11 @@ import (
 )
 
 // admin is deliberately separate from caller-owned whoami/profile operations.
-// Every invocation sends one public GET and lets backend AUTH decide afresh.
+// Each read or explicit write uses one public API operation; backend AUTH
+// decides afresh and a prior read never authorizes a later write.
 func addAdminInspection(root *cobra.Command, client func() (*api.Client, error), output *string, stdout io.Writer) {
-	admin := &cobra.Command{Use: "admin", Short: "Inspect authorized actor and administrative evidence"}
-	actor := &cobra.Command{Use: "actor", Short: "Inspect one exact actor through privileged public reads"}
+	admin := &cobra.Command{Use: "admin", Short: "Read evidence and make explicit administrative decisions"}
+	actor := &cobra.Command{Use: "actor", Short: "Read and explicitly manage one exact actor profile"}
 	actor.AddCommand(&cobra.Command{
 		Use: "show ACTOR_ID", Short: "Read one actor's privacy-bounded administrative profile", Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
