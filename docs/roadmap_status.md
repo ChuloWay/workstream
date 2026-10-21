@@ -291,10 +291,12 @@ Explicit CLI Submitter/Reviewer issuance and revocation use the existing public
 AUTH writes with caller-supplied qualifications/reasons, exact receipt binding
 and fresh-authorized manual replay. This is not AdminRole administration,
 automatic eligibility or activation of unfinished human review.
+The CLI also reads the existing privacy-safe, exact-project contributor-candidate
+page for a covered Project Manager; discovery is not qualification or a grant.
 CLI grant list/detail now expose the existing authorized qualification and
 revocation history: one filtered count-free page with explicit continuation,
-or one exact project/grant. Current authority remains backend-owned; no actor
-discovery, role cache or automatic decisions are added.
+or one exact project/grant. Current authority remains backend-owned; no global
+actor directory, role cache or automatic decisions are added.
 CLI contribution-policy current/exact-version reads now expose the authorized
 Finance policy graph, including empty drafts, published/open-draft selectors and
 retained historical versions. Backend selection and current Finance authority
@@ -430,7 +432,7 @@ cannot be reused as post-submission review-gate evidence. See the
 | Lifecycle stage | Intended merged status | What is already proven | What remains before v0.1 |
 | --- | --- | --- | --- |
 | Identity and actor resolution | **Live foundation** | Flow-token verification; canonical ActorProfile and ActorIdentityLink; human/service separation; lifecycle controls; canonical `/actors/me` self-read with duplicate `/auth/me` removed; suspension denies both self-read and self-update | Final end-to-end operational and conformance proof |
-| Authorization kernel | **Live foundation** | Closed action/permission catalogues; deny-by-default evaluation; grants; fixed services; rate controls; opaque transaction-bound PREP; atomic decision evidence | Activate only the remaining owner-proven TASK, checker, REV, and CON boundaries; remove obsolete authority after replacement paths are live |
+| Authorization kernel | **Live foundation** | Closed action/permission catalogues; deny-by-default evaluation; grants; exact-project, privacy-safe candidate read now consumed by the CLI; fixed services; rate controls; opaque transaction-bound PREP; atomic decision evidence | Activate only the remaining owner-proven TASK, checker, REV, and CON boundaries; remove obsolete authority after replacement paths are live |
 | Project Guide source custody | **Live foundation** | Guide creation declares documents and task examples; public document upload; immutable internal metadata snapshots; draft guide and review/revision policy writes with fresh-authorized exact replay of original receipts; exact run-scoped setup reads and assigned-task locked-original reads; S3-backed originals and isolated agent document inspection; exact document generation through separate manager approvals and public exact-authorized CP07 activation; Project Manager guide list, guide detail, activation readiness dry run and verified original read-back (PILOT-READ-3) | Public original upload, task examples, Celery setup and separate approvals are connected locally with recorded inference; prove configured live inference and readers in the intended environment |
 | Unified Project Guide compilation | **Live setup and manager proposal operations** | Committed original-document readiness dispatches one immutable attempt through Celery; complete result and crash/recovery custody; distinct pre/post proposals; deterministic sufficiency and submission-artifact-policy projections; immutable authorized setup finalization; public exact manager review, pre-submit approval and manual correction dispatch; automatic deterministic post-policy derivation, public complete policy read, separate approval and shared correction custody | The bounded local contributor drill starts from public guide inputs with recorded inference; live model setup and hosted operation remain separate |
 | Contribution policy administration | **Public Finance policy workflow; binding administration internal** | Internal Finance Authority adapter-binding lifecycle; public ContributionPolicy discovery/read/create/update/publish/retire with exact Finance Authority and recoverable draft selectors, and a Finance list of every version (PILOT-READ-3); immutable operation and event history; internal exact selected-version validation; CP07 binding with live exact-project manager authority of the selected published version to the active guide generation | The bounded local public drill passed; policy publication alone does not create a contribution, and hosted operation remains unproven |
@@ -672,6 +674,10 @@ cannot be reused as post-submission review-gate evidence. See the
   qualification/provenance and revocation facts. Cursors remain opaque,
   continuation is explicit and each request requires fresh backend authority.
   Observed history does not authorize subsequent writes.
+  [CLI candidate discovery](../.commitrail/initiatives/WS-CLI-001/WS-CLI-001-33.md)
+  consumes the existing two-field, exact-project public AUTH page for a covered
+  Project Manager. Backend authority and cursor scope remain decisive; the CLI
+  neither enumerates all actors nor qualifies or grants a candidate.
   [CLI contribution-policy inspection](../.commitrail/initiatives/WS-CLI-001/WS-CLI-001-22.md)
   discovers current published/open-draft selectors and reads backend-selected or
   explicit retained versions with complete rules and exact award quantities.
