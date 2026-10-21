@@ -96,7 +96,8 @@ short-lived database activation; no proof bypass or new storage owner is needed.
   or private key. A proof command explicitly binds its selected role to its
   probe mode; the application session factory remains runtime-only by default.
   The hosted profile rejects inherited volumes and Compose configs across all
-  services, retaining only validated direct volumes and role-specific secrets.
+  services, retaining exact configured direct-volume and secret-source inventories.
+  Private inputs remain outside shared roots and cannot alias each other's files.
 - Generate configuration digests and policy templates from the same canonical
   validation helpers. Operator configuration should be a small input document
   plus certificate paths, not hand-computed hashes or parallel policy logic.
@@ -151,7 +152,7 @@ product lifecycle or alternative storage subsystem is introduced.
 | Immutable activation and terminal custody | isolated PostgreSQL activation and terminal regressions; focused null-field discriminator | 38 passed plus focused discriminator | hosted complete-suite evidence remains separate |
 | Retained-data migration | separate-invocation predecessor upgrade and targeted downgrade refusal | passed; isolated database cleanup confirmed | no production migration executed |
 | S3 consumer composition | real helper subprocess, actual SDK signing and loopback HTTP with isolated PostgreSQL | exact sealed upload/readback, refreshed credentials, scoped guide access and scratch cleanup passed | loopback transport does not prove AWS policy enforcement |
-| Hosted configuration | generator/normalizer and release configuration/image-contract tests | 33 release configuration/image-contract tests passed after repairs; prior candidate release image build passed | repaired-head image build and real deployment remain separate |
+| Hosted configuration | generator/normalizer and release configuration/image-contract tests | 24 affected release configuration tests passed after exact-file-custody repairs; earlier 14 image-contract tests and candidate release image build passed | repaired-head image build and real deployment remain separate |
 | Owner boundaries | architecture and authorization boundary tests | 127 passed locally | no new storage owner or public route |
 | Existing public guide integration | isolated PostgreSQL/MinIO batch | timed out after 900 seconds; cleanup confirmed; not credited as a pass | complete hosted suite required |
 | Real pilot | provision three identities, run existing proof modes, then public ZIP contribution drill | pending | AWS resources and certificates not provisioned |
@@ -171,9 +172,11 @@ construction to its exact mode, share canonical resource validation, and remove
 Beat's identity mounts. Command-level role-selection tests, generator-to-Settings
 round trips, and rendered-topology counterexamples protect those boundaries.
 Helper download/runtime/verifier hashes also have a shared parity regression.
-Actual Compose rendering regressions cover inherited API volumes and a config
-backed by the runtime private key, closing file-delivery forms that a direct
-volume-only check cannot inspect.
+Actual Compose rendering regressions cover inherited API volumes, configs,
+unexpected direct mounts and substituted secret sources. Exact source inventories
+replace the partial mount checks. Host validation also rejects private files
+under shared scratch/socket roots and inode aliases across configured private
+inputs; these controls preserve role separation across the supported file paths.
 The temporary provisioning instructions create untagged resources before an
 administrator replaces creation grants with exact returned-resource permissions.
 

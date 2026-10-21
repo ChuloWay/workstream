@@ -41,7 +41,10 @@ credential-process file, or another signing helper.
 
 The hosted profile rejects inherited volumes (`volumes_from`) and Compose
 `configs` on every service. Only the declared, validated volumes and role-specific
-secrets may supply files; Beat has no host volumes.
+secrets may supply files; Beat has no host volumes. Preflight binds every mount
+and secret to its configured host file. Keep certificates, keys, secrets and the
+checker configuration outside the shared scratch and socket directories, with
+distinct files; symlinked directory paths and hard links do not bypass these checks.
 
 The release image installs the official `aws_signing_helper` 1.8.5 at
 `/usr/local/bin/aws_signing_helper`. The Docker build and image verifier pin
