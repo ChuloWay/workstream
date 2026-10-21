@@ -132,6 +132,7 @@ class _Prepared:
         self.grant_id = grant_id
         self.prepared = []
         self.consumed = []
+        self.closed = []
 
     async def prepare(self, action, caller, scope):
         self.prepared.append((action, caller, scope))
@@ -146,6 +147,9 @@ class _Prepared:
             resource_context_digest=canonical_json_hash(resource.model_dump(mode="json")),
             decision_id=uuid4(),
         )
+
+    def close_handle(self, handle):
+        self.closed.append(handle)
 
 
 def _subject():
@@ -324,8 +328,8 @@ async def test_service_handles_every_reservation_disposition(disposition: str) -
             }
         )
         return disposition, SimpleNamespace(
+            **facts,
             status="committed" if disposition == "replayed" else "pending",
-            policy_hash=facts["policy_hash"],
             response_json=response.model_dump(mode="json") if disposition == "replayed" else None,
         )
 
@@ -345,6 +349,7 @@ async def test_service_handles_every_reservation_disposition(disposition: str) -
     )
     if disposition == "replayed":
         assert (await invocation).replayed is True
+        assert len(prepared.closed) == 1
     else:
         with pytest.raises(PolicyMutationConflict, match=f"idempotency_{disposition}"):
             await invocation
@@ -428,7 +433,7 @@ async def test_stale_or_unquoted_policy_precondition_fails_without_consumption()
 
 
 @pytest.mark.asyncio
-async def test_exact_committed_replay_returns_without_new_prep_or_write() -> None:
+async def test_exact_committed_replay_requires_new_prep_and_same_link_without_write() -> None:
     service, resolved, prepared, replay, repository, project_id, guide_id = _subject()
     key = uuid4()
     first = await service.replace_revision_policy(
@@ -442,7 +447,6 @@ async def test_exact_committed_replay_returns_without_new_prep_or_write() -> Non
     )
     prepared.prepared.clear()
     prepared.consumed.clear()
-    resolved.identity_link.id = str(uuid4())
     second = await service.replace_revision_policy(
         resolved,
         prepared,
@@ -455,9 +459,45 @@ async def test_exact_committed_replay_returns_without_new_prep_or_write() -> Non
 
     assert second.replayed is True
     assert second.response == first.response
-    assert not prepared.prepared and not prepared.consumed
+    assert len(prepared.prepared) == len(prepared.closed) == 1
+    assert not prepared.consumed
     assert repository.revision.id == first.response.id
     assert replay.completed == 1
+    resolved.identity_link.id = str(uuid4())
+    with pytest.raises(PolicyMutationConflict, match="idempotency_mismatch"):
+        await service.replace_revision_policy(
+            resolved, prepared, key, NO_CURRENT_POLICY_ETAG,
+            project_id, guide_id, _revision_payload(),
+        )
+    assert len(prepared.prepared) == 1
+
+
+@pytest.mark.asyncio
+async def test_policy_replay_rejects_response_and_resource_custody_before_prep() -> None:
+    service, resolved, prepared, replay, _repository, project_id, guide_id = _subject()
+    key = uuid4()
+    original = await service.replace_revision_policy(
+        resolved, prepared, key, NO_CURRENT_POLICY_ETAG,
+        project_id, guide_id, _revision_payload(),
+    )
+    record = replay.records[
+        (resolved.profile.id, ActionId.PROJECT_REVISION_POLICY_UPDATE.value, key)
+    ]
+    prepared.prepared.clear()
+    record.response_json["id"] = str(uuid4())
+    with pytest.raises(RuntimeError, match="lost response custody"):
+        await service.replace_revision_policy(
+            resolved, prepared, key, NO_CURRENT_POLICY_ETAG,
+            project_id, guide_id, _revision_payload(),
+        )
+    record.response_json["id"] = original.response.id
+    record.resource_context_digest = "sha256:" + "0" * 64
+    with pytest.raises(RuntimeError, match="lost resource custody"):
+        await service.replace_revision_policy(
+            resolved, prepared, key, NO_CURRENT_POLICY_ETAG,
+            project_id, guide_id, _revision_payload(),
+        )
+    assert not prepared.prepared
 
 
 @pytest.mark.asyncio
@@ -512,10 +552,27 @@ async def test_replay_repository_owns_claim_classification_and_completion() -> N
         policy_id=str(uuid4()),
         policy_generation=1,
     )
+    assert disposition == "claimed" and selected is record
+
+    session.scalar_values = [None, record]
+    disposition, selected = await repository.reserve(
+        actor_profile_id=actor_id,
+        identity_link_id=link_id,
+        action_id=ActionId.PROJECT_REVIEW_POLICY_UPDATE.value,
+        idempotency_key=key,
+        request_digest=digest,
+        policy_hash="sha256:" + "3" * 64,
+        resource_context_digest=resource_digest,
+        operation_id=operation_id,
+        project_id=project_id,
+        guide_id=guide_id,
+        policy_id=str(uuid4()),
+        policy_generation=1,
+    )
     assert disposition == "pending" and selected is record
 
     record.status = "committed"
-    session.scalar_values = [record_id]
+    session.scalar_values = [None, record]
     disposition, _ = await repository.reserve(
         actor_profile_id=actor_id,
         identity_link_id=link_id,
@@ -531,6 +588,24 @@ async def test_replay_repository_owns_claim_classification_and_completion() -> N
         policy_generation=1,
     )
     assert disposition == "replayed"
+
+    record.identity_link_id = str(uuid4())
+    session.scalar_values = [None, record]
+    disposition, _ = await repository.reserve(
+        actor_profile_id=actor_id,
+        identity_link_id=link_id,
+        action_id=ActionId.PROJECT_REVIEW_POLICY_UPDATE.value,
+        idempotency_key=key,
+        request_digest=digest,
+        policy_hash="sha256:" + "3" * 64,
+        resource_context_digest=resource_digest,
+        operation_id=operation_id,
+        project_id=project_id,
+        guide_id=guide_id,
+        policy_id=str(uuid4()),
+        policy_generation=1,
+    )
+    assert disposition == "mismatch"
 
     session.scalar_values = [record_id]
     await repository.complete(record, response_json={"id": "response"})
@@ -715,7 +790,10 @@ async def test_policy_service_denies_stale_guide_and_replay_mismatch() -> None:
     key = uuid4()
     replay.records[(resolved.profile.id, ActionId.PROJECT_REVISION_POLICY_UPDATE.value, key)] = (
         SimpleNamespace(
+            actor_profile_id=resolved.profile.id,
             identity_link_id=str(uuid4()),
+            action_id=ActionId.PROJECT_REVISION_POLICY_UPDATE.value,
+            idempotency_key=key,
             project_id=str(project_id),
             guide_id=str(guide_id),
             request_digest="sha256:" + "0" * 64,

@@ -37,6 +37,8 @@ OPERATIONS = {
         "/api/v1/actor-identity-links/{identity_link_id}/reactivate",
         "post",
     ),
+    "projects_create": ("/api/v1/projects", "post"),
+    "projects_get": ("/api/v1/projects/{project_id}", "get"),
 }
 
 

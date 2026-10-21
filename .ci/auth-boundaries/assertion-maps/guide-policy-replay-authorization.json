@@ -1,0 +1,1097 @@
+{
+  "chunk_id": "guide-policy-replay-authorization",
+  "mappings": [
+    {
+      "invariant_category": "guide_replay_custody",
+      "new_test_node": "tests/projects/test_guide_mutation_replay_service.py::test_guide_mutation_service_classifies_existing_replay",
+      "old_assertion_id": "assertion:2288:2288:9675db138c21bd06eff9c63039ef9b0a7fa8e35c7e1b7f5cd2551f0f86e7cc7a",
+      "old_content_sha256": "9675db138c21bd06eff9c63039ef9b0a7fa8e35c7e1b7f5cd2551f0f86e7cc7a",
+      "old_revision": "51b86807111ff25b067402219ba0b533e0750f3e",
+      "old_source_span": [
+        2288,
+        2288
+      ],
+      "old_test_node": "tests/test_projects.py::test_guide_mutation_service_classifies_existing_replay",
+      "security_dimensions": {
+        "concealment": {
+          "not_applicable_reason": "This service-level guide replay unit test does not exercise this cross-request or transaction boundary."
+        },
+        "concurrency": {
+          "not_applicable_reason": "This service-level guide replay unit test does not exercise this cross-request or transaction boundary."
+        },
+        "denial_side_effects": {
+          "not_applicable_reason": "This service-level guide replay unit test does not exercise this cross-request or transaction boundary."
+        },
+        "evidence": {
+          "not_applicable_reason": "This service-level guide replay unit test does not exercise this cross-request or transaction boundary."
+        },
+        "lock_order": {
+          "not_applicable_reason": "This service-level guide replay unit test does not exercise this cross-request or transaction boundary."
+        },
+        "replay": "preserved",
+        "revocation": {
+          "not_applicable_reason": "This service-level guide replay unit test does not exercise this cross-request or transaction boundary."
+        },
+        "transaction_ownership": {
+          "not_applicable_reason": "This service-level guide replay unit test does not exercise this cross-request or transaction boundary."
+        }
+      },
+      "target_layer": "service"
+    },
+    {
+      "invariant_category": "guide_replay_custody",
+      "new_test_node": "tests/projects/test_guide_mutation_replay_service.py::test_guide_mutation_service_classifies_existing_replay",
+      "old_assertion_id": "assertion:2267:2270:b3970c1c19127eeefce0df7094b23c7bdda0ea7ca860498a5a93955453da2ee0",
+      "old_content_sha256": "b3970c1c19127eeefce0df7094b23c7bdda0ea7ca860498a5a93955453da2ee0",
+      "old_revision": "51b86807111ff25b067402219ba0b533e0750f3e",
+      "old_source_span": [
+        2267,
+        2270
+      ],
+      "old_test_node": "tests/test_projects.py::test_guide_mutation_service_classifies_existing_replay",
+      "security_dimensions": {
+        "concealment": {
+          "not_applicable_reason": "This service-level guide replay unit test does not exercise this cross-request or transaction boundary."
+        },
+        "concurrency": {
+          "not_applicable_reason": "This service-level guide replay unit test does not exercise this cross-request or transaction boundary."
+        },
+        "denial_side_effects": {
+          "not_applicable_reason": "This service-level guide replay unit test does not exercise this cross-request or transaction boundary."
+        },
+        "evidence": {
+          "not_applicable_reason": "This service-level guide replay unit test does not exercise this cross-request or transaction boundary."
+        },
+        "lock_order": {
+          "not_applicable_reason": "This service-level guide replay unit test does not exercise this cross-request or transaction boundary."
+        },
+        "replay": "preserved",
+        "revocation": {
+          "not_applicable_reason": "This service-level guide replay unit test does not exercise this cross-request or transaction boundary."
+        },
+        "transaction_ownership": {
+          "not_applicable_reason": "This service-level guide replay unit test does not exercise this cross-request or transaction boundary."
+        }
+      },
+      "target_layer": "service"
+    },
+    {
+      "invariant_category": "guide_replay_custody",
+      "new_test_node": "tests/projects/test_guide_mutation_replay_service.py::test_guide_mutation_service_classifies_existing_replay",
+      "old_assertion_id": "assertion:2289:2289:23302c837497cf45fb9766bd63ede065658f9c5a9ce3883932a5d362c063eaa9",
+      "old_content_sha256": "23302c837497cf45fb9766bd63ede065658f9c5a9ce3883932a5d362c063eaa9",
+      "old_revision": "51b86807111ff25b067402219ba0b533e0750f3e",
+      "old_source_span": [
+        2289,
+        2289
+      ],
+      "old_test_node": "tests/test_projects.py::test_guide_mutation_service_classifies_existing_replay",
+      "security_dimensions": {
+        "concealment": {
+          "not_applicable_reason": "This service-level guide replay unit test does not exercise this cross-request or transaction boundary."
+        },
+        "concurrency": {
+          "not_applicable_reason": "This service-level guide replay unit test does not exercise this cross-request or transaction boundary."
+        },
+        "denial_side_effects": {
+          "not_applicable_reason": "This service-level guide replay unit test does not exercise this cross-request or transaction boundary."
+        },
+        "evidence": {
+          "not_applicable_reason": "This service-level guide replay unit test does not exercise this cross-request or transaction boundary."
+        },
+        "lock_order": {
+          "not_applicable_reason": "This service-level guide replay unit test does not exercise this cross-request or transaction boundary."
+        },
+        "replay": "preserved",
+        "revocation": {
+          "not_applicable_reason": "This service-level guide replay unit test does not exercise this cross-request or transaction boundary."
+        },
+        "transaction_ownership": {
+          "not_applicable_reason": "This service-level guide replay unit test does not exercise this cross-request or transaction boundary."
+        }
+      },
+      "target_layer": "service"
+    },
+    {
+      "invariant_category": "guide_replay_custody",
+      "new_test_node": "tests/projects/test_guide_mutation_replay_service.py::test_guide_mutation_service_classifies_existing_replay",
+      "old_assertion_id": "assertion:2249:2252:6de7c9fd3c0478f1966cc51eea8287f2b560a856f789ccfbcc643ed0afaf413c",
+      "old_content_sha256": "6de7c9fd3c0478f1966cc51eea8287f2b560a856f789ccfbcc643ed0afaf413c",
+      "old_revision": "51b86807111ff25b067402219ba0b533e0750f3e",
+      "old_source_span": [
+        2249,
+        2252
+      ],
+      "old_test_node": "tests/test_projects.py::test_guide_mutation_service_classifies_existing_replay",
+      "security_dimensions": {
+        "concealment": {
+          "not_applicable_reason": "This service-level guide replay unit test does not exercise this cross-request or transaction boundary."
+        },
+        "concurrency": {
+          "not_applicable_reason": "This service-level guide replay unit test does not exercise this cross-request or transaction boundary."
+        },
+        "denial_side_effects": {
+          "not_applicable_reason": "This service-level guide replay unit test does not exercise this cross-request or transaction boundary."
+        },
+        "evidence": {
+          "not_applicable_reason": "This service-level guide replay unit test does not exercise this cross-request or transaction boundary."
+        },
+        "lock_order": {
+          "not_applicable_reason": "This service-level guide replay unit test does not exercise this cross-request or transaction boundary."
+        },
+        "replay": "preserved",
+        "revocation": {
+          "not_applicable_reason": "This service-level guide replay unit test does not exercise this cross-request or transaction boundary."
+        },
+        "transaction_ownership": {
+          "not_applicable_reason": "This service-level guide replay unit test does not exercise this cross-request or transaction boundary."
+        }
+      },
+      "target_layer": "service"
+    },
+    {
+      "invariant_category": "guide_replay_custody",
+      "new_test_node": "tests/projects/test_guide_mutation_replay_service.py::test_guide_update_service_returns_exact_cached_response",
+      "old_assertion_id": "assertion:2302:2312:0fb6380016bcd286331f2be9af9f9bc5a0a86133a3bb4d858ef13394609aba91",
+      "old_content_sha256": "0fb6380016bcd286331f2be9af9f9bc5a0a86133a3bb4d858ef13394609aba91",
+      "old_revision": "51b86807111ff25b067402219ba0b533e0750f3e",
+      "old_source_span": [
+        2302,
+        2312
+      ],
+      "old_test_node": "tests/test_projects.py::test_guide_update_service_returns_exact_cached_response",
+      "security_dimensions": {
+        "concealment": {
+          "not_applicable_reason": "This service-level guide replay unit test does not exercise this cross-request or transaction boundary."
+        },
+        "concurrency": {
+          "not_applicable_reason": "This service-level guide replay unit test does not exercise this cross-request or transaction boundary."
+        },
+        "denial_side_effects": {
+          "not_applicable_reason": "This service-level guide replay unit test does not exercise this cross-request or transaction boundary."
+        },
+        "evidence": {
+          "not_applicable_reason": "This service-level guide replay unit test does not exercise this cross-request or transaction boundary."
+        },
+        "lock_order": {
+          "not_applicable_reason": "This service-level guide replay unit test does not exercise this cross-request or transaction boundary."
+        },
+        "replay": "preserved",
+        "revocation": {
+          "not_applicable_reason": "This service-level guide replay unit test does not exercise this cross-request or transaction boundary."
+        },
+        "transaction_ownership": {
+          "not_applicable_reason": "This service-level guide replay unit test does not exercise this cross-request or transaction boundary."
+        }
+      },
+      "target_layer": "service"
+    },
+    {
+      "invariant_category": "guide_replay_custody",
+      "new_test_node": "tests/projects/test_guide_mutation_replay_service.py::test_guide_mutation_service_classifies_reservation_outcomes",
+      "old_assertion_id": "assertion:2318:2321:6de7c9fd3c0478f1966cc51eea8287f2b560a856f789ccfbcc643ed0afaf413c",
+      "old_content_sha256": "6de7c9fd3c0478f1966cc51eea8287f2b560a856f789ccfbcc643ed0afaf413c",
+      "old_revision": "51b86807111ff25b067402219ba0b533e0750f3e",
+      "old_source_span": [
+        2318,
+        2321
+      ],
+      "old_test_node": "tests/test_projects.py::test_guide_mutation_service_classifies_reservation_outcomes",
+      "security_dimensions": {
+        "concealment": {
+          "not_applicable_reason": "This service-level guide replay unit test does not exercise this cross-request or transaction boundary."
+        },
+        "concurrency": {
+          "not_applicable_reason": "This service-level guide replay unit test does not exercise this cross-request or transaction boundary."
+        },
+        "denial_side_effects": {
+          "not_applicable_reason": "This service-level guide replay unit test does not exercise this cross-request or transaction boundary."
+        },
+        "evidence": {
+          "not_applicable_reason": "This service-level guide replay unit test does not exercise this cross-request or transaction boundary."
+        },
+        "lock_order": {
+          "not_applicable_reason": "This service-level guide replay unit test does not exercise this cross-request or transaction boundary."
+        },
+        "replay": "preserved",
+        "revocation": {
+          "not_applicable_reason": "This service-level guide replay unit test does not exercise this cross-request or transaction boundary."
+        },
+        "transaction_ownership": {
+          "not_applicable_reason": "This service-level guide replay unit test does not exercise this cross-request or transaction boundary."
+        }
+      },
+      "target_layer": "service"
+    },
+    {
+      "invariant_category": "guide_replay_custody",
+      "new_test_node": "tests/projects/test_guide_mutation_replay_service.py::test_guide_mutation_service_classifies_reservation_outcomes",
+      "old_assertion_id": "assertion:2330:2330:e4bac80261e052d9afdab8cb4813d5828a71751869eb044bc5dd478fa7a2c9b1",
+      "old_content_sha256": "e4bac80261e052d9afdab8cb4813d5828a71751869eb044bc5dd478fa7a2c9b1",
+      "old_revision": "51b86807111ff25b067402219ba0b533e0750f3e",
+      "old_source_span": [
+        2330,
+        2330
+      ],
+      "old_test_node": "tests/test_projects.py::test_guide_mutation_service_classifies_reservation_outcomes",
+      "security_dimensions": {
+        "concealment": {
+          "not_applicable_reason": "This service-level guide replay unit test does not exercise this cross-request or transaction boundary."
+        },
+        "concurrency": {
+          "not_applicable_reason": "This service-level guide replay unit test does not exercise this cross-request or transaction boundary."
+        },
+        "denial_side_effects": {
+          "not_applicable_reason": "This service-level guide replay unit test does not exercise this cross-request or transaction boundary."
+        },
+        "evidence": {
+          "not_applicable_reason": "This service-level guide replay unit test does not exercise this cross-request or transaction boundary."
+        },
+        "lock_order": {
+          "not_applicable_reason": "This service-level guide replay unit test does not exercise this cross-request or transaction boundary."
+        },
+        "replay": "preserved",
+        "revocation": {
+          "not_applicable_reason": "This service-level guide replay unit test does not exercise this cross-request or transaction boundary."
+        },
+        "transaction_ownership": {
+          "not_applicable_reason": "This service-level guide replay unit test does not exercise this cross-request or transaction boundary."
+        }
+      },
+      "target_layer": "service"
+    },
+    {
+      "invariant_category": "guide_replay_custody",
+      "new_test_node": "tests/projects/test_guide_mutation_replay_service.py::test_guide_mutation_service_classifies_reservation_outcomes",
+      "old_assertion_id": "assertion:2329:2329:b60d2f1b7607d441fc28d1fcd38966dc1d46598a9db8282c21a9c2372f7e48d7",
+      "old_content_sha256": "b60d2f1b7607d441fc28d1fcd38966dc1d46598a9db8282c21a9c2372f7e48d7",
+      "old_revision": "51b86807111ff25b067402219ba0b533e0750f3e",
+      "old_source_span": [
+        2329,
+        2329
+      ],
+      "old_test_node": "tests/test_projects.py::test_guide_mutation_service_classifies_reservation_outcomes",
+      "security_dimensions": {
+        "concealment": {
+          "not_applicable_reason": "This service-level guide replay unit test does not exercise this cross-request or transaction boundary."
+        },
+        "concurrency": {
+          "not_applicable_reason": "This service-level guide replay unit test does not exercise this cross-request or transaction boundary."
+        },
+        "denial_side_effects": {
+          "not_applicable_reason": "This service-level guide replay unit test does not exercise this cross-request or transaction boundary."
+        },
+        "evidence": {
+          "not_applicable_reason": "This service-level guide replay unit test does not exercise this cross-request or transaction boundary."
+        },
+        "lock_order": {
+          "not_applicable_reason": "This service-level guide replay unit test does not exercise this cross-request or transaction boundary."
+        },
+        "replay": "preserved",
+        "revocation": {
+          "not_applicable_reason": "This service-level guide replay unit test does not exercise this cross-request or transaction boundary."
+        },
+        "transaction_ownership": {
+          "not_applicable_reason": "This service-level guide replay unit test does not exercise this cross-request or transaction boundary."
+        }
+      },
+      "target_layer": "service"
+    },
+    {
+      "invariant_category": "guide_replay_custody",
+      "new_test_node": "tests/projects/test_guide_mutation_replay_service.py::test_guide_mutation_service_classifies_reservation_outcomes",
+      "old_assertion_id": "assertion:2323:2326:b3970c1c19127eeefce0df7094b23c7bdda0ea7ca860498a5a93955453da2ee0",
+      "old_content_sha256": "b3970c1c19127eeefce0df7094b23c7bdda0ea7ca860498a5a93955453da2ee0",
+      "old_revision": "51b86807111ff25b067402219ba0b533e0750f3e",
+      "old_source_span": [
+        2323,
+        2326
+      ],
+      "old_test_node": "tests/test_projects.py::test_guide_mutation_service_classifies_reservation_outcomes",
+      "security_dimensions": {
+        "concealment": {
+          "not_applicable_reason": "This service-level guide replay unit test does not exercise this cross-request or transaction boundary."
+        },
+        "concurrency": {
+          "not_applicable_reason": "This service-level guide replay unit test does not exercise this cross-request or transaction boundary."
+        },
+        "denial_side_effects": {
+          "not_applicable_reason": "This service-level guide replay unit test does not exercise this cross-request or transaction boundary."
+        },
+        "evidence": {
+          "not_applicable_reason": "This service-level guide replay unit test does not exercise this cross-request or transaction boundary."
+        },
+        "lock_order": {
+          "not_applicable_reason": "This service-level guide replay unit test does not exercise this cross-request or transaction boundary."
+        },
+        "replay": "preserved",
+        "revocation": {
+          "not_applicable_reason": "This service-level guide replay unit test does not exercise this cross-request or transaction boundary."
+        },
+        "transaction_ownership": {
+          "not_applicable_reason": "This service-level guide replay unit test does not exercise this cross-request or transaction boundary."
+        }
+      },
+      "target_layer": "service"
+    },
+    {
+      "invariant_category": "guide_authority_denial",
+      "new_test_node": "tests/projects/test_guide_mutation_replay_service.py::test_guide_mutation_service_rejects_invalid_authority_proof",
+      "old_assertion_id": "assertion:2335:2335:aebb5a69f1be891d66bef8a0df18412a3a8447db6cda63c867e8a0368838c229",
+      "old_content_sha256": "aebb5a69f1be891d66bef8a0df18412a3a8447db6cda63c867e8a0368838c229",
+      "old_revision": "51b86807111ff25b067402219ba0b533e0750f3e",
+      "old_source_span": [
+        2335,
+        2335
+      ],
+      "old_test_node": "tests/test_projects.py::test_guide_mutation_service_rejects_invalid_authority_proof",
+      "security_dimensions": {
+        "concealment": {
+          "not_applicable_reason": "This service-level guide replay unit test does not exercise this cross-request or transaction boundary."
+        },
+        "concurrency": {
+          "not_applicable_reason": "This service-level guide replay unit test does not exercise this cross-request or transaction boundary."
+        },
+        "denial_side_effects": {
+          "not_applicable_reason": "The pure authority-proof helper does not execute a product write or audit transaction."
+        },
+        "evidence": {
+          "not_applicable_reason": "This service-level guide replay unit test does not exercise this cross-request or transaction boundary."
+        },
+        "lock_order": {
+          "not_applicable_reason": "This service-level guide replay unit test does not exercise this cross-request or transaction boundary."
+        },
+        "replay": {
+          "not_applicable_reason": "This proof checks project-scoped authority rejection before any replay lookup."
+        },
+        "revocation": {
+          "not_applicable_reason": "This service-level guide replay unit test does not exercise this cross-request or transaction boundary."
+        },
+        "transaction_ownership": {
+          "not_applicable_reason": "This service-level guide replay unit test does not exercise this cross-request or transaction boundary."
+        }
+      },
+      "target_layer": "service"
+    },
+    {
+      "invariant_category": "guide_authority_denial",
+      "new_test_node": "tests/projects/test_guide_mutation_replay_service.py::test_guide_mutation_service_composes_unsupported_prepare_denial",
+      "old_assertion_id": "assertion:2385:2385:87dbcd146effb468ffe79a2618d38d3035c53a80cc047e68df7de0db1482adbf",
+      "old_content_sha256": "87dbcd146effb468ffe79a2618d38d3035c53a80cc047e68df7de0db1482adbf",
+      "old_revision": "51b86807111ff25b067402219ba0b533e0750f3e",
+      "old_source_span": [
+        2385,
+        2385
+      ],
+      "old_test_node": "tests/test_projects.py::test_guide_mutation_service_composes_unsupported_prepare_denial",
+      "security_dimensions": {
+        "concealment": {
+          "not_applicable_reason": "This service-level guide replay unit test does not exercise this cross-request or transaction boundary."
+        },
+        "concurrency": {
+          "not_applicable_reason": "This service-level guide replay unit test does not exercise this cross-request or transaction boundary."
+        },
+        "denial_side_effects": "preserved",
+        "evidence": "preserved",
+        "lock_order": {
+          "not_applicable_reason": "This service-level guide replay unit test does not exercise this cross-request or transaction boundary."
+        },
+        "replay": {
+          "not_applicable_reason": "Unsupported PREP rejection does not retrieve or classify a stored replay receipt."
+        },
+        "revocation": {
+          "not_applicable_reason": "This service-level guide replay unit test does not exercise this cross-request or transaction boundary."
+        },
+        "transaction_ownership": {
+          "not_applicable_reason": "This service-level guide replay unit test does not exercise this cross-request or transaction boundary."
+        }
+      },
+      "target_layer": "service"
+    },
+    {
+      "invariant_category": "guide_authority_denial",
+      "new_test_node": "tests/projects/test_guide_mutation_replay_service.py::test_guide_mutation_service_composes_unsupported_prepare_denial",
+      "old_assertion_id": "assertion:2381:2381:6d0a7c44cb456c241d5190ceef6d0594b35142a6fc90721822fe5c1d05efd46c",
+      "old_content_sha256": "6d0a7c44cb456c241d5190ceef6d0594b35142a6fc90721822fe5c1d05efd46c",
+      "old_revision": "51b86807111ff25b067402219ba0b533e0750f3e",
+      "old_source_span": [
+        2381,
+        2381
+      ],
+      "old_test_node": "tests/test_projects.py::test_guide_mutation_service_composes_unsupported_prepare_denial",
+      "security_dimensions": {
+        "concealment": {
+          "not_applicable_reason": "This service-level guide replay unit test does not exercise this cross-request or transaction boundary."
+        },
+        "concurrency": {
+          "not_applicable_reason": "This service-level guide replay unit test does not exercise this cross-request or transaction boundary."
+        },
+        "denial_side_effects": "preserved",
+        "evidence": "preserved",
+        "lock_order": {
+          "not_applicable_reason": "This service-level guide replay unit test does not exercise this cross-request or transaction boundary."
+        },
+        "replay": {
+          "not_applicable_reason": "Unsupported PREP rejection does not retrieve or classify a stored replay receipt."
+        },
+        "revocation": {
+          "not_applicable_reason": "This service-level guide replay unit test does not exercise this cross-request or transaction boundary."
+        },
+        "transaction_ownership": {
+          "not_applicable_reason": "This service-level guide replay unit test does not exercise this cross-request or transaction boundary."
+        }
+      },
+      "target_layer": "service"
+    },
+    {
+      "invariant_category": "guide_authority_denial",
+      "new_test_node": "tests/projects/test_guide_mutation_replay_service.py::test_guide_mutation_service_composes_unsupported_prepare_denial",
+      "old_assertion_id": "assertion:2370:2380:55c5f02987c77339890c31ed40d6b36f26d0e3568384bf7d2ba11c106edcdeb1",
+      "old_content_sha256": "55c5f02987c77339890c31ed40d6b36f26d0e3568384bf7d2ba11c106edcdeb1",
+      "old_revision": "51b86807111ff25b067402219ba0b533e0750f3e",
+      "old_source_span": [
+        2370,
+        2380
+      ],
+      "old_test_node": "tests/test_projects.py::test_guide_mutation_service_composes_unsupported_prepare_denial",
+      "security_dimensions": {
+        "concealment": {
+          "not_applicable_reason": "This service-level guide replay unit test does not exercise this cross-request or transaction boundary."
+        },
+        "concurrency": {
+          "not_applicable_reason": "This service-level guide replay unit test does not exercise this cross-request or transaction boundary."
+        },
+        "denial_side_effects": "preserved",
+        "evidence": "preserved",
+        "lock_order": {
+          "not_applicable_reason": "This service-level guide replay unit test does not exercise this cross-request or transaction boundary."
+        },
+        "replay": {
+          "not_applicable_reason": "Unsupported PREP rejection does not retrieve or classify a stored replay receipt."
+        },
+        "revocation": {
+          "not_applicable_reason": "This service-level guide replay unit test does not exercise this cross-request or transaction boundary."
+        },
+        "transaction_ownership": {
+          "not_applicable_reason": "This service-level guide replay unit test does not exercise this cross-request or transaction boundary."
+        }
+      },
+      "target_layer": "service"
+    },
+    {
+      "invariant_category": "guide_authority_denial",
+      "new_test_node": "tests/projects/test_guide_mutation_replay_service.py::test_guide_mutation_service_composes_unsupported_prepare_denial",
+      "old_assertion_id": "assertion:2383:2383:613ff70793eca3849649ac12d023a633f9178d7ee9247c18d7d5918ee6bb0043",
+      "old_content_sha256": "613ff70793eca3849649ac12d023a633f9178d7ee9247c18d7d5918ee6bb0043",
+      "old_revision": "51b86807111ff25b067402219ba0b533e0750f3e",
+      "old_source_span": [
+        2383,
+        2383
+      ],
+      "old_test_node": "tests/test_projects.py::test_guide_mutation_service_composes_unsupported_prepare_denial",
+      "security_dimensions": {
+        "concealment": {
+          "not_applicable_reason": "This service-level guide replay unit test does not exercise this cross-request or transaction boundary."
+        },
+        "concurrency": {
+          "not_applicable_reason": "This service-level guide replay unit test does not exercise this cross-request or transaction boundary."
+        },
+        "denial_side_effects": "preserved",
+        "evidence": "preserved",
+        "lock_order": {
+          "not_applicable_reason": "This service-level guide replay unit test does not exercise this cross-request or transaction boundary."
+        },
+        "replay": {
+          "not_applicable_reason": "Unsupported PREP rejection does not retrieve or classify a stored replay receipt."
+        },
+        "revocation": {
+          "not_applicable_reason": "This service-level guide replay unit test does not exercise this cross-request or transaction boundary."
+        },
+        "transaction_ownership": {
+          "not_applicable_reason": "This service-level guide replay unit test does not exercise this cross-request or transaction boundary."
+        }
+      },
+      "target_layer": "service"
+    },
+    {
+      "invariant_category": "guide_authority_denial",
+      "new_test_node": "tests/projects/test_guide_mutation_replay_service.py::test_guide_mutation_service_composes_unsupported_prepare_denial",
+      "old_assertion_id": "assertion:2384:2384:a77e16617a6d53b197d7682e1196a9d06359a213809ca07b790a7309e26f1f7b",
+      "old_content_sha256": "a77e16617a6d53b197d7682e1196a9d06359a213809ca07b790a7309e26f1f7b",
+      "old_revision": "51b86807111ff25b067402219ba0b533e0750f3e",
+      "old_source_span": [
+        2384,
+        2384
+      ],
+      "old_test_node": "tests/test_projects.py::test_guide_mutation_service_composes_unsupported_prepare_denial",
+      "security_dimensions": {
+        "concealment": {
+          "not_applicable_reason": "This service-level guide replay unit test does not exercise this cross-request or transaction boundary."
+        },
+        "concurrency": {
+          "not_applicable_reason": "This service-level guide replay unit test does not exercise this cross-request or transaction boundary."
+        },
+        "denial_side_effects": "preserved",
+        "evidence": "preserved",
+        "lock_order": {
+          "not_applicable_reason": "This service-level guide replay unit test does not exercise this cross-request or transaction boundary."
+        },
+        "replay": {
+          "not_applicable_reason": "Unsupported PREP rejection does not retrieve or classify a stored replay receipt."
+        },
+        "revocation": {
+          "not_applicable_reason": "This service-level guide replay unit test does not exercise this cross-request or transaction boundary."
+        },
+        "transaction_ownership": {
+          "not_applicable_reason": "This service-level guide replay unit test does not exercise this cross-request or transaction boundary."
+        }
+      },
+      "target_layer": "service"
+    },
+    {
+      "invariant_category": "historical_receipt_custody",
+      "new_test_node": "tests/projects/test_guide_policy_replay_authorization.py::test_exact_receipts_remain_historical_after_successors_and_reject_foreign_project",
+      "old_assertion_id": "assertion:139:139:05f837a996ed6381df77738febc164ace2a6ab479321187d99a4f559b8c59166",
+      "old_content_sha256": "05f837a996ed6381df77738febc164ace2a6ab479321187d99a4f559b8c59166",
+      "old_revision": "6245ba1cee38cef7f222c5bb472d072f748f0ba0",
+      "old_source_span": [
+        139,
+        139
+      ],
+      "old_test_node": "tests/projects/test_guide_policy_replay_authorization.py::test_exact_guide_and_policy_receipts_require_current_actor_link_and_project_grant",
+      "security_dimensions": {
+        "concealment": {
+          "not_applicable_reason": "This public replay request checks receipt admission and product/audit facts, not a concurrent writer or lock-order schedule."
+        },
+        "concurrency": {
+          "not_applicable_reason": "This public replay request checks receipt admission and product/audit facts, not a concurrent writer or lock-order schedule."
+        },
+        "denial_side_effects": {
+          "not_applicable_reason": "This active-authority historical receipt case has no denied write."
+        },
+        "evidence": {
+          "not_applicable_reason": "This public replay request checks receipt admission and product/audit facts, not a concurrent writer or lock-order schedule."
+        },
+        "lock_order": {
+          "not_applicable_reason": "This public replay request checks receipt admission and product/audit facts, not a concurrent writer or lock-order schedule."
+        },
+        "replay": "preserved",
+        "revocation": {
+          "not_applicable_reason": "This active-authority historical receipt case has no revocation."
+        },
+        "transaction_ownership": {
+          "not_applicable_reason": "This public replay request checks receipt admission and product/audit facts, not a concurrent writer or lock-order schedule."
+        }
+      },
+      "target_layer": "integration"
+    },
+    {
+      "invariant_category": "actor_link_lifecycle_replay_denial",
+      "new_test_node": "tests/projects/test_guide_policy_replay_authorization.py::test_inactive_actor_or_link_cannot_retrieve_exact_receipts",
+      "old_assertion_id": "assertion:282:282:92b21e277faaf8d5b0eacfd1aa482db333107e00c4ce9f48b4e62ad6628abace",
+      "old_content_sha256": "92b21e277faaf8d5b0eacfd1aa482db333107e00c4ce9f48b4e62ad6628abace",
+      "old_revision": "6245ba1cee38cef7f222c5bb472d072f748f0ba0",
+      "old_source_span": [
+        282,
+        282
+      ],
+      "old_test_node": "tests/projects/test_guide_policy_replay_authorization.py::test_exact_guide_and_policy_receipts_require_current_actor_link_and_project_grant",
+      "security_dimensions": {
+        "concealment": {
+          "not_applicable_reason": "This public replay request checks receipt admission and product/audit facts, not a concurrent writer or lock-order schedule."
+        },
+        "concurrency": {
+          "not_applicable_reason": "This public replay request checks receipt admission and product/audit facts, not a concurrent writer or lock-order schedule."
+        },
+        "denial_side_effects": "preserved",
+        "evidence": {
+          "not_applicable_reason": "This public replay request checks receipt admission and product/audit facts, not a concurrent writer or lock-order schedule."
+        },
+        "lock_order": {
+          "not_applicable_reason": "This public replay request checks receipt admission and product/audit facts, not a concurrent writer or lock-order schedule."
+        },
+        "replay": "preserved",
+        "revocation": "preserved",
+        "transaction_ownership": {
+          "not_applicable_reason": "This public replay request checks receipt admission and product/audit facts, not a concurrent writer or lock-order schedule."
+        }
+      },
+      "target_layer": "integration"
+    },
+    {
+      "invariant_category": "revoked_manager_replay_denial",
+      "new_test_node": "tests/projects/test_guide_policy_replay_authorization.py::test_revoked_project_manager_denies_exact_and_fresh_replays_with_audit",
+      "old_assertion_id": "assertion:186:186:4d1379a798fd087bb6e6e2caab09d1ea49d415e4d914e2c4c2b61ac8bdbbb5d0",
+      "old_content_sha256": "4d1379a798fd087bb6e6e2caab09d1ea49d415e4d914e2c4c2b61ac8bdbbb5d0",
+      "old_revision": "6245ba1cee38cef7f222c5bb472d072f748f0ba0",
+      "old_source_span": [
+        186,
+        186
+      ],
+      "old_test_node": "tests/projects/test_guide_policy_replay_authorization.py::test_exact_guide_and_policy_receipts_require_current_actor_link_and_project_grant",
+      "security_dimensions": {
+        "concealment": {
+          "not_applicable_reason": "This public replay request checks receipt admission and product/audit facts, not a concurrent writer or lock-order schedule."
+        },
+        "concurrency": {
+          "not_applicable_reason": "This public replay request checks receipt admission and product/audit facts, not a concurrent writer or lock-order schedule."
+        },
+        "denial_side_effects": "preserved",
+        "evidence": {
+          "not_applicable_reason": "This public replay request checks receipt admission and product/audit facts, not a concurrent writer or lock-order schedule."
+        },
+        "lock_order": {
+          "not_applicable_reason": "This public replay request checks receipt admission and product/audit facts, not a concurrent writer or lock-order schedule."
+        },
+        "replay": "preserved",
+        "revocation": "preserved",
+        "transaction_ownership": {
+          "not_applicable_reason": "This public replay request checks receipt admission and product/audit facts, not a concurrent writer or lock-order schedule."
+        }
+      },
+      "target_layer": "integration"
+    },
+    {
+      "invariant_category": "revoked_manager_replay_denial",
+      "new_test_node": "tests/projects/test_guide_policy_replay_authorization.py::test_revoked_project_manager_denies_exact_and_fresh_replays_with_audit",
+      "old_assertion_id": "assertion:236:236:92b21e277faaf8d5b0eacfd1aa482db333107e00c4ce9f48b4e62ad6628abace",
+      "old_content_sha256": "92b21e277faaf8d5b0eacfd1aa482db333107e00c4ce9f48b4e62ad6628abace",
+      "old_revision": "6245ba1cee38cef7f222c5bb472d072f748f0ba0",
+      "old_source_span": [
+        236,
+        236
+      ],
+      "old_test_node": "tests/projects/test_guide_policy_replay_authorization.py::test_exact_guide_and_policy_receipts_require_current_actor_link_and_project_grant",
+      "security_dimensions": {
+        "concealment": {
+          "not_applicable_reason": "This public replay request checks receipt admission and product/audit facts, not a concurrent writer or lock-order schedule."
+        },
+        "concurrency": {
+          "not_applicable_reason": "This public replay request checks receipt admission and product/audit facts, not a concurrent writer or lock-order schedule."
+        },
+        "denial_side_effects": "preserved",
+        "evidence": {
+          "not_applicable_reason": "This public replay request checks receipt admission and product/audit facts, not a concurrent writer or lock-order schedule."
+        },
+        "lock_order": {
+          "not_applicable_reason": "This public replay request checks receipt admission and product/audit facts, not a concurrent writer or lock-order schedule."
+        },
+        "replay": "preserved",
+        "revocation": "preserved",
+        "transaction_ownership": {
+          "not_applicable_reason": "This public replay request checks receipt admission and product/audit facts, not a concurrent writer or lock-order schedule."
+        }
+      },
+      "target_layer": "integration"
+    },
+    {
+      "invariant_category": "actor_link_lifecycle_replay_denial",
+      "new_test_node": "tests/projects/test_guide_policy_replay_authorization.py::test_inactive_actor_or_link_cannot_retrieve_exact_receipts",
+      "old_assertion_id": "assertion:287:287:00cd3672040076496fa980a7fca4d2b348237ede949a09839d094042a3b15548",
+      "old_content_sha256": "00cd3672040076496fa980a7fca4d2b348237ede949a09839d094042a3b15548",
+      "old_revision": "6245ba1cee38cef7f222c5bb472d072f748f0ba0",
+      "old_source_span": [
+        287,
+        287
+      ],
+      "old_test_node": "tests/projects/test_guide_policy_replay_authorization.py::test_exact_guide_and_policy_receipts_require_current_actor_link_and_project_grant",
+      "security_dimensions": {
+        "concealment": {
+          "not_applicable_reason": "This public replay request checks receipt admission and product/audit facts, not a concurrent writer or lock-order schedule."
+        },
+        "concurrency": {
+          "not_applicable_reason": "This public replay request checks receipt admission and product/audit facts, not a concurrent writer or lock-order schedule."
+        },
+        "denial_side_effects": "preserved",
+        "evidence": {
+          "not_applicable_reason": "This public replay request checks receipt admission and product/audit facts, not a concurrent writer or lock-order schedule."
+        },
+        "lock_order": {
+          "not_applicable_reason": "This public replay request checks receipt admission and product/audit facts, not a concurrent writer or lock-order schedule."
+        },
+        "replay": "preserved",
+        "revocation": "preserved",
+        "transaction_ownership": {
+          "not_applicable_reason": "This public replay request checks receipt admission and product/audit facts, not a concurrent writer or lock-order schedule."
+        }
+      },
+      "target_layer": "integration"
+    },
+    {
+      "invariant_category": "historical_receipt_custody",
+      "new_test_node": "tests/projects/test_guide_policy_replay_authorization.py::test_exact_receipts_remain_historical_after_successors_and_reject_foreign_project",
+      "old_assertion_id": "assertion:136:136:897b320a5e915df2df2ce26da60fb3ad877baf81a0a8b68a370ba2dd12471b9e",
+      "old_content_sha256": "897b320a5e915df2df2ce26da60fb3ad877baf81a0a8b68a370ba2dd12471b9e",
+      "old_revision": "6245ba1cee38cef7f222c5bb472d072f748f0ba0",
+      "old_source_span": [
+        136,
+        136
+      ],
+      "old_test_node": "tests/projects/test_guide_policy_replay_authorization.py::test_exact_guide_and_policy_receipts_require_current_actor_link_and_project_grant",
+      "security_dimensions": {
+        "concealment": {
+          "not_applicable_reason": "This public replay request checks receipt admission and product/audit facts, not a concurrent writer or lock-order schedule."
+        },
+        "concurrency": {
+          "not_applicable_reason": "This public replay request checks receipt admission and product/audit facts, not a concurrent writer or lock-order schedule."
+        },
+        "denial_side_effects": {
+          "not_applicable_reason": "This active-authority historical receipt case has no denied write."
+        },
+        "evidence": {
+          "not_applicable_reason": "This public replay request checks receipt admission and product/audit facts, not a concurrent writer or lock-order schedule."
+        },
+        "lock_order": {
+          "not_applicable_reason": "This public replay request checks receipt admission and product/audit facts, not a concurrent writer or lock-order schedule."
+        },
+        "replay": "preserved",
+        "revocation": {
+          "not_applicable_reason": "This active-authority historical receipt case has no revocation."
+        },
+        "transaction_ownership": {
+          "not_applicable_reason": "This public replay request checks receipt admission and product/audit facts, not a concurrent writer or lock-order schedule."
+        }
+      },
+      "target_layer": "integration"
+    },
+    {
+      "invariant_category": "actor_link_lifecycle_replay_denial",
+      "new_test_node": "tests/projects/test_guide_policy_replay_authorization.py::test_inactive_actor_or_link_cannot_retrieve_exact_receipts",
+      "old_assertion_id": "assertion:302:302:92b21e277faaf8d5b0eacfd1aa482db333107e00c4ce9f48b4e62ad6628abace",
+      "old_content_sha256": "92b21e277faaf8d5b0eacfd1aa482db333107e00c4ce9f48b4e62ad6628abace",
+      "old_revision": "6245ba1cee38cef7f222c5bb472d072f748f0ba0",
+      "old_source_span": [
+        302,
+        302
+      ],
+      "old_test_node": "tests/projects/test_guide_policy_replay_authorization.py::test_exact_guide_and_policy_receipts_require_current_actor_link_and_project_grant",
+      "security_dimensions": {
+        "concealment": {
+          "not_applicable_reason": "This public replay request checks receipt admission and product/audit facts, not a concurrent writer or lock-order schedule."
+        },
+        "concurrency": {
+          "not_applicable_reason": "This public replay request checks receipt admission and product/audit facts, not a concurrent writer or lock-order schedule."
+        },
+        "denial_side_effects": "preserved",
+        "evidence": {
+          "not_applicable_reason": "This public replay request checks receipt admission and product/audit facts, not a concurrent writer or lock-order schedule."
+        },
+        "lock_order": {
+          "not_applicable_reason": "This public replay request checks receipt admission and product/audit facts, not a concurrent writer or lock-order schedule."
+        },
+        "replay": "preserved",
+        "revocation": "preserved",
+        "transaction_ownership": {
+          "not_applicable_reason": "This public replay request checks receipt admission and product/audit facts, not a concurrent writer or lock-order schedule."
+        }
+      },
+      "target_layer": "integration"
+    },
+    {
+      "invariant_category": "historical_receipt_custody",
+      "new_test_node": "tests/projects/test_guide_policy_replay_authorization.py::test_exact_receipts_remain_historical_after_successors_and_reject_foreign_project",
+      "old_assertion_id": "assertion:141:141:dfca6b5db23326f49a8aeb79173290f02c0567df25e48901877ad36f3d6b9a31",
+      "old_content_sha256": "dfca6b5db23326f49a8aeb79173290f02c0567df25e48901877ad36f3d6b9a31",
+      "old_revision": "6245ba1cee38cef7f222c5bb472d072f748f0ba0",
+      "old_source_span": [
+        141,
+        141
+      ],
+      "old_test_node": "tests/projects/test_guide_policy_replay_authorization.py::test_exact_guide_and_policy_receipts_require_current_actor_link_and_project_grant",
+      "security_dimensions": {
+        "concealment": {
+          "not_applicable_reason": "This public replay request checks receipt admission and product/audit facts, not a concurrent writer or lock-order schedule."
+        },
+        "concurrency": {
+          "not_applicable_reason": "This public replay request checks receipt admission and product/audit facts, not a concurrent writer or lock-order schedule."
+        },
+        "denial_side_effects": {
+          "not_applicable_reason": "This active-authority historical receipt case has no denied write."
+        },
+        "evidence": {
+          "not_applicable_reason": "This public replay request checks receipt admission and product/audit facts, not a concurrent writer or lock-order schedule."
+        },
+        "lock_order": {
+          "not_applicable_reason": "This public replay request checks receipt admission and product/audit facts, not a concurrent writer or lock-order schedule."
+        },
+        "replay": "preserved",
+        "revocation": {
+          "not_applicable_reason": "This active-authority historical receipt case has no revocation."
+        },
+        "transaction_ownership": {
+          "not_applicable_reason": "This public replay request checks receipt admission and product/audit facts, not a concurrent writer or lock-order schedule."
+        }
+      },
+      "target_layer": "integration"
+    },
+    {
+      "invariant_category": "historical_receipt_custody",
+      "new_test_node": "tests/projects/test_guide_policy_replay_authorization.py::test_exact_receipts_remain_historical_after_successors_and_reject_foreign_project",
+      "old_assertion_id": "assertion:164:167:353386e55aca6fda6c2508b0a742abd8867b7be2465f4bb33406ae9b80ecaa2c",
+      "old_content_sha256": "353386e55aca6fda6c2508b0a742abd8867b7be2465f4bb33406ae9b80ecaa2c",
+      "old_revision": "6245ba1cee38cef7f222c5bb472d072f748f0ba0",
+      "old_source_span": [
+        164,
+        167
+      ],
+      "old_test_node": "tests/projects/test_guide_policy_replay_authorization.py::test_exact_guide_and_policy_receipts_require_current_actor_link_and_project_grant",
+      "security_dimensions": {
+        "concealment": {
+          "not_applicable_reason": "This public replay request checks receipt admission and product/audit facts, not a concurrent writer or lock-order schedule."
+        },
+        "concurrency": {
+          "not_applicable_reason": "This public replay request checks receipt admission and product/audit facts, not a concurrent writer or lock-order schedule."
+        },
+        "denial_side_effects": {
+          "not_applicable_reason": "This active-authority historical receipt case has no denied write."
+        },
+        "evidence": {
+          "not_applicable_reason": "This public replay request checks receipt admission and product/audit facts, not a concurrent writer or lock-order schedule."
+        },
+        "lock_order": {
+          "not_applicable_reason": "This public replay request checks receipt admission and product/audit facts, not a concurrent writer or lock-order schedule."
+        },
+        "replay": "preserved",
+        "revocation": {
+          "not_applicable_reason": "This active-authority historical receipt case has no revocation."
+        },
+        "transaction_ownership": {
+          "not_applicable_reason": "This public replay request checks receipt admission and product/audit facts, not a concurrent writer or lock-order schedule."
+        }
+      },
+      "target_layer": "integration"
+    },
+    {
+      "invariant_category": "foreign_scope_replay_denial",
+      "new_test_node": "tests/projects/test_guide_policy_replay_authorization.py::test_foreign_only_manager_grant_cannot_retrieve_exact_receipts",
+      "old_assertion_id": "assertion:256:256:92b21e277faaf8d5b0eacfd1aa482db333107e00c4ce9f48b4e62ad6628abace",
+      "old_content_sha256": "92b21e277faaf8d5b0eacfd1aa482db333107e00c4ce9f48b4e62ad6628abace",
+      "old_revision": "6245ba1cee38cef7f222c5bb472d072f748f0ba0",
+      "old_source_span": [
+        256,
+        256
+      ],
+      "old_test_node": "tests/projects/test_guide_policy_replay_authorization.py::test_exact_guide_and_policy_receipts_require_current_actor_link_and_project_grant",
+      "security_dimensions": {
+        "concealment": {
+          "not_applicable_reason": "This public replay request checks receipt admission and product/audit facts, not a concurrent writer or lock-order schedule."
+        },
+        "concurrency": {
+          "not_applicable_reason": "This public replay request checks receipt admission and product/audit facts, not a concurrent writer or lock-order schedule."
+        },
+        "denial_side_effects": "preserved",
+        "evidence": {
+          "not_applicable_reason": "This public replay request checks receipt admission and product/audit facts, not a concurrent writer or lock-order schedule."
+        },
+        "lock_order": {
+          "not_applicable_reason": "This public replay request checks receipt admission and product/audit facts, not a concurrent writer or lock-order schedule."
+        },
+        "replay": "preserved",
+        "revocation": "preserved",
+        "transaction_ownership": {
+          "not_applicable_reason": "This public replay request checks receipt admission and product/audit facts, not a concurrent writer or lock-order schedule."
+        }
+      },
+      "target_layer": "integration"
+    },
+    {
+      "invariant_category": "revoked_manager_replay_denial",
+      "new_test_node": "tests/projects/test_guide_policy_replay_authorization.py::test_revoked_project_manager_denies_exact_and_fresh_replays_with_audit",
+      "old_assertion_id": "assertion:216:220:d782080c233a392b6aeafc8949b62039c7e4d5db5be27435c875536b83651d84",
+      "old_content_sha256": "d782080c233a392b6aeafc8949b62039c7e4d5db5be27435c875536b83651d84",
+      "old_revision": "6245ba1cee38cef7f222c5bb472d072f748f0ba0",
+      "old_source_span": [
+        216,
+        220
+      ],
+      "old_test_node": "tests/projects/test_guide_policy_replay_authorization.py::test_exact_guide_and_policy_receipts_require_current_actor_link_and_project_grant",
+      "security_dimensions": {
+        "concealment": {
+          "not_applicable_reason": "This public replay request checks receipt admission and product/audit facts, not a concurrent writer or lock-order schedule."
+        },
+        "concurrency": {
+          "not_applicable_reason": "This public replay request checks receipt admission and product/audit facts, not a concurrent writer or lock-order schedule."
+        },
+        "denial_side_effects": "preserved",
+        "evidence": "preserved",
+        "lock_order": {
+          "not_applicable_reason": "This public replay request checks receipt admission and product/audit facts, not a concurrent writer or lock-order schedule."
+        },
+        "replay": "preserved",
+        "revocation": "preserved",
+        "transaction_ownership": {
+          "not_applicable_reason": "This public replay request checks receipt admission and product/audit facts, not a concurrent writer or lock-order schedule."
+        }
+      },
+      "target_layer": "integration"
+    },
+    {
+      "invariant_category": "actor_link_lifecycle_replay_denial",
+      "new_test_node": "tests/projects/test_guide_policy_replay_authorization.py::test_inactive_actor_or_link_cannot_retrieve_exact_receipts",
+      "old_assertion_id": "assertion:274:274:ee712872bcd822fbd3e4639614c7cc6ffaa4e1559b420d9f9466e94c4fd9cd22",
+      "old_content_sha256": "ee712872bcd822fbd3e4639614c7cc6ffaa4e1559b420d9f9466e94c4fd9cd22",
+      "old_revision": "6245ba1cee38cef7f222c5bb472d072f748f0ba0",
+      "old_source_span": [
+        274,
+        274
+      ],
+      "old_test_node": "tests/projects/test_guide_policy_replay_authorization.py::test_exact_guide_and_policy_receipts_require_current_actor_link_and_project_grant",
+      "security_dimensions": {
+        "concealment": {
+          "not_applicable_reason": "This public replay request checks receipt admission and product/audit facts, not a concurrent writer or lock-order schedule."
+        },
+        "concurrency": {
+          "not_applicable_reason": "This public replay request checks receipt admission and product/audit facts, not a concurrent writer or lock-order schedule."
+        },
+        "denial_side_effects": "preserved",
+        "evidence": {
+          "not_applicable_reason": "This public replay request checks receipt admission and product/audit facts, not a concurrent writer or lock-order schedule."
+        },
+        "lock_order": {
+          "not_applicable_reason": "This public replay request checks receipt admission and product/audit facts, not a concurrent writer or lock-order schedule."
+        },
+        "replay": "preserved",
+        "revocation": "preserved",
+        "transaction_ownership": {
+          "not_applicable_reason": "This public replay request checks receipt admission and product/audit facts, not a concurrent writer or lock-order schedule."
+        }
+      },
+      "target_layer": "integration"
+    },
+    {
+      "invariant_category": "revoked_manager_replay_denial",
+      "new_test_node": "tests/projects/test_guide_policy_replay_authorization.py::test_revoked_project_manager_denies_exact_and_fresh_replays_with_audit",
+      "old_assertion_id": "assertion:197:197:92b21e277faaf8d5b0eacfd1aa482db333107e00c4ce9f48b4e62ad6628abace",
+      "old_content_sha256": "92b21e277faaf8d5b0eacfd1aa482db333107e00c4ce9f48b4e62ad6628abace",
+      "old_revision": "6245ba1cee38cef7f222c5bb472d072f748f0ba0",
+      "old_source_span": [
+        197,
+        197
+      ],
+      "old_test_node": "tests/projects/test_guide_policy_replay_authorization.py::test_exact_guide_and_policy_receipts_require_current_actor_link_and_project_grant",
+      "security_dimensions": {
+        "concealment": {
+          "not_applicable_reason": "This public replay request checks receipt admission and product/audit facts, not a concurrent writer or lock-order schedule."
+        },
+        "concurrency": {
+          "not_applicable_reason": "This public replay request checks receipt admission and product/audit facts, not a concurrent writer or lock-order schedule."
+        },
+        "denial_side_effects": "preserved",
+        "evidence": {
+          "not_applicable_reason": "This public replay request checks receipt admission and product/audit facts, not a concurrent writer or lock-order schedule."
+        },
+        "lock_order": {
+          "not_applicable_reason": "This public replay request checks receipt admission and product/audit facts, not a concurrent writer or lock-order schedule."
+        },
+        "replay": "preserved",
+        "revocation": "preserved",
+        "transaction_ownership": {
+          "not_applicable_reason": "This public replay request checks receipt admission and product/audit facts, not a concurrent writer or lock-order schedule."
+        }
+      },
+      "target_layer": "integration"
+    },
+    {
+      "invariant_category": "actor_link_lifecycle_replay_denial",
+      "new_test_node": "tests/projects/test_guide_policy_replay_authorization.py::test_inactive_actor_or_link_cannot_retrieve_exact_receipts",
+      "old_assertion_id": "assertion:303:303:e14f391656eec330d50c8d15eec1a54065fc539e5ffd5046398f54fd97fdc74b",
+      "old_content_sha256": "e14f391656eec330d50c8d15eec1a54065fc539e5ffd5046398f54fd97fdc74b",
+      "old_revision": "6245ba1cee38cef7f222c5bb472d072f748f0ba0",
+      "old_source_span": [
+        303,
+        303
+      ],
+      "old_test_node": "tests/projects/test_guide_policy_replay_authorization.py::test_exact_guide_and_policy_receipts_require_current_actor_link_and_project_grant",
+      "security_dimensions": {
+        "concealment": {
+          "not_applicable_reason": "This public replay request checks receipt admission and product/audit facts, not a concurrent writer or lock-order schedule."
+        },
+        "concurrency": {
+          "not_applicable_reason": "This public replay request checks receipt admission and product/audit facts, not a concurrent writer or lock-order schedule."
+        },
+        "denial_side_effects": "preserved",
+        "evidence": {
+          "not_applicable_reason": "This public replay request checks receipt admission and product/audit facts, not a concurrent writer or lock-order schedule."
+        },
+        "lock_order": {
+          "not_applicable_reason": "This public replay request checks receipt admission and product/audit facts, not a concurrent writer or lock-order schedule."
+        },
+        "replay": "preserved",
+        "revocation": "preserved",
+        "transaction_ownership": "preserved"
+      },
+      "target_layer": "integration"
+    },
+    {
+      "invariant_category": "historical_receipt_custody",
+      "new_test_node": "tests/projects/test_guide_policy_replay_authorization.py::test_exact_receipts_remain_historical_after_successors_and_reject_foreign_project",
+      "old_assertion_id": "assertion:170:170:05f837a996ed6381df77738febc164ace2a6ab479321187d99a4f559b8c59166",
+      "old_content_sha256": "05f837a996ed6381df77738febc164ace2a6ab479321187d99a4f559b8c59166",
+      "old_revision": "6245ba1cee38cef7f222c5bb472d072f748f0ba0",
+      "old_source_span": [
+        170,
+        170
+      ],
+      "old_test_node": "tests/projects/test_guide_policy_replay_authorization.py::test_exact_guide_and_policy_receipts_require_current_actor_link_and_project_grant",
+      "security_dimensions": {
+        "concealment": {
+          "not_applicable_reason": "This public replay request checks receipt admission and product/audit facts, not a concurrent writer or lock-order schedule."
+        },
+        "concurrency": {
+          "not_applicable_reason": "This public replay request checks receipt admission and product/audit facts, not a concurrent writer or lock-order schedule."
+        },
+        "denial_side_effects": {
+          "not_applicable_reason": "This active-authority historical receipt case has no denied write."
+        },
+        "evidence": {
+          "not_applicable_reason": "This public replay request checks receipt admission and product/audit facts, not a concurrent writer or lock-order schedule."
+        },
+        "lock_order": {
+          "not_applicable_reason": "This public replay request checks receipt admission and product/audit facts, not a concurrent writer or lock-order schedule."
+        },
+        "replay": "preserved",
+        "revocation": {
+          "not_applicable_reason": "This active-authority historical receipt case has no revocation."
+        },
+        "transaction_ownership": {
+          "not_applicable_reason": "This public replay request checks receipt admission and product/audit facts, not a concurrent writer or lock-order schedule."
+        }
+      },
+      "target_layer": "integration"
+    },
+    {
+      "invariant_category": "revoked_manager_replay_denial",
+      "new_test_node": "tests/projects/test_guide_policy_replay_authorization.py::test_revoked_project_manager_denies_exact_and_fresh_replays_with_audit",
+      "old_assertion_id": "assertion:198:198:5a78781777302ac4aa5d42434e123c5323a34dc6439e13210156c9aecfded5e5",
+      "old_content_sha256": "5a78781777302ac4aa5d42434e123c5323a34dc6439e13210156c9aecfded5e5",
+      "old_revision": "6245ba1cee38cef7f222c5bb472d072f748f0ba0",
+      "old_source_span": [
+        198,
+        198
+      ],
+      "old_test_node": "tests/projects/test_guide_policy_replay_authorization.py::test_exact_guide_and_policy_receipts_require_current_actor_link_and_project_grant",
+      "security_dimensions": {
+        "concealment": {
+          "not_applicable_reason": "This public replay request checks receipt admission and product/audit facts, not a concurrent writer or lock-order schedule."
+        },
+        "concurrency": {
+          "not_applicable_reason": "This public replay request checks receipt admission and product/audit facts, not a concurrent writer or lock-order schedule."
+        },
+        "denial_side_effects": "preserved",
+        "evidence": {
+          "not_applicable_reason": "This public replay request checks receipt admission and product/audit facts, not a concurrent writer or lock-order schedule."
+        },
+        "lock_order": {
+          "not_applicable_reason": "This public replay request checks receipt admission and product/audit facts, not a concurrent writer or lock-order schedule."
+        },
+        "replay": "preserved",
+        "revocation": "preserved",
+        "transaction_ownership": {
+          "not_applicable_reason": "This public replay request checks receipt admission and product/audit facts, not a concurrent writer or lock-order schedule."
+        }
+      },
+      "target_layer": "integration"
+    }
+  ],
+  "schema": "workstream.auth-assertion-map.v1"
+}
