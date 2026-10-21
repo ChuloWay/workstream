@@ -30,6 +30,7 @@
   [WS-CLI-001-23](WS-CLI-001-23.md), Finance draft creation, rule replacement, publication and retirement;
   [WS-CLI-001-24](WS-CLI-001-24.md), self/project contribution evidence and exact private CSV export;
   [WS-CLI-001-25](WS-CLI-001-25.md), explicit public ZIP preparation, Submission replay/history and contributor checker findings;
+  [WS-CLI-001-27](WS-CLI-001-27.md), seven exact-project manager task-context and retained Submission/checker evidence reads;
   [WS-CLI-001-33](WS-CLI-001-33.md), exact-project privacy-safe contributor-candidate discovery;
   [WS-CLI-001-35](WS-CLI-001-35.md), deliberate exact-source manager revision-context repair;
   [PILOT-13](../../changes/pilot13-assigned-task-guide-documents.md), assigned-task locked-guide listing/download;
