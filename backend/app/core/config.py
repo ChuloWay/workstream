@@ -54,6 +54,7 @@ PRODUCTION_LIKE_ENVIRONMENTS = frozenset({"staging", "preview", "prod", "product
 ARTIFACT_AWS_ACTIVATION_VALIDITY_SECONDS = 900
 ARTIFACT_AWS_ACTIVATION_REFRESH_SECONDS = 300
 ARTIFACT_AWS_CLOCK_SAFETY_MARGIN_SECONDS = 30
+ARTIFACT_AWS_PROOF_SEQUENCE_ALLOWANCE_SECONDS = 120
 _SHA256_IDENTITY = re.compile(r"^sha256:[0-9a-f]{64}$")
 _AWS_IAM_ROLE_ARN = re.compile(
     r"^arn:(?:aws|aws-us-gov|aws-cn):iam::[0-9]{12}:role/[A-Za-z0-9+=,.@_/-]{1,512}$"
@@ -748,6 +749,7 @@ class Settings(BaseSettings):
         usable_window = (
             ARTIFACT_AWS_ACTIVATION_VALIDITY_SECONDS
             - ARTIFACT_AWS_ACTIVATION_REFRESH_SECONDS
+            - ARTIFACT_AWS_PROOF_SEQUENCE_ALLOWANCE_SECONDS
             - ARTIFACT_AWS_CLOCK_SAFETY_MARGIN_SECONDS
         )
         if operation_bound > usable_window:

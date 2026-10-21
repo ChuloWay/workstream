@@ -73,25 +73,37 @@ class PolicyMutationReplayRepository:
         record_id = await self._session.scalar(
             insert(PolicyMutationIdempotencyRecord)
             .values(**values)
-            .on_conflict_do_update(
+            .on_conflict_do_nothing(
                 index_elements=[
                     PolicyMutationIdempotencyRecord.actor_profile_id,
                     PolicyMutationIdempotencyRecord.action_id,
                     PolicyMutationIdempotencyRecord.idempotency_key,
                 ],
-                set_={"id": PolicyMutationIdempotencyRecord.id},
             )
             .returning(PolicyMutationIdempotencyRecord.id)
         )
         if record_id is None:
-            raise ProjectRepositoryIntegrityError("policy mutation reservation disappeared")
-        record = await self._session.get(PolicyMutationIdempotencyRecord, record_id)
+            # The conflicting insert waits for its owner. Lock the now-visible
+            # exact row without a no-op UPDATE of immutable JSON custody.
+            record = await self._session.scalar(
+                select(PolicyMutationIdempotencyRecord)
+                .where(
+                    PolicyMutationIdempotencyRecord.actor_profile_id == actor_profile_id,
+                    PolicyMutationIdempotencyRecord.action_id == action_id,
+                    PolicyMutationIdempotencyRecord.idempotency_key == idempotency_key,
+                )
+                .with_for_update()
+                .execution_options(populate_existing=True)
+            )
+        else:
+            record = await self._session.get(PolicyMutationIdempotencyRecord, record_id)
         if record is None:
             raise ProjectRepositoryIntegrityError("policy mutation reservation disappeared")
-        if record_id == values["id"]:
+        if record_id is not None:
             return "claimed", record
         if (
-            record.project_id != project_id
+            record.identity_link_id != identity_link_id
+            or record.project_id != project_id
             or record.guide_id != guide_id
             or record.request_digest != request_digest
             or record.policy_hash != policy_hash

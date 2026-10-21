@@ -45,7 +45,17 @@ performs only that mode's fixed calls, and writes one append-only bounded result
 using PostgreSQL time. Coordination has database access and no AWS transport;
 it accepts exactly one passing result of every type in the common group. Run
 the sequence every five minutes. Results and activations expire 15 minutes from
-their individual starts, so overlapping unexpired groups are expected.
+their individual starts, so overlapping unexpired groups are expected. The
+deployment must complete runtime proof, readiness proof, negative-access proof
+and coordination within the fixed 120-second proof-sequence allowance. Native
+AWS settings reserve that allowance when validating operation deadlines and
+assume successive runtime probes start within 300 seconds. The coordinator and
+activation-table trigger reject insertion when PostgreSQL time minus
+`runtime.started_at` exceeds the allowance. At the maximum permitted budgets,
+equality leaves no scheduling or commit-latency slack: start earlier or configure
+smaller operation deadlines to provide margin. Measure start-to-start cadence,
+full-sequence duration and commit latency during the live drill. These bounds do
+not guarantee continuous eligibility; a late or missed group fails closed.
 
 The command accepts no pass value or caller-authored observation, and product,
 API and configuration inputs cannot create these records. The deployed proof
