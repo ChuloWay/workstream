@@ -777,7 +777,7 @@ def test_workflow_requires_the_locked_external_checker_workspace() -> None:
     assert source.count("external-checker-runtime:") == 1
     assert "rustup toolchain install 1.84.0 --profile minimal --component rustfmt" in source
     assert "cargo fmt --all --check" in source
-    assert "cargo test --workspace --locked" in source
+    assert "cargo test --workspace --locked -- --test-threads=1" in source
     assert "EXTERNAL_CHECKER_RESULT: ${{ needs.external-checker-runtime.result }}" in source
     assert 'require_expected "${EXTERNAL_EXPECTED}" "${EXTERNAL_CHECKER_RESULT}"' in source
 
