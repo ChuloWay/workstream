@@ -53,7 +53,7 @@ The baseline's remaining 56 operations are grouped below. Each issue is a bounde
 outcome, implemented in its own worktree/PR; split an issue further if its
 concrete diff would be unreviewable. The #602 row is delivered by
 [WS-CLI-001-27](WS-CLI-001-27.md); the other rows remain planned here.
-Existing #499 owns the history/current revision-context presentation correction.
+WS-CLI-001-30 delivers #499's history/current revision-context presentation correction.
 
 | Issue | Public-client boundary | Operations |
 |---|---|---:|
@@ -71,8 +71,8 @@ Existing #499 owns the history/current revision-context presentation correction.
 | [#610](https://github.com/Flow-Research/workstream/issues/610) | Task audit context/evidence | 2 |
 | [#611](https://github.com/Flow-Research/workstream/issues/611) | Artifact operator inspection/recovery | 9 |
 
-Start independent guide configuration, manager evidence, admin inspection and
-checker operations in parallel. Inspection informs subsequent manual mutations
+Continue only the remaining boundaries in the inventory above; delivered rows
+are not new assignments. Inspection informs subsequent manual mutations
 and repair; each PR must still build independently or declare its exact stacked
 dependency. Root registrations are additive; shared transport changes have one
 owner and are reused rather than copied. Each PR reconciles its own README and
