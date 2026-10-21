@@ -298,11 +298,9 @@ def test_exact_public_read_parity_and_safe_text(cli, command, path, make_value):
         text = cli(origin, TOKEN, *command)
         assert text.returncode == 0 and text.stderr == "", text.stderr
         assert "\x1b" not in text.stdout and "\u202e" not in text.stdout
-        assert (
-            "\\u001b" in text.stdout
-            or "\\u001B" in text.stdout
-            or command != CASES[1][0]
-        )
+        if command in (CASES[0][0], CASES[1][0], CASES[2][0]):
+            assert "\\u001b" in text.stdout.lower()
+            assert "\\u202e" in text.stdout.lower()
         assert len(requests) == 2 and response["commands"] == []
 
 
