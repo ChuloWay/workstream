@@ -14,13 +14,8 @@ use std::process::{Child, Command, ExitStatus, Stdio};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use workstream_checker_sdk::{
-    canonical_hash, infrastructure_result, parse_request, parse_terminal_benchmark_plan,
-    validate_result, ValidatedRequest, MAX_REQUEST_BYTES,
-};
-
-mod terminal_benchmark;
-use terminal_benchmark::{
-    execute_terminal_benchmark, TerminalBenchmarkExecution, TerminalBenchmarkProfile,
+    canonical_hash, infrastructure_result, parse_request, validate_result, ValidatedRequest,
+    MAX_REQUEST_BYTES,
 };
 
 const PROTOCOL: &str = "external_checker_service.v1";
@@ -47,8 +42,6 @@ struct ServiceConfig {
     sandbox_uid: u32,
     sandbox_gid: u32,
     cache: Vec<CacheEntry>,
-    #[serde(default)]
-    terminal_benchmark: Option<TerminalBenchmarkProfile>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -95,28 +88,11 @@ struct GrantManifest {
     identity: GrantIdentity,
     directories: Vec<String>,
     files: Vec<GrantFile>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    runtime_scratch: Option<RuntimeScratchGrant>,
     binding_digest: String,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-struct RuntimeScratchGrant {
-    byte_allowance: u64,
-    entry_allowance: u64,
-    uid: u32,
-    gid: u32,
-    mode: u32,
 }
 
 struct VerifiedGrant {
-    grant_id: String,
-    root: PathBuf,
     workspace: PathBuf,
-    files: Vec<GrantFile>,
-    runtime: Option<(PathBuf, RuntimeScratchGrant)>,
-    binding_digest: String,
 }
 
 #[derive(Debug, PartialEq)]
@@ -471,9 +447,6 @@ fn prepare_listener(config: &ServiceConfig) -> Result<OwnedSocketListener, Strin
     validate_config(config)?;
     cleanup_stale_runtime_files(config)?;
     cleanup_stale_checker_containers(config)?;
-    if let Some(profile) = &config.terminal_benchmark {
-        terminal_benchmark::cleanup_stale_resources(config, profile)?;
-    }
     Ok(listener)
 }
 
@@ -576,9 +549,6 @@ fn validate_config(config: &ServiceConfig) -> Result<(), String> {
             return Err("cache identity invalid".into());
         }
     }
-    if let Some(profile) = &config.terminal_benchmark {
-        terminal_benchmark::validate_profile(config, profile)?;
-    }
     runtime_ready(config)
 }
 
@@ -661,47 +631,11 @@ fn handle_frame(
                 Ok(output) if validate_result(&output.value, &request).is_ok() => {
                     (output.value, Some(isolation))
                 }
-                Ok(output) => {
-                    let continued = config
-                        .terminal_benchmark
-                        .as_ref()
-                        .filter(|profile| profile.authorizes(&request))
-                        .and_then(|profile| {
-                            parse_terminal_benchmark_plan(&output.value, &request)
-                                .ok()
-                                .map(|plan| (profile, plan))
-                        });
-                    match continued {
-                        Some((profile, plan)) => match execute_terminal_benchmark(
-                            TerminalBenchmarkExecution {
-                                config,
-                                profile,
-                                request: &request,
-                                grant: &grant,
-                                client: stream,
-                                deadline: budget.deadline,
-                                output: &mut budget.output,
-                                cleanup: &mut budget.cleanup,
-                            },
-                            &plan,
-                        ) {
-                            Ok(result) => (result, Some(isolation)),
-                            Err(code) if code == UNSETTLED_RESOURCE_ERROR => {
-                                return Err(UNSETTLED_RESOURCE_ERROR.into());
-                            }
-                            Err(code) => (
-                                infrastructure_result(&request, code)
-                                    .map_err(|_| "result construction failed")?,
-                                Some(isolation),
-                            ),
-                        },
-                        None => (
-                            infrastructure_result(&request, "invalid_output")
-                                .map_err(|_| "result construction failed")?,
-                            Some(isolation),
-                        ),
-                    }
-                }
+                Ok(_) => (
+                    infrastructure_result(&request, "invalid_output")
+                        .map_err(|_| "result construction failed")?,
+                    Some(isolation),
+                ),
                 Err(failure) if failure.cleanup_unsettled => {
                     return Err(UNSETTLED_RESOURCE_ERROR.into());
                 }
@@ -985,44 +919,7 @@ fn verify_grant(
     if observed.files != manifest.files || observed.directories != manifest.directories {
         return Err("grant material differs".into());
     }
-    let terminal_runtime_required = config
-        .terminal_benchmark
-        .as_ref()
-        .is_some_and(|profile| profile.authorizes(request));
-    let runtime = match (&manifest.identity, &manifest.runtime_scratch) {
-        (GrantIdentity::PreSubmit { .. }, None) => None,
-        (GrantIdentity::PostSubmit { .. }, None) if !terminal_runtime_required => None,
-        (GrantIdentity::PostSubmit { .. }, Some(runtime)) if terminal_runtime_required => {
-            let path = grant_root.join("runtime");
-            let metadata = fs::symlink_metadata(&path).map_err(|_| "runtime scratch missing")?;
-            if !metadata.file_type().is_dir()
-                || metadata.file_type().is_symlink()
-                || metadata.mode() & 0o777 != 0o700
-                || metadata.uid() != runtime.uid
-                || metadata.gid() != runtime.gid
-                || runtime.uid != config.sandbox_uid
-                || runtime.gid != config.sandbox_gid
-                || runtime.mode != 0o700
-                || runtime.byte_allowance > 512 * 1024 * 1024
-                || fs::read_dir(&path)
-                    .map_err(|_| "runtime scratch unavailable")?
-                    .next()
-                    .is_some()
-            {
-                return Err("runtime scratch identity differs".into());
-            }
-            Some((path, runtime.clone()))
-        }
-        _ => return Err("grant runtime phase differs".into()),
-    };
-    Ok(VerifiedGrant {
-        grant_id: manifest.grant_id,
-        root: grant_root,
-        workspace,
-        files: manifest.files,
-        runtime,
-        binding_digest: manifest.binding_digest,
-    })
+    Ok(VerifiedGrant { workspace })
 }
 
 fn grant_matches_request(manifest: &GrantManifest, request: &ValidatedRequest) -> bool {
@@ -2172,7 +2069,6 @@ mod tests {
                 architecture: "amd64".into(),
                 config_image_id: format!("sha256:{}", "2".repeat(64)),
             }],
-            terminal_benchmark: None,
         };
         (root, config)
     }
@@ -2206,7 +2102,6 @@ mod tests {
             },
             directories: Vec::new(),
             files: Vec::new(),
-            runtime_scratch: None,
             binding_digest: format!("sha256:{}", "0".repeat(64)),
         };
         let semantic = semantic_manifest_hash(&manifest).unwrap();
@@ -2530,6 +2425,66 @@ exit 2
             "implementation_unavailable"
         );
         assert!(response["isolation"].is_null());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn checker_output_cannot_request_another_execution() {
+        let (root, config) = test_config();
+        let envelope = pre_submit_envelope_with_grant(&config);
+        let request = parse_request(&serde_json::to_vec(&envelope["request"]).unwrap()).unwrap();
+        let cache = &config.cache[0];
+        fs::write(
+            root.join("image.json"),
+            serde_json::to_vec(&serde_json::json!({
+                "Id": cache.config_image_id,
+                "Os": cache.operating_system,
+                "Architecture": cache.architecture,
+                "RepoDigests": [format!("{}@{}", cache.repository, cache.platform_manifest_digest)],
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+        fs::write(
+            &config.docker_binary,
+            b"#!/bin/sh\nroot=$(dirname \"$0\")\nprintf '%s\\n' \"$1\" >> \"$root/calls\"\ncase \"$1 $2\" in\n  \"image inspect\") cat \"$root/image.json\";;\n  \"create --name\") exit 0;;\n  \"start -a\") cat >/dev/null; cat \"$root/result.json\";;\n  \"rm -f\"|\"container ls\") exit 0;;\n  *) exit 2;;\nesac\n",
+        )
+        .unwrap();
+        let valid = workstream_checker_sdk::completed_result(&request, Vec::new()).unwrap();
+        for (output, expected) in [
+            (
+                serde_json::json!({"schema_version": "project_private_plan.v1", "operation": "build"}),
+                infrastructure_result(&request, "invalid_output").unwrap(),
+            ),
+            (valid.clone(), valid),
+        ] {
+            fs::write(root.join("calls"), b"").unwrap();
+            fs::write(
+                root.join("result.json"),
+                serde_json::to_vec(&output).unwrap(),
+            )
+            .unwrap();
+            let (mut client, mut server) = UnixStream::pair().unwrap();
+            write_frame(&mut client, &serde_json::to_vec(&envelope).unwrap()).unwrap();
+            let response: Value =
+                serde_json::from_slice(&handle(&config, &mut server).unwrap()).unwrap();
+            assert_eq!(response["result"], expected);
+            assert!(!response["isolation"].is_null());
+            let calls = fs::read_to_string(root.join("calls")).unwrap();
+            assert_eq!(
+                calls.lines().collect::<Vec<_>>(),
+                ["image", "create", "start", "rm", "container"]
+            );
+        }
+        fs::set_permissions(
+            config
+                .material_root
+                .join("workspaces")
+                .join(envelope["grant"]["grant_id"].as_str().unwrap())
+                .join("workspace"),
+            fs::Permissions::from_mode(0o700),
+        )
+        .unwrap();
         fs::remove_dir_all(root).unwrap();
     }
 
@@ -3019,7 +2974,6 @@ exit 2
             },
             directories: Vec::new(),
             files: Vec::new(),
-            runtime_scratch: None,
             binding_digest: format!("sha256:{}", "9".repeat(64)),
         };
         let semantic = semantic_manifest_hash(&manifest).unwrap();
@@ -3117,7 +3071,6 @@ exit 2
             },
             directories: Vec::new(),
             files: Vec::new(),
-            runtime_scratch: None,
             binding_digest: digest('9'),
         };
         let semantic = semantic_manifest_hash(&manifest).unwrap();
@@ -3152,7 +3105,7 @@ exit 2
         };
         assert!(grant_matches_request(&manifest, &request));
 
-        let (root, mut config) = test_config();
+        let (root, config) = test_config();
         let bind = |manifest: &mut GrantManifest| {
             let mut binding_body = serde_json::to_value(&*manifest).unwrap();
             binding_body
@@ -3168,7 +3121,6 @@ exit 2
             .join("workspaces")
             .join(&conventional_manifest.grant_id);
         let workspace = grant_root.join("workspace");
-        let runtime = grant_root.join("runtime");
         fs::create_dir_all(&workspace).unwrap();
         fs::set_permissions(&grant_root, fs::Permissions::from_mode(0o700)).unwrap();
         fs::set_permissions(&workspace, fs::Permissions::from_mode(0o500)).unwrap();
@@ -3185,49 +3137,7 @@ exit 2
         };
 
         let verified = verify_grant(&config, &request, &conventional_reference).unwrap();
-        assert!(verified.runtime.is_none());
-        config.terminal_benchmark = Some(TerminalBenchmarkProfile::authorization_fixture(&request));
-        assert_eq!(
-            verify_grant(&config, &request, &conventional_reference)
-                .err()
-                .as_deref(),
-            Some("grant runtime phase differs")
-        );
-
-        let mut zero_allowance_manifest = manifest.clone();
-        zero_allowance_manifest.runtime_scratch = Some(RuntimeScratchGrant {
-            byte_allowance: 0,
-            entry_allowance: 0,
-            uid: config.sandbox_uid,
-            gid: config.sandbox_gid,
-            mode: 0o700,
-        });
-        bind(&mut zero_allowance_manifest);
-        fs::remove_file(&manifest_path).unwrap();
-        fs::create_dir(&runtime).unwrap();
-        fs::set_permissions(&runtime, fs::Permissions::from_mode(0o700)).unwrap();
-        fs::write(
-            &manifest_path,
-            serde_json::to_vec(&zero_allowance_manifest).unwrap(),
-        )
-        .unwrap();
-        fs::set_permissions(&manifest_path, fs::Permissions::from_mode(0o400)).unwrap();
-        let zero_reference = GrantReference {
-            grant_id: zero_allowance_manifest.grant_id.clone(),
-            binding_digest: zero_allowance_manifest.binding_digest.clone(),
-        };
-        config.terminal_benchmark = None;
-        assert_eq!(
-            verify_grant(&config, &request, &zero_reference)
-                .err()
-                .as_deref(),
-            Some("grant runtime phase differs")
-        );
-        config.terminal_benchmark = Some(TerminalBenchmarkProfile::authorization_fixture(&request));
-        let verified = verify_grant(&config, &request, &zero_reference).unwrap();
-        let (_, runtime_grant) = verified.runtime.unwrap();
-        assert_eq!(runtime_grant.byte_allowance, 0);
-        assert_eq!(runtime_grant.entry_allowance, 0);
+        assert_eq!(verified.workspace, workspace);
         fs::set_permissions(&workspace, fs::Permissions::from_mode(0o700)).unwrap();
         fs::remove_dir_all(root).unwrap();
 
