@@ -536,6 +536,30 @@ def evaluation_request_handler(*, sessions, materialization):
     )
 
 
+def evaluation_delivery_request_reader(session, evaluations):
+    """Expose TASK's exact retained request reader behind its public port."""
+    from app.modules.checkers.api.delivery_reconciliation import (
+        PostSubmitDeliverySourceUnavailable,
+    )
+    from app.modules.tasks.evaluation_delivery import (
+        EvaluationDeliveryRequestReader,
+        EvaluationDeliveryUnavailable,
+    )
+
+    owner = EvaluationDeliveryRequestReader(session, evaluations)
+
+    class Reader:
+        async def read(self, envelope):
+            try:
+                return await owner.read(envelope)
+            except EvaluationDeliveryUnavailable as exc:
+                raise PostSubmitDeliverySourceUnavailable(
+                    "post_submit_delivery_source_unavailable"
+                ) from exc
+
+    return Reader()
+
+
 def task_post_submit_outcome(session, sessions):
     """Every writer uses the caller session; only committed invocation observation is independent."""
     from app.adapters.audit import task_routing_audit
@@ -561,6 +585,86 @@ def task_post_submit_outcome(session, sessions):
         audit=task_routing_audit(session),
         outbox=outbox_append(session),
     )
+
+
+def post_submit_delivery_outcome(session, sessions):
+    """Expose TASK outcome reconciliation through CHECKERS's typed consumer port."""
+    return _post_submit_delivery_outcome_adapter(
+        task_post_submit_outcome(session, sessions)
+    )
+
+
+def reconciliation_task_post_submit_outcome(
+    session, sessions, custody, reconciliation_claim,
+):
+    """Compose the existing TASK owner behind recovery-bound delivery custody."""
+    from app.adapters.audit import task_routing_audit
+    from app.adapters.auth import task_routing_authorization
+    from app.adapters.checkers import evaluation_coordinator
+    from app.adapters.outbox import outbox_append
+    from app.adapters.projects import project_locked_policy_context_port
+    from app.adapters.tasks.routing_acceptance import RoutingAcceptanceAdapter
+    from app.modules.tasks.post_submit_routing.outcome import TaskPostSubmitOutcome
+
+    return _post_submit_delivery_outcome_adapter(TaskPostSubmitOutcome(
+        session,
+        projects=project_locked_policy_context_port(session),
+        evaluations=evaluation_coordinator(session),
+        authorization=task_routing_authorization(session),
+        acceptance=RoutingAcceptanceAdapter(session),
+        observer=custody,
+        invocation_fence=custody,
+        audit=task_routing_audit(session),
+        outbox=outbox_append(session),
+        reconciliation_claim=reconciliation_claim,
+    ))
+
+
+def _post_submit_delivery_outcome_adapter(owner):
+    """Translate TASK-private unavailable facts to CHECKERS's typed consumer port."""
+    from app.modules.checkers.api.delivery_reconciliation import (
+        PostSubmitDeliveryRetryable,
+        PostSubmitDeliverySourceUnavailable,
+    )
+    from app.modules.tasks.post_submit_routing.requests import TaskRoutingRequestUnavailable
+    from app.modules.tasks.api.routing_outcome import TaskRoutingLifecycleDeferred
+
+    class Outcome:
+        async def _call(self, name, *args, **kwargs):
+            try:
+                return await getattr(owner, name)(*args, **kwargs)
+            except TaskRoutingRequestUnavailable as exc:
+                raise PostSubmitDeliverySourceUnavailable(
+                    "post_submit_delivery_source_unavailable"
+                ) from exc
+            except TaskRoutingLifecycleDeferred as exc:
+                raise PostSubmitDeliveryRetryable(
+                    "post_submit_delivery_retryable"
+                ) from exc
+
+        async def observe_delivery_generation(self, envelope):
+            return await self._call("observe_delivery_generation", envelope)
+
+        async def classify_uncertain_delivery(self, envelope, *, current_generation):
+            return await self._call(
+                "classify_uncertain_delivery",
+                envelope,
+                current_generation=current_generation,
+            )
+
+        async def verify_retained_delivery(self, envelope, *, current_generation):
+            return await self._call(
+                "verify_retained_delivery",
+                envelope,
+                current_generation=current_generation,
+            )
+
+        async def apply(self, envelope, *, current_generation):
+            return await self._call(
+                "apply", envelope, current_generation=current_generation
+            )
+
+    return Outcome()
 
 
 def task_accepted_effects_participant(session, fence):

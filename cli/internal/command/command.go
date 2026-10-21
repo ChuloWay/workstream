@@ -115,6 +115,7 @@ func Run(args []string, stdout, stderr io.Writer, getenv environment, version st
 	addProjectRoleMutations(project, client, &output, stdout)
 	addContributionPolicyReads(project, client, &output, stdout)
 	addManagerReads(project, client, &output, stdout)
+	addManagerTaskEvidence(project, client, &output, stdout)
 	addProjectPreparationReads(project, client, &output, stdout)
 	addContributionEvidence(root, project, client, &output, stdout)
 	addGuideCreate(project, client, &output, stdout)

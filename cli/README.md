@@ -35,6 +35,13 @@ contribution-evidence exports:
 | `workstream project guide document PROJECT_ID GUIDE_ID DOCUMENT_ID --download DIR` | `GET /api/v1/projects/PROJECT_ID/guides/GUIDE_ID/documents/DOCUMENT_ID/content` |
 | `workstream project tasks PROJECT_ID [--status S] [--assignee UUID] [--import-batch UUID] [--updated-since TIME]` | `GET /api/v1/projects/PROJECT_ID/tasks` |
 | `workstream project task PROJECT_ID TASK_ID` | `GET /api/v1/projects/PROJECT_ID/tasks/TASK_ID` |
+| `workstream project task-requirements PROJECT_ID TASK_ID` | `GET /api/v1/projects/PROJECT_ID/tasks/TASK_ID/submission-requirements` |
+| `workstream project task-locked-context PROJECT_ID TASK_ID` | `GET /api/v1/projects/PROJECT_ID/tasks/TASK_ID/locked-context` |
+| `workstream project task-context PROJECT_ID TASK_ID` | `GET /api/v1/projects/PROJECT_ID/tasks/TASK_ID/work-context` |
+| `workstream project task-submissions PROJECT_ID TASK_ID [--limit N] [--cursor TOKEN]` | `GET /api/v1/projects/PROJECT_ID/tasks/TASK_ID/submissions` |
+| `workstream project submission PROJECT_ID SUBMISSION_ID` | `GET /api/v1/projects/PROJECT_ID/submissions/SUBMISSION_ID` |
+| `workstream project checker-runs PROJECT_ID SUBMISSION_ID [--limit N] [--cursor TOKEN]` | `GET /api/v1/projects/PROJECT_ID/submissions/SUBMISSION_ID/checker-runs` |
+| `workstream project checker-runs PROJECT_ID SUBMISSION_ID --run RUN_ID` | `GET /api/v1/projects/PROJECT_ID/submissions/SUBMISSION_ID/checker-runs/RUN_ID` |
 | `workstream project submissions PROJECT_ID [--task UUID] [--status S] [--submitter UUID] [--updated-since TIME] [--limit N] [--cursor TOKEN]` | `GET /api/v1/projects/PROJECT_ID/submissions` |
 | `workstream project assignments PROJECT_ID [--state active\|closed] [--limit N] [--cursor TOKEN]` | `GET /api/v1/projects/PROJECT_ID/assignments` |
 | `workstream project summary PROJECT_ID` | `GET /api/v1/projects/PROJECT_ID/summary` |
@@ -43,6 +50,7 @@ contribution-evidence exports:
 | `workstream project task create PROJECT_ID --input FILE --idempotency-key UUID` | `POST /api/v1/projects/PROJECT_ID/tasks` |
 | `workstream project task screen PROJECT_ID TASK_ID --idempotency-key UUID [--reason TEXT]` | `POST /api/v1/tasks/TASK_ID/screen` |
 | `workstream project task release PROJECT_ID TASK_ID --idempotency-key UUID --reason TEXT` | `POST /api/v1/tasks/TASK_ID/release` |
+| `workstream project task repair-revision PROJECT_ID TASK_ID --idempotency-key UUID --reason TEXT` with exact parent pair or routing manifest | `POST /api/v1/projects/PROJECT_ID/tasks/TASK_ID/revision-context/repair` |
 | `workstream project task-batch convert-csv --input FILE --out FILE` | Local CSV-to-JSON conversion; no API call |
 | `workstream project task-batch source-declare PROJECT_ID --input FILE --idempotency-key UUID` | `POST /api/v1/projects/PROJECT_ID/task-import-sources` |
 | `workstream project task-batch source-upload PROJECT_ID SOURCE_ID --input FILE` | `PUT /api/v1/projects/PROJECT_ID/task-import-sources/SOURCE_ID/content` |
@@ -143,8 +151,8 @@ distinct from client response validation failures.
 The table above is the delivered command inventory. PILOT-02 supplies the
 [batch conversion/import/screen/release commands](#prepare-a-task-import-json-source)
 in the same CLI; contribution-evidence reads do not depend on using batch import.
-Submission preparation, creation and history commands are described below;
-manager revision repair and human-review commands are outside this CLI inventory.
+Submission preparation, creation, history and manager revision repair are
+described below; human-review commands remain outside this CLI inventory.
 
 ## Build and use
 
@@ -1069,6 +1077,39 @@ stored locks and single command/audit facts, tests foreign-project, suspension a
 revocation denials, then exercises contributor discovery/claim/start. Canonical
 guide setup fixtures are not live inference or deployed-service certification.
 
+## Repair a blocked revision context as a project manager
+
+```sh
+workstream project task PROJECT_ID TASK_ID --output json
+workstream project task repair-revision PROJECT_ID TASK_ID \
+  --parent-preparation-id PREPARATION_ID \
+  --parent-preparation-sha256 sha256:LOWERCASE_64_HEX \
+  --reason "Adopt corrected approved context" --idempotency-key REPAIR_KEY --output json
+
+# Only for a retained failure missing its preparation, select its exact routing source instead:
+workstream project task repair-revision PROJECT_ID TASK_ID \
+  --routing-manifest-id ROUTING_MANIFEST_ID \
+  --reason "Recover missing revision root" --idempotency-key ROOT_KEY --output json
+```
+
+Choose exactly one source form. `--reason` must be nonblank, at most 1000
+Unicode characters, and at most 1000 UTF-8 bytes after surrounding whitespace
+is stripped; the backend makes every eligibility, authority, lineage and clock
+decision again at the POST. The preceding manager detail is only an observation:
+it does not reserve a repair or authorize a later write. Each invocation makes
+one keyed POST without an automatic read, retry, guide rebase or deadline reset.
+The JSON output is the complete `ContributorRevisionContext` returned by that
+POST, not a manager task or acceptance receipt. `clock_state=paused` has a null
+deadline, positive `remaining_microseconds` and `context_blocked` disposition;
+`clock_state=running` has a deadline and null allowance. A repair may still be
+blocked under the backend's current policy. Text output escapes terminal controls.
+
+Keep the original project, task, exact source, reason and key together for
+deliberate replay after an uncertain write. A read is not rollback proof, and
+changing the key can conflict with the already committed child. A canonical
+denial is not a success; current Project Manager authority is required even to
+replay. This command does not create a human Review or decide acceptance.
+
 ## Browse tasks as a project manager
 
 ```sh
@@ -1108,6 +1149,32 @@ output. Foreign items, duplicate identities, unknown/duplicate fields and
 malformed replies fail with empty stdout. The existing 64 KiB response bound
 applies to a whole page: an oversized response fails without partial output;
 request a smaller `--limit` if needed.
+
+The manager's task-evidence reads are separate from contributor `task context`,
+`task requirements`, `task submissions` and `submission` commands:
+
+```sh
+workstream project task-requirements PROJECT_ID TASK_ID --output json
+workstream project task-locked-context PROJECT_ID TASK_ID --output json
+workstream project task-context PROJECT_ID TASK_ID --output json
+workstream project task-submissions PROJECT_ID TASK_ID --limit 25 --output json
+workstream project submission PROJECT_ID SUBMISSION_ID --output json
+workstream project checker-runs PROJECT_ID SUBMISSION_ID --limit 25 --output json
+workstream project checker-runs PROJECT_ID SUBMISSION_ID --run RUN_ID --output json
+```
+
+`task-requirements` shows locked intake rules; `task-locked-context` shows
+historical policy identities and the bounded post-submit policy summary;
+`task-context` shows current management instructions and provenance, without
+contributor action hints or compensation terms. History reads show exact
+manager Submission lineage and checker routing evidence; checker results are
+not acceptance decisions. Supply the exact project/task, project/submission or
+project/submission/run identity; the CLI never substitutes the latest record.
+Lists make one request for one page (`--limit` 1–100, default 25) and display an
+opaque `next_cursor`; pass it back unchanged with the same limit and selectors.
+Workstream binds and reauthorizes each page. These reads never grant later
+write authority or fetch artifact bytes. Text escapes terminal controls and
+prints complete nested facts; `--output json` preserves the public response.
 
 ## See your own work
 
