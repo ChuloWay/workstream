@@ -63,6 +63,7 @@ contribution-evidence exports:
 | `workstream project role-grant revoke PROJECT_ID GRANT_ID --input FILE --idempotency-key UUID` | `POST /api/v1/projects/PROJECT_ID/role-grants/GRANT_ID/revoke` |
 | `workstream project role-grant list PROJECT_ID [--status active\|revoked] [--role submitter\|reviewer]` | `GET /api/v1/projects/PROJECT_ID/role-grants` |
 | `workstream project role-grant show PROJECT_ID GRANT_ID` | `GET /api/v1/projects/PROJECT_ID/role-grants/GRANT_ID` |
+| `workstream project role-grant candidates PROJECT_ID [--limit N] [--cursor TOKEN]` | `GET /api/v1/projects/PROJECT_ID/contributor-candidates` |
 | `workstream project contribution-policy current PROJECT_ID` | `GET /api/v1/projects/PROJECT_ID/contribution-policies/current` |
 | `workstream project contribution-policy show PROJECT_ID POLICY_ID [--version UUID]` | `GET /api/v1/projects/PROJECT_ID/contribution-policies/POLICY_ID` with optional `version_id` |
 | `workstream project contribution-policy list PROJECT_ID [--limit N] [--cursor TOKEN]` | `GET /api/v1/projects/PROJECT_ID/contribution-policies` |
@@ -284,8 +285,28 @@ JSON preserves the exact valid response; text escapes terminal controls. Missing
 malformed, substituted or credential-reflecting success is `outcome_unknown`
 with empty stdout. Retry only manually with unchanged selectors, file contents
 and key. A read is observation, not rollback proof; an old issue replay after
-revocation is denied by the backend's retained-state check. No actor discovery,
-automatic role assignment or AdminRole mutation is added.
+revocation is denied by the backend's retained-state check. No unscoped actor
+enumeration, automatic role assignment or AdminRole mutation is added.
+
+### Discover possible grant targets
+
+```sh
+workstream project role-grant candidates PROJECT_ID --limit 50 -o json
+```
+
+This calls the existing exact-project, covered-Project-Manager candidate read.
+Each count-free page contains only `actor_profile_id` and nullable `display_name`
+for backend-selected active human candidates, plus nullable `next_cursor`; no
+contact or identity-provider fields are disclosed. Continue explicitly with
+`--cursor` and the same project and limit. The CLI neither interprets the
+opaque cursor nor follows it automatically. Invalid or cross-project/limit
+cursors are rejected by the backend, which checks current manager authority on
+every request. JSON preserves the public response; text escapes terminal controls.
+
+Candidates are possible targets, not qualification, eligibility decisions,
+active grant holders or authority for a later write. Discovery never issues a
+grant. Use the separate `role-grant issue` command with caller-supplied evidence
+and a fresh backend decision; the page is not a global actor directory.
 
 ### Inspect retained contributor grants
 
