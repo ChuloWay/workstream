@@ -174,8 +174,8 @@ administrator replaces creation grants with exact returned-resource permissions.
 
 ## Reconciliation
 
-- Current-source reconciliation: based on main `4ad0812e0`; preserve its CLI source-download
-  and task-audit capabilities and roadmap updates alongside this adapter/deployment boundary.
+- Current-source reconciliation: based on main `c6d916cc1`; preserve its CLI source-download,
+  task-audit and Operator capabilities, checker test isolation, and roadmap updates alongside this adapter/deployment boundary.
 - Next usable boundary: provision identities and run live AWS activation and
   the public contribution drill tracked by #582/#555.
 - Remaining risks: certificate signing-key custody and renewal are operational

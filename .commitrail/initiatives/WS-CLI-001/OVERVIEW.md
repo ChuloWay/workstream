@@ -38,11 +38,19 @@
   [WS-CLI-001-33](WS-CLI-001-33.md), exact-project contributor-candidate discovery;
   [WS-CLI-001-34](WS-CLI-001-34.md), exact-project task audit context and bounded cursor-based evidence reads;
   [WS-CLI-001-35](WS-CLI-001-35.md), deliberate exact-source manager revision-context repair;
+  [WS-CLI-001-36](WS-CLI-001-36.md), status-only Operator task browsing,
+  exact locked-context inspection and explicit reasoned start override;
   [PILOT-13](../../changes/pilot13-assigned-task-guide-documents.md), assigned-task locked-guide listing/download;
   [PILOT-02](../../changes/pilot02-bulk-transitions-cli.md), explicit CSV conversion,
   source custody, atomic import, batch status and whole-batch screen/release.
 
 ## Current boundary
+
+The Operator commands `operations task list`, `operations task locked-context`
+and `operations task start` use three existing public routes. Their restricted
+read projections remain observations; the backend rechecks the distinct
+Operator authority on every start and exact-key replay. These commands do not
+create assignments or fall back to contributor authority.
 
 [WS-CLI-001-32](WS-CLI-001-32.md) adds read-only active-guide and exact-guide
 sufficiency/artifact/effective/pre-submit inspection through seven existing
@@ -91,12 +99,12 @@ also delivered by the merged PILOT read work; reuse those owners.
 The baseline's remaining 56 operations are grouped below. Each issue is a bounded client
 outcome, implemented in its own worktree/PR; split an issue further if its
 concrete diff would be unreviewable. The #600, #602, #603, #604, #605, #606,
-#608 and #610 rows are delivered by [WS-CLI-001-32](WS-CLI-001-32.md),
+#608, #609 and #610 rows are delivered by [WS-CLI-001-32](WS-CLI-001-32.md),
 [WS-CLI-001-27](WS-CLI-001-27.md), [WS-CLI-001-35](WS-CLI-001-35.md),
 [WS-CLI-001-33](WS-CLI-001-33.md), [WS-CLI-001-31](WS-CLI-001-31.md),
-[WS-CLI-001-28](WS-CLI-001-28.md), [WS-CLI-001-29](WS-CLI-001-29.md) and
-[WS-CLI-001-34](WS-CLI-001-34.md), respectively; other rows remain separate
-boundaries.
+[WS-CLI-001-28](WS-CLI-001-28.md), [WS-CLI-001-29](WS-CLI-001-29.md),
+[WS-CLI-001-36](WS-CLI-001-36.md) and [WS-CLI-001-34](WS-CLI-001-34.md),
+respectively; other rows remain planned here.
 [WS-CLI-001-30](WS-CLI-001-30.md) delivers #499's history/current
 revision-context presentation correction.
 
@@ -112,7 +120,7 @@ revision-context presentation correction.
 | [#606](https://github.com/Flow-Research/workstream/issues/606) | Actor/admin authority inspection — delivered by [WS-CLI-001-28](WS-CLI-001-28.md) | 6 |
 | [#607](https://github.com/Flow-Research/workstream/issues/607) | Actor/identity lifecycle and administrative writes | 8 |
 | [#608](https://github.com/Flow-Research/workstream/issues/608) | External-checker registry and explicit retry, delivered by [WS-CLI-001-29](WS-CLI-001-29.md) | 4 |
-| [#609](https://github.com/Flow-Research/workstream/issues/609) | Operator task inspection/start override | 3 |
+| [#609](https://github.com/Flow-Research/workstream/issues/609) | Operator task inspection/start override, delivered by [WS-CLI-001-36](WS-CLI-001-36.md) | 3 |
 | [#610](https://github.com/Flow-Research/workstream/issues/610) | Task audit context/evidence — delivered by [WS-CLI-001-34](WS-CLI-001-34.md) | 2 |
 | [#611](https://github.com/Flow-Research/workstream/issues/611) | Artifact operator inspection/recovery | 9 |
 
