@@ -27,9 +27,10 @@ short-lived database activation; no proof bypass or new storage owner is needed.
 - `backend/app/core/config.py` and a focused pure configuration helper if needed.
 - `backend/app/adapters/artifacts/{s3_compatible,aws_live_proof,aws_roles_anywhere}.py`
   and a focused shared certificate/trust validation helper in this adapter owner.
-- Existing AWS proof/activation command and owner only where required to bind
-  the new configuration to existing activation evidence; a migration only if
-  review demonstrates existing custody cannot bind the new security facts.
+- Existing AWS proof/activation command, ART models, activation owner, Alembic
+  environment and a new linear migration extending both proof and activation
+  rows with exact Roles Anywhere anchor/profile identities and state digests.
+  Associated schema fingerprint and migration regressions are included.
 - `backend/tests/test_aws_*.py`, affected config/storage tests and focused new
   Roles Anywhere tests; test allocation/ownership inventories only as required.
 - `docker/backend/Dockerfile.release`, `deploy/hosted/`, related image/config
@@ -68,11 +69,24 @@ short-lived database activation; no proof bypass or new storage owner is needed.
 - Readiness validates enabled trust-anchor/profile resources, expected CA
   certificate identity, exact allowed roles and a closed trust shape bound to
   account, anchor, issuer and distinct exact subject common names. Bind these
-  facts to the existing release/activation contract before permitting access.
-  Extend the readiness role only with narrowly scoped necessary read actions.
+  facts to four explicit fields on both probe and activation records:
+  `roles_anywhere_trust_anchor_arn`, `roles_anywhere_trust_anchor_sha256`,
+  `roles_anywhere_profile_arn`, `roles_anywhere_profile_sha256`. All four are
+  absent for existing independent credential methods, or all present for this
+  method. Canonical digests cover enabled anchor CA source and enabled profile
+  role/duration/session-policy/attribute-mapping state; resource ARNs alone are
+  insufficient because resources are mutable. Extend the existing immutable
+  guards, exact group matching, coordinator filters and runtime filters. Do not
+  overload release or IAM trust-policy digests. Extend the readiness role only
+  with narrowly scoped necessary read actions. Each proof identity must also
+  prove that its certificate is denied assumption of both other roles; network,
+  certificate, helper or timeout errors do not count as authorization denial.
 - The hosted Linux/Docker profile uses certificate mounts and the official
   helper. No EC2 metadata dependency. Separate proof jobs receive only their
   own identity; runtime never receives readiness/negative keys or CA signing key.
+- Generate configuration digests and policy templates from the same canonical
+  validation helpers. Operator configuration should be a small input document
+  plus certificate paths, not hand-computed hashes or parallel policy logic.
 - Keep current three-identity activation and immutable bucket policy. A live
   scheduled proof group remains required; update deployment instructions for
   external-host execution rather than leaving an EC2-only prerequisite.
@@ -116,7 +130,10 @@ short-lived database activation; no proof bypass or new storage owner is needed.
 
 ## Review findings
 
-Plan review precedes implementation. Record material findings and repairs here.
+Initial security/architecture inspection identified that existing release and
+IAM trust digests cannot bind mutable CA/profile state. The design now includes
+explicit persistent bindings and the complete cross-role denial matrix. Final
+plan review precedes implementation.
 
 ## Reconciliation
 
