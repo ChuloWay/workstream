@@ -20,6 +20,7 @@ from workstream_mcp.schemas import (
     authorization_context_output_validator,
     profile_output_validator,
     profile_update_output_validator,
+    project_output_validator,
 )
 
 _SAFE_VALUE = re.compile(
@@ -49,6 +50,8 @@ _PUBLIC_ERROR_CODES = frozenset(
         "missing_token",
         "permission_not_granted",
         "project_authorization_resource_not_found",
+        "project_slug_conflict",
+        "idempotency_pending",
         "resource_guard_denied",
         "resource_not_found",
         "rate_limit_exceeded",
@@ -236,6 +239,55 @@ class WorkstreamGateway:
             expected_resource_id=resource_id,
             mutation=True,
         )
+
+    async def project_create(
+        self,
+        bearer: str,
+        arguments: dict[str, Any],
+        correlation_id: str | None = None,
+    ) -> GatewayResult:
+        """Create one project shell through the fixed public API route."""
+        return await self._request(
+            "POST",
+            "/api/v1/projects",
+            bearer,
+            project_output_validator("projects_create"),
+            correlation_id,
+            json_body=arguments["body"],
+            idempotency_key=arguments["idempotency_key"],
+            expected_status=201,
+            mutation=True,
+        )
+
+    async def project_get(
+        self,
+        bearer: str,
+        project_id: str,
+        correlation_id: str | None = None,
+    ) -> GatewayResult:
+        """Read one project and bind the response to the requested UUID."""
+        outcome = await self._request(
+            "GET",
+            f"/api/v1/projects/{quote(project_id, safe='')}",
+            bearer,
+            project_output_validator("projects_get"),
+            correlation_id,
+        )
+        if outcome.failure is not None:
+            return outcome
+        try:
+            matches = UUID((outcome.data or {})["id"]) == UUID(project_id)
+        except (KeyError, TypeError, ValueError):
+            matches = False
+        if not matches:
+            return GatewayResult(
+                failure=SafeFailure(
+                    "invalid_api_response",
+                    status=502,
+                    correlation_id=correlation_id,
+                )
+            )
+        return outcome
 
     async def _request(
         self,
@@ -446,7 +498,7 @@ class WorkstreamGateway:
             status=status,
             code=code,
             correlation_id=correlation_id,
-            retryable=status in {429, 502, 503, 504},
+            retryable=status in {429, 502, 503, 504} or code == "idempotency_pending",
         )
 
 
