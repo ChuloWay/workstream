@@ -109,6 +109,7 @@ class LightweightAgentGateTests(unittest.TestCase):
                         "test_access_reads",
                         "test_admin_grants",
                         "test_actor_lifecycle",
+                        "test_projects",
                     ) if code == 0 else ("test_profile_flow",)
                     expected = [
                         [
@@ -411,15 +412,8 @@ class LightweightAgentGateTests(unittest.TestCase):
             workflow.split("\n  scope:\n", 1)[1].split("\n  minio-image:\n", 1)[0],
         )
         test_job = workflow.split("\n  test:\n", 1)[1]
-        self.assertIn("Mirror the existing proof for a description-only edit", test_job)
-        self.assertIn('select(.name == "scope")', test_job)
-        self.assertIn(".number == $pr and .base.ref == $base and .base.sha == $base_sha", test_job)
-        self.assertIn("gh api --paginate", test_job)
-        self.assertIn("EXPECTED_JOB: ${{ github.event.pull_request.draft && 'draft-test' || 'test' }}", test_job)
-        self.assertIn('test "${conclusion}" = success', test_job)
-        # An unfinished proof must not hold a runner until its final check exists.
-        self.assertIn("its own ${EXPECTED_JOB} check will replace this one", test_job)
-        self.assertNotIn("seq 1 140", test_job)
+        self.assertNotIn("Mirror the existing proof", test_job)
+        self.assertNotIn("gh api", test_job)
         self.assertIn("timeout-minutes: 40", test_job.split("\n    steps:\n", 1)[0])
         scope_job = workflow.split("\n  scope:\n", 1)[1].split(
             "\n  minio-image:\n", 1
@@ -444,7 +438,6 @@ class LightweightAgentGateTests(unittest.TestCase):
             workflow,
         )
         self.assertIn(
-            "    if: ${{ always() }}\n"
             "    needs: [scope, auth-boundary-preflight, external-checker-runtime, "
             "lanes, minio-image, cli-public-contract, mcp-contract, full-suite]",
             workflow,
@@ -763,16 +756,61 @@ class LightweightAgentGateTests(unittest.TestCase):
                 )
                 self.assertNotEqual(result.returncode, 0)
 
-    def test_draft_feedback_cannot_publish_the_required_full_suite_context(self) -> None:
+    def test_metadata_edits_cannot_publish_or_replace_required_proof(self) -> None:
         workflow = Path(".github/workflows/backend.yml").read_text(encoding="utf-8")
         fan_in = workflow.split("\n  test:\n", 1)[1]
-        self.assertIn(
-            "    name: ${{ github.event_name == 'pull_request' "
-            "&& github.event.pull_request.draft && 'draft-test' || 'test' }}\n",
-            fan_in,
+        metadata = (
+            "github.event_name == 'pull_request' && github.event.action == 'edited' "
+            "&& !github.event.changes.base "
+            "&& github.event.pull_request.head.repo.full_name == github.repository"
         )
-        # Event state, not planner output, names even a failed-planner check.
-        self.assertIn("    if: ${{ always() }}\n", fan_in)
+        expressions = {
+            key: re.search(r"^    " + key + r": \$\{\{ (.+) \}\}$", fan_in, re.M).group(1)
+            for key in ("name", "if")
+        }
+        self.assertEqual(
+            expressions["name"], metadata + " && 'metadata-only' || "
+            "github.event_name == 'pull_request' && github.event.pull_request.draft "
+            "&& 'draft-test' || 'test'",
+        )
+        self.assertEqual(expressions["if"], "always() && !(" + metadata + ")")
+
+        def evaluate(expression: str, event: dict[str, object]) -> object:
+            # These two pinned expressions use only boolean operators, equality,
+            # strings and event values. Model their extracted text if evaluated;
+            # GitHub currently displays the literal name expression when skipped.
+            rendered = re.sub(r"github[.\w]+", lambda match: repr(event[match[0]]), expression)
+            rendered = rendered.replace("always()", "True").replace("&&", " and ")
+            rendered = rendered.replace("||", " or ").replace("!", "not ")
+            return eval(rendered, {"__builtins__": {}}, {})
+
+        cases = [
+            ("edited", False, True, "pull_request", "metadata-only", False),
+            ("edited", True, True, "pull_request", None, True),
+            ("edited", False, False, "pull_request", None, True),
+            ("opened", False, True, "pull_request", None, True),
+            ("reopened", False, True, "pull_request", None, True),
+            ("synchronize", False, True, "pull_request", None, True),
+            ("ready_for_review", False, True, "pull_request", None, True),
+            ("converted_to_draft", False, True, "pull_request", None, True),
+            ("", False, False, "push", "test", True),
+            # A non-PR event must never enter the metadata path.
+            ("edited", False, True, "push", "test", True),
+        ]
+        for action, base_changed, same_repo, event_name, name, runs in cases:
+            for draft in (False, True):
+                with self.subTest(action=action, base=base_changed, same_repo=same_repo,
+                                  event=event_name, draft=draft):
+                    event = {
+                        "github.event_name": event_name,
+                        "github.event.action": action,
+                        "github.event.changes.base": base_changed,
+                        "github.event.pull_request.head.repo.full_name": "owner/repo" if same_repo else "fork/repo",
+                        "github.repository": "owner/repo",
+                        "github.event.pull_request.draft": draft,
+                    }
+                    self.assertEqual(evaluate(expressions["name"], event), name or ("draft-test" if draft else "test"))
+                    self.assertEqual(evaluate(expressions["if"], event), runs)
 
     def test_required_backend_status_accepts_only_the_exact_selected_scope(self) -> None:
         workflow = Path(".github/workflows/backend.yml").read_text(encoding="utf-8")

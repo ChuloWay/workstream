@@ -172,8 +172,9 @@ You need Git, Docker Engine, and Docker Compose v2.
 ## Use the command-line client
 
 The [Workstream CLI](cli/README.md) is a terminal client for the public API.
-You can use it to set up projects, find and claim tasks, submit work, and
-export contribution records. It sends your Flow token, from
+You can use it to set up projects, find and claim tasks, submit work, read
+authorized task audit context and evidence, and export contribution records.
+It sends your Flow token, from
 `WORKSTREAM_TOKEN`, with each request.
 
 ## Repository layout
@@ -574,8 +575,15 @@ completion handling with commit-before-ACK. 04F2 supplies the hidden remediation
 handoff without Review, acceptance, contribution or award effects. 04F3 supplies
 hidden exact-cause replacement intake through the canonical Submission writer;
 it neither creates failure economics nor activates human revision. 04F4 adds
-hidden Operator retry for known terminal infrastructure failures with immutable
-source evidence. PILOT-04 registers selected production request/completion handlers.
+the retry owner for known terminal infrastructure failures with immutable source
+evidence, exposed through the supported project-scoped Operator API. A separate
+Operator list and reconcile command handles uncertain post-submit request and
+completion deliveries: it verifies committed facts or schedules the existing
+owner only when durable evidence proves no effect. Each original UNKNOWN keeps
+at most one immutable reconciliation child; ambiguous effects and an UNKNOWN
+child remain held. See the
+[Operator recovery flow](docs/operations_operator_workflow.md#uncertain-post-submit-delivery-reconciliation).
+PILOT-04 registers selected production request/completion handlers.
 ARCH-02I-B exposes public admission-backed entry; ARCH-04E3-B activates
 supported false-policy guides, with new acceptance effects still gated on a
 LIVE REV generation bound to the current reviewed manifest. A known pre-effect

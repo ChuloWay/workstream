@@ -107,6 +107,7 @@ func Run(args []string, stdout, stderr io.Writer, getenv environment, version st
 	update.Flags().BoolVar(&clearContactEmail, "clear-contact-email", false, "Clear your profile contact text")
 	profile.AddCommand(update)
 	root.AddCommand(profile)
+	addAdminInspection(root, client, &output, stdout)
 
 	project := &cobra.Command{Use: "project", Short: "Public project operations"}
 	addTaskReads(project, client, &output, stdout)
@@ -115,6 +116,7 @@ func Run(args []string, stdout, stderr io.Writer, getenv environment, version st
 	addProjectRoleMutations(project, client, &output, stdout)
 	addContributionPolicyReads(project, client, &output, stdout)
 	addManagerReads(project, client, &output, stdout)
+	addManagerTaskEvidence(project, client, &output, stdout)
 	addProjectPreparationReads(project, client, &output, stdout)
 	addContributionEvidence(root, project, client, &output, stdout)
 	addGuideCreate(project, client, &output, stdout)
@@ -166,6 +168,11 @@ func Run(args []string, stdout, stderr io.Writer, getenv environment, version st
 		},
 	})
 	root.AddCommand(project)
+	addTaskAudit(root, client, &output, stdout)
+	operations := &cobra.Command{Use: "operations", Short: "Explicit system Operator operations"}
+	addCheckerOperations(operations, client, &output, stdout)
+	addOperatorTasks(operations, client, &output, stdout)
+	root.AddCommand(operations)
 	addContributorTasks(root, client, &output, stdout)
 	addContributorReads(root, client, &output, stdout)
 
@@ -200,11 +207,12 @@ func writeJSON(w io.Writer, raw json.RawMessage) error {
 }
 
 func writeSafeJSON(w io.Writer, raw json.RawMessage) error {
-	// Preserve JSON values while keeping literal C1/bidi/format controls out
-	// of terminals. JSON already escapes C0 controls inside strings.
+	// Preserve JSON values while keeping literal controls, format marks and
+	// Unicode line/paragraph separators out of terminals. JSON already
+	// escapes C0 controls inside strings.
 	var safe strings.Builder
 	for _, r := range string(bytes.TrimSpace(raw)) {
-		if r >= 0x7f && (unicode.IsControl(r) || unicode.Is(unicode.Cf, r)) {
+		if r >= 0x7f && (unicode.IsControl(r) || unicode.Is(unicode.Cf, r) || r == '\u2028' || r == '\u2029') {
 			if r <= 0xffff {
 				fmt.Fprintf(&safe, "\\u%04x", r)
 			} else {

@@ -406,6 +406,10 @@ and fresh-authorized replay; receipts are observations, not cached permission.
 page; `project role-grant show PROJECT_ID GRANT_ID` inspects complete public
 qualification/provenance and revocation history. Pagination is explicit and
 fresh authority is backend-owned; a read never authorizes a later write.
+`project role-grant candidates PROJECT_ID [--limit N] [--cursor TOKEN]` reads
+only the backend's two-field, exact-project candidate page for a covered Project
+Manager. Its opaque continuation is explicit; discovery neither qualifies an
+actor nor issues a grant or exposes a global actor directory.
 `project contribution-policy current PROJECT_ID` discovers the published and
 open-draft selectors; `project contribution-policy show PROJECT_ID POLICY_ID
 [--version UUID]` inspects backend-selected or exact historical policy versions,

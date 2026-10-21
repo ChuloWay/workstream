@@ -269,10 +269,17 @@ def main() -> None:
         },
     }
     contract = {
-        "schema_version": "workstream.terminal_benchmark_project_checker_contract.v1",
+        "schema_version": "workstream.terminal_benchmark_project_checker_contract.v2",
         "configuration": {
             "schema_version": "terminal_benchmark_project.v1",
             "external_task_id": "terminal-ledger-reconcile",
+        },
+        "isolation": {
+            **facts["checker"],
+            "runtime": "runsc",
+            "isolation_mode": "gvisor",
+            "sandbox_uid": arguments.sandbox_uid,
+            "sandbox_gid": arguments.sandbox_gid,
         },
         "registry": entry.model_dump(mode="json"),
     }

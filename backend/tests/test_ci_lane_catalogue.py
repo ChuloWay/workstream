@@ -92,6 +92,10 @@ def test_checker_delivery_and_routing_preparation_partition_every_node_once() ->
         "tests/checkers/execution/test_checker_retry_history_replay.py",
         "tests/checkers/execution/test_checker_retry_http.py",
         "tests/checkers/execution/test_checker_retry_migration.py",
+        "tests/checkers/execution/test_delivery_reconciliation_concurrency.py",
+        "tests/checkers/execution/test_delivery_reconciliation_contract.py",
+        "tests/checkers/execution/test_delivery_reconciliation_custody.py",
+        "tests/checkers/execution/test_delivery_reconciliation_public.py",
         "tests/test_post_submit_materialization.py",
         "tests/test_post_submit_selection.py",
         "tests/test_checker_output_custody.py",
@@ -267,8 +271,8 @@ def test_semantic_family_membership_has_an_independent_fingerprint() -> None:
             "b655b72178300395f0a46987c4eadd8878ed5b8872d2e8cea287c42692894d35",
         ),
         "project": (
-            201,
-            "32618e899ba9fcae6133840dce96b8909a96a7af22a03c3cb70b804b1ea8ba04",
+            207,
+            "7f53dc49b4e8dc7d9b9d4bf060bf7ae1db8a9b13ad073538b589943c87738784",
         ),
         "task": (
             95,
@@ -340,9 +344,9 @@ def test_project_lane_ownership_has_an_independent_fingerprint() -> None:
         )
         + "\n"
     )
-    assert len(catalogue.PROJECT_PARTITIONED_MODULES) == 201
+    assert len(catalogue.PROJECT_PARTITIONED_MODULES) == 207
     assert hashlib.sha256(canonical.encode()).hexdigest() == (
-        "1ba5fb3f2ceeca7bee79a172245263b0a284ed0f9cea1d8639078ca36083cba2"
+        "e40156743513e7df3d6359246403a4c333929902c8ab62a412678090d32fed22"
     )
 
 
@@ -773,7 +777,7 @@ def test_workflow_requires_the_locked_external_checker_workspace() -> None:
     assert source.count("external-checker-runtime:") == 1
     assert "rustup toolchain install 1.84.0 --profile minimal --component rustfmt" in source
     assert "cargo fmt --all --check" in source
-    assert "cargo test --workspace --locked" in source
+    assert "cargo test --workspace --locked -- --test-threads=1" in source
     assert "EXTERNAL_CHECKER_RESULT: ${{ needs.external-checker-runtime.result }}" in source
     assert 'require_expected "${EXTERNAL_EXPECTED}" "${EXTERNAL_CHECKER_RESULT}"' in source
 

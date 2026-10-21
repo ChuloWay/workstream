@@ -339,6 +339,21 @@ class AdminAuthorizationRepository:
             return None
         return link, profile
 
+    async def read_request_actor(
+        self, identity_link_id: UUID, actor_profile_id: UUID,
+    ) -> tuple[ActorIdentityLink, ActorProfile] | None:
+        """Read the exact request actor without retaining a product lock."""
+        profile = await self._session.scalar(
+            select(ActorProfile).where(ActorProfile.id == str(actor_profile_id))
+        )
+        link = await self._session.scalar(
+            select(ActorIdentityLink).where(
+                ActorIdentityLink.id == str(identity_link_id),
+                ActorIdentityLink.actor_profile_id == str(actor_profile_id),
+            )
+        )
+        return (link, profile) if link is not None and profile is not None else None
+
     async def lock_project_role_principals(
         self,
         *,
