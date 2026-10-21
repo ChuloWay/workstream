@@ -2429,6 +2429,25 @@ exit 2
     }
 
     #[test]
+    fn service_configuration_rejects_removed_project_profiles() {
+        let mut configuration = serde_json::json!({
+            "socket_path": "/tmp/checker.sock",
+            "material_root": "/tmp/material",
+            "docker_binary": "/usr/bin/docker",
+            "runtime": "runsc",
+            "isolation_mode": "gvisor",
+            "operating_system": "linux",
+            "architecture": "amd64",
+            "sandbox_uid": 65532,
+            "sandbox_gid": 65532,
+            "cache": [],
+        });
+        assert!(serde_json::from_value::<ServiceConfig>(configuration.clone()).is_ok());
+        configuration["terminal_benchmark"] = Value::Null;
+        assert!(serde_json::from_value::<ServiceConfig>(configuration).is_err());
+    }
+
+    #[test]
     fn checker_output_cannot_request_another_execution() {
         let (root, config) = test_config();
         let envelope = pre_submit_envelope_with_grant(&config);

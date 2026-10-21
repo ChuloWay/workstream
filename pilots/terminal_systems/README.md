@@ -15,8 +15,9 @@ checker implementation, an approved policy or a record of completed work.
 
 ## Onboard through the public product flow
 
-1. The PM creates the project and guide with its example, uploads the document,
-   and starts setup through the supported API or CLI.
+1. The PM creates the project and guide with its example and uploads the declared
+   document through the supported API or CLI. Committing the last declared
+   document upload automatically queues setup; there is no separate start command.
 2. Setup reads those actual inputs and the available registered capabilities.
    Inspect its source-backed requirement inventory, proposed PRE/POST bindings
    and missing-capability suggestions. Do not substitute a prepared result.

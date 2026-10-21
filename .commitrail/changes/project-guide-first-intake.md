@@ -33,7 +33,7 @@ That bounded corpus proves its own implementation, not arbitrary project setup.
   manifest custody, quotas, reservations, cleanup and callback ordering.
 - The two affected backend external-runtime/materialization test modules:
   remove obsolete named-profile assertions while retaining general protections.
-- Affected checker architecture, roadmap, direct fixture-navigation documents
+- Affected checker architecture, glossary, roadmap, direct fixture-navigation documents
   and required test-inventory metadata: reconcile with the retired behavior.
 - This change record.
 
@@ -97,7 +97,13 @@ Read-only architecture/test-delta scope review found the retirement coherent.
 It required preserving generic aggregate quota and mixed POST lineage tests,
 reconciling the PRE scoreboard row, and adding a service-level invalid-result
 control that proves a project-private output cannot launch a continuation. Those
-items are included. Clean-target implementation review remains required.
+items are included. Implementation review also required a discriminating
+configuration-parser regression: the retired profile key, including a null value,
+must reject while the generic configuration shape remains accepted. The generic
+private-output test protects result handling but is not presented as a test that
+failed the old POST-only continuation. Documentation review corrected the glossary's
+superseded catalogue definition and the onboarding trigger: the final declared
+document upload queues setup automatically. Clean-target replay remains required.
 
 ## Reconciliation
 
