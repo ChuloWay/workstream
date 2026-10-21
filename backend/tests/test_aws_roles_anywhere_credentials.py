@@ -332,6 +332,54 @@ def test_runtime_session_contains_only_roles_anywhere_provider(tmp_path: Path) -
         )
 
 
+@pytest.mark.parametrize(
+    "role_arn",
+    [RUNTIME_ROLE_ARN, READINESS_ROLE_ARN, NEGATIVE_ROLE_ARN],
+)
+def test_proof_session_requires_and_constructs_each_exact_roles_anywhere_role(
+    tmp_path: Path,
+    role_arn: str,
+) -> None:
+    identity = write_roles_anywhere_identity(tmp_path / role_arn.rsplit("/", 1)[-1], role_arn=role_arn)
+    settings = make_roles_anywhere_settings(
+        tmp_path,
+        selected_role_arn=role_arn,
+        identity_paths=identity,
+    )
+
+    session = s3_compatible.create_isolated_aws_workload_identity_session(
+        settings,
+        environ={"HOME": str(tmp_path)},
+        required_roles_anywhere_role_arn=role_arn,
+    )
+
+    providers = session.get_component("credential_provider").providers
+    assert len(providers) == 1
+    assert type(providers[0]) is aws_roles_anywhere.RolesAnywhereCredentialProvider
+    assert providers[0]._role_arn == role_arn  # noqa: SLF001
+
+
+@pytest.mark.parametrize(
+    "required_role_arn",
+    [
+        READINESS_ROLE_ARN,
+        "arn:aws:iam::123456789012:role/workstream-foreign",
+    ],
+)
+def test_proof_session_rejects_an_invalid_required_roles_anywhere_role(
+    tmp_path: Path,
+    required_role_arn: str,
+) -> None:
+    settings = make_roles_anywhere_settings(tmp_path)
+
+    with pytest.raises(ArtifactConfigurationError, match="required proof role"):
+        s3_compatible.create_isolated_aws_workload_identity_session(
+            settings,
+            environ={"HOME": str(tmp_path)},
+            required_roles_anywhere_role_arn=required_role_arn,
+        )
+
+
 async def test_real_subprocess_supplies_sdk_refreshable_credentials(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

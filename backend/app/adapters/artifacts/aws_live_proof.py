@@ -78,7 +78,7 @@ class AwsArtifactLiveProof:
         if settings.artifact_s3_provider_profile != "aws_s3":
             raise ArtifactConfigurationError("AWS artifact proof requires native AWS settings")
         self._settings = settings
-        self._session = session or create_isolated_aws_workload_identity_session(settings)
+        self._session = session
         self._config = AioConfig(
             connect_timeout=settings.artifact_s3_connect_timeout_seconds,
             read_timeout=settings.artifact_s3_read_timeout_seconds,
@@ -101,6 +101,21 @@ class AwsArtifactLiveProof:
             "mode": probe_type,
         }
         try:
+            if self._settings.artifact_s3_aws_workload_identity_method == "roles-anywhere":
+                if self._settings.artifact_s3_roles_anywhere_role_arn != expected:
+                    raise ArtifactConfigurationError(
+                        "Roles Anywhere identity does not match the selected proof mode"
+                    )
+            if self._session is None:
+                self._session = create_isolated_aws_workload_identity_session(
+                    self._settings,
+                    required_roles_anywhere_role_arn=(
+                        expected
+                        if self._settings.artifact_s3_aws_workload_identity_method
+                        == "roles-anywhere"
+                        else None
+                    ),
+                )
             observed = await self._observe_principal(expected)
             if observed != expected:
                 return self._failed(probe_type, expected, observed, "identity_mismatch", evidence)

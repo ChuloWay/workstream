@@ -1053,8 +1053,16 @@ async def test_roles_anywhere_each_proof_requires_bounded_role_isolation_before_
 ) -> None:
     from app.adapters.artifacts import aws_roles_anywhere
 
+    selected_roles = {
+        "readiness": _READINESS_ROLE,
+        "runtime_immutability": _RUNTIME_ROLE,
+        "negative_access": _NEGATIVE_ROLE,
+    }
     settings = _settings(tmp_path).model_copy(
-        update={"artifact_s3_aws_workload_identity_method": "roles-anywhere"}
+        update={
+            "artifact_s3_aws_workload_identity_method": "roles-anywhere",
+            "artifact_s3_roles_anywhere_role_arn": selected_roles[probe_type],
+        }
     )
     proof = AwsArtifactLiveProof(settings, _Session())
     events: list[str] = []
@@ -1102,7 +1110,10 @@ async def test_roles_anywhere_isolation_failure_cannot_produce_a_passing_proof(
     from app.adapters.artifacts import aws_roles_anywhere
 
     settings = _settings(tmp_path).model_copy(
-        update={"artifact_s3_aws_workload_identity_method": "roles-anywhere"}
+        update={
+            "artifact_s3_aws_workload_identity_method": "roles-anywhere",
+            "artifact_s3_roles_anywhere_role_arn": _RUNTIME_ROLE,
+        }
     )
     proof = AwsArtifactLiveProof(settings, _Session())
 
