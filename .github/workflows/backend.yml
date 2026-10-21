@@ -813,7 +813,8 @@ jobs:
 
   test:
     # Skipping a job still named `test` would falsely satisfy branch protection.
-    # Metadata runs must use a separate name and leave real proof untouched.
+    # Metadata runs use a distinct dynamic identity, leaving real proof untouched.
+    # GitHub may display the unevaluated name expression for this skipped path.
     name: ${{ github.event_name == 'pull_request' && github.event.action == 'edited' && !github.event.changes.base && github.event.pull_request.head.repo.full_name == github.repository && 'metadata-only' || github.event_name == 'pull_request' && github.event.pull_request.draft && 'draft-test' || 'test' }}
     if: ${{ always() && !(github.event_name == 'pull_request' && github.event.action == 'edited' && !github.event.changes.base && github.event.pull_request.head.repo.full_name == github.repository) }}
     needs: [scope, auth-boundary-preflight, external-checker-runtime, lanes, minio-image, cli-public-contract, mcp-contract, full-suite]

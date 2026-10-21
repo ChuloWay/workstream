@@ -29,8 +29,9 @@ workspace command adds `-- --test-threads=1`, serializing independent test cases
 Tests requiring concurrency still create and join their own threads. All Rust
 source, assertions, workspace members and test selection remain unchanged.
 
-For same-repository title/description edits only, couple a distinct
-`metadata-only` final-check name with a skipped job. Remove the mirror/polling
+For same-repository title/description edits only, couple a distinct non-required
+dynamic final-check identity with a skipped job. Its expression selects
+`metadata-only` if evaluated. Remove the mirror/polling
 step. Preserve `test`/`draft-test`, dependencies and failure validation for actual
 proof events, including base retargets and fork edits. Preserve workflow triggers
 and the separate metadata concurrency group.
@@ -81,8 +82,12 @@ timing failure does not authorize relaxing its one-second budget.
 
 - Workflow contracts cover the metadata/proof event matrix and retain the
   failed/cancelled/skipped prerequisite checks. Mutations replacing the distinct
-  metadata name with `test` and removing the metadata skip guard each fail the
-  intended regression assertion.
+  metadata name branch with `test` and removing the metadata skip guard each
+  fail the intended regression assertion.
+- Hosted metadata run `39617491644` completed skipped and emitted neither `test`
+  nor `draft-test`. GitHub displayed the unevaluated name expression for its
+  skipped final job. This is observed rendering, not a promised display format;
+  the safety requirement is a distinct non-required identity in either case.
 
 ## Reconciliation
 

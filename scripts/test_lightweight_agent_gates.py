@@ -777,7 +777,8 @@ class LightweightAgentGateTests(unittest.TestCase):
 
         def evaluate(expression: str, event: dict[str, object]) -> object:
             # These two pinned expressions use only boolean operators, equality,
-            # strings and event values. Evaluate their actual extracted text.
+            # strings and event values. Model their extracted text if evaluated;
+            # GitHub currently displays the literal name expression when skipped.
             rendered = re.sub(r"github[.\w]+", lambda match: repr(event[match[0]]), expression)
             rendered = rendered.replace("always()", "True").replace("&&", " and ")
             rendered = rendered.replace("||", " or ").replace("!", "not ")

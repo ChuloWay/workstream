@@ -148,9 +148,11 @@ the required check even on an unchanged commit; an older green draft result
 cannot satisfy it.
 Base-branch edits also start a fresh run bound to the new base. On a PR from a
 branch in this repository, a title or description edit starts a separate run
-that neither cancels nor repeats proof. Its final job is named `metadata-only`
-and skipped; this informational check cannot satisfy required `test`. The
-original proof-producing run alone owns `test` (or `draft-test` for a draft).
+that neither cancels nor repeats proof. Its final job is skipped under a distinct
+non-required dynamic identity. GitHub currently displays the unevaluated name
+expression for this path; if evaluated, it selects `metadata-only`. Neither
+`test` nor `draft-test` is emitted by the metadata run. The original
+proof-producing run alone owns `test` (or `draft-test` for a draft).
 Missing, pending or failed proof stays missing, pending or failed: a metadata
 edit never mirrors or replaces its outcome. Fork PR edits continue to run fresh
 proof, as do source changes and readiness changes.
