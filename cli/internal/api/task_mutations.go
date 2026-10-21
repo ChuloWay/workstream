@@ -59,6 +59,11 @@ type ClaimedTask struct {
 var policyHash = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
 
 func (c *Client) taskWrite(ctx context.Context, selector, action, key string, reason *string, responseLimit int) (json.RawMessage, error) {
+	raw, err := c.taskWriteRoute(ctx, "/api/v1/tasks/", selector, action, key, reason, responseLimit)
+	return raw, taskWriteFailure(err)
+}
+
+func (c *Client) taskWriteRoute(ctx context.Context, route, selector, action, key string, reason *string, responseLimit int) (json.RawMessage, error) {
 	if _, ok := uuidIdentity(selector); !ok || len(selector) > 100 {
 		return nil, errors.New("TASK_ID must be a UUID")
 	}
@@ -76,8 +81,7 @@ func (c *Client) taskWrite(ctx context.Context, selector, action, key string, re
 	if err != nil || len(body) > maxUpdateBytes {
 		return nil, errors.New("task request exceeds the request size limit")
 	}
-	raw, err := c.requestWithResponseLimit(ctx, http.MethodPost, "/api/v1/tasks/"+url.PathEscape(selector)+"/"+action, "", body, key, http.StatusOK, responseLimit)
-	return raw, taskWriteFailure(err)
+	return c.requestWithResponseLimit(ctx, http.MethodPost, route+url.PathEscape(selector)+"/"+action, "", body, key, http.StatusOK, responseLimit)
 }
 
 func taskWriteFailure(err error) error {
