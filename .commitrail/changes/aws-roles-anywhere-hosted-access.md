@@ -120,7 +120,7 @@ short-lived database activation; no proof bypass or new storage owner is needed.
   and the setup agent opening only its assigned guide documents through the
   selected provider; retained bytes and hashes match. The real AWS execution
   of this journey is separately pending provisioned certificates/roles.
-- [x] Existing AWS/MinIO, settings, release and activation regressions pass.
+- [ ] Existing AWS/MinIO, settings, release and activation regressions pass.
   Real helper/local process tests are distinguished from unexecuted live AWS
   trust, permission and ZIP custody proof.
 
