@@ -3,13 +3,15 @@
 An independent Go client for Workstream's public REST API, for humans and
 agents using the terminal. It provides human self-profile reads and editing,
 plus draft project/guide declaration and original upload, exact-project inspection, authority reads, manager task browsing and
-administrative active-guide/intake-policy inspection and explicit human guide
-sufficiency diagnostics,
+administrative active-guide/intake-policy inspection,
 contributor work discovery, claim/start, locked guide documents and governing
 context/intake requirements, explicit batch import/screen/release, Finance
 policy management, explicit ZIP preparation/submission, checker findings,
 system-Operator checker registration and terminal recovery, and
 contribution-evidence exports and exact Audit Authority task reads:
+
+Separate commands record human guide sufficiency diagnostics and warning
+acknowledgements; neither approves policy nor activates a guide.
 
 | Command | Public API |
 |---|---|

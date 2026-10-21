@@ -172,6 +172,12 @@ async def test_manual_sufficiency_cli_uses_current_public_authority_and_exact_re
                     assert acknowledged["acknowledgement_note"] == note["acknowledgement_note"]
                     assert output(acknowledge(token(manager))) == acknowledged
                     assert output(acknowledge(token(manager), str(uuid4())), 1)["error"]["status"] == 409
+                    note_path.write_text(
+                        json.dumps({"acknowledgement_note": "Changed acknowledgement"}),
+                        encoding="utf-8",
+                    )
+                    assert output(acknowledge(token(manager)), 1)["error"]["code"] == "idempotency_mismatch"
+                    note_path.write_text(json.dumps(note), encoding="utf-8")
                     async with factory() as session:
                         stored = (
                             await session.execute(
