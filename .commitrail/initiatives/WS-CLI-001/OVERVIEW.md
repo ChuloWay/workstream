@@ -72,8 +72,8 @@ other boundaries remain planned. [WS-CLI-001-30](WS-CLI-001-30.md) delivers
 | [#610](https://github.com/Flow-Research/workstream/issues/610) | Task audit context/evidence | 2 |
 | [#611](https://github.com/Flow-Research/workstream/issues/611) | Artifact operator inspection/recovery | 9 |
 
-Start independent guide configuration, manager evidence, admin inspection and
-checker operations in parallel. Inspection informs subsequent manual mutations
+Continue only the remaining boundaries in the inventory above; delivered rows
+are not new assignments. Inspection informs subsequent manual mutations
 and repair; each PR must still build independently or declare its exact stacked
 dependency. Root registrations are additive; shared transport changes have one
 owner and are reused rather than copied. Each PR reconciles its own README and
