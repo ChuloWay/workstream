@@ -42,8 +42,8 @@ from app.modules.projects.guide_compilation.service import GuideCompilationServi
 from .helpers import context, identity, persistence_facts, seed_database
 
 
-def _request(values: dict[str, UUID]) -> ProjectGuideCompilationRequestFacts:
-    attempt_identity = identity(context(values))
+def _request(values: dict[str, UUID], configuration=None) -> ProjectGuideCompilationRequestFacts:
+    attempt_identity = identity(context(values, configuration=configuration))
     persist = persistence_facts(values, new_record_id(), attempt_identity)
     names = ProjectGuideCompilationRequestFacts.__dataclass_fields__
     return ProjectGuideCompilationRequestFacts(**{name: asdict(persist)[name] for name in names})

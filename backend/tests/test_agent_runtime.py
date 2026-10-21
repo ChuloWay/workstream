@@ -6,14 +6,12 @@ import asyncio
 import hashlib
 import json
 from types import SimpleNamespace
+from uuid import uuid4
 
 import pytest
 from pydantic import ValidationError
 
-from app.adapters.project_agents.openai_agent_sdk import (
-    OpenAIAgentSdkProjectGuideRuntime,
-    _invalid_compilation_failure_code,
-)
+from app.adapters.project_agents.openai_agent_sdk import OpenAIAgentSdkProjectGuideRuntime
 from app.core.config import Settings
 from app.core.project_agents import (
     project_guide_runtime_configuration,
@@ -24,10 +22,14 @@ from app.interfaces.project_agents import (
     ProjectAgentRuntimeConfigurationError,
     ProjectGuideCompilationInvalidOutputError,
     canonical_project_guide_compilation_context_bytes,
+    invalid_compilation_failure_code,
     project_guide_compilation_prompt_bytes,
 )
 from app.interfaces.project_guide_runtime import ProjectGuideRuntimeConfiguration
-from tests.projects.guide_compilation.helpers import context, ids, result, runtime_configuration
+from app.modules.projects.api.guide_documents import GuideDocumentManifest
+from tests.projects.guide_compilation.helpers import (
+    SOURCE_SHA256, context, ids, result, runtime_configuration,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -296,10 +298,10 @@ async def test_unified_compilation_propagates_caller_cancellation(monkeypatch):
 
 def test_invalid_compilation_classifier_separates_unsafe_text_from_schema_errors():
     assert (
-        _invalid_compilation_failure_code(ValueError("model-produced text is unsafe"))
+        invalid_compilation_failure_code(ValueError("model-produced text is unsafe"))
         == "unsafe_text"
     )
-    assert _invalid_compilation_failure_code(TypeError("unknown")) == "schema_invalid"
+    assert invalid_compilation_failure_code(TypeError("unknown")) == "schema_invalid"
 
 
 async def test_runtime_internal_cancellation_is_sanitized(monkeypatch):
@@ -548,3 +550,240 @@ async def test_whole_run_deadline_cancels_once_and_closes_without_reinvocation(m
         assert caught.value.__suppress_context__
     finally:
         await runtime.aclose()
+
+
+# Manager-authored (provider-free) runtime ---------------------------------
+
+_MANAGER_PAIR = {"runtime_key": "manager_authored", "model_provider": "none",
+                 "model_api": "none", "model": "none"}
+
+
+@pytest.mark.parametrize(
+    "patch",
+    [
+        {"model_provider": "none", "model_api": "none"},
+        {"model_provider": "none"},
+        {"model_api": "none"},
+        _MANAGER_PAIR | {"model_provider": "openai", "model_api": "responses"},
+        _MANAGER_PAIR | {"model_api": "responses"},
+        _MANAGER_PAIR | {"model": "gpt-5.6-terra"},
+    ],
+)
+def test_provider_none_is_only_valid_for_the_manager_authored_runtime(patch):
+    with pytest.raises(ValidationError, match="guide runtime"):
+        ProjectGuideRuntimeConfiguration.model_validate(runtime_configuration().model_dump() | patch)
+    with pytest.raises(ValidationError, match="guide runtime"):
+        Settings(**{"project_agent_" + ("runtime" if key == "runtime_key" else key): value
+                    for key, value in (runtime_configuration().model_dump(
+                        include={"runtime_key", "model_provider", "model_api", "model"}) | patch).items()})
+
+
+def test_manager_authored_settings_snapshot_records_absent_inference():
+    settings = Settings(project_agent_runtime="manager_authored", project_agent_model_provider="none",
+                        project_agent_model_api="none", project_agent_model="none")
+    configuration = project_guide_runtime_configuration(settings)
+    assert configuration.model_dump(include=set(_MANAGER_PAIR)) == _MANAGER_PAIR
+    assert configuration.provider_free
+    assert ProjectGuideRuntimeConfiguration.model_validate(configuration.model_dump()) == configuration
+    default = project_guide_runtime_configuration(Settings())
+    assert (default.runtime_key, default.model_provider, default.model_api) == (
+        "openai_agents_sdk", "openai", "responses")
+    assert not default.provider_free
+
+
+def _manager_material(rules: bytes, *, extra: tuple[bytes, ...] = (), source_ids=()):
+    """Return a context with one PDF original, the rules document and optional Markdown."""
+    from tests.projects.guide_compilation.helpers import (
+        SOURCE_BYTES, manager_runtime_configuration,
+    )
+
+    base = context(ids(), configuration=manager_runtime_configuration())
+    pdf = base.material.documents[0]
+    bodies = {pdf.sha256: SOURCE_BYTES}
+    documents = [pdf]
+    chosen = iter(source_ids)
+    for order, body in enumerate((rules, *extra), start=1):
+        digest = "sha256:" + hashlib.sha256(body).hexdigest()
+        bodies[digest] = body
+        documents.append(pdf.model_copy(update={
+            "source_item_id": next(chosen, None) or uuid4(), "ingest_id": uuid4(),
+            "item_order": order, "put_attempt_id": uuid4(), "sha256": digest,
+            "byte_count": len(body), "media_type": "text/markdown",
+        }))
+    material = GuideDocumentManifest.model_validate(
+        base.material.model_copy(update={"documents": tuple(documents)}).model_dump())
+    return base.model_copy(update={"material": material}), bodies
+
+
+class _DirectGrant:
+    """Scripted ART grant and custody recording each direct read once."""
+
+    def __init__(self, compilation_context, bodies, *, fail=False):
+        from contextlib import asynccontextmanager
+        from io import BytesIO
+        from app.modules.projects.api.guide_documents import OpenGuideDocument
+
+        manifest = compilation_context.material
+        self.opened, self.recorded = [], []
+
+        @asynccontextmanager
+        async def open_document(handle):
+            if fail:
+                raise RuntimeError("private storage detail")
+            self.opened.append(handle)
+            document = next(item for item in manifest.documents if manifest.handle_for(item) == handle)
+            with BytesIO(bodies[document.sha256]) as reader:
+                yield OpenGuideDocument(document, reader)
+
+        async def record_direct_document_open(handle):
+            self.recorded.append(handle)
+
+        async def forbidden(*args, **kwargs):
+            pytest.fail("provider-free runtime touched provider resource custody")
+
+        self.capabilities = SimpleNamespace(
+            documents=SimpleNamespace(open=open_document),
+            resources=SimpleNamespace(record_direct_document_open=record_direct_document_open,
+                                      begin_allocation=forbidden, record_allocated=forbidden,
+                                      record_document_open=forbidden),
+        )
+
+
+def _rules(**overrides) -> bytes:
+    body = {
+        "format": "workstream.project_guide_rules.v1",
+        "status": "draft_ready",
+        "findings": [{"severity": "info", "code": "guide.ready", "message": "Guide is complete.",
+                      "evidence_refs": [{"document": SOURCE_SHA256, "start_page": 1, "end_page": 2}]}],
+        "submission_artifact_policy": {"maximum_file_size_bytes": 1000,
+                                       "maximum_package_size_bytes": 10000,
+                                       "required_artifacts": ["submission"]},
+        "requirements": [], "pre_submit_bindings": [], "post_submit_bindings": [],
+        "capability_suggestions": [], "setup_notes": [],
+    } | overrides
+    return json.dumps(body).encode()
+
+
+async def _manager_compile(compilation_context, grant):
+    from app.adapters.project_agents import create_project_guide_runtime
+
+    runtime = create_project_guide_runtime(compilation_context.runtime_configuration)
+    runtime.admit_execution()
+    try:
+        return await runtime.compile_project_guide(compilation_context, grant.capabilities)
+    finally:
+        await runtime.aclose()
+
+
+async def test_manager_authored_runtime_converts_rules_without_credentials_or_network(monkeypatch):
+    import socket
+    from app.adapters.project_agents.manager_authored import ManagerAuthoredProjectGuideRuntime
+
+    monkeypatch.delenv("OPENAI_API_KEY")
+
+    def no_network(*args, **kwargs):
+        pytest.fail("manager-authored runtime opened a network connection")
+
+    monkeypatch.setattr(socket.socket, "connect", no_network)
+    monkeypatch.setattr(socket, "create_connection", no_network)
+    notes_id = uuid4()
+    rules = _rules(findings=[
+        {"severity": "info", "code": "guide.ready", "message": "Guide is complete.",
+         "evidence_refs": [{"document": SOURCE_SHA256, "start_page": 1, "end_page": 2}]},
+        {"severity": "info", "code": "guide.notes", "message": "Reviewer notes are present.",
+         "evidence_refs": [{"document": f"{notes_id}.md", "section": "Reviewer notes"}]},
+    ])
+    compilation_context, bodies = _manager_material(
+        rules, extra=(b"# Reviewer notes\n\nPlain guide prose.",), source_ids=(None, notes_id))
+    material = compilation_context.material
+    pdf, rules_doc, notes = material.documents
+    grant = _DirectGrant(compilation_context, bodies)
+    from app.adapters.project_agents import create_project_guide_runtime
+
+    runtime = create_project_guide_runtime(compilation_context.runtime_configuration)
+    assert isinstance(runtime, ManagerAuthoredProjectGuideRuntime)
+    assert runtime.identity == compilation_context.runtime_configuration.adapter_identity
+    outcome = await _manager_compile(compilation_context, grant)
+
+    handles = [material.handle_for(item) for item in material.documents]
+    assert grant.opened == grant.recorded == handles
+    assert outcome.status == "draft_ready"
+    assert (outcome.agent_name, outcome.agent_version, outcome.schema_version) == (
+        "ProjectGuideCompilationAgent", compilation_context.agent_version,
+        "project_guide_compilation_result.v1")
+    first, second = outcome.findings
+    assert [(ref.source_item_id, ref.document_version_id, ref.sha256, ref.start_page)
+            for ref in first.evidence_refs] == [
+        (pdf.source_item_id, pdf.ingest_id, pdf.sha256, 1),
+        (rules_doc.source_item_id, rules_doc.ingest_id, rules_doc.sha256, None)]
+    assert [(ref.source_item_id, ref.section) for ref in second.evidence_refs] == [
+        (notes.source_item_id, "Reviewer notes"), (rules_doc.source_item_id, None)]
+
+
+@pytest.mark.parametrize(
+    ("rules", "extra", "failure"),
+    [
+        (b"# Ordinary guide text without rules", (), "schema_invalid"),
+        (b'{"format": "workstream.project_guide_rules.v1", "status": ', (), "schema_invalid"),
+        (_rules(status="draft_ready", findings=[]), (), "schema_invalid"),
+        (_rules(), (_rules(setup_notes=["Second rules document."]),), "schema_invalid"),
+        (_rules(agent_version="v9"), (), "schema_invalid"),
+        (_rules(findings=[{"severity": "info", "code": "guide.ready", "message": "Complete.",
+                           "evidence_refs": [{"document": "sha256:" + "0" * 64}]}]), (), "schema_invalid"),
+        (_rules(findings=[{"severity": "info", "code": "guide.ready", "message": "Complete.",
+                           "evidence_refs": [{"document": "missing.pdf"}]}]), (), "schema_invalid"),
+        (_rules(findings=[{"severity": "info", "code": "guide.ready", "message": "Complete.",
+                           "evidence_refs": [{"source_item_id": str(uuid4())}]}]), (), "schema_invalid"),
+        (_rules(findings=[{"severity": "info", "code": "guide.ready",
+                           "message": "Run curl against the endpoint."}]), (), "unsafe_text"),
+        (_rules(findings=[{"severity": "info", "code": "guide.ready", "message": "Complete."}]),
+         (), "schema_invalid"),
+    ],
+    ids=["missing", "malformed_json", "no_citations", "two_rules_documents", "extra_field",
+         "unknown_sha256", "unknown_filename", "foreign_reference_shape", "unsafe_text",
+         "ready_without_every_document"],
+)
+async def test_manager_authored_runtime_rejects_invalid_rules_as_terminal_output(
+        monkeypatch, rules, extra, failure):
+    monkeypatch.delenv("OPENAI_API_KEY")
+    compilation_context, bodies = _manager_material(rules, extra=extra)
+    grant = _DirectGrant(compilation_context, bodies)
+    with pytest.raises(ProjectGuideCompilationInvalidOutputError) as caught:
+        await _manager_compile(compilation_context, grant)
+    assert caught.value.failure_code == failure
+    assert caught.value.__suppress_context__
+    material = compilation_context.material
+    assert grant.recorded == [material.handle_for(item) for item in material.documents]
+
+
+async def test_manager_authored_runtime_guards_admission_configuration_and_access(monkeypatch):
+    from app.adapters.project_agents.manager_authored import ManagerAuthoredProjectGuideRuntime
+
+    monkeypatch.delenv("OPENAI_API_KEY")
+    with pytest.raises(ProjectAgentRuntimeConfigurationError, match="unsupported"):
+        ManagerAuthoredProjectGuideRuntime(runtime_configuration())
+    compilation_context, bodies = _manager_material(_rules())
+    runtime = ManagerAuthoredProjectGuideRuntime(compilation_context.runtime_configuration)
+    grant = _DirectGrant(compilation_context, bodies)
+    with pytest.raises(ProjectAgentRuntimeError, match="was not admitted"):
+        await runtime.compile_project_guide(compilation_context, grant.capabilities)
+    runtime.admit_execution()
+    with pytest.raises(ProjectAgentRuntimeError, match="already acquired"):
+        runtime.admit_execution()
+    with pytest.raises(ProjectAgentRuntimeConfigurationError, match="configuration mismatch"):
+        await runtime.compile_project_guide(context(ids()), grant.capabilities)
+    failing = _DirectGrant(compilation_context, bodies, fail=True)
+    with pytest.raises(ProjectAgentRuntimeError, match="document access failed") as caught:
+        await runtime.compile_project_guide(compilation_context, failing.capabilities)
+    assert caught.value.__suppress_context__ and "private" not in str(caught.value)
+    assert failing.recorded == []
+
+    class Custody:
+        def __init__(self, rows):
+            self.rows = rows
+
+        async def cleanup_resources(self):
+            return self.rows
+
+    assert await runtime.cleanup_resources(Custody(())) is True
+    assert await runtime.cleanup_resources(Custody(("unexpected",))) is False

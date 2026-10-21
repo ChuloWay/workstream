@@ -1,0 +1,206 @@
+# Manager-authored guide runtime — provider-free guide compilation
+
+- Initiative: None
+- Durable disposition: Complete
+- Intended merge outcome: A second registered guide-compilation runtime, `manager_authored`, converts one manager-uploaded rules document into the existing untrusted compilation result with no inference, no network call and no provider resources, recorded as provider/API/model `none`.
+
+## Intent
+
+Project setup could compile a guide only through the OpenAI Agents SDK runtime,
+so a project could not be set up without an OpenAI key, and teams using other
+providers, local models or deterministic generators could not supply rules
+(#641). Running the PILOT-04 public journey probe locally (#635) showed that the
+rest of the guide → task → submission → acceptance journey needs no hosted
+inference. This change makes pre-written rules a supported, explicitly
+recorded option while every downstream check stays unchanged.
+
+## Current behavior
+
+- `backend/app/adapters/project_agents/__init__.py` registers only
+  `openai_agents_sdk` in the typed `ExternalServiceAdapterFactory`.
+- `ProjectGuideRuntimeConfiguration` and `Settings` pin `model_provider` to
+  `Literal["openai"]` and `model_api` to `Literal["responses"]`.
+- `guard_project_guide_runtime_configuration()` (baseline
+  `v01_schema.sql`) rejects any stored configuration whose provider is not
+  `openai` or whose API is not `responses`.
+- Document-read evidence (`project_guide_document_accesses`) requires a
+  non-null `attachment_allocation_id`; `guard_guide_document_access()` requires
+  an allocated container → file → attachment chain, and
+  `require_compilation_document_access()` walks it. A runtime that stages no
+  provider files therefore cannot record a read, and without reads a ready
+  result is refused (`guard_compilation_document_evidence()` and the Python
+  check both require every assigned document to be opened and cited).
+- Invalid output is terminal only when the runtime raises
+  `ProjectGuideCompilationInvalidOutputError`; any other exception from
+  `compile_project_guide` leaves the attempt provider-uncertain
+  (`orchestrator.py`).
+
+## Bounded change
+
+### Allowed
+
+- `backend/app/adapters/project_agents/manager_authored.py` (new) and its
+  registration in `backend/app/adapters/project_agents/__init__.py`.
+- `backend/app/interfaces/project_guide_runtime.py` and
+  `backend/app/core/config.py`: admit `none` and enforce the runtime/provider
+  pairing with one shared validator.
+- `backend/app/interfaces/project_agents.py`: move the existing invalid-output
+  classifier from the OpenAI adapter to the shared port so both runtimes use one
+  rule (renamed `invalid_compilation_failure_code`; no behavior change).
+- `GuideRuntimeResourceCustody.record_direct_document_open`, its SQLAlchemy
+  implementation, nullable `ProjectGuideDocumentAccess.attachment_allocation_id`
+  and the provider-free branch of `require_compilation_document_access`.
+- Migration `0056_manager_authored_runtime`: replace three guard predicates and
+  drop `NOT NULL` from `project_guide_document_accesses.attachment_allocation_id`;
+  register the head in `alembic/env.py` and `tests/test_alembic.py`; refresh the
+  test schema fingerprint in `tests/conftest.py`.
+- Behavior-ownership partition registration of the new adapter target.
+- Focused tests, README, operations manual, `.env.example` and roadmap updates.
+
+### Not allowed
+
+- No change to compilation validation, proposal review, PRE/POST approval,
+  correction, finalization or activation.
+- No new admitted guide media type, upload path or manifest field.
+- No relaxation of OpenAI validation, credentials, retry/circuit behavior or
+  provider-resource custody for the hosted runtime.
+- No fabricated provider identifiers and no provider allocation for a
+  provider-free attempt.
+- No other providers (Anthropic, OpenRouter, local models) inside Workstream;
+  they can produce rules outside it.
+
+## Design and decisions
+
+**Runtime.** `ManagerAuthoredProjectGuideRuntime` is constructed only for
+`runtime_key == "manager_authored"` with provider `none`. `admit_execution`
+records a single admission and consults no model circuit; `aclose` releases
+nothing; `cleanup_resources` reports clean only when custody holds no provider
+resource. `compile_project_guide` opens every manifest document once, in source
+order, through `capabilities.documents.open` (the ART grant authorizes and
+checksum-verifies bytes), checks the yielded version, and records the read. The
+whole read is bounded by the configured run timeout. Read or custody failures
+raise a sanitized `ProjectAgentRuntimeError` (the existing provider-uncertain
+path); rules problems raise `ProjectGuideCompilationInvalidOutputError` with
+`schema_invalid`, or `unsafe_text` when the shared safe-text validator proves
+it. Exceptions are raised outside handlers so no frame retains document bytes.
+
+**Identifying the rules document.** The rule is content-based: exactly one
+`text/markdown` original whose complete UTF-8 body (at most 4 MiB, the result
+storage limit) is a JSON object with `"format": "workstream.project_guide_rules.v1"`.
+An exact filename is impossible because the manifest deliberately carries only
+generated names (`<source_item_id>.<ext>`), never source labels; a JSON media
+type would widen ingress (format detector, review-packet constraint, upload
+schema) for this one feature. Managers are told to label the upload
+`workstream-rules.json`. A Markdown guide that is not such JSON is simply read
+and recorded.
+
+**Rules shape and evidence.** The object holds `format` plus exactly the eight
+author-owned result fields; the runtime adds `agent_name`, the context's
+`agent_version` and `schema_version`, then applies the unchanged
+`require_complete_…`, `validate_project_guide_compilation_result` and the same
+"ready cites every assigned document" rule as the hosted runtime. Author
+evidence references name a document by `sha256:` digest or manifest filename and
+must resolve to exactly one document. Because the rules document is itself an
+assigned original that a ready result must cite, and it cannot contain its own
+digest, the runtime appends a reference to the rules document on every finding,
+requirement and suggestion. That attribution is true provenance — each item is
+stated there — and it is the only evidence the runtime adds. Authors therefore
+have at most 19 references per item.
+
+**Custody without provider resources (minimal extension).** The hosted
+runtime's read evidence is anchored to a provider attachment. Rather than
+inventing `cntr_`/`file-`/`cfile_` identifiers, a provider-free attempt records
+a read with a null `attachment_allocation_id` through a separate, explicit
+`record_direct_document_open`. Both layers bind this to the attempt's stored
+provider:
+
+- Python custody refuses direct reads unless the locked attempt's provider is
+  `none`, and refuses `begin_allocation` and staged `record_document_open` when
+  it is.
+- `guard_guide_document_access()` accepts a null attachment only for a provider
+  `none` attempt, and then requires the canonical run-scoped handle and that the
+  source item belongs to the attempt's snapshot with the exact ingest and
+  SHA-256. Non-null attachments keep the full existing chain.
+- `guard_guide_runtime_allocation()` refuses every allocation for a provider
+  `none` attempt.
+- `require_compilation_document_access()` reads the attempt's provider:
+  provider-free rows must have no attachment, hosted rows must have the full
+  file lineage.
+
+The ready/citation guard on attempts is unchanged and still proves that every
+document was read and cited.
+
+**Configuration and provenance.** `require_project_guide_runtime_pairing` is
+the single rule used by `ProjectGuideRuntimeConfiguration` and `Settings`:
+`manager_authored` requires provider, API and model `none`; every other runtime
+requires `openai`/`responses`. The trigger enforces the same pairing
+null-safely, independent of Python. The default remains
+`openai_agents_sdk`/`openai`/`responses`. Requiring model `none` keeps the
+stored snapshot from naming a model that never ran. Instruction and limit
+fields are still recorded (the schema requires them) but unused.
+
+**Model circuit.** `provider_resilience.ModelCircuitAdmission` is constructed
+only by the OpenAI adapter; the new runtime never touches it, so a rules
+failure cannot open or consume the provider circuit.
+
+Rejected: synthesizing an evidence reference only on the first item (arbitrary
+and order-dependent); reading only Markdown originals (would leave PDFs
+unrecorded and fail the ready guard); a generic "provider-free" flag on the
+configuration (a second source of truth beside `model_provider`).
+
+## Acceptance criteria
+
+- [x] `manager_authored` is registered, constructs without `OPENAI_API_KEY`,
+      makes no socket connection and never constructs the OpenAI runtime.
+- [x] A guide with a valid rules document compiles through the live worker to
+      `policy_draft_ready`; every original has a read record with no attachment
+      and the attempt has no provider allocations.
+- [x] A malformed, missing, duplicated or unresolvable rules document ends the
+      attempt as `compilation_invalid_terminal`/`schema_invalid` (or
+      `unsafe_text`).
+- [x] Settings, the configuration snapshot and the database trigger each accept
+      `none` only with `manager_authored` and reject every mixed pair; OpenAI
+      remains the default and keeps strict validation.
+- [x] The stored attempt configuration shows `manager_authored`/`none`.
+- [x] The database refuses provider allocations for a provider-free attempt,
+      direct reads for a hosted attempt, and direct reads of a foreign or
+      mismatched original.
+- [x] README, operations manual (with a sample `workstream-rules.json`),
+      `.env.example` and roadmap describe the runtime.
+
+## Risk and review routing
+
+- Risk class: `L1` (new schema predicates on custody evidence and a new
+  untrusted-input path; no authorization or payment change).
+- Required reviewers: `security`, `architecture`, `qa`.
+- Human review focus: the content-based identification rule; the runtime adding
+  a rules-document citation to every item; null-attachment read evidence as the
+  custody extension; requiring model `none`.
+
+## Evidence
+
+| Claim | Command or proof | Result | Remaining uncertainty |
+|---|---|---|---|
+| Runtime conversion, rejection codes, no credentials or network | `tests/test_agent_runtime.py` (manager-authored tests) | Pass | Socket patching proves no connection attempt in-process only |
+| Settings/snapshot pairing | `tests/test_agent_runtime.py`, `tests/test_config.py` | Pass | — |
+| Composition constructs only the selected runtime | `tests/test_external_service_adapters.py`, `tests/projects/guide_compilation/test_live_worker.py` | Pass | — |
+| Trigger pairing, null-safe | `tests/projects/guide_compilation/test_runtime_configuration_postgresql.py` | Pass on PostgreSQL 16 | — |
+| Direct-read custody and allocation refusal | `tests/projects/guide_compilation/test_document_file_custody_postgresql.py` | Pass on PostgreSQL 16 | — |
+| Live worker ready and malformed outcomes | `tests/projects/guide_compilation/test_live_cutover_postgresql.py::test_manager_authored_rules_compile_through_the_live_worker_without_inference` | Pass | Document bytes come from a scripted grant; real ART/S3 reads are proved separately |
+| Migration graph, fingerprint, predecessor upgrade | `tests/test_alembic.py`; 0055 fingerprint reproduced locally before refresh | Pass | — |
+| Documented sample compiles | Ad hoc run of the operations-manual sample through the runtime | `draft_ready` | Not a committed test |
+
+## Review findings
+
+Recorded in the pull request after the focused security, architecture and QA
+review of the frozen candidate.
+
+## Reconciliation
+
+- Current-source reconciliation: based on `main` at `c6d916cc1`. Open PR #633
+  also adds a `0056` migration; whichever merges second must renumber and
+  refresh the schema fingerprint and `alembic/env.py`.
+- Next usable boundary: None.
+- Remaining risks: a manager-authored result is only as good as its author;
+  it passes the same validation and still requires the manager's proposal
+  review and approvals.

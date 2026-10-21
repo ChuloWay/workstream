@@ -293,6 +293,29 @@ S3-compatible settings in `.env`. The disabled-store first-run profile does not
 support guide artifact ingestion. Committed original-document readiness runs one compilation
 and stops at findings and draft proposals; manager review/approval remains separate.
 
+To compile guides without any model provider, select the manager-authored
+runtime instead. It needs no `OPENAI_API_KEY` and no `agents` extra, makes no
+network call and allocates no provider resources:
+
+```bash
+WORKSTREAM_PROJECT_AGENT_RUNTIME=manager_authored
+WORKSTREAM_PROJECT_AGENT_MODEL_PROVIDER=none
+WORKSTREAM_PROJECT_AGENT_MODEL_API=none
+WORKSTREAM_PROJECT_AGENT_MODEL=none
+```
+
+Settings and the database both reject `none` with any other runtime, and this
+runtime with any provider other than `none`. The manager uploads a rules
+document (conventionally labelled `workstream-rules.json`, declared as
+`text/markdown`) with the guide originals; a person, a script or any AI provider
+outside Workstream can write it. The runtime opens and records every original,
+converts the rules document into the same untrusted compilation result a model
+returns, and then the unchanged validation, proposal review, approvals,
+correction and activation apply. The attempt's stored configuration records
+`manager_authored` and `none`, so the absence of inference is explicit. See
+[Manager-authored guide rules](docs/operations_project_operating_manual.md#manager-authored-guide-rules)
+for the format and a sample.
+
 ### Logs, Shutdown, And Reset
 
 The API and prefork Celery process emit privacy-bounded structured logs and can export
@@ -410,6 +433,9 @@ A process-local circuit opens after three exhausted transient model requests,
 then admits one recovery probe after 60 seconds. Cleanup remains available.
 The corresponding retry and circuit settings are listed in `backend/.env.example`.
 The runtime adapter is selected through the shared typed adapter factory.
+The registered runtimes are `openai_agents_sdk` (the default) and the
+provider-free `manager_authored` runtime described above; the latter has no
+retry or circuit settings because it makes no provider request.
 
 Verified guide-source readiness automatically delivers one compilation. A ready
 result records both policy proposals and stops at a draft; an insufficient guide

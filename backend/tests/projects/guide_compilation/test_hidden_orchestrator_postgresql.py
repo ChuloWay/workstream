@@ -123,7 +123,7 @@ def _port(factory, runtime, *, checker_capabilities=None):
     )
 
 
-async def _authorized_attempt(database_url: str, values):
+async def _authorized_attempt(database_url: str, values, configuration=None):
     actor_id, link_id, _grant_id = await _seed_human(database_url, values)
     actor = ActorIdentityFacts(actor_id, link_id, ActorKind.HUMAN)
     engine = create_async_engine(database_url)
@@ -133,9 +133,9 @@ async def _authorized_attempt(database_url: str, values):
             return await _authorized_service(session, actor).authorize_request(
                 origin=ProjectGuideCompilationRequestOrigin(trigger="project_manager"),
                 actor=actor,
-                facts=_request(values),
-                identity=identity(context(values)),
-                runtime_configuration=runtime_configuration(),
+                facts=_request(values, configuration),
+                identity=identity(context(values, configuration=configuration)),
+                runtime_configuration=configuration or runtime_configuration(),
             )
     finally:
         await engine.dispose()

@@ -16,6 +16,7 @@ from app.modules.checkers.api.artifact_paths import (
 
 from pydantic import (
     BaseModel,
+    ValidationError,
     ConfigDict,
     Field,
     StrictBool,
@@ -773,6 +774,21 @@ def _validate_bindings(
         )
         seen_requirements.add(binding.requirement_id)
     return seen_requirements
+
+
+def invalid_compilation_failure_code(
+    error: TypeError | ValueError,
+) -> Literal["schema_invalid", "unsafe_text"]:
+    """Classify only a proven unsafe-text validation without exposing the rejected value."""
+    if isinstance(error, ValidationError):
+        for item in error.errors(include_url=False, include_input=False):
+            context = item.get("ctx") or {}
+            cause = context.get("error")
+            if isinstance(cause, ValueError) and str(cause) == "model-produced text is unsafe":
+                return "unsafe_text"
+    if str(error) == "model-produced text is unsafe":
+        return "unsafe_text"
+    return "schema_invalid"
 
 
 class ProjectAgentRuntimeError(ExternalServiceAdapterError):
