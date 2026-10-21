@@ -58,6 +58,12 @@ task requirements/context and exact Submission/checker-history GETs through
 separate project-scoped commands. The backend reauthorizes each page; the CLI
 preserves locked lineage and opaque cursors and makes no lifecycle decision.
 
+[WS-CLI-001-33](WS-CLI-001-33.md) adds `project role-grant candidates PROJECT_ID`
+over the existing exact-project candidate page. A covered Project Manager sees
+only actor UUID and nullable display name with explicit opaque continuation.
+Discovery neither qualifies nor grants actors; backend authority and cursor
+scope remain decisive.
+
 Current public-only completion plan (inventory at main `51b868071`): FastAPI
 OpenAPI declares 125 non-health method/path operations, of which 69 have CLI
 coverage. Counts are an inventory, not a runtime certification or a coverage
@@ -68,11 +74,12 @@ also delivered by the merged PILOT read work; reuse those owners.
 
 The baseline's remaining 56 operations are grouped below. Each issue is a bounded client
 outcome, implemented in its own worktree/PR; split an issue further if its
-concrete diff would be unreviewable. The #602, #603, #605 and #608 rows are
+concrete diff would be unreviewable. The #602, #603, #604, #605 and #608 rows are
 delivered by [WS-CLI-001-27](WS-CLI-001-27.md),
-[WS-CLI-001-35](WS-CLI-001-35.md), [WS-CLI-001-31](WS-CLI-001-31.md) and
-[WS-CLI-001-29](WS-CLI-001-29.md), respectively; the other rows remain
-separate boundaries. WS-CLI-001-30 delivers #499's history/current
+[WS-CLI-001-35](WS-CLI-001-35.md), [WS-CLI-001-33](WS-CLI-001-33.md),
+[WS-CLI-001-31](WS-CLI-001-31.md) and [WS-CLI-001-29](WS-CLI-001-29.md),
+respectively; the other rows remain separate boundaries.
+[WS-CLI-001-30](WS-CLI-001-30.md) delivers #499's history/current
 revision-context presentation correction.
 
 | Issue | Public-client boundary | Operations |
@@ -290,7 +297,7 @@ CLIs. Keep the package independent of backend and MCP runtime dependencies.
     replay. No grant discovery or automatic eligibility.
 21. **WS-CLI-001-21:** Filtered project-grant pagination and exact grant history
    through public GETs, complete qualification/provenance disclosure and fresh
-   authority on each call. No actor discovery or automatic decisions.
+   authority on each call. No unscoped actor directory or automatic decisions.
 22. **WS-CLI-001-22:** Current Finance policy discovery and backend-selected or
    exact retained-version inspection, including empty drafts and complete award
    definitions. No Finance mutation, publication or local readiness decisions.

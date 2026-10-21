@@ -46,6 +46,7 @@ func addProjectRoleMutations(project *cobra.Command, client func() (*api.Client,
 		roles.AddCommand(cmd)
 	}
 	addProjectRoleReads(roles, client, output, stdout)
+	addProjectContributorCandidates(roles, client, output, stdout)
 	project.AddCommand(roles)
 }
 
