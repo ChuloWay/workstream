@@ -170,6 +170,105 @@ async def test_equivalent_verified_source_recovers_original_and_changed_key_conf
 
 
 @pytest.mark.asyncio
+async def test_source_download_verifies_public_custody_and_fresh_read_authority(
+    import_source_client,
+    tmp_path,
+):
+    original = json.dumps(document(1), ensure_ascii=False).encode()
+    source_file = tmp_path / "briefs.json"
+    source_file.write_bytes(original)
+    project_response = await import_source_client.post(
+        "/api/v1/projects",
+        headers=auth_headers(),
+        json={"name": "CLI source download", "slug": "cli-download-" + uuid4().hex},
+    )
+    assert project_response.status_code == 201, project_response.text
+    project = project_response.json()["id"]
+    profile_response = await import_source_client.get(
+        "/api/v1/actors/me",
+        headers=auth_headers(),
+    )
+    assert profile_response.status_code == 200, profile_response.text
+    actor_id = profile_response.json()["actor_profile_id"]
+
+    async with socket_api(create_app()) as origin:
+        declared = await successful(
+            origin,
+            "source-declare",
+            project,
+            "--input",
+            str(source_file),
+            "--idempotency-key",
+            str(uuid4()),
+        )
+        source_id = declared["source_id"]
+        uploaded = await successful(
+            origin,
+            "source-upload",
+            project,
+            source_id,
+            "--input",
+            str(source_file),
+        )
+        assert uploaded["status"] == "verified"
+        destination = tmp_path / "download"
+        destination.mkdir()
+        receipt = await successful(
+            origin,
+            "source-download",
+            project,
+            source_id,
+            "--download",
+            str(destination),
+        )
+        assert receipt == {"downloaded": source_id + ".json", "source": uploaded}
+        assert (destination / receipt["downloaded"]).read_bytes() == original
+
+        async with db_session.get_session_factory()() as session:
+            grants = list(
+                await session.scalars(
+                    select(AdminRoleGrant)
+                    .where(
+                        AdminRoleGrant.target_actor_profile_id == actor_id,
+                        AdminRoleGrant.role == "project_manager",
+                        AdminRoleGrant.status == "active",
+                        or_(
+                            AdminRoleGrant.scope_type == "system",
+                            AdminRoleGrant.scope_project_id == project,
+                        ),
+                    )
+                    .order_by(AdminRoleGrant.id)
+                )
+            )
+            references = [
+                (grant.id, grant.granted_by_actor_profile_id) for grant in grants
+            ]
+        assert references
+        for grant_id, administrator_id in references:
+            context = await actor_context(administrator_id)
+            async with db_session.get_session_factory()() as session, session.begin():
+                await revoke_manager_grant(session, context, UUID(str(grant_id)))
+
+        revoked_destination = tmp_path / "revoked-download"
+        revoked_destination.mkdir()
+        denied = await invoke(
+            origin,
+            "source-download",
+            project,
+            source_id,
+            "--download",
+            str(revoked_destination),
+        )
+        assert denied.returncode == 1 and denied.stdout == ""
+        error = json.loads(denied.stderr)["error"]
+        assert (
+            error["status"] == 404 and error["code"] == "task_import_source_not_found"
+        )
+        assert not error.get("outcome_unknown", False)
+        assert list(revoked_destination.iterdir()) == []
+
+
+@pytest.mark.asyncio
 async def test_200_row_csv_source_import_screen_release_and_fresh_denial(
     import_source_client,
     tmp_path,

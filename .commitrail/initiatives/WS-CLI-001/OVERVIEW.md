@@ -33,6 +33,7 @@
   [WS-CLI-001-27](WS-CLI-001-27.md), manager task-context and retained Submission/checker evidence reads;
   [WS-CLI-001-28](WS-CLI-001-28.md), privileged actor, identity-link, grant-history and catalogue reads;
   [WS-CLI-001-29](WS-CLI-001-29.md), Operator checker registry and exact retry commands;
+  [WS-CLI-001-31](WS-CLI-001-31.md), verified retained task-import source download;
   [WS-CLI-001-32](WS-CLI-001-32.md), read-only active-guide and retained/current intake-policy inspection;
   [WS-CLI-001-33](WS-CLI-001-33.md), exact-project contributor-candidate discovery;
   [WS-CLI-001-35](WS-CLI-001-35.md), deliberate exact-source manager revision-context repair;
@@ -55,6 +56,12 @@ known-terminal checker retry-source listing/retry through four existing public
 REST routes. Registration does not enable execution; source reads do not authorize
 later retry, and exact replay rechecks backend authority. Hosted operation and
 CLI distribution remain separate.
+
+[WS-CLI-001-31](WS-CLI-001-31.md) adds `project task-batch source-download`
+through retained-source status and content public GETs. The CLI verifies bytes
+against the returned size/SHA-256 before publishing a private, non-overwriting
+local file. Source custody and fresh read authorization remain backend-owned;
+the CLI never reads a provider URL or storage key directly.
 
 [WS-CLI-001-27](WS-CLI-001-27.md) exposes the seven existing Project Manager
 task requirements/context and exact Submission/checker-history GETs through
@@ -82,12 +89,13 @@ also delivered by the merged PILOT read work; reuse those owners.
 
 The baseline's remaining 56 operations are grouped below. Each issue is a bounded client
 outcome, implemented in its own worktree/PR; split an issue further if its
-concrete diff would be unreviewable. The #600, #602, #603, #604, #606 and #608
-rows are delivered by [WS-CLI-001-32](WS-CLI-001-32.md),
+concrete diff would be unreviewable. The #600, #602, #603, #604, #605, #606
+and #608 rows are delivered by [WS-CLI-001-32](WS-CLI-001-32.md),
 [WS-CLI-001-27](WS-CLI-001-27.md), [WS-CLI-001-35](WS-CLI-001-35.md),
-[WS-CLI-001-33](WS-CLI-001-33.md), [WS-CLI-001-28](WS-CLI-001-28.md)
-and [WS-CLI-001-29](WS-CLI-001-29.md), respectively; other rows remain planned
-here. [WS-CLI-001-30](WS-CLI-001-30.md) delivers #499's history/current
+[WS-CLI-001-33](WS-CLI-001-33.md), [WS-CLI-001-31](WS-CLI-001-31.md),
+[WS-CLI-001-28](WS-CLI-001-28.md) and [WS-CLI-001-29](WS-CLI-001-29.md),
+respectively; other rows remain planned here.
+[WS-CLI-001-30](WS-CLI-001-30.md) delivers #499's history/current
 revision-context presentation correction.
 
 | Issue | Public-client boundary | Operations |
@@ -98,7 +106,7 @@ revision-context presentation correction.
 | [#602](https://github.com/Flow-Research/workstream/issues/602) | Manager task context and submission/checker evidence, delivered by [WS-CLI-001-27](WS-CLI-001-27.md) | 7 |
 | [#603](https://github.com/Flow-Research/workstream/issues/603) | Exact revision-context repair, delivered by [WS-CLI-001-35](WS-CLI-001-35.md) | 1 |
 | [#604](https://github.com/Flow-Research/workstream/issues/604) | Contributor-candidate discovery, delivered by [WS-CLI-001-33](WS-CLI-001-33.md) | 1 |
-| [#605](https://github.com/Flow-Research/workstream/issues/605) | Retained task-import source download | 1 |
+| [#605](https://github.com/Flow-Research/workstream/issues/605) | Retained task-import source download, delivered by [WS-CLI-001-31](WS-CLI-001-31.md) | 1 |
 | [#606](https://github.com/Flow-Research/workstream/issues/606) | Actor/admin authority inspection — delivered by [WS-CLI-001-28](WS-CLI-001-28.md) | 6 |
 | [#607](https://github.com/Flow-Research/workstream/issues/607) | Actor/identity lifecycle and administrative writes | 8 |
 | [#608](https://github.com/Flow-Research/workstream/issues/608) | External-checker registry and explicit retry, delivered by [WS-CLI-001-29](WS-CLI-001-29.md) | 4 |
