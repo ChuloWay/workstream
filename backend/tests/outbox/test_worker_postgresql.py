@@ -189,6 +189,9 @@ async def test_worker_scan_continues_after_failed_publication(worker, monkeypatc
 
 async def test_production_registry_claims_only_registered_features(delivery_harness):
     from app.adapters.outbox import production_outbox_delivery
+    from app.modules.checkers.api.delivery_reconciliation import (
+        POST_SUBMIT_DELIVERY_RECONCILIATION_EVENT,
+    )
     from app.modules.checkers.api.execution import COMPLETION_EVENT, REQUEST_EVENT
 
     h = delivery_harness
@@ -202,6 +205,7 @@ async def test_production_registry_claims_only_registered_features(delivery_harn
         ("TaskRevisionExhausted", 1),
         (REQUEST_EVENT, 1),
         (COMPLETION_EVENT, 1),
+        (POST_SUBMIT_DELIVERY_RECONCILIATION_EVENT, 1),
     )
     assert production._registry.can_retry_unknown("TaskRevisionExpiryRequested", 1)
     assert production._registry.can_retry_unknown("TaskRevisionExpired", 1)
@@ -209,6 +213,9 @@ async def test_production_registry_claims_only_registered_features(delivery_harn
     assert production._registry.can_retry_unknown("TaskRevisionExhausted", 1)
     assert not production._registry.can_retry_unknown(REQUEST_EVENT, 1)
     assert not production._registry.can_retry_unknown(COMPLETION_EVENT, 1)
+    assert not production._registry.can_retry_unknown(
+        POST_SUBMIT_DELIVERY_RECONCILIATION_EVENT, 1
+    )
     assert (await production.candidates()).items == ()
     assert await production.deliver(event.event_id, h.project, "worker") is None
     async with h.factory() as session:

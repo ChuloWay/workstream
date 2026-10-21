@@ -12,6 +12,9 @@ from app.modules.authorization.catalogue import ActionId
 from app.modules.checkers.api.execution import CheckerRetryPreparation, CheckerRetrySuccessor
 
 
+CHECKER_RETRY_ACTIONS = frozenset({ActionId.OPERATIONS_CHECKER_RETRY})
+
+
 class CheckerRetryResourceContext(BaseModel):
     """Bind the source and the actual successor without granting project authority."""
 
