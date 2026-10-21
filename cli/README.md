@@ -108,6 +108,9 @@ contribution-evidence exports and exact Audit Authority task reads:
 | `workstream task show TASK_ID` | `GET /api/v1/tasks/TASK_ID` |
 | `workstream task claim TASK_ID --idempotency-key UUID` | `POST /api/v1/tasks/TASK_ID/claim` |
 | `workstream task start TASK_ID --idempotency-key UUID` | `POST /api/v1/tasks/TASK_ID/start` |
+| `workstream operations task list PROJECT_ID [--limit N] [--cursor TOKEN]` | `GET /api/v1/operations/projects/PROJECT_ID/tasks` |
+| `workstream operations task locked-context PROJECT_ID TASK_ID` | `GET /api/v1/operations/projects/PROJECT_ID/tasks/TASK_ID/locked-context` |
+| `workstream operations task start TASK_ID --reason TEXT --idempotency-key UUID` | `POST /api/v1/operations/tasks/TASK_ID/start` |
 | `workstream task context TASK_ID` | `GET /api/v1/tasks/TASK_ID/work-context` |
 | `workstream task guide TASK_ID [--download DIR]` | Work context, then assigned-task `GET /api/v1/tasks/TASK_ID/guide/documents/DOCUMENT_ID/content` for downloads |
 | `workstream task requirements TASK_ID` | `GET /api/v1/tasks/TASK_ID/submission-requirements` |
@@ -1508,6 +1511,40 @@ canonical Workstream 4xx error envelope establishes a known denial. Inspect with
 `workstream task show TASK_ID`; this observes current state, not rollback or
 global ordering. If manually retrying, preserve the unchanged action, task,
 reason and key. Do not invent a new key or assume recovery will still succeed.
+
+## Inspect and start tasks as a system Operator
+
+```sh
+workstream operations task list PROJECT_ID --limit 50 --output json
+workstream operations task list PROJECT_ID --limit 50 --cursor PREVIOUS_NEXT_CURSOR --output json
+workstream operations task locked-context PROJECT_ID TASK_ID --output json
+workstream operations task start TASK_ID --reason 'Verified the active assignment' --idempotency-key START_UUID --output json
+```
+
+These are separate system-Operator routes, not aliases for contributor or
+Project Manager commands. The queue contains only task/project IDs, status and
+creation/update times. Its signed cursor is opaque, scoped to the exact
+project/caller/page size and reauthorized on continuation. Locked context
+contains immutable policy identities, hashes and positive generations, not
+policy bodies or task instructions. Both are observations, not authority for a
+later start.
+
+`operations task start` sends one explicit override POST with a nonblank
+explanation of at most 1000 Unicode characters and a caller-owned UUID key.
+Workstream rechecks the current human Operator grant, exact task/assignment,
+locked context and lifecycle, then records its own authorization decision and
+audit event. The response is the contributor-safe in-progress task, not an
+assignment receipt; the CLI does not infer or alter the assignee. It never
+falls back to `task start`, which requires the assigned Submitter's different
+authority. The three commands use bounded closed response validation, exact
+UUID binding and terminal-safe text/JSON output.
+
+Keep the override action, exact task, reason and key together. Changed inputs
+conflict; exact replay still requires current Operator authority. The CLI does
+not preflight or automatically retry, including after uncertain transport
+delivery. A lost, malformed or unsafe success is `outcome_unknown`; a later
+read may help inspect current state but cannot prove rollback. Manually replay
+only the unchanged override request if appropriate.
 
 ## Edit your profile
 

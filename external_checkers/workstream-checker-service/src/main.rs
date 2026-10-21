@@ -2737,17 +2737,22 @@ exit 2
         });
         let mut cleanup = EmergencyCleanupBudget::new();
         let started = Instant::now();
-        assert!(matches!(
-            run_bounded_command_cancellable(
-                &config.docker_binary,
-                &["start", "--attach", "candidate"],
-                Instant::now() + Duration::from_secs(30),
-                1024,
-                &client,
-                &mut cleanup,
-            ),
-            Err(error) if error == "client disconnected"
-        ));
+        let command_result = run_bounded_command_cancellable(
+            &config.docker_binary,
+            &["start", "--attach", "candidate"],
+            Instant::now() + Duration::from_secs(30),
+            1024,
+            &client,
+            &mut cleanup,
+        );
+        assert!(
+            matches!(&command_result, Err(error) if error == "client disconnected"),
+            "unexpected command error={:?}, status={:?}, pid_marker_exists={}, elapsed={:?}",
+            command_result.as_ref().err(),
+            command_result.as_ref().ok().map(|output| &output.status),
+            cli_pid.exists(),
+            started.elapsed()
+        );
         disconnect.join().unwrap();
         assert!(started.elapsed() < Duration::from_secs(2));
         let pid: libc::pid_t = fs::read_to_string(&cli_pid).unwrap().parse().unwrap();
