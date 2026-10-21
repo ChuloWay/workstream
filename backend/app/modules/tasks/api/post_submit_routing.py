@@ -114,7 +114,8 @@ def task_post_submit_source_digest(source: TaskPostSubmitSourceProposal) -> str:
 
 __all__ = ("TaskPostSubmitSourceProposal", "TaskPostSubmitManifestFacts", "task_post_submit_source_digest",
            "TaskRoutingSelection", "TaskRoutingRequestFacts", "task_routing_request_digest",
-           "TaskRoutingSourcePreparation", "TaskRevisionExhaustionFacts")
+           "TaskRoutingSourceObservation", "TaskRoutingSourcePreparation",
+           "TaskRevisionExhaustionFacts")
 
 
 class TaskRoutingSelection(BaseModel):
@@ -188,6 +189,20 @@ class TaskRevisionExhaustionFacts(BaseModel):
         if self.revision_round != self.max_revision_rounds or self.exhaustion_receipt_id.version != 7:
             raise ValueError("revision exhaustion requires the final permitted attempt")
         return self
+
+
+class TaskRoutingSourceObservation(BaseModel):
+    """Nonmutating exact current completion and locked policy branch."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+
+    project_id: UUID
+    task_id: UUID
+    submission_id: UUID
+    completion_event_id: UUID
+    checker_run_id: UUID
+    routing_recommendation: Literal["allow_review", "needs_revision"]
+    human_review_required: StrictBool
 
 
 class TaskRoutingSourcePreparation(BaseModel):

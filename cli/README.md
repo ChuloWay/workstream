@@ -34,6 +34,13 @@ contribution-evidence exports:
 | `workstream project guide document PROJECT_ID GUIDE_ID DOCUMENT_ID --download DIR` | `GET /api/v1/projects/PROJECT_ID/guides/GUIDE_ID/documents/DOCUMENT_ID/content` |
 | `workstream project tasks PROJECT_ID [--status S] [--assignee UUID] [--import-batch UUID] [--updated-since TIME]` | `GET /api/v1/projects/PROJECT_ID/tasks` |
 | `workstream project task PROJECT_ID TASK_ID` | `GET /api/v1/projects/PROJECT_ID/tasks/TASK_ID` |
+| `workstream project task-requirements PROJECT_ID TASK_ID` | `GET /api/v1/projects/PROJECT_ID/tasks/TASK_ID/submission-requirements` |
+| `workstream project task-locked-context PROJECT_ID TASK_ID` | `GET /api/v1/projects/PROJECT_ID/tasks/TASK_ID/locked-context` |
+| `workstream project task-context PROJECT_ID TASK_ID` | `GET /api/v1/projects/PROJECT_ID/tasks/TASK_ID/work-context` |
+| `workstream project task-submissions PROJECT_ID TASK_ID [--limit N] [--cursor TOKEN]` | `GET /api/v1/projects/PROJECT_ID/tasks/TASK_ID/submissions` |
+| `workstream project submission PROJECT_ID SUBMISSION_ID` | `GET /api/v1/projects/PROJECT_ID/submissions/SUBMISSION_ID` |
+| `workstream project checker-runs PROJECT_ID SUBMISSION_ID [--limit N] [--cursor TOKEN]` | `GET /api/v1/projects/PROJECT_ID/submissions/SUBMISSION_ID/checker-runs` |
+| `workstream project checker-runs PROJECT_ID SUBMISSION_ID --run RUN_ID` | `GET /api/v1/projects/PROJECT_ID/submissions/SUBMISSION_ID/checker-runs/RUN_ID` |
 | `workstream project submissions PROJECT_ID [--task UUID] [--status S] [--submitter UUID] [--updated-since TIME] [--limit N] [--cursor TOKEN]` | `GET /api/v1/projects/PROJECT_ID/submissions` |
 | `workstream project assignments PROJECT_ID [--state active\|closed] [--limit N] [--cursor TOKEN]` | `GET /api/v1/projects/PROJECT_ID/assignments` |
 | `workstream project summary PROJECT_ID` | `GET /api/v1/projects/PROJECT_ID/summary` |
@@ -1137,6 +1144,32 @@ output. Foreign items, duplicate identities, unknown/duplicate fields and
 malformed replies fail with empty stdout. The existing 64 KiB response bound
 applies to a whole page: an oversized response fails without partial output;
 request a smaller `--limit` if needed.
+
+The manager's task-evidence reads are separate from contributor `task context`,
+`task requirements`, `task submissions` and `submission` commands:
+
+```sh
+workstream project task-requirements PROJECT_ID TASK_ID --output json
+workstream project task-locked-context PROJECT_ID TASK_ID --output json
+workstream project task-context PROJECT_ID TASK_ID --output json
+workstream project task-submissions PROJECT_ID TASK_ID --limit 25 --output json
+workstream project submission PROJECT_ID SUBMISSION_ID --output json
+workstream project checker-runs PROJECT_ID SUBMISSION_ID --limit 25 --output json
+workstream project checker-runs PROJECT_ID SUBMISSION_ID --run RUN_ID --output json
+```
+
+`task-requirements` shows locked intake rules; `task-locked-context` shows
+historical policy identities and the bounded post-submit policy summary;
+`task-context` shows current management instructions and provenance, without
+contributor action hints or compensation terms. History reads show exact
+manager Submission lineage and checker routing evidence; checker results are
+not acceptance decisions. Supply the exact project/task, project/submission or
+project/submission/run identity; the CLI never substitutes the latest record.
+Lists make one request for one page (`--limit` 1–100, default 25) and display an
+opaque `next_cursor`; pass it back unchanged with the same limit and selectors.
+Workstream binds and reauthorizes each page. These reads never grant later
+write authority or fetch artifact bytes. Text escapes terminal controls and
+prints complete nested facts; `--output json` preserves the public response.
 
 ## See your own work
 

@@ -4,7 +4,12 @@ from collections.abc import Callable, Mapping
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.modules.authorization.api.outbox_dispatch import OutboxDispatchAuthorizationPort
-from app.modules.outbox.api import DeliveryOptions, InvocationFencePort, OutboxAppendPort
+from app.modules.outbox.api import (
+    DeliveryOptions,
+    FinalizedUnknownDeliveryPort,
+    InvocationFencePort,
+    OutboxAppendPort,
+)
 from app.modules.outbox.delivery import OutboxDelivery, CommittedInvocationReader
 from app.modules.outbox.delivery_repository import DeliveryRepository
 from app.modules.outbox.registry import HandlerRegistry
@@ -12,6 +17,11 @@ from app.modules.outbox.registry import HandlerRegistry
 
 def outbox_invocation_fence(session: AsyncSession) -> InvocationFencePort:
     """Use the existing owner's locks in the caller's effect transaction."""
+    return DeliveryRepository(session)
+
+
+def finalized_unknown_deliveries(session: AsyncSession) -> FinalizedUnknownDeliveryPort:
+    """Expose exact terminal UNKNOWN observation through OUTBOX's public port."""
     return DeliveryRepository(session)
 
 
@@ -49,6 +59,10 @@ def production_outbox_delivery(session_factory):
         TransactionalTaskRevisionExhaustedNoticeHandler,
         evaluation_completion_handler,
         evaluation_request_handler,
+    )
+    from app.adapters.checkers import post_submit_delivery_reconciliation_handler
+    from app.modules.checkers.api.delivery_reconciliation import (
+        POST_SUBMIT_DELIVERY_RECONCILIATION_EVENT as RECONCILIATION_EVENT,
     )
     from app.modules.checkers.api.execution import COMPLETION_EVENT, REQUEST_EVENT
     from app.modules.checkers.api.external_policy import (
@@ -122,6 +136,16 @@ def production_outbox_delivery(session_factory):
                     COMPLETION_EVENT,
                     1,
                     evaluation_completion_handler(sessions=session_factory),
+                ),
+                (
+                    RECONCILIATION_EVENT,
+                    1,
+                    post_submit_delivery_reconciliation_handler(
+                        sessions=session_factory,
+                        materialization=worker_post_submission_materialization(
+                            sessions=session_factory
+                        ),
+                    ),
                 ),
             ],
             replay_safe=frozenset({(REVISION_EXPIRY_EVENT, 1), (REVISION_EXPIRED_EVENT, 1), (REVISION_CONTEXT_BLOCKED_EVENT, 1), (REVISION_EXHAUSTED_EVENT, 1)}),

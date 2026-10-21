@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from enum import StrEnum
-from typing import Any, NoReturn, Protocol, Self
+from typing import Any, Literal, NoReturn, Protocol, Self
 import re
 import json
 from uuid import UUID
@@ -189,6 +189,67 @@ class DeliveryCandidatePage(DeliveryValue):
 
     items: tuple[DeliveryCandidate, ...]
     next_after: UUID | None
+
+
+class ReconciliationChildObservation(DeliveryValue):
+    """The sole child event linked to one original terminal UNKNOWN attempt."""
+
+    event_id: UUID
+    payload_digest: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
+    payload_json: str
+    occurred_at: datetime
+    state: Literal["pending", "active", "acknowledged", "unknown", "held"]
+
+
+class FinalizedUnknownDelivery(DeliveryValue):
+    """Exact immutable terminal invocation and optional reconciliation child."""
+
+    envelope: OutboxEventEnvelope
+    finalized_at: datetime
+    error_code: Literal["INVOKE_OUTCOME_UNKNOWN"]
+    child: ReconciliationChildObservation | None = None
+
+
+class FinalizedUnknownDeliveryPage(DeliveryValue):
+    """Stable project-scoped delivery page before feature classification."""
+
+    items: tuple[FinalizedUnknownDelivery, ...]
+    has_more: bool
+
+
+class FinalizedUnknownDeliveryPort(Protocol):
+    """OUTBOX-owned terminal UNKNOWN observation and locking boundary."""
+
+    async def list_finalized_unknown(
+        self,
+        *,
+        project_id: UUID,
+        event_types: tuple[tuple[str, int], ...],
+        child_event_type: str,
+        after: tuple[datetime, UUID] | None,
+        limit: int,
+    ) -> FinalizedUnknownDeliveryPage: ...
+
+    async def read_finalized_unknown(
+        self,
+        *,
+        project_id: UUID,
+        event_id: UUID,
+        event_types: tuple[tuple[str, int], ...],
+        child_event_type: str,
+        lock: bool,
+    ) -> FinalizedUnknownDelivery | None: ...
+
+    async def fence_reconciliation(
+        self,
+        *,
+        original: OutboxEventEnvelope,
+        child: OutboxEventEnvelope,
+        event_types: tuple[tuple[str, int], ...],
+        child_event_type: str,
+    ) -> CommittedInvocationObservation | None:
+        """Lock immutable original custody then require the exact live child."""
+        ...
 
 
 _KEY = re.compile(r"^[a-z][a-z0-9_]{0,127}$")

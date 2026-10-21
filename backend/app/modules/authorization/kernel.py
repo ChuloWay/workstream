@@ -24,7 +24,7 @@ from app.modules.authorization.catalogue import (
     PermissionId,
 )
 from app.modules.authorization.domain.guide_manager_resources import guide_manager_resource_denial
-from app.modules.authorization.domain import adapter_bindings, checker_registry, checker_retry, contribution_policies, guide_compilation as compilation
+from app.modules.authorization.domain import adapter_bindings, checker_registry, checker_retry, contribution_policies, guide_compilation as compilation, post_submit_deliveries
 from app.modules.authorization.domain.action_groups import (
     GUIDE_BOUND_PROJECT_MANAGER_ACTIONS as _GUIDE_BOUND_PROJECT_MANAGER_ACTIONS,
     CONTEXT_DIGEST_ACTIONS,
@@ -152,7 +152,7 @@ _ADMIN_ACTIONS = frozenset(
         ActionId.PROJECT_PRE_SUBMIT_CHECKER_POLICY_READ,
         ActionId.PROJECT_ACTIVE_GUIDE_READ,
     }
-) | adapter_bindings.ADAPTER_BINDING_READ_ACTIONS | contribution_policies.CONTRIBUTION_POLICY_READ_ACTIONS | checker_registry.CHECKER_REGISTRY_ACTIONS | frozenset({ActionId.OPERATIONS_CHECKER_RETRY})
+) | adapter_bindings.ADAPTER_BINDING_READ_ACTIONS | contribution_policies.CONTRIBUTION_POLICY_READ_ACTIONS | checker_registry.CHECKER_REGISTRY_ACTIONS | checker_retry.CHECKER_RETRY_ACTIONS | post_submit_deliveries.POST_SUBMIT_DELIVERY_MUTATION_ACTIONS
 _SERIALIZED_ADMIN_READS = frozenset(
     {
         ActionId.ACTOR_PROFILE_READ,
@@ -178,8 +178,7 @@ _ADMIN_MUTATIONS = frozenset(
         ActionId.ACTOR_IDENTITY_LINK_REVOKE,
         ActionId.ACTOR_IDENTITY_LINK_REACTIVATE,
     }
-) | PROJECT_SCOPED_ADMIN_MUTATIONS | checker_registry.CHECKER_REGISTRY_MUTATION_ACTIONS | frozenset({ActionId.OPERATIONS_CHECKER_RETRY})
-
+) | PROJECT_SCOPED_ADMIN_MUTATIONS | checker_registry.CHECKER_REGISTRY_MUTATION_ACTIONS | checker_retry.CHECKER_RETRY_ACTIONS | post_submit_deliveries.POST_SUBMIT_DELIVERY_MUTATION_ACTIONS
 
 def _prepared_admin_role_locker(action_id):
     """Select the only supported prepared admin-role authority locker."""
@@ -188,7 +187,6 @@ def _prepared_admin_role_locker(action_id):
     if action_id in _GUIDE_BOUND_PROJECT_MANAGER_ACTIONS:
         return lock_project_manager_authority
     raise ValueError("unsupported prepared admin-role action")
-
 
 async def prelock_serialized_admin_read_actor(
     authorization: AuthorizationService, action_id: ActionId
@@ -201,7 +199,6 @@ async def prelock_serialized_admin_read_actor(
             authorization._context.identity_link_id,
             authorization._context.actor_profile_id,
         )
-
 
 _ARTIFACT_INTERNAL_RESOURCES = {
     ActionId.ARTIFACT_GUIDE_SOURCE_READ: (
@@ -263,7 +260,7 @@ _ADMIN_EXPECTED_RESOURCES = MappingProxyType(
         ActionId.PROJECT_ACTIVE_GUIDE_READ: ProjectActiveGuideReadResourceContext,
         **adapter_bindings.ADAPTER_BINDING_RESOURCE_BY_ACTION,
         **contribution_policies.CONTRIBUTION_POLICY_RESOURCE_BY_ACTION, **checker_registry.CHECKER_REGISTRY_RESOURCE_BY_ACTION,
-        ActionId.OPERATIONS_CHECKER_RETRY: checker_retry.CheckerRetryResourceContext,
+        ActionId.OPERATIONS_CHECKER_RETRY: checker_retry.CheckerRetryResourceContext, **post_submit_deliveries.POST_SUBMIT_DELIVERY_RESOURCE_BY_ACTION,
         **PROJECT_MUTATION_RESOURCE_BY_ACTION,
         **GUIDE_PROPOSAL_RESOURCE_BY_ACTION,
     }
@@ -456,8 +453,7 @@ class AuthorizationService:
             context = self._locked_human_context(locked, context)
         elif action_id in _ADMIN_MUTATIONS | _GUIDE_BOUND_PROJECT_MANAGER_ACTIONS:
             context, grant = await _prepared_admin_role_locker(action_id)(
-                self._admin, context, scope, action_id, action.permission_id,
-                self._locked_human_context,
+                self._admin, context, scope, action_id, action.permission_id, self._locked_human_context,
             )
         elif action_id is ActionId.PROJECT_CREATE:
             context, grant = await lock_project_create_authority(
@@ -755,8 +751,7 @@ class AuthorizationService:
             if denial is None and action_id not in SERVICE_ACTIONS_BY_IDENTITY.get(context.service_identity, ()):
                 denial = AuthorizationDenialCode.PERMISSION_NOT_GRANTED
             if denial is None and not fixed_service_resource_matches(
-                action_id, resource_context, authority.scope_project_id,
-                authority.artifact_resource_type, authority.artifact_resource_id, expected_resource,
+                action_id, resource_context, authority.scope_project_id, authority.artifact_resource_type, authority.artifact_resource_id, expected_resource,
             ):
                 denial = AuthorizationDenialCode.RESOURCE_GUARD_DENIED
             if denial is None:
@@ -961,7 +956,7 @@ class AuthorizationService:
                 adapter_bindings.finance_authority_grant_filters(action.action_id)
             )
         grant_filters.update({**contribution_policies.policy_finance_grant_filters(action.action_id), **checker_registry.checker_registry_grant_filters(action.action_id)})
-        if action.action_id is ActionId.OPERATIONS_CHECKER_RETRY:
+        if action.action_id in checker_retry.CHECKER_RETRY_ACTIONS | post_submit_deliveries.POST_SUBMIT_DELIVERY_MUTATION_ACTIONS:
             grant_filters["allowed_roles"] = (AdminRole.OPERATOR,)
         matched = await self._admin.find_effective_grant(
             context.actor_profile_id,
@@ -1043,6 +1038,8 @@ class AuthorizationService:
                 return AuthorizationDenialCode.RESOURCE_GUARD_DENIED
             if await self._admin.lock_identity_link_lifecycle_target(resource.resource_id) is None:
                 return AuthorizationDenialCode.RESOURCE_NOT_FOUND
+        elif type(resource) is post_submit_deliveries.PostSubmitDeliveryResourceContext and not await self._admin.project_exists(resource.scope_project_id, for_update=True):
+            return AuthorizationDenialCode.RESOURCE_NOT_FOUND
         elif isinstance(
             resource,
             (AdminRoleGrantCollectionResourceContext, ActorAdminRoleGrantHistoryResourceContext),

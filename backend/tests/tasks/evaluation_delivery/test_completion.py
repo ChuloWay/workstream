@@ -9,6 +9,9 @@ from app.adapters.auth import outbox_dispatch_authorization
 from app.adapters.outbox import outbox_delivery, production_outbox_delivery
 from app.adapters.tasks import evaluation_completion_handler
 from app.modules.checkers.api.execution import COMPLETION_EVENT, REQUEST_EVENT
+from app.modules.checkers.api.delivery_reconciliation import (
+    POST_SUBMIT_DELIVERY_RECONCILIATION_EVENT,
+)
 from app.modules.checkers.api.external_policy import (
     MAXIMUM_SELECTED_POST_EXECUTION_BUDGET_MS,
     SELECTED_POST_DELIVERY_LEASE_SECONDS,
@@ -316,9 +319,10 @@ async def test_production_registry_delivers_request_then_completion_exactly_once
             lambda *, sessions: h.service,
         )
         delivery = production_outbox_delivery(h.factory)
-        assert delivery._registry.keys[-2:] == (
+        assert delivery._registry.keys[-3:] == (
             (REQUEST_EVENT, 1),
             (COMPLETION_EVENT, 1),
+            (POST_SUBMIT_DELIVERY_RECONCILIATION_EVENT, 1),
         )
 
         request_receipt = await delivery.deliver(

@@ -10,15 +10,18 @@ from app.modules.checkers.api.execution import (
 class _DeliveryPhase:
     """Canonical AUTH owns its receipt; delivery only adds exact invocation custody."""
 
-    def __init__(self, prepared, fence, envelope, request, eligible):
+    def __init__(self, prepared, fence, envelope, request, eligible, cause=None):
         self._prepared, self._fence = prepared, fence
         self._envelope, self._request, self._eligible = envelope, request, eligible
+        self._cause = cause
 
     def _require_request(self, facts):
         if facts.request != self._request:
             raise CheckerExecutionUnavailable("checker_delivery_request_unavailable")
 
     async def _require_invocation(self):
+        if self._cause is not None:
+            await self._cause()
         observed = await self._fence.fence_invocation(self._envelope)
         if observed is None or observed.claim != self._envelope.claim:
             raise CheckerExecutionUnavailable("checker_delivery_invocation_unavailable")
@@ -53,9 +56,10 @@ class _DeliveryFinalize(_DeliveryPhase, PreparedFinalization):
 class DeliveryExecutionAuthority:
     """TASK precedes AUTH and CHECKERS; outbox locks follow in consume/replay."""
 
-    def __init__(self, *, authority, tasks, fence, envelope, request):
+    def __init__(self, *, authority, tasks, fence, envelope, request, cause=None):
         self._envelope, self._request = envelope, request
         self._authority, self._tasks, self._fence = authority, tasks, fence
+        self._cause = cause
 
     async def preflight(self, request):
         if request != self._request:
@@ -67,11 +71,11 @@ class DeliveryExecutionAuthority:
         eligible = await self._tasks.lock_evaluation_scope(request)
         async with self._authority.prepare_execution(request) as prepared:
             yield _DeliveryExecute(prepared, self._fence,
-                                   self._envelope, self._request, eligible)
+                                   self._envelope, self._request, eligible, self._cause)
 
     @asynccontextmanager
     async def prepare_finalization(self, request):
         eligible = await self._tasks.lock_evaluation_scope(request)
         async with self._authority.prepare_finalization(request) as prepared:
             yield _DeliveryFinalize(prepared, self._fence,
-                                    self._envelope, self._request, eligible)
+                                    self._envelope, self._request, eligible, self._cause)
