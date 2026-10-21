@@ -40,11 +40,19 @@
   [WS-CLI-001-35](WS-CLI-001-35.md), deliberate exact-source manager revision-context repair;
   [WS-CLI-001-36](WS-CLI-001-36.md), status-only Operator task browsing,
   exact locked-context inspection and explicit reasoned start override;
+  [WS-CLI-001-39](WS-CLI-001-39.md), explicit actor, identity-link and administrative grant mutations;
   [PILOT-13](../../changes/pilot13-assigned-task-guide-documents.md), assigned-task locked-guide listing/download;
   [PILOT-02](../../changes/pilot02-bulk-transitions-cli.md), explicit CSV conversion,
   source custody, atomic import, batch status and whole-batch screen/release.
 
 ## Current boundary
+
+[WS-CLI-001-39](WS-CLI-001-39.md) adds eight existing public administrative
+writes under the existing `admin` command tree. Service provisioning, actor
+lifecycle, identity-link lifecycle and administrative grants remain separate
+backend-owned decisions. Every write requires explicit input and a caller-owned
+replay key; prior inspection confers no authority and uncertainty never triggers
+automatic retry. Local deployment bootstrap remains outside this public client.
 
 The Operator commands `operations task list`, `operations task locked-context`
 and `operations task start` use three existing public routes. Their restricted
