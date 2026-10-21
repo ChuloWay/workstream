@@ -1,6 +1,6 @@
 # Workstream MCP Adapter
 
-An independently installed adapter exposing sixteen tools under the caller's authority:
+An independently installed adapter exposing eighteen tools under the caller's authority:
 
 - `workstream_profile_get` calls `GET /api/v1/actors/me`.
 - `workstream_profile_update` calls the unkeyed `PATCH /api/v1/actors/me`.
@@ -27,6 +27,8 @@ An independently installed adapter exposing sixteen tools under the caller's aut
   `POST /api/v1/actor-identity-links/{identity_link_id}/revoke`.
 - `workstream_identity_link_reactivate` calls keyed
   `POST /api/v1/actor-identity-links/{identity_link_id}/reactivate`.
+- `workstream_projects_create` calls keyed `POST /api/v1/projects`.
+- `workstream_projects_get` calls `GET /api/v1/projects/{project_id}`.
 
 Each call forwards the caller's bearer to its fixed public Workstream operation.
 There are no MCP resources or prompts. Workstream, not the adapter, owns every
@@ -107,6 +109,16 @@ alone enforces caller authority, self and final-administrator guards, current
 state, link admission and terminal actor deactivation. The adapter accepts only
 the exact bounded receipt for the requested UUID and performs no retry.
 
+Project creation takes a closed body with `name`, `slug` and optional
+`description`, plus the required typed UUID `idempotency_key`. Workstream alone
+checks current system Project Manager authority, owns duplicate-slug and replay
+state, and creates the draft project. `idempotency_pending` tells the caller that
+a later same-key recovery is allowed; the adapter still never retries
+automatically. Project read takes one UUID. Workstream selects the full
+administrative response or the exact contributor response containing only
+`id`, `name` and `status`; the adapter validates that projection and the returned
+project identity without calculating access itself.
+
 ## Deployment Boundary
 
 Build from this directory only:
@@ -129,7 +141,7 @@ retries. A mutation transport failure, upstream 5xx response, or unexpected
 success/redirect response is reported as non-retryable uncertain execution.
 Connections may be pooled, but
 caller credentials and results are not shared or cached. Response validation is
-pinned to the sixteen selected public contracts in `contracts/`; upstream drift
+pinned to the eighteen selected public contracts in `contracts/`; upstream drift
 must be reviewed, not silently accepted. There is no fallback service or
 backend-private import.
 
@@ -146,10 +158,10 @@ Real API tests require the repository's isolated PostgreSQL runner, controlled
 fixture identities and a separate installed adapter process. Never supply a
 production database or real user token to a test. Integration and container
 commands are recorded in the additive MCP workflow and the
-[current chunk record](../.commitrail/initiatives/WS-MCP-002/WS-MCP-002-05.md).
+[current chunk record](../.commitrail/initiatives/WS-MCP-002/WS-MCP-002-06.md).
 Selected schemas are compared with the running backend OpenAPI operations;
 custom admission, lifecycle and exact-project semantics are exercised separately.
 
 Local fixture evidence does not certify the deployed Flow provider, a public
-gateway or all MCP clients. The remaining 11 mapped tools belong to later
+gateway or all MCP clients. The remaining 9 mapped tools belong to later
 bounded changes in the [initiative](../.commitrail/initiatives/WS-MCP-002/OVERVIEW.md).

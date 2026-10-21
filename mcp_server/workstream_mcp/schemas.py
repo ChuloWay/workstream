@@ -192,6 +192,44 @@ ACTOR_LIFECYCLE_INPUT_SCHEMAS: dict[str, dict[str, Any]] = {
     "identity_link_reactivate": _lifecycle_input("identity_link_id"),
 }
 
+PROJECT_INPUT_SCHEMAS: dict[str, dict[str, Any]] = {
+    "projects_create": {
+        "type": "object",
+        "properties": {
+            "body": {
+                "type": "object",
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "maxLength": 200,
+                        "pattern": r"^[^\u0000]*$",
+                    },
+                    "slug": {
+                        "type": "string",
+                        "maxLength": 120,
+                        "pattern": r"^[^\u0000]*$",
+                    },
+                    "description": {
+                        "type": ["string", "null"],
+                        "pattern": r"^[^\u0000]*$",
+                    },
+                },
+                "required": ["name", "slug"],
+                "additionalProperties": False,
+            },
+            "idempotency_key": _IDEMPOTENCY_KEY_INPUT,
+        },
+        "required": ["body", "idempotency_key"],
+        "additionalProperties": False,
+    },
+    "projects_get": {
+        "type": "object",
+        "properties": {"project_id": _UUID_INPUT},
+        "required": ["project_id"],
+        "additionalProperties": False,
+    },
+}
+
 
 class ContractError(RuntimeError):
     """The reviewed packaged contract is absent or invalid."""
@@ -232,16 +270,12 @@ def _selected_schema(document: dict[str, Any]) -> dict[str, Any]:
             content = success.get("content") if isinstance(success, dict) else None
             media = content.get("application/json") if isinstance(content, dict) else None
             selected = media.get("schema") if isinstance(media, dict) else None
-            reference = selected.get("$ref") if isinstance(selected, dict) else None
-            prefix = "#/components/schemas/"
-            if isinstance(reference, str) and reference.startswith(prefix):
-                candidate = schemas.get(reference.removeprefix(prefix))
-                if isinstance(candidate, dict):
-                    return cast(dict[str, Any], _resolve_schema_refs(candidate, schemas))
+            if isinstance(selected, dict):
+                return cast(dict[str, Any], _resolve_schema_refs(selected, schemas))
     raise ContractError("contract does not contain an output schema")
 
 
-@lru_cache(maxsize=16)
+@lru_cache(maxsize=32)
 def _contract_output_schema(name: str) -> dict[str, Any]:
     filename = f"{name}.json"
     resource = files("workstream_mcp").joinpath(f"contracts/{filename}")
@@ -277,7 +311,7 @@ def authorization_context_output_schema() -> dict[str, Any]:
     return _contract_output_schema("authorization_context_get")
 
 
-@lru_cache(maxsize=16)
+@lru_cache(maxsize=32)
 def _contract_output_validator(name: str) -> Draft202012Validator:
     return Draft202012Validator(
         _contract_output_schema(name),
@@ -334,3 +368,22 @@ def actor_lifecycle_output_validator(name: str) -> Draft202012Validator:
     """Validate one actor or identity-link lifecycle receipt."""
     actor_lifecycle_output_schema(name)
     return _contract_output_validator(name)
+
+
+def project_output_schema(name: str) -> dict[str, Any]:
+    """Load one reviewed project-shell response contract."""
+    if name not in PROJECT_INPUT_SCHEMAS:
+        raise ContractError("unknown project contract")
+    schema = _contract_output_schema(name)
+    if name == "projects_get" and "type" not in schema:
+        # MCP requires object-rooted tool outputs; retain FastAPI's exact union.
+        return {"type": "object", **schema}
+    return schema
+
+
+def project_output_validator(name: str) -> Draft202012Validator:
+    """Validate one project-shell response projection."""
+    return Draft202012Validator(
+        project_output_schema(name),
+        format_checker=_OUTPUT_FORMAT_CHECKER,
+    )
