@@ -145,11 +145,11 @@ product lifecycle or alternative storage subsystem is introduced.
 
 | Claim | Command or proof | Result | Remaining uncertainty |
 |---|---|---|---|
-| Credential/configuration/proof contracts | focused credential, settings, proof, activation and lane suite | 484 passed locally | no live AWS authorization claim |
+| Credential/configuration/proof contracts | focused credential, settings, proof, activation and lane suite | initial 484 passed; 330 affected credential/configuration/proof-command tests passed after repairs | overlapping counts; no live AWS authorization claim |
 | Immutable activation and terminal custody | isolated PostgreSQL activation and terminal regressions; focused null-field discriminator | 38 passed plus focused discriminator | hosted complete-suite evidence remains separate |
 | Retained-data migration | separate-invocation predecessor upgrade and targeted downgrade refusal | passed; isolated database cleanup confirmed | no production migration executed |
 | S3 consumer composition | real helper subprocess, actual SDK signing and loopback HTTP with isolated PostgreSQL | exact sealed upload/readback, refreshed credentials, scoped guide access and scratch cleanup passed | loopback transport does not prove AWS policy enforcement |
-| Hosted configuration | generator/normalizer and release configuration/image-contract tests | passed locally | release image build and real deployment remain separate |
+| Hosted configuration | generator/normalizer and release configuration/image-contract tests | 33 release configuration/image-contract tests passed after repairs; prior candidate release image build passed | repaired-head image build and real deployment remain separate |
 | Owner boundaries | architecture and authorization boundary tests | 127 passed locally | no new storage owner or public route |
 | Existing public guide integration | isolated PostgreSQL/MinIO batch | timed out after 900 seconds; cleanup confirmed; not credited as a pass | complete hosted suite required |
 | Real pilot | provision three identities, run existing proof modes, then public ZIP contribution drill | pending | AWS resources and certificates not provisioned |
@@ -174,8 +174,8 @@ administrator replaces creation grants with exact returned-resource permissions.
 
 ## Reconciliation
 
-- Current-source reconciliation: based on main `3f373f840`; preserve its CLI source-download
-  capability and roadmap updates alongside this adapter/deployment boundary.
+- Current-source reconciliation: based on main `4ad0812e0`; preserve its CLI source-download
+  and task-audit capabilities and roadmap updates alongside this adapter/deployment boundary.
 - Next usable boundary: provision identities and run live AWS activation and
   the public contribution drill tracked by #582/#555.
 - Remaining risks: certificate signing-key custody and renewal are operational
