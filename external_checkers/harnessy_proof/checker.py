@@ -82,7 +82,7 @@ def evaluate_proof(raw: bytes | None) -> list[dict[str, object]]:
 def read_proof(input_root: Path) -> bytes | None:
     """Read at most one byte past the limit from a regular, non-linked proof file."""
     try:
-        descriptor = os.open(input_root / PROOF_PATH, os.O_RDONLY | os.O_NOFOLLOW)
+        descriptor = os.open(input_root / PROOF_PATH, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
     except OSError:
         return None
     with os.fdopen(descriptor, "rb") as handle:

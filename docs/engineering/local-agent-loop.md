@@ -183,7 +183,10 @@ authority and a stable `Idempotency-Key` per identity. A rerun reports
 `provisioned` again (the exact replay), an identity created earlier under
 another subject reports `existing`, and any other outcome reports
 `failed:<status>:<code>` with a nonzero exit. It waits for `Retry-After` when the
-administrative rate limit (30 mutations per minute by default) is reached:
+administrative rate limit (30 mutations per minute by default) is reached. It
+sends the administrator's token only to loopback HTTP or to HTTPS; any other
+`--api-url`, such as `http://backend:8000`, exits 2 with `invalid_api_url`. The
+default `http://127.0.0.1:8000` is the API inside the backend container:
 
 ```bash
 docker compose exec -T backend python scripts/provision_local_service_actors.py \
@@ -336,8 +339,8 @@ The script does not authenticate its caller. Anyone who can run
 `docker compose exec backend` already holds the database credentials, so naming
 an operator's profile ID is acceptable only on this local stack; AUTH still
 requires that operator's current grant. Going live is refused while any
-retained FinalAcceptance lacks a valid routing receipt. Leaving `live` uses the owner's draining path and is not part of this
-script.
+retained FinalAcceptance lacks a valid routing receipt. Leaving `live` uses the
+owner's draining path and is not part of this script.
 
 ## Contributor flow for the agent
 

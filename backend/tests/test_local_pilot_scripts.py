@@ -314,6 +314,10 @@ def test_service_actor_script_resends_the_same_key_after_rate_limit(monkeypatch)
     [
         ("http://127.0.0.1:8000", True),
         ("http://localhost:8000", True),
+        ("http://[::1]:8000", True),
+        ("http://localhost.evil.example", False),
+        ("http://127.0.0.1@evil.example", False),
+        ("http://backend:8000", False),
         ("https://api.example", True),
         ("http://api.example", False),
         ("http://user:pass@127.0.0.1:8000", False),

@@ -149,8 +149,9 @@ def test_published_registry_bodies_are_backend_valid_for_both_phases() -> None:
             "harnessy.work_proof",
             "v2",
         )
-    with pytest.raises(SystemExit):
-        publish_local.publish("localhost:5000@registry.example", "harnessy-proof")
+    for registry in ("localhost:5000@registry.example", "localhost", "registry.example:5000"):
+        with pytest.raises(SystemExit):
+            publish_local.publish(registry, "harnessy-proof")
 
 
 def test_published_service_paths_match_the_compose_overlay() -> None:
