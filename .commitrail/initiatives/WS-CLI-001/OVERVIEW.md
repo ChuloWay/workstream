@@ -30,14 +30,23 @@
   [WS-CLI-001-23](WS-CLI-001-23.md), Finance draft creation, rule replacement, publication and retirement;
   [WS-CLI-001-24](WS-CLI-001-24.md), self/project contribution evidence and exact private CSV export;
   [WS-CLI-001-25](WS-CLI-001-25.md), explicit public ZIP preparation, Submission replay/history and contributor checker findings;
-  [WS-CLI-001-27](WS-CLI-001-27.md), manager task context and retained Submission/checker evidence reads;
+  [WS-CLI-001-27](WS-CLI-001-27.md), manager task-context and retained Submission/checker evidence reads;
   [WS-CLI-001-28](WS-CLI-001-28.md), privileged actor, identity-link, grant-history and catalogue reads;
+  [WS-CLI-001-29](WS-CLI-001-29.md), Operator checker registry and exact retry commands;
+  [WS-CLI-001-33](WS-CLI-001-33.md), exact-project contributor-candidate discovery;
   [WS-CLI-001-35](WS-CLI-001-35.md), deliberate exact-source manager revision-context repair;
   [PILOT-13](../../changes/pilot13-assigned-task-guide-documents.md), assigned-task locked-guide listing/download;
   [PILOT-02](../../changes/pilot02-bulk-transitions-cli.md), explicit CSV conversion,
   source custody, atomic import, batch status and whole-batch screen/release.
 
 ## Current boundary
+
+[WS-CLI-001-29](WS-CLI-001-29.md) adds explicit system-Operator commands for
+immutable external-checker registry registration/read and project-bound
+known-terminal checker retry-source listing/retry through four existing public
+REST routes. Registration does not enable execution; source reads do not authorize
+later retry, and exact replay rechecks backend authority. Hosted operation and
+CLI distribution remain separate.
 
 [WS-CLI-001-27](WS-CLI-001-27.md) exposes the seven existing Project Manager
 task requirements/context and exact Submission/checker-history GETs through
@@ -49,20 +58,28 @@ exact actor profile/identity-link inspection, explicitly scoped actor/admin gran
 history pages, and permission/role-definition catalogues. These remain separate
 from self-profile operations and never treat observed grants as local authority.
 
+[WS-CLI-001-33](WS-CLI-001-33.md) adds `project role-grant candidates PROJECT_ID`
+over the existing exact-project candidate page. A covered Project Manager sees
+only actor UUID and nullable display name with explicit opaque continuation.
+Discovery neither qualifies nor grants actors; backend authority and cursor
+scope remain decisive.
+
 Current public-only completion plan (inventory at main `51b868071`): FastAPI
 OpenAPI declares 125 non-health method/path operations, of which 69 have CLI
 coverage. Counts are an inventory, not a runtime certification or a coverage
-target, and predate the delivered additions below. Contributor `me`
+target, and predate the delivered additions above. Contributor `me`
 browsing, preparation reads, manager work browsing,
 guide list/show/readiness/document reads and contribution-policy listing are
 also delivered by the merged PILOT read work; reuse those owners.
 
 The baseline's remaining 56 operations are grouped below. Each issue is a bounded client
 outcome, implemented in its own worktree/PR; split an issue further if its
-concrete diff would be unreviewable. The #602, #603 and #606 rows are delivered by
-[WS-CLI-001-27](WS-CLI-001-27.md), [WS-CLI-001-35](WS-CLI-001-35.md) and
-[WS-CLI-001-28](WS-CLI-001-28.md), respectively; the other rows remain planned here.
-WS-CLI-001-30 delivers #499's history/current revision-context presentation correction.
+concrete diff would be unreviewable. The #602, #603, #604 and #606 rows are
+delivered by [WS-CLI-001-27](WS-CLI-001-27.md), [WS-CLI-001-35](WS-CLI-001-35.md),
+[WS-CLI-001-33](WS-CLI-001-33.md) and [WS-CLI-001-28](WS-CLI-001-28.md),
+respectively; other rows remain planned here.
+[WS-CLI-001-30](WS-CLI-001-30.md) delivers #499's history/current
+revision-context presentation correction.
 
 | Issue | Public-client boundary | Operations |
 |---|---|---:|
@@ -71,11 +88,11 @@ WS-CLI-001-30 delivers #499's history/current revision-context presentation corr
 | [#601](https://github.com/Flow-Research/workstream/issues/601) | Governed sufficiency/manual artifact-policy writes | 4 |
 | [#602](https://github.com/Flow-Research/workstream/issues/602) | Manager task context and submission/checker evidence, delivered by [WS-CLI-001-27](WS-CLI-001-27.md) | 7 |
 | [#603](https://github.com/Flow-Research/workstream/issues/603) | Exact revision-context repair, delivered by [WS-CLI-001-35](WS-CLI-001-35.md) | 1 |
-| [#604](https://github.com/Flow-Research/workstream/issues/604) | Contributor-candidate discovery | 1 |
+| [#604](https://github.com/Flow-Research/workstream/issues/604) | Contributor-candidate discovery, delivered by [WS-CLI-001-33](WS-CLI-001-33.md) | 1 |
 | [#605](https://github.com/Flow-Research/workstream/issues/605) | Retained task-import source download | 1 |
 | [#606](https://github.com/Flow-Research/workstream/issues/606) | Actor/admin authority inspection — delivered by [WS-CLI-001-28](WS-CLI-001-28.md) | 6 |
 | [#607](https://github.com/Flow-Research/workstream/issues/607) | Actor/identity lifecycle and administrative writes | 8 |
-| [#608](https://github.com/Flow-Research/workstream/issues/608) | External-checker registry and explicit retry | 4 |
+| [#608](https://github.com/Flow-Research/workstream/issues/608) | External-checker registry and explicit retry, delivered by [WS-CLI-001-29](WS-CLI-001-29.md) | 4 |
 | [#609](https://github.com/Flow-Research/workstream/issues/609) | Operator task inspection/start override | 3 |
 | [#610](https://github.com/Flow-Research/workstream/issues/610) | Task audit context/evidence | 2 |
 | [#611](https://github.com/Flow-Research/workstream/issues/611) | Artifact operator inspection/recovery | 9 |
@@ -279,7 +296,7 @@ CLIs. Keep the package independent of backend and MCP runtime dependencies.
     replay. No grant discovery or automatic eligibility.
 21. **WS-CLI-001-21:** Filtered project-grant pagination and exact grant history
    through public GETs, complete qualification/provenance disclosure and fresh
-   authority on each call. No actor discovery or automatic decisions.
+   authority on each call. No unscoped actor directory or automatic decisions.
 22. **WS-CLI-001-22:** Current Finance policy discovery and backend-selected or
    exact retained-version inspection, including empty drafts and complete award
    definitions. No Finance mutation, publication or local readiness decisions.
