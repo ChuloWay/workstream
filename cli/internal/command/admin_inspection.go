@@ -42,7 +42,8 @@ func addAdminInspection(root *cobra.Command, client func() (*api.Client, error),
 	})
 	addAdminGrantRead(actor, client, output, stdout, true)
 	admin.AddCommand(actor)
-	addAdminGrantRead(admin, client, output, stdout, false)
+	grants := addAdminGrantRead(admin, client, output, stdout, false)
+	addAdminMutations(admin, actor, grants, client, output, stdout)
 	admin.AddCommand(&cobra.Command{
 		Use: "permissions", Short: "Read the public permission catalogue", Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
@@ -74,7 +75,7 @@ func addAdminInspection(root *cobra.Command, client func() (*api.Client, error),
 	root.AddCommand(admin)
 }
 
-func addAdminGrantRead(parent *cobra.Command, client func() (*api.Client, error), output *string, stdout io.Writer, actor bool) {
+func addAdminGrantRead(parent *cobra.Command, client func() (*api.Client, error), output *string, stdout io.Writer, actor bool) *cobra.Command {
 	var scope, project, status, cursor string
 	var limit int
 	command := &cobra.Command{
@@ -117,4 +118,5 @@ func addAdminGrantRead(parent *cobra.Command, client func() (*api.Client, error)
 	command.Flags().IntVar(&limit, "limit", 50, "Page size, 1–100")
 	command.Flags().StringVar(&cursor, "cursor", "", "Opaque next cursor from the prior page")
 	parent.AddCommand(command)
+	return command
 }

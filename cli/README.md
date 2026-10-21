@@ -3,7 +3,8 @@
 An independent Go client for Workstream's public REST API, for humans and
 agents using the terminal. It provides human self-profile reads and editing,
 plus draft project/guide declaration and original upload, exact-project inspection, authority reads, manager task browsing and
-administrative active-guide/intake-policy inspection,
+administrative actor, identity-link and grant inspection and explicit writes,
+active-guide/intake-policy inspection,
 contributor work discovery, claim/start, locked guide documents and governing
 context/intake requirements, explicit batch import/screen/release, Finance
 policy management, explicit ZIP preparation/submission, checker findings,
@@ -20,6 +21,11 @@ contribution-evidence exports and exact Audit Authority task reads:
 | `workstream admin role-grants --scope system\|project [--project-id UUID]` | `GET /api/v1/admin-role-grants` |
 | `workstream admin permissions` | `GET /api/v1/authorization/permissions` |
 | `workstream admin role-definitions` | `GET /api/v1/authorization/admin-role-definitions` |
+| `workstream admin service-actor provision --input FILE --idempotency-key UUID` | `POST /api/v1/service-actors` |
+| `workstream admin actor suspend\|reactivate\|deactivate ACTOR_ID --input FILE --idempotency-key UUID` | `POST /api/v1/actors/ACTOR_ID/{action}` |
+| `workstream admin identity-link revoke\|reactivate LINK_ID --input FILE --idempotency-key UUID` | `POST /api/v1/actor-identity-links/LINK_ID/{action}` |
+| `workstream admin role-grants issue --input FILE --idempotency-key UUID` | `POST /api/v1/admin-role-grants` |
+| `workstream admin role-grants revoke GRANT_ID --input FILE --idempotency-key UUID` | `POST /api/v1/admin-role-grants/GRANT_ID/revoke` |
 | `workstream contributions [--project UUID]` | `GET /api/v1/actors/me/contributions` |
 | `workstream project contributions PROJECT_ID` | `GET /api/v1/projects/PROJECT_ID/contributions/export` |
 | `workstream project access PROJECT_ID` | `GET /api/v1/actors/me/authorization-context?project_id=PROJECT_ID` |
@@ -1546,6 +1552,45 @@ delivery. A lost, malformed or unsafe success is `outcome_unknown`; a later
 read may help inspect current state but cannot prove rollback. Manually replay
 only the unchanged override request if appropriate.
 
+## Make explicit administrative decisions
+
+The eight administrative POSTs are separate from `whoami`, caller-owned
+`profile update`, project contributor grants and the six privileged `admin`
+reads. Each command requires a caller-authored JSON file (at most 1 MiB) and
+UUID idempotency key. For example:
+
+```sh
+workstream admin service-actor provision --input service-actor.json --idempotency-key PROVISION_UUID --output json
+workstream admin actor suspend ACTOR_ID --input reason.json --idempotency-key SUSPEND_UUID --output json
+workstream admin identity-link revoke LINK_ID --input reason.json --idempotency-key LINK_UUID --output json
+workstream admin role-grants issue --input admin-grant.json --idempotency-key ISSUE_UUID --output json
+workstream admin role-grants revoke GRANT_ID --input reason.json --idempotency-key REVOKE_UUID --output json
+```
+
+The provision input has `service_identity`, `subject` and `reason`; the
+service identity must be a registered fixed principal. Actor and link
+transitions and grant revocation take `{"reason":"Explicit decision"}`.
+Grant issuance takes `target_actor_profile_id`, `role`, `scope_type`, optional
+`scope_project_id`, and `reason`. Project scope requires an exact project UUID;
+system scope omits that field or sets it to null. Workstream alone decides
+current Access Administrator authority, role/scope compatibility, lifecycle
+guards and final-administrator protection. A previous read never authorizes
+a later write. Profile suspension, identity-link revocation and grant
+revocation are distinct; reactivating one does not reverse the others.
+
+The three reason contracts differ: service provisioning preserves any nonempty
+1–500 UTF-8-byte reason; actor/link lifecycle reasons are trimmed by the API
+before its 1–500-byte check and cannot contain NUL; grant reasons are untrimmed,
+nonempty 1–500 bytes and cannot contain NUL. Service subjects are nonblank,
+untrimmed and at most 200 UTF-8 bytes without NUL. The CLI sends the original
+file bytes once and validates the bounded response, selected resource identity,
+status and nullable version before printing. JSON retains the complete
+authorized receipt; text escapes controls. A complete canonical API 4xx is a
+known denial. Lost, malformed or unsafe write replies are `outcome_unknown`;
+inspect the exact resource only as an observation, then deliberately replay
+the unchanged action, selectors, file bytes and key if appropriate. The CLI
+never preflights authority or retries automatically.
+
 ## Edit your profile
 
 ```sh
@@ -1560,7 +1605,8 @@ and clearing the same field is invalid. Text must be valid UTF-8 and the JSON
 request is capped at 8 KiB. Workstream validates and normalizes the text:
 display name has a 200-character limit, contact text 320, and blank or NUL text
 is rejected. Contact text does not change your Flow login or identity.
-Service-actor editing and authority/lifecycle changes are not CLI operations.
+Caller-owned profile editing cannot provision service actors or change
+authority/lifecycle state; use the separate explicit `admin` commands above.
 
 A successful update prints the validated API profile, using the same text/JSON
 output as `whoami`. No preflight read or automatic retry is performed, and no
