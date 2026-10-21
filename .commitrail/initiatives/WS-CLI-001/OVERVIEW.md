@@ -33,12 +33,20 @@
   [WS-CLI-001-27](WS-CLI-001-27.md), manager task-context and retained Submission/checker evidence reads;
   [WS-CLI-001-29](WS-CLI-001-29.md), Operator checker registry and exact retry commands;
   [WS-CLI-001-31](WS-CLI-001-31.md), verified retained task-import source download;
+  [WS-CLI-001-32](WS-CLI-001-32.md), read-only active-guide and retained/current intake-policy inspection;
   [WS-CLI-001-35](WS-CLI-001-35.md), deliberate exact-source manager revision-context repair;
   [PILOT-13](../../changes/pilot13-assigned-task-guide-documents.md), assigned-task locked-guide listing/download;
   [PILOT-02](../../changes/pilot02-bulk-transitions-cli.md), explicit CSV conversion,
   source custody, atomic import, batch status and whole-batch screen/release.
 
 ## Current boundary
+
+[WS-CLI-001-32](WS-CLI-001-32.md) adds read-only active-guide and exact-guide
+sufficiency/artifact/effective/pre-submit inspection through seven existing
+public GETs. Historical lists expose the backend-capped newest 100 rows;
+exact reads reach older retained IDs. Current-chain reads remain authorized
+observations, not readiness or later-write authority. Manual policy writes
+remain separate.
 
 [WS-CLI-001-29](WS-CLI-001-29.md) adds explicit system-Operator commands for
 immutable external-checker registry registration/read and project-bound
@@ -67,25 +75,26 @@ scope remain decisive.
 Current public-only completion plan (inventory at main `51b868071`): FastAPI
 OpenAPI declares 125 non-health method/path operations, of which 69 have CLI
 coverage. Counts are an inventory, not a runtime certification or a coverage
-target, and predate the manager-evidence, checker and source-download additions above. Contributor `me`
+target, and predate the manager-evidence, guide-inspection, checker and
+source-download additions above. Contributor `me`
 browsing, preparation reads, manager work browsing,
 guide list/show/readiness/document reads and contribution-policy listing are
 also delivered by the merged PILOT read work; reuse those owners.
 
 The baseline's remaining 56 operations are grouped below. Each issue is a bounded client
 outcome, implemented in its own worktree/PR; split an issue further if its
-concrete diff would be unreviewable. The #602, #603, #604, #605 and #608 rows are
-delivered by [WS-CLI-001-27](WS-CLI-001-27.md),
-[WS-CLI-001-35](WS-CLI-001-35.md), [WS-CLI-001-33](WS-CLI-001-33.md),
-[WS-CLI-001-31](WS-CLI-001-31.md) and [WS-CLI-001-29](WS-CLI-001-29.md),
-respectively; the other rows remain separate boundaries.
-[WS-CLI-001-30](WS-CLI-001-30.md) delivers #499's history/current
+concrete diff would be unreviewable. The #600, #602, #603, #604, #605 and
+#608 rows are delivered by [WS-CLI-001-32](WS-CLI-001-32.md),
+[WS-CLI-001-27](WS-CLI-001-27.md), [WS-CLI-001-35](WS-CLI-001-35.md),
+[WS-CLI-001-33](WS-CLI-001-33.md), [WS-CLI-001-31](WS-CLI-001-31.md) and
+[WS-CLI-001-29](WS-CLI-001-29.md), respectively; other rows remain planned
+here. [WS-CLI-001-30](WS-CLI-001-30.md) delivers #499's history/current
 revision-context presentation correction.
 
 | Issue | Public-client boundary | Operations |
 |---|---|---:|
 | [#599](https://github.com/Flow-Research/workstream/issues/599) | Guide edit and review/revision policy configuration | 3 |
-| [#600](https://github.com/Flow-Research/workstream/issues/600) | Active guide, sufficiency and intake policy inspection | 7 |
+| [#600](https://github.com/Flow-Research/workstream/issues/600) | Active guide, sufficiency and intake policy inspection, delivered by [WS-CLI-001-32](WS-CLI-001-32.md) | 7 |
 | [#601](https://github.com/Flow-Research/workstream/issues/601) | Governed sufficiency/manual artifact-policy writes | 4 |
 | [#602](https://github.com/Flow-Research/workstream/issues/602) | Manager task context and submission/checker evidence, delivered by [WS-CLI-001-27](WS-CLI-001-27.md) | 7 |
 | [#603](https://github.com/Flow-Research/workstream/issues/603) | Exact revision-context repair, delivered by [WS-CLI-001-35](WS-CLI-001-35.md) | 1 |
