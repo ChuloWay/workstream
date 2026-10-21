@@ -17,8 +17,9 @@ complete fix.
 
 ## Bounded change
 
-Allowed files are this record, `.github/workflows/backend.yml`, and the focused
-checks explanation in `docs/operations_backend_testing.md`. The existing Rust
+Allowed files are this record, `.github/workflows/backend.yml`, the existing
+workflow contract assertion in `backend/tests/test_ci_lane_catalogue.py`, and the
+focused checks explanation in `docs/operations_backend_testing.md`. The existing Rust
 workspace command adds `-- --test-threads=1`, serializing independent test cases.
 Tests requiring concurrency still create and join their own threads. All Rust
 source, assertions, workspace members and test selection remain unchanged.
@@ -35,7 +36,8 @@ timing failure does not authorize relaxing its one-second budget.
 - Real kernel exact-size and oversize rejection proof remains unchanged.
 - The concurrency tests retain their explicit client/worker threads and checks.
 - Existing workflow and gate contract tests pass. No fail-open fan-in or skip is
-  added.
+  added. Removing the serial-harness flag makes the existing workflow contract
+  assertion fail on the original command.
 - The original service suite passes repeated serial runs; this is bounded
   stability evidence, not a guarantee against every future environment failure.
 
