@@ -20,6 +20,7 @@ from workstream_mcp.schemas import (
     authorization_context_output_validator,
     profile_output_validator,
     profile_update_output_validator,
+    project_grant_output_validator,
     project_output_validator,
 )
 
@@ -52,6 +53,10 @@ _PUBLIC_ERROR_CODES = frozenset(
         "project_authorization_resource_not_found",
         "project_slug_conflict",
         "idempotency_pending",
+        "invalid_cursor",
+        "project_role_grant_already_revoked",
+        "project_role_grant_exists",
+        "project_role_grant_replay_state_changed",
         "resource_guard_denied",
         "resource_not_found",
         "rate_limit_exceeded",
@@ -288,6 +293,184 @@ class WorkstreamGateway:
                 )
             )
         return outcome
+
+    async def project_grant_read(
+        self,
+        name: str,
+        bearer: str,
+        arguments: dict[str, Any],
+        correlation_id: str | None = None,
+    ) -> GatewayResult:
+        """Dispatch one fixed project-participation read and bind its selectors."""
+        project_id = arguments["project_id"]
+        base = f"/api/v1/projects/{quote(project_id, safe='')}"
+        if name == "contributor_candidates_list":
+            path = f"{base}/contributor-candidates"
+        elif name == "project_grants_list":
+            path = f"{base}/role-grants"
+        else:
+            path = f"{base}/role-grants/{quote(arguments['grant_id'], safe='')}"
+        params = {
+            key: str(value)
+            for key, value in arguments.items()
+            if key not in {"project_id", "grant_id"}
+        }
+        outcome = await self._request(
+            "GET",
+            path,
+            bearer,
+            project_grant_output_validator(name),
+            correlation_id,
+            params=params or None,
+        )
+        if outcome.failure is not None:
+            return outcome
+        data = outcome.data or {}
+        if name == "contributor_candidates_list":
+            items = data.get("items")
+            if not self._unique_uuid_field(items, "actor_profile_id"):
+                return self._invalid_read_response(correlation_id)
+            return outcome
+        grants = data.get("items") if name == "project_grants_list" else [data]
+        if not isinstance(grants, list) or any(
+            not isinstance(grant, dict)
+            or not self._same_uuid(grant.get("project_id"), project_id)
+            or not self._valid_grant_observation(grant)
+            or (
+                name == "project_grants_get"
+                and not self._same_uuid(grant.get("id"), arguments["grant_id"])
+            )
+            for grant in grants
+        ) or not self._unique_uuid_field(grants, "id"):
+            return self._invalid_read_response(correlation_id)
+        return outcome
+
+    async def project_grant_mutation(
+        self,
+        name: str,
+        bearer: str,
+        arguments: dict[str, Any],
+        correlation_id: str | None = None,
+    ) -> GatewayResult:
+        """Dispatch one fixed project-role mutation; Workstream owns replay state."""
+        project_id = arguments["project_id"]
+        base = f"/api/v1/projects/{quote(project_id, safe='')}/role-grants"
+        issue = name == "project_grants_issue"
+        path = base if issue else f"{base}/{quote(arguments['grant_id'], safe='')}/revoke"
+        expected_status = 201 if issue else 200
+        outcome = await self._request(
+            "POST",
+            path,
+            bearer,
+            project_grant_output_validator(name),
+            correlation_id,
+            json_body=arguments["body"],
+            idempotency_key=arguments["idempotency_key"],
+            expected_status=expected_status,
+            mutation=True,
+        )
+        if outcome.failure is not None:
+            return outcome
+        data = outcome.data or {}
+        expected = {
+            "status": "active" if issue else "revoked",
+            "version": 1 if issue else 2,
+        }
+        matches = self._same_uuid(data.get("project_id"), project_id) and all(
+            data.get(key) == value for key, value in expected.items()
+        )
+        if issue:
+            matches = (
+                matches
+                and self._same_uuid(
+                    data.get("actor_profile_id"),
+                    arguments["body"]["target_actor_profile_id"],
+                )
+                and data.get("role") == arguments["body"]["role"]
+            )
+        else:
+            matches = matches and self._same_uuid(data.get("id"), arguments["grant_id"])
+        if not matches:
+            return GatewayResult(
+                failure=SafeFailure(
+                    "workstream_execution_uncertain",
+                    status=502,
+                    correlation_id=correlation_id,
+                )
+            )
+        return outcome
+
+    @staticmethod
+    def _same_uuid(candidate: object, expected: str) -> bool:
+        try:
+            return UUID(str(candidate)) == UUID(expected)
+        except (TypeError, ValueError):
+            return False
+
+    @classmethod
+    def _unique_uuid_field(cls, items: object, field: str) -> bool:
+        if not isinstance(items, list):
+            return False
+        identifiers: set[UUID] = set()
+        for item in items:
+            if not isinstance(item, dict):
+                return False
+            try:
+                identifier = UUID(str(item[field]))
+            except (KeyError, TypeError, ValueError):
+                return False
+            if identifier in identifiers:
+                return False
+            identifiers.add(identifier)
+        return True
+
+    @staticmethod
+    def _valid_grant_observation(grant: dict[str, Any]) -> bool:
+        snapshot = grant.get("qualification_snapshot")
+        if not isinstance(snapshot, dict) or snapshot.get("requested_role") != grant.get("role"):
+            return False
+        if any(
+            "://" in reference
+            for key in ("external_expertise_refs",)
+            for reference in snapshot.get(key, [])
+            if isinstance(reference, str)
+        ):
+            return False
+        for key in ("skills_snapshot", "reputation_snapshot"):
+            evidence = snapshot.get(key)
+            if not isinstance(evidence, dict):
+                return False
+            availability = evidence.get("availability")
+            references = evidence.get("reference_ids")
+            reason = evidence.get("unavailable_reason")
+            if not isinstance(references, list) or any(
+                not isinstance(reference, str) or "://" in reference
+                for reference in references
+            ):
+                return False
+            if availability == "available":
+                if not references or reason is not None:
+                    return False
+            elif availability == "unavailable":
+                if references or reason not in {
+                    "not_collected",
+                    "source_unavailable",
+                    "no_record",
+                }:
+                    return False
+            else:
+                return False
+        return True
+
+    @staticmethod
+    def _invalid_read_response(correlation_id: str | None) -> GatewayResult:
+        return GatewayResult(
+            failure=SafeFailure(
+                "invalid_api_response",
+                status=502,
+                correlation_id=correlation_id,
+            )
+        )
 
     async def _request(
         self,

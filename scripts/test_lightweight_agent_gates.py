@@ -110,6 +110,7 @@ class LightweightAgentGateTests(unittest.TestCase):
                         "test_admin_grants",
                         "test_actor_lifecycle",
                         "test_projects",
+                        "test_project_grants",
                     ) if code == 0 else ("test_profile_flow",)
                     expected = [
                         [
