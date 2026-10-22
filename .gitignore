@@ -224,3 +224,6 @@ demos/week1_api_demo_ui/dist/
 
 # Local agent-loop generated checker configuration
 .local-agent-loop/
+
+# Local checker image qualification/publication receipts
+.checker-images/

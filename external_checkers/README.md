@@ -28,6 +28,11 @@ implementation can use the Rust SDK or implement the same versioned JSON
 request/result contract directly. It must be compatible with the supported
 container platform and sandbox; the SDK does not grant additional privileges.
 
+Use the generic [checker image command](../docs/engineering/checker-images.md)
+to build a project-owned Dockerfile, test positive/negative samples, and optionally
+publish the same image to private ECR. It produces a verified digest and inputs
+for separate runner provisioning and Operator registration; it changes no policy.
+
 ## Shared responsibilities
 
 - Workstream owns guide compilation, authorization, policy approvals, registry
