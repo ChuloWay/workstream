@@ -294,6 +294,12 @@ LOCAL_PILOT_HELPER_TARGETS = frozenset(
         "backend/scripts/local_flow_tokens.py",
     }
 )
+LOCAL_AGENT_LOOP_TARGETS = frozenset(
+    {
+        "backend/scripts/provision_local_service_actors.py",
+        "backend/scripts/transition_review_lifecycle.py",
+    }
+)
 MODULE_PUBLIC_API_FOUNDATION_TARGETS = frozenset(
     {
         "backend/app/api/routes/artifact_submissions.py",
@@ -999,6 +1005,7 @@ def _validate_additive_partition_transition(
         | PILOT_04_DEFAULT_CHECKER_TARGETS
         | PILOT_04_SELECTED_FLOW_TARGETS
         | LOCAL_PILOT_HELPER_TARGETS
+        | LOCAL_AGENT_LOOP_TARGETS
         | MODULE_BOUNDARY_FOUNDATION_TARGETS
         | MODULE_PUBLIC_API_FOUNDATION_TARGETS
         | POL_03A_CALLABLE_TARGETS
