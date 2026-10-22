@@ -308,6 +308,72 @@ ws_as local-finance project contribution-policy publish "$PROJECT_ID" "$POLICY_I
   --idempotency-key "$(uuidgen | tr 'A-Z' 'a-z')" -o json
 ```
 
+## Enable project points
+
+Flow awards contributions in one unit, `FLOW`, shown to people as "Flow
+Points". Partner communities may get separate units later. A unit is
+project-scoped in Workstream, so each Flow project gets its own `FLOW` unit
+with the same code; equal codes in different projects are still different
+units, and Workstream does not add them together.
+
+A `project_points` award rule needs three things for the project: the
+`workstream.compensation.adapter` service actor, the project's `FLOW` unit and
+an active `project_points` adapter binding. The unit and the binding have no
+public route. The script below creates each one that is missing, in this order
+and through the owners' authorized commands:
+
+1. the adapter actor through `POST /api/v1/service-actors` with the Access
+   Administrator's authority (the same call as `provision_local_service_actors.py`);
+2. the unit through `contribution.compensation_unit.create` with the Finance
+   Authority's AUTH decision;
+3. the binding through `compensation.adapter_binding.create` with the same
+   Finance Authority.
+
+```bash
+docker compose exec -T backend python scripts/provision_project_points.py \
+  --project-id "$PROJECT_ID" --finance-actor-profile-id "$FINANCE_ID" \
+  --admin-subject local-access-admin
+```
+
+The script prints one JSON line. Record `adapter_binding_id` as `BINDING_ID`:
+
+```json
+{"adapter_actor": "provisioned", "adapter_actor_id": "...", "adapter_binding_id": "...",
+ "binding": "created", "project_id": "...", "result_code": "ready", "unit": "created",
+ "unit_code": "FLOW"}
+```
+
+Each step commits on its own, so a rerun reports `existing` for what is already
+there and changes nothing. If a step
+fails, the output lists the steps that already committed; fix the cause and run
+the script again. It exits 3 with `result_code: unavailable` when the adapter
+actor is missing and `--admin-subject` is absent, or when the Finance actor
+does not have exactly one active identity link. An AUTH denial (for example, an
+actor without a Finance Authority grant covering the project) exits 1 with
+`error_type`; the failed step creates nothing, and an adapter actor provisioned
+earlier in the run stays. An active binding with another adapter actor or route
+key exits 3 with `active_binding_mismatch`. The script refuses to run when
+`WORKSTREAM_ENVIRONMENT` is production-like (`staging`, `preview`, `prod`,
+`production`). `--unit-code` and `--route-key`
+(default `flow_points.local`) override the defaults. Like the lifecycle script,
+it does not authenticate its caller and is a local operator tool only.
+
+A compensated policy then names the unit and binding. For example, 10 Flow
+Points for an accepted submission and 3 for a completed review:
+
+```bash
+jq -n --arg binding "$BINDING_ID" '{rules:[
+  {contribution_type:"accepted_submission",compensation_mode:"compensated",
+   definitions:[{instrument_type:"project_points",unit_code:"FLOW",quantity:"10",adapter_binding_id:$binding}]},
+  {contribution_type:"completed_review",compensation_mode:"compensated",
+   definitions:[{instrument_type:"project_points",unit_code:"FLOW",quantity:"3",adapter_binding_id:$binding}]}]}' \
+  > .local-agent-loop/policy-rules.json
+```
+
+Create, update and publish it with the Finance commands above. Guide activation
+locks the selected policy version, so new tasks award points only after a guide
+version that selects the new published policy is activated.
+
 ## Placeholder: compile, approve and activate the guide rules
 
 > **Not covered here.** Selecting `harnessy.work_proof` into the locked

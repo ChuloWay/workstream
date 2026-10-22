@@ -198,7 +198,15 @@ Each mutation takes exactly one UUID `Idempotency-Key`; publication and retireme
 use an empty JSON object. Update supplies `rules`, with one `accepted_submission`
 and one `completed_review` rule. Each rule explicitly chooses `unpaid` with no
 definitions, or `compensated` with valid unit/binding definitions. An unpaid policy
-requires no adapter binding. Public binding administration remains pending.
+requires no adapter binding. A compensated `project_points` definition needs
+the project's active points unit and its active `project_points` adapter
+binding. Neither has a public route: Finance Authority creates both through
+internal commands (`contribution.compensation_unit.create` and
+`compensation.adapter_binding.create`). Locally, run
+`backend/scripts/provision_project_points.py`; see
+[the local agent loop guide](engineering/local-agent-loop.md#enable-project-points).
+Public unit and binding administration remain pending, and money units cannot
+be created yet.
 The create command initializes the name for a new policy aggregate; a successor
 draft retains that aggregate's name. Current discovery lets another Finance actor resume a saved draft without the
 creator's receipt. Retired policies remain available through exact authorized

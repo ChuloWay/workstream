@@ -53,6 +53,7 @@ from app.modules.contributions.models import (  # noqa: F401
     Iso4217CurrencyCode,
     ProjectCompensationUnit,
 )
+from app.modules.contributions.units.models import ProjectCompensationUnitCreationEvent  # noqa: F401
 from app.modules.outbox.models import OutboxDeliveryAttempt, OutboxEvent  # noqa: F401
 from app.modules.projects.models import (  # noqa: F401
     EffectiveProjectSubmissionArtifactPolicy,

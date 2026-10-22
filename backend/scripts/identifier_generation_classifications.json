@@ -203,6 +203,7 @@
     "app/modules/tasks/task_batch_transitions.py|TaskBatchTransitionCommands._prepare|Assign:b01b4c43bfe447dd|0": "uuid4:call:transport_token",
     "app/modules/tasks/task_import_batches.py|TaskImportBatchCommands._prepare_rows|Expr:49b976e107dcb310|0": "uuid4:call:transport_token",
     "scripts/provision_local_service_actors.py|idempotency_key|Return:7cb5dd9bb0dd8d6d|0": "uuid5:call:deterministic_selector",
+    "scripts/provision_project_points.py|operation_id|Return:c4153895932617e2|0": "uuid5:call:deterministic_selector",
     "scripts/checker_image.py|test_sample|Assign:e083a0160380e194|0": "uuid4:call:external_provider_identifier",
     "scripts/checker_image.py|publish|Assign:c4c6a34b99018fa0|0": "uuid4:call:external_provider_identifier",
     "scripts/checker_image.py|main|Assign:81cc82e810b9eb29|0": "uuid4:call:ephemeral_storage_name",

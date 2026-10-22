@@ -1238,6 +1238,10 @@
     },
     {
       "group": "lifecycle",
+      "target": "backend/app/modules/contributions/api/compensation_units.py"
+    },
+    {
+      "group": "lifecycle",
       "target": "backend/app/modules/contributions/api/participation.py"
     },
     {
@@ -1343,6 +1347,14 @@
     {
       "group": "lifecycle",
       "target": "backend/app/modules/contributions/service.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/contributions/units/models.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/contributions/units/service.py"
     },
     {
       "group": "shared",
@@ -2221,6 +2233,10 @@
       "target": "backend/scripts/provision_local_service_actors.py"
     },
     {
+      "group": "lifecycle",
+      "target": "backend/scripts/provision_project_points.py"
+    },
+    {
       "group": "shared",
       "target": "backend/scripts/record_id_collection.py"
     },
@@ -2261,7 +2277,7 @@
       "target": "backend/scripts/validate_test_lane_evidence.py"
     }
   ],
-  "authority_digest": "874f98c2ad63737b64efea34f8e4c42f0594cebab911117efde7ded2ed96cef8",
+  "authority_digest": "a82fe4f9c2bf76921e30089dd1f7549ec78c2d49610332b498187c98e7b8b9f7",
   "protected_base_commit": "7676ce4347db0c9694962a9b587a20765e16eac6",
   "schema": "workstream.behavior-ownership-partition.v1"
 }
