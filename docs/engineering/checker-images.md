@@ -30,6 +30,8 @@ does not require another repository or a Workstream source change or rebuild.
 ## Prerequisites
 
 Install `uv` and Docker using the [developer setup](developer-setup.md).
+Publishing requires Docker API 1.46 or later for an explicit single-platform
+[push](https://docs.docker.com/reference/cli/docker/image/push/).
 The command uses the locked backend environment solely for the existing public
 checker validation contracts; it starts no API, database or Celery process. The project
 image itself does not depend on the Workstream backend or Rust SDK.
@@ -142,7 +144,10 @@ approving a production policy.
 After samples pass, publishing tags and pushes that same local image ID. It reads
 the raw ECR manifest, verifies its SHA-256 and configuration image ID, rejects
 image indexes, pulls by digest and verifies the daemon's identity. It then repeats
-the samples with the final registry image digest in their requests.
+the samples with the final registry image digest in their requests. The local
+published tag and digest remain cached; removing the last local repository tag
+can also remove its digest association. Containers, scratch and temporary login
+configuration are cleaned up.
 
 Outputs go to a new `.checker-images/<unique-id>/` directory, or the new directory
 selected by `--out`. Existing directories are never overwritten:

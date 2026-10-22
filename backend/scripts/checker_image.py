@@ -242,9 +242,17 @@ def aws(region: str, *arguments: str) -> bytes:
 def verify_manifest(response: dict, digest: str, image_id: str) -> tuple[str, int]:
     """Bind raw registry manifest bytes to the tested configuration, rejecting indexes."""
     images = response.get("images", [])
-    if response.get("failures") or len(images) != 1:
+    if response.get("failures") or not images:
         raise ImageError("ECR did not return the exact published manifest")
     item = images[0]
+    # ECR can return one row per tag for a digest shared by several releases.
+    if any(
+        other.get("imageManifest") != item.get("imageManifest")
+        or other.get("imageManifestMediaType") != item.get("imageManifestMediaType")
+        or other.get("imageId", {}).get("imageDigest") != digest
+        for other in images
+    ):
+        raise ImageError("ECR returned conflicting identities for the published digest")
     raw = item["imageManifest"].encode("utf-8")
     manifest = decode(raw)
     media = item.get("imageManifestMediaType")
@@ -317,62 +325,66 @@ def publish(
         )
         del password
         docker.call("tag", image["Id"], reference, step="tag tested image")
-        try:
-            # After this point a failure may have published bytes. Never auto-retry.
-            evidence["publication"] = "uncertain"
-            checkpoint()
-            output = docker.call(
-                "--config", auth, "push", reference, step="push tested image", timeout=600
+        # After this point a failure may have published bytes. Never auto-retry.
+        evidence["publication"] = "uncertain"
+        checkpoint()
+        output = docker.call(
+            "--config",
+            auth,
+            "push",
+            "--platform",
+            f"{image['Os']}/{image['Architecture']}",
+            reference,
+            step="push tested image",
+            timeout=600,
+        )
+        digests = re.findall(rb"digest: (sha256:[0-9a-f]{64})", output)
+        if len(set(digests)) != 1:
+            raise ImageError("push completed without one unambiguous digest")
+        digest = digests[0].decode("ascii")
+        evidence.update(publication="published_unverified", image=f"{expected_uri}@{digest}")
+        checkpoint()
+        response = decode(
+            aws(
+                region,
+                "ecr",
+                "batch-get-image",
+                "--registry-id",
+                account,
+                "--repository-name",
+                repository,
+                "--image-ids",
+                f"imageDigest={digest}",
+                "--accepted-media-types",
+                *MANIFEST_TYPES,
+                "--output",
+                "json",
             )
-            digests = re.findall(rb"digest: (sha256:[0-9a-f]{64})", output)
-            if len(set(digests)) != 1:
-                raise ImageError("push completed without one unambiguous digest")
-            digest = digests[0].decode("ascii")
-            evidence.update(publication="published_unverified", image=f"{expected_uri}@{digest}")
-            checkpoint()
-            response = decode(
-                aws(
-                    region,
-                    "ecr",
-                    "batch-get-image",
-                    "--registry-id",
-                    account,
-                    "--repository-name",
-                    repository,
-                    "--image-ids",
-                    f"imageDigest={digest}",
-                    "--accepted-media-types",
-                    *MANIFEST_TYPES,
-                    "--output",
-                    "json",
-                )
-            )
-            media, size = verify_manifest(response, digest, image["Id"])
-            docker.call(
-                "--config",
-                auth,
-                "pull",
-                "--quiet",
-                evidence["image"],
-                step="pull exact digest",
-                timeout=600,
-            )
-            pulled = docker.inspect(evidence["image"])
-            if any(pulled.get(k) != image.get(k) for k in ("Id", "Os", "Architecture")) or evidence[
-                "image"
-            ] not in pulled.get("RepoDigests", []):
-                raise ImageError("pulled image differs from the tested image")
-            return {
-                "repository": expected_uri,
-                "platform_manifest_digest": digest,
-                "platform_manifest_media_type": media,
-                "platform_manifest_byte_count": size,
-                "operating_system": image["Os"],
-                "architecture": image["Architecture"],
-                "config_image_id": image["Id"],
-            }
-        finally:
-            docker.call("image", "rm", reference, step="remove temporary publish tag")
+        )
+        media, size = verify_manifest(response, digest, image["Id"])
+        docker.call(
+            "--config",
+            auth,
+            "pull",
+            "--quiet",
+            evidence["image"],
+            step="pull exact digest",
+            timeout=600,
+        )
+        pulled = docker.inspect(evidence["image"])
+        if any(pulled.get(k) != image.get(k) for k in ("Id", "Os", "Architecture")) or evidence[
+            "image"
+        ] not in pulled.get("RepoDigests", []):
+            raise ImageError("pulled image differs from the tested image")
+        return {
+            "repository": expected_uri,
+            "platform_manifest_digest": digest,
+            "platform_manifest_media_type": media,
+            "platform_manifest_byte_count": size,
+            "operating_system": image["Os"],
+            "architecture": image["Architecture"],
+            "config_image_id": image["Id"],
+        }
 
 
 def execute(args, evidence: dict, checkpoint) -> dict:

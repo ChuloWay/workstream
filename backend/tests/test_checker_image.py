@@ -73,6 +73,8 @@ class FakeDocker:
     def __init__(self):
         self.calls = []
         self.failure = None
+        self.pulled = False
+        self.removed = False
         self.manifest = json.dumps(
             {
                 "schemaVersion": 2,
@@ -85,6 +87,8 @@ class FakeDocker:
         self.reference = URI + "@" + self.digest
 
     def inspect(self, image, **kwargs):
+        if self.removed:
+            raise ImageError("published image identity was removed")
         return json.loads(self.call("image", "inspect", image, step="inspect image", **kwargs))
 
     def image(self):
@@ -107,6 +111,10 @@ class FakeDocker:
         return output
 
     def response(self, *args, step, **kwargs):
+        if args[:2] == ("image", "rm"):
+            self.removed = True
+        if "pull" in args:
+            self.pulled = True
         if args[:2] == ("image", "inspect"):
             return json.dumps(self.image()).encode()
         if args[0] == "info":
@@ -126,6 +134,8 @@ class FakeDocker:
             if self.failure == "invalid":
                 return b'{"outcome":"completed"}'
             request = ExternalCheckerExecutionRequest.model_validate_json(kwargs["data"])
+            if request.registry.image_digest != IMAGE:
+                assert self.pulled and not self.removed
             bad = request.input["sample"] == "bad"
             if self.failure == "digest_branch" and request.registry.image_digest != IMAGE:
                 bad = not bad
@@ -230,6 +240,8 @@ def test_publish_verifies_exact_image_and_rechecks_digest_before_outputs(
     assert len([c for c in calls if c[0] == "build"]) == 1
     assert len([c for c in calls if c[0] == "start"]) == 4
     assert next(c for c in calls if c[0] == "tag")[1] == IMAGE
+    push = next(c for c in calls if "push" in c)
+    assert push[push.index("--platform") + 1] == "linux/amd64"
     login_args, login_options = next(c for c in docker.calls if "login" in c[0])
     assert "private-fixture-password" not in str(login_args)
     assert login_options["data"] == b"private-fixture-password\n"
@@ -242,6 +254,8 @@ def test_publish_verifies_exact_image_and_rechecks_digest_before_outputs(
     assert spec.image_digest == cache["platform_manifest_digest"] == docker.digest
     assert cache["config_image_id"] == IMAGE
     assert receipt["publication"] == "verified"
+    assert docker.pulled and not docker.removed
+    assert not any(c[:2] == ("image", "rm") for c in calls)
 
 
 @pytest.mark.parametrize("failure", ["invalid", "wrong_code", "timeout", "cleanup"])
@@ -302,6 +316,29 @@ def test_manifest_identity_rejects_substitution(mutation):
     }
     with pytest.raises(ImageError):
         cli.verify_manifest(response, digest, IMAGE)
+
+
+@pytest.mark.parametrize("conflicting", [False, True])
+def test_ecr_multiple_tags_preserve_one_exact_manifest_identity(conflicting):
+    """ECR can return multiple tag rows for a single digest, but never different bytes."""
+    docker = FakeDocker()
+    rows = [
+        {
+            "imageManifest": docker.manifest,
+            "imageManifestMediaType": cli.MANIFEST_TYPES[0],
+            "imageId": {"imageDigest": docker.digest, "imageTag": tag},
+        }
+        for tag in ("checked-first", "checked-second")
+    ]
+    if conflicting:
+        rows[1]["imageManifest"] += " "
+        with pytest.raises(ImageError, match="conflicting"):
+            cli.verify_manifest({"images": rows}, docker.digest, IMAGE)
+    else:
+        assert cli.verify_manifest({"images": rows}, docker.digest, IMAGE) == (
+            cli.MANIFEST_TYPES[0],
+            len(docker.manifest.encode()),
+        )
 
 
 def test_existing_output_is_never_overwritten(project, transport, tmp_path):

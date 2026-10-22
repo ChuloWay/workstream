@@ -68,8 +68,17 @@ never registers or changes policy. Dry run performs no AWS calls.
 
 | Claim | Command or proof | Result | Remaining uncertainty |
 |---|---|---|---|
-| Publishing and failure boundaries | `pytest -q tests/test_checker_image.py`; actual Docker sample run | 111 script, lane-catalogue and checker-contract tests passed; real positive/negative Docker samples passed; a 2,048-byte aggregate output budget correctly rejected the image | Live ECR verification is pending; gVisor is not installed on this host |
+| Publishing and failure boundaries | `pytest -q tests/test_checker_image.py`; actual Docker sample run | 113 script, lane-catalogue and checker-contract tests passed; real positive/negative Docker samples passed; a 2,048-byte aggregate output budget correctly rejected the image | Real ECR push, raw-manifest verification, digest pull, final positive/negative samples and output generation passed in eu-north-1; gVisor is not installed on this host |
 | Architecture and documentation | Public CHECKERS contracts; existing Markdown and lint checks | Public request/result validation reused; focused lint and Markdown checks passed | Independent candidate review and full hosted CI are required before merge |
+
+Live qualification used the isolated private `workstream-checker-pre-publisher-proof`
+repository. The command returned zero with `publication=verified`; its platform
+manifest was `sha256:c40d539fa600395529eb9b691e18c2573ec750f286156106a9884494c45c45cc` and
+configuration image was `sha256:360e2cbf91fce711ba808913f55e1d5ef38f3a38b8867966820eefa6f1d85621`.
+Both original and digest-bound positive/negative samples completed. No Workstream
+registration, policy, activation or runner deployment was performed. Real Docker
+also proved proxy-marker isolation in build/container execution and rejection of
+the undersized aggregate output limit; no owned test containers remained.
 
 ## Review findings
 
@@ -82,6 +91,16 @@ runbook wording. These repairs are covered by discriminating regressions; a real
 Docker low-budget counterexample now fails before checker execution. Builds use
 locally cached or publicly pullable bases; private-base authentication is outside
 this bounded command.
+
+Live ECR qualification found that removing the last local publishing tag also
+removed the verified RepoDigest and could block the final sample replay. The
+publisher now retains that intended local image cache; the regression models
+image removal as destructive and requires the pulled identity during final
+samples. The first cloud publication was inspected by digest before the corrected
+command was run again; it was never reported as qualification success. ECR then
+returned multiple tag rows for that same digest. Verification now accepts only
+byte-identical manifest aliases, rejects conflicting rows, and explicitly pushes
+a single platform. Both real failures remained closed with no registration output.
 
 ## Reconciliation
 
