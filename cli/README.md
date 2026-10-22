@@ -7,7 +7,7 @@ administrative active-guide/intake-policy inspection,
 contributor work discovery, claim/start, locked guide documents and governing
 context/intake requirements, explicit batch import/screen/release, Finance
 policy management, explicit ZIP preparation/submission, checker findings,
-system-Operator checker registration and terminal recovery, and
+system-Operator checker registration, terminal recovery and uncertain-delivery reconciliation, and
 contribution-evidence exports and exact Audit Authority task reads:
 
 | Command | Public API |
@@ -95,6 +95,8 @@ contribution-evidence exports and exact Audit Authority task reads:
 | `workstream operations checker registry read ENTRY_ID` | `GET /api/v1/operations/external-checker-registry/ENTRY_ID` |
 | `workstream operations checker retry-sources PROJECT_ID [--limit N] [--cursor TOKEN]` | `GET /api/v1/operations/projects/PROJECT_ID/checker-retry-sources` |
 | `workstream operations checker retry PROJECT_ID SOURCE_RUN_ID --reason TEXT --idempotency-key UUID` | `POST /api/v1/operations/projects/PROJECT_ID/checker-runs/SOURCE_RUN_ID/retry` |
+| `workstream operations delivery list PROJECT_ID [--limit N] [--cursor TOKEN]` | `GET /api/v1/operations/projects/PROJECT_ID/post-submit-deliveries` |
+| `workstream operations delivery reconcile PROJECT_ID EVENT_ID --reason TEXT --idempotency-key UUID` | `POST /api/v1/operations/projects/PROJECT_ID/post-submit-deliveries/EVENT_ID/reconcile` |
 | `workstream task ready PROJECT_ID` | `GET /api/v1/projects/PROJECT_ID/tasks/ready` |
 | `workstream task prepare TASK_ID --assignment UUID --file ZIP --idempotency-key UUID` (revision: add predecessor and exact preparation ID/SHA-256) | `POST /api/v1/tasks/TASK_ID/submission-bundle-preparations` |
 | `workstream task submit TASK_ID --assignment UUID --admission UUID` | `POST /api/v1/tasks/TASK_ID/submissions` |
@@ -1677,6 +1679,32 @@ retry, cached source eligibility or local policy decision. JSON output is the
 complete validated public response; text output safely escapes terminal
 controls.
 
+## Inspect uncertain post-submit deliveries
+
+The separate `operations delivery` commands consume the two public UNKNOWN
+delivery routes. A system Operator can read one project page at a time (1..100
+items, default 50), carrying the opaque `next_cursor` to another explicit read.
+The page reports exact finalized request or completion events and the backend's
+current classification; a read neither grants write authority nor determines
+eligibility locally.
+
+```sh
+workstream operations delivery list PROJECT_ID --limit 50 -o json
+workstream operations delivery list PROJECT_ID --limit 50 --cursor 'OPAQUE_CURSOR' -o json
+workstream operations delivery reconcile PROJECT_ID EVENT_ID --reason 'Verified original UNKNOWN attempt' --idempotency-key UUID -o json
+```
+
+`reconcile` sends one POST for the selected event, a required 1..500-character
+reason without surrounding whitespace or ASCII controls, and a caller-owned
+UUID key. Fresh backend authority and exact source/child guards decide whether
+one immutable reconciliation child may be appended. The CLI does not classify
+the original effect, invoke a checker, infer retry safety, or silently replay
+the write. On an uncertain response, JSON has `error.outcome_unknown: true`;
+text advises manual replay only with the unchanged project, event, reason and
+key. An existing child can later be active, acknowledged or held on exact
+replay. This is distinct from `operations checker retry`, which selects a
+known-terminal infrastructure-failed checker run.
+
 ## Verification
 
 Behavior tests invoke the built executable from outside the repository, with
@@ -1732,6 +1760,11 @@ replay, terminal-source discovery, explicit retry/replay, foreign selection and
 grant-revocation denial. The source's infrastructure failure is arranged by a
 real backend worker fixture. This does not prove hosted OCI execution, external
 Flow issuer integration or S3 custody.
+Delivery CLI built-process hostile HTTP proof covers response boundaries. A
+separate signed public FastAPI/PostgreSQL test is present for an owner-produced
+UNKNOWN source, one keyed child, exact replay and fresh revocation denial; its
+native run remains pending. Neither test establishes a hosted interruption or
+S3 custody drill.
 
 ```sh
 go mod verify

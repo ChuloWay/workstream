@@ -44,6 +44,9 @@
   [PILOT-02](../../changes/pilot02-bulk-transitions-cli.md), explicit CSV conversion,
   source custody, atomic import, batch status and whole-batch screen/release.
 
+[WS-CLI-001-40](WS-CLI-001-40.md) additionally delivers exact-project uncertain
+delivery inspection and explicit reconciliation.
+
 ## Current boundary
 
 [WS-CLI-001-26](WS-CLI-001-26.md) adds deliberate draft-guide summary editing
@@ -73,6 +76,13 @@ known-terminal checker retry-source listing/retry through four existing public
 REST routes. Registration does not enable execution; source reads do not authorize
 later retry, and exact replay rechecks backend authority. Hosted operation and
 CLI distribution remain separate.
+
+[WS-CLI-001-40](WS-CLI-001-40.md) exposes the two public post-submit delivery
+operations added after the inventory baseline below. `operations delivery list`
+returns one authorized page; `operations delivery reconcile` explicitly requests
+one exact event's governed reconciliation with a reason and caller-owned key.
+Classification, current authority and recovery effects remain backend-owned.
+This is not known-terminal checker retry or artifact-custody recovery.
 
 [WS-CLI-001-31](WS-CLI-001-31.md) adds `project task-batch source-download`
 through retained-source status and content public GETs. The CLI verifies bytes
