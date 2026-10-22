@@ -8,7 +8,9 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from app.core.hashing import canonical_json_hash
 from app.core.identifiers import new_record_id
 from app.modules.projects.guide_compilation.models import ProjectGuideCompilationAttempt
-from .helpers import context, identity, runtime_configuration, seed_database
+from .helpers import (
+    context, identity, manager_runtime_configuration, runtime_configuration, seed_database,
+)
 
 
 def _row(values, configuration):
@@ -70,6 +72,46 @@ async def test_sql_rejects_invalid_runtime_configuration(clean_postgres_database
                     **_row(values, runtime_configuration().model_dump(mode="json"))
                 )
             )
+    finally:
+        await engine.dispose()
+
+
+_MANAGER_PAIR = {"runtime_key": "manager_authored", "model_provider": "none",
+                 "model_api": "none", "model": "none"}
+
+
+@pytest.mark.parametrize(
+    "patch",
+    [
+        {"model_provider": "none", "model_api": "none"},
+        {"model_provider": "none"},
+        {"model_api": "none"},
+        {"model_provider": "none", "model_api": "none", "model": "none"},
+        {"model": "none"},
+        _MANAGER_PAIR | {"model_provider": "openai", "model_api": "responses"},
+        _MANAGER_PAIR | {"model_provider": "openai"},
+        _MANAGER_PAIR | {"model_api": "responses"},
+        _MANAGER_PAIR | {"model": "gpt-5.6-terra"},
+        _MANAGER_PAIR | {"runtime_key": "manager_authored_preview"},
+    ],
+)
+async def test_sql_accepts_provider_none_only_for_manager_authored(clean_postgres_database, patch):
+    """The trigger independently binds provider/API none to the provider-free runtime."""
+    values = await seed_database(clean_postgres_database)
+    engine = create_async_engine(clean_postgres_database)
+    try:
+        async with engine.begin() as connection:
+            with pytest.raises(DBAPIError, match="compilation runtime configuration is invalid") as error:
+                await connection.execute(insert(ProjectGuideCompilationAttempt).values(
+                    **_row(values, runtime_configuration().model_dump(mode="json") | patch)))
+            assert error.value.orig.sqlstate == "23514"
+        async with engine.begin() as connection:
+            await connection.execute(insert(ProjectGuideCompilationAttempt).values(
+                **_row(values, manager_runtime_configuration().model_dump(mode="json"))))
+        async with engine.connect() as connection:
+            stored = await connection.scalar(text(
+                "select runtime_configuration::jsonb from project_guide_compilation_attempts"))
+        assert {key: stored[key] for key in _MANAGER_PAIR} == _MANAGER_PAIR
     finally:
         await engine.dispose()
 

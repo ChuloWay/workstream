@@ -525,6 +525,34 @@ class GuideCompilationRepository:
         )
         return await self._required_attempt(attempt_id)
 
+    async def release_provider_free_fence(
+        self, attempt_id: UUID, *, stale_before: datetime | None = None
+    ) -> ProjectGuideCompilationAttempt:
+        """Return a provider-free attempt to reservation after a transient failure.
+
+        The fence of a provider-free attempt guards no provider call, so no
+        unknown external outcome exists. Hosted attempts keep the one-way fence.
+        With ``stale_before``, release only a fence set before that instant, so
+        a run that may still be in flight elsewhere is left alone.
+        """
+        from .runtime_resources import attempt_is_provider_free
+
+        attempt = await self._lock_attempt(attempt_id)
+        if attempt.status == "compilation_reserved":
+            return attempt
+        if (attempt.status != "compilation_provider_uncertain"
+                or not attempt_is_provider_free(attempt)):
+            raise GuideCompilationIntegrityError("invalid provider-free fence release")
+        if stale_before is not None and attempt.provider_uncertain_at > stale_before:
+            return attempt
+        await self._transition(
+            attempt_id,
+            expected=("compilation_provider_uncertain",),
+            status="compilation_reserved",
+            provider_uncertain_at=None,
+        )
+        return await self._required_attempt(attempt_id)
+
     async def accept_result(
         self,
         *,

@@ -12,6 +12,9 @@ architecture. This change was not run on a macOS host, so file sharing,
 Docker Desktop resource limits, sleep/resume and both Apple Silicon and Intel
 startup remain unverified here.
 
+To add the external checker service and prepare this stack for agent work, use
+the [local agent loop overlay](local-agent-loop.md).
+
 ## Configure one checkout
 
 Install Docker Compose v2, `curl`, `jq` and OpenSSL. From the repository root:

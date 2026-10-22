@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Callable
-from contextlib import AbstractAsyncContextManager, asynccontextmanager
+from contextlib import AbstractAsyncContextManager, asynccontextmanager, suppress
+from datetime import UTC, datetime, timedelta
 from typing import Protocol
 from uuid import UUID
 
@@ -153,6 +155,15 @@ class SqlAlchemyGuideCompilationExecutionBackend:
         async with self._authorized_service(state) as (service, actor):
             return await service.fence_dispatch(actor=actor, facts=state.preflight_facts)
 
+    async def release_provider_free(
+        self, state: CompilationExecutionState, *, stale_before: datetime | None = None
+    ) -> bool:
+        """Reopen a provider-free fence so a transient failure stays retryable."""
+        async with self._authorized_service(state) as (service, actor):
+            return await service.release_provider_free_dispatch(
+                actor=actor, facts=state.preflight_facts, stale_before=stale_before
+            )
+
     async def record_accepted(
         self,
         state: CompilationExecutionState,
@@ -247,6 +258,10 @@ class GuideCompilationExecutionBackend(Protocol):
 
     async def fence(self, state: CompilationExecutionState) -> CompilationDispatchReceipt: ...
 
+    async def release_provider_free(
+        self, state: CompilationExecutionState, *, stale_before: datetime | None = None
+    ) -> bool: ...
+
     async def record_accepted(
         self,
         state: CompilationExecutionState,
@@ -288,9 +303,11 @@ class GuideCompilationOrchestrator(ProjectGuideCompilationExecutionPort):
         runtime = None
         try:
             if (
-                len(project_guide_compilation_prompt_bytes(context))
+                not context.runtime_configuration.provider_free
+                and len(project_guide_compilation_prompt_bytes(context))
                 > context.runtime_configuration.maximum_manifest_bytes
             ):
+                # The hosted prompt limit; a provider-free runtime builds no prompt.
                 raise ValueError("configured prompt limit exceeded")
             runtime = self._runtime_factory(context.runtime_configuration)
             if runtime.identity != context.runtime_configuration.adapter_identity:
@@ -328,8 +345,21 @@ class GuideCompilationOrchestrator(ProjectGuideCompilationExecutionPort):
                         else:
                             await self._backend.record_accepted(state, context, result)
                             accepted = True
+            except asyncio.CancelledError:
+                if (terminal_receipt is None and not accepted
+                        and context.runtime_configuration.provider_free):
+                    # Reopen before propagating so cancellation cannot strand the attempt.
+                    with suppress(Exception):
+                        await asyncio.shield(self._backend.release_provider_free(state))
+                raise
             except Exception:  # noqa: BLE001 - preserve known evidence across cleanup failure
                 if terminal_receipt is None and not accepted:
+                    if context.runtime_configuration.provider_free:
+                        # No provider call exists to be uncertain about; reopen and retry.
+                        await self._backend.release_provider_free(state)
+                        raise ProjectGuideCompilationExecutionError(
+                            "runtime_unavailable"
+                        ) from None
                     return _receipt_result(dispatch)
             if terminal_receipt is not None:
                 return _receipt_result(terminal_receipt)
@@ -341,6 +371,19 @@ class GuideCompilationOrchestrator(ProjectGuideCompilationExecutionPort):
         self, state: CompilationExecutionState
     ) -> ProjectGuideCompilationExecutionResult | None:
         """Return a durable result without provider I/O, or select dispatch."""
+        configuration = state.runtime_configuration
+        if (
+            state.classification is CompilationRecoveryClassification.PROVIDER_UNCERTAIN
+            and configuration is not None
+            and configuration.provider_free
+        ):
+            # A provider-free fence left by a crashed or cancelled worker guards no
+            # provider call. Reopen it once its run deadline has passed.
+            stale_before = datetime.now(UTC) - timedelta(
+                seconds=configuration.timeout_seconds + configuration.cleanup_timeout_seconds
+            )
+            if await self._backend.release_provider_free(state, stale_before=stale_before):
+                return None
         if state.classification in {
             CompilationRecoveryClassification.PERSISTED,
             CompilationRecoveryClassification.INVALID_TERMINAL,

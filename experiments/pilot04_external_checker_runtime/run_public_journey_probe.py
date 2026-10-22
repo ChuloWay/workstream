@@ -559,6 +559,10 @@ async def _ready_admission(client, factory, task_id: str, assignment_id: str,
     }
     if predecessor_id is not None:
         headers["X-Predecessor-Submission-Id"] = predecessor_id
+        detail = await _json(client, "GET", f"/api/v1/tasks/{task_id}/work-context", contributor_token, 200)
+        revision = detail["revision_context"]
+        headers["X-Revision-Preparation-Id"] = revision["preparation_id"]
+        headers["X-Revision-Preparation-Sha256"] = revision["preparation_sha256"]
     route = f"/api/v1/tasks/{task_id}/submission-bundle-preparations"
     deadline = time.monotonic() + 180
     current_status = None
@@ -1231,7 +1235,7 @@ async def run(database_url: str, image_reference: str, service_binary: Path,
         "external_checker_material_root": scratch,
         "external_checker_service_timeout_seconds": 90.0,
     })
-    bootstrap = create_artifact_store_bootstrap(settings)
+    bootstrap = create_artifact_store_bootstrap(settings, activation_guard=None)
     namespace = artifact_storage_namespace_spec(settings, bootstrap)
     bootstrap.close()
     service_config = {
@@ -1298,7 +1302,7 @@ async def run(database_url: str, image_reference: str, service_binary: Path,
     ):
         _require(getattr(runtime_settings, field) == getattr(settings, field),
                  "API/worker artifact provider configuration differs from fixture")
-    runtime_bootstrap = create_artifact_store_bootstrap(runtime_settings)
+    runtime_bootstrap = create_artifact_store_bootstrap(runtime_settings, activation_guard=None)
     try:
         runtime_namespace = artifact_storage_namespace_spec(
             runtime_settings, runtime_bootstrap
