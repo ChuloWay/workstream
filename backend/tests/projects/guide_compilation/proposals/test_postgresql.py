@@ -213,7 +213,7 @@ async def test_correction_uses_canonical_human_request_and_binds_feedback(clean_
     from app.modules.projects.guide_compilation.service import GuideCompilationService
     from app.modules.projects.guide_compilation.validation import identity_from_attempt
     from app.modules.projects.guide_compilation.models import (
-        ProjectGuideCompilation, ProjectGuideCompilationAttempt,
+        ProjectGuideCompilation, ProjectGuideCompilationAttempt, ProjectGuideSetupFinalization,
     )
     from tests.projects.guide_compilation.helpers import runtime_configuration
 
@@ -298,6 +298,8 @@ async def test_correction_uses_canonical_human_request_and_binds_feedback(clean_
                     self.changes = changes
 
                 async def get(self, model, key):
+                    if model is ProjectGuideSetupFinalization and self.changes == {"missing_finalization": True}:
+                        return None
                     return await session.get(model, key)
 
                 async def scalar(self, statement):
@@ -313,6 +315,7 @@ async def test_correction_uses_canonical_human_request_and_binds_feedback(clean_
 
             for changes in (
                 None,
+                {"missing_finalization": True},
                 {"project_id": str(uuid4())},
                 {"source_snapshot_id": str(uuid4())},
                 {"setup_generation": predecessor.setup_generation + 1},

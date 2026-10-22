@@ -587,3 +587,10 @@ only provider-free executions may reopen. Thus a reserved attempt has never
 contacted the hosted provider, and authenticated predecessor materialization
 needs no new version branch or deployment fence. Instructions remain bounded at
 15,966 characters. Ruff, Markdown links, Commitrail and diff checks pass.
+
+Independent architecture review caught the new hosted prompt bound also applying
+to provider-free manager-authored compilation. Scope it to hosted runtimes, as
+the existing orchestrator already does; add a shared-builder regression for both
+branches and replay the existing real PostgreSQL provider-free case. QA requested
+a missing-finalization negative, now added to the storage-substitution proof.
+These repairs preserve the same bounded outcome and runtime authority.

@@ -72,3 +72,50 @@ def test_correction_rejects_uncommitted_material_even_after_unvalidated_copy(cha
         serialize(compilation.model_copy(update=updates))
     with pytest.raises(ValueError, match="correction"):
         ProjectGuideCompilationContext.model_validate({**compilation.model_dump(), **updates})
+
+
+@pytest.mark.parametrize("provider_free", [False, True])
+def test_context_prompt_bound_applies_only_when_a_provider_will_receive_it(provider_free):
+    """Manager-authored rules keep their own document bound without a hosted prompt."""
+    from types import SimpleNamespace
+    from app.modules.projects.guide_compilation.context import compilation_context_from_material
+    from app.modules.projects.guide_compilation.repository import GuideCompilationIntegrityError
+    from tests.projects.guide_compilation.helpers import (
+        TASK_EXAMPLE_MANIFEST,
+        TASK_EXAMPLES,
+        manager_runtime_configuration,
+        runtime_configuration,
+    )
+
+    configuration = (
+        manager_runtime_configuration() if provider_free else runtime_configuration()
+    ).model_copy(update={"maximum_manifest_bytes": 1024})
+    original = context(ids(), configuration=configuration)
+    material = original.material
+    guide = SimpleNamespace(
+        id=str(material.guide_id),
+        project_id=str(material.project_id),
+        version=material.guide_version,
+        task_examples=TASK_EXAMPLES,
+        task_examples_hash=TASK_EXAMPLE_MANIFEST["task_examples_hash"],
+    )
+    snapshot = SimpleNamespace(
+        id=str(material.source_snapshot_id),
+        bundle_hash=material.source_snapshot_hash,
+        manifest_json=TASK_EXAMPLE_MANIFEST,
+    )
+    arguments = dict(
+        guide=guide,
+        snapshot=snapshot,
+        loaded=material,
+        setup_run_id=original.setup_run_id,
+        setup_generation=original.setup_generation,
+        checker_capabilities=original.checker_capabilities,
+        runtime_configuration=configuration,
+    )
+    assert len(project_guide_compilation_prompt_bytes(original)) > 1024
+    if provider_free:
+        assert compilation_context_from_material(**arguments) == original
+    else:
+        with pytest.raises(GuideCompilationIntegrityError, match="context exceeds"):
+            compilation_context_from_material(**arguments)
