@@ -107,7 +107,7 @@ The first L1 plan review found that the original contract omitted production act
 
 ## Reconciliation
 
-- Current-source reconciliation: #598 merged AWS activation timing/source corrections; #582 remains an open live-AWS proof boundary. Neither activates these Operator actions. Open #633 (AWS Roles Anywhere) and #647 (checker image publication) have no ART Operator AUTH ownership.
+- Current-source reconciliation: #598 merged AWS activation timing/source corrections, and #633 merged AWS Roles Anywhere hosted access/custody. #582 remains an open live-AWS proof boundary. None activates these Operator actions. Open #647 (checker image publication) has no ART Operator AUTH ownership.
 - Next usable boundary: separate #611 CLI client implementation against this merged, usable public API; hosted AWS proof remains separately owned by #582.
 - Remaining risks: do not claim this record's intended outcome delivered on `main` before the PR's production AUTH/API and PostgreSQL proof passes and an eligible human merges it; hosted AWS proof remains separate.
 - Human decision: backend prerequisite scope is explicitly approved; no new role, entitlement, provider or product-lifecycle decision is inferred. A later eligible human must approve this specific PR for merge.
