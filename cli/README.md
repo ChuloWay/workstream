@@ -1848,3 +1848,52 @@ complete [hosted check](../.github/workflows/cli.yml).
 That reusable check runs in parallel with Backend lanes; its failure also fails
 the existing required Backend `test` result. No separate optional PR workflow
 or extra branch-protection setting is needed.
+
+### Connected local journey
+
+`tests/journey/bootstrap.py` exercises the built CLI against a fresh migrated
+PostgreSQL database, real MinIO, a private Redis broker, prefork Celery workers
+and the real external checker service. It creates product prerequisites through
+public CLI operations. The documented local administrator bootstrap and lifecycle
+deployment transition are explicit deployment prerequisites, not fixture-created
+project, submission or acceptance records.
+
+This drill currently targets a Linux Docker host whose daemon can bind-mount the
+same local scratch paths. Install the backend environment, Go, Rust, Docker and
+`redis-server`. Use the local PostgreSQL/MinIO prerequisites and proof-checker
+publication instructions in the [local agent loop](../docs/engineering/local-agent-loop.md)
+to generate `.local-agent-loop/checker-service.json`, `registry-pre.json` and
+`registry-post.json`. The drill starts its own native API, worker and checker
+processes; it does not use an already-running application database or broker.
+
+From the repository root:
+
+```sh
+(cd cli && go build -trimpath -o ../.local-agent-loop/workstream ./cmd/workstream)
+cargo build --manifest-path external_checkers/Cargo.toml --locked --release \
+  -p workstream-checker-service --jobs 2
+export WORKSTREAM_CLI_EXECUTABLE="$PWD/.local-agent-loop/workstream"
+export WORKSTREAM_CLI_JOURNEY_SETUP=1
+export WORKSTREAM_CLI_JOURNEY_TASKS=1
+export WORKSTREAM_CLI_JOURNEY_SUBMIT=1
+# Supply a disposable local PostgreSQL admin URL and the local MinIO endpoint
+# through WORKSTREAM_TEST_ADMIN_DATABASE_URL and WORKSTREAM_TEST_MINIO_ENDPOINT.
+cd backend
+.venv/bin/python scripts/run_isolated_tests.py \
+  --metadata-json /tmp/workstream-cli-journey-isolation.json \
+  --lane cli_full_journey --timeout-seconds 900 -- \
+  .venv/bin/python ../cli/tests/journey/bootstrap.py
+```
+
+Use the isolated runner's fixed local test MinIO credentials, never production
+credentials. Each run owns a unique database/role and bucket/prefix. Require its
+cleanup metadata as well as exit zero; neither a completed migration nor a
+successful intermediate stage proves the remaining journey. Do not bypass a
+failed prerequisite or substitute a synthetic checker result.
+
+The scope is manager-authored setup, an explicitly unpaid policy and the locked
+no-human-review acceptance branch. The example checker validates declared proof
+fields, not the truth of remote GitHub work. This is not hosted deployment,
+external Flow issuer, live model inference, human review/revision or compensation
+fulfillment certification. Parallel CLI additions still need reconciliation and
+their own affected proof after merge.
