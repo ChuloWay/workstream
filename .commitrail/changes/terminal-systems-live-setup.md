@@ -698,3 +698,16 @@ using the backend-validated public response and keep invalid path rejection
 coverage. This is within the existing CLI contract scope; no backend path rule,
 execution boundary or guide instruction changes. Batch these repairs with the
 structural fix and replay the affected independent reviews.
+
+The split PostgreSQL cases passed on `f9a581d5c` with database/role cleanup; all
+17 original journey assertions are AST-identical, all seven substituted-read
+variants remain, and an intact-read control is added. The growth suite passed
+51 cases and the actual structural validator passed without ledger changes.
+Formatter-only cleanup does not change those assertions. The old CLI binary
+rejects the new backend-validated brace-path case with `invalid_api_response`.
+
+Catalogue reconciliation adds exactly two shared modules and three project
+modules, preserving every existing module's lane owners and the 16-lane topology.
+Update only the corresponding independent family/ownership snapshot constants;
+no existing test is moved or excluded. The first local inventory run correctly
+rejected stale snapshot constants before their explicit reconciliation.
