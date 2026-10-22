@@ -465,7 +465,9 @@ class CheckSpecification(BaseModel):
     evaluation_method: CheckEvaluationMethod = Field(
         description=(
             "isolated_execution requires a runtime dependency of kind isolated_execution; "
-            "model_evaluation requires model_service and belongs to POST background work."
+            "model_evaluation requires model_service and belongs to POST background work. "
+            "Model review assesses content; proving runtime outcomes or built-environment "
+            "properties requires isolated_execution with actual trials and observations."
         )
     )
     execution_mode: CheckExecutionMode
@@ -493,7 +495,15 @@ class CheckSpecification(BaseModel):
             "model evaluation in POST. Never invent a document grammar absent from the guide."
         ),
     )
-    pass_conditions: tuple[ModelProse, ...] = Field(min_length=1, max_length=20)
+    pass_conditions: tuple[ModelProse, ...] = Field(
+        min_length=1,
+        max_length=20,
+        description=(
+            "Observable outcomes proved by the declared method and inputs. A model's "
+            "review of claimed execution is not proof of actual execution; a static "
+            "predicate cannot interpret free-form explanations."
+        ),
+    )
     failure_findings: tuple[CheckFailureFinding, ...] = Field(min_length=1, max_length=20)
     positive_tests: tuple[ModelProse, ...] = Field(min_length=1, max_length=10)
     negative_tests: tuple[CheckNegativeTest, ...] = Field(min_length=1, max_length=10)
@@ -597,7 +607,9 @@ class AtomicGuideRequirement(BaseModel):
             "capability gap when the required implementation is unavailable; a gap keeps "
             "the proposal warning-ready but blocks activation. Use human_review only for "
             "authorized human judgment, and project_lifecycle_policy for project operation "
-            "outside submission evaluation. A guide_blocker requires guide_blocked and no "
+            "outside submission evaluation. Revision explanation, rerun evidence and objective "
+            "preservation remain separately checkable work requirements, not lifecycle. "
+            "A guide_blocker requires guide_blocked and no "
             "artifact policy."
         )
     )

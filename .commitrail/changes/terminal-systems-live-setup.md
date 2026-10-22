@@ -375,3 +375,21 @@ inputs, or as inputs without matching dependencies. Backend and CLI now enforce
 that relationship. This validation repair does not change the v10 inference
 instructions or add any material permission. The actual retained v10 result must
 also pass this stricter validation before qualification.
+
+
+### Method and evidence qualification
+
+The retained v10 result passes current strict parsing, public read and immutable
+hash checks, but remains unqualified as an engineering handoff. Independent QA
+found a free-form directory explanation inside a static check, built-environment
+visibility claims judged only from source, executed demonstrations represented as
+documentary review, revision quality hidden under lifecycle, and displayed stage
+totals missing fixed overhead. All 27 provider resources were deleted.
+
+Repair generic inference instructions and typed field descriptions: split methods
+by the evidence they can establish, require executed observations for runtime
+claims, separate revised-work quality from eligibility and timing, and compute
+complete totals. Add these rules to the existing contextual contract regression.
+No task identifiers or project-specific predicates enter shared code. A fresh
+provider run, independently checked against the unchanged guide, is the semantic
+regression; presence of instruction text alone does not prove inference quality.
