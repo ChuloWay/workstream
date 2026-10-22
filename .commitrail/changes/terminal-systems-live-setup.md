@@ -393,3 +393,10 @@ complete totals. Add these rules to the existing contextual contract regression.
 No task identifiers or project-specific predicates enter shared code. A fresh
 provider run, independently checked against the unchanged guide, is the semantic
 regression; presence of instruction text alone does not prove inference quality.
+
+
+Source review narrowed that guidance to the actual guide obligation: other exact
+Workstream-owned lifecycle behavior remains classifiable by its owner; prior
+context is a gap only when needed and unavailable from existing inputs; a guide
+requiring documentary or attested evidence does not acquire an invented rerun
+obligation. Runtime outcomes still require observable execution proof.
