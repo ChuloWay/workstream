@@ -46,9 +46,17 @@ in the server or application. Do not publish a host port.
 Run on a private Docker bridge with network alias `flow-drill.test`:
 
 ```sh
-python fixture.py serve --jwks /public/jwks.json \
+python experiments/hosted_drill_identity/fixture.py serve --jwks /public/jwks.json \
   --certificate /tls/tls.pem --key /tls/tls-key.pem --bind 0.0.0.0 --port 8443
 ```
+
+The command above uses the repository-root path and locked backend environment.
+The release image does **not** contain experiment files. For a container, bind
+mount this reviewed script read-only at `/fixture/fixture.py`, mount the three
+server files individually, and override the entrypoint with
+`/opt/venv/bin/python /fixture/fixture.py serve` followed by the same file and
+network arguments. Use the existing digest-qualified backend image; never mount
+the whole operator directory or checkout.
 
 Run as the owner of the mounted files, read-only, with dropped capabilities,
 `no-new-privileges`, bounded CPU/memory and no Docker socket. Use a separate

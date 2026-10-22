@@ -104,7 +104,9 @@ def test_real_https_identity_contract_and_replay(material, tls, tmp_path):
     )
     assert claims["scope"] == "workstream:access"
     assert claims["subject_kind"] == "human"
-    assert set(json.loads(read_private(material / "subjects.json"))) == set(IDENTITIES)
+    subjects = json.loads(read_private(material / "subjects.json"))
+    assert set(subjects) == set(IDENTITIES)
+    assert len(set(subjects.values())) == len(IDENTITIES)
     first = asyncio.run(verifier(tls).verify(token)).token
     second = asyncio.run(verifier(tls).verify(token)).token
     assert first == second  # Bearer replay is deliberately possible until expiry.
@@ -138,8 +140,9 @@ def test_invalid_tokens_reject_across_real_https(material, tls, tmp_path, change
     altered = jwt.encode(
         claims, key, algorithm="RS256", headers=jwt.get_unverified_header(token)
     )
-    with pytest.raises(AuthVerificationError):
+    with pytest.raises(AuthVerificationError) as denied:
         asyncio.run(verifier(tls).verify(altered))
+    assert type(denied.value) is AuthVerificationError
 
 
 def test_untrusted_tls_rejects(material, tls, tmp_path, monkeypatch):
@@ -234,3 +237,24 @@ def test_exclusive_private_files_and_no_token_output(material, tmp_path, capsys)
     os.link(output, tmp_path / "hardlink")
     with pytest.raises(ValueError, match="unsafe"):
         read_private(output)
+
+
+def test_unsafe_output_parent_creates_no_token(material, tmp_path):
+    directory = tmp_path / "public"
+    directory.mkdir(mode=0o755)
+    output = directory / "token.jwt"
+    with pytest.raises(ValueError, match="output directory must be private and owned"):
+        mint(material, "contributor", output)
+    assert not output.exists()
+
+
+def test_private_jwk_is_rejected_before_serving(material, tmp_path):
+    document = json.loads(read_private(material / "jwks.json"))
+    document["keys"][0]["d"] = "private-material-must-not-be-served"
+    path = tmp_path / "private-jwk.json"
+    path.write_text(json.dumps(document))
+    path.chmod(0o400)
+    with pytest.raises(ValueError, match="expected one public RSA key"):
+        make_server(
+            path, material / "tls.pem", material / "tls-key.pem", "127.0.0.1", 0
+        )

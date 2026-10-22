@@ -4,7 +4,7 @@
 - Durable disposition: Planned
 - Intended merge outcome: A separate, explicitly simulated issuer can supply short-lived identities to the existing Flow verifier during an isolated hosted drill.
 
-## Intent and current behavior
+## Intent
 
 The operator needs tokens for the first hosted contribution journey without
 making Workstream a login or token-issuance product. The actual Flow issuance
@@ -90,7 +90,7 @@ admission and absence of grants before explicit bootstrap/grant operations.
   repeated issuance does not silently replace retained token files.
 - Evidence calls this a simulated issuer and does not close real Flow integration.
 
-## Risk and review
+## Risk and review routing
 
 - Risk class: L1, bounded authentication drill tooling.
 - Required reviewers: plan/security; architecture/reuse; QA/test delta.
@@ -100,10 +100,19 @@ admission and absence of grants before explicit bootstrap/grant operations.
 - Roadmap impact: no product capability or public exposure changes. Actual Flow
   integration and the complete hosted contribution drill remain unproven.
 
-## Reconciliation
+## Evidence
 
 Inspected current main `a82f0d45e`; no deployed Flow issuance contract was found
 in Workstream inputs. The sibling Flow Node exposes a different DID/WebAuthn
 contract and is not silently treated as this JWT issuer. Next boundary is the
 public hosted journey using clearly identified drill identities, followed by
 actual external issuer integration when its supported configuration exists.
+
+Local verification exercises actual HTTPS using the unchanged verifier, with no
+mock transport. Regressions distinguish invalid credentials from issuer outages,
+require distinct fixture subjects, reject unsafe output parents, and reject
+private JWK fields. Review clarified that first-access admission is retained and
+that tool inventory is not a verifier-enforced subject allowlist. The release
+image requires an explicit experiment-script mount; it does not include this
+fixture. Remote proof is recorded privately and remains distinct from public
+journey completion or real Flow interoperability.
