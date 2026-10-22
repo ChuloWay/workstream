@@ -26,6 +26,7 @@ from app.modules.contributions.models import (
     ContributionRule,
     ProjectCompensationUnit,
 )
+from app.modules.contributions.units.models import ProjectCompensationUnitCreationEvent
 
 
 def policy_operation_lock_key(operation_id: UUID) -> int:
@@ -343,6 +344,33 @@ class ContributionPolicyRepository:
             .with_for_update()
             .execution_options(populate_existing=True)
         )
+
+    async def lock_unit_scope(self, project_id: UUID, instrument_type: str, unit_code: str) -> None:
+        """Serialize creation of one exact project unit identity."""
+        await self._session.execute(
+            text("select pg_advisory_xact_lock(hashtextextended(:scope, 0))"),
+            {"scope": f"compensation-unit:{project_id}:{instrument_type}:{unit_code}"},
+        )
+
+    async def get_unit_creation_event(
+        self, operation_id: UUID
+    ) -> ProjectCompensationUnitCreationEvent | None:
+        """Load immutable recovery evidence for one unit-creation operation."""
+        return await self._session.scalar(
+            select(ProjectCompensationUnitCreationEvent).where(
+                ProjectCompensationUnitCreationEvent.operation_id == operation_id
+            )
+        )
+
+    async def add_unit_and_creation_event(
+        self, unit: ProjectCompensationUnit, event: ProjectCompensationUnitCreationEvent
+    ) -> None:
+        """Flush one new active unit and its immutable creation event atomically."""
+        self._session.add(unit)
+        await self._session.flush()
+        self._session.add(event)
+        await self._session.flush()
+        await self._session.refresh(event)
 
     async def lock_publication_graph(
         self, version_id: UUID

@@ -21,6 +21,7 @@ class ContributionPolicyMutationScopeDenialResourceContext(BaseModel):
         ActionId.CONTRIBUTION_POLICY_UPDATE_DRAFT,
         ActionId.CONTRIBUTION_POLICY_PUBLISH,
         ActionId.CONTRIBUTION_POLICY_RETIRE,
+        ActionId.CONTRIBUTION_COMPENSATION_UNIT_CREATE,
     ]
 
     @model_validator(mode="after")
@@ -85,12 +86,37 @@ class ContributionPolicyRetireResourceContext(ContributionPolicyMutationResource
     expected_version_status: Literal["published"]
 
 
+class ProjectCompensationUnitCreateResourceContext(BaseModel):
+    """Exact project-scoped unit identity requested by one unit-creation operation.
+
+    A unit has a natural ``(project, instrument, unit_code)`` key and no record
+    identifier, so the authorized resource is the owning project itself.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+    resource_type: Literal["project"]
+    resource_id: UUID
+    scope_project_id: UUID
+    operation_id: UUID
+    request_digest: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
+    instrument_type: Literal["project_points"]
+    unit_code: str = Field(pattern=r"^[A-Za-z][A-Za-z0-9._:-]{0,31}$")
+
+    @model_validator(mode="after")
+    def exact_project(self):
+        """Bind the unit to the one project that owns it."""
+        if self.resource_id != self.scope_project_id:
+            raise ValueError("unit creation requires one exact project")
+        return self
+
+
 CONTRIBUTION_POLICY_RESOURCE_BY_ACTION = {
     ActionId.CONTRIBUTION_POLICY_READ: ContributionPolicyReadResourceContext,
     ActionId.CONTRIBUTION_POLICY_CREATE_DRAFT: ContributionPolicyCreateResourceContext,
     ActionId.CONTRIBUTION_POLICY_UPDATE_DRAFT: ContributionPolicyUpdateResourceContext,
     ActionId.CONTRIBUTION_POLICY_PUBLISH: ContributionPolicyPublishResourceContext,
     ActionId.CONTRIBUTION_POLICY_RETIRE: ContributionPolicyRetireResourceContext,
+    ActionId.CONTRIBUTION_COMPENSATION_UNIT_CREATE: ProjectCompensationUnitCreateResourceContext,
 }
 CONTRIBUTION_POLICY_READ_ACTIONS = frozenset({ActionId.CONTRIBUTION_POLICY_READ})
 CONTRIBUTION_POLICY_ACTIONS = frozenset(CONTRIBUTION_POLICY_RESOURCE_BY_ACTION)
@@ -100,7 +126,7 @@ CONTRIBUTION_POLICY_MUTATION_ACTIONS = (
 
 
 def policy_finance_grant_filters(action_id: ActionId) -> dict[str, object]:
-    """Confine the five policy actions to Finance Authority grants."""
+    """Confine the policy and unit actions to Finance Authority grants."""
     if action_id not in CONTRIBUTION_POLICY_ACTIONS:
         return {}
     from app.modules.authorization.schemas import AdminRole

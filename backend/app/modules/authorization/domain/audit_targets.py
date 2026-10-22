@@ -53,6 +53,18 @@ def _post_submit_delivery_target(resource):
     )
 
 
+def _compensation_unit_target(resource):
+    """A unit has no record identifier, so its audit target is the owning project."""
+    from app.modules.authorization.domain.contribution_policies import (
+        ProjectCompensationUnitCreateResourceContext,
+    )
+
+    if type(resource) is not ProjectCompensationUnitCreateResourceContext:
+        return None
+    project_id = str(resource.scope_project_id)
+    return project_id, "project", project_id, "project", project_id
+
+
 def project_authority_audit_target(
     resource: object, action_id: ActionId,
     *, matched_scope_project_id: UUID | None = None,
@@ -124,7 +136,7 @@ def project_authority_audit_target(
         return project_id, "checker_run", str(resource.resource_id), "project", project_id
     if type(resource) is CheckerRetrySourceReadResourceContext:
         return _checker_retry_read_target(resource)
-    if target := _post_submit_delivery_target(resource):
+    if target := _post_submit_delivery_target(resource) or _compensation_unit_target(resource):
         return target
     if action_id in SUBMISSION_POLICY_MUTATIONS and isinstance(
         resource, ProjectSubmissionArtifactPolicyMutationResourceContext,

@@ -759,3 +759,11 @@ and a dummy test credential in the latter. Keep malformed-rule rejection and
 the forbidden provider-call assertion unchanged. Recheck both worker outcomes
 on isolated PostgreSQL and the prompt-bound test without ambient credentials;
 this repair does not weaken generation validation or change runtime behavior.
+
+Reconcile the subsequent project-points unit creation on main by retaining both
+sets of ownership targets and test modules. The shared family contains 255
+modules: all 253 from main plus this change's two setup-parser/review modules.
+Preserve every prior target assignment, the protected base and all lane owners;
+recompute only the combined authority digest and shared-family fingerprint.
+Main's unit-creation migration, permission contract and tests remain intact.
+Validate the combined catalogue and full hosted run after this integration.

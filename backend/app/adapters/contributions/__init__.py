@@ -15,6 +15,7 @@ from app.modules.contributions.api import (
     ContributionPolicyReadAuthorizationPort,
     ContributionPolicyValidationPort,
     LockedCompensationTermsPort,
+    ProjectCompensationUnitOperationsPort,
 )
 from app.modules.contributions.service import ContributionPolicyService
 from app.modules.contributions.selected_policy_validation import (
@@ -35,6 +36,21 @@ def contribution_policy_service(
         mutation_authorization=mutation_authorization,
         projects=project_contribution_policy_eligibility_port(session),
         bindings=policy_adapter_binding_port(session),
+    )
+
+
+def project_compensation_unit_service(
+    session: AsyncSession,
+    *,
+    mutation_authorization: ContributionPolicyMutationAuthorizationPort | None = None,
+) -> ProjectCompensationUnitOperationsPort:
+    """Compose internal unit creation; it has no public route."""
+    from app.modules.contributions.units.service import ProjectCompensationUnitService
+
+    return ProjectCompensationUnitService(
+        session,
+        mutation_authorization=mutation_authorization,
+        projects=project_contribution_policy_eligibility_port(session),
     )
 
 

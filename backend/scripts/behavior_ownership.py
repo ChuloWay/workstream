@@ -309,6 +309,14 @@ LOCAL_AGENT_LOOP_TARGETS = frozenset(
         "backend/scripts/transition_review_lifecycle.py",
     }
 )
+COMPENSATION_UNIT_TARGETS = frozenset(
+    {
+        "backend/app/modules/contributions/api/compensation_units.py",
+        "backend/app/modules/contributions/units/service.py",
+        "backend/app/modules/contributions/units/models.py",
+        "backend/scripts/provision_project_points.py",
+    }
+)
 MODULE_PUBLIC_API_FOUNDATION_TARGETS = frozenset(
     {
         "backend/app/api/routes/artifact_submissions.py",
@@ -1022,6 +1030,7 @@ def _validate_additive_partition_transition(
         | PILOT_04_SELECTED_FLOW_TARGETS
         | LOCAL_PILOT_HELPER_TARGETS
         | LOCAL_AGENT_LOOP_TARGETS
+        | COMPENSATION_UNIT_TARGETS
         | MODULE_BOUNDARY_FOUNDATION_TARGETS
         | MODULE_PUBLIC_API_FOUNDATION_TARGETS
         | POL_03A_CALLABLE_TARGETS
