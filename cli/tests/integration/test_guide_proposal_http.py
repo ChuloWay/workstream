@@ -291,7 +291,7 @@ def test_proposal_missing_null_unknown_and_private_nested_fields(cli):
         (("result", "findings", 0, "evidence_refs", 0), ("document_number",)),
         (
             ("result", "submission_artifact_policy"),
-            ("maximum_file_size_bytes", "maximum_package_size_bytes"),
+            (),
         ),
     ]
     with http_fixture() as (origin, response, _):
@@ -500,3 +500,30 @@ def test_proposal_intake_integer_field_boundaries(cli):
                 value["result"]["submission_artifact_policy"][field] = boundary
                 response["body"] = json.dumps(value).encode()
                 assert_failure(invoke(cli, origin), "invalid_api_response")
+
+
+def test_proposal_without_project_size_overrides_preserves_nulls(cli):
+    from app.modules.projects.api.guide_proposal_package import (
+        GuideProposalReviewPackage,
+    )
+
+    with http_fixture() as (origin, response, _):
+        for fields in (
+            ("maximum_file_size_bytes",),
+            ("maximum_package_size_bytes",),
+            ("maximum_file_size_bytes", "maximum_package_size_bytes"),
+        ):
+            for omit in (False, True):
+                value = proposal()
+                policy = value["result"]["submission_artifact_policy"]
+                for field in fields:
+                    if omit:
+                        del policy[field]
+                    else:
+                        policy[field] = None
+                GuideProposalReviewPackage.model_validate(value)
+                response["body"] = json.dumps(value).encode()
+                result = invoke(cli, origin)
+                assert result.returncode == 0 and json.loads(result.stdout) == value, (
+                    result.stderr
+                )

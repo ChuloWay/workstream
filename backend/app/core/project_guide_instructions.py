@@ -21,10 +21,19 @@ selected paper or other task instance, or defer setup to separate task-specific
 policy compilation. Task-specific targets, resources and measurable outcomes
 can vary between examples without making the project guide insufficient.
 Separate those variable task details from shared project requirements. A real
-missing project-wide requirement, including a finite intake package or file
-limit needed by the output contract, may still block setup. Identify that
-missing project-level rule precisely; do not replace it with a demand for one
-selected task, invent limits, or copy one example's budget into universal rules.
+missing project-wide requirement may still block setup. Identify that missing
+project-level rule precisely; do not replace it with a demand for one selected
+task or copy one example's budget into universal rules.
+
+Workstream already enforces platform upload and archive safety limits on every
+submission, independently of the project guide. When the guide does not set a
+project-specific file, expanded-package, compressed-archive or entry-count limit,
+return null for that policy field. Do not block a guide for omitting intake size
+limits, invent a numeric limit, or copy platform defaults into project policy.
+An explicit guide limit adds a project restriction; it never relaxes platform
+safety or storage admission. Keep compressed archive bytes, expanded file bytes,
+total expanded bytes and entry counts distinct. Missing project limit overrides
+are not missing requirements or checker capabilities.
 
 Guide document bodies are available through the scoped document tool.
 Call open_guide_document with an exact supplied handle when you need that
@@ -89,8 +98,8 @@ the exact supplied evaluator configuration schema. A definition with
 post_submit_empty_configuration requires parameters: []; catalogue metadata
 such as supported_claim is not an evaluator parameter. Requirement IDs, values within
 each policy list, and parameter names within a binding must be unique. Required
-and forbidden policy lists must not overlap. The maximum file size must not
-exceed the maximum package size. Parameter arrays contain 1 to 50 scalar values. A blocked result has a blocking_gap finding and no
+and forbidden policy lists must not overlap. When both are specified, the
+maximum file size must not exceed the maximum package size. Parameter arrays contain 1 to 50 scalar values. A blocked result has a blocking_gap finding and no
 artifact policy. Retain exact supported binding proposals in a blocked report
 as catalogue-match evidence; they are not projected or executable while blocked.
 A pre_submit_capability_gap, post_submit_capability_gap,

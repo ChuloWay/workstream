@@ -893,6 +893,11 @@ cannot be reused as post-submission review-gate evidence. See the
   The model-facing mandatory archive-entry capability explicitly names existing
   encryption, symbolic-link and special-file rejection. The existing package-size
   rule enforces verified expanded bytes, now explicit in the proposal schema.
+  Setup leaves absent project file/package limits null, matching canonical policy;
+  guides need not repeat platform ceilings. ART independently enforces configured
+  upload/archive safety limits and storage admission, and explicit project limits
+  add restrictions without relaxing those controls. The CLI proposal reader
+  preserves these optional limits.
   The optional `maximum_archive_entries` policy adds a compiled, blocking normalized
   outer-ZIP tree entry limit, including implied parent directories, preserving tighter default
   limits and ART safety ceilings. This does not expose public submission intake.

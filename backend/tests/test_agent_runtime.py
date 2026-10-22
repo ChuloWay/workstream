@@ -474,6 +474,10 @@ def test_sdk_output_schema_has_one_intake_configuration_and_separate_post_parame
     from app.interfaces.project_agents import ProjectGuideCompilationResult
 
     schema = AgentOutputSchema(ProjectGuideCompilationResult).json_schema()
+    intake = schema["$defs"]["SubmissionArtifactPolicyProposal"]
+    for field in ("maximum_file_size_bytes", "maximum_package_size_bytes"):
+        assert field in intake["required"]
+        assert {item["type"] for item in intake["properties"][field]["anyOf"]} == {"integer", "null"}
     pre = schema["$defs"]["PreSubmissionBindingProposal"]
     post = schema["$defs"]["PostSubmissionBindingProposal"]
     assert pre["additionalProperties"] is False
@@ -506,6 +510,8 @@ def test_default_instructions_advertise_contextual_output_constraints():
         "Paraphrase section headings using the same safe plain-prose rules",
         "Required and forbidden policy lists must not overlap",
         "maximum file size must not exceed the maximum package size",
+        "return null for that policy field",
+        "Do not block a guide for omitting intake size limits",
     ):
         assert rule in instructions
 

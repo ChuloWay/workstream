@@ -23,6 +23,10 @@ included in `guide.md`, without depending on a repository-relative attachment.
 `task-example.md` is the queue-recovery brief, also embedded in the guide creation
 request. Keep these copies synchronized when editing the inputs.
 
+The guide does not repeat Workstream's platform upload limits. Setup leaves
+project size overrides null unless the guide explicitly adds a restriction;
+platform upload, archive-safety and storage-admission enforcement always applies.
+
 ## Initial work
 
 | Brief | Main behavior the author develops into a solver task |
@@ -43,6 +47,8 @@ normal task creation; no runtime change or checker allowlist is implied.
 1. The PM creates the project and guide with its example and uploads the declared
    document through the supported API or CLI. Committing the last declared
    document upload automatically queues setup; there is no separate start command.
+   The manager needs a role grant on this exact project for setup and proposal
+   reads; system-level project-creation authority alone is insufficient.
 2. Setup reads those actual inputs and the available registered capabilities.
    Inspect its source-backed requirement inventory, proposed PRE/POST bindings
    and missing-capability suggestions. Do not substitute a prepared result.

@@ -273,7 +273,7 @@ func validateProposalResult(raw json.RawMessage, value *ProposalResult) error {
 		return errors.New("invalid proposal protocol")
 	}
 	if policy := fields["submission_artifact_policy"]; len(policy) > 0 && string(policy) != "null" {
-		policyFields, err := contextObject(policy, value.SubmissionArtifactPolicy, []string{"maximum_file_size_bytes", "maximum_package_size_bytes"}, []string{"allowed_storage_schemes", "required_artifacts", "forbidden_artifacts", "required_evidence", "attestation_terms"})
+		policyFields, err := contextObject(policy, value.SubmissionArtifactPolicy, nil, []string{"allowed_storage_schemes", "required_artifacts", "forbidden_artifacts", "required_evidence", "attestation_terms"})
 		if err != nil {
 			return err
 		}
@@ -281,7 +281,7 @@ func validateProposalResult(raw json.RawMessage, value *ProposalResult) error {
 		// the proposed policy. Optional archive limits retain arbitrary range.
 		ceiling := big.NewInt(10 * 1024 * 1024 * 1024)
 		for _, limit := range []*big.Int{value.SubmissionArtifactPolicy.MaximumFileSizeBytes, value.SubmissionArtifactPolicy.MaximumPackageSizeBytes} {
-			if limit.Sign() <= 0 || limit.Cmp(ceiling) > 0 {
+			if limit != nil && (limit.Sign() <= 0 || limit.Cmp(ceiling) > 0) {
 				return errors.New("invalid intake byte limit")
 			}
 		}

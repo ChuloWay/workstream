@@ -36,14 +36,31 @@ def test_openapi_exposes_complete_proposal_journey():
     assert "provider_idempotency_key" not in schemas["GuideProposalDispatchResponse"]["properties"]
 
 
-async def test_public_approval_read_replay_and_current_authority(clean_postgres_database):
-    async with proposal_case(clean_postgres_database) as (_, factory, command, actor, grant):
+@pytest.mark.parametrize("project_size_limits", [True, False])
+async def test_public_approval_read_replay_and_current_authority(clean_postgres_database, project_size_limits):
+    from tests.projects.guide_compilation.helpers import result
+    from app.interfaces.project_agents import SubmissionArtifactPolicyProposal
+
+    outcome = result()
+    if not project_size_limits:
+        outcome = outcome.model_copy(update={
+            "submission_artifact_policy": SubmissionArtifactPolicyProposal.model_validate(
+                outcome.submission_artifact_policy.model_dump() | {
+                    "maximum_file_size_bytes": None, "maximum_package_size_bytes": None,
+                }
+            ),
+        })
+    async with proposal_case(clean_postgres_database, outcome=outcome) as (_, factory, command, actor, grant):
         path = proposal_path(command)
         async with proposal_client(factory, actor) as client:
             package = await client.get(path + "/proposal")
             assert package.status_code == 200, package.text
             body = package.json()
             assert body["target"]["compilation_id"] == str(command.compilation_id)
+            for field in ("maximum_file_size_bytes", "maximum_package_size_bytes"):
+                assert body["result"]["submission_artifact_policy"][field] == getattr(
+                    outcome.submission_artifact_policy, field
+                )
             key = {"Idempotency-Key": str(uuid4())}
             payload = {"target": body["target"], "acknowledged_warning_hashes": body["warning_hashes"]}
             approved = await client.post(path+"/pre-submission-approval", headers=key, json=payload)
@@ -56,6 +73,11 @@ async def test_public_approval_read_replay_and_current_authority(clean_postgres_
             async with factory() as session:
                 count = await session.scalar(text("SELECT count(*) FROM project_guide_proposal_approvals"))
                 assert count == 1
+                policy = await session.scalar(text(
+                    "SELECT policy_body FROM submission_artifact_policies WHERE id=:id"
+                ), {"id": body["target"]["artifact_policy_id"]})
+                for field in ("maximum_file_size_bytes", "maximum_package_size_bytes"):
+                    assert policy[field] == getattr(outcome.submission_artifact_policy, field)
             await revoke_review_grant(factory, actor, grant)
             denied = await client.post(path+"/pre-submission-approval", headers=key, json=payload)
             assert denied.status_code == 404, denied.text

@@ -142,6 +142,12 @@ S3-compatible settings in `.env`. The disabled-store first-run profile does not
 support guide artifact ingestion. Committed original-document readiness runs one compilation
 and stops at findings and draft proposals; manager review/approval remains separate.
 
+Project guides do not need to repeat platform upload limits. Setup leaves absent
+project-specific file, expanded-package, compressed-archive and entry-count
+limits null. ART still enforces its configured platform safety limits and storage
+admission quotas. An explicit project limit adds a restriction; it cannot relax
+platform enforcement. Platform defaults are not copied into frozen project policy.
+
 ## Logs, Shutdown, And Reset
 
 The API and prefork Celery process emit privacy-bounded structured logs and can export

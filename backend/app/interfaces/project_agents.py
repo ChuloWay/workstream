@@ -326,11 +326,17 @@ class SubmissionArtifactPolicyProposal(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     packaging: Literal["zip"] = "zip"
-    maximum_file_size_bytes: StrictInt = Field(gt=0, le=10 * 1024 * 1024 * 1024)
-    maximum_package_size_bytes: StrictInt = Field(
+    maximum_file_size_bytes: StrictInt | None = Field(
+        default=None,
         gt=0,
         le=10 * 1024 * 1024 * 1024,
-        description="Maximum total expanded bytes in the submitted ZIP, verified from actual contents; not compressed upload bytes.",
+        description="Project-specific maximum expanded bytes per submitted file. Null adds no project limit; platform safety limits always apply.",
+    )
+    maximum_package_size_bytes: StrictInt | None = Field(
+        default=None,
+        gt=0,
+        le=10 * 1024 * 1024 * 1024,
+        description="Project-specific maximum total expanded bytes in the submitted ZIP, verified from actual contents; not compressed upload bytes. Null adds no project limit; platform safety limits always apply.",
     )
     maximum_archive_size_bytes: StrictInt | None = Field(
         default=None,
@@ -387,7 +393,11 @@ class SubmissionArtifactPolicyProposal(BaseModel):
     @model_validator(mode="after")
     def validate_package_limit(self) -> SubmissionArtifactPolicyProposal:
         """Require coherent file/package limits and artifact sets."""
-        if self.maximum_file_size_bytes > self.maximum_package_size_bytes:
+        if (
+            self.maximum_file_size_bytes is not None
+            and self.maximum_package_size_bytes is not None
+            and self.maximum_file_size_bytes > self.maximum_package_size_bytes
+        ):
             raise ValueError("file limit exceeds package limit")
         if set(self.required_artifacts).intersection(self.forbidden_artifacts):
             raise ValueError("artifact policy requirements conflict")
