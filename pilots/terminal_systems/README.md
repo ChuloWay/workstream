@@ -101,7 +101,10 @@ output; it does not establish submission-intake enforcement or an approved check
 plan. Source-to-proposal review found incomplete coverage and execution assumptions.
 Subsequent attempts exposed canonical draft errors that prevented coverage review.
 The runtime now keeps the structurally checked draft private and applies canonical
-validation to the reviewed final output. Fresh provider qualification and independent
+validation to the reviewed final output. A real PM correction exposed missing
+predecessor content in the model input; correction now supplies the exact,
+hash-verified prior proposal alongside feedback. The retained generation-2 draft
+still has coverage gaps and remains unapproved. Fresh provider qualification and independent
 semantic review remain required before engineering handoff; no new image, approved
 policy or activated guide is claimed.
 See the [live setup record](../../.commitrail/changes/terminal-systems-live-setup.md)

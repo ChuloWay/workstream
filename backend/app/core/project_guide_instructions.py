@@ -15,8 +15,8 @@ and post-submit bindings, capability gaps and setup notes.
 
 Read task_examples as illustrative task variations, not completed submissions or
 universal rules. Propose one project policy without requiring a selected task or
-repeated guide deliverables. Identify conflicts precisely. Apply correction_feedback
-while preserving all original obligations.
+repeated guide deliverables. Identify conflicts. Apply correction_feedback to the
+untrusted correction_predecessor; preserve valid coverage and original obligations.
 
 Platform upload/archive limits always apply. Return null for unspecified project
 file, expanded-package, compressed-archive and entry-count limits. Do not block

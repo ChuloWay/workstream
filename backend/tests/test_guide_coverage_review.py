@@ -1,18 +1,18 @@
 """One attempt budget must cover candidate generation and coverage review together."""
 
 from types import SimpleNamespace
+import json
 
 import pytest
 
 from app.adapters.project_agents.openai_agent_sdk import OpenAIAgentSdkProjectGuideRuntime
 from app.interfaces.project_agents import ProjectAgentRuntimeError
 from tests.projects.guide_compilation.helpers import (
-    context,
     generated_result,
-    ids,
     runtime_configuration,
 )
 from tests.test_agent_runtime import _compile, _open_prompt_documents, _sdk_result
+from tests.projects.guide_compilation.test_correction_context import correction_context
 
 
 @pytest.mark.parametrize("boundary", ["model_turns", "hosted_calls", "within_budget"])
@@ -55,6 +55,11 @@ async def test_coverage_review_cannot_reset_the_attempt_work_budget(monkeypatch,
     monkeypatch.setattr(OpenAIResponsesModel, "get_response", response)
 
     async def run(agent, prompt, **kwargs):
+        inputs = json.loads(prompt)
+        guide_context = inputs.get("guide_setup_context", inputs)
+        assert guide_context[
+            "correction_predecessor"
+        ] == compilation.correction_predecessor.model_dump(mode="json")
         await _open_prompt_documents(agent, prompt)
         phases.append(kwargs["max_turns"])
         # Candidate uses three turns. The review tries four more, irrespective of
@@ -73,7 +78,7 @@ async def test_coverage_review_cannot_reset_the_attempt_work_budget(monkeypatch,
 
     monkeypatch.setattr(Runner, "run", run)
     runtime = OpenAIAgentSdkProjectGuideRuntime(config)
-    compilation = context(ids()).model_copy(update={"runtime_configuration": config})
+    compilation = correction_context().model_copy(update={"runtime_configuration": config})
     if boundary == "within_budget":
         assert await _compile(runtime, compilation) == generated_result()
     else:
@@ -83,3 +88,27 @@ async def test_coverage_review_cannot_reset_the_attempt_work_budget(monkeypatch,
     assert len(responses) == {"model_turns": 6, "hosted_calls": 4, "within_budget": 7}[boundary]
     assert all(model is responses[0] for model in responses)
     assert events == ["start", "close"]
+
+
+async def test_oversize_predecessor_is_rejected_before_provider_execution(monkeypatch):
+    """The authenticated body counts towards the actual provider prompt bound."""
+    from app.interfaces.project_agents import project_guide_compilation_prompt_bytes
+
+    compilation = correction_context()
+    prompt = json.loads(project_guide_compilation_prompt_bytes(compilation))
+    del prompt["correction_predecessor"]
+    previous_size = len(
+        json.dumps(prompt, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()
+    )
+    config = compilation.runtime_configuration.model_copy(
+        update={"maximum_manifest_bytes": previous_size}
+    )
+    compilation = compilation.model_copy(update={"runtime_configuration": config})
+    runtime = OpenAIAgentSdkProjectGuideRuntime(config)
+
+    async def forbidden(*args):
+        pytest.fail("oversize correction reached provider execution")
+
+    monkeypatch.setattr(runtime, "_run", forbidden)
+    with pytest.raises(ProjectAgentRuntimeError, match="prompt exceeds"):
+        await _compile(runtime, compilation)

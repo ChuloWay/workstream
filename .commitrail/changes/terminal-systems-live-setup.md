@@ -546,3 +546,44 @@ configuration checks; rendered instructions are 15,928 characters. Ruff and diff
 checks passed. This proves visibility and bounds of the instruction contract,
 not that every future model output is semantically correct. Qualification depends
 on the actual PM-correction successor and independent source review.
+
+### Exact predecessor input for corrections
+
+The real generation-2 correction completed, but regressed previously useful
+requirements. Both model phases receive only the previous result's identity/hash
+and feedback, not its content. Add the exact retained predecessor as bounded,
+untrusted input; never ask the model to reconstruct it from an identifier.
+
+Extend allowed paths to the existing compilation context, request-input and
+correction-feedback loaders, their contract and PostgreSQL tests, SDK correction
+input tests, and affected setup documentation. Preserve the public correction
+command and immutable feedback hash. Reuse `AcceptedCompilationResult` to verify
+canonical/result/component hashes, and match the exact correction target and
+successor project/guide/source/generation. Read immutable records without new
+locks or permission paths. Require feedback and predecessor together.
+
+The predecessor body is derived material already committed by the feedback's
+result hash. Exclude that redundant body from canonical attempt identity, and
+include it explicitly in provider input with size checks before dispatch and
+again when constructing coverage review. Preserve terminal replay hashes;
+provider-uncertain attempts must not be reissued. No migration, retained-data
+rewrite, compatibility branch or additional model call is permitted.
+
+Acceptance: exact predecessor visible in both model phases; substitution,
+missing custody and oversize input rejected before provider execution; request
+and execution reconstruct identical identity; public correction/replay preserves
+the original proposal. Run focused pure/SDK and isolated PostgreSQL proofs, then
+architecture, QA/product and security reviews on a frozen candidate. Re-run the
+real public correction and review source-to-proposal semantics before qualifying
+the engineering handoff. Existing source and runtime authority remain unchanged.
+
+The focused contract/SDK suite passes 190 cases. The initial isolated PostgreSQL
+run passes correction request/replay, exact predecessor delivery to execution,
+uncertain-call recovery without a second runtime, and the hosted fence's refusal
+to reopen (three cases); temporary database cleanup is confirmed. Additional
+bad-storage and substituted-authority assertions are being qualified separately.
+The unchanged owner state machine fences hosted dispatch before provider I/O;
+only provider-free executions may reopen. Thus a reserved attempt has never
+contacted the hosted provider, and authenticated predecessor materialization
+needs no new version branch or deployment fence. Instructions remain bounded at
+15,966 characters. Ruff, Markdown links, Commitrail and diff checks pass.

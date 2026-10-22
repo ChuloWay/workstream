@@ -362,6 +362,11 @@ status and lineage pointers; it does not substitute for the authorized package.
 A manager correction preserves finalized history and creates a successor setup
 generation with bounded feedback. It never reopens a finalized run or activates
 the guide. The successor's pre-submission proposal requires its own approval.
+The setup agent receives both the saved feedback and the exact, hash-verified
+predecessor proposal to correct, then checks the originals again. Previous
+proposal text is untrusted context, not a replacement for source evidence or
+approval. Both model phases and their combined input-size limits include it;
+oversized or unavailable predecessor material stops before provider execution.
 
 Timeout or unknown provider acceptance is not a correctable finalized result.
 It remains blocked without another call until the adapter supports verified

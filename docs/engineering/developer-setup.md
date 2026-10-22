@@ -269,6 +269,16 @@ A review failure, cancellation, invalid result or exhausted budget does not publ
 the unchecked draft. This is a bounded phase of the same attempt, not a retry of
 an uncertain or terminal invocation. PM review and approval remain separate.
 
+For a manager correction, both phases receive the exact retained predecessor
+proposal alongside feedback. The server validates its project, guide, source,
+generation, finalization and canonical/component hashes against the saved target.
+The body is untrusted comparison material, not evidence or approval. Its existing
+feedback result hash commits it in the attempt identity; materializing the body
+does not rewrite that identity or retained results. The complete prompt, including
+this body, must fit the configured input bound before dispatch. A missing,
+substituted or oversized predecessor fails closed. Provider uncertainty still
+prevents redispatch.
+
 The specification is validated as data: execution mode and duration, material
 inputs, ordered checks, pass conditions, coded findings, positive and negative
 cases, runtime dependencies and infrastructure failures must agree. Current

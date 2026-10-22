@@ -27,6 +27,7 @@ from pydantic import (
     model_validator,
 )
 
+from app.core.hashing import canonical_json_hash
 from app.modules.projects.api.task_examples import ProjectGuideTaskExamples
 from app.modules.checkers.api.external import (
     EXTERNAL_CHECKER_EXECUTION_CLEANUP_MARGIN_MS,
@@ -749,84 +750,6 @@ class CapabilitySuggestion(BaseModel):
     _rationale = field_validator("rationale")(_validated_safe_model_text)
 
 
-class ProjectGuideCorrectionFeedback(BaseModel):
-    """Bounded manager input tied to the exact result being reconsidered."""
-
-    model_config = ConfigDict(extra="forbid", frozen=True)
-    operation_id: UUID
-    predecessor_compilation_id: UUID
-    predecessor_result_hash: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
-    target_digest: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
-    reason: str = Field(min_length=1, max_length=4000)
-
-
-class ProjectGuideCompilationContext(BaseModel):
-    """Exact bounded input for one future unified compilation attempt."""
-
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-    material: GuideDocumentManifest
-    setup_run_id: UUID
-    setup_generation: StrictInt = Field(ge=1)
-    instruction_version: str = Field(max_length=100)
-    agent_identity: str = Field(max_length=100)
-    agent_version: str = Field(
-        max_length=100, json_schema_extra={"pattern": _SAFE_IDENTIFIER.pattern}
-    )
-    runtime_configuration: ProjectGuideRuntimeConfiguration
-    checker_capabilities: ExternalCheckerCapabilityProjection
-    task_examples: ProjectGuideTaskExamples
-    correction_feedback: ProjectGuideCorrectionFeedback | None = None
-
-    @model_validator(mode="after")
-    def validate_instruction_configuration(self) -> ProjectGuideCompilationContext:
-        """Bind the semantic instruction version to its exact execution snapshot."""
-        configuration = self.runtime_configuration
-        if (
-            self.material.setup_run_id != self.setup_run_id
-            or self.material.setup_generation != self.setup_generation
-            or len(self.material.documents) > configuration.maximum_documents
-            or any(
-                item.byte_count > configuration.maximum_document_bytes
-                for item in self.material.documents
-            )
-            or sum(item.byte_count for item in self.material.documents)
-            > configuration.maximum_total_document_bytes
-        ):
-            raise ValueError("compilation document manifest exceeds its execution boundary")
-        if self.instruction_version != self.runtime_configuration.instruction_version:
-            raise ValueError("compilation instruction configuration mismatch")
-        return self
-
-
-def canonical_project_guide_compilation_context_bytes(
-    context: ProjectGuideCompilationContext,
-) -> bytes:
-    """Serialize one context without double-encoding canonical guide JSON."""
-    body = context.model_dump(mode="json")
-    if context.correction_feedback is None:
-        # Absent optional input contributes no canonical field; a real
-        # correction is always included in the exact attempt identity.
-        del body["correction_feedback"]
-    return json.dumps(
-        body,
-        sort_keys=True,
-        separators=(",", ":"),
-        ensure_ascii=False,
-        allow_nan=False,
-    ).encode("utf-8")
-
-
-def project_guide_compilation_prompt_bytes(context: ProjectGuideCompilationContext) -> bytes:
-    """Serialize only source and capability input, excluding trusted runtime settings."""
-    body = json.loads(canonical_project_guide_compilation_context_bytes(context))
-    del body["runtime_configuration"]
-    body["material"] = context.material.agent_projection()
-    return json.dumps(
-        body, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False
-    ).encode("utf-8")
-
-
 class ProjectGuideCompilationResult(BaseModel):
     """Strict untrusted proposal; trusted code must validate it with context."""
 
@@ -865,6 +788,101 @@ class ProjectGuideCompilationResult(BaseModel):
         return tuple(_validated_safe_model_text(value) for value in values)
 
     _agent_version = field_validator("agent_version")(_validated_identifier)
+
+
+class ProjectGuideCorrectionFeedback(BaseModel):
+    """Bounded manager input tied to the exact result being reconsidered."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    operation_id: UUID
+    predecessor_compilation_id: UUID
+    predecessor_result_hash: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
+    target_digest: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
+    reason: str = Field(min_length=1, max_length=4000)
+
+
+class ProjectGuideCompilationContext(BaseModel):
+    """Exact bounded input for one future unified compilation attempt."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    material: GuideDocumentManifest
+    setup_run_id: UUID
+    setup_generation: StrictInt = Field(ge=1)
+    instruction_version: str = Field(max_length=100)
+    agent_identity: str = Field(max_length=100)
+    agent_version: str = Field(
+        max_length=100, json_schema_extra={"pattern": _SAFE_IDENTIFIER.pattern}
+    )
+    runtime_configuration: ProjectGuideRuntimeConfiguration
+    checker_capabilities: ExternalCheckerCapabilityProjection
+    task_examples: ProjectGuideTaskExamples
+    correction_feedback: ProjectGuideCorrectionFeedback | None = None
+    correction_predecessor: ProjectGuideCompilationResult | None = None
+
+    @model_validator(mode="after")
+    def validate_instruction_configuration(self) -> ProjectGuideCompilationContext:
+        """Bind the semantic instruction version to its exact execution snapshot."""
+        self.require_correction_predecessor()
+        configuration = self.runtime_configuration
+        if (
+            self.material.setup_run_id != self.setup_run_id
+            or self.material.setup_generation != self.setup_generation
+            or len(self.material.documents) > configuration.maximum_documents
+            or any(
+                item.byte_count > configuration.maximum_document_bytes
+                for item in self.material.documents
+            )
+            or sum(item.byte_count for item in self.material.documents)
+            > configuration.maximum_total_document_bytes
+        ):
+            raise ValueError("compilation document manifest exceeds its execution boundary")
+        if self.instruction_version != self.runtime_configuration.instruction_version:
+            raise ValueError("compilation instruction configuration mismatch")
+        return self
+
+    def require_correction_predecessor(self) -> None:
+        """Authenticate derived correction material against its existing commitment."""
+        feedback = self.correction_feedback
+        predecessor = self.correction_predecessor
+        if (feedback is None) != (predecessor is None):
+            raise ValueError("correction feedback and predecessor must be paired")
+        if feedback is not None and canonical_json_hash(
+            predecessor.model_dump(mode="json")
+        ) != feedback.predecessor_result_hash:
+            raise ValueError("correction predecessor hash mismatch")
+
+
+def canonical_project_guide_compilation_context_bytes(
+    context: ProjectGuideCompilationContext,
+) -> bytes:
+    """Serialize one context without double-encoding canonical guide JSON."""
+    context.require_correction_predecessor()
+    # The immutable feedback hash already commits this exact derived body.
+    body = context.model_dump(mode="json", exclude={"correction_predecessor"})
+    if context.correction_feedback is None:
+        # Absent optional input contributes no canonical field; a real
+        # correction is always included in the exact attempt identity.
+        del body["correction_feedback"]
+    return json.dumps(
+        body,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+        allow_nan=False,
+    ).encode("utf-8")
+
+
+def project_guide_compilation_prompt_bytes(context: ProjectGuideCompilationContext) -> bytes:
+    """Serialize only source and capability input, excluding trusted runtime settings."""
+    body = json.loads(canonical_project_guide_compilation_context_bytes(context))
+    del body["runtime_configuration"]
+    body["material"] = context.material.agent_projection()
+    if context.correction_predecessor is not None:
+        body["correction_predecessor"] = context.correction_predecessor.model_dump(mode="json")
+    return json.dumps(
+        body, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False
+    ).encode("utf-8")
 
 
 _COMPLETE_COMPILATION_RESULT_FIELDS = frozenset(ProjectGuideCompilationResult.model_fields)

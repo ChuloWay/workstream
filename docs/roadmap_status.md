@@ -1494,7 +1494,10 @@ review has not yet qualified a complete handoff. Draft path and material-linkage
 errors also exposed a review-boundary problem: canonical draft rejection prevented
 the planned correction phase. Setup now uses a private structurally checked draft,
 then reviews it against the originals under the same attempt budget; only the final
-result can pass canonical validation and become a proposal. Fresh provider and
+result can pass canonical validation and become a proposal. PM correction now
+supplies the exact hash-verified predecessor as bounded, untrusted context rather
+than only its identity and feedback. The real generation-2 proposal still has
+semantic coverage gaps and remains unapproved. Fresh provider and
 source-to-proposal qualification remains required before image engineering. No new
 image, approved binding, guide activation or contribution outcome for these inputs
 is established.

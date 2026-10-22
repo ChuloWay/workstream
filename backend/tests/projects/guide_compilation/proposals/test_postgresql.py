@@ -1,6 +1,6 @@
 """Real proposal, approval and correction transactions over finalized setup evidence."""
 
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from sqlalchemy import select
@@ -195,6 +195,8 @@ async def test_correction_postgresql_replay_creates_one_successor(clean_postgres
 
 
 async def test_correction_uses_canonical_human_request_and_binds_feedback(clean_postgres_database):
+    import json
+    from app.core.hashing import canonical_json_hash
     from app.interfaces.project_agents import project_guide_compilation_prompt_bytes
     from app.modules.authorization.guide_compilation import (
         ProjectGuideCompilationAuthorizationAdapter,
@@ -210,7 +212,9 @@ async def test_correction_uses_canonical_human_request_and_binds_feedback(clean_
     from app.modules.projects.guide_compilation.request_inputs import CompilationRequestInputs
     from app.modules.projects.guide_compilation.service import GuideCompilationService
     from app.modules.projects.guide_compilation.validation import identity_from_attempt
-    from app.modules.projects.guide_compilation.models import ProjectGuideCompilationAttempt
+    from app.modules.projects.guide_compilation.models import (
+        ProjectGuideCompilation, ProjectGuideCompilationAttempt,
+    )
     from tests.projects.guide_compilation.helpers import runtime_configuration
 
     async with proposal_case(clean_postgres_database) as (_, factory, command, actor, grant):
@@ -278,6 +282,86 @@ async def test_correction_uses_canonical_human_request_and_binds_feedback(clean_
             )
             assert attempt.status == "compilation_reserved"
             assert context.material.source_snapshot_id == package.target.source_snapshot_id
+            predecessor = await session.get(ProjectGuideCompilation, command.compilation_id)
+            prompt = json.loads(project_guide_compilation_prompt_bytes(context))
+            assert prompt["correction_predecessor"] == predecessor.canonical_result
+            assert canonical_json_hash(prompt["correction_predecessor"]) == package.target.result_hash
+            original_identity = (attempt.canonical_input_hash, attempt.provider_idempotency_key)
+            from types import SimpleNamespace
+            from app.modules.projects.guide_compilation.correction_feedback import load_correction_input
+            from app.modules.projects.guide_compilation.repository import GuideCompilationIntegrityError
+
+            class AlteredPredecessorStorage:
+                """Inject a bad read without modifying retained database evidence."""
+
+                def __init__(self, changes):
+                    self.changes = changes
+
+                async def get(self, model, key):
+                    return await session.get(model, key)
+
+                async def scalar(self, statement):
+                    row = await session.scalar(statement)
+                    if isinstance(row, ProjectGuideCompilation):
+                        if self.changes is None:
+                            return None
+                        return SimpleNamespace(**{
+                            **{column.key: getattr(row, column.key) for column in row.__table__.columns},
+                            **self.changes,
+                        })
+                    return row
+
+            for changes in (
+                None,
+                {"project_id": str(uuid4())},
+                {"source_snapshot_id": str(uuid4())},
+                {"setup_generation": predecessor.setup_generation + 1},
+                {"canonical_result": {**predecessor.canonical_result, "setup_notes": ["Substituted result."]}},
+                {"component_hashes": {**predecessor.component_hashes, "setup_notes_hash": "sha256:" + "f" * 64}},
+            ):
+                with pytest.raises(GuideCompilationIntegrityError, match="correction predecessor"):
+                    await load_correction_input(AlteredPredecessorStorage(changes), UUID(setup.id))
+
+        from app.interfaces.project_agents import ProjectAgentRuntimeError
+        from app.modules.projects.api import (
+            ProjectGuideCompilationExecutionClassification,
+            ProjectGuideCompilationExecutionCommand,
+        )
+        from app.modules.projects.guide_compilation.orchestrator import GuideCompilationOrchestrator
+        from tests.projects.guide_compilation.test_hidden_orchestrator_postgresql import (
+            _Runtime, _backend,
+        )
+
+        class RecordingFailure(_Runtime):
+            async def compile_project_guide(self, execution_context, capabilities):
+                assert execution_context == context
+                assert execution_context.correction_predecessor.model_dump(mode="json") == predecessor.canonical_result
+                return await super().compile_project_guide(execution_context, capabilities)
+
+        runtime = RecordingFailure(ProjectAgentRuntimeError("transport failed"))
+        backend = _backend(factory)
+        execution = ProjectGuideCompilationExecutionCommand(attempt_id=receipts[0].attempt_id)
+        first = await GuideCompilationOrchestrator(backend, lambda _: runtime).execute(execution)
+        assert first.classification is ProjectGuideCompilationExecutionClassification.PROVIDER_UNRESOLVED
+
+        class RecoveryOnly:
+            async def load(self, attempt_id):
+                return await backend.load(attempt_id)
+
+            def __getattr__(self, name):
+                pytest.fail("uncertain correction reached " + name)
+
+        def forbidden_runtime(_):
+            pytest.fail("uncertain correction created a second runtime")
+
+        assert await GuideCompilationOrchestrator(RecoveryOnly(), forbidden_runtime).execute(execution) == first
+        assert runtime.calls == 1
+        async with factory() as session:
+            retained = await session.get(ProjectGuideCompilation, command.compilation_id)
+            attempt = await session.get(ProjectGuideCompilationAttempt, receipts[0].attempt_id)
+            assert retained.canonical_result == predecessor.canonical_result
+            assert retained.result_hash == package.target.result_hash
+            assert (attempt.canonical_input_hash, attempt.provider_idempotency_key) == original_identity
 
 
 async def test_correction_rejects_authority_for_a_substituted_locator_operation(
