@@ -4,12 +4,14 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 import json
+from pathlib import Path
 from types import SimpleNamespace
 from uuid import UUID
 
 import pytest
 
 from app.adapters.artifacts.aws_live_proof import AwsArtifactProbeObservation
+from app.core.config import Settings
 from scripts import aws_artifact_provider_proof as command
 
 
@@ -18,6 +20,8 @@ _RESULT_ID = UUID("0199f68b-5dc2-7000-8000-000000000003")
 _ACTIVATION_ID = UUID("0199f68b-5dc2-7000-8000-000000000004")
 _STARTED_AT = datetime(2026, 10, 16, 12, 0, tzinfo=UTC)
 _RUNTIME_ROLE = "arn:aws:iam::123456789012:role/workstream-runtime"
+_READINESS_ROLE = "arn:aws:iam::123456789012:role/workstream-readiness"
+_NEGATIVE_ROLE = "arn:aws:iam::123456789012:role/workstream-negative"
 
 
 class _Transaction:
@@ -55,6 +59,36 @@ class _SessionFactory:
         return _DatabaseSession(self.count, self.events)
 
 
+def _stub_probe_persistence(
+    monkeypatch: pytest.MonkeyPatch,
+    settings: Settings,
+    *,
+    persisted: list[dict[str, object]],
+) -> None:
+    sessions = _SessionFactory([])
+
+    async def database_time(_session: _DatabaseSession) -> datetime:
+        return _STARTED_AT
+
+    async def record(
+        _session: _DatabaseSession,
+        actual_settings: Settings,
+        **values: object,
+    ) -> UUID:
+        assert actual_settings is settings
+        persisted.append(values)
+        return _RESULT_ID
+
+    async def dispose() -> None:
+        return None
+
+    monkeypatch.setattr(command, "get_settings", lambda: settings)
+    monkeypatch.setattr(command, "get_session_factory", lambda: sessions)
+    monkeypatch.setattr(command, "artifact_provider_database_time", database_time)
+    monkeypatch.setattr(command, "record_artifact_provider_probe_result", record)
+    monkeypatch.setattr(command, "dispose_engine", dispose)
+
+
 @pytest.mark.asyncio
 async def test_probe_run_executes_transport_then_persists_its_actual_observation(
     monkeypatch: pytest.MonkeyPatch,
@@ -68,7 +102,7 @@ async def test_probe_run_executes_transport_then_persists_its_actual_observation
         observed_principal_arn=_RUNTIME_ROLE,
         passed=True,
         error_code=None,
-        evidence={"suite": "aws-s3-live-v1", "exact_readback": True},
+        evidence={"suite": "aws-s3-identity-custody", "exact_readback": True},
     )
 
     class _Proof:
@@ -145,6 +179,133 @@ async def test_probe_run_executes_transport_then_persists_its_actual_observation
         ("session-exit", 2),
         "dispose",
     ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("mode", "role_arn"),
+    [
+        ("readiness", _READINESS_ROLE),
+        ("runtime_immutability", _RUNTIME_ROLE),
+        ("negative_access", _NEGATIVE_ROLE),
+    ],
+)
+async def test_roles_anywhere_command_constructs_the_exact_selected_proof_identity(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    mode: str,
+    role_arn: str,
+) -> None:
+    from app.adapters.artifacts import aws_live_proof, aws_roles_anywhere
+    from tests.test_aws_roles_anywhere_credentials import (
+        make_roles_anywhere_settings,
+        write_roles_anywhere_identity,
+    )
+
+    certificate_path, private_key_path = write_roles_anywhere_identity(
+        tmp_path / role_arn.rsplit("/", 1)[-1],
+        role_arn=role_arn,
+    )
+    settings = make_roles_anywhere_settings(
+        tmp_path,
+        selected_role_arn=role_arn,
+        identity_paths=(certificate_path, private_key_path),
+    )
+    persisted: list[dict[str, object]] = []
+    _stub_probe_persistence(monkeypatch, settings, persisted=persisted)
+    monkeypatch.setenv("HOME", str(tmp_path))
+
+    async def observe(proof: object, expected: str) -> str:
+        session = proof._session  # type: ignore[attr-defined]  # noqa: SLF001
+        assert session is not None
+        providers = session.get_component("credential_provider").providers
+        assert len(providers) == 1
+        provider = providers[0]
+        assert type(provider) is aws_roles_anywhere.RolesAnywhereCredentialProvider
+        assert provider._role_arn == role_arn  # noqa: SLF001
+        assert provider._settings.artifact_s3_roles_anywhere_certificate_file == certificate_path  # noqa: SLF001
+        assert provider._settings.artifact_s3_roles_anywhere_private_key_file == private_key_path  # noqa: SLF001
+        return expected
+
+    async def cloud_probe(*_args: object) -> dict[str, object]:
+        return {"stubbed_cloud_transport": True}
+
+    async def isolate(_settings: Settings) -> object:
+        return SimpleNamespace(
+            initial_own_role_succeeded=True,
+            other_roles_access_denied=True,
+            final_own_role_succeeded=True,
+        )
+
+    monkeypatch.setattr(aws_live_proof.AwsArtifactLiveProof, "_observe_principal", observe)
+    monkeypatch.setattr(aws_live_proof.AwsArtifactLiveProof, "_readiness", cloud_probe)
+    monkeypatch.setattr(
+        aws_live_proof.AwsArtifactLiveProof,
+        "_runtime_immutability",
+        cloud_probe,
+    )
+    monkeypatch.setattr(aws_live_proof.AwsArtifactLiveProof, "_negative_access", cloud_probe)
+    monkeypatch.setattr(aws_roles_anywhere, "prove_roles_anywhere_role_isolation", isolate)
+
+    result = await command.run(mode, _GROUP_NONCE)
+
+    assert result["result"] == "passed"
+    assert persisted[0]["expected_principal_arn"] == role_arn
+    assert persisted[0]["observed_principal_arn"] == role_arn
+    assert persisted[0]["passed"] is True
+
+
+@pytest.mark.asyncio
+async def test_roles_anywhere_command_rejects_wrong_mode_before_credential_or_cloud_io(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    from app.adapters.artifacts import aws_live_proof
+    from tests.test_aws_roles_anywhere_credentials import (
+        make_roles_anywhere_settings,
+        write_roles_anywhere_identity,
+    )
+
+    identity = write_roles_anywhere_identity(
+        tmp_path / "readiness",
+        role_arn=_READINESS_ROLE,
+    )
+    settings = make_roles_anywhere_settings(
+        tmp_path,
+        selected_role_arn=_READINESS_ROLE,
+        identity_paths=identity,
+    )
+    persisted: list[dict[str, object]] = []
+    _stub_probe_persistence(monkeypatch, settings, persisted=persisted)
+    unsafe_events: list[str] = []
+
+    def forbidden_session(*_args: object, **_kwargs: object) -> object:
+        unsafe_events.append("credential-session")
+        raise AssertionError("wrong mode constructed a credential session")
+
+    async def forbidden_cloud(*_args: object, **_kwargs: object) -> object:
+        unsafe_events.append("cloud")
+        raise AssertionError("wrong mode called AWS")
+
+    monkeypatch.setattr(
+        aws_live_proof,
+        "create_isolated_aws_workload_identity_session",
+        forbidden_session,
+    )
+    monkeypatch.setattr(
+        aws_live_proof.AwsArtifactLiveProof,
+        "_observe_principal",
+        forbidden_cloud,
+    )
+
+    result = await command.run("runtime_immutability", _GROUP_NONCE)
+
+    assert result["result"] == "failed"
+    assert result["error_code"] == "proof_validation_failed"
+    assert persisted[0]["expected_principal_arn"] == _RUNTIME_ROLE
+    assert persisted[0]["observed_principal_arn"] is None
+    assert persisted[0]["passed"] is False
+    assert unsafe_events == []
 
 
 @pytest.mark.asyncio

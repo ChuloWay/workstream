@@ -42,7 +42,11 @@ case "${WORKSTREAM_RELEASE_ROLE:-}" in
         load_required_secret OPENAI_API_KEY "${OPENAI_API_KEY_FILE:-}"
         ;;
     beat)
+        load_required_secret WORKSTREAM_DATABASE_URL "${WORKSTREAM_DATABASE_URL_FILE:-}"
         load_required_secret WORKSTREAM_CELERY_BROKER_URL "${WORKSTREAM_CELERY_BROKER_URL_FILE:-}"
+        ;;
+    proof)
+        load_required_secret WORKSTREAM_DATABASE_URL "${WORKSTREAM_DATABASE_URL_FILE:-}"
         ;;
     *)
         echo "required release role is unavailable or unsupported" >&2
