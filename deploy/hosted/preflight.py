@@ -18,7 +18,7 @@ from typing import Any
 
 COMPOSE_PATH = Path(__file__).with_name("compose.yml")
 SCRATCH_ROOT = Path("/var/lib/workstream/scratch")
-SOCKET_ROOT = Path("/run/workstream-checker")
+SOCKET_ROOT = Path("/var/lib/workstream/checker-runtime")
 SOCKET_PATH = SOCKET_ROOT / "checker.sock"
 DOCKER_SOCKET = Path("/var/run/docker.sock")
 DIGEST = re.compile(r"sha256:[0-9a-f]{64}\Z")

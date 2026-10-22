@@ -66,6 +66,7 @@ class HostedReleaseConfigTests(unittest.TestCase):
         self.temporary.cleanup()
 
     def test_valid_configuration_and_rendered_topology(self) -> None:
+        self.assertEqual(str(preflight.SOCKET_ROOT), "/var/lib/workstream/checker-runtime")
         preflight.validate_environment(self.environment)
         preflight.validate_checker_config(self.checker, self.environment)
         rendered = preflight.render_compose(self.environment_path, self.environment)
@@ -345,6 +346,11 @@ class HostedReleaseConfigTests(unittest.TestCase):
             if mount["target"] == str(preflight.SCRATCH_ROOT):
                 mount["read_only"] = False
         cases.append(("writable checker material", writable_material))
+        volatile_owner = copy.deepcopy(rendered)
+        for mount in volatile_owner["services"]["checker-service"]["volumes"]:
+            if mount["target"] == str(preflight.SOCKET_ROOT):
+                mount["source"] = "/run/workstream-checker"
+        cases.append(("boot-volatile checker custody", volatile_owner))
         root_controller = copy.deepcopy(rendered)
         root_controller["services"]["checker-service"]["user"] = "0:0"
         cases.append(("root checker controller", root_controller))

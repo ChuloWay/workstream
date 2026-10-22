@@ -1,6 +1,6 @@
 """Opt-in real-Docker startup isolation proof; never pulls or scans for cleanup.
 
-Usage: python3 container_ownership.py --service ABSOLUTE_BINARY --image redis:7
+Usage: python3 container_ownership.py --service ABSOLUTE_BINARY --image alpine:3.20
 The already-cached image must supply /bin/sh and sleep. No checker is executed.
 """
 

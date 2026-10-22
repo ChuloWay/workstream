@@ -27,7 +27,7 @@ controller container's mount namespace, resolves checker bind sources:
 
 ```text
 /var/lib/workstream/scratch
-/run/workstream-checker/checker.sock
+/var/lib/workstream/checker-runtime/checker.sock
 ```
 
 Do not replace either path with a named volume or another in-container path.
@@ -78,9 +78,18 @@ fixed private directories with that runtime identity:
 
 ```sh
 sudo install -d -m 0700 -o 10001 -g 10001 /var/lib/workstream/scratch
-sudo install -d -m 0700 -o 10001 -g 10001 /run/workstream-checker
+sudo install -d -m 0700 -o 10001 -g 10001 /var/lib/workstream/checker-runtime
 stat -c '%g' /var/run/docker.sock
 ```
+
+The checker runtime directory must be on durable host storage, not `/run`,
+tmpfs or ephemeral container storage. Its private `.workstream-checker-owner`
+file identifies containers recoverable after a service or host restart. Preserve
+it with the directory; never clone it into another live deployment. Before
+changing or deleting this directory, drain checker work and verify cleanup of
+its exact owned containers. If custody was lost, reconcile independently verified
+container IDs; a new owner will not adopt old containers. See
+[container recovery ownership](../../external_checkers/README.md#container-recovery-ownership).
 
 Copy `release.env.example` to an operator-owned non-secret environment file and
 replace every example identity. The file contains paths and public configuration,

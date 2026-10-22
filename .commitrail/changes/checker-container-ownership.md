@@ -20,6 +20,14 @@ Allowed: `external_checkers/workstream-checker-service/src/main.rs`,
 `docs/roadmap_status.md`, `docs/engineering/local-agent-loop.md`, and this record.
 The local-loop runbook also describes startup deletion and must name the same
 deployment-scoped ownership boundary.
+Hosted custody must also survive host reboot: include `deploy/hosted/compose.yml`,
+`deploy/hosted/preflight.py`, `deploy/hosted/checker-service.example.json`,
+`deploy/hosted/README.md`, `docker/backend/Dockerfile.release`,
+`docker/checker/Dockerfile.release`, and `scripts/test_hosted_release_config.py`.
+Replace the boot-volatile socket root with `/var/lib/workstream/checker-runtime`
+consistently; no alternate configuration or compatibility path. Verify rendered
+mount/config parity and rejection of the volatile source. Local disposal must
+settle direct-created checker containers before deleting their custody volume.
 No checker protocol/result, policy, admission, AUTH, ART, database, dependency,
 CI selection, project-image or sandbox privilege changes. No unrelated cleanup.
 
@@ -79,7 +87,7 @@ bounded real-Docker ownership proof; freeze and review; open one PR. Then use
 the repaired service in the separately scoped CLI journey and retain raw proof.
 No deployment, live AWS or completed CLI journey claim follows from this repair.
 
-Future proof (not yet executed): Rust `owner_custody_is_stable_private_and_bounded`
+Proof strategy: Rust `owner_custody_is_stable_private_and_bounded`
 covers distinct parents, restart, unsafe file forms and incomplete creation;
 `startup_recovery_is_instance_scoped` uses a stateful fake Docker executable with
 A/B/unowned inventories and actual calls through recovery, asserting A/unowned
@@ -90,8 +98,7 @@ timeout/disconnect tests retain their assertions and add owner-qualified targets
 The opt-in process proof `tests/container_ownership.py` starts the built service
 with two fresh private directories and real Docker, creates only disposable
 containers, records their full IDs, proves restart cleanup and foreign survival,
-and tears down only those recorded IDs. This is future executed composition
-evidence. No fake is credited as real Docker proof.
+and tears down only those recorded IDs. No fake is credited as real Docker proof.
 
 ## Reconciliation
 

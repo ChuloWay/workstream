@@ -2410,6 +2410,37 @@ mod tests {
     }
 
     #[test]
+    fn unsafe_owner_custody_stops_startup_before_docker() {
+        use std::os::unix::fs::symlink;
+        let (root, mut config) = test_config();
+        let owner_path = config
+            .socket_path
+            .parent()
+            .unwrap()
+            .join(CONTAINER_OWNER_FILE);
+        let marker = root.join("docker-called");
+        fs::write(
+            &config.docker_binary,
+            format!("#!/bin/sh\ntouch '{}'\nexit 1\n", marker.display()),
+        )
+        .unwrap();
+        fs::write(&owner_path, b"partial").unwrap();
+        assert!(prepare_listener(&mut config).is_err());
+        assert!(
+            !marker.exists(),
+            "unsafe owner allowed Docker startup calls"
+        );
+        fs::remove_file(&owner_path).unwrap();
+        symlink(root.join("substituted-owner"), &owner_path).unwrap();
+        assert!(prepare_listener(&mut config).is_err());
+        assert!(
+            !marker.exists(),
+            "substituted owner allowed Docker startup calls"
+        );
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
     fn container_identity_requires_all_ownership_facts() {
         let id = "a".repeat(64);
         let owner = "b".repeat(64);
@@ -2472,9 +2503,13 @@ root='{root}'
 case "$1 $2" in
  "info --format") printf '{{"runc":{{}}}}';;
  "container ls")
+   for argument in "$@"; do
+     case "$argument" in
+       id=*) id="${{argument#id=}}"; test -e "$root/$id" && printf '%s\n' "$id"; exit 0;;
+     esac
+   done
    case "$*" in
-    *'id='*) test -e "$root/{b_id}" && printf '{b_id}\n';;
-    *'label=workstream.external-checker-owner={b_owner}'*) test -e "$root/{b_id}" && printf '{b_id}\n';;
+    *'label=workstream.external-checker-owner={b_owner}'*) touch "$root/owner-filter"; test -e "$root/{b_id}" && printf '{b_id}\n';;
     *) printf '{a_id}\n{b_id}\n{unowned}\n';;
    esac; exit 0;;
  "container inspect")
@@ -2483,7 +2518,9 @@ case "$1 $2" in
     '{b_id}') owner='{b_owner}';;
     *) owner='';;
    esac
-   printf '[{{"Id":"%s","Name":"/ws-checker-%s-a1","Config":{{"Labels":{{"workstream.external-checker":"true","workstream.external-checker-owner":"%s","workstream.external-checker-attempt":"a1"}}}}}}]' "$3" "$owner" "$owner";;
+   name='/ws-checker-a1'
+   test -e "$root/owner-filter" && name="/ws-checker-$owner-a1"
+   printf '[{{"Id":"%s","Name":"%s","Config":{{"Labels":{{"workstream.external-checker":"true","workstream.external-checker-owner":"%s","workstream.external-checker-attempt":"a1"}}}}}}]' "$3" "$name" "$owner";;
  "rm -f") rm "$root/$3";;
  *) exit 2;;
 esac

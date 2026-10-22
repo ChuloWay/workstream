@@ -371,10 +371,18 @@ define replay and revision behavior.
 
 ## Stop or dispose
 
-`docker compose down` keeps the project's volumes, including the material
-volume, the registry and the generated digests. To delete everything this
-project owns, confirm the project name first, as in
-[Stop, retain or dispose](local-pilot.md#stop-retain-or-dispose), then:
+`docker compose down` keeps the project's volumes, including the material,
+registry and checker socket/owner volumes. Checker execution containers are
+created directly, not by Compose: `down --volumes` does not remove them.
+Before disposal, stop admission and drain checker executions while the service
+is running. Verify that no container remains for this deployment's exact owner.
+After a crash, retain the socket volume and restart its owning service to recover
+its containers, or reconcile independently verified exact container IDs first.
+Do not delete the custody volume while container ownership remains unsettled.
+
+Only after that verification, confirm the project name as in
+[Stop, retain or dispose](local-pilot.md#stop-retain-or-dispose) and remove its
+Compose resources and images:
 
 ```bash
 docker compose down --volumes
