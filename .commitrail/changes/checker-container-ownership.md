@@ -4,7 +4,7 @@
 - Durable disposition: Planned
 - Intended merge outcome: checker startup recovers only its own deployment's containers.
 
-## Intent and current behavior
+## Intent
 
 The CLI journey found ARCH-CLI43-001: startup enumerates every Docker container
 with `workstream.external-checker=true`, validates only a generic name/attempt,
@@ -17,7 +17,9 @@ parent lock protects only services sharing that directory.
 Allowed: `external_checkers/workstream-checker-service/src/main.rs`,
 `external_checkers/workstream-checker-service/tests/container_ownership.py`,
 `external_checkers/README.md`, `docs/architecture_checker_framework.md`,
-`docs/roadmap_status.md`, and this record.
+`docs/roadmap_status.md`, `docs/engineering/local-agent-loop.md`, and this record.
+The local-loop runbook also describes startup deletion and must name the same
+deployment-scoped ownership boundary.
 No checker protocol/result, policy, admission, AUTH, ART, database, dependency,
 CI selection, project-image or sandbox privilege changes. No unrelated cleanup.
 
@@ -69,7 +71,7 @@ loss; the service never adopts them by their generic label.
 - Human review focus: restart custody, cross-instance isolation, exact deletion
   targets and deployment-directory lifecycle. Human merge only.
 
-## Plan and evidence
+## Evidence
 
 Inspect startup/create/recovery and fixtures; review this plan; implement one
 owner path; run Rust format/tests/clippy, discriminating fake-Docker tests and

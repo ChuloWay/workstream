@@ -383,5 +383,9 @@ docker image rm "$COMPOSE_PROJECT_NAME-checker:local" \
 ```
 
 Checker containers that the service started carry the label
-`workstream.external-checker=true`; the service removes them after each run and
-on startup.
+`workstream.external-checker=true` and a deployment owner label. The service
+removes its containers after each run; startup recovery verifies that same
+owner, exact Docker ID, name and attempt before removal. Preserve the private
+socket directory's `.workstream-checker-owner` across restarts; do not copy it
+between deployments. See [container recovery ownership](../../external_checkers/README.md#container-recovery-ownership)
+for lost-custody reconciliation. Generic labels alone never authorize cleanup.

@@ -27,11 +27,14 @@ const DOCKER_CONTROL_TIMEOUT: Duration = Duration::from_secs(10);
 const CLEANUP_TIMEOUT: Duration = Duration::from_secs(10);
 const CLEANUP_MAXIMUM_OUTPUT_BYTES: usize = 256 * 1024;
 const RUNTIME_FILE_PREFIX: &str = ".workstream-checker-runtime-";
+const CONTAINER_OWNER_FILE: &str = ".workstream-checker-owner";
 const UNSETTLED_RESOURCE_ERROR: &str = "owned runtime resource cleanup unsettled";
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct ServiceConfig {
+    #[serde(skip)]
+    container_owner: Option<String>,
     socket_path: PathBuf,
     material_root: PathBuf,
     docker_binary: PathBuf,
@@ -416,9 +419,9 @@ fn run() -> Result<(), String> {
         .nth(1)
         .ok_or("configuration path missing")?;
     let bytes = fs::read(path).map_err(|_| "configuration unavailable")?;
-    let config: ServiceConfig =
+    let mut config: ServiceConfig =
         serde_json::from_slice(&bytes).map_err(|_| "configuration invalid")?;
-    let listener = prepare_listener(&config)?;
+    let listener = prepare_listener(&mut config)?;
     serve_connections(&config, listener.incoming(), SOCKET_IO_TIMEOUT)
 }
 
@@ -439,15 +442,85 @@ where
     Ok(())
 }
 
-fn prepare_listener(config: &ServiceConfig) -> Result<OwnedSocketListener, String> {
+fn prepare_listener(config: &mut ServiceConfig) -> Result<OwnedSocketListener, String> {
     // Socket-parent custody must precede validation that invokes Docker and every
     // startup cleanup. A losing concurrent process cannot inspect or remove the
     // live owner's resources.
     let listener = OwnedSocketListener::bind(&config.socket_path)?;
+    config.container_owner = Some(load_container_owner(&listener.parent)?);
     validate_config(config)?;
     cleanup_stale_runtime_files(config)?;
     cleanup_stale_checker_containers(config)?;
     Ok(listener)
+}
+
+fn load_container_owner(parent: &File) -> Result<String, String> {
+    let path = PathBuf::from(format!(
+        "/proc/self/fd/{}/{}",
+        parent.as_raw_fd(),
+        CONTAINER_OWNER_FILE
+    ));
+    let flags = libc::O_NOFOLLOW | libc::O_CLOEXEC | libc::O_NONBLOCK;
+    match OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .mode(0o600)
+        .custom_flags(flags)
+        .open(&path)
+    {
+        Ok(mut file) => {
+            let mut random = [0_u8; 32];
+            File::open("/dev/urandom")
+                .and_then(|mut source| source.read_exact(&mut random))
+                .map_err(|_| "container owner randomness unavailable")?;
+            let mut owner = String::with_capacity(64);
+            for byte in random {
+                use std::fmt::Write;
+                write!(&mut owner, "{byte:02x}").expect("writing to String cannot fail");
+            }
+            file.write_all(owner.as_bytes())
+                .and_then(|_| file.sync_all())
+                .map_err(|_| "container owner persistence failed")?;
+            parent
+                .sync_all()
+                .map_err(|_| "container owner persistence failed")?;
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {}
+        Err(_) => return Err("container owner unavailable".into()),
+    }
+    let file = OpenOptions::new()
+        .read(true)
+        .custom_flags(flags)
+        .open(path)
+        .map_err(|_| "container owner unavailable")?;
+    let metadata = file.metadata().map_err(|_| "container owner unavailable")?;
+    // SAFETY: effective process IDs are read-only process attributes.
+    let (uid, gid) = unsafe { (libc::geteuid(), libc::getegid()) };
+    if !metadata.is_file()
+        || metadata.nlink() != 1
+        || metadata.uid() != uid
+        || metadata.gid() != gid
+        || metadata.mode() & 0o7777 != 0o600
+        || metadata.len() != 64
+    {
+        return Err("container owner identity invalid".into());
+    }
+    let mut owner = String::new();
+    file.take(65)
+        .read_to_string(&mut owner)
+        .map_err(|_| "container owner invalid")?;
+    if !valid_full_container_id(&owner) {
+        return Err("container owner invalid".into());
+    }
+    Ok(owner)
+}
+
+fn container_owner(config: &ServiceConfig) -> Result<&str, String> {
+    config
+        .container_owner
+        .as_deref()
+        .filter(|owner| valid_full_container_id(owner))
+        .ok_or_else(|| "container owner custody missing".into())
 }
 
 fn serve_connection(
@@ -1264,6 +1337,8 @@ fn execute_container(
     client: &UnixStream,
     budget: &mut RequestExecutionBudget,
 ) -> Result<ExecutedChecker, ExecutionFailure> {
+    let owner = container_owner(config)
+        .map_err(|_| ExecutionFailure::ordinary("implementation_unavailable", false))?;
     // Revalidate immediately before handing the path to Docker.
     inspect_workspace(workspace, config.sandbox_uid, config.sandbox_gid)
         .map_err(|_| ExecutionFailure::ordinary("material_unavailable", false))?;
@@ -1271,7 +1346,8 @@ fn execute_container(
         .duration_since(UNIX_EPOCH)
         .map_err(|_| ExecutionFailure::ordinary("implementation_unavailable", false))?
         .as_nanos();
-    let name = format!("ws-checker-{nonce:x}");
+    let name = format!("ws-checker-{owner}-{nonce:x}");
+    let owner_label = format!("workstream.external-checker-owner={owner}");
     let attempt_label = format!("workstream.external-checker-attempt={nonce:x}");
     let image = format!("{}@{}", cache.repository, cache.platform_manifest_digest);
     let sandbox_user = format!("{}:{}", config.sandbox_uid, config.sandbox_gid);
@@ -1290,6 +1366,8 @@ fn execute_container(
         "workstream.external-checker=true",
         "--label",
         &attempt_label,
+        "--label",
+        &owner_label,
         "--runtime",
         &config.runtime,
         "--network",
@@ -1483,6 +1561,8 @@ fn successful_empty_inventory(output: &BoundedCommandOutput) -> bool {
 }
 
 fn cleanup_stale_checker_containers(config: &ServiceConfig) -> Result<(), String> {
+    let owner = container_owner(config)?;
+    let owner_filter = format!("label=workstream.external-checker-owner={owner}");
     let deadline = Instant::now() + CLEANUP_TIMEOUT;
     let listed = run_bounded_command(
         &config.docker_binary,
@@ -1494,6 +1574,8 @@ fn cleanup_stale_checker_containers(config: &ServiceConfig) -> Result<(), String
             "--no-trunc",
             "--filter",
             "label=workstream.external-checker=true",
+            "--filter",
+            &owner_filter,
         ],
         deadline,
         1024 * 1024,
@@ -1515,7 +1597,7 @@ fn cleanup_stale_checker_containers(config: &ServiceConfig) -> Result<(), String
             1024 * 1024,
         )
         .map_err(|_| "external checker container recovery unavailable")?;
-        if !inspected.status.success() || !owned_checker_container(&inspected.stdout) {
+        if !inspected.status.success() || !owned_checker_container(&inspected.stdout, id, owner) {
             return Err("external checker container recovery identity differs".into());
         }
         if !remove_container_until(config, id, deadline) {
@@ -1532,7 +1614,7 @@ fn valid_full_container_id(value: &str) -> bool {
             .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
 }
 
-fn owned_checker_container(bytes: &[u8]) -> bool {
+fn owned_checker_container(bytes: &[u8], id: &str, owner: &str) -> bool {
     let Ok(value) = serde_json::from_slice::<Value>(bytes) else {
         return false;
     };
@@ -1540,10 +1622,11 @@ fn owned_checker_container(bytes: &[u8]) -> bool {
         return false;
     };
     let container = &containers[0];
+    let prefix = format!("/ws-checker-{owner}-");
     let Some(attempt) = container
         .get("Name")
         .and_then(Value::as_str)
-        .and_then(|name| name.strip_prefix("/ws-checker-"))
+        .and_then(|name| name.strip_prefix(&prefix))
         .filter(|attempt| {
             !attempt.is_empty()
                 && attempt.len() <= 32
@@ -1554,10 +1637,15 @@ fn owned_checker_container(bytes: &[u8]) -> bool {
     else {
         return false;
     };
-    container
-        .pointer("/Config/Labels/workstream.external-checker")
-        .and_then(Value::as_str)
-        == Some("true")
+    container.get("Id").and_then(Value::as_str) == Some(id)
+        && container
+            .pointer("/Config/Labels/workstream.external-checker-owner")
+            .and_then(Value::as_str)
+            == Some(owner)
+        && container
+            .pointer("/Config/Labels/workstream.external-checker")
+            .and_then(Value::as_str)
+            == Some("true")
         && container
             .pointer("/Config/Labels/workstream.external-checker-attempt")
             .and_then(Value::as_str)
@@ -2051,6 +2139,9 @@ mod tests {
         let sandbox_uid = owner.uid();
         let sandbox_gid = owner.gid();
         let config = ServiceConfig {
+            container_owner: Some(
+                load_container_owner(&File::open(&socket_root).unwrap()).unwrap(),
+            ),
             socket_path: socket_root.join("checker.sock"),
             material_root,
             docker_binary: docker,
@@ -2245,8 +2336,8 @@ mod tests {
 
     #[test]
     fn losing_full_startup_cannot_run_cleanup_under_the_live_owner() {
-        let (root, config) = test_config();
-        let first = prepare_listener(&config).unwrap();
+        let (root, mut config) = test_config();
+        let first = prepare_listener(&mut config).unwrap();
         let socket_root = config.socket_path.parent().unwrap();
         let stale_runtime = socket_root.join(format!("{RUNTIME_FILE_PREFIX}loser.stdout"));
         fs::write(&stale_runtime, b"winner-owned").unwrap();
@@ -2261,7 +2352,7 @@ mod tests {
         .unwrap();
 
         assert_eq!(
-            prepare_listener(&config).unwrap_err(),
+            prepare_listener(&mut config).unwrap_err(),
             "socket custody unavailable"
         );
         assert_eq!(fs::read(&stale_runtime).unwrap(), b"winner-owned");
@@ -2273,7 +2364,157 @@ mod tests {
     }
 
     #[test]
-    fn startup_recovery_requires_exact_generic_container_identity_and_absence() {
+    fn owner_custody_is_stable_private_and_bounded() {
+        let (root, config) = test_config();
+        let (other_root, other) = test_config();
+        let parent = File::open(config.socket_path.parent().unwrap()).unwrap();
+        let path = config
+            .socket_path
+            .parent()
+            .unwrap()
+            .join(CONTAINER_OWNER_FILE);
+        let original = container_owner(&config).unwrap();
+        assert_eq!(load_container_owner(&parent).unwrap(), original);
+        assert_ne!(original, container_owner(&other).unwrap());
+        let listener = OwnedSocketListener::bind(&config.socket_path).unwrap();
+        drop(listener);
+        assert_eq!(load_container_owner(&parent).unwrap(), original);
+        for bytes in [
+            vec![],
+            vec![b'a'; 63],
+            vec![b'a'; 65],
+            vec![b'A'; 64],
+            vec![b'g'; 64],
+        ] {
+            fs::write(&path, bytes).unwrap();
+            assert!(load_container_owner(&parent).is_err());
+        }
+        fs::write(&path, original).unwrap();
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o644)).unwrap();
+        assert!(load_container_owner(&parent).is_err());
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o600)).unwrap();
+        let alias = root.join("alias");
+        fs::hard_link(&path, &alias).unwrap();
+        assert!(load_container_owner(&parent).is_err());
+        fs::remove_file(&path).unwrap();
+        symlink(&alias, &path).unwrap();
+        assert!(load_container_owner(&parent).is_err());
+        fs::remove_file(&path).unwrap();
+        fs::create_dir(&path).unwrap();
+        assert!(load_container_owner(&parent).is_err());
+        fs::remove_dir(&path).unwrap();
+        // Lost custody is never reconstructed from generic containers.
+        assert_ne!(load_container_owner(&parent).unwrap(), original);
+        fs::remove_dir_all(root).unwrap();
+        fs::remove_dir_all(other_root).unwrap();
+    }
+
+    #[test]
+    fn container_identity_requires_all_ownership_facts() {
+        let id = "a".repeat(64);
+        let owner = "b".repeat(64);
+        let valid = serde_json::json!([{
+            "Id": id, "Name": format!("/ws-checker-{owner}-c1"),
+            "Config": {"Labels": {
+                "workstream.external-checker": "true",
+                "workstream.external-checker-owner": owner,
+                "workstream.external-checker-attempt": "c1"
+            }}
+        }]);
+        assert!(owned_checker_container(
+            &serde_json::to_vec(&valid).unwrap(),
+            &id,
+            &owner
+        ));
+        for path in [
+            "/0/Id",
+            "/0/Name",
+            "/0/Config/Labels/workstream.external-checker",
+            "/0/Config/Labels/workstream.external-checker-owner",
+            "/0/Config/Labels/workstream.external-checker-attempt",
+        ] {
+            for replacement in [Value::Null, Value::String("different".into())] {
+                let mut bad = valid.clone();
+                *bad.pointer_mut(path).unwrap() = replacement;
+                assert!(
+                    !owned_checker_container(&serde_json::to_vec(&bad).unwrap(), &id, &owner),
+                    "{path}"
+                );
+            }
+        }
+        let (root, mut config) = test_config();
+        config.container_owner = None;
+        assert_eq!(
+            cleanup_stale_checker_containers(&config).unwrap_err(),
+            "container owner custody missing"
+        );
+        config.container_owner = Some(String::new());
+        assert!(cleanup_stale_checker_containers(&config).is_err());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn startup_recovery_is_instance_scoped() {
+        let (root, mut a) = test_config();
+        let (b_root, mut b) = test_config();
+        let live = prepare_listener(&mut a).unwrap();
+        let a_owner = container_owner(&a).unwrap();
+        let b_owner = container_owner(&b).unwrap().to_owned();
+        let a_id = "a".repeat(64);
+        let b_id = "b".repeat(64);
+        let unowned = "c".repeat(64);
+        for id in [&a_id, &b_id, &unowned] {
+            fs::write(b_root.join(id), b"container").unwrap();
+        }
+        let script = format!(
+            r#"#!/bin/sh
+root='{root}'
+case "$1 $2" in
+ "info --format") printf '{{"runc":{{}}}}';;
+ "container ls")
+   case "$*" in
+    *'id='*) test -e "$root/{b_id}" && printf '{b_id}\n';;
+    *'label=workstream.external-checker-owner={b_owner}'*) test -e "$root/{b_id}" && printf '{b_id}\n';;
+    *) printf '{a_id}\n{b_id}\n{unowned}\n';;
+   esac; exit 0;;
+ "container inspect")
+   case "$3" in
+    '{a_id}') owner='{a_owner}';;
+    '{b_id}') owner='{b_owner}';;
+    *) owner='';;
+   esac
+   printf '[{{"Id":"%s","Name":"/ws-checker-%s-a1","Config":{{"Labels":{{"workstream.external-checker":"true","workstream.external-checker-owner":"%s","workstream.external-checker-attempt":"a1"}}}}}}]' "$3" "$owner" "$owner";;
+ "rm -f") rm "$root/$3";;
+ *) exit 2;;
+esac
+"#,
+            root = b_root.display()
+        );
+        fs::write(&b.docker_binary, script).unwrap();
+        let b_listener = prepare_listener(&mut b).unwrap();
+        assert!(
+            b_root.join(&a_id).exists(),
+            "foreign active container was removed"
+        );
+        assert!(
+            b_root.join(&unowned).exists(),
+            "unowned container was removed"
+        );
+        assert!(
+            !b_root.join(&b_id).exists(),
+            "own stale container was not recovered"
+        );
+        drop(b_listener);
+        let restarted = prepare_listener(&mut b).unwrap();
+        assert_eq!(container_owner(&b).unwrap(), b_owner);
+        drop(restarted);
+        drop(live);
+        fs::remove_dir_all(root).unwrap();
+        fs::remove_dir_all(b_root).unwrap();
+    }
+
+    #[test]
+    fn startup_recovery_requires_exact_container_identity_and_absence() {
         let (root, config) = test_config();
         let container = root.join("generic-container");
         let preserved = root.join("preserved");
@@ -2287,13 +2528,14 @@ mod tests {
 case "$1 $2" in
   "container ls") test -e "{container}" && printf '{container_id}\n'; exit 0;;
   "container inspect")
-    printf '%s\n' '[{{"Name":"/ws-checker-a1","Config":{{"Labels":{{"workstream.external-checker":"true","workstream.external-checker-attempt":"a1"}}}}}}]'
+    printf '%s\n' '[{{"Id":"{container_id}","Name":"/ws-checker-{owner}-a1","Config":{{"Labels":{{"workstream.external-checker":"true","workstream.external-checker-owner":"{owner}","workstream.external-checker-attempt":"a1"}}}}}}]'
     exit 0;;
   "rm -f") rm -f "{container}"; exit 0;;
 esac
 exit 2
 "#,
                 container = container.display(),
+                owner = container_owner(&config).unwrap(),
             ),
         )
         .unwrap();
@@ -2311,7 +2553,11 @@ exit 2
             }}
         }]))
         .unwrap();
-        assert!(!owned_checker_container(&mismatched));
+        assert!(!owned_checker_container(
+            &mismatched,
+            &container_id,
+            container_owner(&config).unwrap()
+        ));
 
         fs::write(&container, b"ambiguous").unwrap();
         fs::write(
