@@ -1,14 +1,20 @@
 # Terminal Systems — live setup qualification
 
 - Initiative: None
-- Durable disposition: Complete
-- Intended merge outcome: Leave absent project size limits null during guide setup, without requiring contributors’ project guides to repeat infrastructure limits; prove with the actual original guide.
+- Durable disposition: Planned
+- Intended merge outcome: Produce a useful, typed and reviewable guide-setup specification from the original guide, including correct checker classification and platform-limit inheritance; qualify it with the real provider before engineering images.
 
 ## Intent
 
 Exercise the real guide upload and provider-backed setup before implementing
 project checkers. Use the actual proposed requirements and capability gaps as
 engineering input. Do not replace inference with a prepared response.
+
+The user expanded PR #651 to include classification, structured engineering
+specifications and invalid-output diagnosis. Keep these related repairs in this
+PR, committing and reviewing each completed stage before advancing. The setup
+agent must reduce PM interpretation work and produce a concrete implementation
+handoff, not merely label requirements or return schema-valid prose.
 
 ## Current behavior
 
@@ -23,6 +29,14 @@ Other test containers on the workstation are separate retained environments.
 ## Bounded change
 
 ### Allowed
+
+- Existing project-agent contract, instructions, SDK adapter and affected
+  validation/finalization/public proposal owners; narrowly scoped adjacent
+  interface modules if needed to keep the typed specification cohesive.
+- Existing CLI proposal decoder and text renderer, affected API/process tests,
+  manager-authored rules consumers, current setup specifications and runbooks.
+- Focused pure, SDK-parser, PostgreSQL custody/hash/approval and CLI regressions,
+  plus isolated live provider runs using unchanged guide bytes.
 
 - Ignored local Compose configuration and operator scripts for a uniquely named
   PostgreSQL/Redis/MinIO/API/Celery environment, public API/CLI calls and private
@@ -54,6 +68,31 @@ Other test containers on the workstation are separate retained environments.
 
 ## Design and decisions
 
+### Remaining stages in this PR
+
+1. Define a bounded typed checker specification linked to each atomic
+   requirement: evaluation method/stage, input materials, checks, pass criteria,
+   failure findings, positive/negative examples and execution/infrastructure
+   needs. Explain human-review and lifecycle classifications explicitly.
+   Infer suitable verification from required outcomes; lack of a registered
+   checker must yield an engineering gap, not a human-review fallback.
+2. Preserve retained immutable result hashes and exact public reads when
+   evolving the contract. Require complete specifications from newly compiled
+   results, without rewriting earlier evidence or inventing implementation IDs.
+   Keep all policy approval, registration and activation authority unchanged.
+3. Render a concise PM overview followed by readable per-check specifications
+   through the existing CLI command; retain complete structured JSON output.
+4. Diagnose invalid structured results with bounded, non-content diagnostics;
+   reproduce and fix actual contract/prompt gaps. Never weaken validation or
+   silently retry terminal attempts until a result passes.
+5. Replay the original guide, inspect semantic completeness of the resulting
+   PRE/POST handoff, verify stored/public exactness and cleanup, then perform
+   independent final review and required CI. No project-specific logic enters
+   the shared runner. Building project images remains the next product step.
+
+The specification design is subject to architecture review before implementation;
+the existing nullable-limit repair and its evidence remain intact below.
+
 The user clarified that platform limits already govern every upload. Silence
 in the project guide must not block setup. Remove the attempted guide-level
 duplication; retain uploaded versions and their outcomes unchanged. The canonical downstream project policy already represents absent overrides
@@ -72,6 +111,18 @@ migration or parallel inference path is needed.
 - [x] A guide without numeric intake limits is not blocked for their absence; null project overrides leave ART platform limits in control.
 - [x] The public proposal reader accepts null overrides while rejecting invalid positive limits.
 - [x] Complete the isolated PostgreSQL explicit/null approval, replay and revoked-authority regression; a timed-out run is not a pass.
+- [ ] New setup results include typed, evidence-linked specifications sufficient
+  to implement and test each proposed check; malformed or contradictory specs
+  are rejected without policy writes.
+- [ ] Classification distinguishes mechanical checks, agent evaluation,
+  explicitly human decisions and Workstream-owned lifecycle rules. Missing
+  implementations remain visible engineering gaps.
+- [ ] Prior retained result hashes/readability remain exact; new specifications
+  survive projection, public read, approval/correction and CLI display.
+- [ ] Invalid-output diagnosis identifies reproduced failure boundaries without
+  exposing guide/model text, credentials or provider state.
+- [ ] Real setup of the unchanged guide yields a useful reviewed engineering
+  handoff; no activation/image/contribution claim substitutes for that proof.
 
 ## Risk and review routing
 
