@@ -174,7 +174,8 @@ def test_published_service_paths_match_the_compose_overlay() -> None:
         socket_mounts = [
             mount
             for mount in overlay["services"][name]["volumes"]
-            if mount.split(":")[1] == "/run/ws-checker"
+            if (mount.split(":")[1] if isinstance(mount, str) else mount["target"])
+            == "/run/ws-checker"
         ]
         mode = ":ro" if name in ("backend", "worker", "beat") else ""
         assert socket_mounts == [f"checker_socket:/run/ws-checker{mode}"], name
