@@ -396,7 +396,12 @@ async def test_manual_policy_cli_after_owner_finalization_and_fresh_authority(
                 create_path.write_text(json.dumps(create_body), encoding="utf-8")
                 create_key = str(uuid4())
 
-                def create(presented=token, key=create_key, selected_guide=guide):
+                def create(
+                    presented=token,
+                    key=create_key,
+                    selected_project=project,
+                    selected_guide=guide,
+                ):
                     return cli(
                         origin,
                         presented,
@@ -406,7 +411,7 @@ async def test_manual_policy_cli_after_owner_finalization_and_fresh_authority(
                         "guide",
                         "artifact-policy",
                         "create",
-                        project,
+                        selected_project,
                         selected_guide,
                         "--input",
                         str(create_path),
@@ -433,6 +438,77 @@ async def test_manual_policy_cli_after_owner_finalization_and_fresh_authority(
                 )
                 assert output(create(), 1)["error"]["code"] == "idempotency_mismatch"
                 create_path.write_text(json.dumps(create_body), encoding="utf-8")
+
+                # A stored second project's guide and draft are real foreign
+                # resources, not missing UUIDs that merely exercise 404.
+                async with source_case(clean_postgres_database) as (
+                    foreign_values,
+                    _foreign_factory,
+                    _foreign_finalization,
+                    foreign_actor,
+                    _foreign_grant,
+                ):
+                    foreign_project, foreign_guide, foreign_snapshot = (
+                        str(foreign_values[name])
+                        for name in ("project", "guide", "snapshot")
+                    )
+                    foreign_token = issue_flow_token(
+                        str(foreign_actor.actor_profile_id),
+                        [],
+                        issuer=issuer,
+                        audience=audience,
+                        secret=secret,
+                    )
+                    foreign_path = tmp_path / "foreign-manual-create.json"
+                    foreign_path.write_text(
+                        json.dumps(
+                            create_body
+                            | {
+                                "source_snapshot_id": foreign_snapshot,
+                                "policy_version": "foreign-manual-v1",
+                            }
+                        ),
+                        encoding="utf-8",
+                    )
+                    foreign_result = cli(
+                        origin,
+                        foreign_token,
+                        "-o",
+                        "json",
+                        "project",
+                        "guide",
+                        "artifact-policy",
+                        "create",
+                        foreign_project,
+                        foreign_guide,
+                        "--input",
+                        str(foreign_path),
+                        "--idempotency-key",
+                        str(uuid4()),
+                    )
+                    foreign_manual = output(foreign_result)
+                    assert foreign_manual["project_id"] == foreign_project
+                    assert foreign_manual["guide_id"] == foreign_guide
+                    assert output(
+                        create(key=str(uuid4()), selected_guide=foreign_guide), 1
+                    )["error"]["status"] in (403, 404)
+                    assert output(
+                        create(
+                            key=str(uuid4()),
+                            selected_project=foreign_project,
+                            selected_guide=foreign_guide,
+                        ),
+                        1,
+                    )["error"]["status"] in (403, 404)
+                    async with factory() as session:
+                        foreign_count = await session.scalar(
+                            text(
+                                "SELECT COUNT(*) FROM submission_artifact_policies "
+                                "WHERE guide_id=:guide AND derivation_source='manual_admin_derivation'"
+                            ),
+                            {"guide": foreign_guide},
+                        )
+                        assert foreign_count == 1
 
                 update_path = tmp_path / "manual-update.json"
                 update_body = {
@@ -464,6 +540,42 @@ async def test_manual_policy_cli_after_owner_finalization_and_fresh_authority(
                         key,
                     )
 
+                wrong_hash = (
+                    "sha256:"
+                    + ("0" if manual["policy_hash"][-64:] != "0" * 64 else "1") * 64
+                )
+                update_path.write_text(
+                    json.dumps(update_body | {"expected_policy_hash": wrong_hash}),
+                    encoding="utf-8",
+                )
+                assert output(update(key=str(uuid4())), 1)["error"]["code"] == (
+                    "submission_policy_precondition_failed"
+                )
+                async with factory() as session:
+                    assert (
+                        await session.scalar(
+                            text(
+                                "SELECT lifecycle_status FROM submission_artifact_policies "
+                                "WHERE id=:id"
+                            ),
+                            {"id": manual["id"]},
+                        )
+                        == "draft"
+                    )
+                    assert (
+                        await session.scalar(
+                            text(
+                                "SELECT COUNT(*) FROM submission_artifact_policies "
+                                "WHERE guide_id=:guide AND derivation_source='manual_admin_derivation'"
+                            ),
+                            {"guide": guide},
+                        )
+                        == 1
+                    )
+                update_path.write_text(json.dumps(update_body), encoding="utf-8")
+                assert output(
+                    update(key=str(uuid4()), selected_policy=foreign_manual["id"]), 1
+                )["error"]["status"] in (403, 404)
                 successor = output(update())
                 assert successor["supersedes_policy_id"] == manual["id"]
                 assert successor["derivation_source"] == "manual_admin_derivation"
@@ -499,6 +611,22 @@ async def test_manual_policy_cli_after_owner_finalization_and_fresh_authority(
                         {"guide": guide},
                     )
                     assert retained == 2
+                    foreign_status = await session.scalar(
+                        text(
+                            "SELECT lifecycle_status FROM submission_artifact_policies "
+                            "WHERE id=:id"
+                        ),
+                        {"id": foreign_manual["id"]},
+                    )
+                    assert foreign_status == "draft"
+                    foreign_count = await session.scalar(
+                        text(
+                            "SELECT COUNT(*) FROM submission_artifact_policies "
+                            "WHERE guide_id=:guide AND derivation_source='manual_admin_derivation'"
+                        ),
+                        {"guide": foreign_guide},
+                    )
+                    assert foreign_count == 1
                 await revoke_review_grant(factory, actor, grant)
                 for attempt in (create(), update()):
                     assert output(attempt, 1)["error"]["status"] in (403, 404)

@@ -1441,7 +1441,7 @@ artifact-policy schema; `change_summary` is optional. For example:
 Update selects one exact current manual draft by `POLICY_ID` and appends a
 successor. Its JSON file must include `expected_policy_hash` copied from that
 draft's exact `policy_hash` and a new `successor_policy_version`; optional
-`policy_body` replaces the body, while omission retains it. Optional
+`policy_body` replaces the body, while omission or explicit `null` retains it. Optional
 `change_summary` replaces the prior summary when supplied. For example:
 
 ```json
