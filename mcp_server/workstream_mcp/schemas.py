@@ -372,6 +372,113 @@ PROJECT_GRANT_INPUT_SCHEMAS: dict[str, dict[str, Any]] = {
     },
 }
 
+_GUIDE_TASK_EXAMPLE_INPUT = {
+    "type": "object",
+    "properties": {
+        "content": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 65_536,
+            "pattern": r"^[^\u0000]*$",
+        },
+        "title": {
+            "type": ["string", "null"],
+            "maxLength": 500,
+            "pattern": r"^[^\u0000]*$",
+        },
+        "labels": {
+            "type": "array",
+            "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100,
+                "pattern": r"^[^\u0000]*$",
+            },
+            "maxItems": 20,
+        },
+    },
+    "required": ["content"],
+    "additionalProperties": False,
+}
+_GUIDE_DOCUMENT_INPUT = {
+    "type": "object",
+    "properties": {
+        "label": {"type": "string", "minLength": 1, "maxLength": 500},
+        "media_type": {
+            "type": "string",
+            "enum": [
+                "application/pdf",
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                "text/markdown",
+            ],
+        },
+    },
+    "required": ["label", "media_type"],
+    "additionalProperties": False,
+}
+GUIDE_INPUT_SCHEMAS: dict[str, dict[str, Any]] = {
+    "guides_create": {
+        "type": "object",
+        "properties": {
+            "project_id": _UUID_INPUT,
+            "body": {
+                "type": "object",
+                "properties": {
+                    "version": {
+                        "type": "string",
+                        "maxLength": 50,
+                        "pattern": r"^[^\u0000]*$",
+                    },
+                    "change_summary": {
+                        "type": ["string", "null"],
+                        "maxLength": 1000,
+                        "pattern": r"^[^\u0000]*$",
+                    },
+                    "task_examples": {
+                        "type": "array",
+                        "items": _GUIDE_TASK_EXAMPLE_INPUT,
+                        "minItems": 1,
+                        "maxItems": 100,
+                    },
+                    "documents": {
+                        "type": "array",
+                        "items": _GUIDE_DOCUMENT_INPUT,
+                        "minItems": 1,
+                        "maxItems": 100,
+                    },
+                },
+                "required": ["version", "task_examples", "documents"],
+                "additionalProperties": False,
+            },
+            "idempotency_key": _IDEMPOTENCY_KEY_INPUT,
+        },
+        "required": ["project_id", "body", "idempotency_key"],
+        "additionalProperties": False,
+    },
+    "guides_update": {
+        "type": "object",
+        "properties": {
+            "project_id": _UUID_INPUT,
+            "guide_id": _UUID_INPUT,
+            "body": {
+                "type": "object",
+                "properties": {
+                    "change_summary": {
+                        "type": ["string", "null"],
+                        "maxLength": 1000,
+                        "pattern": r"^[^\u0000]*$",
+                    }
+                },
+                "additionalProperties": False,
+            },
+            "idempotency_key": _IDEMPOTENCY_KEY_INPUT,
+        },
+        "required": ["project_id", "guide_id", "body", "idempotency_key"],
+        "additionalProperties": False,
+    },
+}
+
 
 class ContractError(RuntimeError):
     """The reviewed packaged contract is absent or invalid."""
@@ -540,4 +647,16 @@ def project_grant_output_schema(name: str) -> dict[str, Any]:
 
 def project_grant_output_validator(name: str) -> Draft202012Validator:
     """Validate one project-participation response projection."""
+    return _contract_output_validator(name)
+
+
+def guide_output_schema(name: str) -> dict[str, Any]:
+    """Load one reviewed guide-mutation response contract."""
+    if name not in GUIDE_INPUT_SCHEMAS:
+        raise ContractError("unknown guide contract")
+    return _contract_output_schema(name)
+
+
+def guide_output_validator(name: str) -> Draft202012Validator:
+    """Validate one guide-mutation response projection."""
     return _contract_output_validator(name)

@@ -1,6 +1,6 @@
 # Workstream MCP Adapter
 
-An independently installed adapter exposing twenty-three tools under the caller's authority:
+An independently installed adapter exposing twenty-five tools under the caller's authority:
 
 - `workstream_profile_get` calls `GET /api/v1/actors/me`.
 - `workstream_profile_update` calls the unkeyed `PATCH /api/v1/actors/me`.
@@ -39,6 +39,10 @@ An independently installed adapter exposing twenty-three tools under the caller'
   `GET /api/v1/projects/{project_id}/role-grants/{grant_id}`.
 - `workstream_project_grants_revoke` calls keyed
   `POST /api/v1/projects/{project_id}/role-grants/{grant_id}/revoke`.
+- `workstream_guides_create` calls keyed
+  `POST /api/v1/projects/{project_id}/guides`.
+- `workstream_guides_update` calls keyed
+  `PATCH /api/v1/projects/{project_id}/guides/{guide_id}`.
 
 Each call forwards the caller's bearer to its fixed public Workstream operation.
 There are no MCP resources or prompts. Workstream, not the adapter, owns every
@@ -140,6 +144,15 @@ duplicate/current state and replay. The adapter forwards caller inputs unchanged
 validates project/target/grant binding in successful responses and never turns
 project participation into task eligibility.
 
+Guide creation declares a version, one or more illustrative task examples and
+one or more PDF, DOCX, PPTX or Markdown document records. It returns immutable
+document identifiers and an `awaiting_documents` setup identity. The adapter
+does not upload document bytes or continue setup. Guide update accepts only the
+draft guide's optional `change_summary`; version, examples, documents, policies
+and lifecycle fields are rejected by its closed input schema. Both mutations
+require caller-supplied UUID idempotency keys and rely on Workstream for project
+authority, draft-state checks, version uniqueness and durable replay.
+
 ## Deployment Boundary
 
 Build from this directory only:
@@ -162,7 +175,7 @@ retries. A mutation transport failure, upstream 5xx response, or unexpected
 success/redirect response is reported as non-retryable uncertain execution.
 Connections may be pooled, but
 caller credentials and results are not shared or cached. Response validation is
-pinned to the twenty-three selected public contracts in `contracts/`; upstream drift
+pinned to the twenty-five selected public contracts in `contracts/`; upstream drift
 must be reviewed, not silently accepted. There is no fallback service or
 backend-private import.
 
@@ -179,10 +192,10 @@ Real API tests require the repository's isolated PostgreSQL runner, controlled
 fixture identities and a separate installed adapter process. Never supply a
 production database or real user token to a test. Integration and container
 commands are recorded in the additive MCP workflow and the
-[current chunk record](../.commitrail/initiatives/WS-MCP-002/WS-MCP-002-07.md).
+[current chunk record](../.commitrail/initiatives/WS-MCP-002/WS-MCP-002-08.md).
 Selected schemas are compared with the running backend OpenAPI operations;
 custom admission, lifecycle and exact-project semantics are exercised separately.
 
 Local fixture evidence does not certify the deployed Flow provider, a public
-gateway or all MCP clients. The remaining 4 mapped tools belong to later
+gateway or all MCP clients. The remaining 2 mapped tools belong to later
 bounded changes in the [initiative](../.commitrail/initiatives/WS-MCP-002/OVERVIEW.md).

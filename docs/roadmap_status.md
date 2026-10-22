@@ -248,9 +248,9 @@ Selected production request/completion composition and
 supported false-guide activation are implemented. A known pre-effect non-live REV refusal returns bounded OUTBOX retry after rollback; exhaustion dead-letters without automatic reopen. A setup-fault hold is future safety work because no current selected production result emits `task_setup_blocked`. Human review/revision, conditional fulfillment, operations and
 release proof remain later v0.1 work.
 
-The [independent MCP package](../mcp_server/README.md) implements twenty-three
+The [independent MCP package](../mcp_server/README.md) implements twenty-five
 self-service, administrative access, actor/identity-lifecycle, project-shell and
-project-participation tools through WS-MCP-002-07. The
+project-participation and guide-metadata tools through WS-MCP-002-08. The
 [Go CLI](../cli/README.md) provides caller-profile and exact-project authorization
 reads plus human self-profile editing, exact-project inspection and manager
 task queue/detail reads, contributor ready-work/instruction reads and public
@@ -598,8 +598,9 @@ cannot be reused as post-submission review-gate evidence. See the
   WS-MCP-002-04 adds issue/revoke grant mutations through current Workstream authority;
   WS-MCP-002-05 adds actor and identity-link lifecycle mutations; WS-MCP-002-06
   adds project creation and authority-selected project reads; WS-MCP-002-07 adds
-  candidate discovery and project-role grant issue/list/read/revoke.
-  Four proposed tools remain; WS-MCP-002-08 guide documents
+  candidate discovery and project-role grant issue/list/read/revoke; WS-MCP-002-08
+  adds guide declaration and summary-only draft editing.
+  Two proposed tools remain; WS-MCP-002-09 draft policies
   is next. This remains a custom
   authentication adapter, not a public deployment or a 27-tool release.
   The [CLI foundation](../.commitrail/initiatives/WS-CLI-001/WS-CLI-001-01.md)
