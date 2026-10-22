@@ -665,3 +665,20 @@ image publication/registration, corrected policy binding/approval and the real
 contributor journey are separate remaining work. This record does not claim
 submission-intake enforcement, deployment, or a contribution outcome from setup
 proof. No private reference content or prewritten inference response was used.
+
+### Hosted structural-gate repair
+
+Hosted preflight at `f16fa6cc2` passed the 92 boundary tests but rejected new
+structural debt: the extended correction test is 171 lines, its file is 1,204
+lines, and `growth_report` is 101 lines. The structural validator itself had
+not been run locally. Keep the existing limits and frozen ledger unchanged.
+
+Within the existing focused test scope, move only the newly added altered-storage
+rejection proof into a separate correction-input test, retain every original
+canonical request/replay/execution assertion in its current test node, and move
+its imports to module scope. Remove the fixture's duplicated capability lookup
+without changing the generated result. No product source, provider prompt,
+proposal, skip or test assertion may be weakened. Qualify the actual structural
+validator, focused fixture tests and both PostgreSQL invariants, then replay
+QA/test-delta and architecture review. Existing live Gen6 qualification remains
+applicable because runtime source and instructions are unchanged.

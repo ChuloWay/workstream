@@ -56,12 +56,10 @@ def growth_report(*, gaps=True):
                 evidence_refs=refs,
             )
         )
+        definition = next(
+            d for d in source.checker_capabilities.definitions if d.selectable and d.phase == stage
+        )
         if stage == "pre_submit":
-            definition = next(
-                d
-                for d in source.checker_capabilities.definitions
-                if d.selectable and d.phase == stage
-            )
             pre.append(
                 PreSubmissionBindingProposal(
                     requirement_id=key,
@@ -71,11 +69,6 @@ def growth_report(*, gaps=True):
                 )
             )
         else:
-            definition = next(
-                d
-                for d in source.checker_capabilities.definitions
-                if d.selectable and d.phase == stage
-            )
             post.append(
                 PostSubmissionBindingProposal(
                     requirement_id=key,
