@@ -371,10 +371,8 @@ class GuideCompilationOrchestrator(ProjectGuideCompilationExecutionPort):
         self, state: CompilationExecutionState
     ) -> ProjectGuideCompilationExecutionResult | None:
         """Return a durable result without provider I/O, or select dispatch."""
-        configuration = state.runtime_configuration
-        if (
-            state.classification is CompilationRecoveryClassification.PROVIDER_UNCERTAIN
-            and configuration is not None
+        if state.classification is CompilationRecoveryClassification.PROVIDER_UNCERTAIN and (
+            (configuration := state.runtime_configuration) is not None
             and configuration.provider_free
         ):
             # A provider-free fence left by a crashed or cancelled worker guards no

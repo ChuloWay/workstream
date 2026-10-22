@@ -291,6 +291,11 @@ candidate `7f42f7682`; no blocking finding. Dispositions:
   - Tests: cancellation reopens the attempt; recovery leaves a fresh fence and
     reopens a stale one; a repeated read records one row; a provider-free run
     with a 1,024-byte limit and a larger context still runs.
+- Post-merge fix: `main` CI on `61dacb03d` failed
+  `test_open_circuit_prevents_product_fence_and_resource_allocation`, whose
+  stand-in state has no `runtime_configuration`. Recovery read that field
+  before checking the attempt status. It now reads it only for a
+  provider-uncertain attempt; behavior is otherwise unchanged.
 - Coordination: PR #633 also adds `0056`; whichever merges second renumbers its
   migration and refreshes `alembic/env.py`, `tests/test_alembic.py` and the
   schema fingerprint.
