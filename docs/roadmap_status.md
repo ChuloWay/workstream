@@ -350,9 +350,11 @@ of that summary in historical responses from the separate current task-context
 read; it never substitutes current context for historical submission evidence.
 Individual CLI tests retain fixture-arranged prerequisites. The connected
 [native CLI journey](../.commitrail/initiatives/WS-CLI-001/WS-CLI-001-43.md)
-additionally proves public manager-authored setup through real MinIO/Celery
-evaluation, unpaid automated acceptance and matching JSON/CSV contribution
-evidence, including rejected-intake recovery, replay and authority denials.
+targets public manager-authored setup through real MinIO/Celery evaluation,
+unpaid automated acceptance and matching JSON/CSV contribution evidence,
+including rejected-intake recovery, replay and authority denials. Earlier runs
+reached acceptance; the strengthened final journey remains unproven after
+evaluation and deployment-transition timeouts. See the linked evidence record.
 It uses explicit local deployment bootstrap, not fixture-created product facts.
 Hosted operation, external Flow verification and human-review/revision remain
 separate proof boundaries; this is not general beta certification.
