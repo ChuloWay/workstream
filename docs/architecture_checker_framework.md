@@ -277,8 +277,12 @@ validation or recovery, so a losing concurrent startup cannot inspect or clean
 the live owner's resources. Startup preserves a live listener and every foreign
 or linked path, but may remove a connection-refused socket only after its owned
 inode remains unchanged. Clean shutdown removes only the listener inode it
-created. Startup recovery removes a checker container only when its exact
-generated name and attempt label agree. Work commands share the request
+created. A private persistent random owner ID in that locked directory scopes
+container names and labels to one deployment. Startup filters by that owner and
+removes a container only when the inspected full ID, owner, generated name and
+attempt label agree. Other deployments and generic unowned containers remain
+untouched. Preserve the owner file across restarts; loss requires operator-owned
+orphan reconciliation, never generic adoption. Work commands share the request
 deadline/output meter and poll cancellation. Emergency cleanup has its separate
 bounded budget. Unsettled cleanup suppresses the result and prevents another
 request from being admitted; restart reconciles owned resources while retaining

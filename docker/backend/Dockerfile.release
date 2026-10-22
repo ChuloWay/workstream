@@ -40,7 +40,7 @@ RUN test "${WORKSTREAM_RUNTIME_UID}" -ne 0 \
     && useradd --uid "${WORKSTREAM_RUNTIME_UID}" --gid workstream \
         --create-home --shell /usr/sbin/nologin workstream \
     && install -d -m 0700 -o workstream -g workstream \
-        /var/lib/workstream/scratch /run/workstream-checker
+        /var/lib/workstream/scratch /var/lib/workstream/checker-runtime
 
 WORKDIR /workspace/backend
 

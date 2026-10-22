@@ -371,10 +371,18 @@ define replay and revision behavior.
 
 ## Stop or dispose
 
-`docker compose down` keeps the project's volumes, including the material
-volume, the registry and the generated digests. To delete everything this
-project owns, confirm the project name first, as in
-[Stop, retain or dispose](local-pilot.md#stop-retain-or-dispose), then:
+`docker compose down` keeps the project's volumes, including the material,
+registry and checker socket/owner volumes. Checker execution containers are
+created directly, not by Compose: `down --volumes` does not remove them.
+Before disposal, stop admission and drain checker executions while the service
+is running. Verify that no container remains for this deployment's exact owner.
+After a crash, retain the socket volume and restart its owning service to recover
+its containers, or reconcile independently verified exact container IDs first.
+Do not delete the custody volume while container ownership remains unsettled.
+
+Only after that verification, confirm the project name as in
+[Stop, retain or dispose](local-pilot.md#stop-retain-or-dispose) and remove its
+Compose resources and images:
 
 ```bash
 docker compose down --volumes
@@ -383,5 +391,9 @@ docker image rm "$COMPOSE_PROJECT_NAME-checker:local" \
 ```
 
 Checker containers that the service started carry the label
-`workstream.external-checker=true`; the service removes them after each run and
-on startup.
+`workstream.external-checker=true` and a deployment owner label. The service
+removes its containers after each run; startup recovery verifies that same
+owner, exact Docker ID, name and attempt before removal. Preserve the private
+socket directory's `.workstream-checker-owner` across restarts; do not copy it
+between deployments. See [container recovery ownership](../../external_checkers/README.md#container-recovery-ownership)
+for lost-custody reconciliation. Generic labels alone never authorize cleanup.

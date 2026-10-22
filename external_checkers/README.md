@@ -68,6 +68,28 @@ the current real-project preparation. Ordinary platform regression tests protect
 this execution boundary; their passing results do not establish a live project
 journey or the correctness of a project's checker images.
 
+## Container recovery ownership
+
+The service creates `.workstream-checker-owner` (mode `0600`) inside its locked
+private socket directory. Preserve this file and directory across restarts.
+Different deployments must use separate directories; never clone an owner file
+into another concurrently running deployment. Containers are labelled and named
+with that owner, and recovery verifies the exact Docker ID and attempt before
+deletion. Docker administrators remain trusted infrastructure.
+
+Malformed, linked, partial or unsafe owner files reject startup before container
+cleanup. If custody is lost, stop the deployment and reconcile its orphaned
+containers by independently verified exact IDs. Startup never adopts unowned
+generic containers. Before installing this repair, drain the prior service and
+settle its containers with the prior deployment; it cannot prove ownership of
+containers that lack the new owner label. Do not remove unrelated containers,
+product artifacts or immutable evidence.
+
+The opt-in `workstream-checker-service/tests/container_ownership.py` proof uses
+a built service and an already local image, two private socket directories and
+disposable containers. It checks foreign-container survival and restart recovery;
+it is not a hosted deployment or sandbox-security certification.
+
 ## Retiring the fixed-project profile
 
 The former sample-specific build continuation is removed, including its private

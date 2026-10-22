@@ -43,7 +43,7 @@ x-backend-environment: &backend-environment
   WORKSTREAM_DEBUG: "false"
   WORKSTREAM_ENVIRONMENT: production
   WORKSTREAM_EXTERNAL_CHECKER_MATERIAL_ROOT: /var/lib/workstream/scratch
-  WORKSTREAM_EXTERNAL_CHECKER_SERVICE_SOCKET: /run/workstream-checker/checker.sock
+  WORKSTREAM_EXTERNAL_CHECKER_SERVICE_SOCKET: /var/lib/workstream/checker-runtime/checker.sock
   WORKSTREAM_OBSERVABILITY_LOG_LEVEL: ${WORKSTREAM_OBSERVABILITY_LOG_LEVEL:-INFO}
   WORKSTREAM_OBSERVABILITY_OTLP_ENDPOINT: ${WORKSTREAM_OBSERVABILITY_OTLP_ENDPOINT:-}
   WORKSTREAM_OBSERVABILITY_TRACE_SAMPLE_RATIO: ${WORKSTREAM_OBSERVABILITY_TRACE_SAMPLE_RATIO:-0.1}
@@ -110,13 +110,13 @@ services:
         target: /var/lib/workstream/scratch
         read_only: true
       - type: bind
-        source: /run/workstream-checker
-        target: /run/workstream-checker
+        source: /var/lib/workstream/checker-runtime
+        target: /var/lib/workstream/checker-runtime
       - type: bind
         source: /var/run/docker.sock
         target: /var/run/docker.sock
     healthcheck:
-      test: [CMD-SHELL, "test -S /run/workstream-checker/checker.sock && docker info --format '{{json .Runtimes.runsc}}' | grep -vq '^null$'"]
+      test: [CMD-SHELL, "test -S /var/lib/workstream/checker-runtime/checker.sock && docker info --format '{{json .Runtimes.runsc}}' | grep -vq '^null$'"]
       interval: 15s
       timeout: 10s
       retries: 4
@@ -163,8 +163,9 @@ services:
         source: /var/lib/workstream/scratch
         target: /var/lib/workstream/scratch
       - type: bind
-        source: /run/workstream-checker
-        target: /run/workstream-checker
+        source: /var/lib/workstream/checker-runtime
+        target: /var/lib/workstream/checker-runtime
+        read_only: true
       - type: bind
         source: ${WORKSTREAM_ARTIFACT_S3_ROLES_ANYWHERE_RUNTIME_CERTIFICATE_HOST_FILE:?set the private runtime certificate path}
         target: /run/workstream-roles-anywhere/certificate.pem
@@ -226,8 +227,9 @@ services:
         source: /var/lib/workstream/scratch
         target: /var/lib/workstream/scratch
       - type: bind
-        source: /run/workstream-checker
-        target: /run/workstream-checker
+        source: /var/lib/workstream/checker-runtime
+        target: /var/lib/workstream/checker-runtime
+        read_only: true
       - type: bind
         source: ${WORKSTREAM_ARTIFACT_S3_ROLES_ANYWHERE_RUNTIME_CERTIFICATE_HOST_FILE:?set the private runtime certificate path}
         target: /run/workstream-roles-anywhere/certificate.pem
