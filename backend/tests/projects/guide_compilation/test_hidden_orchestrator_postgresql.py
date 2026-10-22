@@ -7,6 +7,7 @@ from tests.projects.guide_compilation.helpers import runtime_configuration
 from app.modules.authorization.api import ProjectGuideCompilationRequestOrigin
 import asyncio
 from contextlib import asynccontextmanager
+from dataclasses import replace
 
 import pytest
 from sqlalchemy import text
@@ -124,9 +125,20 @@ def _port(factory, runtime, *, checker_capabilities=None):
     )
 
 
-async def _authorized_attempt(database_url: str, values, configuration=None):
+async def _authorized_attempt(database_url: str, values, configuration=None, *, compilation_context=None):
     actor_id, link_id, _grant_id = await _seed_human(database_url, values)
     actor = ActorIdentityFacts(actor_id, link_id, ActorKind.HUMAN)
+    selected_context = compilation_context or context(values, configuration=configuration)
+    selected_identity = identity(selected_context)
+    request_facts = _request(values, configuration)
+    if compilation_context is not None:
+        request_facts = replace(
+            request_facts,
+            **{
+                name: getattr(selected_identity, name)
+                for name in type(selected_identity).model_fields
+            },
+        )
     engine = create_async_engine(database_url)
     factory = async_sessionmaker(engine, expire_on_commit=False)
     try:
@@ -134,8 +146,8 @@ async def _authorized_attempt(database_url: str, values, configuration=None):
             return await _authorized_service(session, actor).authorize_request(
                 origin=ProjectGuideCompilationRequestOrigin(trigger="project_manager"),
                 actor=actor,
-                facts=_request(values, configuration),
-                identity=identity(context(values, configuration=configuration)),
+                facts=request_facts,
+                identity=selected_identity,
                 runtime_configuration=configuration or runtime_configuration(),
             )
     finally:

@@ -523,12 +523,17 @@ Backend is exactly `disabled`, `local`, or `s3_compatible`. Credential modes are
 Production static credentials are forbidden.
 
 An AWS S3 deployment selects exactly one workload-identity method:
-`assume-role-with-web-identity`, `container-role`, or `iam-role`. Workstream
+`roles-anywhere`, `assume-role-with-web-identity`, `container-role`, or
+`iam-role`. Workstream
 validates the configuration required by the selected method, constrains the
 pinned botocore credential resolver to that provider before any provider is
 loaded, and verifies the resolved method. Explicit credentials, environment
-access keys, shared credential/config files, credential processes, login/SSO,
-legacy EC2/Boto sources, and every unselected workload provider are rejected.
+access keys, shared credential/config files, arbitrary credential processes,
+login/SSO, obsolete EC2/Boto credential sources, and every unselected workload
+provider are rejected. Roles Anywhere invokes only the pinned AWS signing
+helper with fixed arguments and private certificate/key files; its bounded
+output remains in memory and its temporary credentials refresh automatically.
+It does not use an ambient `credential_process` profile or a metadata server.
 Web-identity STS, ECS container metadata, and EC2 instance metadata use
 explicit no-proxy sessions. Web identity also rejects ambient endpoint and CA
 overrides. Tests poison every nonselected source and prove that it is never
@@ -692,29 +697,41 @@ Provider-readiness inspection is not part of `ArtifactStore` and is not called
 by a product service.
 
 AWS proof uses separate executors and append-only
-`ArtifactProviderProbeResult` records. No proof process switches credentials or
-assumes another proof role:
+`ArtifactProviderProbeResult` records. Each process uses only its own identity.
+Roles Anywhere additionally attempts both other roles and requires explicit
+access denial; obtaining credentials for another role fails the proof:
 
 | Probe | Execution identity and boundary |
 |---|---|
-| readiness | independent deployment job with the short-lived OIDC readiness role; policy/ACL/public-access/lifecycle/IAM inspection only |
+| readiness | independent deployment job with the short-lived readiness role; policy/ACL/public-access/lifecycle/IAM inspection only |
 | runtime immutability | command executed inside the deployed Workstream runtime workload identity; conditional write, unconditional-overwrite denial, missing-key 404, head/get, and byte-preservation proof only |
-| negative access | independent deployment job with the short-lived OIDC negative-test role; known-object read/write/delete denials only |
+| negative access | independent deployment job with the short-lived negative-test role; known-object read/write/delete denials only |
 
 The readiness role cannot assume the runtime or negative-test role. The
 runtime workload cannot assume either deployment role. Readiness reads each
-exact role trust policy, requires its configured canonical digest, rejects any
-readiness or negative trust shape except one exact OIDC `Allow` statement using
-`sts:AssumeRoleWithWebIdentity`, `StringEquals`, the provider issuer's exact
-`sub`, and audience `sts.amazonaws.com`, and requires the three policies to
-identify disjoint workload subjects. Runtime accepts that same shape or the
-closed Linux VM trust of one condition-free `sts:AssumeRole` `Allow` for
-`ec2.amazonaws.com`; the trusted provisioner owns the instance-profile
-attachment. AWS principals, role chaining, other service principals,
-wildcards, negative or pattern operators, foreign/missing audiences and extra
-statements or condition keys are unsupported and fail closed. The three reviewed
-trust-policy digests are part of every probe result and activation, so trust
-drift invalidates an otherwise matching group. The bootstrap principal
+exact role trust policy and requires its configured canonical digest and
+three disjoint workload subjects. Supported closed trust shapes are:
+
+- OIDC: one exact `Allow` with `sts:AssumeRoleWithWebIdentity`, exact issuer
+  `sub` and audience `sts.amazonaws.com` under `StringEquals`.
+- EC2: runtime only, one condition-free `sts:AssumeRole` `Allow` for
+  `ec2.amazonaws.com`, with provisioner-owned instance-profile attachment.
+- Roles Anywhere: one exact service trust for `rolesanywhere.amazonaws.com`,
+  the required AssumeRole/TagSession/SetSourceIdentity actions, exact source
+  account and trust-anchor ARN, and exact issuer/role-specific subject CNs.
+  One shared profile permits exactly the three configured roles. Readiness
+  verifies its enabled state and canonical security settings, and the enabled
+  trust anchor's CA material. Each certificate must acquire its own credentials,
+  receive explicit access denial for both other roles, then reacquire its own
+  credentials. Other helper failures cannot stand in for denial.
+
+For Roles Anywhere, both probe and activation records also retain the exact
+anchor/profile ARNs and canonical state digests. The four fields are all
+present for that method or all absent for the other supported methods. Group
+matching and every activation lookup include them. An updated CA or profile
+requires matching fresh proof; retained records are not rewritten. Wildcard or
+broader trust, role chaining and extra trust conditions/statements fail closed.
+The bootstrap principal
 is never supplied to any probe. Each probe asks STS for its observed caller ARN
 and commits one immutable result bound to probe type, expected/observed caller
 ARN, release ID, namespace fingerprint, bucket-policy digest, common challenge
@@ -1009,8 +1026,12 @@ The S3-compatible provider settings use the same prefix:
 | `WORKSTREAM_ARTIFACT_S3_PRIVATE_PREFIX` | `workstream/artifacts` | Canonical private key prefix; object references remain server-derived SHA-256 paths. |
 | `WORKSTREAM_ARTIFACT_S3_ADDRESSING_STYLE` | `virtual` | Closed value: `path` or `virtual`; local compose uses `path`. |
 | `WORKSTREAM_ARTIFACT_S3_CREDENTIAL_MODE` | unset | MinIO requires `local_static`; native AWS requires `aws_workload_identity`. |
-| `WORKSTREAM_ARTIFACT_S3_AWS_WORKLOAD_IDENTITY_METHOD` | unset | Native AWS selection: `assume-role-with-web-identity`, `container-role`, or `iam-role`; never used by MinIO. |
+| `WORKSTREAM_ARTIFACT_S3_AWS_WORKLOAD_IDENTITY_METHOD` | unset | Native AWS selection: `roles-anywhere`, `assume-role-with-web-identity`, `container-role`, or `iam-role`; never used by MinIO. |
 | `WORKSTREAM_RELEASE_ID` | unset | Native AWS-only immutable deployed image/release digest in `sha256:<64 lowercase hex>` form. |
+| `WORKSTREAM_ARTIFACT_S3_ROLES_ANYWHERE_TRUST_ANCHOR_ARN` / `TRUST_ANCHOR_SHA256` | unset | Exact anchor and canonical CA/state digest, required only for Roles Anywhere. Both names use the full `WORKSTREAM_ARTIFACT_S3_ROLES_ANYWHERE_` prefix. |
+| `WORKSTREAM_ARTIFACT_S3_ROLES_ANYWHERE_PROFILE_ARN` / `PROFILE_SHA256` | unset | Exact shared profile and canonical security-state digest, under the same prefix. |
+| `WORKSTREAM_ARTIFACT_S3_ROLES_ANYWHERE_ROLE_ARN` | unset | This process's exact role; application uses runtime, each proof job uses its own role. |
+| `WORKSTREAM_ARTIFACT_S3_ROLES_ANYWHERE_CERTIFICATE_FILE` / `PRIVATE_KEY_FILE` | unset | Private mounted identity files, under the same prefix; never the CA signing key. |
 | `WORKSTREAM_ARTIFACT_S3_RUNTIME_ROLE_ARN` | unset | Exact runtime IAM role ARN used for product object calls and runtime proof. |
 | `WORKSTREAM_ARTIFACT_S3_RUNTIME_TRUST_POLICY_SHA256` | unset | Canonical digest of the reviewed runtime role trust policy. |
 | `WORKSTREAM_ARTIFACT_S3_RUNTIME_POLICY_ARN` | unset | Exact sole customer-managed runtime policy ARN. |

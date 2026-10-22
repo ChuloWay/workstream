@@ -5,6 +5,7 @@ from __future__ import annotations
 from copy import deepcopy
 import json
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 from urllib.parse import quote
 from uuid import UUID
@@ -15,9 +16,11 @@ import pytest
 
 from app.adapters.artifacts.aws_live_proof import (
     AwsArtifactLiveProof,
+    _has_only_sse_s3,
     _trust_policy_subjects,
     _validate_bucket_policy,
     _validate_lifecycle,
+    _validate_readiness_policy,
 )
 from app.core.config import Settings
 from app.core.hashing import canonical_json_hash
@@ -844,12 +847,30 @@ def test_lifecycle_allows_disabled_or_disjoint_expiration() -> None:
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "encryption_metadata",
+    [
+        {},
+        {"BucketKeyEnabled": False},
+        {"BucketKeyEnabled": True, "BlockedEncryptionTypes": {"EncryptionType": ["SSE-C"]}},
+    ],
+    ids=["minimal", "bucket-key-false", "live-aws-response"],
+)
 async def test_readiness_uses_bounded_bucket_responses_and_runs_every_denial_guard(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
+    encryption_metadata: dict[str, object],
 ) -> None:
     bucket_policy = _bucket_policy()
     client = _ReadinessS3Client(bucket_policy, lifecycle=[])
+
+    async def encryption(**_kwargs: object) -> dict[str, object]:
+        return {"ServerSideEncryptionConfiguration": {"Rules": [{
+            "ApplyServerSideEncryptionByDefault": {"SSEAlgorithm": "AES256"},
+            **encryption_metadata,
+        }]}}
+
+    monkeypatch.setattr(client, "get_bucket_encryption", encryption)
     proof = AwsArtifactLiveProof(
         _settings(tmp_path, bucket_policy=bucket_policy),
         _Session(s3=client),
@@ -883,6 +904,66 @@ async def test_readiness_uses_bounded_bucket_responses_and_runs_every_denial_gua
     }
 
 
+@pytest.mark.parametrize(
+    "alteration",
+    [
+        {"BucketKeyEnabled": 1},
+        {"BucketKeyEnabled": 0},
+        {"BucketKeyEnabled": "true"},
+        {"BucketKeyEnabled": None},
+        {"BucketKeyEnabled": []},
+        {"BlockedEncryptionTypes": None},
+        {"BlockedEncryptionTypes": {"EncryptionType": ["NONE"]}},
+        {"BlockedEncryptionTypes": {"EncryptionType": ["SSE-C", "NONE"]}},
+        {"BlockedEncryptionTypes": {"EncryptionType": "SSE-C"}},
+        {"BlockedEncryptionTypes": {"EncryptionType": ["SSE-C"], "unknown": True}},
+        {"unknown": True},
+        {"ApplyServerSideEncryptionByDefault": {"SSEAlgorithm": "aws:kms"}},
+        {"ApplyServerSideEncryptionByDefault": {"SSEAlgorithm": "aws:kms:dsse"}},
+        {"ApplyServerSideEncryptionByDefault": {"SSEAlgorithm": "AES256", "KMSMasterKeyID": "key"}},
+    ],
+)
+def test_sse_s3_readiness_rejects_noncanonical_encryption(alteration: dict[str, object]) -> None:
+    rule = {
+        "ApplyServerSideEncryptionByDefault": {"SSEAlgorithm": "AES256"},
+        "BucketKeyEnabled": True,
+        "BlockedEncryptionTypes": {"EncryptionType": ["SSE-C"]},
+        **alteration,
+    }
+    assert _has_only_sse_s3([rule]) is False
+
+
+def test_sse_s3_readiness_rejects_mixed_encryption_rules() -> None:
+    rule = {"ApplyServerSideEncryptionByDefault": {"SSEAlgorithm": "AES256"}}
+    assert _has_only_sse_s3([rule, rule]) is False
+
+
+@pytest.mark.asyncio
+async def test_readiness_rejects_invalid_encryption_before_iam(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+) -> None:
+    policy = _bucket_policy()
+    client = _ReadinessS3Client(policy, lifecycle=[])
+    proof = AwsArtifactLiveProof(_settings(tmp_path, bucket_policy=policy), _Session(s3=client))
+    events = []
+
+    async def encryption(**_kwargs: object) -> dict[str, object]:
+        events.append("encryption")
+        return {"ServerSideEncryptionConfiguration": {"Rules": [{
+            "ApplyServerSideEncryptionByDefault": {"SSEAlgorithm": "AES256"},
+            "BlockedEncryptionTypes": {"EncryptionType": ["NONE"]},
+        }]}}
+
+    async def forbidden() -> None:
+        raise AssertionError("IAM was queried after invalid encryption")
+
+    monkeypatch.setattr(client, "get_bucket_encryption", encryption)
+    monkeypatch.setattr(proof, "_validate_iam", forbidden)
+    with pytest.raises(ArtifactConfigurationError, match="encryption is not exact SSE-S3"):
+        await proof._readiness(_GROUP_NONCE)
+    assert events == ["encryption"]
+
+
 @pytest.mark.asyncio
 async def test_readiness_rejects_completed_artifact_lifecycle_before_iam(
     monkeypatch: pytest.MonkeyPatch,
@@ -910,6 +991,229 @@ async def test_readiness_rejects_completed_artifact_lifecycle_before_iam(
     monkeypatch.setattr(proof, "_validate_iam", forbidden)
     with pytest.raises(ArtifactConfigurationError, match="expire completed artifacts"):
         await proof._readiness(_GROUP_NONCE)
+
+
+@pytest.mark.asyncio
+async def test_roles_anywhere_readiness_reads_and_binds_exact_anchor_and_profile(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    from app.adapters.artifacts import aws_live_proof
+
+    anchor_arn = (
+        "arn:aws:rolesanywhere:us-east-1:123456789012:trust-anchor/"
+        "01234567-89ab-cdef-0123-456789abcdef"
+    )
+    profile_arn = (
+        "arn:aws:rolesanywhere:us-east-1:123456789012:profile/"
+        "11234567-89ab-cdef-0123-456789abcdef"
+    )
+    anchor_digest = "sha256:" + "6" * 64
+    profile_digest = "sha256:" + "7" * 64
+    calls: list[tuple[str, str]] = []
+
+    class RolesAnywhereClient:
+        async def get_trust_anchor(self, *, trustAnchorId: str) -> dict[str, object]:
+            calls.append(("anchor", trustAnchorId))
+            return {"trustAnchor": {"bounded": True}}
+
+        async def get_profile(self, *, profileId: str) -> dict[str, object]:
+            calls.append(("profile", profileId))
+            return {"profile": {"bounded": True}}
+
+    settings = _settings(tmp_path).model_copy(
+        update={
+            "artifact_s3_aws_workload_identity_method": "roles-anywhere",
+            "artifact_s3_roles_anywhere_trust_anchor_arn": anchor_arn,
+            "artifact_s3_roles_anywhere_trust_anchor_sha256": anchor_digest,
+            "artifact_s3_roles_anywhere_profile_arn": profile_arn,
+            "artifact_s3_roles_anywhere_profile_sha256": profile_digest,
+        }
+    )
+    proof = AwsArtifactLiveProof(
+        settings,
+        _Session(rolesanywhere=RolesAnywhereClient()),
+    )
+
+    def normalize_anchor(
+        response: object,
+        *,
+        expected_arn: str,
+        expected_issuer_common_name: str,
+    ) -> tuple[dict[str, object], str]:
+        assert response == {"trustAnchor": {"bounded": True}}
+        assert expected_arn == anchor_arn
+        assert expected_issuer_common_name == "Workstream Artifact Root CA"
+        return {}, anchor_digest
+
+    def normalize_profile(
+        response: object,
+        *,
+        expected_arn: str,
+        expected_role_arns: object,
+        expected_duration_seconds: int,
+    ) -> tuple[dict[str, object], str]:
+        assert response == {"profile": {"bounded": True}}
+        assert expected_arn == profile_arn
+        assert tuple(expected_role_arns) == (_RUNTIME_ROLE, _READINESS_ROLE, _NEGATIVE_ROLE)
+        assert expected_duration_seconds == 3600
+        return {}, profile_digest
+
+    monkeypatch.setattr(aws_live_proof, "normalize_roles_anywhere_trust_anchor", normalize_anchor)
+    monkeypatch.setattr(aws_live_proof, "normalize_roles_anywhere_profile", normalize_profile)
+
+    await proof._validate_roles_anywhere_resources()
+
+    assert calls == [
+        ("anchor", "01234567-89ab-cdef-0123-456789abcdef"),
+        ("profile", "11234567-89ab-cdef-0123-456789abcdef"),
+    ]
+    assert proof._session.requests[0][0] == "rolesanywhere"  # type: ignore[attr-defined]
+    assert proof._session.requests[0][1]["region_name"] == "us-east-1"  # type: ignore[attr-defined]
+
+
+def test_roles_anywhere_readiness_policy_adds_only_two_exact_resource_reads(
+    tmp_path: Path,
+) -> None:
+    anchor_arn = (
+        "arn:aws:rolesanywhere:us-east-1:123456789012:trust-anchor/"
+        "01234567-89ab-cdef-0123-456789abcdef"
+    )
+    profile_arn = (
+        "arn:aws:rolesanywhere:us-east-1:123456789012:profile/"
+        "11234567-89ab-cdef-0123-456789abcdef"
+    )
+    settings = _settings(tmp_path).model_copy(
+        update={
+            "artifact_s3_aws_workload_identity_method": "roles-anywhere",
+            "artifact_s3_roles_anywhere_trust_anchor_arn": anchor_arn,
+            "artifact_s3_roles_anywhere_profile_arn": profile_arn,
+        }
+    )
+    policy = _readiness_identity_policy()
+    policy["Statement"].extend(
+        [
+            {
+                "Effect": "Allow",
+                "Action": "rolesanywhere:GetTrustAnchor",
+                "Resource": anchor_arn,
+            },
+            {
+                "Effect": "Allow",
+                "Action": "rolesanywhere:GetProfile",
+                "Resource": profile_arn,
+            },
+        ]
+    )
+
+    _validate_readiness_policy(policy, settings)
+
+    widened = deepcopy(policy)
+    widened["Statement"].append(
+        {
+            "Effect": "Allow",
+            "Action": "rolesanywhere:UpdateProfile",
+            "Resource": profile_arn,
+        }
+    )
+    with pytest.raises(ArtifactConfigurationError, match="permissions differ"):
+        _validate_readiness_policy(widened, settings)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "probe_type",
+    ["readiness", "runtime_immutability", "negative_access"],
+)
+async def test_roles_anywhere_each_proof_requires_bounded_role_isolation_before_pass(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    probe_type: str,
+) -> None:
+    from app.adapters.artifacts import aws_roles_anywhere
+
+    selected_roles = {
+        "readiness": _READINESS_ROLE,
+        "runtime_immutability": _RUNTIME_ROLE,
+        "negative_access": _NEGATIVE_ROLE,
+    }
+    settings = _settings(tmp_path).model_copy(
+        update={
+            "artifact_s3_aws_workload_identity_method": "roles-anywhere",
+            "artifact_s3_roles_anywhere_role_arn": selected_roles[probe_type],
+        }
+    )
+    proof = AwsArtifactLiveProof(settings, _Session())
+    events: list[str] = []
+
+    async def observe(expected: str) -> str:
+        return expected
+
+    async def mode_evidence(*_args: object) -> dict[str, object]:
+        events.append("mode")
+        return {"fixed_mode_calls": True}
+
+    async def isolate(_settings: Settings) -> object:
+        events.append("isolation")
+        return SimpleNamespace(
+            initial_own_role_succeeded=True,
+            other_roles_access_denied=True,
+            final_own_role_succeeded=True,
+        )
+
+    monkeypatch.setattr(proof, "_observe_principal", observe)
+    monkeypatch.setattr(proof, "_readiness", mode_evidence)
+    monkeypatch.setattr(proof, "_runtime_immutability", mode_evidence)
+    monkeypatch.setattr(proof, "_negative_access", mode_evidence)
+    monkeypatch.setattr(aws_roles_anywhere, "prove_roles_anywhere_role_isolation", isolate)
+
+    observation = await proof.run(probe_type, group_nonce=_GROUP_NONCE)  # type: ignore[arg-type]
+
+    assert observation.passed is True
+    assert events == ["mode", "isolation"]
+    assert observation.evidence == {
+        "suite": "aws-s3-identity-custody",
+        "mode": probe_type,
+        "fixed_mode_calls": True,
+        "roles_anywhere_initial_own_role": True,
+        "roles_anywhere_other_roles_denied": True,
+        "roles_anywhere_final_own_role": True,
+    }
+
+
+@pytest.mark.asyncio
+async def test_roles_anywhere_isolation_failure_cannot_produce_a_passing_proof(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    from app.adapters.artifacts import aws_roles_anywhere
+
+    settings = _settings(tmp_path).model_copy(
+        update={
+            "artifact_s3_aws_workload_identity_method": "roles-anywhere",
+            "artifact_s3_roles_anywhere_role_arn": _RUNTIME_ROLE,
+        }
+    )
+    proof = AwsArtifactLiveProof(settings, _Session())
+
+    async def observe(expected: str) -> str:
+        return expected
+
+    async def mode_evidence(*_args: object) -> dict[str, object]:
+        return {"fixed_mode_calls": True}
+
+    async def reject(_settings: Settings) -> object:
+        raise ArtifactConfigurationError("unpersisted helper diagnostic")
+
+    monkeypatch.setattr(proof, "_observe_principal", observe)
+    monkeypatch.setattr(proof, "_runtime_immutability", mode_evidence)
+    monkeypatch.setattr(aws_roles_anywhere, "prove_roles_anywhere_role_isolation", reject)
+
+    observation = await proof.run("runtime_immutability", group_nonce=_GROUP_NONCE)
+
+    assert observation.passed is False
+    assert observation.error_code == "proof_validation_failed"
+    assert "unpersisted helper diagnostic" not in json.dumps(observation.evidence)
 
 
 @pytest.mark.asyncio

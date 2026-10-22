@@ -109,4 +109,8 @@ and tears down only those recorded IDs. No fake is credited as real Docker proof
 ## Reconciliation
 
 Base: main `91df16e76`. Open PRs #633/#648/#650 do not modify this Rust owner.
+Reconciled merged #633 (`a82f0d45e`): retain its Roles Anywhere mounts and exact
+mount-set validator; express read-only checker client custody in that validator
+instead of retaining the superseded per-mount checks. Preserve all AWS proof
+services, credentials isolation and roadmap claims.
 Next usable boundary: safely rerun the pending CLI full journey.
