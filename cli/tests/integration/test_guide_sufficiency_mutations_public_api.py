@@ -320,10 +320,10 @@ async def test_manual_sufficiency_cli_uses_current_public_authority_and_exact_re
 
 
 @pytest.mark.asyncio
-async def test_manual_policy_feasibility_after_owner_finalization(
-    clean_postgres_database, tmp_path
+async def test_manual_policy_cli_after_owner_finalization_and_fresh_authority(
+    clean_postgres_database, tmp_path, cli
 ):
-    """Probe the later #601 boundary without fabricating a compiled report."""
+    """Use the built CLI after genuine setup; manual drafts do not activate it."""
     env = api_environment()
     env["WORKSTREAM_E2E_FLOW_ISSUER"] = "https://identity.flowresearch.tech"
     env["WORKSTREAM_FLOW_AUTH_ISSUER"] = env["WORKSTREAM_E2E_FLOW_ISSUER"]
@@ -334,7 +334,7 @@ async def test_manual_policy_feasibility_after_owner_finalization(
         factory,
         _finalization,
         actor,
-        _grant,
+        grant,
     ):
         project, guide, snapshot = (
             str(values[name]) for name in ("project", "guide", "snapshot")
@@ -349,6 +349,7 @@ async def test_manual_policy_feasibility_after_owner_finalization(
                     {"id": str(values["setup_1"])},
                 )
             ).one()
+            assert setup.status == "policy_draft_ready"
             assert setup.output_sufficiency_report_id is not None
         token = issue_flow_token(
             str(actor.actor_profile_id),
@@ -385,48 +386,116 @@ async def test_manual_policy_feasibility_after_owner_finalization(
                     tmp_path / "manual-policy-api.log",
                     env,
                 )
-                async with httpx.AsyncClient(
-                    base_url=origin, trust_env=False, timeout=20
-                ) as direct:
-                    root = f"/api/v1/projects/{project}/guides/{guide}/submission-artifact-policies"
-                    headers = {"Authorization": "Bearer " + token}
-                    created = await direct.post(
-                        root,
-                        headers=headers | {"Idempotency-Key": str(uuid4())},
-                        json={
-                            "source_snapshot_id": snapshot,
-                            "policy_version": "manual-v1",
-                            "policy_body": project_submission_artifact_policy_body(),
-                            "change_summary": "Manual draft, not the compiled proposal",
-                        },
+                create_path = tmp_path / "manual-create.json"
+                create_body = {
+                    "source_snapshot_id": snapshot,
+                    "policy_version": "manual-v1",
+                    "policy_body": project_submission_artifact_policy_body(),
+                    "change_summary": "Manual draft, not the compiled proposal",
+                }
+                create_path.write_text(json.dumps(create_body), encoding="utf-8")
+                create_key = str(uuid4())
+
+                def create(presented=token, key=create_key, selected_guide=guide):
+                    return cli(
+                        origin,
+                        presented,
+                        "-o",
+                        "json",
+                        "project",
+                        "guide",
+                        "artifact-policy",
+                        "create",
+                        project,
+                        selected_guide,
+                        "--input",
+                        str(create_path),
+                        "--idempotency-key",
+                        key,
                     )
-                    assert created.status_code == 201, created.text
-                    manual = created.json()
-                    assert manual["derivation_source"] == "manual_admin_derivation"
-                    assert manual["lifecycle_status"] == "draft"
-                    updated = await direct.patch(
-                        root + "/" + manual["id"],
-                        headers=headers | {"Idempotency-Key": str(uuid4())},
-                        json={
-                            "expected_policy_hash": manual["policy_hash"],
-                            "successor_policy_version": "manual-v2",
-                            "change_summary": "A replacement manual draft",
-                        },
+
+                manual = output(create())
+                assert manual["derivation_source"] == "manual_admin_derivation"
+                assert manual["lifecycle_status"] == "draft"
+                assert manual["source_snapshot_id"] == snapshot
+                assert output(create()) == manual
+                assert output(create(key=str(uuid4())), 1)["error"]["status"] == 409
+                assert output(create(selected_guide=str(uuid4())), 1)["error"]["code"] == "idempotency_mismatch"
+                assert output(create(selected_guide=str(uuid4()), key=str(uuid4())), 1)["error"][
+                    "status"
+                ] in (403, 404)
+                create_path.write_text(
+                    json.dumps(create_body | {"policy_version": "manual-v1-changed"}),
+                    encoding="utf-8",
+                )
+                assert output(create(), 1)["error"]["code"] == "idempotency_mismatch"
+                create_path.write_text(json.dumps(create_body), encoding="utf-8")
+
+                update_path = tmp_path / "manual-update.json"
+                update_body = {
+                    "expected_policy_hash": manual["policy_hash"],
+                    "successor_policy_version": "manual-v2",
+                    "change_summary": "A replacement manual draft",
+                }
+                update_path.write_text(json.dumps(update_body), encoding="utf-8")
+                update_key = str(uuid4())
+
+                def update(
+                    presented=token, key=update_key, selected_policy=manual["id"]
+                ):
+                    return cli(
+                        origin,
+                        presented,
+                        "-o",
+                        "json",
+                        "project",
+                        "guide",
+                        "artifact-policy",
+                        "update",
+                        project,
+                        guide,
+                        selected_policy,
+                        "--input",
+                        str(update_path),
+                        "--idempotency-key",
+                        key,
                     )
-                    assert updated.status_code == 200, updated.text
-                    successor = updated.json()
-                    assert successor["supersedes_policy_id"] == manual["id"]
-                    assert successor["derivation_source"] == "manual_admin_derivation"
-                    assert successor["lifecycle_status"] == "draft"
-                    async with factory() as session:
-                        predecessor = await session.scalar(
-                            text(
-                                "SELECT lifecycle_status FROM submission_artifact_policies "
-                                "WHERE id=:id"
-                            ),
-                            {"id": manual["id"]},
-                        )
-                        assert predecessor == "superseded"
+
+                successor = output(update())
+                assert successor["supersedes_policy_id"] == manual["id"]
+                assert successor["derivation_source"] == "manual_admin_derivation"
+                assert successor["lifecycle_status"] == "draft"
+                assert output(update()) == successor
+                assert output(update(key=str(uuid4())), 1)["error"]["status"] == 409
+                assert output(update(selected_policy=str(uuid4())), 1)["error"]["code"] == "idempotency_mismatch"
+                assert output(update(selected_policy=str(uuid4()), key=str(uuid4())), 1)["error"][
+                    "status"
+                ] in (403, 404)
+                update_path.write_text(
+                    json.dumps(update_body | {"change_summary": "Changed"}),
+                    encoding="utf-8",
+                )
+                assert output(update(), 1)["error"]["code"] == "idempotency_mismatch"
+                update_path.write_text(json.dumps(update_body), encoding="utf-8")
+                async with factory() as session:
+                    predecessor = await session.scalar(
+                        text(
+                            "SELECT lifecycle_status FROM submission_artifact_policies "
+                            "WHERE id=:id"
+                        ),
+                        {"id": manual["id"]},
+                    )
+                    assert predecessor == "superseded"
+                    retained = await session.scalar(
+                        text(
+                            "SELECT COUNT(*) FROM submission_artifact_policies WHERE guide_id=:guide AND derivation_source='manual_admin_derivation'"
+                        ),
+                        {"guide": guide},
+                    )
+                    assert retained == 2
+                await revoke_review_grant(factory, actor, grant)
+                for attempt in (create(), update()):
+                    assert output(attempt, 1)["error"]["status"] in (403, 404)
             finally:
                 process.terminate()
                 await asyncio.to_thread(process.wait, timeout=10)
