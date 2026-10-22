@@ -594,3 +594,22 @@ the existing orchestrator already does; add a shared-builder regression for both
 branches and replay the existing real PostgreSQL provider-free case. QA requested
 a missing-finalization negative, now added to the storage-substitution proof.
 These repairs preserve the same bounded outcome and runtime authority.
+
+The clean repair `1e8dc833f` passed all five isolated PostgreSQL correction,
+authority, hosted-fence and provider-free cases, with cleanup confirmed, plus
+92 repository module/authorization boundary tests. Real generation 3 completed
+from the unchanged guide, with exact stored/public hashes and CLI rendering,
+two PRE and eight POST specifications, two lifecycle requirements, ten gaps and
+four null limits. All 48 accumulated provider resources were deleted.
+
+Independent semantic review closed the earlier method/evidence defects but found
+remaining incomplete predicates, directory entries in a file-artifact list,
+missing mandatory documentation/pinning obligations, and unresolved qualitative
+selection of revision checks. Keep this result unapproved. Within the existing
+instruction/specification scope, clarify self-contained predicates, typed path
+inputs, file-only artifact metadata, presence before accuracy, and resolved
+mapping or conservative complete reruns. Update generic schema descriptions and
+their existing focused assertions, preserving the 16,000-character instruction
+limit and all trust, stage and authority rules. Submit source-grounded PM feedback
+through another exact correction, then qualify its actual output. No source guide
+changes, project-specific shared code or fabricated result are permitted.

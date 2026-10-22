@@ -87,7 +87,9 @@ _MODEL_PROSE_SCHEMA = {
         "Plain prose only. No URLs, email addresses, credentials, filesystem paths, "
         "slash-separated words, code, or executable command names. Spell alternatives "
         "with words (for example, 'training and evaluation', not a slash expression). "
-        "Describe shell instructions and module loading without literal command tokens."
+        "Describe shell instructions and module loading without literal command tokens. "
+        "Source-defined field identifiers, types, numeric constraints and constants "
+        "may be described explicitly; put file and directory paths in typed relative_path inputs."
     ),
 }
 ModelProse = Annotated[str, Field(json_schema_extra=_MODEL_PROSE_SCHEMA)]
@@ -496,7 +498,9 @@ class CheckSpecification(BaseModel):
         max_length=20,
         description=(
             "Implementable steps on the declared inputs. Static inspection needs explicit "
-            "syntax or deterministic predicates; qualitative free-form comparison needs "
+            "syntax or deterministic predicates, including source-defined field identifiers, "
+            "types, values, ranges and exceptions rather than references to documented rules; "
+            "qualitative free-form comparison needs "
             "model evaluation in POST. Never invent a document grammar absent from the guide."
         ),
     )
@@ -506,7 +510,8 @@ class CheckSpecification(BaseModel):
         description=(
             "Observable outcomes proved by the declared method and inputs. A model's "
             "review of claimed execution is not proof of actual execution; a static "
-            "predicate cannot interpret free-form explanations."
+            "predicate cannot interpret free-form explanations. Require mandatory content "
+            "to exist before judging its accuracy; absent required claims cannot pass vacuously."
         ),
     )
     failure_findings: tuple[CheckFailureFinding, ...] = Field(min_length=1, max_length=20)
@@ -680,7 +685,7 @@ class SubmissionArtifactPolicyProposal(BaseModel):
     required_artifacts: tuple[Annotated[str, Field(min_length=1, max_length=500)], ...] = Field(
         default=(),
         max_length=100,
-        description="Exact canonical relative POSIX paths inside the submitted ZIP. A bare path such as task.toml requires that file at the ZIP root; wrapper/task.toml does not satisfy it. Nested paths such as outputs/answer.md require that exact location. No trailing separators, duplicate paths, traversal, storage references or secret files.",
+        description="Exact canonical relative POSIX regular-file paths inside the submitted ZIP. Required directories belong in checker specifications, never this hash-required file list. A bare path such as task.toml requires that file at the ZIP root; wrapper/task.toml does not satisfy it. Nested paths such as outputs/answer.md require that exact location. No trailing separators, duplicate paths, traversal, storage references or secret files.",
     )
     forbidden_artifacts: tuple[Annotated[str, Field(min_length=1, max_length=500)], ...] = Field(
         default=(),
