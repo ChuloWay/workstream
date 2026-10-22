@@ -1322,6 +1322,11 @@ the migration-owned immutable ISO 4217 List One registry. Project-points units
 are project-scoped. Award definitions reference the unit identity with a
 composite foreign key. Persistence initially allows active creation only and
 defers unit lifecycle mutation to the authorized contribution-policy behavior.
+Finance Authority creates `project_points` units through the internal
+`contribution.compensation_unit.create` command. Each creation also stores one
+immutable `ProjectCompensationUnitCreationEvent` (`operation_id`,
+`request_digest`, actor, project, instrument and unit code) that exact retries
+replay from; the database requires the event actor to be the unit creator.
 
 ## ProjectCompensationAdapterBinding
 

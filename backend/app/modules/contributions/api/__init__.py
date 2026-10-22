@@ -1,5 +1,14 @@
 """Dependency-safe public API for the CONTRIBUTIONS business module."""
 
+from app.modules.contributions.api.compensation_units import (
+    CompensationUnitAction,
+    CompensationUnitCreateAuthorizationFacts,
+    CompensationUnitInstrument,
+    ProjectCompensationUnitCreateRequest,
+    ProjectCompensationUnitCreateResult,
+    ProjectCompensationUnitOperationsPort,
+)
+
 from app.modules.contributions.api.policies import (
     ContributionPolicyOperationsPort,
     ContributionPolicyProjectReadRequest,
@@ -54,6 +63,12 @@ from app.modules.contributions.api.published_selection import (
 )
 
 __all__ = (
+    "CompensationUnitAction",
+    "CompensationUnitCreateAuthorizationFacts",
+    "CompensationUnitInstrument",
+    "ProjectCompensationUnitCreateRequest",
+    "ProjectCompensationUnitCreateResult",
+    "ProjectCompensationUnitOperationsPort",
     "ContributionPolicyOperationsPort",
     "ContributionPolicyProjectReadRequest",
     "ContributionPolicyProjectSelection",

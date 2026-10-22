@@ -8,6 +8,10 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, with_config
 
 from app.modules.compensation.api import CompensationInstrumentType
+from app.modules.contributions.api.compensation_units import (
+    CompensationUnitAction,
+    CompensationUnitCreateAuthorizationFacts,
+)
 
 PolicyAction = Literal[
     "contribution.policy.create_draft",
@@ -286,6 +290,7 @@ ContributionPolicyAuthorizationFacts: TypeAlias = (
     ContributionPolicyMutationAuthorizationFacts
     | ContributionPolicyPublishAuthorizationFacts
     | ContributionPolicyRetireAuthorizationFacts
+    | CompensationUnitCreateAuthorizationFacts
 )
 
 
@@ -302,7 +307,8 @@ class ContributionPolicyMutationAuthorizationPort(Protocol):
     """Prepare, consume, and close opaque mutation authority."""
 
     async def lock_contribution_policy_mutation_scope(
-        self, *, action: PolicyAction, actor_profile_id: UUID, project_id: UUID,
+        self, *, action: PolicyAction | CompensationUnitAction, actor_profile_id: UUID,
+        project_id: UUID,
     ) -> None:
         """Retain scoped authority locks before product rows without issuing a handle."""
 
@@ -331,7 +337,8 @@ class DenyContributionPolicyAuthorization:
         raise ContributionPolicyUnavailable("contribution_policy_unavailable")
 
     async def lock_contribution_policy_mutation_scope(
-        self, *, action: PolicyAction, actor_profile_id: UUID, project_id: UUID,
+        self, *, action: PolicyAction | CompensationUnitAction, actor_profile_id: UUID,
+        project_id: UUID,
     ) -> None:
         """Retain scoped authority locks before product rows without issuing a handle."""
 

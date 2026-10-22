@@ -236,6 +236,19 @@ creation and rejects lifecycle mutation until the authorized policy behavior
 chunk installs its transition guard. Definitions reference this identity with
 a composite foreign key, so regex-shaped but unconfigured units cannot publish.
 
+`contribution.compensation_unit.create` is the only supported way to create a
+unit; test fixtures and the PILOT-04 probe still insert unit rows directly. It admits an active human Finance Authority covering the exact project
+(project or system grant) through the same prepared mutation protocol as the
+policy commands, under `compensation.policy.manage`. It creates only
+`project_points` units; money-unit enablement and unit retirement are not
+implemented. The command has no public route: like adapter-binding
+administration it is composed internally, and the local operator script
+`backend/scripts/provision_project_points.py` is its only caller. Each creation
+appends one immutable `ProjectCompensationUnitCreationEvent` keyed by the
+caller's operation identifier and request digest. An identical retry returns
+the stored result after re-checking current authority; a changed retry, an
+existing unit, an invalid code, or an unknown project creates nothing.
+
 ### ProjectCompensationAdapterBinding
 
 Canonical fields:
@@ -942,6 +955,7 @@ remain unchanged, and downgrade refuses retained binding audit evidence.
 | `contribution.policy.update_draft` | `compensation.policy.manage` | Finance / draft version | T | WS-ARCH-001-CP05 (active AUTH; CP04A owner; CP05A public composition; CP01B registration custody) |
 | `contribution.policy.publish` | `compensation.policy.manage` | Finance / complete draft | T | WS-ARCH-001-CP05 (active AUTH; CP04B owner; CP05A public composition; CP01B registration custody) |
 | `contribution.policy.retire` | `compensation.policy.manage` | Finance / published version | T | WS-ARCH-001-CP05 (active AUTH; CP04B owner; CP05A public composition; CP01B registration custody) |
+| `contribution.compensation_unit.create` | `compensation.policy.manage` | covered human Finance Authority / exact project | T | project-points-unit-creation (active; internal composition only; migration `0058_compensation_unit_create` admits its audit pair) |
 | `compensation.fulfillment.report` | proposed `compensation.fulfillment.report` | exact bound service / award and binding | T | CON-08B |
 | `contribution.read_self` | `contribution.read_self` | active human / own records and complete awards | Q | PILOT-10A |
 | `contribution.read_project` | `contribution.read_project` | covering PM or exact-project Finance / project records and complete awards | Q | PILOT-10A |

@@ -5,6 +5,7 @@ from __future__ import annotations
 from uuid import UUID
 
 from app.modules.authorization.api import (
+    CompensationUnitCreateAuthorityFacts,
     ContributionPolicyAuthorizationPort,
     ContributionPolicyMutationAuthorityFacts,
     ContributionPolicyReadFacts,
@@ -16,6 +17,7 @@ from app.modules.authorization.api import (
     action_id,
 )
 from app.modules.contributions.api import (
+    CompensationUnitCreateAuthorizationFacts,
     ContributionPolicyAuthorizationFacts,
     ContributionPolicyPublishAuthorizationFacts,
     ContributionPolicyRetireAuthorizationFacts,
@@ -59,8 +61,18 @@ class ContributionPolicyAuthorization:
     @staticmethod
     def _facts(
         facts: ContributionPolicyAuthorizationFacts,
-    ) -> ContributionPolicyMutationAuthorityFacts:
+    ) -> ContributionPolicyMutationAuthorityFacts | CompensationUnitCreateAuthorityFacts:
         """Translate exact public CON facts without consulting private product owners."""
+        if type(facts) is CompensationUnitCreateAuthorizationFacts:
+            return CompensationUnitCreateAuthorityFacts(
+                action_id=action_id(facts.action),
+                actor_profile_id=facts.actor_profile_id,
+                operation_id=facts.operation_id,
+                request_digest=facts.request_digest,
+                project_id=facts.project_id,
+                instrument_type=facts.instrument_type,
+                unit_code=facts.unit_code,
+            )
         if type(facts) not in {
             ContributionPolicyMutationAuthorizationFacts,
             ContributionPolicyPublishAuthorizationFacts,
