@@ -1,6 +1,0 @@
-external_task_id = "terminal-ledger-reconcile"
-entrypoint = ["python", "/workspace/program.py", "INPUT.json", "OUTPUT.json"]
-test_command = ["python", "/tests/test_task.py", "/workspace/program.py"]
-build_context = "."
-dockerfile = "environment/Dockerfile"
-reference_program = "solution/program.py"

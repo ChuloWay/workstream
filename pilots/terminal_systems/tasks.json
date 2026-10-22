@@ -1,0 +1,63 @@
+{
+  "schema_version": "workstream.task_import.v1",
+  "metadata": {
+    "label": "Terminal Systems initial authoring tasks"
+  },
+  "tasks": [
+    {
+      "external_task_id": "queue-recovery",
+      "title": "Author a restart-safe file-processing queue task",
+      "description": "# Example task brief: recover a file-processing queue after interruption\n\n## Authoring assignment\n\nCreate a terminal task in which the solver repairs a local file-processing queue.\nThe queue accepts jobs, persists their progress and writes a result for each\ncompleted job. Its starting implementation mishandles interruption and replay.\n\nGive the solver a small working application, a documented command interface,\nrepresentative inputs and a reproducible failure. The solver must investigate\nand repair the application while preserving its documented behavior.\n\n## Required behavior to specify\n\n- A durable job identifier distinguishes a repeated delivery from a new job.\n- Repeating an already completed job returns its retained result without\n  performing its effect again.\n- A restart recovers interrupted work without losing previously completed jobs.\n- Reusing an identifier with different input is rejected without changing the\n  original job or its result.\n- A failed input does not corrupt unrelated jobs, and the status command reports\n  a useful, accurate outcome.\n\nAs the task author, define the exact command and data formats, interruption\npoints, recovery rules and observable effects in the solver instructions. Choose\nstorage and programming tools appropriate to this small local application.\nDo not require external accounts or a network service.\n\n## Deliverable\n\nProvide the complete task package described in the project guide: starting\nworkspace, environment, solver instructions, metadata, reference repair,\nverification and author notes. Your tests should observe persisted state and\neffects before and after restart. Include a plausible repair that passes an\nordinary successful run but fails one of the interruption or replay cases.\n\nThis brief is illustrative. It does not prescribe a single implementation or\nmake this task identifier an eligibility rule for other tasks in the project.\n",
+      "task_type": "terminal_task_authoring",
+      "skill_tags": [
+        "storage",
+        "recovery",
+        "testing"
+      ]
+    },
+    {
+      "external_task_id": "snapshot-restore",
+      "title": "Author a verified snapshot and restore task",
+      "description": "Create a terminal task around a local backup tool that must restore a directory tree from a retained snapshot. Give the solver source code, representative files and a defect involving an interrupted or invalid restore. Specify handling of nested directories, empty files, exact content, manifest integrity and existing destination data. Define when a failed restore must leave the prior destination unchanged and how successful publication is observed. Supply a reference repair and verification that detects plausible shortcuts such as checking filenames without content or overwriting the destination before validation. Follow the project guide; the author chooses suitable implementation tools and documents the complete interface and edge cases.",
+      "task_type": "terminal_task_authoring",
+      "skill_tags": [
+        "filesystems",
+        "integrity",
+        "testing"
+      ]
+    },
+    {
+      "external_task_id": "incremental-build",
+      "title": "Author a dependency-aware incremental build task",
+      "description": "Create a terminal task in which the solver repairs a small local build planner. Supply a dependency graph, reproducible build commands and a defective planner. Define rebuild rules for changed inputs, shared prerequisites, removed inputs and failed steps, with an explicit treatment of cycles. The repaired planner must preserve required dependency order, avoid unnecessary rebuilds and never publish failed output as successful. Establish expected plans independently and verify produced artifacts as well as reported status. Include a wrong repair that handles a simple chain but mishandles a shared dependency. Deliver the complete authoring package under the project guide.",
+      "task_type": "terminal_task_authoring",
+      "skill_tags": [
+        "build-systems",
+        "graphs",
+        "testing"
+      ]
+    },
+    {
+      "external_task_id": "schema-upgrade",
+      "title": "Author an atomic local database upgrade task",
+      "description": "Create a terminal task around a database upgrade tool that transforms an existing local database while preserving retained records. Specify the starting and destination schemas, supported source versions, conversion rules and replay behavior. The solver must repair a defect that can leave a partial upgrade or corrupt a boundary value. Include representative data, an interruption or validation failure, an exact replay and an unsupported-version case. Verify both resulting values and schema, and prove the original database remains usable after a rejected upgrade. Supply the reference repair and a plausible incomplete repair that a happy-path-only test would miss. Use the project guide for packaging and verification requirements.",
+      "task_type": "terminal_task_authoring",
+      "skill_tags": [
+        "databases",
+        "transactions",
+        "testing"
+      ]
+    },
+    {
+      "external_task_id": "event-correlation",
+      "title": "Author a deterministic event-correlation task",
+      "description": "Create a terminal task for a tool that combines event streams into per-operation summaries. Specify event identity, timestamp interpretation, tie-breaking, duplicate handling, missing-event treatment and exact output semantics. Provide source code and inputs that expose a meaningful interaction, such as duplicate delivery combined with out-of-order completion. The solver must repair the tool without relying on input order or the local timezone. Establish expected outputs independently, check invariance under documented reorderings and include a plausible repair that passes the ordinary case while failing a tie or duplicate case. Deliver an environment, reference, verification and author notes as required by the project guide.",
+      "task_type": "terminal_task_authoring",
+      "skill_tags": [
+        "data-processing",
+        "time",
+        "testing"
+      ]
+    }
+  ]
+}

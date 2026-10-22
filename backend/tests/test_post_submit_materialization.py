@@ -19,7 +19,6 @@ from tests.checkers.execution.support import material_execution, service_link_st
 from app.modules.actors.api import ServiceIdentity
 from app.modules.artifacts.preparation import ArtifactScratchIntegrityError
 from app.modules.checkers.api.external import (
-    ExternalCheckerRegistryEntry,
     PostSubmitExternalCheckerIdentity,
     external_checker_json_hash,
     make_external_checker_execution_request,
@@ -54,15 +53,14 @@ class Consumer:
 class ExternalGrantConsumer(Consumer):
     """Exercise the real POST lineage through ART's callback-scoped grant."""
 
-    def __init__(self, files, execution, scratch, *, terminal=False):
+    def __init__(self, files, execution, scratch):
         super().__init__(files)
         self.execution = execution
         self.scratch = scratch
-        self.terminal = terminal
         self.grant_path = None
         self.manifest = None
 
-    def external_request(self, material, *, identity=None, terminal=False):
+    def external_request(self, material, *, identity=None):
         source, lease = self.execution.request, self.execution.lease
         reservation = lease.reservation
         identity = identity or PostSubmitExternalCheckerIdentity(
@@ -81,27 +79,6 @@ class ExternalGrantConsumer(Consumer):
             lease_expires_at=lease.expires_at,
         )
         registry = registry_entry("post_submit")
-        if terminal:
-            values = registry.model_dump(mode="json")
-            values["capability_id"] = "workstream.terminal_benchmark_project"
-            values["capability_version"] = "v1"
-            spec = {
-                key: value
-                for key, value in values.items()
-                if key
-                not in {
-                    "registry_entry_id",
-                    "entry_digest",
-                    "registration_operation_id",
-                    "registered_by_actor_profile_id",
-                    "authorization_decision_event_id",
-                    "created_at",
-                }
-            }
-            values["entry_digest"] = external_checker_json_hash(spec)
-            registry = ExternalCheckerRegistryEntry.model_validate_json(
-                json.dumps(values, separators=(",", ":"), sort_keys=True)
-            )
         return make_external_checker_execution_request(
             registry=registry,
             identity=identity,
@@ -116,9 +93,7 @@ class ExternalGrantConsumer(Consumer):
         await super().evaluate(request, view)
         # Publishing a grant moves the projected tree below the fixed mount, so
         # each materialization callback can publish at most one valid grant.
-        external_request = self.external_request(
-            view.external_checker_material, terminal=self.terminal
-        )
+        external_request = self.external_request(view.external_checker_material)
         with view.external_checker_grant(external_request) as grant:
             self.grant_path = self.scratch / "workspaces" / grant.grant_id
             self.manifest = json.loads(
@@ -128,12 +103,8 @@ class ExternalGrantConsumer(Consumer):
             assert self.manifest["submission_id"] == str(request.submission_id)
             assert self.manifest["request_digest"] == external_request.request_digest
             assert self.manifest["binding_digest"] == grant.binding_digest
-            if self.terminal:
-                assert self.manifest["runtime_scratch"]["byte_allowance"] > 0
-                assert (self.grant_path / "runtime").is_dir()
-            else:
-                assert "runtime_scratch" not in self.manifest
-                assert not (self.grant_path / "runtime").exists()
+            assert "runtime_scratch" not in self.manifest
+            assert not (self.grant_path / "runtime").exists()
         # Revocation removes the service grant immediately; the outer material
         # callback still owns its workspace until materialization completes.
         assert self.grant_path.is_dir()
@@ -197,13 +168,12 @@ async def test_exact_materialization_reads_verified_original_and_revokes_view(tm
                                         "input_materialization_evidence_id"}
 
 
-@pytest.mark.parametrize("terminal", [False, True], ids=["conventional", "terminal_benchmark"])
 async def test_post_external_grant_binds_native_submission_art_and_lease(
-    tmp_path, isolated_database_env, terminal
+    tmp_path, isolated_database_env
 ):
     async with material_fixture(tmp_path, isolated_database_env) as h:
         execution = await material_execution(h)
-        consumer = ExternalGrantConsumer(h.files, execution, h.scratch, terminal=terminal)
+        consumer = ExternalGrantConsumer(h.files, execution, h.scratch)
         material = await h.service.materialize(execution, consumer)
         assert material.evaluation.outcome == "completed"
         assert consumer.manifest["lease_id"] == str(execution.lease.lease_id)
