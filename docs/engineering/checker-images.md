@@ -56,7 +56,8 @@ The publisher needs repository inspection, authorization-token, image upload,
 manifest read and image pull permissions. It does not create repositories,
 change IAM or install credentials into the image. ECR authentication uses a
 private temporary Docker configuration that is removed when the command ends.
-Builds and samples also use an empty Docker client configuration, so host proxy
+Builds and samples use a Docker client configuration containing only the host
+plugin search paths (including user-installed Buildx), so host proxy
 credentials and registry logins are not inherited. Base images must be locally
 cached or publicly pullable; private-base authentication is outside this command.
 See AWS's [private image push instructions](https://docs.aws.amazon.com/AmazonECR/latest/userguide/docker-push-ecr-image.html)

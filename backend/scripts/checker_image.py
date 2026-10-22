@@ -59,8 +59,22 @@ class Docker:
             )
         if not isinstance(host, str) or not host.startswith("unix:///"):
             raise ImageError("use a local Docker Unix socket so sample mounts name local files")
+        original = Path(os.environ.get("DOCKER_CONFIG") or Path.home() / ".docker")
+        original_file = original / "config.json"
+        settings = decode(original_file.read_bytes()) if original_file.is_file() else {}
+        if not isinstance(settings, dict):
+            raise ImageError("Docker client configuration must be an object")
+        extra = settings.get("cliPluginsExtraDirs") or []
+        if not isinstance(extra, list) or not all(isinstance(path, str) for path in extra):
+            raise ImageError("Docker plugin search paths must be a list of directories")
+        # Keep the operator's plugin discovery order, never proxy or login settings.
+        plugin_dirs = [
+            str(Path(path).resolve())
+            for path in [*extra, str(original / "cli-plugins")]
+            if Path(path).is_dir()
+        ]
         config.mkdir(mode=0o700)
-        (config / "config.json").write_text("{}\n")
+        (config / "config.json").write_text(json.dumps({"cliPluginsExtraDirs": plugin_dirs}) + "\n")
         self.prefix = ["docker", "--host", host, "--config", str(config)]
         self.env = {
             k: v

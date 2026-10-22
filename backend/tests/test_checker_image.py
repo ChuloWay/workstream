@@ -462,9 +462,20 @@ def test_build_and_samples_do_not_inherit_docker_proxy_configuration(monkeypatch
     """A user's Docker config and proxy environment never enter build or sample calls."""
     host_config = tmp_path / "host-config"
     host_config.mkdir()
+    user_plugins = host_config / "cli-plugins"
+    user_plugins.mkdir()
+    extra_plugins = tmp_path / "extra-plugins"
+    extra_plugins.mkdir()
     marker = "https://user:private-marker@proxy.example"
     (host_config / "config.json").write_text(
-        json.dumps({"proxies": {"default": {"httpsProxy": marker}}})
+        json.dumps(
+            {
+                "proxies": {"default": {"httpsProxy": marker}},
+                "auths": {"registry.example": {"auth": "private-login-marker"}},
+                "credsStore": "host-helper",
+                "cliPluginsExtraDirs": [str(extra_plugins)],
+            }
+        )
     )
     monkeypatch.setenv("DOCKER_HOST", "unix:///var/run/docker.sock")
     monkeypatch.setenv("DOCKER_CONFIG", str(host_config))
@@ -475,7 +486,9 @@ def test_build_and_samples_do_not_inherit_docker_proxy_configuration(monkeypatch
     docker = cli.Docker(config)
     docker.call("build", ".", step="build")
     docker.call("create", IMAGE, step="sample")
-    assert json.loads((config / "config.json").read_text()) == {}
+    assert json.loads((config / "config.json").read_text()) == {
+        "cliPluginsExtraDirs": [str(extra_plugins), str(user_plugins)]
+    }
     for argv, options in calls:
         assert argv[argv.index("--config") + 1] == str(config)
         assert marker not in str(options["env"])

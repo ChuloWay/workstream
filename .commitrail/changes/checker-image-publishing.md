@@ -115,3 +115,9 @@ the script, lane and contract checks.
 - Current-source reconciliation: main `9b67c8106`, including merged generic project image boundary and MCP participation tools. No overlapping open implementation PR found.
 - Next usable boundary: use the resulting registered image in a separately approved project policy and live project rehearsal.
 - Remaining risks: sample success is image compatibility evidence, not live ART custody, policy activation or a full project journey.
+
+CodeRabbit identified that an empty client configuration hides user-installed
+Buildx. The sanitized configuration now preserves only plugin search directories
+in their original order; proxy, login and credential-helper settings remain
+excluded. A real Docker CLI probe selects a user-only fixture plugin and the
+regression checks both discovery paths and credential exclusion.
