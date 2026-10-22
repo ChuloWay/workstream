@@ -659,14 +659,14 @@ remain planned and unavailable, and add no migration.
 
 | ActionId | PermissionId | Principal class | Canonical resource | Resource-owning WS-ART chunk |
 |---|---|---|---|---|
-| `artifact.binding.read` | `artifact.binding.read` | Operator | artifact binding | `02D` |
-| `artifact.replica.read` | `artifact.replica.read` | Operator | artifact replica | `02D` |
-| `artifact.receipt.read` | `artifact.receipt.read` | Operator | artifact receipt | `02D` |
-| `artifact.verification_job.read` | `artifact.verification_job.read` | Operator | verification job | `02D` |
-| `artifact.verification_job.retry` | `artifact.verification_job.retry` | Operator | exhausted verification job | `02D` |
-| `artifact.recovery_attempt.read` | `artifact.recovery_attempt.read` | Operator | recovery attempt | `02D` |
-| `artifact.audit.read` | `artifact.audit.read` | Operator | artifact audit scope | `02D` |
-| `operations.artifact_storage_admission.read` | `operations.status.read` | Operator | deployment artifact-storage namespace | `02D` |
+| `artifact.binding.read` | `artifact.binding.read` | Operator | exact product-resource binding kind/ID and project | `02D` |
+| `artifact.replica.read` | `artifact.replica.read` | Operator | ArtifactContent ID and complete associated project IDs | `02D` |
+| `artifact.receipt.read` | `artifact.receipt.read` | Operator | artifact replica ID and complete content-project lineage | `02D` |
+| `artifact.verification_job.read` | `artifact.verification_job.read` | Operator | verification job ID and complete content-project lineage | `02D` |
+| `artifact.verification_job.retry` | `artifact.verification_job.retry` | Operator | locked source job, project/task/submission and expected CAS version | `02D` |
+| `artifact.recovery_attempt.read` | `artifact.recovery_attempt.read` | Operator | recovery attempt ID and canonical project | `02D` |
+| `artifact.audit.read` | `artifact.audit.read` | Operator | selected audit resource kind/ID and complete associated projects | `02D` |
+| `operations.artifact_storage_admission.read` | `operations.status.read` | Operator | exact project and optional task/deployment admission scope, or deployment readiness selector | `02D` |
 | `artifact.guide_source.ingest` | `artifact.guide_source.ingest` | exact covered Project Manager | guide-source snapshot item | `03` |
 | `artifact.guide_source.read` | `artifact.guide_source.read` | fixed guide-reader service | exact committed document version and fenced compilation attempt | `03` |
 | `artifact.submission_bundle.prepare` | `submission.create` | assigned contributor | exact task/admission context | `04C2` |
