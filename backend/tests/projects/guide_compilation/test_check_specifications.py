@@ -544,3 +544,25 @@ def test_prepared_material_input_requires_explicit_unavailable_material_custody(
     else:
         with pytest.raises(ValidationError, match="context input requires a runtime dependency"):
             CheckSpecification.model_validate(body)
+
+
+@pytest.mark.parametrize("material_kind", ["task_context", "guide_context", "prepared_material"])
+def test_external_material_dependency_requires_its_declared_input(material_kind: str) -> None:
+    with pytest.raises(ValidationError, match="material dependency requires a declared input"):
+        _specification(
+            runtime_dependencies=[
+                {
+                    "dependency_id": "external_material",
+                    "kind": material_kind,
+                    "provisioning": "runtime_gap",
+                    "purpose": "Provide the external evaluation material.",
+                    "unavailable_code": "material_unavailable",
+                }
+            ],
+            infrastructure_failures=[
+                {
+                    "code": "material_unavailable",
+                    "condition": "The external evaluation material is unavailable.",
+                }
+            ],
+        )

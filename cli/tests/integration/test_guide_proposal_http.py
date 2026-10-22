@@ -701,6 +701,11 @@ def test_proposal_rejects_pre_model_evaluation_and_validates_post_runtime_gaps(c
         accepted = invoke(cli, origin)
         assert accepted.returncode == 0 and json.loads(accepted.stdout) == value
 
+        prepared_input = specification["inputs"].pop()
+        response["body"] = json.dumps(value).encode()
+        assert_failure(invoke(cli, origin), "invalid_api_response")
+        specification["inputs"].append(prepared_input)
+
         specification["runtime_dependencies"].pop()
         response["body"] = json.dumps(value).encode()
         assert_failure(invoke(cli, origin), "invalid_api_response")

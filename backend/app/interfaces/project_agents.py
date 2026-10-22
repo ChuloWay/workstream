@@ -567,6 +567,11 @@ class CheckSpecification(BaseModel):
                 and item.kind not in dependency_kinds
             ):
                 raise ValueError("check context input requires a runtime dependency")
+        material_dependencies = dependency_kinds.intersection(
+            {"task_context", "guide_context", "prepared_material"}
+        )
+        if material_dependencies - {item.kind for item in self.inputs}:
+            raise ValueError("check material dependency requires a declared input")
         available_failures = {item.code for item in self.infrastructure_failures}
         if any(
             dependency.unavailable_code not in available_failures

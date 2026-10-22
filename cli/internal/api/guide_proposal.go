@@ -595,9 +595,12 @@ func validateProposalCheckSpecification(raw json.RawMessage, value *ProposalChec
 		}
 		dependencyIDs[item.DependencyID], dependencyKinds[item.Kind] = true, true
 	}
-	if (inputKinds["task_context"] && !dependencyKinds["task_context"]) || (inputKinds["guide_context"] && !dependencyKinds["guide_context"]) ||
-		(inputKinds["prepared_material"] && !dependencyKinds["prepared_material"]) ||
-		(value.EvaluationMethod == "model_evaluation" && !dependencyKinds["model_service"]) ||
+	for _, kind := range []string{"task_context", "guide_context", "prepared_material"} {
+		if inputKinds[kind] != dependencyKinds[kind] {
+			return errors.New("material inputs and dependencies must match")
+		}
+	}
+	if (value.EvaluationMethod == "model_evaluation" && !dependencyKinds["model_service"]) ||
 		(value.EvaluationMethod == "isolated_execution" && !dependencyKinds["isolated_execution"]) {
 		return errors.New("missing runtime dependency")
 	}

@@ -368,3 +368,10 @@ inputs, and missing cache material from defective contributor work. Add only the
 `prepared_material` input/dependency kind to the typed handoff and CLI, requiring
 `runtime_gap/material_unavailable` and a matching infrastructure condition. This
 describes an unresolved engineering prerequisite; it grants no material access.
+
+Final contract review required the material pair in both directions: task context,
+guide context and prepared material cannot appear as dependencies without declared
+inputs, or as inputs without matching dependencies. Backend and CLI now enforce
+that relationship. This validation repair does not change the v10 inference
+instructions or add any material permission. The actual retained v10 result must
+also pass this stricter validation before qualification.
