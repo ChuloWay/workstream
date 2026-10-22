@@ -711,8 +711,13 @@ it does not by itself guarantee that temporary credentials already issued for a
 
 An account administrator must also hold the reviewed emergency authority:
 `rolesanywhere:DisableProfile` or `rolesanywhere:DisableTrustAnchor` scoped to
-the exact resource, plus IAM role-session revocation authority for the three
-named roles. The CRL publisher grants above do not supply those permissions.
+the exact resource, plus `iam:PutRolePolicy` scoped to exactly the three named
+workload role ARNs to write or update the `AWSRevokeOlderSessions` inline deny.
+That IAM action can write other inline policies too: its restriction to the
+reviewed revocation policy is an administrator procedure, not an IAM-enforced
+policy-content restriction. Keep this authority out of workload identities and
+do not add other role-mutation actions for revocation. The CRL publisher grants
+above do not supply these permissions.
 For emergency containment, stop the affected Workstream processes, disable the
 profile or trust anchor, publish the CRL, and revoke active sessions for all
 three roles using the AWS IAM **Revoke sessions** operation or its reviewed
