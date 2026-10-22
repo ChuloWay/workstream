@@ -411,7 +411,7 @@ instead. A transient read, timeout or storage failure is not an uncertain
 provider outcome for this runtime: the attempt returns from
 `compilation_provider_uncertain` to `compilation_reserved` and the next delivery
 retries it. Cancellation reopens the attempt before it propagates. A fence left
-by a crashed worker reopens on a later delivery once the run deadline
+by a crashed process reopens on a later delivery once the run deadline
 (`timeout_seconds` plus `cleanup_timeout_seconds`) has passed, and setup
 continuation keeps such attempts eligible for redelivery. A retried run reuses
 the read records of the failed run. The database allows the return only for an
