@@ -746,3 +746,7 @@ No runtime code, ownership claim, test exclusion or gate weakening is authorized
 The same run stopped CLI lint because formatting moved an existing delayed-import
 annotation to the closing parenthesis. Restore it on the import statement and
 run formatting followed by lint across all CLI tests. This changes no test body.
+CI review requires the new parser allowlist to be pinned independently, as the
+adjacent adapter allowlists already are. Add the exact-target regression in
+`backend/tests/test_behavior_ownership.py`, including rejection of an adjacent
+undeclared parser; prove widening the production constant fails that assertion.
