@@ -101,7 +101,7 @@ supported PRE proposals cannot select a registry deadline exceeding 60 seconds.
 Retained approved evidence keeps its exact original semantics.
 
 Use one typed `check_specification` on each atomic checker requirement, with a
-`disposition_rationale` for every new requirement. Both additions are omitted
+`classification_rationale` for every new requirement. Both additions are omitted
 from serialized retained records when absent, preserving immutable canonical
 result and component hashes. New-generation completeness is enforced before
 acceptance, in the central orchestrator and adapter validation; historical read,
@@ -240,10 +240,48 @@ needed.
 
 ## Reconciliation
 
-- Current-source reconciliation: merged #647 and #649 on main `91df16e76`.
+- Current-source reconciliation: merged #647 and #649 on main `91df16e76`, then incorporated main `a82f0d45` including #633 and its linear 0057 migration.
 - Next usable boundary: review the actual v5 requirements and determine correct
   PRE/POST capability gaps before engineering images or approving policy.
 - Remaining risks: earlier schema-invalid model outcomes remain unexplained;
   requirement classification, model/tool reliability, offline builds and the
   contribution journey still need qualification. A successful nullable proposal
   is not end-to-end project readiness.
+
+### Expanded diagnostic run
+
+A separate, unchanged-guide version 6 reproduced the classification problem:
+nine human-review requirements, one POST
+capability gap and one lifecycle requirement. It finalized a blocked result
+solely because a required external evaluator was not registered. The model did
+not fail schema validation in this run. This supports the source diagnosis that
+the instructions conflate missing engineering with guide insufficiency, but
+does not establish why the earlier v3/v4 outputs were invalid. The original
+results remain immutable. All 15 recorded provider resources through v6 were
+confirmed deleted. The isolated local database upgraded from 0056 to main's
+0057 without recreation; no product records were rewritten.
+
+### Typed contract checkpoint
+
+New-generation admission requires a nonempty inventory for ready proposals,
+source evidence and classification rationales, and complete typed specifications
+for checker requirements. Supported proposals must fit the selected image's
+registered deadline, with PRE capped at 60 seconds. Runtime gaps cannot masquerade
+as available implementations. The single existing proposal command renders the
+structured handoff as readable sections and preserves exact JSON output.
+
+The SDK and manager-authored runtime suite passed 72 cases. The built CLI proposal
+suite passed ten cases, with two affected cases replayed after the final display
+and completeness changes; Go build, test and vet passed. The first PostgreSQL run
+passed the new typed-specification public read, approval, replay, retained-body
+and hash assertions; two previous positive fixtures correctly failed new admission
+because they supplied an empty inventory. Those current-generation fixtures are
+corrected; the full three-case rerun remains required. Database and MinIO cleanup
+for that first run completed.
+
+A read-only check against the real retained v5 row preserved its complete canonical
+body, all component hashes and result hash
+`sha256:639809ae02445e6b0dd87ebfc63d1818b882a168204e66e7af1c6bbb07be566f`.
+A public CLI read also preserved the original result, target and target digest.
+No prior proposal was rewritten or approved. Fresh provider inference using the
+typed contract, independent review and full CI remain pending.

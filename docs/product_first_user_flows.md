@@ -89,10 +89,13 @@ Acceptance:
   the Submission stamp without policy selection.
 - Normal setup starts from guide/source capture and one authorized compilation
   request, not separate requests for sufficiency and each policy derivation.
-- All pre/post capability-gap dispositions block projection/approval/activation.
-  Explicit approved `human_review` requirements remain valid, but unsupported
-  automation is never silently relabelled. An uncertain provider outcome stays
-  blocked without a fresh call until same-operation recovery is supported.
+- Pre/post capability-gap dispositions remain visible in a warning-ready draft
+  and block activation until a corrected compilation binds registered
+  implementations. Only a genuine guide blocker or blocking finding prevents
+  draft projection. Explicit approved `human_review` requirements remain valid,
+  but unsupported checks are never silently relabelled. An uncertain provider
+  outcome stays blocked without a fresh call until same-operation recovery is
+  supported.
 - Submission artifact policy is Workstream-derived and approved by an
   authorized covered Project Manager; project owners do not author or approve
   the machine policy schema directly.

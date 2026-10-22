@@ -28,7 +28,7 @@ from app.interfaces.project_agents import (
 from app.interfaces.project_guide_runtime import ProjectGuideRuntimeConfiguration
 from app.modules.projects.api.guide_documents import GuideDocumentManifest
 from tests.projects.guide_compilation.helpers import (
-    SOURCE_SHA256, context, ids, result, runtime_configuration,
+    SOURCE_SHA256, context, ids, generated_result as result, runtime_configuration,
 )
 
 
@@ -502,9 +502,14 @@ def test_default_instructions_advertise_contextual_output_constraints():
         "they are not projected or executable while blocked",
         "return exactly one capability_suggestions item with its requirement_id",
         "A fully covered project may have no suggestions",
-        "post_submit_empty_configuration requires parameters: []",
+        "Both pre-submit and post-submit bindings carry parameters",
         "they do not require an automated judge",
-        "or guide_blocker requirement also requires guide_blocked",
+        "A guide_blocker requirement requires guide_blocked",
+        "Capability gaps alone are not guide deficiencies",
+        "can reliably finish within 60 seconds",
+        "Automation alone does not make a check POST",
+        "Give every atomic requirement a classification_rationale",
+        "Recording paths in submission_artifact_policy does not prove",
         "Supply both start_page and end_page together",
         "for a single page use that same number at both ends",
         "Paraphrase section headings using the same safe plain-prose rules",
@@ -665,7 +670,15 @@ def _rules(**overrides) -> bytes:
         "submission_artifact_policy": {"maximum_file_size_bytes": 1000,
                                        "maximum_package_size_bytes": 10000,
                                        "required_artifacts": ["submission"]},
-        "requirements": [], "pre_submit_bindings": [], "post_submit_bindings": [],
+        "requirements": [{
+            "requirement_id": "guide.context", "statement": "Use the project guide.",
+            "disposition": "informational", "platform_coverage": None,
+            "classification_rationale": "This identifies the governing guide for the work.",
+            "check_specification": None,
+            # The rules document itself supplies this background requirement.
+            # PDF coverage remains owned by findings, including negative cases.
+            "evidence_refs": [],
+        }], "pre_submit_bindings": [], "post_submit_bindings": [],
         "capability_suggestions": [], "setup_notes": [],
     } | overrides
     return json.dumps(body).encode()

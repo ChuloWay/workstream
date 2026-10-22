@@ -50,11 +50,16 @@ normal task creation; no runtime change or checker allowlist is implied.
    The manager needs a role grant on this exact project for setup and proposal
    reads; system-level project-creation authority alone is insufficient.
 2. Setup reads those actual inputs and the available registered capabilities.
-   Inspect its source-backed requirement inventory, proposed PRE/POST bindings
-   and missing-capability suggestions. Do not substitute a prepared result.
+   Inspect its source-backed requirement inventory, classification rationale,
+   per-check typed specifications, proposed PRE/POST bindings and
+   missing-capability suggestions. PRE is for static and other reliably bounded
+   checks that complete within 60 seconds before Submission creation; longer or
+   model-based work belongs to background POST. Automation alone does not choose
+   the stage. Do not substitute a prepared result.
 3. Engineering receives the uncovered requirements, intended stage, expected
-   findings and execution needs. Build and test the required external checker
-   images against the existing request/result contract. Project logic belongs
+   findings, positive/negative cases, material inputs, dependencies and
+   infrastructure outcomes. Build and test the required external checker images
+   against the existing request/result contract. Project logic belongs
    in those images, not in project-named branches of Workstream or its shared
    runner. Reuse a registered implementation only if it really covers the need.
    Use the merged [image command](../../docs/engineering/checker-images.md) for
@@ -89,10 +94,11 @@ normal task creation; no runtime change or checker allowlist is implied.
 
 A real provider-backed local setup run has produced a draft from the unchanged
 guide with all four project size/entry limits null. That establishes the
-platform-default behavior, not an approved checker plan. Earlier attempts ended
-with invalid structured output, and the successful draft classifies the work
-checks as human review with no checker suggestions. Those classifications need
-review before engineering handoff; no policy or guide has been activated.
+platform-limit behavior, not an approved checker plan. Earlier attempts ended
+with invalid structured output, and the successful pre-specification draft
+classified the work checks as human review with no checker suggestions. The
+expanded setup contract must be replayed and reviewed before engineering handoff;
+no new image, approved policy or activated guide is claimed.
 See the [live setup record](../../.commitrail/changes/terminal-systems-live-setup.md)
 for the retained attempt sequence and qualification limits.
 
@@ -109,9 +115,13 @@ No checker is claimed to implement this guide yet. In particular, the previous
 fixed five-task sample is not an implementation of these requirements. Required
 semantic judgments, metadata tooling, environment support and execution needs
 must appear in setup's capability assessment; do not weaken the guide to hide a
-gap. A missing required capability blocks activation until engineering supplies
-it and the proposal is approved. Human-review requirements cannot be silently
-converted into automated acceptance.
+gap. A missing required capability remains visible in a warning-ready draft and
+blocks activation until engineering supplies it and a corrected proposal binds
+it. It does not make a sufficient guide blocked and cannot be hidden as a human
+fallback. Human-review requirements cannot be silently converted into automated
+acceptance. Workstream's four default checks cover ZIP safety, received-byte and
+manifest identity, high-confidence secret detection and unchanged work; the
+guide's required files, layout, metadata and quality rules need project checks.
 
 Before upload, confirm that this guide describes the desired project. The PM
 still chooses compensation, review mode, revision cap and revision window through
@@ -119,10 +129,11 @@ the separate governed policy operations. The input version label does not
 publish or replace any existing guide in a live project.
 Nor does it authorize live model spend, registry publication or deployment.
 
-For the first setup run, retain the actual requirements and capability suggestions
+For each setup run, retain the actual requirements and capability suggestions
 with their guide references. An engineering handoff should identify each uncovered
-requirement, proposed execution stage, inputs, expected findings, dependency needs
-and representative positive/negative cases. Do not handwrite that result in
+requirement, classification rationale, proposed execution stage and duration,
+inputs, ordered checks, pass conditions, expected findings, dependency needs,
+infrastructure failures and representative positive/negative cases. Do not handwrite that result in
 advance or classify a required semantic judgment as enforced merely because a
 file exists. Building submitted environments offline and checking reference/test
 quality need explicit implementations and proof. When the configured runtime

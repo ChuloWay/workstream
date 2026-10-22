@@ -21,6 +21,7 @@ from app.interfaces.project_agents import (
     ProjectGuideCompilationResult,
     invalid_compilation_failure_code,
     project_guide_compilation_prompt_bytes,
+    require_complete_generated_specifications,
     require_complete_project_guide_compilation_result,
     require_ready_result_cites_every_document,
     validate_project_guide_compilation_result,
@@ -138,6 +139,7 @@ class OpenAIAgentSdkProjectGuideRuntime:
             result = ProjectGuideCompilationResult.model_validate(output)
         require_complete_project_guide_compilation_result(result)
         validate_project_guide_compilation_result(context, result)
+        require_complete_generated_specifications(context, result)
         if result.agent_version != context.agent_version:
             raise ValueError("compilation result agent version is invalid")
         opened = await capabilities.resources.opened_handles()

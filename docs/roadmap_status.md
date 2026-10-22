@@ -433,17 +433,18 @@ B7 delivers the hidden request handler with exact invocation fencing. 04E2-B del
 Both stages enforce quality, but answer different questions and produce
 different outcomes. They are not one combined checker phase.
 
-The phase is distinct from the execution method. Intake primitives and policy
-compilation can be deterministic without making every task evaluator
-deterministic. Post-submit work evaluation may use deterministic rules or a
-supported model/agent-based quality judge; recording its inputs and result does
-not promise identical judgments on rerun. Such an evaluator needs an explicit
-implementation and policy binding and is not claimed live here.
+The phase is distinct from the execution method. Static inspection and other
+checks that can reliably finish within 60 seconds belong before Submission
+creation, even when they use durable execution and polling. Longer work,
+repeated trials and model evaluation belong in background POST. Automation alone
+does not make a check POST. Recording a model evaluator's inputs and result does
+not promise identical judgments on rerun; it still needs an explicit
+implementation, runtime dependency and policy binding.
 
 | Stage | Purpose and examples | Policy and execution boundary | Outcome |
 | --- | --- | --- | --- |
-| Pre-submission intake checks | Is this package acceptable to submit? Check completeness, required/forbidden files, evidence integrity, and configured intake-quality rules. | The locked selected PRE policy runs the single Workstream default followed by every required digest-pinned project image on ART-verified material, before a Submission exists. | Blocking failures return correction feedback and prevent Submission creation. Passing intake does not prove the task is accepted or ready for review. |
-| Post-submission evaluation | Does the submitted work meet the configured task/project checks? Evaluate the exact stored work and evidence under the locked requirements. | The Submission-stamped external POST policy drives approved digest-pinned images through the Rust service and durable `CheckerRun` ownership after immutable Submission creation. Only supported, registered checks execute. 04F1 verifies current completed failure evidence through the same CHECKERS port. The locked project revision policy requires an explicit integer cap `N >= 0` and positive deadline hours. | Persist current evidence. The hidden authorized operation publishes exact source custody. `allow_review` branches on locked ReviewPolicy: true moves TASK to `review_pending`; false invokes shared acceptance under TASK authority. Exact current `needs_revision` with another revision remaining moves TASK to contributor remediation under either mode, with a running or setup-paused PostgreSQL window and no REV/CON effects. Failure on the final permitted attempt immediately records rejection and exhaustion, closes the assignment as `revision_exhausted`, and returns TASK to `ready` without another preparation or window. CHECKERS never writes TASK state or acceptance itself. B8 supplies completion custody; PILOT-04 registers selected request/completion production delivery. |
+| Pre-submission intake checks | Is this bounded package check acceptable before creating a Submission? Check static structure, required/forbidden files, evidence integrity and other work that reliably completes within 60 seconds. | The locked selected PRE policy runs the single Workstream default followed by every required digest-pinned project image on ART-verified material. PRE may use durable execution and polling, but a proposed check and selected registry deadline must remain within the 60-second boundary. | Blocking failures return correction feedback and prevent Submission creation. Passing intake does not prove the task is accepted or ready for review. |
+| Post-submission evaluation | Does the submitted work meet checks that need longer execution, repeated trials or model evaluation? Evaluate the exact immutable work and evidence under the locked requirements. | The Submission-stamped external POST policy drives approved digest-pinned images through the Rust service and durable `CheckerRun` ownership after immutable Submission creation. Only supported, registered checks execute. 04F1 verifies current completed failure evidence through the same CHECKERS port. The locked project revision policy requires an explicit integer cap `N >= 0` and positive deadline hours. | Persist current evidence. The hidden authorized operation publishes exact source custody. `allow_review` branches on locked ReviewPolicy: true moves TASK to `review_pending`; false invokes shared acceptance under TASK authority. Exact current `needs_revision` with another revision remaining moves TASK to contributor remediation under either mode, with a running or setup-paused PostgreSQL window and no REV/CON effects. Failure on the final permitted attempt immediately records rejection and exhaustion, closes the assignment as `revision_exhausted`, and returns TASK to `ready` without another preparation or window. CHECKERS never writes TASK state or acceptance itself. B8 supplies completion custody; PILOT-04 registers selected request/completion production delivery. |
 
 The unified guide agent proposes both sets of policy bindings in one setup
 result. Trusted compilation, validation, and the governing approval path turn
@@ -451,6 +452,14 @@ those proposals into separate locked policies; setup inference is not a second
 agent run judging a contributor's submission. An agent-based evaluator or quality
 judge would require its own supported checker implementation and policy binding;
 it is not implied to be live by the unified setup agent or the roadmap.
+
+Each newly compiled atomic requirement explains its classification. Supported
+and missing PRE/POST checks carry one typed engineering specification covering
+stage and budget, inputs, ordered checks, pass conditions, work findings,
+positive/negative cases, dependencies and infrastructure failures. Missing
+implementations remain capability gaps in a warning-ready draft and block
+activation; only guide blockers or blocking findings stop draft projection.
+Historical results remain readable and hash-identical with absent new fields.
 
 Authorized reviewers still own `accept`, `needs_revision`, and `reject`.
 Only an actual human Review stores those decisions; neither checker stage
@@ -467,7 +476,7 @@ cannot be reused as post-submission review-gate evidence. See the
 | Identity and actor resolution | **Live foundation** | Flow-token verification; canonical ActorProfile and ActorIdentityLink; human/service separation; lifecycle controls; canonical `/actors/me` self-read with duplicate `/auth/me` removed; suspension denies both self-read and self-update; CLI privileged exact-actor/profile and identity-link reads and explicit separate profile/link lifecycle writes remain distinct from self-service and backend guards | Final end-to-end operational and conformance proof |
 | Authorization kernel | **Live foundation** | Closed action/permission catalogues; deny-by-default evaluation; grants; exact-project, privacy-safe candidate read now consumed by the CLI; fixed services; rate controls; opaque transaction-bound PREP; atomic decision evidence; CLI scope-filtered administrative grant/catalogue reads and explicit keyed grant issue/revoke consume existing public APIs without local authority decisions | Activate only the remaining owner-proven TASK, checker, REV, and CON boundaries; remove obsolete authority after replacement paths are live |
 | Project Guide source custody | **Live foundation** | Guide creation declares documents and task examples; public document upload; immutable internal metadata snapshots; draft guide and review/revision policy writes with fresh-authorized exact replay of original receipts; exact run-scoped setup reads and assigned-task locked-original reads; S3-backed originals and isolated agent document inspection; exact document generation through separate manager approvals and public exact-authorized CP07 activation; Project Manager guide list, guide detail, activation readiness dry run and verified original read-back (PILOT-READ-3); the CLI exposes existing administrative active-chain and retained sufficiency/artifact-policy reads plus keyed human sufficiency creation and warning acknowledgement, with backend-owned policy decisions | Public original upload, task examples, Celery setup and separate approvals are connected locally with recorded inference; prove configured live inference and readers in the intended environment; CLI manual artifact-policy writes remain separate |
-| Unified Project Guide compilation | **Live setup and manager proposal operations** | Committed original-document readiness dispatches one immutable attempt through Celery; complete result and crash/recovery custody; distinct pre/post proposals; deterministic sufficiency and submission-artifact-policy projections; immutable authorized setup finalization; public exact manager review, pre-submit approval and manual correction dispatch; automatic deterministic post-policy derivation, public complete policy read, separate approval and shared correction custody; provider-free `manager_authored` runtime compiles a manager-uploaded rules document with no inference or provider resources ([change record](../.commitrail/changes/manager-authored-guide-runtime.md)) | The bounded local contributor drill starts from public guide inputs with recorded inference; live model setup and hosted operation remain separate |
+| Unified Project Guide compilation | **Live setup and manager proposal operations** | Committed original-document readiness dispatches one immutable attempt through Celery; complete result and crash/recovery custody; distinct pre/post proposals; typed per-requirement classification and checker specifications; deterministic sufficiency and submission-artifact-policy projections; immutable authorized setup finalization; public exact manager review, pre-submit approval and manual correction dispatch; automatic deterministic post-policy derivation, public complete policy read, separate approval and shared correction custody; provider-free `manager_authored` runtime compiles a manager-uploaded rules document with no inference or provider resources ([change record](../.commitrail/changes/manager-authored-guide-runtime.md)). Capability gaps preserve a warning-ready review package but block activation; retained pre-specification results keep exact hashes and reads. | Qualify the expanded contract with the actual guide and model; hosted operation remains separate |
 | Contribution policy administration | **Public Finance policy workflow; binding administration internal** | Internal Finance Authority adapter-binding lifecycle; public ContributionPolicy discovery/read/create/update/publish/retire with exact Finance Authority and recoverable draft selectors, and a Finance list of every version (PILOT-READ-3); immutable operation and event history; internal exact selected-version validation; CP07 binding with live exact-project manager authority of the selected published version to the active guide generation | The bounded local public drill passed; policy publication alone does not create a contribution, and hosted operation remains unproven |
 | Task readiness and claim | **Foundation with grant-backed manager and contributor commands** | Task records, assignments and locked work context; guide-bound ContributionPolicyVersion locked before `READY` and copied to TaskAssignment; detached project/guide display; public project-scoped ready, management and operational queues with distinct current grant authority and signed bounded live pagination, with typed task status and manager filters by status, assignee, native import batch and update time (PILOT-READ-2); contributor cross-project own-assignment, attempt and summary reads under current Submitter grants (PILOT-READ-2); Project Manager project-wide attempt, claim, summary and import-batch reads (PILOT-READ-3); public contributor/management detail with exact project and assignment authority; separate current live work-context projections with exact receipt-selected review/revision/ContributionPolicy identities and no obsolete economic fields; explicit management/operational/audit locked-context projections using one historical resolver, with separate public manager, system-Operator and Audit Authority access; immutable contributor/management requirements using one historical translator, with public exact Contributor and Manager authority; the CLI exposes the three exact manager requirements/context reads separately from contributor commands (WS-CLI-001-27); bounded public Audit Authority lifecycle evidence with atomic project/task scoping and exact transition references; separate CLI audit commands consume those two existing Audit Authority GETs with explicit continuation; public manager create/screen/release use exact covered Project Manager authority, atomic audit and replay; claim/start/contributor context use exact-project Submitter grants; assigned context lists documents only and distinct `task.guide.read` verifies locked originals before delivery; separate manager context and system-Operator start; durable claim/start retry receipts with fresh authority and exact assignment checks; hidden exact-assignment invalidation with committed cause verification, delivery fencing, exact fixed-service authority and decision-bound immutable release evidence; atomic authority-loss publication and registered prefork delivery; PILOT-14 exposes both locked contribution types in ready rows and Contributor detail for active exact-project Submitters or Reviewers as unpaid or exact instrument/unit/quantity awards, without Finance binding facts; claim/start remain Submitter-only | The bounded local public durable-runtime journey passed; intended hosted operation remains unproven |
 | Operator task CLI | **Existing public task operations consumed by the CLI** | WS-CLI-001-36 adds separate status-only project pages, exact-project locked-reference reads and explicit reasoned start override with caller-owned manual replay. Backend Operator authority, assignment consistency, locked lineage and audit remain decisive; contributor start has no fallback to override. | Native public-API proof is bounded to existing fixtures; hosted/deployed operation, other Operator workflows and published binary remain separate |
@@ -887,10 +896,16 @@ cannot be reused as post-submission review-gate evidence. See the
   through Celery. It persists sufficiency findings and separate pre-submit and
   post-submit proposals, then projects the sufficiency and artifact-policy
   components and atomically finalizes the setup at draft output. A blocked guide
-  ends at sufficiency evidence, with no policy projection. Its canonical result
-  retains exact registered digest-pinned image matches and one evidence-linked engineering
+  ends at sufficiency evidence, with no policy projection. Capability gaps alone
+  preserve a warning-ready draft and continue blocking activation. Each new
+  atomic requirement includes classification rationale; supported and missing
+  PRE/POST checks include one typed specification with stage/budget, inputs,
+  checks, outcomes, test cases and dependencies. Its canonical result retains
+  exact registered digest-pinned image matches and one evidence-linked engineering
   suggestion for each required missing pre-submit or post-submit check. Fully
-  covered projects need no suggestions. POL-05B exposes the complete POL-05A review package;
+  covered projects need no suggestions. PRE covers static and other checks that
+  reliably finish within 60 seconds before Submission, including durable/polled
+  execution; longer and model work belongs to background POST. POL-05B exposes the complete POL-05A review package;
   AUTH-12F4 supplies exact manager authority; suggestions cannot register or activate a checker. Runtime, model/provider and instructions are independently
   configured and bound to the attempt. The agent opens assigned files on demand
   in an isolated workspace and assesses them with every supplied task example;
@@ -900,9 +915,12 @@ cannot be reused as post-submission review-gate evidence. See the
   same grant, records those reads without provider resources, and stores
   provider, API and model `none` on the attempt. Known
   invalid output ends terminally, and replay never starts a second inference.
-  The model-facing mandatory archive-entry capability explicitly names existing
-  encryption, symbolic-link and special-file rejection. The existing package-size
-  rule enforces verified expanded bytes, now explicit in the proposal schema.
+  The model-facing default capability names exactly four platform guarantees:
+  bounded safe ZIP handling, received-byte/manifest identity, high-confidence
+  secret detection and unchanged-work detection. Required project files, layout,
+  metadata and content rules require project checks; artifact-policy metadata
+  does not make the default enforce them. The existing package-size rule enforces
+  verified expanded bytes, now explicit in the proposal schema.
   Setup leaves absent project file/package limits null, matching canonical policy;
   guides need not repeat platform ceilings. ART independently enforces configured
   upload/archive safety limits and storage admission, and explicit project limits
@@ -1469,9 +1487,10 @@ remaining sample PID probe as sufficient project readiness.
 public journey. The [live setup qualification](../.commitrail/changes/terminal-systems-live-setup.md)
 now includes a real provider draft from unchanged guide bytes with all project
 size/entry limits null. Earlier schema-invalid outcomes remain unexplained; the
-successful draft's human-review classifications are not a qualified checker
-handoff. No approved binding, guide activation or contribution outcome for
-these inputs is established.
+successful pre-specification draft's human-review classifications are not a
+qualified checker handoff. The expanded typed contract still needs a fresh
+provider replay and review before image engineering. No new image, approved
+binding, guide activation or contribution outcome for these inputs is established.
 
 The [offline gVisor build spike](engineering/pilot00-gvisor-offline-build-spike.md)
 selects a sealed-cache Kaniko builder plus a separate gVisor oracle sandbox for

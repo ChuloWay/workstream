@@ -42,9 +42,9 @@ from app.modules.projects.api.setup_identity import project_guide_compilation_ta
 from app.modules.projects.setup_queue import dispatch_project_guide_compilation_after_commit
 from ..helpers import (
     context,
+    generated_result,
     identity,
     persistence_facts,
-    result,
 )
 
 
@@ -125,7 +125,7 @@ async def compilation_and_projections(
     )
     await admit_compilation_delivery(factory, compilation_context)
     supplied_outcome = outcome is not None
-    outcome = outcome or result()
+    outcome = outcome or generated_result()
     if classification != "draft_ready" and not supplied_outcome:
         patch = {
             "status": classification,

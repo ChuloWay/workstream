@@ -14,7 +14,7 @@ from tests.projects.client_fixtures import (
     project_database_env as project_database_env,
 )
 from .test_automatic_request import automatic_source as automatic_source
-from .helpers import runtime_configuration, result
+from .helpers import generated_result, runtime_configuration
 from .runtime_fixtures import document_access, ScriptedGuideRuntime
 
 
@@ -75,7 +75,8 @@ async def test_pending_exact_delivery_compiles_once_and_replays_finalization(
     if status != "draft_ready":
         from app.interfaces.project_agents import CompilationFinding
 
-        runtime.outcome = result().model_copy(
+        base_outcome = generated_result()
+        runtime.outcome = base_outcome.model_copy(
             update={
                 "status": status,
                 "findings": (
@@ -87,7 +88,7 @@ async def test_pending_exact_delivery_compiles_once_and_replays_finalization(
                 ),
                 "submission_artifact_policy": None
                 if status == "guide_blocked"
-                else result().submission_artifact_policy,
+                else base_outcome.submission_artifact_policy,
             }
         )
     monkeypatch.setattr(worker, "create_project_guide_runtime", lambda configuration: runtime)

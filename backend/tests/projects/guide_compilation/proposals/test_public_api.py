@@ -36,12 +36,30 @@ def test_openapi_exposes_complete_proposal_journey():
     assert "provider_idempotency_key" not in schemas["GuideProposalDispatchResponse"]["properties"]
 
 
-@pytest.mark.parametrize("project_size_limits", [True, False])
-async def test_public_approval_read_replay_and_current_authority(clean_postgres_database, project_size_limits):
-    from tests.projects.guide_compilation.helpers import result
-    from app.interfaces.project_agents import SubmissionArtifactPolicyProposal
+@pytest.mark.parametrize("project_size_limits,typed_specification", [(True, False), (False, False), (False, True)])
+async def test_public_approval_read_replay_and_current_authority(clean_postgres_database, project_size_limits, typed_specification):
+    from tests.projects.guide_compilation.helpers import generated_result, valid_specification
+    from app.interfaces.project_agents import (
+        AtomicGuideRequirement, CapabilitySuggestion, SubmissionArtifactPolicyProposal,
+    )
 
-    outcome = result()
+    outcome = generated_result()
+    if typed_specification:
+        references = outcome.findings[0].evidence_refs
+        outcome = outcome.model_copy(update={
+            "status": "draft_ready_with_warnings",
+            "requirements": (AtomicGuideRequirement(
+                requirement_id="package.structure", statement="Supply the required package files.",
+                disposition="pre_submit_capability_gap",
+                classification_rationale="This is bounded static inspection requiring a project image.",
+                check_specification=valid_specification(), evidence_refs=references,
+            ),),
+            "capability_suggestions": (CapabilitySuggestion(
+                requirement_id="package.structure", stage="pre_submit",
+                title="Package structure check", rationale="Register an image that checks required files.",
+                evidence_refs=references,
+            ),),
+        })
     if not project_size_limits:
         outcome = outcome.model_copy(update={
             "submission_artifact_policy": SubmissionArtifactPolicyProposal.model_validate(
@@ -57,6 +75,12 @@ async def test_public_approval_read_replay_and_current_authority(clean_postgres_
             assert package.status_code == 200, package.text
             body = package.json()
             assert body["target"]["compilation_id"] == str(command.compilation_id)
+            if typed_specification:
+                shown = body["result"]["requirements"][0]
+                assert shown["check_specification"] == valid_specification().model_dump(mode="json")
+                assert shown["classification_rationale"] == outcome.requirements[0].classification_rationale
+                assert shown["evidence_refs"][0]["document_number"] == 1
+                assert body["result"]["status"] == "draft_ready_with_warnings"
             for field in ("maximum_file_size_bytes", "maximum_package_size_bytes"):
                 assert body["result"]["submission_artifact_policy"][field] == getattr(
                     outcome.submission_artifact_policy, field
@@ -71,6 +95,12 @@ async def test_public_approval_read_replay_and_current_authority(clean_postgres_
             for secret in ("provider_idempotency_key", "source_item_id", "runtime_configuration", "document_version_id"):
                 assert secret not in package.text
             async with factory() as session:
+                retained = (await session.execute(text(
+                    "SELECT canonical_result,result_hash,component_hashes FROM project_guide_compilations WHERE id=:id"
+                ), {"id": command.compilation_id})).mappings().one()
+                assert retained["canonical_result"] == outcome.model_dump(mode="json")
+                assert retained["result_hash"] == body["target"]["result_hash"]
+                assert retained["component_hashes"] == body["target"]["component_hashes"]
                 count = await session.scalar(text("SELECT count(*) FROM project_guide_proposal_approvals"))
                 assert count == 1
                 policy = await session.scalar(text(

@@ -240,6 +240,24 @@ pre-submission and post-submission policies through the OpenAI Agents SDK adapte
 Use the locked installation and environment-loading commands in
 [Native Unified Guide Inference](#native-unified-guide-inference).
 
+New compilation results also include `classification_rationale` for every atomic
+requirement and one typed `check_specification` for each supported or missing
+PRE/POST check. PRE is reserved for static and other checks that can reliably
+finish within 60 seconds before Submission creation; it may still use durable
+execution and polling. Longer or model-based work belongs to background POST.
+The compiler infers checks from required outcomes rather than requiring guide
+authors to label automation or stages. A missing registered implementation stays
+an engineering gap in a warning-ready draft and blocks activation; only a real
+guide blocker prevents the draft.
+
+The specification is validated as data: execution mode and duration, material
+inputs, ordered checks, pass conditions, coded findings, positive and negative
+cases, runtime dependencies and infrastructure failures must agree. Current
+images are offline and do not implicitly receive task/guide prose or model access.
+Older retained results remain readable with the new fields absent; new results
+cannot use that historical omission. Invalid new output ends terminally and is
+diagnosed without logging guide or model content.
+
 The Celery worker captures runtime, model provider, model, API, instructions,
 timeout, document limits and tool budgets on the attempt before execution. Credentials stay in
 the Celery worker environment. `WORKSTREAM_PROJECT_AGENT_INSTRUCTIONS` and

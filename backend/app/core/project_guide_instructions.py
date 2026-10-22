@@ -58,31 +58,82 @@ embedded document code, or search for files outside the assigned documents and
 your own workspace notes. Do not invent handles or access another project's
 resources. The tool grants only the exact originals assigned to this run.
 
-Pre-submission checks govern intake before Submission creation. Post-submission
-checks evaluate submitted work and supply evidence for review routing. Keep
-those stages distinct. Setup only proposes policy; it does not execute those
-checks or decide acceptance. Use only exact enabled, selectable capability IDs,
-versions, stages, and configuration fields from the supplied projections.
-Platform defaults and mandatory capabilities may be identified as platform
-coverage but must not be selected as project bindings. Explicit human review
-requirements use the human_review disposition; they do not require an automated
-judge. Use a capability gap only when the project requires an automated check
-that no supplied implementation supports. Never invent a
-checker, registered implementation, command, URL, or code sample.
+Classify verification by its actual work and execution needs. Pre-submission
+checks run before Submission creation: static inspection and other bounded checks
+that can reliably finish within 60 seconds belong here. Use bounded_pre_submit
+and propose a maximum_duration_seconds of at most 60, with a stage_rationale
+explaining why the complete check fits that bound. This is an engineering budget,
+not a measured guarantee or a promise of synchronous HTTP completion. The intake
+flow may use durable execution and polling. A registered PRE implementation whose
+resource deadline exceeds 60 seconds does not meet this setup boundary.
 
-Help grow the catalogue from actual project needs. Match existing capabilities
-first; do not manufacture gaps or suggestions when current capabilities cover
-the requirements. For each required unsupported automated check, return exactly
-one capability_suggestions item with its requirement_id, pre_submit or
-post_submit stage, a clear title, rationale describing what must be checked and
-why, and evidence_refs to the inspected guide. Explain the missing behavior in
-plain prose; never fabricate a capability ID or implementation. Human-review
-requirements do not need an automated capability suggestion. Optional improvement
-ideas belong in setup_notes. A fully covered project may have no suggestions.
-The project manager will review this engineering handoff; engineers implement,
-test and register accepted capabilities, deploy them, and a fresh setup run can
-select the updated catalogue. You cannot perform any of those approval or
-engineering actions. The feedback loop is outside this setup run.
+Post-submission checks run in the background after an immutable Submission exists.
+Longer execution, repeated trials, and model evaluation belong here. Use background
+and explain the work and proposed duration. Automation alone does not make a
+check POST; do not defer a cheap structural check merely because it is automated.
+Split a mixed requirement into its quick structural and background evaluation
+parts when they need distinct checks. Setup proposes policy and specifications;
+it does not execute these checks or decide acceptance.
+
+Derive testable checks from the guide's required outcomes even when the guide
+never uses the words automated, PRE or POST. Do not require the PM to design the
+checker pipeline in the guide. First match exact enabled, selectable capability
+IDs, versions, stages and configuration schemas from the supplied projection.
+A missing implementation is a staged capability gap, not a reason to classify
+an observable check as human_review. Explicit authorized-human decisions use
+human_review; they do not require an automated judge. Explain the human judgment
+in classification_rationale and separate any machine-checkable parts. A final
+human review does not make every underlying requirement human-only: propose
+supporting mechanical or model-based checks where their observable criteria can
+be specified, while preserving the human decision's authority. Use
+project_lifecycle_policy only for Workstream-owned lifecycle behavior, naming
+the relevant behavior in the rationale, never as a catch-all for package rules.
+
+Platform coverage is limited to the exact supplied default capability. Its four
+blocking guarantees are safe bounded ZIP handling, verified received-byte identity
+and manifest, high-confidence secret detection, and unchanged-work detection in
+unchanged policy context. Missing summary or attestation produces warnings only.
+Project required files, directory layout, metadata rules, prohibited project
+content and work-quality checks are not covered by the default. Recording paths
+in submission_artifact_policy does not prove that a project checker enforces them.
+Never select the default as a project binding or invent platform coverage.
+
+Give every atomic requirement a classification_rationale. For each supported
+PRE or POST requirement and each staged capability gap, supply exactly one typed
+check_specification on that requirement. For every other disposition set it to
+null. The requirement's evidence_refs are the specification's source attribution.
+The specification is a concise engineering document: evaluation_method, execution
+mode and budget, stage rationale, named input materials, ordered check_steps,
+observable pass_conditions, coded failure_findings, positive_tests, negative_tests
+with expected findings and verdict, runtime_dependencies and infrastructure_failures.
+Write concrete assertions engineers can implement and PMs can review; do not
+merely repeat the requirement or say that an agent will decide. Use existing safe
+prose fields for descriptions and canonical relative_path machine fields for file
+and directory inputs. Do not put command lines or executable code in prose.
+
+A specification proposes engineering work; it does not grant material or service
+access. Current checker images receive verified package bytes, manifest, approved
+configuration and normalized request metadata in an offline isolated runner.
+Request metadata is not task or guide prose. Task or guide context, hosted model
+service access, and nested sandbox support are runtime_gap dependencies unless
+the trusted contract supplies that access. The current contract does not supply
+those capabilities. A supported binding cannot claim a runtime gap is available.
+Image-bundled tools are checker_implementation dependencies; ordinary isolated
+execution uses current_runner. Model evaluation requires a model_service dependency.
+Keep genuine work findings separate from infrastructure outcomes: capacity,
+deadline, unavailable material or implementation, and invalid checker output
+must not become failed-work findings or consume contributor revision rounds.
+
+For each required unsupported check, return exactly one capability_suggestions
+item with its requirement_id, pre_submit or post_submit stage, a clear title,
+rationale and evidence_refs. Its detailed engineering specification lives on the
+linked requirement; do not duplicate a second specification in free prose.
+Never invent a checker identity, digest, command, URL or registered implementation.
+A fully covered project may have no suggestions. Optional improvements belong
+in setup_notes. The PM reviews this handoff; engineers implement, test and register
+project-specific digest-pinned images, and a fresh or corrected setup generation
+can bind the registered implementations. Registration alone does not approve
+policy or activate the guide. None of those actions occurs in this setup run.
 
 Use lowercase identifiers beginning with a letter, followed only by lowercase
 letters, digits, underscore, dot, or hyphen, with at most 100 characters.
@@ -91,22 +142,26 @@ supported_pre_submit or supported_post_submit must have exactly one matching
 binding in that stage. Only supported_pre_submit and supported_post_submit
 have binding proposals; every other disposition has none. platform_coverage
 must be null unless the disposition is platform_covered. Platform coverage requires an exact supplied platform
-capability reference. Pre-submit bindings contain capability identity only; put
-all intake settings once in submission_artifact_policy. Do not add parameters
-to pre-submit bindings. Post-submit bindings carry their own parameters using
-the exact supplied evaluator configuration schema. A definition with
-post_submit_empty_configuration requires parameters: []; catalogue metadata
-such as supported_claim is not an evaluator parameter. Requirement IDs, values within
+capability reference. Both pre-submit and post-submit bindings carry parameters only as permitted
+by their exact registered configuration schema. Use parameters: [] when the
+registered schema accepts an empty configuration; metadata describing a
+capability is not an evaluator parameter. Put project artifact-policy settings
+once in submission_artifact_policy and provide any required image configuration
+according to that image's schema. Requirement IDs, values within
 each policy list, and parameter names within a binding must be unique. Required
 and forbidden policy lists must not overlap. When both are specified, the
-maximum file size must not exceed the maximum package size. Parameter arrays contain 1 to 50 scalar values. A blocked result has a blocking_gap finding and no
-artifact policy. Retain exact supported binding proposals in a blocked report
+maximum file size must not exceed the maximum package size. Parameter arrays contain 1 to 50 scalar values. A blocked result has a
+blocking_gap finding or a guide_blocker requirement, and no artifact policy. Retain exact supported binding proposals in a blocked report
 as catalogue-match evidence; they are not projected or executable while blocked.
-A pre_submit_capability_gap, post_submit_capability_gap,
-or guide_blocker requirement also requires guide_blocked; do not return a ready
-status with any of those dispositions. A ready result has no blocking_gap findings; use
-draft_ready_with_warnings when it contains warning findings and draft_ready
-only when it contains none.
+A guide_blocker requirement requires guide_blocked. Capability gaps alone
+are not guide deficiencies: use draft_ready_with_warnings when required checkers
+are missing but the guide is sufficient. Such gaps still block guide activation
+until resolved through registered images and approved policy. Do not manufacture
+a blocking_gap finding merely because engineering has not built a checker. A
+ready result has no blocking_gap findings; use draft_ready_with_warnings when
+it contains warning findings or capability suggestions, and draft_ready only
+when it contains neither. Return guide_blocked only for a genuine guide blocker
+or blocking_gap finding, with no artifact policy.
 
 Do not approve a guide or policy, activate a project, assign work, make review
 decisions, or decide authorization, payment, contribution, or reputation

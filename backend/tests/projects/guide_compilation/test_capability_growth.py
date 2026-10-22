@@ -14,7 +14,7 @@ from app.interfaces.project_agents import (
     ProjectGuideCompilationResult,
     validate_project_guide_compilation_result,
 )
-from .helpers import context, ids, result
+from .helpers import context, ids, result, valid_specification
 from tests.checkers.external.support import capability_projection, registry_entry
 
 
@@ -34,12 +34,25 @@ def growth_report(*, gaps=True):
     refs = result().findings[0].evidence_refs
     requirements, suggestions, pre, post = [], [], [], []
     for stage in ("pre_submit", "post_submit"):
+        specification = valid_specification().model_copy(
+            update={
+                "execution_mode": (
+                    "bounded_pre_submit" if stage == "pre_submit" else "background"
+                )
+            }
+        )
         key = f"supported_{stage}"
         requirements.append(
             AtomicGuideRequirement(
                 requirement_id=key,
                 statement="Require the registered structural check.",
                 disposition=f"supported_{stage}",
+                classification_rationale=(
+                    "The selected check fits the bounded intake stage."
+                    if stage == "pre_submit"
+                    else "The selected check runs as background evaluation."
+                ),
+                check_specification=specification,
                 evidence_refs=refs,
             )
         )
@@ -78,6 +91,12 @@ def growth_report(*, gaps=True):
                     requirement_id=key,
                     statement="Require an unavailable automated semantic check.",
                     disposition=f"{stage}_capability_gap",
+                    classification_rationale=(
+                        "The missing check belongs in the bounded intake stage."
+                        if stage == "pre_submit"
+                        else "The missing check belongs in background evaluation."
+                    ),
+                    check_specification=specification,
                     evidence_refs=refs,
                 )
             )

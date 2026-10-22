@@ -295,6 +295,261 @@ class PlatformCoverageRef(BaseModel):
     )
 
 
+CheckEvaluationMethod = Literal[
+    "static_inspection", "isolated_execution", "model_evaluation"
+]
+CheckExecutionMode = Literal["bounded_pre_submit", "background"]
+CheckInputKind = Literal[
+    "package",
+    "manifest",
+    "request_metadata",
+    "relative_file",
+    "relative_directory",
+    "task_context",
+    "guide_context",
+]
+CheckerDependencyKind = Literal[
+    "checker_tool",
+    "isolated_execution",
+    "nested_sandbox",
+    "task_context",
+    "guide_context",
+    "model_service",
+]
+DependencyProvisioning = Literal[
+    "current_runner", "checker_implementation", "runtime_gap"
+]
+InfrastructureFailureCode = Literal[
+    "capacity_exceeded",
+    "deadline_exceeded",
+    "material_unavailable",
+    "implementation_unavailable",
+    "invalid_output",
+]
+_INFRASTRUCTURE_FAILURE_CODES = frozenset(
+    {
+        "capacity_exceeded",
+        "deadline_exceeded",
+        "material_unavailable",
+        "implementation_unavailable",
+        "invalid_output",
+    }
+)
+
+
+class CheckInput(BaseModel):
+    """One exact material or context input needed by a proposed check."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    input_id: PolicyIdentifier
+    kind: CheckInputKind
+    relative_path: Annotated[
+        str,
+        Field(
+            min_length=1,
+            max_length=500,
+            description="Canonical relative POSIX path inside the submitted package.",
+        ),
+    ] | None = Field(default=None, exclude_if=lambda value: value is None)
+    purpose: ModelProse
+
+    _input_id = field_validator("input_id")(_validated_identifier)
+    _purpose = field_validator("purpose")(_validated_safe_model_text)
+
+    @model_validator(mode="after")
+    def validate_relative_path(self) -> CheckInput:
+        """Require a safe path only for an exact file or directory input."""
+        path_required = self.kind in {"relative_file", "relative_directory"}
+        if path_required != (self.relative_path is not None):
+            raise ValueError("check input relative path does not match its kind")
+        if self.relative_path is not None and not is_canonical_relative_path(
+            self.relative_path
+        ):
+            raise ValueError("check input relative path is invalid")
+        return self
+
+
+class CheckFailureFinding(BaseModel):
+    """One stable work finding an implementation must return when observed."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    code: PolicyIdentifier
+    level: Literal["warning", "error", "coverage_incomplete"]
+    condition: ModelProse
+    message: ModelProse
+
+    _code = field_validator("code")(_validated_identifier)
+    _condition = field_validator("condition")(_validated_safe_model_text)
+    _message = field_validator("message")(_validated_safe_model_text)
+
+
+class CheckNegativeTest(BaseModel):
+    """One representative non-happy path and its exact observable outcome."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    name: PolicyIdentifier
+    scenario: ModelProse
+    expected_verdict: Literal["passed", "failed"]
+    expected_finding_codes: tuple[PolicyIdentifier, ...] = Field(
+        min_length=1, max_length=10
+    )
+
+    _name = field_validator("name")(_validated_identifier)
+    _scenario = field_validator("scenario")(_validated_safe_model_text)
+
+    @field_validator("expected_finding_codes")
+    @classmethod
+    def validate_expected_finding_codes(cls, values: tuple[str, ...]) -> tuple[str, ...]:
+        """Keep the expected finding set stable, bounded and unambiguous."""
+        if len(values) != len(set(values)):
+            raise ValueError("negative test finding codes must be unique")
+        return tuple(_validated_identifier(value) for value in values)
+
+
+class CheckRuntimeDependency(BaseModel):
+    """One implementation or runner dependency and its availability owner."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    dependency_id: PolicyIdentifier
+    kind: CheckerDependencyKind
+    provisioning: DependencyProvisioning
+    purpose: ModelProse
+    unavailable_code: InfrastructureFailureCode
+
+    _dependency_id = field_validator("dependency_id")(_validated_identifier)
+    _purpose = field_validator("purpose")(_validated_safe_model_text)
+
+    @model_validator(mode="after")
+    def validate_provisioning(self) -> CheckRuntimeDependency:
+        """Describe current runner support without treating desired access as live."""
+        expected = {
+            "checker_tool": ("checker_implementation", "implementation_unavailable"),
+            "isolated_execution": ("current_runner", "implementation_unavailable"),
+            "nested_sandbox": ("runtime_gap", "implementation_unavailable"),
+            "task_context": ("runtime_gap", "material_unavailable"),
+            "guide_context": ("runtime_gap", "material_unavailable"),
+            "model_service": ("runtime_gap", "implementation_unavailable"),
+        }[self.kind]
+        if (self.provisioning, self.unavailable_code) != expected:
+            raise ValueError("check dependency availability is invalid")
+        return self
+
+
+class CheckInfrastructureFailure(BaseModel):
+    """One non-work failure that must never become a failed work verdict."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    code: InfrastructureFailureCode
+    condition: ModelProse
+
+    _condition = field_validator("condition")(_validated_safe_model_text)
+
+
+class CheckSpecification(BaseModel):
+    """Bounded implementation and test handoff for one atomic requirement."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    evaluation_method: CheckEvaluationMethod
+    execution_mode: CheckExecutionMode
+    maximum_duration_seconds: StrictInt = Field(
+        ge=1,
+        le=3600,
+        description=(
+            "Proposed engineering budget for one check execution, not a measured runtime "
+            "promise. PRE checks must be at most 60 seconds; POST checks may use up to "
+            "3600 seconds in background execution."
+        ),
+    )
+    stage_rationale: ModelProse
+    inputs: tuple[CheckInput, ...] = Field(min_length=1, max_length=20)
+    check_steps: tuple[ModelProse, ...] = Field(min_length=1, max_length=20)
+    pass_conditions: tuple[ModelProse, ...] = Field(min_length=1, max_length=20)
+    failure_findings: tuple[CheckFailureFinding, ...] = Field(
+        min_length=1, max_length=20
+    )
+    positive_tests: tuple[ModelProse, ...] = Field(min_length=1, max_length=10)
+    negative_tests: tuple[CheckNegativeTest, ...] = Field(min_length=1, max_length=10)
+    runtime_dependencies: tuple[CheckRuntimeDependency, ...] = Field(max_length=10)
+    infrastructure_failures: tuple[CheckInfrastructureFailure, ...] = Field(
+        min_length=1, max_length=5
+    )
+
+    _stage_rationale = field_validator("stage_rationale")(_validated_safe_model_text)
+
+    @field_validator("check_steps", "pass_conditions", "positive_tests")
+    @classmethod
+    def validate_prose_items(cls, values: tuple[str, ...]) -> tuple[str, ...]:
+        """Apply safe-prose validation to every collection member."""
+        return tuple(_validated_safe_model_text(value) for value in values)
+
+    @model_validator(mode="after")
+    def validate_linkage(self) -> CheckSpecification:
+        """Reject duplicate handoff identities and contradictory expected results."""
+        for values, message in (
+            ([item.input_id for item in self.inputs], "check inputs must be unique"),
+            (
+                [item.code for item in self.failure_findings],
+                "check failure findings must be unique",
+            ),
+            (
+                [item.name for item in self.negative_tests],
+                "check negative tests must be unique",
+            ),
+            (
+                [item.dependency_id for item in self.runtime_dependencies],
+                "check runtime dependencies must be unique",
+            ),
+            (
+                [item.code for item in self.infrastructure_failures],
+                "check infrastructure failures must be unique",
+            ),
+        ):
+            if len(values) != len(set(values)):
+                raise ValueError(message)
+
+        findings = {item.code: item for item in self.failure_findings}
+        if set(findings).intersection(_INFRASTRUCTURE_FAILURE_CODES):
+            raise ValueError("work and infrastructure finding codes must be distinct")
+        for test in self.negative_tests:
+            referenced = [findings.get(code) for code in test.expected_finding_codes]
+            if any(item is None for item in referenced):
+                raise ValueError("negative test references an unknown finding")
+            has_error = any(item.level == "error" for item in referenced if item is not None)
+            if (test.expected_verdict == "failed") != has_error:
+                raise ValueError("negative test verdict disagrees with its findings")
+
+        dependency_kinds = {item.kind for item in self.runtime_dependencies}
+        if (
+            self.evaluation_method == "model_evaluation"
+            and "model_service" not in dependency_kinds
+        ):
+            raise ValueError("model evaluation requires a model service dependency")
+        if (
+            self.evaluation_method == "isolated_execution"
+            and "isolated_execution" not in dependency_kinds
+        ):
+            raise ValueError("isolated evaluation requires an execution dependency")
+        for item in self.inputs:
+            if (
+                item.kind in {"task_context", "guide_context"}
+                and item.kind not in dependency_kinds
+            ):
+                raise ValueError("check context input requires a runtime dependency")
+        available_failures = {item.code for item in self.infrastructure_failures}
+        if any(
+            dependency.unavailable_code not in available_failures
+            for dependency in self.runtime_dependencies
+        ):
+            raise ValueError("check dependency failure is not specified")
+        return self
+
+
 class AtomicGuideRequirement(BaseModel):
     """One evidence-linked guide requirement with one disposition."""
 
@@ -304,20 +559,43 @@ class AtomicGuideRequirement(BaseModel):
     statement: ModelProse
     disposition: RequirementDisposition = Field(
         description=(
-            "Use human_review for work assigned to an authorized human reviewer. "
-            "Use a capability gap only for required unsupported automated evaluation. "
-            "A guide_blocker requires guide_blocked and no artifact policy. Capability "
-            "gaps remain explicit activation blockers while the manager reviews the "
-            "available exact bindings in a warning-ready proposal."
+            "Infer checkable requirements from observable outcomes even when the guide "
+            "does not call them automated. Use supported_pre_submit for static or other "
+            "bounded checks that reliably complete within 60 seconds, and "
+            "supported_post_submit for longer background evaluation. Use the matching "
+            "capability gap when the required implementation is unavailable; a gap keeps "
+            "the proposal warning-ready but blocks activation. Use human_review only for "
+            "authorized human judgment, and project_lifecycle_policy for project operation "
+            "outside submission evaluation. A guide_blocker requires guide_blocked and no "
+            "artifact policy."
         )
     )
     platform_coverage: PlatformCoverageRef | None = None
+    classification_rationale: ModelProse | None = Field(
+        default=None,
+        exclude_if=lambda value: value is None,
+        description=(
+            "Explain the selected ownership and, for a staged check, why its work and "
+            "runtime fit PRE or POST."
+        ),
+    )
+    check_specification: CheckSpecification | None = Field(
+        default=None,
+        exclude_if=lambda value: value is None,
+        description=(
+            "Typed implementation and test handoff inferred from the required outcome for "
+            "every supported or capability-gap PRE or POST requirement."
+        ),
+    )
     evidence_refs: tuple[GuideEvidenceRef, ...] = Field(
         default=(), max_length=MAXIMUM_EVIDENCE_REFS
     )
 
     _requirement_id = field_validator("requirement_id")(_validated_identifier)
     _statement = field_validator("statement")(_validated_safe_model_text)
+    _classification_rationale = field_validator("classification_rationale")(
+        lambda value: _validated_safe_model_text(value) if value is not None else None
+    )
 
 
 class SubmissionArtifactPolicyProposal(BaseModel):
@@ -549,6 +827,71 @@ def require_complete_project_guide_compilation_result(
     """Reject provider output that omitted any member of the strict envelope."""
     if _COMPLETE_COMPILATION_RESULT_FIELDS - result.model_fields_set:
         raise ValueError("compilation result envelope is incomplete")
+
+
+def require_complete_generated_specifications(
+    context: ProjectGuideCompilationContext,
+    result: ProjectGuideCompilationResult,
+) -> None:
+    """Require an actionable typed handoff on newly generated requirements."""
+    if result.status != "guide_blocked" and not result.requirements:
+        raise ValueError("ready compilation requires a requirement inventory")
+
+    specification_stages = {
+        RequirementDisposition.SUPPORTED_PRE_SUBMIT: CompilationStage.PRE_SUBMIT,
+        RequirementDisposition.PRE_SUBMIT_CAPABILITY_GAP: CompilationStage.PRE_SUBMIT,
+        RequirementDisposition.SUPPORTED_POST_SUBMIT: CompilationStage.POST_SUBMIT,
+        RequirementDisposition.POST_SUBMIT_CAPABILITY_GAP: CompilationStage.POST_SUBMIT,
+    }
+    supported = {
+        RequirementDisposition.SUPPORTED_PRE_SUBMIT,
+        RequirementDisposition.SUPPORTED_POST_SUBMIT,
+    }
+    for requirement in result.requirements:
+        if requirement.classification_rationale is None:
+            raise ValueError("generated requirement lacks a classification rationale")
+        if not requirement.evidence_refs:
+            raise ValueError("generated requirement lacks source evidence")
+        expected_stage = specification_stages.get(requirement.disposition)
+        specification = requirement.check_specification
+        if expected_stage is None:
+            if specification is not None:
+                raise ValueError("non-check requirement cannot include a check specification")
+            continue
+        if specification is None:
+            raise ValueError("check requirement lacks a check specification")
+        if expected_stage is CompilationStage.PRE_SUBMIT:
+            if (
+                specification.execution_mode != "bounded_pre_submit"
+                or specification.maximum_duration_seconds > 60
+            ):
+                raise ValueError("pre-submit check specification is not bounded")
+        elif specification.execution_mode != "background":
+            raise ValueError("post-submit check specification is not background work")
+        if requirement.disposition in supported and any(
+            dependency.provisioning == "runtime_gap"
+            for dependency in specification.runtime_dependencies
+        ):
+            raise ValueError("supported check depends on unavailable runtime support")
+
+    definitions = {
+        (definition.phase, definition.capability_id, definition.capability_version): definition
+        for definition in context.checker_capabilities.definitions
+    }
+    requirements = {item.requirement_id: item for item in result.requirements}
+    for binding in (*result.pre_submit_bindings, *result.post_submit_bindings):
+        definition = definitions.get(
+            (binding.stage.value, binding.capability_id, binding.capability_version)
+        )
+        requirement = requirements.get(binding.requirement_id)
+        specification = requirement.check_specification if requirement is not None else None
+        if definition is None or definition.registry_entry is None or specification is None:
+            continue
+        deadline_ms = definition.registry_entry.resources.deadline_ms
+        if binding.stage is CompilationStage.PRE_SUBMIT and deadline_ms > 60_000:
+            raise ValueError("pre-submit checker deadline exceeds the bounded stage")
+        if specification.maximum_duration_seconds * 1000 > deadline_ms:
+            raise ValueError("check specification exceeds the checker deadline")
 
 
 def validate_project_guide_compilation_result(

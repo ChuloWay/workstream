@@ -8,13 +8,16 @@ It does not replace reviewers. It blocks structurally broken work and gives revi
 
 ## Stage And Execution Method Are Separate
 
-**Pre-submission intake checks** ask whether a prepared package is fit to
-submit, including packaging, completeness, integrity, and configured intake
-quality. They execute before a Submission exists; blocking failures prevent
-its creation. **Post-submission evaluation** asks whether the immutable submitted
-work meets the locked task/project checks. It produces durable results for
-review eligibility, not a final Review decision. Neither stage's evidence can
-stand in for the other.
+**Pre-submission intake checks** run before a Submission exists; blocking
+failures prevent its creation. Static inspection and other checks that can
+reliably finish within 60 seconds belong here, including project-specific
+package, completeness, integrity and bounded quality checks. PRE execution may
+still use durable work and polling; the stage does not promise synchronous HTTP
+completion. **Post-submission evaluation** runs after the immutable Submission
+exists. Longer execution, repeated trials and model evaluation belong in this
+background stage and produce durable evidence for review eligibility, not a
+final Review decision. Automation alone does not make a check POST. Neither
+stage's evidence can stand in for the other.
 
 These stage names do not mean that every checker is deterministic. The current
 intake primitives and trusted policy compilers are deterministic mechanisms.
@@ -85,6 +88,12 @@ authority. Consumers read an exact registry ID and digest; there is no
 The registry supports both `pre_submit` and `post_submit`. Registration alone
 grants no execution; selected owners execute only exact approved image bindings
 with fresh phase authority and ART-verified material.
+
+Guide setup classifies a check from its complete work and execution budget, not
+from whether the guide says automated, PRE or POST. A newly proposed PRE binding
+must fit the `bounded_pre_submit` mode, propose at most 60 seconds and select a
+registry entry whose deadline does not exceed that boundary. Longer work uses
+the background POST stage. A cheap automated structural check stays PRE.
 
 The trusted compiler binds approved requirement identities to exact immutable
 registry entries, image/configuration/schema digests and ordered PRE/POST
@@ -182,8 +191,9 @@ exactly four blocking behaviors:
 4. reject the same files as the preceding attempt unless the task rules changed
    since that attempt.
 
-Missing summary or attestation produces warnings only. Required-file, project
-size and forbidden-file rules belong to digest-pinned external project images.
+Missing summary or attestation produces warnings only. Required-file, directory
+layout, project metadata, project size and project-specific prohibited-content
+rules belong to digest-pinned external project images.
 The default checker, ART custody and approved project images replace the removed
 executable catalogues. Human reviewers continue
 to own final quality judgment.
@@ -428,11 +438,31 @@ task to `review_pending`, and do not return review decision values: `accept`,
 
 The unified `ProjectGuideCompilationAgent` proposes artifact intake, sufficiency
 and both checker-stage bindings in one constrained result. It proposes no
-unrestricted executable code. The trusted compiler resolves each required
-project check to an immutable Operator-registered image, validates bounded typed
-configuration against that entry's schema, and locks its exact digest and order.
-An unsupported required automated check blocks the guide; a presence check cannot
-stand in for a substantive evaluator. The removed primitive catalogue is not an
+unrestricted executable code. Each atomic requirement explains its classification
+in `classification_rationale`. Every supported PRE/POST requirement and every
+staged capability gap carries one `check_specification`; human-review,
+platform-covered, lifecycle-policy and guide-blocker requirements do not.
+
+The typed specification is the implementation and test handoff. It records the
+evaluation method, `bounded_pre_submit` or `background` execution mode, proposed
+duration, stage rationale, exact input materials, ordered steps, pass conditions,
+coded work findings, positive and negative cases, runtime dependencies and
+infrastructure failures. File and directory inputs use canonical relative paths.
+Capacity, deadline, unavailable material or implementation, and invalid output
+remain infrastructure outcomes rather than contributor work findings. Model
+evaluation requires an explicit model-service dependency; task or guide context
+requires an explicit material dependency. The ordinary image runner remains
+offline and receives only its trusted request contract, so a desired dependency
+must not be presented as available runtime capability.
+
+The trusted compiler resolves each supported project check to an immutable
+Operator-registered image, validates bounded typed configuration against that
+entry's schema, and locks its exact digest and order. A missing implementation
+produces a staged capability gap and engineering suggestion, rather than a human
+fallback or a fabricated binding. Capability gaps permit a warning-ready draft
+for manager review but continue to block activation. Only an actual guide blocker
+or blocking finding stops draft policy projection. A presence check cannot stand
+in for a substantive evaluator. The removed primitive catalogue is not an
 alternate compiler or runtime path.
 
 Project-specific file/count/size/evidence requirements belong to these approved
@@ -454,14 +484,23 @@ effective intake policy and compiled pre-submit policy; a separate operation
 then deterministically projects the same result's post-submit component. It
 does not resume finalized setup or invoke `PostSubmitCheckerPolicyDerivationAgent`.
 
-Bindings select exact registered image/configuration/schema identities and trace to the guide's requirement inventory.
-All pre/post capability gaps block under the current compilation schema.
-Ordinary warnings may be acknowledged; unsupported automation cannot be silently
-reclassified as human review. Explicit approved `human_review` requirements
-remain valid and do not claim automated semantic coverage.
+Bindings select exact registered image/configuration/schema identities and trace
+to the guide's requirement inventory. Both PRE and POST bindings carry only
+configuration accepted by the selected immutable registry schema. Capability
+gaps remain visible in a warning-ready draft and block activation until a later
+corrected compilation selects the registered implementation. Ordinary warnings
+may be acknowledged; unsupported automation cannot be silently reclassified as
+human review. Explicit approved `human_review` requirements remain valid and do
+not claim automated semantic coverage.
 They require `human_review_required=true`: false guide activation and final
 acceptance both reject any applicable approved `human_review` disposition.
 Passing every executable check cannot discharge that separate requirement.
+
+Retained compilation results keep their exact hashes and public representation.
+The new `classification_rationale` and `check_specification` members are omitted
+when absent from historical results; reads, approvals and recovery never invent
+them. Newly compiled results must satisfy the complete typed contract before
+acceptance, so compatibility does not weaken new-generation quality.
 
 The unified output is a constrained proposal. Workstream's trusted compiler owns the
 canonical `PostSubmitCheckerPolicy.policy_body`, hash and ordered external
@@ -811,10 +850,10 @@ The checker interface is async-first from the start so storage reads, external
 checks, and later agent evaluation do not require a contract rewrite.
 
 Background checker execution uses Celery. FastAPI background tasks are not the
-Workstream product-job boundary. Request-bound pre-submit evaluation can remain
-fast and deterministic because it runs before submission creation, but any
-long-running setup or post-submit checker work must go through the durable
-worker boundary.
+Workstream product-job boundary. PRE checks may also use durable execution and
+polling, but their complete work must remain reliably bounded to 60 seconds.
+Longer-running setup or post-submit checker work must go through the durable
+worker boundary. Determinism and automation do not select the stage.
 
 ### Saved guide proposal to post-submit policy
 

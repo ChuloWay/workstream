@@ -25,6 +25,76 @@ def proposal():
         "capability_id": "results.present",
         "capability_version": "v1",
         "stage": "pre_submit",
+        "parameters": [{"name": "required", "value": True}],
+    }
+    pre_specification = {
+        "evaluation_method": "static_inspection",
+        "execution_mode": "bounded_pre_submit",
+        "maximum_duration_seconds": 45,
+        "stage_rationale": "This bounded package inspection can finish before submission.",
+        "inputs": [
+            {
+                "input_id": "submission_package",
+                "kind": "package",
+                "purpose": "Inspect the submitted package.",
+            },
+            {
+                "input_id": "results_file",
+                "kind": "relative_file",
+                "relative_path": "reports/results.json",
+                "purpose": "Read the required results.",
+            },
+        ],
+        "check_steps": ["Open the results file and validate its required fields."],
+        "pass_conditions": ["The required results are present and valid."],
+        "failure_findings": [
+            {
+                "code": "results.missing",
+                "level": "error",
+                "condition": "The results file is absent.",
+                "message": "Add the required results file.",
+            },
+            {
+                "code": "results.extra",
+                "level": "warning",
+                "condition": "The results include an optional extra field.",
+                "message": "Review the optional field.",
+            },
+        ],
+        "positive_tests": ["A package with a complete results file passes."],
+        "negative_tests": [
+            {
+                "name": "missing_results",
+                "scenario": "The package omits the results file.",
+                "expected_verdict": "failed",
+                "expected_finding_codes": ["results.missing"],
+            },
+            {
+                "name": "extra_results_field",
+                "scenario": "The results file includes an optional extra field.",
+                "expected_verdict": "passed",
+                "expected_finding_codes": ["results.extra"],
+            },
+        ],
+        "runtime_dependencies": [
+            {
+                "dependency_id": "results_parser",
+                "kind": "checker_tool",
+                "provisioning": "checker_implementation",
+                "purpose": "Parse and validate the results file.",
+                "unavailable_code": "implementation_unavailable",
+            }
+        ],
+        "infrastructure_failures": [
+            {
+                "code": "material_unavailable",
+                "condition": "The submitted package cannot be read.",
+            },
+            {
+                "code": "implementation_unavailable",
+                "condition": "The required checker implementation is unavailable.",
+            },
+        ],
     }
     return {
         "target": {
@@ -92,18 +162,53 @@ def proposal():
                     "requirement_id": "results",
                     "statement": "Provide evaluation results.",
                     "disposition": "supported_pre_submit",
+                    "classification_rationale": "A bounded static check can evaluate this before submission.",
+                    "check_specification": pre_specification,
                     "platform_coverage": {
                         "capability_id": "submission.zip",
                         "capability_version": "v1",
                         "stage": "pre_submit",
                     },
                     "evidence_refs": [location],
-                }
+                },
+                {
+                    "requirement_id": "quality",
+                    "statement": "Evaluate result quality after submission.",
+                    "disposition": "supported_post_submit",
+                    "classification_rationale": "Execution may take longer than the intake budget.",
+                    "check_specification": pre_specification
+                    | {
+                        "evaluation_method": "isolated_execution",
+                        "execution_mode": "background",
+                        "maximum_duration_seconds": 300,
+                        "stage_rationale": "Run the evaluator in the background.",
+                        "runtime_dependencies": [
+                            {
+                                "dependency_id": "execution_runner",
+                                "kind": "isolated_execution",
+                                "provisioning": "current_runner",
+                                "purpose": "Run the project evaluator offline.",
+                                "unavailable_code": "implementation_unavailable",
+                            }
+                        ],
+                    },
+                    "platform_coverage": None,
+                    "evidence_refs": [location],
+                },
+                {
+                    "requirement_id": "review_decision",
+                    "statement": "A reviewer makes the final decision.",
+                    "disposition": "human_review",
+                    "classification_rationale": "The guide explicitly assigns this judgment to a reviewer.",
+                    "platform_coverage": None,
+                    "evidence_refs": [location],
+                },
             ],
             "pre_submit_bindings": [binding],
             "post_submit_bindings": [
                 binding
                 | {
+                    "requirement_id": "quality",
                     "stage": "post_submit",
                     "parameters": [
                         {"name": "threshold", "value": 0.9},
@@ -182,15 +287,31 @@ def test_proposal_complete_exact_selector_and_terminal_safe_observation(cli):
         response["body"] = json.dumps(value, ensure_ascii=False).encode()
         text = invoke(cli, origin, output="text")
         assert text.returncode == 0 and text.stderr == "", text.stderr
-        assert text.stdout.startswith("Guide proposal (not approval or activation): ")
-        assert (
-            text.stdout.count("\n") == 1
-            and "\x1b" not in text.stdout
-            and "\u202e" not in text.stdout
-        )
+        assert text.stdout.startswith("Guide proposal (inspection only)\nStatus: ")
+        assert "\x1b" not in text.stdout and "\u202e" not in text.stdout
+        assert "\\u000A\\u001B[32m\\u202E" in text.stdout
         assert "9223372036854775808" in text.stdout
-        for name in value:
-            assert f'"{name}"' in text.stdout
+        for section in (
+            "Findings (1)",
+            "Submission artifact policy",
+            "PRE requirements (1)",
+            "POST requirements (1)",
+            "Non-checker requirements (1)",
+            "Check steps",
+            "Pass conditions",
+            "Failure findings",
+            "Positive tests",
+            "Negative tests",
+            "Runtime dependencies",
+            "Infrastructure failures",
+            "Capability suggestions (1)",
+            "Setup notes (1)",
+        ):
+            assert section in text.stdout
+        assert "document 1" in text.stdout
+        assert "results_parser" in text.stdout
+        assert "required=true" in text.stdout
+        assert '"target":' not in text.stdout
         assert (
             len(requests) == 13
             and response["commands"] == []
@@ -276,6 +397,57 @@ def test_proposal_missing_null_unknown_and_private_nested_fields(cli):
         (("result", "findings", 0), ("severity", "code", "message")),
         (("result", "requirements", 0), ("requirement_id", "statement", "disposition")),
         (
+            ("result", "requirements", 0, "check_specification"),
+            (
+                "evaluation_method",
+                "execution_mode",
+                "maximum_duration_seconds",
+                "stage_rationale",
+                "inputs",
+                "check_steps",
+                "pass_conditions",
+                "failure_findings",
+                "positive_tests",
+                "negative_tests",
+                "runtime_dependencies",
+                "infrastructure_failures",
+            ),
+        ),
+        (
+            ("result", "requirements", 0, "check_specification", "inputs", 1),
+            ("input_id", "kind", "purpose", "relative_path"),
+        ),
+        (
+            ("result", "requirements", 0, "check_specification", "failure_findings", 0),
+            ("code", "level", "condition", "message"),
+        ),
+        (
+            ("result", "requirements", 0, "check_specification", "negative_tests", 0),
+            ("name", "scenario", "expected_verdict", "expected_finding_codes"),
+        ),
+        (
+            (
+                "result",
+                "requirements",
+                0,
+                "check_specification",
+                "runtime_dependencies",
+                0,
+            ),
+            ("dependency_id", "kind", "provisioning", "purpose", "unavailable_code"),
+        ),
+        (
+            (
+                "result",
+                "requirements",
+                0,
+                "check_specification",
+                "infrastructure_failures",
+                0,
+            ),
+            ("code", "condition"),
+        ),
+        (
             ("result", "requirements", 0, "platform_coverage"),
             ("capability_id", "capability_version", "stage"),
         ),
@@ -283,6 +455,7 @@ def test_proposal_missing_null_unknown_and_private_nested_fields(cli):
             ("result", "pre_submit_bindings", 0),
             ("requirement_id", "capability_id", "capability_version", "stage"),
         ),
+        (("result", "pre_submit_bindings", 0, "parameters", 0), ("name", "value")),
         (("result", "post_submit_bindings", 0, "parameters", 0), ("name", "value")),
         (
             ("result", "capability_suggestions", 0),
@@ -313,6 +486,11 @@ def test_proposal_missing_null_unknown_and_private_nested_fields(cli):
         for field in ("artifact_policy_status",):
             body = deepcopy(value)
             del body[field]
+            response["body"] = json.dumps(body).encode()
+            assert_failure(invoke(cli, origin), "invalid_api_response")
+        for field in ("classification_rationale", "check_specification"):
+            body = deepcopy(value)
+            body["result"]["requirements"][0][field] = None
             response["body"] = json.dumps(body).encode()
             assert_failure(invoke(cli, origin), "invalid_api_response")
         for field in (
@@ -356,6 +534,93 @@ def test_proposal_rejects_null_array_members_and_parameter_objects(cli):
             value["result"]["post_submit_bindings"][0]["parameters"][0]["value"] = (
                 invalid
             )
+            response["body"] = json.dumps(value).encode()
+            assert_failure(invoke(cli, origin), "invalid_api_response")
+
+
+def test_proposal_specification_stage_semantics_and_historical_omission(cli):
+    with http_fixture() as (origin, response, _):
+        historical = proposal()
+        for field in ("classification_rationale", "check_specification"):
+            del historical["result"]["requirements"][0][field]
+        response["body"] = json.dumps(historical).encode()
+        result = invoke(cli, origin)
+        assert result.returncode == 0 and json.loads(result.stdout) == historical
+
+        warning_only = proposal()
+        spec = warning_only["result"]["requirements"][0]["check_specification"]
+        spec["failure_findings"] = [spec["failure_findings"][1]]
+        spec["negative_tests"] = [spec["negative_tests"][1]]
+        response["body"] = json.dumps(warning_only).encode()
+        assert invoke(cli, origin).returncode == 0
+
+        invalid_values = []
+
+        value = proposal()
+        del value["result"]["requirements"][0]["classification_rationale"]
+        invalid_values.append(value)
+
+        value = proposal()
+        del value["result"]["requirements"][0]["check_specification"]
+        invalid_values.append(value)
+
+        value = proposal()
+        value["result"]["requirements"][0]["evidence_refs"] = []
+        invalid_values.append(value)
+
+        value = proposal()
+        value["result"]["requirements"][0]["check_specification"][
+            "maximum_duration_seconds"
+        ] = 61
+        invalid_values.append(value)
+
+        value = proposal()
+        value["result"]["requirements"][0]["check_specification"]["execution_mode"] = (
+            "background"
+        )
+        invalid_values.append(value)
+
+        value = proposal()
+        value["result"]["requirements"][1]["check_specification"][
+            "maximum_duration_seconds"
+        ] = 3601
+        invalid_values.append(value)
+
+        value = proposal()
+        value["result"]["requirements"][0]["check_specification"]["negative_tests"][0][
+            "expected_verdict"
+        ] = "passed"
+        invalid_values.append(value)
+
+        value = proposal()
+        value["result"]["requirements"][0]["check_specification"]["negative_tests"][1][
+            "expected_verdict"
+        ] = "failed"
+        invalid_values.append(value)
+
+        value = proposal()
+        value["result"]["requirements"][0]["check_specification"]["inputs"][1][
+            "relative_path"
+        ] = "../results.json"
+        invalid_values.append(value)
+
+        value = proposal()
+        value["result"]["requirements"][0]["check_specification"][
+            "runtime_dependencies"
+        ][0]["unavailable_code"] = "capacity_exceeded"
+        invalid_values.append(value)
+
+        value = proposal()
+        value["result"]["requirements"][2]["check_specification"] = deepcopy(
+            value["result"]["requirements"][0]["check_specification"]
+        )
+        invalid_values.append(value)
+
+        value = proposal()
+        value["result"]["requirements"][0]["check_specification"]["check_steps"] = []
+        invalid_values.append(value)
+
+        for value in invalid_values:
             response["body"] = json.dumps(value).encode()
             assert_failure(invoke(cli, origin), "invalid_api_response")
 
