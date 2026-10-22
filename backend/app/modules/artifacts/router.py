@@ -420,7 +420,7 @@ async def retry_artifact_verification(
         )
     except ArtifactOperatorAuthorityDenied as exc:
         await _persist_exact_denial(session, authority, exc)
-    except ArtifactOperatorAuthorityUnavailable as exc:
+    except (ArtifactOperatorAuthorityUnavailable, SQLAlchemyError) as exc:
         await session.rollback()
         raise HTTPException(
             status_code=503, detail="Artifact authority evidence unavailable"

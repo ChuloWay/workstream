@@ -183,14 +183,14 @@
     {
       "capability": "oversized_authorization_structure",
       "content_sha256": "c9fe520f3eb45c6f3d8a57eff6f81e7e771c9651021e94e315f1a338ddb18d86",
-      "end_line": 516,
+      "end_line": 519,
       "hard_limit": 120,
       "kind": "test_function",
       "observed_lines": 328,
       "path": "backend/tests/test_artifact_operator_api.py",
       "qualified_symbol": "test_real_http_operator_path_returns_redacted_lineage_and_recovery",
       "removal_chunk": "WS-AUTH-003-CLOSE",
-      "start_line": 189
+      "start_line": 192
     },
     {
       "capability": "oversized_authorization_structure",

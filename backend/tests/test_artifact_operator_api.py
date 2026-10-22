@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+from unittest.mock import AsyncMock
 from uuid import UUID, uuid4
 from app.core.identifiers import new_record_id
 
 from fastapi.routing import APIRoute
 from httpx import ASGITransport, AsyncClient
 import pytest
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.db.session import get_db_session
@@ -26,6 +28,7 @@ from app.modules.artifacts.router import (
     get_artifact_authorization_context,
     get_artifact_operator_authority,
     get_artifact_recovery_authority,
+    get_artifact_recovery_port,
     router,
 )
 from app.modules.artifacts.schemas import (
@@ -514,3 +517,28 @@ async def test_real_http_operator_path_returns_redacted_lineage_and_recovery(
         if bootstrap is not None:
             bootstrap.close()
         await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_retry_database_failure_is_bounded_unavailability() -> None:
+    class _FailingRecovery:
+        async def retry_verification(self, _request):
+            raise SQLAlchemyError("injected persistence failure")
+
+    app = create_app(Settings())
+    session = AsyncMock()
+    app.dependency_overrides[get_db_session] = lambda: session
+    app.dependency_overrides[get_artifact_authorization_context] = _context
+    app.dependency_overrides[get_artifact_recovery_authority] = _AllowRecoveryAuthority
+    app.dependency_overrides[get_artifact_recovery_port] = _FailingRecovery
+    async with AsyncClient(
+        transport=ASGITransport(app=app, raise_app_exceptions=False),
+        base_url="http://workstream.test",
+    ) as client:
+        response = await client.post(
+            f"/api/v1/operator/artifacts/verification-jobs/{uuid4()}/retry",
+            json=_retry_payload(str(uuid4()), str(uuid4()), None, "retry", "fault-probe", 0),
+        )
+    assert response.status_code == 503, response.text
+    assert "injected persistence failure" not in response.text
+    session.rollback.assert_awaited_once()
