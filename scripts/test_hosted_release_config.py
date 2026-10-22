@@ -351,6 +351,12 @@ class HostedReleaseConfigTests(unittest.TestCase):
             if mount["target"] == str(preflight.SOCKET_ROOT):
                 mount["source"] = "/run/workstream-checker"
         cases.append(("boot-volatile checker custody", volatile_owner))
+        for role in ("api", "worker"):
+            writable_owner = copy.deepcopy(rendered)
+            for mount in writable_owner["services"][role]["volumes"]:
+                if mount["target"] == str(preflight.SOCKET_ROOT):
+                    mount["read_only"] = False
+            cases.append((f"{role} writable checker custody", writable_owner))
         root_controller = copy.deepcopy(rendered)
         root_controller["services"]["checker-service"]["user"] = "0:0"
         cases.append(("root checker controller", root_controller))

@@ -481,8 +481,11 @@ def validate_compose(rendered: dict[str, Any]) -> None:
             mount = mounts.get(str(path))
             if mount is None or mount.get("source") != str(path):
                 raise PreflightError(f"{name} does not preserve exact host path {path}")
-            if mount.get("read_only") is True:
-                raise PreflightError(f"{name} requires a writable private path {path}")
+            if path == SOCKET_ROOT:
+                if mount.get("read_only") is not True:
+                    raise PreflightError(f"{name} checker socket custody must be read-only")
+            elif mount.get("read_only") is True:
+                raise PreflightError(f"{name} requires a writable scratch path {path}")
     environments: dict[str, dict[str, Any]] = {}
     for role in ROLE_SECRET_FILE_KEYS:
         environment = services[role].get("environment")

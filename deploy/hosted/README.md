@@ -84,8 +84,10 @@ stat -c '%g' /var/run/docker.sock
 
 The checker runtime directory must be on durable host storage, not `/run`,
 tmpfs or ephemeral container storage. Its private `.workstream-checker-owner`
-file identifies containers recoverable after a service or host restart. Preserve
-it with the directory; never clone it into another live deployment. Before
+file identifies containers recoverable after a service or host restart. Only the
+checker service has a writable mount; API and worker socket mounts are read-only
+so clients can connect but cannot replace recovery custody. Preserve the file
+with the directory; never clone it into another live deployment. Before
 changing or deleting this directory, drain checker work and verify cleanup of
 its exact owned containers. If custody was lost, reconcile independently verified
 container IDs; a new owner will not adopt old containers. See

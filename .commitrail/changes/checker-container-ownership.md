@@ -28,6 +28,10 @@ Replace the boot-volatile socket root with `/var/lib/workstream/checker-runtime`
 consistently; no alternate configuration or compatibility path. Verify rendered
 mount/config parity and rejection of the volatile source. Local disposal must
 settle direct-created checker containers before deleting their custody volume.
+Include `docker-compose.agent-loop.yml` to make local backend socket mounts
+read-only, matching hosted API/worker mounts. Only the checker and explicit local
+volume initializer may mutate socket-directory custody; scratch remains writable
+for backend operations. Preflight must reject writable client socket mounts.
 No checker protocol/result, policy, admission, AUTH, ART, database, dependency,
 CI selection, project-image or sandbox privilege changes. No unrelated cleanup.
 

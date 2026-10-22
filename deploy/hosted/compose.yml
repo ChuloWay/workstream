@@ -141,6 +141,7 @@ services:
       - type: bind
         source: /var/lib/workstream/checker-runtime
         target: /var/lib/workstream/checker-runtime
+        read_only: true
     depends_on:
       checker-service:
         condition: service_healthy
@@ -196,6 +197,7 @@ services:
       - type: bind
         source: /var/lib/workstream/checker-runtime
         target: /var/lib/workstream/checker-runtime
+        read_only: true
     depends_on:
       api:
         condition: service_healthy
