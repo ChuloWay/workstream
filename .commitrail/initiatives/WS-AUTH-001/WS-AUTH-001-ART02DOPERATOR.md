@@ -23,6 +23,8 @@ The human explicitly approved this backend prerequisite to client-only issue #61
 - `.ci/auth-boundaries/IMPORT_LEDGER.md` only to remove the superseded `artifacts.schemas` → private AUTH runtime import; frozen edge growth remains prohibited.
 - `.ci/auth-boundaries/TEST_STRUCTURE_DEBT.json` only to record the actual reduction of pre-existing oversized AUTH kernel and ART route-test entries; no new structural debt, policy change or exception is allowed.
 - `backend/scripts/test_lane_catalogue.py` and `backend/tests/test_ci_lane_catalogue.py` only to assign the new signed PostgreSQL module to the existing shared-foundations CI family and refresh its exact inventory fingerprint; do not alter the lane runner, workflow, timeout or gate.
+- `.ci/behavior-ownership/partition.v1.json`, `backend/scripts/behavior_ownership.py`, and `backend/tests/test_behavior_ownership.py` only to assign the three new AUTH/ART modules to their existing exact ownership groups and add their names to the trusted additive-transition allowlist; preserve inventory, digest, and unapproved-addition rejection.
+- `backend/tests/authorization/setup_finalization/test_catalogue.py` and `backend/tests/authorization/test_authorization_custody_documentation.py` only to reconcile independent expected active actions and the historical-versus-current ART custody assertion with this exact activation; retain their strict comparisons and independent retry assertion.
 - `docs/spec_authorization_service.md`, `docs/engineering/authorization_activation_custody.md`, `docs/operations_authorization_service.md`, `docs/operations_artifact_storage.md`, `docs/roadmap_status.md`, the current WS-AUTH overview/record, and the #611 dependency lines of the current WS-CLI overview only for affected intended-merge claims.
 
 ### Not allowed
@@ -65,6 +67,7 @@ Rejected alternatives: composing `operations.status.read` for admission/readines
 - [ ] Retry remains independently gated: only exhausted eligible source work with matching project/task/submission/CAS, reason and key can create one recovery attempt, retry job and initiation audit. A read context never grants retry and vice versa. Current actor/link/grant revocation, stale CAS, changed replay and post-decision failure roll back success effects; exact replay returns the original IDs only after fresh authority.
 - [ ] Signed-token PostgreSQL public-API tests use no override of database session, actor/context or either authority dependency for positive and negative calls. They inspect persisted decision/effect evidence in an independent session. Existing Local/MinIO and ART response tests remain intact.
 - [ ] Current AUTH/ART docs and roadmap distinguish executable backend routes from later CLI and hosted AWS proof; no deployment or live S3 claim is inferred.
+- [ ] Hosted ownership preflight and shared-foundations partitions pass with the three new modules assigned exactly, all eight active actions independently enumerated, and current custody wording checked without weakening either invariant.
 
 ## Risk and review routing
 
