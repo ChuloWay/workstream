@@ -249,7 +249,7 @@ supported false-guide activation are implemented. A known pre-effect non-live RE
 release proof remain later v0.1 work.
 
 The [independent MCP package](../mcp_server/README.md) implements twenty-five
-self-service, administrative access, actor/identity-lifecycle, project-shell and
+self-service, administrative access, actor/identity-lifecycle, project-shell,
 project-participation and guide-metadata tools through WS-MCP-002-08. The
 [Go CLI](../cli/README.md) provides caller-profile and exact-project authorization
 reads plus human self-profile editing, exact-project inspection and manager
