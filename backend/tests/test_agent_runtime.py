@@ -699,6 +699,7 @@ def test_default_instructions_advertise_contextual_output_constraints():
         "evaluation_method isolated_execution requires an entry",
         "model evaluation always belongs to POST background work",
         "include its unavailable_code once in infrastructure_failures",
+        "must appear in both inputs and runtime_dependencies, never only one",
         "Reading short prose does not make a judgment static",
         "Every mandatory pass condition needs an error finding",
         "current_runner means isolation of the checker image itself",

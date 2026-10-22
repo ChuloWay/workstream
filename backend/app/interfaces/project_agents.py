@@ -484,7 +484,11 @@ class CheckSpecification(BaseModel):
     inputs: tuple[CheckInput, ...] = Field(
         min_length=1,
         max_length=20,
-        description="All materials needed to observe every pass condition and negative case.",
+        description=(
+            "All materials needed to observe every pass condition and negative case. "
+            "Every task_context, guide_context or prepared_material runtime dependency "
+            "requires an input of that same kind, and vice versa."
+        ),
     )
     check_steps: tuple[ModelProse, ...] = Field(
         min_length=1,
@@ -511,7 +515,9 @@ class CheckSpecification(BaseModel):
         max_length=10,
         description=(
             "Declare the evaluation method's required dependency and any task_context, "
-            "guide_context or prepared_material input dependency. Each unavailable_code must appear in "
+            "guide_context or prepared_material input dependency. Each of those three kinds "
+            "must occur in both inputs and runtime_dependencies, never just one. "
+            "Each unavailable_code must appear in "
             "infrastructure_failures."
         ),
     )

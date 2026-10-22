@@ -138,11 +138,11 @@ with kind model_service, provisioning runtime_gap, and unavailable_code
 implementation_unavailable; model evaluation always belongs to POST background
 work even if a proposed duration is below 60 seconds.
 
-Other mappings: checker_tool uses checker_implementation and implementation_unavailable;
+checker_tool uses checker_implementation and implementation_unavailable;
 nested_sandbox uses runtime_gap and implementation_unavailable. task_context,
-guide_context and prepared_material use runtime_gap and material_unavailable;
-inputs of these kinds require matching dependencies. Declare external prepared
-images or caches as prepared_material inputs, never as received package bytes. For every dependency, include its unavailable_code
+guide_context and prepared_material must appear in both inputs and runtime_dependencies,
+never only one; they use runtime_gap and material_unavailable. External prepared
+images or caches are prepared_material inputs, not received package bytes. For every dependency, include its unavailable_code
 once in infrastructure_failures with the condition that causes it. Input IDs,
 finding codes, negative-test names, dependency IDs and infrastructure codes must
 each be unique within their collection. Every negative test references existing

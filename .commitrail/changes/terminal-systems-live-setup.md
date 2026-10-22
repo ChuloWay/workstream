@@ -456,3 +456,13 @@ no additional grant, workspace or model call is introduced. Regressions cover
 zero, partial and complete review access after the draft opened all originals,
 and distinguish local size rejection from unresolved provider failures.
 All 33 provider resources from the previous live attempts are confirmed deleted.
+
+V13 used the exact reviewed c39d5fa instruction hash and unchanged original bytes.
+It ended as terminal `schema_invalid`: bounded parser diagnostics identified a
+material dependency without its required matching input. All 36 allocations
+through this attempt are deleted. No result was accepted or semantic success
+claimed. The contract already rejects this mismatch; instructions and schema
+field descriptions now state the pairing in both directions instead of only
+requiring a dependency for an input. The existing three-kind pairing regressions
+remain authoritative; a new instruction assertion exposes the previously omitted
+reverse rule. Fresh inference, not that wording assertion, must qualify the repair.
