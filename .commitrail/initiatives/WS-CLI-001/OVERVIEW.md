@@ -388,7 +388,10 @@ CLIs. Keep the package independent of backend and MCP runtime dependencies.
    history. No automatic retry/polling or inferred acceptance. Revision-change
    summaries are available through current task context, not historical rows;
    [WS-CLI-001-30](WS-CLI-001-30.md) corrects the remaining text. The separate
-   #552 public setup/worker drill is delivered; full native CLI journey proof remains.
+   #552 public setup/worker drill is delivered; [WS-CLI-001-43](WS-CLI-001-43.md)
+   adds the connected local native CLI manager-authored/unpaid automated-acceptance
+   journey through contribution export, with negative intake and authority checks.
+   Hosted and human-review journey proof remain separate.
    Unfinished human review/revision is not current CLI implementation scope.
 26. **Optional TUI:** Add a focused public queue/evidence view after its API
    workflow is complete. Never require a TUI for agents or scripts.
