@@ -81,16 +81,20 @@ does not maintain the revocation database needed to issue a CRL.
 
 ```sh
 set +x
+set -e
 umask 077
 mkdir -m 0700 workstream-ca
 cd workstream-ca
-exec 9>.signing.lock
-flock -n 9
-mkdir certs crl csr issued newcerts private
-mkdir -m 0700 ../workstream-leaf-staging
-touch index.txt
-printf '1000\n' > serial
-printf '1000\n' > crlnumber
+(
+  set -e
+  exec 9>.signing.lock
+  flock -n 9 || exit 1
+  mkdir certs crl csr issued newcerts private
+  mkdir -m 0700 ../workstream-leaf-staging
+  touch index.txt
+  printf '1000\n' > serial
+  printf '1000\n' > crlnumber
+)
 ```
 
 Create `openssl.cnf` in that directory:
@@ -144,12 +148,17 @@ Create the encrypted CA key and ten-year pilot root. Keep the passphrase outside
 shell history and logs.
 
 ```sh
-openssl genpkey -algorithm RSA -aes-256-cbc \
-  -pkeyopt rsa_keygen_bits:4096 -out private/ca.key.pem
-chmod 0400 private/ca.key.pem
-openssl req -config openssl.cnf -new -x509 -sha256 -days 3650 \
-  -key private/ca.key.pem -out certs/ca.cert.pem
-openssl x509 -in certs/ca.cert.pem -noout -subject -issuer -dates -text
+(
+  set -e
+  exec 9>.signing.lock
+  flock -n 9 || exit 1
+  openssl genpkey -algorithm RSA -aes-256-cbc \
+    -pkeyopt rsa_keygen_bits:4096 -out private/ca.key.pem
+  chmod 0400 private/ca.key.pem
+  openssl req -config openssl.cnf -new -x509 -sha256 -days 3650 \
+    -key private/ca.key.pem -out certs/ca.cert.pem
+  openssl x509 -in certs/ca.cert.pem -noout -subject -issuer -dates -text
+)
 ```
 
 For each of `runtime`, `readiness`, and `negative`, set `ROLE_BASENAME` to the
@@ -157,23 +166,33 @@ exact basename of its final IAM role ARN and issue a distinct key and leaf. Run
 the commands three times; never reuse a leaf key.
 
 ```sh
-IDENTITY=runtime
-ROLE_BASENAME=workstream-runtime
-openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:3072 \
-  -out "../workstream-leaf-staging/${IDENTITY}.key.pem"
-openssl req -new -sha256 -key "../workstream-leaf-staging/${IDENTITY}.key.pem" \
-  -subj "/CN=${ROLE_BASENAME}" -out "csr/${IDENTITY}.csr.pem"
-openssl ca -batch -config openssl.cnf -extensions leaf_cert -days 30 \
-  -in "csr/${IDENTITY}.csr.pem" -out "issued/${IDENTITY}.cert.pem"
-openssl verify -CAfile certs/ca.cert.pem "issued/${IDENTITY}.cert.pem"
-openssl x509 -in "issued/${IDENTITY}.cert.pem" -noout -subject -issuer -serial -dates
+(
+  set -e
+  exec 9>.signing.lock
+  flock -n 9 || exit 1
+  IDENTITY=runtime
+  ROLE_BASENAME=workstream-runtime
+  openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:3072 \
+    -out "../workstream-leaf-staging/${IDENTITY}.key.pem"
+  openssl req -new -sha256 -key "../workstream-leaf-staging/${IDENTITY}.key.pem" \
+    -subj "/CN=${ROLE_BASENAME}" -out "csr/${IDENTITY}.csr.pem"
+  openssl ca -batch -config openssl.cnf -extensions leaf_cert -days 30 \
+    -in "csr/${IDENTITY}.csr.pem" -out "issued/${IDENTITY}.cert.pem"
+  openssl verify -CAfile certs/ca.cert.pem "issued/${IDENTITY}.cert.pem"
+  openssl x509 -in "issued/${IDENTITY}.cert.pem" -noout -subject -issuer -serial -dates
+)
 ```
 
-Hold the same `.signing.lock` for every signing, revocation, CRL and backup
-operation. Before releasing it, take a consistent encrypted backup of the CA
-key, configuration, index, serial, `crlnumber`, certificates and CRL state; copy
-that backup off the server and test restoration into an isolated private
-directory. Exclude `workstream-leaf-staging` from the CA backup. Leaf keys are
+Use the same `.signing.lock` for every signing, revocation, CRL and backup
+operation. Each scoped subshell above owns descriptor 9: a failed lock exits
+before mutation, and leaving the subshell releases it. Use that same fail-closed
+scope when backing up. After each CA state change, take a consistent encrypted
+backup of the complete CA directory, including `.attr`/`.old` state, excluding
+only the lock. Use an authenticated archive format (for example GPG symmetric
+encryption with integrity protection and `--no-symkey-cache`), with a separate
+interactive backup passphrase. Copy the backup off-server and test restoration:
+finish authenticated decryption successfully before extracting into an isolated
+private directory, then compare every restored state file. Exclude `workstream-leaf-staging` from the CA backup. Leaf keys are
 unencrypted for unattended helper use and rely on private ownership and mounts.
 After the exact leaf pairs are installed and verified, remove their staging keys.
 
@@ -297,7 +316,7 @@ READINESS_POLICY_NAME=${READINESS_POLICY_ARN##*/}
 export AWS_REGION BUCKET RUNTIME_POLICY_ARN READINESS_POLICY_ARN
 ```
 
-Create the untagged certificate-bundle trust anchor from the transferred public
+Create the untagged certificate-bundle trust anchor from the copied public
 CA and retain its create response. Its read response is collected after the
 exact-resource permissions are installed:
 
@@ -480,7 +499,7 @@ OpenAI, checker, and timeout values described in
 
 ## Secure host installation and proof
 
-Create the private host directory and install the transferred leaf material as
+Create the private host directory and install the staged leaf material as
 regular runtime-owned files. Never copy the CA private key or OpenSSL database.
 
 ```sh
@@ -605,11 +624,14 @@ serial, then issue and verify a new CRL. Serialize signing and revocation so
 only one administrator writes the CA database at a time, using the same lock:
 
 ```sh
-exec 9>.signing.lock
-flock -n 9
-openssl ca -config openssl.cnf -revoke issued/runtime.cert.pem
-openssl ca -config openssl.cnf -gencrl -out crl/workstream-artifacts.crl.pem
-openssl crl -in crl/workstream-artifacts.crl.pem -noout -issuer -lastupdate -nextupdate
+(
+  set -e
+  exec 9>.signing.lock
+  flock -n 9 || exit 1
+  openssl ca -config openssl.cnf -revoke issued/runtime.cert.pem
+  openssl ca -config openssl.cnf -gencrl -out crl/workstream-artifacts.crl.pem
+  openssl crl -in crl/workstream-artifacts.crl.pem -noout -issuer -lastupdate -nextupdate
+)
 ```
 
 Import and enable the first PEM CRL with `aws rolesanywhere import-crl`; update

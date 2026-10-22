@@ -161,7 +161,7 @@ product lifecycle or alternative storage subsystem is introduced.
 | S3 consumer composition | real helper subprocess, actual SDK signing and loopback HTTP with isolated PostgreSQL | exact sealed upload/readback, refreshed credentials, scoped guide access and scratch cleanup passed | loopback transport does not prove AWS policy enforcement |
 | Hosted configuration | generator/normalizer and release configuration/image-contract tests | 24 affected release configuration tests passed after exact-file-custody repairs; earlier 14 image-contract tests and candidate release image build passed | repaired-head image build and real deployment remain separate |
 | Owner boundaries | architecture and authorization boundary tests | 127 passed locally | no new storage owner or public route |
-| Existing public guide integration | isolated PostgreSQL/MinIO batch | timed out after 900 seconds; cleanup confirmed; not credited as a pass | complete hosted suite required |
+| Existing public guide integration | isolated PostgreSQL/MinIO batch | earlier local run timed out after 900 seconds; cleanup confirmed; not credited as a pass | full regression execution subsequently passed in the hosted row below |
 | Complete regression execution | hosted aggregate evidence for candidate `f1e6750fd` | 10,351 unique tests completed, zero skipped/deselected; all 16 lanes record cleanup; tested merge tree equals candidate tree | subsequent changes affect only CA operating instructions; live AWS is separate |
 | Real pilot | provision three identities, run existing proof modes, then public ZIP contribution drill | provisioning identity and five live bucket configuration reads verified | CA, application roles/profile and runtime proof remain pending |
 
