@@ -146,6 +146,13 @@ func policyValueReflectsInput(expected, actual any) bool {
 		}
 		return true
 	default:
+		if number, ok := expected.(json.Number); ok {
+			// Reuse the existing precision-aware JSON number identity used by
+			// checker receipts. Python may parse 1e3 and persist it as 1000.
+			wanted, wantedErr := checkerParsedIdentity(number)
+			returned, returnedErr := checkerParsedIdentity(actual)
+			return wantedErr == nil && returnedErr == nil && reflect.DeepEqual(wanted, returned)
+		}
 		return reflect.DeepEqual(expected, actual)
 	}
 }

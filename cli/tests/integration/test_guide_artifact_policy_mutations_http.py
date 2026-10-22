@@ -311,6 +311,42 @@ def test_explicit_null_update_body_is_forwarded(cli, tmp_path):
 
 
 @pytest.mark.parametrize("command", [CREATE, UPDATE])
+def test_numeric_policy_body_normalization_is_valid_receipt(cli, tmp_path, command):
+    create = command == CREATE
+    request = create_input() if create else update_input()
+    request["policy_body"] = create_input()["policy_body"] | {
+        "maximum_file_size_bytes": 1000
+    }
+    raw = (
+        json.dumps(request)
+        .replace('"maximum_file_size_bytes": 1000', '"maximum_file_size_bytes": 1e3')
+        .encode()
+    )
+    assert b'"maximum_file_size_bytes": 1e3' in raw
+    path = write_input(tmp_path, raw.decode())
+    response = manual_response(not create)
+    response["policy_body"]["maximum_file_size_bytes"] = 1000
+    with http_fixture() as (origin, fixture, requests):
+        fixture.update(
+            status=201 if create else 200, body=json.dumps(response).encode()
+        )
+        result = cli(
+            origin,
+            TOKEN,
+            *command,
+            "--input",
+            path,
+            "--idempotency-key",
+            KEY,
+            "-o",
+            "json",
+        )
+        assert result.returncode == 0, result.stderr
+        assert fixture["raw_commands"] == [raw]
+        assert len(requests) == 1
+
+
+@pytest.mark.parametrize("command", [CREATE, UPDATE])
 def test_backend_denial_and_conflict_remain_backend_decisions(cli, tmp_path, command):
     path = write_input(
         tmp_path, json.dumps(create_input() if command == CREATE else update_input())
@@ -348,7 +384,9 @@ def test_backend_denial_and_conflict_remain_backend_decisions(cli, tmp_path, com
             assert_failure(result, code)
             assert TOKEN not in result.stderr
             if command == UPDATE:
-                assert not json.loads(result.stderr)["error"].get("outcome_unknown", False)
+                assert not json.loads(result.stderr)["error"].get(
+                    "outcome_unknown", False
+                )
         assert len(requests) == 2
 
 
