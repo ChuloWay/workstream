@@ -9,7 +9,7 @@ responses.
 
 The routes under `/api/v1/operator/artifacts` require a current persisted
 system-scoped human Operator grant. AUTH makes a fresh exact action/resource
-decision and retains its audit evidence; a token role alone grants nothing.
+decision and retains its audit evidence. JWT role metadata is not authority.
 Reads, including configuration-only readiness, never authorize verification
 retry. Retry has its own action and commits its decisions with the ART recovery
 chain. Missing resources and denied authority share a concealed 404; an
