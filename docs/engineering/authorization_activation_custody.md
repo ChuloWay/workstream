@@ -44,7 +44,7 @@ mappings, and availability must remain identical.
 | AUTH activation chunk | Exact ActionIds and current availability |
 |---|---|
 | `WS-AUTH-001-ART-02D-INTERNAL` | Active: `artifact.verification.execute`, `artifact.pending_work.scan`, `artifact.put_attempt.resolve` |
-| `WS-AUTH-001-ART-02D-OPERATOR` | Planned: `artifact.binding.read`, `artifact.replica.read`, `artifact.receipt.read`, `artifact.verification_job.read`, `artifact.verification_job.retry`, `artifact.recovery_attempt.read`, `artifact.audit.read`, `operations.artifact_storage_admission.read` |
+| `WS-AUTH-001-ART-02D-OPERATOR` | Active: `artifact.binding.read`, `artifact.replica.read`, `artifact.receipt.read`, `artifact.verification_job.read`, `artifact.verification_job.retry`, `artifact.recovery_attempt.read`, `artifact.audit.read`, `operations.artifact_storage_admission.read` |
 | `WS-XINT-002-04B` | Active: `artifact.guide_source.read` |
 | `WS-XINT-002-04A` | Active: `artifact.guide_source.ingest` |
 | `PILOT-02A` | Active: `artifact.task_import_source.declare`, `artifact.task_import_source.upload`, `artifact.task_import_source.read` |
@@ -270,9 +270,15 @@ callback, delivery, dispatcher, or reconciliation authority.
 resolution, and scanner behavior plus ART-02C3 recovery/fencing foundations and
 any ART-02D resource-composer dependency. ART-02D does not own the internal
 behavior. Within `WS-AUTH-001-ART-02D-OPERATOR`,
-`artifact.verification_job.retry` requires its own evaluator, guards, behavior
-tests, and explicit availability assertion; passing the seven read/status cases
+`artifact.verification_job.retry` has its own active evaluator, guards, behavior
+tests and availability assertion; passing the seven read/status cases alone
 does not authorize retry.
+The ART Operator activation uses only current system-scoped human Operator grants
+and canonical ART-owned resource facts. The public GET response and its AUTH
+decision commit together after validation; retry's source/recovery/job/audit
+facts and independent AUTH decisions commit in the ART recovery transaction.
+The eight exact action/permission pairs were already reserved by the existing
+audit constraint, so activation adds no migration or generic permission path.
 
 Service actions use the exact fixed-service identities and closed matrix
 installed unavailable by 02C plus controlled canonical admission. REV does not

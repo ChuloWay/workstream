@@ -7,12 +7,16 @@ responses.
 
 ## Activation boundary
 
-The routes are composed under `/api/v1/operator/artifacts`, but production
-authority remains deny-only while the corresponding Authorization Service
-Operator actions are planned. WS-XINT-002-03 activates only the fixed verifier,
-pending-work scanner, and put resolver through transaction-bound prepared
-authority. It grants no Operator route. Do not add role checks, fallback
-constructors, or artifact-owned grant evaluation.
+The routes under `/api/v1/operator/artifacts` require a current persisted
+system-scoped human Operator grant. AUTH makes a fresh exact action/resource
+decision and retains its audit evidence; a token role alone grants nothing.
+Reads, including configuration-only readiness, never authorize verification
+retry. Retry has its own action and commits its decisions with the ART recovery
+chain. Missing resources and denied authority share a concealed 404; an
+unavailable decision/audit returns 503. These routes do not expose provider
+objects or activate S3. WS-XINT-002-03 separately activates the fixed verifier,
+pending-work scanner and put resolver through transaction-bound prepared
+authority; it grants no Operator route by itself.
 
 AWS S3 is activation-gated. Configuration supplies only non-secret exact
 release, namespace, role/policy, reviewed trust-policy digest and bucket-policy
@@ -178,6 +182,9 @@ HTTP response and audit identifiers.
 `project_id` and reports bounded deployment, project, and optional task usage.
 It never enumerates producer-scope identifiers. It is read-only: it cannot
 release charges, change configuration, or create recovery work.
+`configured_limit_bytes` is `null` when the serving deployment has not
+configured that scope; the persisted `limit_bytes` remains an observed row,
+not permission to admit more bytes or a claim of provider readiness.
 
 Each bounded scope also reports submission-bundle pressure as
 `unbound_ready_count`/`unbound_ready_bytes` and

@@ -4,6 +4,7 @@ from app.modules.authorization.catalogue import GUIDE_PROPOSAL_ACTION_IDS, POST_
 from app.modules.authorization.domain.task_authority import TASK_IMPORT_BATCH_ACTIONS, TaskImportBatchResourceContext
 from app.modules.authorization.catalogue import ActionId
 from app.modules.authorization.domain import adapter_bindings, checker_registry, contribution_policies
+from app.modules.authorization.domain.artifact_operator import ARTIFACT_OPERATOR_ACTIONS
 from app.modules.authorization.runtime import PROJECT_SUBMISSION_POLICY_TARGET_KIND_BY_ACTION
 
 GUIDE_BOUND_PROJECT_MANAGER_ACTIONS = frozenset(
@@ -55,6 +56,7 @@ CONTEXT_DIGEST_ACTIONS = frozenset(
         *POST_POLICY_MUTATION_ACTION_IDS,
         *adapter_bindings.ADAPTER_BINDING_ACTIONS,
         *contribution_policies.CONTRIBUTION_POLICY_ACTIONS,
+        *ARTIFACT_OPERATOR_ACTIONS,
     }
 )
 

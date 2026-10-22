@@ -13,6 +13,12 @@ from app.interfaces.artifact_operations import (
     ArtifactAuditResourceType,
     ArtifactBindingResourceType,
 )
+from app.modules.artifacts.api.operator_authority import (
+    ArtifactOperatorAuthority,
+    ArtifactOperatorAuthorityFacts,
+    ArtifactOperatorAuthorizationEvidence,
+    ArtifactOperatorResourceType,
+)
 from app.modules.artifacts.models import (
     ArtifactAdmissionCharge,
     ArtifactAdmissionScope,
@@ -29,12 +35,6 @@ from app.modules.artifacts.models import (
     SubmissionBundleDurableIntent,
 )
 from app.modules.artifacts.metrics import ArtifactAdmissionMetrics
-from app.modules.artifacts.schemas import (
-    ArtifactOperatorAuthority,
-    ArtifactOperatorAuthorityFacts,
-    ArtifactOperatorAuthorizationEvidence,
-    ArtifactOperatorResourceType,
-)
 from app.modules.checkers.models import CheckerRun
 from app.modules.projects.models import (
     GuideSourceSnapshot,
@@ -99,6 +99,7 @@ class ArtifactOperatorService:
             ArtifactOperatorResourceType.ADMISSION_SCOPE,
             "artifact-storage-readiness",
             (),
+            None,
         )
 
     async def list_bindings(
@@ -120,6 +121,7 @@ class ArtifactOperatorService:
             ArtifactOperatorResourceType.BINDING_SCOPE,
             f"{resource_type}:{resource_id}",
             project,
+            resource_id,
         )
         base = (
             select(ArtifactBinding)
@@ -164,6 +166,7 @@ class ArtifactOperatorService:
             ArtifactOperatorResourceType.CONTENT,
             str(content_id),
             projects,
+            content_id,
         )
         rows = await self._page(
             select(ArtifactReplica).where(ArtifactReplica.content_id == str(content_id)),
@@ -203,6 +206,7 @@ class ArtifactOperatorService:
             ArtifactOperatorResourceType.REPLICA,
             str(replica_id),
             projects,
+            replica_id,
         )
 
         receipt_order = {"put": 0, "put_observation": 1, "verification": 2}
@@ -326,6 +330,7 @@ class ArtifactOperatorService:
             ArtifactOperatorResourceType.VERIFICATION_JOB,
             row.id,
             projects,
+            UUID(row.id),
         )
         receipt = await self._session.scalar(
             select(ArtifactVerificationReceipt).where(
@@ -364,6 +369,7 @@ class ArtifactOperatorService:
             ArtifactOperatorResourceType.RECOVERY_ATTEMPT,
             row.id,
             (UUID(row.project_id),),
+            UUID(row.id),
         )
         source = await self._session.scalar(
             select(ArtifactVerificationJob).where(
@@ -415,6 +421,7 @@ class ArtifactOperatorService:
             ArtifactOperatorResourceType.AUDIT_RESOURCE,
             f"{resource_type}:{resource_id}",
             projects,
+            resource_id,
         )
         rows = await self._page(
             select(AuditEvent).where(
@@ -493,6 +500,7 @@ class ArtifactOperatorService:
             ArtifactOperatorResourceType.ADMISSION_SCOPE,
             f"project:{project_id or '*'}:task:{task_id or '*'}",
             projects,
+            task_id or project_id,
         )
         if cursor:
             cursor_type, separator, cursor_id = cursor.partition(":")
@@ -594,13 +602,14 @@ class ArtifactOperatorService:
         resource_type: ArtifactOperatorResourceType,
         resource_id: str,
         projects: tuple[UUID, ...],
+        record_id: UUID | None,
     ) -> ArtifactOperatorAuthorizationEvidence:
         evidence = await self._authority.authorize(
             authorization_context=context,
-            facts=ArtifactOperatorAuthorityFacts(resource_type, resource_id, projects, action),
+            facts=ArtifactOperatorAuthorityFacts(resource_type, resource_id, projects, action.value, record_id),
         )
         expected = _PERMISSIONS[action].value
-        if evidence.action_id is not action or evidence.permission_id != expected:
+        if evidence.action_id != action.value or evidence.permission_id != expected:
             raise ArtifactOperatorEvidenceError(
                 "artifact Operator authorization evidence is invalid"
             )

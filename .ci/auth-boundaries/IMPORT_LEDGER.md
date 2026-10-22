@@ -54,7 +54,6 @@ backend/app/modules/artifacts/router.py
   app.modules.authorization.runtime
 backend/app/modules/artifacts/schemas.py
   app.modules.authorization.catalogue
-  app.modules.authorization.runtime
 backend/app/modules/artifacts/service.py
   app.modules.authorization.catalogue
   app.modules.authorization.prepared

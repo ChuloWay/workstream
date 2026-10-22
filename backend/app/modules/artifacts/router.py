@@ -1,13 +1,15 @@
-"""Hidden Operator HTTP surfaces for provider-neutral artifact diagnosis."""
+"""Bounded Operator HTTP surfaces for provider-neutral artifact diagnosis."""
 
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Annotated, Generic, Literal, TypeVar
+from typing import Annotated, Awaitable, Generic, Literal, NoReturn, TypeVar
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, ConfigDict, Field
+from pydantic import ValidationError
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db_session
@@ -18,6 +20,16 @@ from app.interfaces.artifact_operations import (
     ArtifactRecoveryRequest,
 )
 from app.modules.artifacts.authorization import get_artifact_authorization_context
+from app.adapters.auth import (
+    artifact_operator_read_authorization,
+    artifact_operator_retry_authorization,
+)
+from app.modules.artifacts.api.operator_authority import (
+    ArtifactOperatorAuthority,
+    ArtifactOperatorAuthorityDenied,
+    ArtifactOperatorAuthorityUnavailable,
+    ArtifactRecoveryAuthority,
+)
 from app.modules.artifacts.operator import (
     ArtifactOperatorEvidenceError,
     ArtifactOperatorInputError,
@@ -28,16 +40,12 @@ from app.modules.artifacts.operator import (
 from app.modules.artifacts.metrics import artifact_admission_metrics
 from app.modules.artifacts.schemas import (
     ArtifactAuthorityDeniedError,
-    ArtifactOperatorAuthority,
-    ArtifactRecoveryAuthority,
     ArtifactRecoveryConflictError,
     ArtifactRecoveryIneligibleError,
     ArtifactRecoveryNotFoundError,
-    DenyArtifactOperatorAuthority,
-    DenyArtifactRecoveryAuthority,
 )
 from app.modules.artifacts.service import ArtifactRecoveryService
-from app.modules.authorization.runtime import AuthorizationContext
+from app.modules.authorization.runtime import AuthorizationContext, HumanAuthorizationContext
 
 __all__ = ("router",)
 
@@ -139,7 +147,7 @@ class ArtifactAdmissionUsageResponse(StrictOperatorResponse):
     counted_bytes: int
     limit_bytes: int
     remaining_bytes: int
-    configured_limit_bytes: int
+    configured_limit_bytes: int | None
     unbound_ready_count: int
     unbound_ready_bytes: int
     stale_count: int
@@ -182,14 +190,20 @@ class ArtifactReadinessResponse(StrictOperatorResponse):
     prerequisites: dict[str, bool]
 
 
-def get_artifact_operator_authority() -> ArtifactOperatorAuthority:
-    """Keep every Operator read unavailable until AUTH activation."""
-    return DenyArtifactOperatorAuthority()
+def get_artifact_operator_authority(
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+    context: Annotated[AuthorizationContext, Depends(get_artifact_authorization_context)],
+) -> ArtifactOperatorAuthority:
+    """Compose the exact AUTH-owned system Operator read adapter."""
+    return artifact_operator_read_authorization(session, context)
 
 
-def get_artifact_recovery_authority() -> ArtifactRecoveryAuthority:
-    """Keep retry unavailable until its independent AUTH activation."""
-    return DenyArtifactRecoveryAuthority()
+def get_artifact_recovery_authority(
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+    context: Annotated[AuthorizationContext, Depends(get_artifact_authorization_context)],
+) -> ArtifactRecoveryAuthority:
+    """Compose independently guarded retry authority in ART's transaction."""
+    return artifact_operator_retry_authorization(session, context)
 
 
 def get_artifact_recovery_port(
@@ -221,6 +235,59 @@ def _page(result) -> dict[str, object]:
     return {"items": list(result.items), "next_cursor": result.next_cursor}
 
 
+async def _persist_exact_denial(
+    session: AsyncSession,
+    authority: ArtifactOperatorAuthority | ArtifactRecoveryAuthority,
+    denial: ArtifactOperatorAuthorityDenied,
+) -> NoReturn:
+    """Restage only the issuing AUTH decision after the failed ART transaction."""
+    await session.rollback()
+    try:
+        if not await authority.restage_denial():
+            raise ArtifactOperatorAuthorityUnavailable("missing exact denial evidence")
+        await session.commit()
+    except Exception as exc:
+        await session.rollback()
+        raise HTTPException(
+            status_code=503, detail="Artifact authority evidence unavailable"
+        ) from exc
+    raise _concealed(denial) from denial
+
+
+async def _read(
+    session: AsyncSession,
+    authority: ArtifactOperatorAuthority,
+    operation: Awaitable[object],
+    response_model: type[BaseModel],
+    *,
+    paged: bool = False,
+) -> BaseModel:
+    """Validate the public shape before committing the exact AUTH decision."""
+    try:
+        result = await operation
+        response = response_model.model_validate(_page(result) if paged else result)
+        await session.commit()
+        return response
+    except ArtifactOperatorAuthorityDenied as exc:
+        await _persist_exact_denial(session, authority, exc)
+    except (ArtifactAuthorityDeniedError, ArtifactOperatorNotFound) as exc:
+        await session.rollback()
+        raise _concealed(exc) from exc
+    except ArtifactOperatorInputError as exc:
+        await session.rollback()
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except (
+        ArtifactOperatorEvidenceError,
+        ArtifactOperatorAuthorityUnavailable,
+        ValidationError,
+        SQLAlchemyError,
+    ) as exc:
+        await session.rollback()
+        raise HTTPException(
+            status_code=503, detail="Artifact authority evidence unavailable"
+        ) from exc
+
+
 @router.get("/bindings", response_model=OperatorPageResponse[ArtifactBindingResponse])
 async def list_artifact_bindings(
     request: Request,
@@ -232,26 +299,19 @@ async def list_artifact_bindings(
     cursor: str | None = None,
     limit: Annotated[int, Query(ge=1, le=100)] = 50,
 ) -> dict[str, object]:
-    try:
-        return _page(
-            await _service(request, session, authority).list_bindings(
-                authorization_context=context,
-                resource_type=resource_type,
-                resource_id=resource_id,
-                cursor=cursor,
-                limit=limit,
-            )
-        )
-    except (
-        ArtifactAuthorityDeniedError,
-        ArtifactOperatorNotFound,
-        ArtifactOperatorEvidenceError,
-    ) as exc:
-        raise _concealed(exc) from exc
-    except ArtifactOperatorInputError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
-        ) from exc
+    return await _read(
+        session,
+        authority,
+        _service(request, session, authority).list_bindings(
+            authorization_context=context,
+            resource_type=resource_type,
+            resource_id=resource_id,
+            cursor=cursor,
+            limit=limit,
+        ),
+        OperatorPageResponse[ArtifactBindingResponse],
+        paged=True,
+    )
 
 
 @router.get(
@@ -267,22 +327,15 @@ async def list_artifact_replicas(
     cursor: str | None = None,
     limit: Annotated[int, Query(ge=1, le=100)] = 50,
 ) -> dict[str, object]:
-    try:
-        return _page(
-            await _service(request, session, authority).list_replicas(
-                authorization_context=context, content_id=content_id, cursor=cursor, limit=limit
-            )
-        )
-    except (
-        ArtifactAuthorityDeniedError,
-        ArtifactOperatorNotFound,
-        ArtifactOperatorEvidenceError,
-    ) as exc:
-        raise _concealed(exc) from exc
-    except ArtifactOperatorInputError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
-        ) from exc
+    return await _read(
+        session,
+        authority,
+        _service(request, session, authority).list_replicas(
+            authorization_context=context, content_id=content_id, cursor=cursor, limit=limit
+        ),
+        OperatorPageResponse[ArtifactReplicaResponse],
+        paged=True,
+    )
 
 
 @router.get(
@@ -299,22 +352,15 @@ async def list_artifact_receipts(
     cursor: str | None = None,
     limit: Annotated[int, Query(ge=1, le=100)] = 50,
 ) -> dict[str, object]:
-    try:
-        return _page(
-            await _service(request, session, authority).list_receipts(
-                authorization_context=context, replica_id=replica_id, cursor=cursor, limit=limit
-            )
-        )
-    except (
-        ArtifactAuthorityDeniedError,
-        ArtifactOperatorNotFound,
-        ArtifactOperatorEvidenceError,
-    ) as exc:
-        raise _concealed(exc) from exc
-    except ArtifactOperatorInputError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
-        ) from exc
+    return await _read(
+        session,
+        authority,
+        _service(request, session, authority).list_receipts(
+            authorization_context=context, replica_id=replica_id, cursor=cursor, limit=limit
+        ),
+        OperatorPageResponse[ArtifactReceiptResponse],
+        paged=True,
+    )
 
 
 @router.get(
@@ -328,16 +374,14 @@ async def get_artifact_verification_job(
     session: Annotated[AsyncSession, Depends(get_db_session)],
     authority: Annotated[ArtifactOperatorAuthority, Depends(get_artifact_operator_authority)],
 ) -> dict[str, object]:
-    try:
-        return await _service(request, session, authority).get_verification_job(
+    return await _read(
+        session,
+        authority,
+        _service(request, session, authority).get_verification_job(
             authorization_context=context, verification_job_id=verification_job_id
-        )
-    except (
-        ArtifactAuthorityDeniedError,
-        ArtifactOperatorNotFound,
-        ArtifactOperatorEvidenceError,
-    ) as exc:
-        raise _concealed(exc) from exc
+        ),
+        ArtifactVerificationJobResponse,
+    )
 
 
 @router.post(
@@ -350,7 +394,11 @@ async def retry_artifact_verification(
     payload: ArtifactRecoveryCreateRequest,
     context: Annotated[AuthorizationContext, Depends(get_artifact_authorization_context)],
     recovery: Annotated[ArtifactOperatorRecoveryPort, Depends(get_artifact_recovery_port)],
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+    authority: Annotated[ArtifactRecoveryAuthority, Depends(get_artifact_recovery_authority)],
 ) -> ArtifactRecoveryCreateResponse:
+    if type(context) is not HumanAuthorizationContext:
+        raise _concealed(TypeError("artifact retry requires a human Operator"))
     try:
         result = await recovery.retry_verification(
             ArtifactRecoveryRequest(
@@ -370,6 +418,13 @@ async def retry_artifact_verification(
             retry_verification_job_id=result.retry_verification_job_id,
             replayed=result.replayed,
         )
+    except ArtifactOperatorAuthorityDenied as exc:
+        await _persist_exact_denial(session, authority, exc)
+    except ArtifactOperatorAuthorityUnavailable as exc:
+        await session.rollback()
+        raise HTTPException(
+            status_code=503, detail="Artifact authority evidence unavailable"
+        ) from exc
     except ArtifactAuthorityDeniedError as exc:
         raise _concealed(exc) from exc
     except ArtifactRecoveryNotFoundError as exc:
@@ -397,16 +452,14 @@ async def get_artifact_recovery_attempt(
     session: Annotated[AsyncSession, Depends(get_db_session)],
     authority: Annotated[ArtifactOperatorAuthority, Depends(get_artifact_operator_authority)],
 ) -> dict[str, object]:
-    try:
-        return await _service(request, session, authority).get_recovery_attempt(
+    return await _read(
+        session,
+        authority,
+        _service(request, session, authority).get_recovery_attempt(
             authorization_context=context, recovery_attempt_id=recovery_attempt_id
-        )
-    except (
-        ArtifactAuthorityDeniedError,
-        ArtifactOperatorNotFound,
-        ArtifactOperatorEvidenceError,
-    ) as exc:
-        raise _concealed(exc) from exc
+        ),
+        ArtifactRecoveryAttemptResponse,
+    )
 
 
 @router.get("/audit-events", response_model=OperatorPageResponse[ArtifactAuditEventResponse])
@@ -420,22 +473,19 @@ async def list_artifact_audit_events(
     cursor: str | None = None,
     limit: Annotated[int, Query(ge=1, le=100)] = 50,
 ) -> dict[str, object]:
-    try:
-        return _page(
-            await _service(request, session, authority).list_audit_events(
-                authorization_context=context,
-                resource_type=resource_type,
-                resource_id=resource_id,
-                cursor=cursor,
-                limit=limit,
-            )
-        )
-    except (
-        ArtifactAuthorityDeniedError,
-        ArtifactOperatorNotFound,
-        ArtifactOperatorEvidenceError,
-    ) as exc:
-        raise _concealed(exc) from exc
+    return await _read(
+        session,
+        authority,
+        _service(request, session, authority).list_audit_events(
+            authorization_context=context,
+            resource_type=resource_type,
+            resource_id=resource_id,
+            cursor=cursor,
+            limit=limit,
+        ),
+        OperatorPageResponse[ArtifactAuditEventResponse],
+        paged=True,
+    )
 
 
 @router.get(
@@ -452,26 +502,19 @@ async def get_artifact_admission_usage(
     cursor: str | None = None,
     limit: Annotated[int, Query(ge=1, le=100)] = 50,
 ) -> dict[str, object]:
-    try:
-        return _page(
-            await _service(request, session, authority).admission_usage(
-                authorization_context=context,
-                project_id=project_id,
-                task_id=task_id,
-                cursor=cursor,
-                limit=limit,
-            )
-        )
-    except (
-        ArtifactAuthorityDeniedError,
-        ArtifactOperatorNotFound,
-        ArtifactOperatorEvidenceError,
-    ) as exc:
-        raise _concealed(exc) from exc
-    except ArtifactOperatorInputError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
-        ) from exc
+    return await _read(
+        session,
+        authority,
+        _service(request, session, authority).admission_usage(
+            authorization_context=context,
+            project_id=project_id,
+            task_id=task_id,
+            cursor=cursor,
+            limit=limit,
+        ),
+        OperatorPageResponse[ArtifactAdmissionUsageResponse],
+        paged=True,
+    )
 
 
 @router.get("/readiness", response_model=ArtifactReadinessResponse)
@@ -485,6 +528,23 @@ async def get_artifact_readiness(
     try:
         # Reuse the exact operations-status permission without querying mutable usage.
         await service.authorize_readiness(context)
-    except (ArtifactAuthorityDeniedError, ArtifactOperatorEvidenceError) as exc:
+        response = ArtifactReadinessResponse.model_validate(
+            artifact_provider_readiness(request.app.state.settings)
+        )
+        await session.commit()
+        return response
+    except ArtifactOperatorAuthorityDenied as exc:
+        await _persist_exact_denial(session, authority, exc)
+    except ArtifactAuthorityDeniedError as exc:
+        await session.rollback()
         raise _concealed(exc) from exc
-    return ArtifactReadinessResponse(**artifact_provider_readiness(request.app.state.settings))
+    except (
+        ArtifactOperatorEvidenceError,
+        ArtifactOperatorAuthorityUnavailable,
+        ValidationError,
+        SQLAlchemyError,
+    ) as exc:
+        await session.rollback()
+        raise HTTPException(
+            status_code=503, detail="Artifact authority evidence unavailable"
+        ) from exc

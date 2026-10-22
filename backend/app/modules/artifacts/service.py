@@ -73,6 +73,10 @@ from app.modules.artifacts.metrics import (
     artifact_admission_metrics,
 )
 from app.modules.artifacts.repository import ArtifactRepository, GuideSourceIngestConflict
+from app.modules.artifacts.api.operator_authority import (
+    ArtifactRecoveryAuthority,
+    ArtifactRecoveryAuthorityFacts,
+)
 from app.modules.artifacts.provider_activation import require_provider_activation_for_terminal
 from app.modules.artifacts.authorization import (
     GuideArtifactPreparedAuthorization,
@@ -92,8 +96,6 @@ from app.modules.artifacts.schemas import (
     ArtifactPendingWorkAuthorityFacts,
     ArtifactVerificationAuthorityFacts,
     ArtifactRecoveryResult,
-    ArtifactRecoveryAuthority,
-    ArtifactRecoveryAuthorityFacts,
     ArtifactRecoveryConflictError,
     ArtifactRecoveryIneligibleError,
     ArtifactRecoveryNotFoundError,
@@ -2013,7 +2015,7 @@ class ArtifactRecoveryService:
                     "retry_verification_job_id": retry_id,
                     "recovery_class": self._RECOVERY_CLASS,
                     "request_digest": digest,
-                    "authorization_action_id": authorization.action_id.value,
+                    "authorization_action_id": authorization.action_id,
                     "authorization_permission_id": authorization.permission_id,
                     "authorization_decision_id": str(authorization.decision_id),
                     "authorization_request_id": str(context.request_id),
@@ -2080,7 +2082,7 @@ class ArtifactRecoveryService:
             ),
         )
         if (
-            authorization.action_id is not ActionId.ARTIFACT_VERIFICATION_JOB_RETRY
+            authorization.action_id != ActionId.ARTIFACT_VERIFICATION_JOB_RETRY.value
             or authorization.permission_id != PermissionId.ARTIFACT_VERIFICATION_JOB_RETRY.value
         ):
             raise ArtifactAuthorityDeniedError(

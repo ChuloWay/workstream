@@ -526,9 +526,11 @@ WS-XINT-002-01 then reconciles the live ART set to 22 planned rows by deleting
 six obsolete upload actions and adding three bundle/review actions. The ART
 transfer and later WS-XINT-002-01 catalogue reconciliation are included in the
 v0.1 baseline.
-The REV transfer adds no migration. The ART transfer does not grant Operator
-authority; its `OPERATOR` suffix denotes only future activation custody, and
-verification retry remains independently gated from read/status actions.
+The REV transfer adds no migration. The ART transfer itself granted no Operator
+authority; its `OPERATOR` suffix denotes exact activation custody, now delivered
+for the eight reserved system-Operator actions. A current persisted grant is
+still required, and verification retry remains independently gated from
+read/status actions.
 Catalogue entries and explicit runtime composition determine availability;
 a planned action is not activated by its presence in the catalogue.
 CP01A added four initially unavailable adapter-binding actions under

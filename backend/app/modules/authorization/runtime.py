@@ -52,6 +52,10 @@ from app.modules.authorization.domain.artifact_storage import (
     ArtifactPendingWorkResourceContext as ArtifactPendingWorkResourceContext,
     GuideSourceReadResourceContext as GuideSourceReadResourceContext,
 )
+from app.modules.authorization.domain.artifact_operator import (
+    ArtifactOperatorReadResourceContext,
+    ArtifactOperatorRetryResourceContext,
+)
 from app.modules.authorization.schemas import AdminRole, AdminScope, ProjectRole
 from app.modules.authorization.submission_preparation import SubmissionBundlePreparationPreflightResourceContext, SubmissionBundlePreparationResourceContext
 from app.modules.authorization.submission_consumption import SubmissionBindingResourceContext, SubmissionCreationResourceContext
@@ -1112,6 +1116,8 @@ AuthorizationResourceContext = (
     | ArtifactPutAttemptResourceContext
     | ArtifactVerificationJobResourceContext
     | ArtifactPendingWorkResourceContext
+    | ArtifactOperatorReadResourceContext
+    | ArtifactOperatorRetryResourceContext
     | GuideSourceReadResourceContext
     | SubmissionCreationResourceContext | SubmissionBindingResourceContext
     | PreSubmitCheckerInputResourceContext

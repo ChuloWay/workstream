@@ -30,15 +30,14 @@ from app.modules.artifacts.router import (
 )
 from app.modules.artifacts.schemas import (
     ArtifactAuthorityDeniedError,
-    ArtifactOperatorAuthorizationEvidence,
-    DenyArtifactOperatorAuthority,
-    DenyArtifactRecoveryAuthority,
 )
+from app.modules.artifacts.api.operator_authority import ArtifactOperatorAuthorizationEvidence
 from app.modules.authorization.catalogue import ACTION_BY_ID
 from app.modules.authorization.runtime import ActorStatus, IdentityLinkStatus
 from app.core.config import Settings
 from tests.test_artifact_recovery import (
     _AllowRecoveryAuthority,
+    _DenyRecoveryAuthority,
     _context,
     _exhausted_job,
     _settings,
@@ -90,6 +89,15 @@ def test_readiness_contract_contains_no_provider_internals() -> None:
     assert "credential" not in str(payload).lower()
 
 
+def test_admission_usage_openapi_represents_unconfigured_limit() -> None:
+    schema = create_app(Settings()).openapi()["components"]["schemas"][
+        "ArtifactAdmissionUsageResponse"
+    ]
+    assert schema["properties"]["configured_limit_bytes"]["anyOf"] == [
+        {"type": "integer"}, {"type": "null"},
+    ]
+
+
 class _AllowOperatorAuthority:
     async def authorize(self, *, facts, **_values: object) -> ArtifactOperatorAuthorizationEvidence:
         return ArtifactOperatorAuthorizationEvidence(
@@ -97,6 +105,11 @@ class _AllowOperatorAuthority:
             permission_id=ACTION_BY_ID[facts.action_id].permission_id.value,
             decision_id=new_record_id(),
         )
+
+
+class _DenyOperatorAuthority:
+    async def authorize(self, **_values: object):
+        raise ArtifactAuthorityDeniedError("artifact Operator action denied")
 
 
 class _ProjectOperatorAuthority(_AllowOperatorAuthority):
@@ -312,7 +325,7 @@ async def test_real_http_operator_path_returns_redacted_lineage_and_recovery(
                 assert job.json()["status"] == "provider_unavailable"
 
                 app.dependency_overrides[get_artifact_recovery_authority] = (
-                    DenyArtifactRecoveryAuthority
+                    _DenyRecoveryAuthority
                 )
                 denied_before_create = await client.post(
                     f"/api/v1/operator/artifacts/verification-jobs/{source_job_id}/retry",
@@ -465,7 +478,7 @@ async def test_real_http_operator_path_returns_redacted_lineage_and_recovery(
                 assert cross_project.json()["error"]["code"] == missing.json()["error"]["code"]
 
                 app.dependency_overrides[get_artifact_operator_authority] = (
-                    DenyArtifactOperatorAuthority
+                    _DenyOperatorAuthority
                 )
                 concealed = await client.get(
                     f"/api/v1/operator/artifacts/contents/{content_id}/replicas"

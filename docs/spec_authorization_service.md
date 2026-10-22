@@ -608,7 +608,7 @@ is not a permission alias.
 | AUTH activation custodian | Exact ActionIds and current availability |
 |---|---|
 | `WS-AUTH-001-ART-02D-INTERNAL` | Active: `artifact.verification.execute`, `artifact.pending_work.scan`, `artifact.put_attempt.resolve` |
-| `WS-AUTH-001-ART-02D-OPERATOR` | `artifact.binding.read`, `artifact.replica.read`, `artifact.receipt.read`, `artifact.verification_job.read`, `artifact.verification_job.retry`, `artifact.recovery_attempt.read`, `artifact.audit.read`, `operations.artifact_storage_admission.read` |
+| `WS-AUTH-001-ART-02D-OPERATOR` | Active: `artifact.binding.read`, `artifact.replica.read`, `artifact.receipt.read`, `artifact.verification_job.read`, `artifact.verification_job.retry`, `artifact.recovery_attempt.read`, `artifact.audit.read`, `operations.artifact_storage_admission.read` |
 | `WS-XINT-002-04A` | Active: `artifact.guide_source.ingest` |
 | `WS-XINT-002-04B` | Active: `artifact.guide_source.read` |
 | `PILOT-02A` | Active: `artifact.task_import_source.declare`, `artifact.task_import_source.upload`, `artifact.task_import_source.read` |
@@ -639,17 +639,19 @@ to the reviewed Submission. It does not include a reviewer-uploaded artifact.
 Therefore 07A activates packet materialization only; evidence binding remains
 planned and unavailable unless a later REV-owned intent explicitly approves it.
 
-The `OPERATOR` suffix names future activation custody only; it creates no
-Operator grant or entitlement. WS-XINT-002-03 activates the three internal
-service actions, WS-XINT-002-04A activates guide-source ingest, and
-WS-XINT-002-04B activates the two fixed-service guide binding/read actions, and
-WS-ARCH-001-02G activates contributor bundle preparation. WS-ARCH-001-02H
-activates submission binding for the fixed artifact-binding service; the other
-14 ART actions remain planned and unavailable.
+The `OPERATOR` suffix names exact activation custody, not an automatic
+Operator grant or entitlement. Only a current persisted system-scoped human
+Operator grant can satisfy these eight actions; token roles and project-scoped
+authority cannot. WS-XINT-002-03 separately activates the three internal
+service actions, WS-XINT-002-04A guide-source ingest, WS-XINT-002-04B the
+fixed-service guide binding/read actions, WS-ARCH-001-02G contributor bundle
+preparation, and WS-ARCH-001-02H fixed-service submission binding. These
+activation boundaries do not imply that remaining ART actions are active.
 The v0.1 baseline admits the exact privacy-bounded ART resource-context digest
 in append-only authorization decision facts; it adds no table or column.
-`artifact.verification_job.retry` requires its own later evaluator, guards, and
-independent activation proof; read/status proof cannot activate retry. The
+`artifact.verification_job.retry` has its own active evaluator, guards and
+independent signed-PostgreSQL proof; read/status proof alone cannot authorize
+retry. The
 historical ART transfer added no migration; WS-XINT-002-01 reconciles the
 closed catalogue in the v0.1 baseline. The separately started REV custody
 transfer is also complete: all 19 REV rows now name exact AUTH custodians,

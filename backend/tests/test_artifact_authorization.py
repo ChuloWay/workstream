@@ -19,14 +19,17 @@ from app.modules.artifacts.operator import (
 )
 from app.modules.artifacts.models import ArtifactAdmissionScope
 from app.modules.artifacts.metrics import InProcessArtifactAdmissionMetrics, pressure_band
-from app.modules.artifacts.schemas import (
-    ArtifactAuthorityDeniedError,
-    ArtifactOperatorAuthorityFacts,
+from app.modules.artifacts.api.operator_authority import (
     ArtifactOperatorAuthorizationEvidence,
     ArtifactOperatorResourceType,
-    DenyArtifactOperatorAuthority,
 )
-from app.modules.authorization.catalogue import ActionId, PermissionId
+from app.modules.authorization.catalogue import (
+    ACTION_BY_ID,
+    ActionAvailability,
+    ActionId,
+    ActionOwner,
+    PermissionId,
+)
 from app.modules.authorization.runtime import (
     ActorKind,
     ActorStatus,
@@ -64,6 +67,16 @@ INTERNAL_ACTIONS = (
 )
 
 
+def test_artifact_operator_activation_is_exact() -> None:
+    owned = {
+        action_id
+        for action_id, definition in ACTION_BY_ID.items()
+        if definition.owner is ActionOwner.AUTH_ART_02D_OPERATOR
+        and definition.availability is ActionAvailability.ACTIVE
+    }
+    assert owned == set(OPERATOR_ACTIONS)
+
+
 def _context() -> HumanAuthorizationContext:
     return HumanAuthorizationContext(
         actor_profile_id=new_record_id(),
@@ -77,14 +90,16 @@ def _context() -> HumanAuthorizationContext:
 
 
 @pytest.mark.parametrize("action", OPERATOR_ACTIONS)
-async def test_real_kernel_keeps_operator_artifact_actions_unavailable(action: ActionId) -> None:
+async def test_real_kernel_rejects_wrong_resource_for_operator_artifact_actions(
+    action: ActionId,
+) -> None:
     service, _evidence = _runtime_service(_runtime_context())
     with pytest.raises(AuthorizationDenied) as caught:
         await service.require(
             action,
             SystemResourceContext(resource_type="system", resource_id="workstream:system"),
         )
-    assert caught.value.decision.denial_code is AuthorizationDenialCode.ACTION_UNAVAILABLE
+    assert caught.value.decision.denial_code is AuthorizationDenialCode.RESOURCE_GUARD_DENIED
 
 
 @pytest.mark.parametrize("action", INTERNAL_ACTIONS)
@@ -96,19 +111,6 @@ async def test_humans_cannot_reach_active_internal_actions(action: ActionId) -> 
             SystemResourceContext(resource_type="system", resource_id="workstream:system"),
         )
     assert caught.value.decision.denial_code is AuthorizationDenialCode.ACTION_UNAVAILABLE
-
-
-async def test_production_operator_authority_denies() -> None:
-    with pytest.raises(ArtifactAuthorityDeniedError):
-        await DenyArtifactOperatorAuthority().authorize(
-            authorization_context=_context(),
-            facts=ArtifactOperatorAuthorityFacts(
-                resource_type=ArtifactOperatorResourceType.CONTENT,
-                resource_id=str(new_record_id()),
-                project_ids=(),
-                action_id=ActionId.ARTIFACT_REPLICA_READ,
-            ),
-        )
 
 
 class _WrongEvidenceAuthority:
@@ -131,6 +133,7 @@ async def test_operator_service_rejects_mismatched_authority_evidence() -> None:
             ArtifactOperatorResourceType.CONTENT,
             str(new_record_id()),
             (),
+            None,
         )
 
 
@@ -259,7 +262,9 @@ async def test_binding_resource_resolver_uses_canonical_product_lineage(
         session, _WrongEvidenceAuthority(), Settings(), InProcessArtifactAdmissionMetrics()
     )
 
-    assert await service._binding_resource_project(resource_type, str(new_record_id())) == project_id
+    assert (
+        await service._binding_resource_project(resource_type, str(new_record_id())) == project_id
+    )
     session.scalar.assert_awaited_once()
 
 
@@ -275,9 +280,7 @@ async def test_binding_resource_resolver_fails_closed_for_unknown_type() -> None
 
 def test_operator_page_helpers_are_bounded_and_deduplicate_projects() -> None:
     first, second, third = (SimpleNamespace(id=str(new_record_id())) for _ in range(3))
-    page = ArtifactOperatorService._result(
-        [first, second, third], 2, lambda row: {"id": row.id}
-    )
+    page = ArtifactOperatorService._result([first, second, third], 2, lambda row: {"id": row.id})
     assert page.items == ({"id": first.id}, {"id": second.id})
     assert page.next_cursor == second.id
     assert ArtifactOperatorService._result([], 2, lambda row: row).next_cursor is None
@@ -300,7 +303,9 @@ async def test_audit_resource_resolver_composes_exact_artifact_lineage() -> None
 
     binding_projects = await service._audit_projects("artifact_binding", str(new_record_id()))
     assert binding_projects == (UUID(project_id),)
-    assert await service._audit_projects("artifact_content", str(new_record_id())) == content_projects
+    assert (
+        await service._audit_projects("artifact_content", str(new_record_id())) == content_projects
+    )
     assert await service._audit_projects("artifact_replica", replica_id) == replica_projects
     assert (
         await service._audit_projects("artifact_verification_job", str(new_record_id()))
@@ -343,9 +348,7 @@ async def test_binding_discovery_projects_canonical_authorized_page() -> None:
     )
     service._binding_resource_project = AsyncMock(return_value=str(project_id))
     service._authorize = AsyncMock()
-    service._page = AsyncMock(
-        return_value=(row, SimpleNamespace(**{**vars(row), "id": second_id}))
-    )
+    service._page = AsyncMock(return_value=(row, SimpleNamespace(**{**vars(row), "id": second_id})))
 
     result = await service.list_bindings(
         authorization_context=_context(),
@@ -376,6 +379,7 @@ async def test_binding_discovery_projects_canonical_authorized_page() -> None:
         ArtifactOperatorResourceType.BINDING_SCOPE,
         f"task:{resource_id}",
         (project_id,),
+        resource_id,
     )
 
 
