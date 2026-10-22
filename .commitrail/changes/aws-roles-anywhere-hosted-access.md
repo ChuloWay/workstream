@@ -48,8 +48,10 @@ short-lived database activation; no proof bypass or new storage owner is needed.
 - Static AWS access-key fallback, ambient credential discovery, arbitrary shell
   commands, metadata-service fallback, shared runtime/proof identities, weakened
   bucket policy or activation checks, manually forged passing probe evidence.
-- Committed credentials or certificates, live resource provisioning, paid CA
-  creation, deletion of retained data, or claims of live AWS proof from fakes.
+- Committed credentials or certificates, paid CA creation, deletion of retained
+  data, or claims of live AWS proof from fakes. The user has separately authorized
+  the exact pilot AWS setup and live checks; private provisioning evidence stays
+  outside the repository and does not imply hosted journey completion.
 
 ## Design and decisions
 
@@ -66,10 +68,15 @@ short-lived database activation; no proof bypass or new storage owner is needed.
   must be one of the existing three roles; hosted application processes use
   only the runtime role. Files must be regular, privately mounted, owned by the
   workload and unreadable to other users. Never print helper output or keys.
-- A pilot uses one dedicated offline CA and distinct leaf certificates for the
-  runtime, readiness and denial-test identities. Its signing key is never in
-  application containers. Provide explicit renewal/revocation instructions;
-  local generated test certificates do not stand in for provisioned identities.
+- The user selected same-server administrative CA custody for this pilot instead
+  of requiring a separate offline machine. Use an administrator-only directory,
+  an encrypted signing key, a passphrase retained outside the host/application,
+  and an encrypted off-server backup of the key and signing database. Only
+  distinct leaf identities reach the runtime, readiness and denial-test jobs.
+  The CA key is never mounted into containers. This trusts host administrators
+  and the privileged checker controller; it is not offline or host-compromise
+  isolation. Renewal/revocation remain explicit; generated test certificates do
+  not stand in for provisioned identities.
 - Readiness validates enabled trust-anchor/profile resources, expected CA
   certificate identity, exact allowed roles and a closed trust shape bound to
   account, anchor, issuer and distinct exact subject common names. Bind these
@@ -119,14 +126,14 @@ short-lived database activation; no proof bypass or new storage owner is needed.
   security bindings; identity changes require matching fresh proof.
 - [x] Hosted configuration mounts only the intended certificate/key, rejects
   unsafe mounts/modes and unavailable helper, and works without EC2 metadata.
-- [x] A reproducible provisioning guide covers offline CA custody, separate
+- [x] A reproducible provisioning guide covers administrator-managed CA custody, separate
   certificates/roles, renewable sessions, certificate renewal, revocation,
   three proof jobs and retained-data restrictions.
 - [x] An integrated proof exercises upload, exact verified read-back/download
   and the setup agent opening only its assigned guide documents through the
   selected provider; retained bytes and hashes match. The real AWS execution
   of this journey is separately pending provisioned certificates/roles.
-- [ ] Existing AWS/MinIO, settings, release and activation regressions pass.
+- [x] Existing AWS/MinIO, settings, release and activation regressions pass.
   Real helper/local process tests are distinguished from unexecuted live AWS
   trust, permission and ZIP custody proof.
 
@@ -155,7 +162,8 @@ product lifecycle or alternative storage subsystem is introduced.
 | Hosted configuration | generator/normalizer and release configuration/image-contract tests | 24 affected release configuration tests passed after exact-file-custody repairs; earlier 14 image-contract tests and candidate release image build passed | repaired-head image build and real deployment remain separate |
 | Owner boundaries | architecture and authorization boundary tests | 127 passed locally | no new storage owner or public route |
 | Existing public guide integration | isolated PostgreSQL/MinIO batch | timed out after 900 seconds; cleanup confirmed; not credited as a pass | complete hosted suite required |
-| Real pilot | provision three identities, run existing proof modes, then public ZIP contribution drill | pending | AWS resources and certificates not provisioned |
+| Complete regression execution | hosted aggregate evidence for candidate `f1e6750fd` | 10,351 unique tests completed, zero skipped/deselected; all 16 lanes record cleanup; tested merge tree equals candidate tree | subsequent changes affect only CA operating instructions; live AWS is separate |
+| Real pilot | provision three identities, run existing proof modes, then public ZIP contribution drill | provisioning identity and five live bucket configuration reads verified | CA, application roles/profile and runtime proof remain pending |
 
 ## Review findings
 
@@ -179,6 +187,10 @@ under shared scratch/socket roots and inode aliases across configured private
 inputs; these controls preserve role separation across the supported file paths.
 The temporary provisioning instructions create untagged resources before an
 administrator replaces creation grants with exact returned-resource permissions.
+The user selected same-server administrative certificate signing. Its encrypted
+key, terminal-only passphrase, exclusive signing lock and encrypted off-server
+backup replace the separate-offline-machine prerequisite without changing
+application credential mounts, trust checks or runtime authorization.
 
 ## Reconciliation
 

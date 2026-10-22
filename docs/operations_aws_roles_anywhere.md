@@ -8,7 +8,7 @@ namespace.
 
 ## Short operator path
 
-The one-time path is: create the offline CA and three leaf identities, fill in
+The one-time path is: create the administrator-managed CA and three leaf identities, fill in
 one `operator-input.json`, run the generator, apply its exact role/policy/profile
 files, save the AWS trust-anchor and profile read responses, then run the same
 generator for `roles-anywhere.env`. Copy that fragment into the hosted release
@@ -24,7 +24,7 @@ results and the later public API drill as environment evidence.
 
 ## Identity and custody layout
 
-Use one offline pilot CA and exactly three leaf identities:
+Use one pilot CA and exactly three leaf identities:
 
 | Identity | Certificate subject CN | Selected role | Mounted into |
 |---|---|---|---|
@@ -53,18 +53,41 @@ these SHA-256 identities:
 - x86_64: `beec9ed1c492d93db809890f16713e3556353294b823c2184ad4e891f1b2b54d`
 - aarch64: `3d131aa888cd56da446f9c6bb460b1f0569f6c7edc74eae6193a2fe3928883ba`
 
-## Build the offline pilot CA
+## Build the pilot CA on the deployment server
 
-Perform this section on an offline encrypted system. Start in an empty private
-directory on storage whose backup and recovery procedure is tested. The CA
+The pilot may use the same server for administrative signing and application
+execution. Keep the CA in a separate administrator-owned `0700` directory,
+at a canonical absolute path outside the checkout, runtime identity directory,
+secret/configuration directories, all container mounts and shared scratch/socket roots. The application UID must not own or access it.
+Encrypt its signing key and keep a high-entropy passphrase in the operator's
+password manager outside this host, never in a release environment, command
+argument, script, log or application secret. Enter it only at OpenSSL's trusted
+terminal prompt; do not capture it through an agent, script, CI or shell tracing.
+The application uses its leaf key and never needs the CA passphrase.
+
+This is administrator separation on a trusted host, not an offline CA or a
+boundary against host root or Docker administrators. A compromise of the host
+can expose leaf identities and capture CA material or its passphrase during signing;
+encryption at rest does not protect an actively compromised signing host. Do not grant application
+or checker workloads access to the CA directory; the privileged checker
+controller and host administrators remain trusted infrastructure.
+
+Start in an empty private directory on storage whose backup and recovery
+procedure is tested. Keep an encrypted backup outside the server, using separate
+backup encryption material. The CA
 database, serial files, and `crlnumber` are durable signing state; back them up
-with the CA key. A bare `openssl x509 -req` workflow is insufficient because it
+with the encrypted CA key. A bare `openssl x509 -req` workflow is insufficient because it
 does not maintain the revocation database needed to issue a CRL.
 
 ```sh
+set +x
 umask 077
-mkdir -p workstream-ca/{certs,crl,csr,issued,newcerts,private}
+mkdir -m 0700 workstream-ca
 cd workstream-ca
+exec 9>.signing.lock
+flock -n 9
+mkdir certs crl csr issued newcerts private
+mkdir -m 0700 ../workstream-leaf-staging
 touch index.txt
 printf '1000\n' > serial
 printf '1000\n' > crlnumber
@@ -137,8 +160,8 @@ the commands three times; never reuse a leaf key.
 IDENTITY=runtime
 ROLE_BASENAME=workstream-runtime
 openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:3072 \
-  -out "private/${IDENTITY}.key.pem"
-openssl req -new -sha256 -key "private/${IDENTITY}.key.pem" \
+  -out "../workstream-leaf-staging/${IDENTITY}.key.pem"
+openssl req -new -sha256 -key "../workstream-leaf-staging/${IDENTITY}.key.pem" \
   -subj "/CN=${ROLE_BASENAME}" -out "csr/${IDENTITY}.csr.pem"
 openssl ca -batch -config openssl.cnf -extensions leaf_cert -days 30 \
   -in "csr/${IDENTITY}.csr.pem" -out "issued/${IDENTITY}.cert.pem"
@@ -146,13 +169,22 @@ openssl verify -CAfile certs/ca.cert.pem "issued/${IDENTITY}.cert.pem"
 openssl x509 -in "issued/${IDENTITY}.cert.pem" -noout -subject -issuer -serial -dates
 ```
 
+Hold the same `.signing.lock` for every signing, revocation, CRL and backup
+operation. Before releasing it, take a consistent encrypted backup of the CA
+key, configuration, index, serial, `crlnumber`, certificates and CRL state; copy
+that backup off the server and test restoration into an isolated private
+directory. Exclude `workstream-leaf-staging` from the CA backup. Leaf keys are
+unencrypted for unattended helper use and rely on private ownership and mounts.
+After the exact leaf pairs are installed and verified, remove their staging keys.
+
 Record the certificate serial, role ARN, issuance time, expiry, custodian, and
 deployment target without recording private-key bytes. Transfer the three leaf
-pairs through the approved encrypted channel to their deployment custodian.
-Separately transfer only `certs/ca.cert.pem`, which is public, to the connected
-AWS provisioning directory and verify its SHA-256 fingerprint out of band. The
-CA private key, database, serial files, `crlnumber`, CSRs, and issued-certificate
-archive stay on the offline CA system.
+pairs into the exact runtime-owned host files described below; use an encrypted
+channel if transferring them to another host. Copy only `certs/ca.cert.pem`,
+which is public, into the separate AWS provisioning directory and compare its
+SHA-256 fingerprint to the original. The CA private key, database, serial files,
+`crlnumber`, CSRs, and issued-certificate archive stay in the administrator-only
+CA directory and its encrypted backup, never in application mounts.
 
 ## Provision the closed AWS trust
 
@@ -200,8 +232,8 @@ mkdir -m 0700 "$PROVISION_DIR"
 cd "$PROVISION_DIR"
 ```
 
-Place the transferred public certificate at `$PROVISION_DIR/ca.cert.pem` and
-verify the out-of-band fingerprint before continuing. No leaf private key or
+Place the copied public certificate at `$PROVISION_DIR/ca.cert.pem` and
+verify its fingerprint against the CA copy before continuing. No leaf private key or
 other CA file belongs in this connected directory.
 
 ```sh
@@ -561,17 +593,20 @@ and tests create no AWS resources and make none of these calls.
 ## Renewal, revocation, and containment
 
 Set an alert well before the 30-day leaf expiry. Renewal means issuing a new
-leaf with the same exact role-basename CN and a new private key from the offline
-CA database, verifying it offline, securely staging the pair, stopping the
+leaf with the same exact role-basename CN and a new private key using the
+administrator-managed CA database, verifying its signature, securely staging the pair, stopping the
 affected containers, atomically installing the new `0400` files, rerunning
 preflight and a complete fresh proof group, and restarting the release. Keep the
 old private key only for the approved rollback window, then destroy it under the
 key-custody procedure. Never extend validity by copying or editing a certificate.
 
-To revoke a leaf, take the CA database offline, identify the exact serial, then
-issue and verify a new CRL:
+To revoke a leaf, use the administrator-only CA directory, identify the exact
+serial, then issue and verify a new CRL. Serialize signing and revocation so
+only one administrator writes the CA database at a time, using the same lock:
 
 ```sh
+exec 9>.signing.lock
+flock -n 9
 openssl ca -config openssl.cnf -revoke issued/runtime.cert.pem
 openssl ca -config openssl.cnf -gencrl -out crl/workstream-artifacts.crl.pem
 openssl crl -in crl/workstream-artifacts.crl.pem -noout -issuer -lastupdate -nextupdate
