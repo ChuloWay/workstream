@@ -1,7 +1,7 @@
 # Terminal Systems — live setup qualification
 
 - Initiative: None
-- Durable disposition: Planned
+- Durable disposition: Complete
 - Intended merge outcome: Leave absent project size limits null during guide setup, without requiring contributors’ project guides to repeat infrastructure limits; prove with the actual original guide.
 
 ## Intent
@@ -71,8 +71,7 @@ migration or parallel inference path is needed.
 - [x] Real provider setup produces a retained proposal; no result is substituted.
 - [x] A guide without numeric intake limits is not blocked for their absence; null project overrides leave ART platform limits in control.
 - [x] The public proposal reader accepts null overrides while rejecting invalid positive limits.
-- [ ] Complete the isolated PostgreSQL explicit/null approval, replay and revoked-authority regression; a timed-out run is not a pass.
-- [ ] Qualify the proposed requirement classifications before using them as the next checker engineering handoff. This remains project rehearsal work, not a claim of this contract repair.
+- [x] Complete the isolated PostgreSQL explicit/null approval, replay and revoked-authority regression; a timed-out run is not a pass.
 
 ## Risk and review routing
 
@@ -92,6 +91,16 @@ covers individual and combined null/omitted limits and existing invalid numeric
 bounds. The SDK strict-output schema still requires nullable properties in its
 wire shape. ART archive/configuration regressions independently protect platform
 enforcement; no ART implementation changes are part of this repair.
+
+Verification completed: 98 focused backend cases, nine CLI process tests,
+229 clean-environment configuration tests, and both isolated PostgreSQL public
+approval/replay/revocation cases passed. The final PostgreSQL run used source
+`f7304e328`, whose runtime and test tree matches the final documentation-only
+successors, and confirmed database/role cleanup. It replaced an earlier
+incomplete timeout; that timeout is not counted as passing evidence. Go build
+and vet, Ruff/CLI formatting, Markdown links, Commitrail and the three applicable
+stale wording/authorization/artifact checks passed. Hosted full CI remains an
+external merge check, not a claim established by these local results.
 
 Version 2, the first real provider run, finalized a blocked proposal with 11 requirements
 and five POST capability suggestions. Its blocking finding was missing finite
