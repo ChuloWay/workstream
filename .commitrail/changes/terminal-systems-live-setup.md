@@ -522,3 +522,27 @@ private draft parsing and checker schema validation with neither `agents` nor
 `pytest` installed. The dependency regression passed. Every third-party lock entry,
 resolved version and artifact hash is unchanged; only the root dependency edge
 moves. Ruff and diff checks passed. The parser's 182-case evidence is unchanged.
+
+### Real proposal review and public correction
+
+V15 completed on `aa77a9b10` with 13 typed requirements (two static PRE, ten POST,
+one lifecycle), 12 missing-capability suggestions, four null limits and no
+approval. Exact canonical/result/component hashes and public CLI rendering passed;
+all 42 accumulated provider resources are deleted. Source-to-proposal review still
+found missing mandatory predicates, evidence inputs and execution dependencies;
+one coverage condition incorrectly accepted disclosure instead of compliance.
+This proposal is retained unapproved, not qualified as an engineering handoff.
+
+Strengthen the generic instructions within existing scope: each source clause
+needs an enforceable pass/error condition; disclosure is not compliance unless
+expressly permitted; apply PM correction feedback without dropping other source
+obligations. Do not encode this project's rules in shared code. Exercise the
+existing public correction and explicit dispatch using the exact reviewed target,
+retain its immutable predecessor and feedback, and independently review the real
+successor before qualifying a handoff. No direct result edits or fabricated output.
+
+The generic correction/coverage wording passed the three focused instruction and
+configuration checks; rendered instructions are 15,928 characters. Ruff and diff
+checks passed. This proves visibility and bounds of the instruction contract,
+not that every future model output is semantically correct. Qualification depends
+on the actual PM-correction successor and independent source review.

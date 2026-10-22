@@ -730,7 +730,10 @@ def test_default_instructions_advertise_contextual_output_constraints():
         "include its unavailable_code once in infrastructure_failures",
         "must appear in both inputs and runtime_dependencies, never only one",
         "Reading short prose does not make a judgment static",
-        "Every mandatory pass condition needs an error finding",
+        "Every mandatory condition needs an error finding",
+        "Disclosure of noncompliance is not a pass unless the guide explicitly makes disclosure sufficient",
+        "Apply correction_feedback while preserving all original obligations",
+        "permissions and advice remain nonblocking",
         "current_runner means isolation of the checker image itself",
         "File presence is structural; whether prose explains that file's role is qualitative",
         "Guide-required runtime outcomes need isolated_execution",
@@ -744,8 +747,8 @@ def test_default_instructions_advertise_contextual_output_constraints():
         "Paraphrase section headings using the same safe plain-prose rules",
         "Required and forbidden policy lists must not overlap",
         "maximum file size must not exceed the maximum package size",
-        "return null for that policy field",
-        "Do not block a guide for omitting intake size limits",
+        "Return null for unspecified project file, expanded-package, compressed-archive and entry-count limits",
+        "Do not block for absent limits",
     ):
         assert rule in instructions
 
