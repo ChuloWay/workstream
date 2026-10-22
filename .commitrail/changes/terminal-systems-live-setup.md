@@ -90,8 +90,43 @@ Other test containers on the workstation are separate retained environments.
    independent final review and required CI. No project-specific logic enters
    the shared runner. Building project images remains the next product step.
 
-The specification design is subject to architecture review before implementation;
-the existing nullable-limit repair and its evidence remain intact below.
+### Reviewed specification and stage boundary
+
+The user clarified stage selection: static and other reliably bounded checks
+within 60 seconds belong before Submission creation; longer-running execution
+and model evaluation belong in the background after Submission. PRE may still
+use durable asynchronous execution and polling. This is not a synchronous HTTP
+completion guarantee. Proposals must explain stage and execution budget; new
+supported PRE proposals cannot select a registry deadline exceeding 60 seconds.
+Retained approved evidence keeps its exact original semantics.
+
+Use one typed `check_specification` on each atomic checker requirement, with a
+`disposition_rationale` for every new requirement. Both additions are omitted
+from serialized retained records when absent, preserving immutable canonical
+result and component hashes. New-generation completeness is enforced before
+acceptance, in the central orchestrator and adapter validation; historical read,
+approval and recovery do not manufacture fields or reclassify evidence.
+
+The bounded specification contains evaluation method, stage rationale, execution
+mode and proposed duration, input materials, ordered checks, pass conditions,
+coded failure findings, positive and negative test cases, runtime dependencies
+and infrastructure-failure handling. Input paths are canonical relative machine
+fields, not prose. Missing task context or model-service custody is an explicit
+engineering dependency, never invented runtime capability. The ordinary image
+runner is offline. A supported claim must fit its actual material/service port.
+
+Fix the two reviewed instruction contradictions: capability gaps alone produce
+warning-ready proposals and continue blocking activation; only guide blockers
+or blocking findings require `guide_blocked`. Both PRE and POST bindings may
+carry configuration accepted by their exact immutable registry schema. The
+four platform defaults do not implement project required-file/layout rules;
+those require project checks even when also recorded in artifact-policy metadata.
+
+Update the existing CLI decoder and readable proposal output for this same
+contract, including current PRE parameters. Keep the complete JSON response and
+terminal-safe display. Prove old retained hashes and new malformed specs,
+stage/time conflicts, exact registry parameters and public read/approval paths.
+The existing nullable-limit repair and its evidence remain intact below.
 
 The user clarified that platform limits already govern every upload. Silence
 in the project guide must not block setup. Remove the attempted guide-level
