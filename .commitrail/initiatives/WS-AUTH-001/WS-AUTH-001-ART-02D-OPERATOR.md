@@ -56,6 +56,18 @@ Rejected alternatives: composing `operations.status.read` for admission/readines
 
 The following are named future tests, not executed evidence. The shared fixture signs a real bearer, provisions a human through `/actors/me`, bootstraps an Access Administrator and issues a persisted system Operator grant through public administration. It uses the migrated PostgreSQL schema, real FastAPI dependencies and an independent observer session. ART seeds only canonical artifact rows needed to reach the route; no authority port or context is overridden.
 
+| Existing surface | Exact action | ART-owned resource selector | AUTH and transaction owner |
+|---|---|---|---|
+| `GET /bindings` | `artifact.binding.read` | canonical product resource kind/UUID and project | typed system-Operator read; ART GET commits |
+| `GET /contents/{id}/replicas` | `artifact.replica.read` | content UUID and complete associated projects | typed system-Operator read; ART GET commits |
+| `GET /replicas/{id}/receipts` | `artifact.receipt.read` | replica UUID and complete associated projects | typed system-Operator read; ART GET commits |
+| `GET /verification-jobs/{id}` | `artifact.verification_job.read` | job UUID and complete associated projects | typed system-Operator read; ART GET commits |
+| `GET /recovery-attempts/{id}` | `artifact.recovery_attempt.read` | attempt UUID and canonical project | typed system-Operator read; ART GET commits |
+| `GET /audit-events` | `artifact.audit.read` | audit resource kind/UUID and complete associated projects | typed system-Operator read; ART GET commits |
+| `GET /admission-usage` | `operations.artifact_storage_admission.read` | exact project and optional task/deployment scope | typed system-Operator read; ART GET commits |
+| `GET /readiness` | `operations.artifact_storage_admission.read` | deployment artifact-storage readiness selector | typed system-Operator read; ART GET commits |
+| `POST /verification-jobs/{id}/retry` | `artifact.verification_job.retry` | locked source job, project/task/submission and CAS | separate typed system-Operator evaluator; ART recovery service owns commit |
+
 | Behavior atom / owner | Future discriminating proof | Required observation |
 |---|---|---|
 | Exact eight-action availability and no unrelated growth / AUTH catalogue | `test_artifact_operator_action_activation_is_exact` | Before/after action/permission set; wrong typed resource/action pair denied |
