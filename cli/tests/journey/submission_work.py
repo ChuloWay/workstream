@@ -114,8 +114,12 @@ def submit_and_observe(
     retained = client.call(token, "me", "submissions", "--task", task_id)
     if retained["next_cursor"] is not None or len(retained["items"]) != 1:
         raise AssertionError("submission replay did not retain exactly one attempt")
+    if (
+        retained["items"][0]["submission_id"] != receipt["submission_id"]
+        or outcome["id"] != receipt["submission_id"]
+    ):
+        raise AssertionError("retained submission differs from accepted receipt")
     for field, value in {
-        "id": receipt["submission_id"],
         "task_id": task_id,
         "version": receipt["submission_version"],
         "status": "accepted",
