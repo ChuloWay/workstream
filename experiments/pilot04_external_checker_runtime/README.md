@@ -102,7 +102,7 @@ must remove those containers after the run. Never use a deployment broker.
 ```sh
 PYTHONPATH=.:tests:.. .venv/bin/python scripts/run_isolated_tests.py \
   --metadata-json /tmp/guide-journey-cleanup.json --timeout-seconds 1500 \
-  --lane guide-journey -- \
+  --lane guide_journey -- \
   .venv/bin/python ../experiments/pilot04_external_checker_runtime/run_public_journey_probe.py \
   --image-reference 'localhost:<port>/<repository>@sha256:<manifest-digest>' \
   --service-binary /absolute/path/to/workstream-checker-service \
@@ -116,3 +116,16 @@ not guide contents, tokens or provider credentials. Check `cleanup_complete`,
 `database_cleanup_complete` and `minio_cleanup_complete` in the runner metadata.
 The drill stops owned API, worker, Beat and Rust processes even on failure.
 The removed approved-guide bootstrap mode is not an alternate entry path.
+
+The backend lock and the Rust checker service are Linux-only. On macOS with
+Docker Desktop, run the runner, service and probe inside a Linux container that
+can reach the Docker socket, mounting the repository at its identical host path.
+Three host limits apply there:
+
+- Keep the work directory path short. The checker's Unix socket path must fit
+  the Linux 107-byte limit.
+- Put the work directory on a Docker volume inside the Desktop VM, mounted at
+  its identical path. The host-shared filesystem refuses `chmod` on a Unix
+  socket, and checker containers need a bind source the engine can resolve.
+- On Apple M4 hosts, set `OPENSSL_armcap=0` in the container if importing
+  `cryptography` stops with "Illegal instruction".
