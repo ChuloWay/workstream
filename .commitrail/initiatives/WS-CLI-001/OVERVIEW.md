@@ -32,6 +32,7 @@
   [WS-CLI-001-25](WS-CLI-001-25.md), explicit public ZIP preparation, Submission replay/history and contributor checker findings;
   [WS-CLI-001-27](WS-CLI-001-27.md), manager task-context and retained Submission/checker evidence reads;
   [WS-CLI-001-28](WS-CLI-001-28.md), privileged actor, identity-link, grant-history and catalogue reads;
+  [WS-CLI-001-39](WS-CLI-001-39.md), explicit actor, identity-link and administrative grant mutations;
   [WS-CLI-001-29](WS-CLI-001-29.md), Operator checker registry and exact retry commands;
   [WS-CLI-001-31](WS-CLI-001-31.md), verified retained task-import source download;
   [WS-CLI-001-32](WS-CLI-001-32.md), read-only active-guide and retained/current intake-policy inspection;
@@ -44,7 +45,18 @@
   [PILOT-02](../../changes/pilot02-bulk-transitions-cli.md), explicit CSV conversion,
   source custody, atomic import, batch status and whole-batch screen/release.
 
+[WS-CLI-001-40](WS-CLI-001-40.md) additionally delivers exact-project uncertain
+delivery inspection and explicit reconciliation.
+
 ## Current boundary
+
+[WS-CLI-001-26](WS-CLI-001-26.md) adds deliberate draft-guide summary editing
+and separate guide-bound review/revision policy configuration. The commands
+`project guide edit`, `set-review-policy` and `set-revision-policy` consume only
+the existing public writes with caller-owned replay keys and policy `If-Match`.
+The backend owns manager authorization for new writes, policy semantics, replay and activation;
+editing/configuring a guide does not approve or activate it. Other public API
+client gaps, optional TUI and binary distribution remain separate work.
 
 The Operator commands `operations task list`, `operations task locked-context`
 and `operations task start` use three existing public routes. Their restricted
@@ -66,6 +78,13 @@ REST routes. Registration does not enable execution; source reads do not authori
 later retry, and exact replay rechecks backend authority. Hosted operation and
 CLI distribution remain separate.
 
+[WS-CLI-001-40](WS-CLI-001-40.md) exposes the two public post-submit delivery
+operations added after the inventory baseline below. `operations delivery list`
+returns one authorized page; `operations delivery reconcile` explicitly requests
+one exact event's governed reconciliation with a reason and caller-owned key.
+Classification, current authority and recovery effects remain backend-owned.
+This is not known-terminal checker retry or artifact-custody recovery.
+
 [WS-CLI-001-31](WS-CLI-001-31.md) adds `project task-batch source-download`
 through retained-source status and content public GETs. The CLI verifies bytes
 against the returned size/SHA-256 before publishing a private, non-overwriting
@@ -82,13 +101,20 @@ exact actor profile/identity-link inspection, explicitly scoped actor/admin gran
 history pages, and permission/role-definition catalogues. These remain separate
 from self-profile operations and never treat observed grants as local authority.
 
+[WS-CLI-001-39](WS-CLI-001-39.md) adds eight existing public administrative
+writes under the existing `admin` command tree. Service provisioning, actor
+lifecycle, identity-link lifecycle and administrative grants remain separate
+backend-owned decisions. Every write requires explicit input and a caller-owned
+replay key; prior inspection confers no authority and uncertainty never triggers
+automatic retry. Local deployment bootstrap remains outside this public client.
+
 [WS-CLI-001-33](WS-CLI-001-33.md) adds `project role-grant candidates PROJECT_ID`
 over the existing exact-project candidate page. A covered Project Manager sees
 only actor UUID and nullable display name with explicit opaque continuation.
 Discovery neither qualifies nor grants actors; backend authority and cursor
 scope remain decisive.
 
-Current public-only completion plan (inventory at main `51b868071`): FastAPI
+Public-only completion baseline (inventory at main `51b868071`): FastAPI
 OpenAPI declares 125 non-health method/path operations, of which 69 have CLI
 coverage. Counts are an inventory, not a runtime certification or a coverage
 target, and predate the delivered additions above. Contributor `me`
@@ -122,7 +148,16 @@ revision-context presentation correction.
 | [#608](https://github.com/Flow-Research/workstream/issues/608) | External-checker registry and explicit retry, delivered by [WS-CLI-001-29](WS-CLI-001-29.md) | 4 |
 | [#609](https://github.com/Flow-Research/workstream/issues/609) | Operator task inspection/start override, delivered by [WS-CLI-001-36](WS-CLI-001-36.md) | 3 |
 | [#610](https://github.com/Flow-Research/workstream/issues/610) | Task audit context/evidence — delivered by [WS-CLI-001-34](WS-CLI-001-34.md) | 2 |
-| [#611](https://github.com/Flow-Research/workstream/issues/611) | Artifact operator inspection/recovery | 9 |
+| [#611](https://github.com/Flow-Research/workstream/issues/611) | Artifact operator inspection/recovery; production authority is not activated, so no usable CLI boundary yet | 9 |
+
+After that baseline, #617 added two live post-submit delivery discovery and
+reconciliation operations. [#634](https://github.com/Flow-Research/workstream/issues/634)
+tracks their public CLI client separately; the baseline counts do not include them.
+For #611, mounted routes are not usable capability: the production dependencies
+still return denying artifact operator/recovery authorities. Positive tests with
+authority overrides do not establish production availability. Backend activation
+must precede CLI implementation; no dormant commands or client-side bypass belong
+in this initiative.
 
 Continue only the remaining boundaries in the inventory above; delivered rows
 are not new assignments. Inspection informs subsequent manual mutations
@@ -131,7 +166,8 @@ dependency. Root registrations are additive; shared transport changes have one
 owner and are reused rather than copied. Each PR reconciles its own README and
 roadmap claims, while the lead coordinates overview/index changes. No generic
 raw-HTTP executor, private backend path, new business rules or eager TUI is needed.
-No material product decision is missing for these existing-contract clients.
+The usable existing-contract clients require no new product policy. Activating
+#611's backend authority is a separate authorization change, not CLI scope.
 
 The backend exposes `GET /api/v1/actors/me` and
 `GET /api/v1/actors/me/authorization-context` in
