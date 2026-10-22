@@ -750,3 +750,12 @@ CI review requires the new parser allowlist to be pinned independently, as the
 adjacent adapter allowlists already are. Add the exact-target regression in
 `backend/tests/test_behavior_ownership.py`, including rejection of an adjacent
 undeclared parser; prove widening the production constant fails that assertion.
+
+The complete hosted runtime run found two additional fixture defects: the
+manager-authored live-worker happy path still supplied an empty requirement
+inventory, and the oversize-predecessor unit test implicitly depended on a local
+provider credential. Supply an explicit informational requirement in the former
+and a dummy test credential in the latter. Keep malformed-rule rejection and
+the forbidden provider-call assertion unchanged. Recheck both worker outcomes
+on isolated PostgreSQL and the prompt-bound test without ambient credentials;
+this repair does not weaken generation validation or change runtime behavior.

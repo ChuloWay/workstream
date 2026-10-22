@@ -978,7 +978,15 @@ def _manager_rules(**overrides) -> bytes:
         "submission_artifact_policy": {"maximum_file_size_bytes": 1000,
                                        "maximum_package_size_bytes": 10000,
                                        "required_artifacts": ["submission"]},
-        "requirements": [], "pre_submit_bindings": [], "post_submit_bindings": [],
+        "requirements": [{
+            "requirement_id": "guide.context",
+            "statement": "Use the project guide.",
+            "disposition": "informational",
+            "platform_coverage": None,
+            "classification_rationale": "This identifies the governing guide for the work.",
+            "check_specification": None,
+            "evidence_refs": [],
+        }], "pre_submit_bindings": [], "post_submit_bindings": [],
         "capability_suggestions": [], "setup_notes": [],
     } | overrides).encode()
 

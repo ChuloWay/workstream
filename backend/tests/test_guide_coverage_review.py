@@ -94,6 +94,7 @@ async def test_oversize_predecessor_is_rejected_before_provider_execution(monkey
     """The authenticated body counts towards the actual provider prompt bound."""
     from app.interfaces.project_agents import project_guide_compilation_prompt_bytes
 
+    monkeypatch.setenv("OPENAI_API_KEY", "unit-test-only")
     compilation = correction_context()
     prompt = json.loads(project_guide_compilation_prompt_bytes(compilation))
     del prompt["correction_predecessor"]
