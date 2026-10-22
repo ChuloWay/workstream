@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"regexp"
 	"strings"
+	"unicode"
 	"unicode/utf8"
 )
 
@@ -662,7 +663,8 @@ func proposalInfraCode(value string) bool {
 }
 
 func proposalRelativePath(value string) bool {
-	if value == "" || strings.TrimSpace(value) != value || strings.HasPrefix(value, "/") || strings.HasPrefix(value, "~") ||
+	// NFC is validated by the backend owner; this reader never resolves paths.
+	if value == "" || !utf8.ValidString(value) || utf8.RuneCountInString(value) > 500 || strings.TrimSpace(value) != value || strings.HasPrefix(value, "/") || strings.HasPrefix(value, "~") ||
 		strings.ContainsAny(value, `\\:%#`+"`$;|<>*?[]") {
 		return false
 	}
@@ -671,7 +673,7 @@ func proposalRelativePath(value string) bool {
 			return false
 		}
 		for _, r := range segment {
-			if r < 0x20 || r == 0x7f {
+			if unicode.Is(unicode.Cc, r) || unicode.Is(unicode.Cs, r) || unicode.Is(unicode.Cf, r) {
 				return false
 			}
 		}

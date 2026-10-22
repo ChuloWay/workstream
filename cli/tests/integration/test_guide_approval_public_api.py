@@ -33,7 +33,9 @@ from tests.projects.guide_compilation.proposals.pg_support import (  # noqa: E40
     proposal_case,
     seed_review_actor,
 )
-from tests.projects.guide_compilation.helpers import result as compilation_result  # noqa: E402
+from tests.projects.guide_compilation.helpers import (
+    generated_result as compilation_result,
+)  # noqa: E402
 
 
 @pytest.mark.asyncio

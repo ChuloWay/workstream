@@ -4,6 +4,8 @@ from copy import deepcopy
 import json
 from urllib.parse import quote
 
+import pytest
+
 from test_contributor_task_mutations import canonical_error
 from test_guide_create_http import GUIDE, SETUP
 from test_http_boundary import PROJECT, TOKEN, assert_failure, http_fixture
@@ -538,13 +540,20 @@ def test_proposal_rejects_null_array_members_and_parameter_objects(cli):
             assert_failure(invoke(cli, origin), "invalid_api_response")
 
 
-def test_proposal_accepts_backend_canonical_paths_with_literal_braces(cli):
+def test_proposal_accepts_backend_canonical_paths(cli):
     from app.modules.projects.api.guide_proposal_package import (
         GuideProposalReviewPackage,
     )
 
     with http_fixture() as (origin, response, _):
-        for path in ("reports/{summary}", "reports/result}"):
+        for path in (
+            "reports/{summary}",
+            "reports/result}",
+            "reports/Café.txt",
+            "reports/結果.txt",
+            "reports/á" + "\u0301" * 31 + ".txt",
+            "結" * 500,
+        ):
             value = proposal()
             value["result"]["requirements"][0]["check_specification"]["inputs"][1][
                 "relative_path"
@@ -560,6 +569,29 @@ def test_proposal_accepts_backend_canonical_paths_with_literal_braces(cli):
                 ]
                 == path
             )
+
+
+def test_proposal_rejects_backend_invalid_unicode_paths(cli):
+    from pydantic import ValidationError
+
+    from app.modules.projects.api.guide_proposal_package import (
+        GuideProposalReviewPackage,
+    )
+
+    with http_fixture() as (origin, response, _):
+        for path in (
+            "reports/\u200bhidden.txt",
+            "reports/a\u0085b.txt",
+            "結" * 501,
+        ):
+            value = proposal()
+            value["result"]["requirements"][0]["check_specification"]["inputs"][1][
+                "relative_path"
+            ] = path
+            with pytest.raises(ValidationError):
+                GuideProposalReviewPackage.model_validate(value)
+            response["body"] = json.dumps(value).encode()
+            assert_failure(invoke(cli, origin), "invalid_api_response")
 
 
 def test_proposal_specification_stage_semantics_and_historical_omission(cli):

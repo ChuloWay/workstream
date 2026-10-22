@@ -711,3 +711,25 @@ modules, preserving every existing module's lane owners and the 16-lane topology
 Update only the corresponding independent family/ownership snapshot constants;
 no existing test is moved or excluded. The first local inventory run correctly
 rejected stale snapshot constants before their explicit reconciliation.
+
+Architecture review also reproduced Unicode control/format characters accepted
+by the CLI and rejected by the backend. Enforce valid UTF-8, the 500-rune bound
+and Cc/Cs/Cf rejection while preserving canonical Unicode filenames and braces.
+Keep NFC validation with the backend owner: this display-only reader neither
+resolves nor executes paths. Go's stream-safe normalization rejects some valid
+Python NFC strings and uses a different Unicode version; do not introduce a
+second normalization implementation or dependency just to mirror that semantic
+guard. Backend-validated positive cases include long combining sequences;
+backend-rejected process cases cover controls, format characters and length.
+The old binary accepts the invalid response, so the new negative test fails
+against it. Replay the affected architecture and QA reviews.
+
+Hosted real-API CLI cases also exposed callers still feeding the empty retained
+compilation fixture into new execution. The new generation guard correctly
+refuses these before persistence. Update current-generation source/committed-guide
+fixtures and explicit runtime callers to supply the existing generated fixture
+and complete typed PRE/POST specifications. Preserve retained-result fixtures and
+deliberately invalid-output tests; never auto-enrich supplied outcomes or bypass
+generation validation. Extend test scope to their existing backend and CLI
+consumers. Reproduce the failing public approval journey, rerun affected real-API
+journeys on isolated PostgreSQL, and retain cleanup evidence.
