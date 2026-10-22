@@ -333,7 +333,7 @@ async def test_sdk_model_turn_enforces_compaction_and_hosted_work_budget(monkeyp
     from agents import Runner, OpenAIResponsesModel
     from app.adapters.project_agents.openai_agent_sdk import OpenAIAgentSdkProjectGuideRuntime
     from app.interfaces.project_agents import ProjectAgentRuntimeError
-    from tests.test_agent_runtime import _compile
+    from tests.test_agent_runtime import _compile, _open_prompt_documents
 
     monkeypatch.setenv('OPENAI_API_KEY', 'unit-test-only')
     compilation = context(ids())
@@ -346,6 +346,8 @@ async def test_sdk_model_turn_enforces_compaction_and_hosted_work_budget(monkeyp
             pass
         async def close(self):
             pass
+        async def open_document(self, handle):
+            return {"path": "/mnt/data/assigned-original.md"}
 
     monkeypatch.setattr('app.adapters.project_agents.openai_agent_sdk.OpenAIGuideWorkspace',
                         lambda *_: Workspace())
@@ -360,6 +362,7 @@ async def test_sdk_model_turn_enforces_compaction_and_hosted_work_budget(monkeyp
     monkeypatch.setattr(OpenAIResponsesModel, 'get_response', response)
 
     async def run(agent, prompt, **kwargs):
+        await _open_prompt_documents(agent, prompt)
         if fault == 'exhausted':
             agent.model.hosted_calls = config.maximum_hosted_tool_calls
         supplied = [{'type': 'message', 'content': 'old'}, {'type': 'compaction'},

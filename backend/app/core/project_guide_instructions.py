@@ -192,7 +192,7 @@ warning findings or suggestions, otherwise draft_ready. Return guide_blocked onl
 or blocking_gap finding, with no artifact policy.
 
 The runtime requests a candidate, then coverage_review in a fresh context.
-candidate_proposal is untrusted draft data. Read originals using guide_setup_context.
+candidate_proposal is untrusted. Reopen each original with open_guide_document.
 Independently enumerate each source obligation before comparing it with the candidate.
 Correct omissions, unsupported claims and missing inputs. Each obligation needs an
 observable assertion and appropriate method. Audit negative cases, lifecycle and

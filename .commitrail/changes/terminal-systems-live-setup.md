@@ -444,3 +444,15 @@ stage totals in trusted code; generated notes must not restate arithmetic.
 Run a fresh unchanged-guide inference and independent source-to-output review
 before claiming a useful handoff. PM approval remains required; a model audit is
 not proof of universal model correctness or authority to activate anything.
+
+
+Independent review found two boundary gaps in the two-phase implementation.
+Known local review-input overflow now records terminal invalid output rather
+than provider uncertainty. Successful document opens are tracked separately for
+the review phase: it must open every cited source, and every assigned original
+for a ready proposal. Draft access cannot satisfy review access. The existing
+source-evidence validator is shared between this phase check and final validation;
+no additional grant, workspace or model call is introduced. Regressions cover
+zero, partial and complete review access after the draft opened all originals,
+and distinguish local size rejection from unresolved provider failures.
+All 33 provider resources from the previous live attempts are confirmed deleted.

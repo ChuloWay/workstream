@@ -56,7 +56,24 @@ def scripted_workspace(monkeypatch):
         async def close(self):
             pass
 
+        async def open_document(self, handle):
+            return {"path": "/mnt/data/assigned-original.md"}
+
     monkeypatch.setattr(openai_agent_sdk, "OpenAIGuideWorkspace", Workspace)
+
+
+async def _open_prompt_documents(agent, prompt, count=None):
+    """Exercise the assigned-document tool in this Runner phase."""
+    from agents.tool_context import ToolContext
+
+    supplied = json.loads(prompt)
+    material = supplied.get("guide_setup_context", supplied)["material"]
+    for document in material["documents"][:count]:
+        arguments = json.dumps({"handle": document["handle"]})
+        await agent.tools[0].on_invoke_tool(
+            ToolContext(context=None, tool_name="open_guide_document",
+                        tool_call_id="test-open", tool_arguments=arguments), arguments
+        )
 
 
 async def _compile(runtime, compilation_context):
@@ -157,6 +174,7 @@ async def test_unified_compilation_uses_scoped_tools_and_strict_output(monkeypat
 
     async def run(agent, prompt, **kwargs):
         calls.append((agent, prompt, kwargs))
+        await _open_prompt_documents(agent, prompt)
         assert agent.instructions == configuration.instructions
         assert len(agent.tools) == 2 and agent.handoffs == []
         assert isinstance(agent.tools[0], FunctionTool)
@@ -220,10 +238,59 @@ async def test_coverage_review_failure_never_returns_unchecked_draft(monkeypatch
         pytest.fail("oversized review reached the provider")
 
     monkeypatch.setattr(Runner, "run", run)
-    with pytest.raises(ProjectAgentRuntimeError) as caught:
+    expected_error = (ProjectGuideCompilationInvalidOutputError
+                      if failure == "oversized" else ProjectAgentRuntimeError)
+    with pytest.raises(expected_error) as caught:
         await _compile(OpenAIAgentSdkProjectGuideRuntime(configuration), compilation)
+    if failure == "oversized":
+        assert caught.value.failure_code == "schema_invalid"
     assert "private" not in str(caught.value)
     assert calls == ([1] if failure == "oversized" else [1, 1])
+
+
+@pytest.mark.parametrize("review_count", [0, 1, 2])
+async def test_review_must_open_every_original_independently(monkeypatch, review_count):
+    """Draft opens cannot stand in for source access during the fresh review."""
+    from agents import Runner
+
+    compilation = context(ids())
+    original = compilation.material.documents[0]
+    second = original.model_copy(update={
+        "source_item_id": uuid4(), "ingest_id": uuid4(),
+        "put_attempt_id": uuid4(), "item_order": original.item_order + 1,
+    })
+    compilation = compilation.model_copy(update={
+        "material": compilation.material.model_copy(update={"documents": (original, second)})
+    })
+    candidate = result()
+    requirement = candidate.requirements[0]
+    second_reference = requirement.evidence_refs[0].model_copy(update={
+        "source_item_id": second.source_item_id, "document_version_id": second.ingest_id,
+    })
+    candidate = candidate.model_copy(update={"requirements": (
+        requirement.model_copy(update={
+            "evidence_refs": (*requirement.evidence_refs, second_reference),
+        }), *candidate.requirements[1:],
+    )})
+    phases = []
+
+    async def run(agent, prompt, **kwargs):
+        phases.append(1)
+        if len(phases) == 1:
+            await _open_prompt_documents(agent, prompt)
+        else:
+            await _open_prompt_documents(agent, prompt, review_count)
+        return SimpleNamespace(final_output=candidate)
+
+    monkeypatch.setattr(Runner, "run", run)
+    runtime = OpenAIAgentSdkProjectGuideRuntime(compilation.runtime_configuration)
+    if review_count == 2:
+        assert await _compile(runtime, compilation) == candidate
+    else:
+        with pytest.raises(ProjectGuideCompilationInvalidOutputError) as caught:
+            await _compile(runtime, compilation)
+        assert caught.value.failure_code == "schema_invalid"
+    assert phases == [1, 1]
 
 
 @pytest.mark.parametrize("kind", ["mapping", "json", "model"])
@@ -380,8 +447,9 @@ async def test_actual_sdk_parser_preserves_known_invalid_output(monkeypatch, kin
     raw = "{invalid" if kind == "malformed" else json.dumps(payload)
     calls = []
 
-    async def run(agent, *args, **kwargs):
+    async def run(agent, prompt, **kwargs):
         calls.append(1)
+        await _open_prompt_documents(agent, prompt)
         return SimpleNamespace(final_output=agent.output_type.validate_json(raw))
 
     monkeypatch.setattr(Runner, "run", run)
@@ -444,8 +512,9 @@ async def test_sdk_parser_requires_declared_isolated_execution_dependency(
     ]
     calls = []
 
-    async def run(agent, *args, **kwargs):
+    async def run(agent, prompt, **kwargs):
         calls.append(1)
+        await _open_prompt_documents(agent, prompt)
         return SimpleNamespace(final_output=agent.output_type.validate_json(json.dumps(payload)))
 
     monkeypatch.setattr(Runner, "run", run)

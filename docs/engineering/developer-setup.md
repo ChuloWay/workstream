@@ -255,7 +255,10 @@ to check it against the original documents and return the corrected proposal.
 Both phases share one attempt, workspace, client, overall timeout and aggregate
 model-turn/hosted-tool budgets. The draft can use at most half the configured turn
 allowance; review receives the unused remainder. The serialized review input
-(original credential-free context plus candidate) must fit `maximum_manifest_bytes`.
+(original credential-free context plus candidate) must fit `maximum_manifest_bytes`;
+an oversized candidate is terminal invalid output. The review must reopen every
+cited original, and every assigned original for a ready proposal; draft-phase
+opens cannot satisfy review access.
 A review failure, cancellation, invalid result or exhausted budget does not publish
 the unchecked draft. This is a bounded phase of the same attempt, not a retry of
 an uncertain or terminal invocation. PM review and approval remain separate.

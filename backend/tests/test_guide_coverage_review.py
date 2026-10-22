@@ -12,7 +12,7 @@ from tests.projects.guide_compilation.helpers import (
     ids,
     runtime_configuration,
 )
-from tests.test_agent_runtime import _compile
+from tests.test_agent_runtime import _compile, _open_prompt_documents
 
 
 @pytest.mark.parametrize("boundary", ["model_turns", "hosted_calls", "within_budget"])
@@ -34,6 +34,9 @@ async def test_coverage_review_cannot_reset_the_attempt_work_budget(monkeypatch,
         async def close(self):
             events.append("close")
 
+        async def open_document(self, handle):
+            return {"path": "/mnt/data/assigned-original.md"}
+
     monkeypatch.setattr(
         "app.adapters.project_agents.openai_agent_sdk.OpenAIGuideWorkspace",
         lambda *_: Workspace(),
@@ -52,6 +55,7 @@ async def test_coverage_review_cannot_reset_the_attempt_work_budget(monkeypatch,
     monkeypatch.setattr(OpenAIResponsesModel, "get_response", response)
 
     async def run(agent, prompt, **kwargs):
+        await _open_prompt_documents(agent, prompt)
         phases.append(kwargs["max_turns"])
         # Candidate uses three turns. The review tries four more, irrespective of
         # the SDK phase limit, to exercise the adapter's independent shared fence.

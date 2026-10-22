@@ -143,22 +143,7 @@ class OpenAIAgentSdkProjectGuideRuntime:
         if result.agent_version != context.agent_version:
             raise ValueError("compilation result agent version is invalid")
         opened = await capabilities.resources.opened_handles()
-        if not opened:
-            raise ValueError("compilation has no opened document evidence")
-        document_handles = {
-            (item.source_item_id, item.ingest_id): context.material.handle_for(item)
-            for item in context.material.documents
-        }
-        references = (
-            *(ref for finding in result.findings for ref in finding.evidence_refs),
-            *(ref for requirement in result.requirements for ref in requirement.evidence_refs),
-            *(ref for suggestion in result.capability_suggestions for ref in suggestion.evidence_refs),
-        )
-        cited_handles = {document_handles[(ref.source_item_id, ref.document_version_id)]
-                         for ref in references}
-        if not cited_handles <= opened:
-            raise ValueError("compilation cites unopened source material")
-        require_ready_result_cites_every_document(context, result)
+        _require_opened_sources(context, result, opened)
         return result
 
     async def _run(self, context: ProjectGuideCompilationContext, prompt: str,
@@ -230,10 +215,16 @@ class OpenAIAgentSdkProjectGuideRuntime:
             try:
                 await workspace.start()
 
+                reviewing = False
+                review_opened = set()
+
                 @function_tool(failure_error_function=None)
                 async def open_guide_document(handle: str) -> str:
                     """Open one assigned original by opaque handle, returning its workspace path."""
-                    return json.dumps(await workspace.open_document(handle))
+                    document = await workspace.open_document(handle)
+                    if reviewing:
+                        review_opened.add(handle)
+                    return json.dumps(document)
 
                 agent = Agent(
                     name="ProjectGuideCompilationAgent",
@@ -265,10 +256,11 @@ class OpenAIAgentSdkProjectGuideRuntime:
                         "candidate_proposal": draft.final_output.model_dump(mode="json"),
                     }, ensure_ascii=False, separators=(",", ":"))
                     if len(review_input.encode("utf-8")) > configuration.maximum_manifest_bytes:
-                        raise RuntimeError("guide review input exceeds configured size limit")
+                        raise ProjectGuideCompilationInvalidOutputError("schema_invalid")
                     remaining_turns = configuration.maximum_turns - agent.model.model_turns
                     if remaining_turns <= 0:
                         raise RuntimeError("guide review turn budget exhausted")
+                    reviewing = True
                     result = await Runner.run(
                         agent, review_input, max_turns=remaining_turns,
                         run_config=run_config,
@@ -277,8 +269,31 @@ class OpenAIAgentSdkProjectGuideRuntime:
                     if not parser_rejected:
                         raise
                 else:
+                    try:
+                        _require_opened_sources(context, result.final_output, review_opened)
+                    except ValueError:
+                        raise ProjectGuideCompilationInvalidOutputError("schema_invalid") from None
                     return result.final_output
                 return _INVALID_SCHEMA_OUTPUT
             finally:
                 await workspace.close()
 
+
+def _require_opened_sources(context, result, opened):
+    """Require this phase to access every cited original and all originals when ready."""
+    if not opened:
+        raise ValueError("compilation has no opened document evidence")
+    document_handles = {
+        (item.source_item_id, item.ingest_id): context.material.handle_for(item)
+        for item in context.material.documents
+    }
+    references = (
+        *(ref for finding in result.findings for ref in finding.evidence_refs),
+        *(ref for requirement in result.requirements for ref in requirement.evidence_refs),
+        *(ref for suggestion in result.capability_suggestions for ref in suggestion.evidence_refs),
+    )
+    cited_handles = {document_handles.get((ref.source_item_id, ref.document_version_id))
+                     for ref in references}
+    if not cited_handles <= opened:
+        raise ValueError("compilation cites unopened source material")
+    require_ready_result_cites_every_document(context, result)
