@@ -2141,6 +2141,18 @@
       "target": "backend/scripts/bootstrap_access_administrator.py"
     },
     {
+      "group": "artifacts",
+      "target": "backend/scripts/checker_image.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/scripts/checker_image_process.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/scripts/checker_image_samples.py"
+    },
+    {
       "group": "shared",
       "target": "backend/scripts/coverage_policy.py"
     },
@@ -2233,7 +2245,7 @@
       "target": "backend/scripts/validate_test_lane_evidence.py"
     }
   ],
-  "authority_digest": "0d137f6ea32259e8f0fb55387d02c668feb72d4921dee6c39ad05b25cb5ec2ca",
+  "authority_digest": "11000341e55e3e324d368933bf80e3a26dfd0a82a3fdf76c6e8f089e63e38984",
   "protected_base_commit": "7676ce4347db0c9694962a9b587a20765e16eac6",
   "schema": "workstream.behavior-ownership-partition.v1"
 }

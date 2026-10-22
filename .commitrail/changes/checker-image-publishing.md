@@ -26,6 +26,8 @@ command. Registration and approved policy binding remain separate operations.
 - `.gitignore`: generated local publishing outputs.
 - Focused script tests and their existing CI selection where needed.
 - `backend/scripts/test_lane_catalogue.py`: select the new script regression file.
+- `backend/scripts/behavior_ownership.py` and its partition: register exactly the
+  three added script targets under the existing ownership rules.
 - `external_checkers/README.md`, engineering runbook, affected roadmap claims,
   and this record.
 
@@ -101,6 +103,12 @@ command was run again; it was never reported as qualification success. ECR then
 returned multiple tag rows for that same digest. Verification now accepts only
 byte-identical manifest aliases, rejects conflicting rows, and explicitly pushes
 a single platform. Both real failures remained closed with no registration output.
+
+Hosted preflight found the three new scripts missing from the separate behavior
+ownership partition. The repair adds only those exact targets and their existing
+artifact group, retaining the protected base and all existing assignments. The
+ownership validation and its existing adversarial tests are required alongside
+the script, lane and contract checks.
 
 ## Reconciliation
 
