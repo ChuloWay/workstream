@@ -7,6 +7,7 @@ from uuid import UUID
 
 from sqlalchemy import and_, or_, func, select
 from sqlalchemy.sql.elements import ColumnElement
+from app.interfaces.project_guide_runtime import PROVIDER_FREE
 from .guide_compilation.models import ProjectGuideCompilationAttempt, ProjectGuideSetupFinalization
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -32,8 +33,13 @@ def retryable_compilation_dispatch_predicate() -> ColumnElement[bool]:
             ProjectGuideCompilationAttempt.setup_generation == ProjectSetupRun.setup_generation,
             or_(
                 ProjectGuideCompilationAttempt.runtime_configuration.is_(None),
-                ProjectGuideCompilationAttempt.status.in_(
-                    ("compilation_invalid_terminal", "compilation_provider_uncertain")
+                ProjectGuideCompilationAttempt.status == "compilation_invalid_terminal",
+                # A provider-free fence guards no provider call; recovery reopens it.
+                and_(
+                    ProjectGuideCompilationAttempt.status == "compilation_provider_uncertain",
+                    ProjectGuideCompilationAttempt.runtime_configuration["model_provider"]
+                    .as_string()
+                    .is_distinct_from(PROVIDER_FREE),
                 ),
             ),
         )

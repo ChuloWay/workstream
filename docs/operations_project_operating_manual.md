@@ -410,8 +410,14 @@ taken verbatim from the document. Upload revised rules in a new guide version
 instead. A transient read, timeout or storage failure is not an uncertain
 provider outcome for this runtime: the attempt returns from
 `compilation_provider_uncertain` to `compilation_reserved` and the next delivery
-retries it. The database allows that return only for an attempt whose stored
-provider is `none`; hosted attempts keep the one-way fence. Only the first
+retries it. Cancellation reopens the attempt before it propagates. A fence left
+by a crashed worker reopens on a later delivery once the run deadline
+(`timeout_seconds` plus `cleanup_timeout_seconds`) has passed, and setup
+continuation keeps such attempts eligible for redelivery. A retried run reuses
+the read records of the failed run. The database allows the return only for an
+attempt whose stored provider is `none`; hosted attempts keep the one-way
+fence. The hosted prompt-size limit (`maximum_manifest_bytes`) does not apply,
+because no prompt is built. Only the first
 matching rules document stays parsed in memory; later matches are recorded as
 duplicates without their bodies.
 

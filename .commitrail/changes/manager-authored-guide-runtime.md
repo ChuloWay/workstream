@@ -271,6 +271,26 @@ candidate `7f42f7682`; no blocking finding. Dispositions:
     compilation orchestrator, runtime configuration, document custody,
     Alembic), Ruff, architecture tests and the module, AUTH, test-structure and
     behavior-ownership validators pass. Schema fingerprint refreshed.
+- Second review round on PR #643 (Codex and CodeRabbit, four findings, all
+  fixed):
+  - Codex P1, cancellation stranded the attempt: `CancelledError` bypassed the
+    release. The orchestrator now releases a provider-free fence (shielded)
+    before re-raising cancellation.
+  - CodeRabbit, crashed workers stranded the attempt: recovery returned every
+    uncertain attempt as terminal. A provider-free fence older than
+    `timeout_seconds + cleanup_timeout_seconds` is now released during recovery
+    and dispatch continues; a younger one is left alone so a run still in
+    flight elsewhere is not duplicated. Setup continuation no longer treats a
+    provider-free uncertain attempt as terminal, so redelivery reaches recovery.
+  - CodeRabbit, retries could violate `uq_guide_document_access`: a retried run
+    rereads documents the failed run recorded. `record_direct_document_open`
+    now returns when the same document is already recorded for the attempt and
+    refuses a different handle for it.
+  - Codex P2, hosted prompt limit applied to provider-free runs: the
+    orchestrator now applies `maximum_manifest_bytes` only to hosted runtimes.
+  - Tests: cancellation reopens the attempt; recovery leaves a fresh fence and
+    reopens a stale one; a repeated read records one row; a provider-free run
+    with a 1,024-byte limit and a larger context still runs.
 - Coordination: PR #633 also adds `0056`; whichever merges second renumbers its
   migration and refreshes `alembic/env.py`, `tests/test_alembic.py` and the
   schema fingerprint.

@@ -199,6 +199,15 @@ class SqlAlchemyGuideRuntimeCustody(SqlAlchemyGuideRuntimeCleanupCustody):
             raise ValueError("guide runtime document is not granted")
         async with self._sessions() as session, session.begin():
             await self._lock_attempt(session, in_flight=True, provider_free=True)
+            recorded = await session.scalar(select(ProjectGuideDocumentAccess.document_handle).where(
+                ProjectGuideDocumentAccess.attempt_id == self._attempt_id,
+                ProjectGuideDocumentAccess.source_item_id == str(document.source_item_id),
+            ))
+            if recorded is not None:
+                # A retried provider-free run rereads documents a failed run recorded.
+                if str(recorded) != handle:
+                    raise RuntimeError("guide runtime custody is unavailable")
+                return
             session.add(ProjectGuideDocumentAccess(
                 id=new_record_id(), attempt_id=self._attempt_id, source_item_id=str(document.source_item_id),
                 document_version_id=str(document.ingest_id), attachment_allocation_id=None,

@@ -201,6 +201,18 @@ async def test_manager_authored_read_is_recorded_without_any_provider_resource(m
             {"id": attempt_id}) == 0
 
 
+async def test_manager_authored_read_is_recorded_once_across_a_retry(manager_attempt):
+    """A retried provider-free run rereads documents the failed run already recorded."""
+    sessions, attempt_id, compilation, custody = manager_attempt
+    handle = compilation.material.handle_for(compilation.material.documents[0])
+    await custody.record_direct_document_open(handle)
+    await custody.record_direct_document_open(handle)
+    async with sessions() as session:
+        assert await session.scalar(text(
+            "select count(*) from project_guide_document_accesses where attempt_id=:id"),
+            {"id": attempt_id}) == 1
+
+
 async def test_sql_refuses_provider_resources_for_a_manager_authored_attempt(manager_attempt):
     sessions, attempt_id, compilation, _custody = manager_attempt
     async with sessions() as session, session.begin():

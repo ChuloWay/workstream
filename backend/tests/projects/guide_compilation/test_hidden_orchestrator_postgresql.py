@@ -549,6 +549,101 @@ async def test_provider_free_transient_failure_reopens_the_attempt_for_retry(
 
 
 @pytest.mark.asyncio
+async def test_provider_free_cancellation_reopens_the_attempt(
+    clean_postgres_database: str,
+) -> None:
+    """Cancellation propagates, but never strands a provider-free attempt."""
+    values = await seed_database(clean_postgres_database)
+    requested = await _authorized_attempt(
+        clean_postgres_database, values, manager_runtime_configuration())
+    engine = create_async_engine(clean_postgres_database)
+    factory = async_sessionmaker(engine, expire_on_commit=False)
+    command = ProjectGuideCompilationExecutionCommand(attempt_id=requested.attempt_id)
+    try:
+        with pytest.raises(asyncio.CancelledError):
+            await _port(factory, _ManagerRuntime(asyncio.CancelledError())).execute(command)
+        async with factory() as session:
+            status = await session.scalar(text(
+                "select status from project_guide_compilation_attempts where id=:id"),
+                {"id": requested.attempt_id})
+            await session.rollback()
+        assert status == "compilation_reserved"
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_recovery_reopens_only_a_stale_provider_free_fence(
+    clean_postgres_database: str, monkeypatch,
+) -> None:
+    """A fence left by a crashed worker reopens after its run deadline, not before."""
+    from datetime import UTC, datetime, timedelta
+
+    from app.modules.projects.guide_compilation import orchestrator
+
+    values = await seed_database(clean_postgres_database)
+    requested = await _authorized_attempt(
+        clean_postgres_database, values, manager_runtime_configuration())
+    engine = create_async_engine(clean_postgres_database)
+    factory = async_sessionmaker(engine, expire_on_commit=False)
+    command = ProjectGuideCompilationExecutionCommand(attempt_id=requested.attempt_id)
+    try:
+        backend = _backend(factory)
+        assert (await backend.fence(await backend.load(requested.attempt_id))).dispatch_permitted
+        fresh = _ManagerRuntime(ProjectGuideCompilationInvalidOutputError("schema_invalid"))
+        unresolved = await _port(factory, fresh).execute(command)
+        assert (
+            unresolved.classification
+            is ProjectGuideCompilationExecutionClassification.PROVIDER_UNRESOLVED
+        )
+        assert fresh.calls == 0
+
+        class _Later(datetime):
+            @classmethod
+            def now(cls, tz=None):
+                return datetime.now(tz or UTC) + timedelta(hours=3)
+
+        monkeypatch.setattr(orchestrator, "datetime", _Later)
+        stale = _ManagerRuntime(ProjectGuideCompilationInvalidOutputError("schema_invalid"))
+        retried = await _port(factory, stale).execute(command)
+        assert (
+            retried.classification
+            is ProjectGuideCompilationExecutionClassification.INVALID_TERMINAL
+        )
+        assert stale.calls == 1
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_provider_free_run_ignores_the_hosted_prompt_limit(
+    clean_postgres_database: str,
+) -> None:
+    """The prompt limit bounds a hosted model request; a provider-free run sends none."""
+    from app.interfaces.project_agents import project_guide_compilation_prompt_bytes
+
+    configuration = manager_runtime_configuration().model_copy(
+        update={"maximum_manifest_bytes": 1024})
+    values = await seed_database(clean_postgres_database)
+    assert len(project_guide_compilation_prompt_bytes(
+        context(values, configuration=configuration))) > 1024
+    requested = await _authorized_attempt(clean_postgres_database, values, configuration)
+    engine = create_async_engine(clean_postgres_database)
+    factory = async_sessionmaker(engine, expire_on_commit=False)
+    runtime = _ManagerRuntime(ProjectGuideCompilationInvalidOutputError("schema_invalid"))
+    try:
+        receipt = await _port(factory, runtime).execute(
+            ProjectGuideCompilationExecutionCommand(attempt_id=requested.attempt_id))
+        assert (
+            receipt.classification
+            is ProjectGuideCompilationExecutionClassification.INVALID_TERMINAL
+        )
+        assert runtime.calls == 1
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
 async def test_revoked_service_authority_is_bounded_before_provider_call(
     clean_postgres_database: str,
 ) -> None:

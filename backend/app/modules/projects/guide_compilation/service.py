@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import datetime
+
 from dataclasses import asdict, replace
 from typing import Any, Literal
 from uuid import UUID
@@ -385,13 +387,17 @@ class GuideCompilationService:
         *,
         actor: ActorIdentityFacts,
         facts: ProjectGuideCompilationExecutePreflightFacts,
-    ) -> None:
-        """Reopen a provider-free fence after a transient failure so delivery can retry."""
+        stale_before: datetime | None = None,
+    ) -> bool:
+        """Reopen a provider-free fence so delivery can retry; report whether it is open."""
         self._require_fresh_session()
         async with self._session.begin():
             repository = GuideCompilationRepository(self._session)
             _operation, attempt = await self._lock_execution(repository, actor, facts)
-            await repository.release_provider_free_fence(attempt.id)
+            attempt = await repository.release_provider_free_fence(
+                attempt.id, stale_before=stale_before
+            )
+            return attempt.status == "compilation_reserved"
 
     async def record_accepted_result(
         self,
