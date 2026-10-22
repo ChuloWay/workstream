@@ -299,8 +299,10 @@ project rules using the canonical CHECKERS compiler. Post-submit policy is a
 separate deterministic projection of the same unified result; no contributor-work
 evaluator runs during setup or approval.
 
-Inference drafts a candidate, then checks coverage against the original documents
-in a fresh model context before returning its corrected proposal. Both phases
+Inference drafts a private structured candidate, then checks coverage against the original documents
+in a fresh model context before returning its corrected proposal. Review can
+correct draft constraint mistakes; only its final output can pass canonical and
+owner validation and become a retained proposal. Both phases
 share the attempt's limits; a failed review cannot publish the unchecked draft.
 This improves the handoff but does not replace the PM's review of source coverage
 and the proposed checks' observable evidence.

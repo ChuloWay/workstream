@@ -1488,14 +1488,16 @@ must be reconciled with the actual setup-derived gaps, rather than treating one
 remaining sample PID probe as sufficient project readiness.
 [#555](https://github.com/Flow-Research/workstream/issues/555) owns the connected
 public journey. The [live setup qualification](../.commitrail/changes/terminal-systems-live-setup.md)
-now includes a real provider draft from unchanged guide bytes with all project
-size/entry limits null. The typed v7 run identified and repaired a missing
-isolated-dependency instruction. The v8 run produced a schema-valid draft, but
-semantic review found incomplete inputs, qualitative PRE checks and unsupported
-execution assumptions. Its handoff is not qualified. The repaired generic
-instructions and explicit capacity gaps still need fresh provider qualification
-before image engineering. No new image, approved
-binding, guide activation or contribution outcome for these inputs is established.
+includes real provider drafts from unchanged guide bytes with all project size/entry
+limits null. Typed proposals expose engineering specifications, but semantic
+review has not yet qualified a complete handoff. Draft path and material-linkage
+errors also exposed a review-boundary problem: canonical draft rejection prevented
+the planned correction phase. Setup now uses a private structurally checked draft,
+then reviews it against the originals under the same attempt budget; only the final
+result can pass canonical validation and become a proposal. Fresh provider and
+source-to-proposal qualification remains required before image engineering. No new
+image, approved binding, guide activation or contribution outcome for these inputs
+is established.
 
 The [offline gVisor build spike](engineering/pilot00-gvisor-offline-build-spike.md)
 selects a sealed-cache Kaniko builder plus a separate gVisor oracle sandbox for

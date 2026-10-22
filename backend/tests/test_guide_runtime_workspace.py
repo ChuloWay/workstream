@@ -333,7 +333,7 @@ async def test_sdk_model_turn_enforces_compaction_and_hosted_work_budget(monkeyp
     from agents import Runner, OpenAIResponsesModel
     from app.adapters.project_agents.openai_agent_sdk import OpenAIAgentSdkProjectGuideRuntime
     from app.interfaces.project_agents import ProjectAgentRuntimeError
-    from tests.test_agent_runtime import _compile, _open_prompt_documents
+    from tests.test_agent_runtime import _compile, _open_prompt_documents, _sdk_result
 
     monkeypatch.setenv('OPENAI_API_KEY', 'unit-test-only')
     compilation = context(ids())
@@ -373,7 +373,7 @@ async def test_sdk_model_turn_enforces_compaction_and_hosted_work_budget(monkeyp
         assert agent.model.hosted_calls == len(observed)
         assert agent.model.model_turns == len(observed)
         from tests.projects.guide_compilation.helpers import generated_result
-        return SimpleNamespace(final_output=generated_result())
+        return _sdk_result(agent, generated_result())
 
     monkeypatch.setattr(Runner, 'run', run)
     runtime = OpenAIAgentSdkProjectGuideRuntime(config)

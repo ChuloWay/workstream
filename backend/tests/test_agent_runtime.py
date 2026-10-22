@@ -76,6 +76,33 @@ async def _open_prompt_documents(agent, prompt, count=None):
         )
 
 
+def _provider_payload(value=None):
+    """Include nullable members required by the provider's strict JSON schema."""
+    payload = (result() if value is None else value).model_dump(mode="json")
+    for requirement in payload["requirements"]:
+        requirement.setdefault("classification_rationale", None)
+        requirement.setdefault("check_specification", None)
+        if requirement["check_specification"] is not None:
+            for item in requirement["check_specification"]["inputs"]:
+                item.setdefault("relative_path", None)
+    return payload
+
+
+def _provider_specification():
+    """Include explicit null paths required by the provider schema."""
+    specification = valid_specification().model_dump(mode="json")
+    for item in specification["inputs"]:
+        item.setdefault("relative_path", None)
+    return specification
+
+
+def _sdk_result(agent, value=None):
+    """Return the result of the active phase parser, as the SDK does."""
+    return SimpleNamespace(final_output=agent.output_type.validate_json(
+        json.dumps(_provider_payload(value))
+    ))
+
+
 async def _compile(runtime, compilation_context):
     """Supply scripted prior document access and always release circuit admission."""
     async def opened_handles():
@@ -195,14 +222,14 @@ async def test_unified_compilation_uses_scoped_tools_and_strict_output(monkeypat
         supplied = json.loads(prompt)
         assert "runtime_configuration" not in supplied
         if len(calls) == 1:
-            return SimpleNamespace(final_output=result().model_copy(
+            return _sdk_result(agent, result().model_copy(
                 update={"setup_notes": ("Unchecked candidate.",)}
             ))
         assert supplied["phase"] == "coverage_review"
         assert supplied["guide_setup_context"] == json.loads(calls[0][1])
         assert "runtime_configuration" not in supplied["guide_setup_context"]
         assert supplied["candidate_proposal"]["setup_notes"] == ["Unchecked candidate."]
-        return SimpleNamespace(final_output=result())
+        return _sdk_result(agent)
 
     monkeypatch.setattr(Runner, "run", run)
     output = await _compile(OpenAIAgentSdkProjectGuideRuntime(configuration), compilation_context)
@@ -227,10 +254,10 @@ async def test_coverage_review_failure_never_returns_unchecked_draft(monkeypatch
         compilation = compilation.model_copy(update={"runtime_configuration": configuration})
     calls = []
 
-    async def run(*args, **kwargs):
+    async def run(agent, *args, **kwargs):
         calls.append(1)
         if len(calls) == 1:
-            return SimpleNamespace(final_output=result())
+            return _sdk_result(agent)
         if failure == "cancelled":
             raise asyncio.CancelledError("private review detail")
         if failure == "provider":
@@ -280,7 +307,7 @@ async def test_review_must_open_every_original_independently(monkeypatch, review
             await _open_prompt_documents(agent, prompt)
         else:
             await _open_prompt_documents(agent, prompt, review_count)
-        return SimpleNamespace(final_output=candidate)
+        return _sdk_result(agent, candidate)
 
     monkeypatch.setattr(Runner, "run", run)
     runtime = OpenAIAgentSdkProjectGuideRuntime(compilation.runtime_configuration)
@@ -439,11 +466,11 @@ async def test_actual_sdk_parser_preserves_known_invalid_output(monkeypatch, kin
 
     from agents import _debug
     monkeypatch.setattr(_debug, "DONT_LOG_MODEL_DATA", redacted)
-    payload = result().model_dump(mode="json")
+    payload = _provider_payload()
     if kind == "schema":
         payload["status"] = "not-a-status"
     if kind == "unsafe":
-        payload["findings"] = [{"severity": "info", "code": "bad", "message": "token=secret123"}]
+        payload["findings"] = [{"severity": "info", "code": "bad", "message": "token=secret123", "evidence_refs": []}]
     raw = "{invalid" if kind == "malformed" else json.dumps(payload)
     calls = []
 
@@ -462,7 +489,7 @@ async def test_actual_sdk_parser_preserves_known_invalid_output(monkeypatch, kin
         assert caught.value.failure_code == expected
         assert "secret123" not in str(caught.value)
         assert caught.value.__suppress_context__
-    assert calls == ([1, 1] if expected is None else [1])
+    assert calls == ([1, 1] if kind in {"valid", "unsafe"} else [1])
 
 
 @pytest.mark.parametrize("include_dependency", [True, False])
@@ -472,12 +499,12 @@ async def test_sdk_parser_requires_declared_isolated_execution_dependency(
     """Reproduce the live handoff failure through the actual SDK parser."""
     from agents import Runner
 
-    payload = result().model_dump(mode="json")
+    payload = _provider_payload()
     payload["status"] = "draft_ready_with_warnings"
     requirement = payload["requirements"][0]
     requirement["disposition"] = "post_submit_capability_gap"
     requirement["classification_rationale"] = "Repeated trials need background execution."
-    specification = valid_specification().model_dump(mode="json")
+    specification = _provider_specification()
     specification.update(
         evaluation_method="isolated_execution",
         execution_mode="background",
@@ -530,7 +557,7 @@ async def test_sdk_parser_requires_declared_isolated_execution_dependency(
         with pytest.raises(ProjectGuideCompilationInvalidOutputError) as caught:
             await _compile(runtime, context(ids()))
         assert caught.value.failure_code == "schema_invalid"
-    assert calls == ([1, 1] if include_dependency else [1])
+    assert calls == [1, 1]
 
 
 async def test_unclassified_sdk_behavior_error_remains_unresolved(monkeypatch):
@@ -562,8 +589,10 @@ async def test_sdk_parser_error_drops_payload_tracebacks(monkeypatch, redacted, 
     from agents import Runner, _debug
 
     marker = "private-parser-output-79436"
-    payload = result().model_dump(mode="json")
-    payload["findings"] = [{"severity": "info", "code": "bad", "message": f"token={marker}"}]
+    payload = _provider_payload()
+    payload["findings"] = [{"severity": "info", "code": "bad", "message": f"token={marker}", "evidence_refs": []}]
+    if phase == "draft":
+        payload["status"] = marker
     raw = json.dumps(payload)
     monkeypatch.setattr(_debug, "DONT_LOG_MODEL_DATA", redacted)
 
@@ -572,7 +601,7 @@ async def test_sdk_parser_error_drops_payload_tracebacks(monkeypatch, redacted, 
     async def run(agent, *args, **kwargs):
         calls.append(1)
         if phase == "review" and len(calls) == 1:
-            return SimpleNamespace(final_output=result())
+            return _sdk_result(agent)
         return SimpleNamespace(final_output=agent.output_type.validate_json(raw))
 
     monkeypatch.setattr(Runner, "run", run)
@@ -743,10 +772,10 @@ async def test_whole_run_deadline_cancels_once_and_closes_without_reinvocation(
         async def close(self):
             events.append("close")
 
-    async def blocked_run(*args, **kwargs):
+    async def blocked_run(agent, *args, **kwargs):
         events.append("run")
         if blocked_phase == "review" and events.count("run") == 1:
-            return SimpleNamespace(final_output=result())
+            return _sdk_result(agent)
         try:
             await asyncio.Event().wait()
         finally:

@@ -12,7 +12,7 @@ from tests.projects.guide_compilation.helpers import (
     ids,
     runtime_configuration,
 )
-from tests.test_agent_runtime import _compile, _open_prompt_documents
+from tests.test_agent_runtime import _compile, _open_prompt_documents, _sdk_result
 
 
 @pytest.mark.parametrize("boundary", ["model_turns", "hosted_calls", "within_budget"])
@@ -69,7 +69,7 @@ async def test_coverage_review_cannot_reset_the_attempt_work_budget(monkeypatch,
                 [],
                 None,
             )
-        return SimpleNamespace(final_output=generated_result())
+        return _sdk_result(agent, generated_result())
 
     monkeypatch.setattr(Runner, "run", run)
     runtime = OpenAIAgentSdkProjectGuideRuntime(config)

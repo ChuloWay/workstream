@@ -250,8 +250,14 @@ authors to label automation or stages. A missing registered implementation stays
 an engineering gap in a warning-ready draft and blocks activation; only a real
 guide blocker prevents the draft.
 
-The SDK adapter first produces a typed candidate, then uses a fresh model context
+The SDK adapter first produces a private structured candidate, then uses a fresh model context
 to check it against the original documents and return the corrected proposal.
+Both phases expose the same strict JSON Schema. The private draft must satisfy
+JSON syntax and structural limits; canonical content constraints are checked
+diagnostically so review can correct them. Diagnostics contain bounded field
+paths and a fixed code, never rejected values or exception messages. Only the
+reviewed output passes through canonical Pydantic and owner validation for
+acceptance. The draft is never persisted, projected or accepted.
 Both phases share one attempt, workspace, client, overall timeout and aggregate
 model-turn/hosted-tool budgets. The draft can use at most half the configured turn
 allowance; review receives the unused remainder. The serialized review input

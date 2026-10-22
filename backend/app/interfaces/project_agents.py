@@ -679,7 +679,7 @@ class SubmissionArtifactPolicyProposal(BaseModel):
     required_artifacts: tuple[Annotated[str, Field(min_length=1, max_length=500)], ...] = Field(
         default=(),
         max_length=100,
-        description="Exact canonical relative POSIX paths inside the submitted ZIP. A bare path such as task.toml requires that file at the ZIP root; wrapper/task.toml does not satisfy it. Nested paths such as outputs/answer.md require that exact location. No traversal, storage references or secret files.",
+        description="Exact canonical relative POSIX paths inside the submitted ZIP. A bare path such as task.toml requires that file at the ZIP root; wrapper/task.toml does not satisfy it. Nested paths such as outputs/answer.md require that exact location. No trailing separators, duplicate paths, traversal, storage references or secret files.",
     )
     forbidden_artifacts: tuple[Annotated[str, Field(min_length=1, max_length=500)], ...] = Field(
         default=(),

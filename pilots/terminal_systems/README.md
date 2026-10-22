@@ -95,14 +95,15 @@ normal task creation; no runtime change or checker allowlist is implied.
 
 ## Current boundary
 
-A real provider-backed local setup run has produced a draft from the unchanged
+Real provider-backed local setup has produced typed drafts from the unchanged
 guide with all four project size/entry limits null. This proves nullable proposal
 output; it does not establish submission-intake enforcement or an approved checker
-plan. Earlier attempts ended
-with invalid structured output, and the successful pre-specification draft
-classified the work checks as human review with no checker suggestions. The
-expanded setup contract must be replayed and reviewed before engineering handoff;
-no new image, approved policy or activated guide is claimed.
+plan. Source-to-proposal review found incomplete coverage and execution assumptions.
+Subsequent attempts exposed canonical draft errors that prevented coverage review.
+The runtime now keeps the structurally checked draft private and applies canonical
+validation to the reviewed final output. Fresh provider qualification and independent
+semantic review remain required before engineering handoff; no new image, approved
+policy or activated guide is claimed.
 See the [live setup record](../../.commitrail/changes/terminal-systems-live-setup.md)
 for the retained attempt sequence and qualification limits.
 

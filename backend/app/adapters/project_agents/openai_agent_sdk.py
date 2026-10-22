@@ -12,6 +12,7 @@ from app.adapters.project_agents.openai_workspace import OpenAIGuideWorkspace, c
 from app.adapters.project_agents.provider_resilience import (
     ModelCircuitAdmission, model_retry_settings,
 )
+from app.adapters.project_agents.compilation_draft import CompilationDraftParser
 from app.interfaces.project_guide_runtime import ProjectGuideRuntimeConfiguration
 from app.interfaces.project_agents import (
     ProjectAgentRuntimeConfigurationError,
@@ -157,6 +158,7 @@ class OpenAIAgentSdkProjectGuideRuntime:
         from openai import AsyncOpenAI
 
         parser_rejected = False
+        draft_rejected = False
         configuration = self._configuration
         admission = self._admission
 
@@ -170,6 +172,26 @@ class OpenAIAgentSdkProjectGuideRuntime:
                 except ModelBehaviorError:
                     parser_rejected = True
                     raise
+
+        class DraftOutputSchema(AgentOutputSchema):
+            """Keep draft structure strict without rejecting correctable private content."""
+
+            def validate_json(self, json_str: str):
+                nonlocal draft_rejected
+                candidate = draft_parser.parse(json_str)
+                if candidate is not None:
+                    return candidate
+                draft_rejected = True
+                json_str = None
+                raise ModelBehaviorError("Guide candidate has invalid structure") from None
+
+        canonical_schema = CompilationOutputSchema(
+            ProjectGuideCompilationResult, strict_json_schema=True,
+        )
+        draft_schema = DraftOutputSchema(ProjectGuideCompilationResult, strict_json_schema=True)
+        draft_parser = CompilationDraftParser(
+            canonical_schema.json_schema(), configuration.maximum_manifest_bytes,
+        )
 
         class BoundedResponsesModel(OpenAIResponsesModel):
             """Bound hosted work across every model turn and compact carried input."""
@@ -237,8 +259,7 @@ class OpenAIAgentSdkProjectGuideRuntime:
                         context_management=[{"type": "compaction",
                                              "compact_threshold": configuration.compaction_threshold_tokens}],
                     ),
-                    output_type=CompilationOutputSchema(ProjectGuideCompilationResult,
-                                                        strict_json_schema=True),
+                    output_type=draft_schema,
                     tools=[open_guide_document, CodeInterpreterTool(tool_config={
                         "type": "code_interpreter", "container": workspace.container_id,
                     })],
@@ -250,23 +271,30 @@ class OpenAIAgentSdkProjectGuideRuntime:
                         agent, prompt, max_turns=configuration.maximum_turns // 2,
                         run_config=run_config,
                     )
+                    candidate = draft.final_output
+                    draft = None
+                    if not isinstance(candidate, dict):
+                        return _INVALID_SCHEMA_OUTPUT
                     review_input = json.dumps({
                         "phase": "coverage_review",
                         "guide_setup_context": json.loads(prompt),
-                        "candidate_proposal": draft.final_output.model_dump(mode="json"),
-                    }, ensure_ascii=False, separators=(",", ":"))
+                        "candidate_proposal": candidate,
+                        "candidate_validation_issues": draft_parser.canonical_issues(candidate),
+                    }, ensure_ascii=False, allow_nan=False, separators=(",", ":"))
+                    candidate = None
                     if len(review_input.encode("utf-8")) > configuration.maximum_manifest_bytes:
                         raise ProjectGuideCompilationInvalidOutputError("schema_invalid")
                     remaining_turns = configuration.maximum_turns - agent.model.model_turns
                     if remaining_turns <= 0:
                         raise RuntimeError("guide review turn budget exhausted")
                     reviewing = True
+                    agent.output_type = canonical_schema
                     result = await Runner.run(
                         agent, review_input, max_turns=remaining_turns,
                         run_config=run_config,
                     )
                 except ModelBehaviorError:
-                    if not parser_rejected:
+                    if not (parser_rejected or draft_rejected):
                         raise
                 else:
                     try:

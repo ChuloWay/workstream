@@ -466,3 +466,41 @@ field descriptions now state the pairing in both directions instead of only
 requiring a dependency for an input. The existing three-kind pairing regressions
 remain authoritative; a new instruction assertion exposes the previously omitted
 reverse rule. Fresh inference, not that wording assertion, must qualify the repair.
+
+### Private draft correction before canonical acceptance
+
+V14 failed its first canonical SDK parse on required artifact path syntax before
+the review phase could run. All 39 provider resources through that attempt are
+deleted. Repeated independent draft-constraint failures show that requiring a
+canonical candidate prevents the intended review from correcting it; further
+prompt-only retries do not address that design assumption.
+
+Keep exactly two bounded phases, with the identical provider-facing strict JSON
+Schema. Add a private parser under `backend/app/adapters/project_agents/` that
+checks draft byte size, strict JSON syntax, duplicate keys and schema structure,
+including a local-reference-only schema boundary. A structurally valid draft is
+transient untrusted data, never a retained or accepted compilation. A bounded
+field-path diagnostic can identify canonical validation failures without source
+values, exception messages or contexts. The same provider reviews this candidate
+against the original documents; only its final output uses the canonical SDK
+parser and unchanged owner, evidence, storage and finalization validators.
+
+The same agent/model, workspace, client, admission, overall deadline and work
+counters remain shared. Drop the draft run result before review. Malformed,
+structurally invalid or oversized drafts terminate without another invocation;
+there is no third phase, fallback, acceptance bypass or retry loop. Unsafe draft
+prose may be corrected inside this private boundary but can never bypass final
+text safety. Architecture and security design reviews support this boundary.
+Extend the focused adapter tests and add a private-parser test module covering
+both repaired drafts and still-invalid final outputs, structural rejection,
+local schema references, redaction, shared budgets and exact parser selection.
+
+The structural-draft regression set completed with 182 passing cases across the
+SDK runtime, workspace, two-phase work budget, private parser and typed spec
+validation. The first run identified five fixtures missing explicit nullable
+input paths required by the strict provider schema; fixture serialization was
+corrected without relaxing production validation. The passing run covers draft
+correction versus unchanged invalid final output, no extra invocation, shared
+budgets, source reopening, structural rejection and error redaction. The rendered
+instructions remain within their 16,000-character limit (15,994). Ruff and diff
+checks passed. These are adapter proofs, not fresh live semantic qualification.
