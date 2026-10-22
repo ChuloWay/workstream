@@ -99,11 +99,12 @@ grammar. Free-form completeness and consistency judgments belong to model-based
 POST evaluation; setup must not invent document headings or keywords to force
 them into PRE.
 
-Setup also checks aggregate POST capacity against the existing worker budget,
-including materialization and per-entry cleanup. A proposed policy that cannot
+Setup checks aggregate capacity separately for PRE and POST, including the PRE
+default or POST materialization and per-entry cleanup. A proposed policy that cannot
 fit must expose an `execution_capacity` runtime gap with a `capacity_exceeded`
 infrastructure outcome; supported bindings cannot exceed the actual aggregate
-deadline. This does not increase runtime capacity. Ordinary checker-image
+deadline. A stage that fits must not claim a capacity gap. This does not increase
+runtime capacity. Ordinary checker-image
 isolation also does not supply nested task environments, which remain explicit
 runtime gaps until supported.
 
@@ -463,7 +464,9 @@ infrastructure failures. File and directory inputs use canonical relative paths.
 Capacity, deadline, unavailable material or implementation, and invalid output
 remain infrastructure outcomes rather than contributor work findings. Model
 evaluation requires an explicit model-service dependency; task or guide context
-requires an explicit material dependency. The ordinary image runner remains
+and external prepared images or caches require explicit material dependencies.
+`prepared_material` remains a runtime gap with `material_unavailable` handling;
+it is not received package content and its absence is not a work failure. The ordinary image runner remains
 offline and receives only its trusted request contract, so a desired dependency
 must not be presented as available runtime capability.
 

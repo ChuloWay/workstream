@@ -625,7 +625,7 @@ def test_proposal_specification_stage_semantics_and_historical_omission(cli):
             assert_failure(invoke(cli, origin), "invalid_api_response")
 
 
-def test_proposal_rejects_pre_model_evaluation_and_accepts_post_capacity_gap(cli):
+def test_proposal_rejects_pre_model_evaluation_and_validates_post_runtime_gaps(cli):
     from app.modules.projects.api.guide_proposal_package import (
         GuideProposalReviewPackage,
     )
@@ -634,7 +634,8 @@ def test_proposal_rejects_pre_model_evaluation_and_accepts_post_capacity_gap(cli
         value = proposal()
         requirement = value["result"]["requirements"][0]
         requirement["disposition"] = "pre_submit_capability_gap"
-        specification = requirement["check_specification"]
+        specification = deepcopy(requirement["check_specification"])
+        requirement["check_specification"] = specification
         specification["evaluation_method"] = "model_evaluation"
         specification["runtime_dependencies"] = [
             {
@@ -673,6 +674,21 @@ def test_proposal_rejects_pre_model_evaluation_and_accepts_post_capacity_gap(cli
                 "unavailable_code": "capacity_exceeded",
             }
         )
+        prepared_dependency = {
+            "dependency_id": "prepared_reference_cache",
+            "kind": "prepared_material",
+            "provisioning": "runtime_gap",
+            "purpose": "Provide the prepared reference cache used by the evaluator.",
+            "unavailable_code": "material_unavailable",
+        }
+        specification["runtime_dependencies"].append(prepared_dependency)
+        specification["inputs"].append(
+            {
+                "input_id": "prepared_reference_cache",
+                "kind": "prepared_material",
+                "purpose": "Read the externally prepared reference cache.",
+            }
+        )
         specification["infrastructure_failures"].append(
             {
                 "code": "capacity_exceeded",
@@ -685,6 +701,16 @@ def test_proposal_rejects_pre_model_evaluation_and_accepts_post_capacity_gap(cli
         accepted = invoke(cli, origin)
         assert accepted.returncode == 0 and json.loads(accepted.stdout) == value
 
+        specification["runtime_dependencies"].pop()
+        response["body"] = json.dumps(value).encode()
+        assert_failure(invoke(cli, origin), "invalid_api_response")
+
+        specification["runtime_dependencies"].append(prepared_dependency)
+        prepared_dependency["provisioning"] = "current_runner"
+        response["body"] = json.dumps(value).encode()
+        assert_failure(invoke(cli, origin), "invalid_api_response")
+
+        prepared_dependency["provisioning"] = "runtime_gap"
         specification["runtime_dependencies"][1]["provisioning"] = "current_runner"
         response["body"] = json.dumps(value).encode()
         assert_failure(invoke(cli, origin), "invalid_api_response")

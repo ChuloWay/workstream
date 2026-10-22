@@ -35,7 +35,9 @@ from app.modules.checkers.api.external import (
 )
 from app.modules.checkers.api.external_policy import (
     MAXIMUM_SELECTED_POST_EXECUTION_BUDGET_MS,
+    MAXIMUM_SELECTED_PRE_EXECUTION_BUDGET_MS,
     SELECTED_POST_MATERIALIZATION_BUDGET_MS,
+    WORKSTREAM_DEFAULT_EXECUTION_BUDGET_MS,
 )
 from app.interfaces.external_services import (
     ExternalServiceAdapter,
@@ -310,6 +312,7 @@ CheckInputKind = Literal[
     "relative_directory",
     "task_context",
     "guide_context",
+    "prepared_material",
 ]
 CheckerDependencyKind = Literal[
     "checker_tool",
@@ -319,6 +322,7 @@ CheckerDependencyKind = Literal[
     "guide_context",
     "model_service",
     "execution_capacity",
+    "prepared_material",
 ]
 DependencyProvisioning = Literal["current_runner", "checker_implementation", "runtime_gap"]
 InfrastructureFailureCode = Literal[
@@ -433,6 +437,7 @@ class CheckRuntimeDependency(BaseModel):
             "nested_sandbox": ("runtime_gap", "implementation_unavailable"),
             "task_context": ("runtime_gap", "material_unavailable"),
             "guide_context": ("runtime_gap", "material_unavailable"),
+            "prepared_material": ("runtime_gap", "material_unavailable"),
             "model_service": ("runtime_gap", "implementation_unavailable"),
             "execution_capacity": ("runtime_gap", "capacity_exceeded"),
         }[self.kind]
@@ -495,8 +500,8 @@ class CheckSpecification(BaseModel):
     runtime_dependencies: tuple[CheckRuntimeDependency, ...] = Field(
         max_length=10,
         description=(
-            "Declare the evaluation method's required dependency and any task_context or "
-            "guide_context input dependency. Each unavailable_code must also appear in "
+            "Declare the evaluation method's required dependency and any task_context, "
+            "guide_context or prepared_material input dependency. Each unavailable_code must appear in "
             "infrastructure_failures."
         ),
     )
@@ -557,7 +562,10 @@ class CheckSpecification(BaseModel):
         ):
             raise ValueError("isolated evaluation requires an execution dependency")
         for item in self.inputs:
-            if item.kind in {"task_context", "guide_context"} and item.kind not in dependency_kinds:
+            if (
+                item.kind in {"task_context", "guide_context", "prepared_material"}
+                and item.kind not in dependency_kinds
+            ):
                 raise ValueError("check context input requires a runtime dependency")
         available_failures = {item.code for item in self.infrastructure_failures}
         if any(
@@ -899,7 +907,7 @@ def require_complete_generated_specifications(
         for definition in context.checker_capabilities.definitions
     }
     requirements = {item.requirement_id: item for item in result.requirements}
-    supported_post_deadlines: dict[str, int] = {}
+    supported_deadlines: dict[str, int] = {}
     for binding in (*result.pre_submit_bindings, *result.post_submit_bindings):
         definition = definitions.get(
             (binding.stage.value, binding.capability_id, binding.capability_version)
@@ -913,35 +921,52 @@ def require_complete_generated_specifications(
             raise ValueError("pre-submit checker deadline exceeds the bounded stage")
         if specification.maximum_duration_seconds * 1000 > deadline_ms:
             raise ValueError("check specification exceeds the checker deadline")
-        if binding.stage is CompilationStage.POST_SUBMIT:
-            supported_post_deadlines[binding.requirement_id] = deadline_ms
+        supported_deadlines[binding.requirement_id] = deadline_ms
 
-    supported_budget = SELECTED_POST_MATERIALIZATION_BUDGET_MS + sum(
-        deadline + EXTERNAL_CHECKER_EXECUTION_CLEANUP_MARGIN_MS
-        for deadline in supported_post_deadlines.values()
-    )
-    if supported_budget > MAXIMUM_SELECTED_POST_EXECUTION_BUDGET_MS:
-        raise ValueError("supported post-submit checks exceed the durable worker budget")
-    post_requirements = [
-        item
-        for item in result.requirements
-        if specification_stages.get(item.disposition) is CompilationStage.POST_SUBMIT
-    ]
-    proposed_budget = SELECTED_POST_MATERIALIZATION_BUDGET_MS + sum(
-        max(
-            item.check_specification.maximum_duration_seconds * 1000,
-            supported_post_deadlines.get(item.requirement_id, 0),
+    for stage, fixed_budget, maximum_budget in (
+        (
+            CompilationStage.PRE_SUBMIT,
+            WORKSTREAM_DEFAULT_EXECUTION_BUDGET_MS,
+            MAXIMUM_SELECTED_PRE_EXECUTION_BUDGET_MS,
+        ),
+        (
+            CompilationStage.POST_SUBMIT,
+            SELECTED_POST_MATERIALIZATION_BUDGET_MS,
+            MAXIMUM_SELECTED_POST_EXECUTION_BUDGET_MS,
+        ),
+    ):
+        staged_requirements = [
+            item
+            for item in result.requirements
+            if specification_stages.get(item.disposition) is stage
+        ]
+        supported_budget = fixed_budget + sum(
+            supported_deadlines[item.requirement_id] + EXTERNAL_CHECKER_EXECUTION_CLEANUP_MARGIN_MS
+            for item in staged_requirements
+            if item.requirement_id in supported_deadlines
         )
-        + EXTERNAL_CHECKER_EXECUTION_CLEANUP_MARGIN_MS
-        for item in post_requirements
-    )
-    has_capacity_gap = any(
-        dependency.kind == "execution_capacity"
-        for item in post_requirements
-        for dependency in item.check_specification.runtime_dependencies
-    )
-    if proposed_budget > MAXIMUM_SELECTED_POST_EXECUTION_BUDGET_MS and not has_capacity_gap:
-        raise ValueError("proposed post-submit checks require an execution capacity gap")
+        stage_name = stage.value.replace("_", "-")
+        if supported_budget > maximum_budget:
+            raise ValueError(f"supported {stage_name} checks exceed the aggregate execution budget")
+        proposed_budget = fixed_budget + sum(
+            max(
+                item.check_specification.maximum_duration_seconds * 1000,
+                supported_deadlines.get(item.requirement_id, 0),
+            )
+            + EXTERNAL_CHECKER_EXECUTION_CLEANUP_MARGIN_MS
+            for item in staged_requirements
+        )
+        has_capacity_gap = any(
+            dependency.kind == "execution_capacity"
+            for item in staged_requirements
+            for dependency in item.check_specification.runtime_dependencies
+        )
+        if proposed_budget > maximum_budget and not has_capacity_gap:
+            raise ValueError(f"proposed {stage_name} checks require an execution capacity gap")
+        if proposed_budget <= maximum_budget and has_capacity_gap:
+            raise ValueError(
+                f"proposed {stage_name} checks do not require an execution capacity gap"
+            )
 
 
 def validate_project_guide_compilation_result(

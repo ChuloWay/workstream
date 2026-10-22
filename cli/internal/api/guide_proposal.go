@@ -509,7 +509,7 @@ func validateProposalCheckSpecification(raw json.RawMessage, value *ProposalChec
 		}
 		inputIDs[item.InputID] = true
 		switch item.Kind {
-		case "package", "manifest", "request_metadata", "task_context", "guide_context":
+		case "package", "manifest", "request_metadata", "task_context", "guide_context", "prepared_material":
 			if _, hasPath := itemFields["relative_path"]; hasPath {
 				return errors.New("unexpected input path")
 			}
@@ -588,6 +588,7 @@ func validateProposalCheckSpecification(raw json.RawMessage, value *ProposalChec
 			"guide_context":      {"runtime_gap", "material_unavailable"},
 			"model_service":      {"runtime_gap", "implementation_unavailable"},
 			"execution_capacity": {"runtime_gap", "capacity_exceeded"},
+			"prepared_material":  {"runtime_gap", "material_unavailable"},
 		}[item.Kind]
 		if expected == [2]string{} || item.Provisioning != expected[0] || item.UnavailableCode != expected[1] || (supported && item.Provisioning == "runtime_gap") {
 			return errors.New("invalid runtime dependency provisioning")
@@ -595,6 +596,7 @@ func validateProposalCheckSpecification(raw json.RawMessage, value *ProposalChec
 		dependencyIDs[item.DependencyID], dependencyKinds[item.Kind] = true, true
 	}
 	if (inputKinds["task_context"] && !dependencyKinds["task_context"]) || (inputKinds["guide_context"] && !dependencyKinds["guide_context"]) ||
+		(inputKinds["prepared_material"] && !dependencyKinds["prepared_material"]) ||
 		(value.EvaluationMethod == "model_evaluation" && !dependencyKinds["model_service"]) ||
 		(value.EvaluationMethod == "isolated_execution" && !dependencyKinds["isolated_execution"]) {
 		return errors.New("missing runtime dependency")

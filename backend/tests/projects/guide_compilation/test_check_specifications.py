@@ -190,10 +190,11 @@ def test_generation_admission_enforces_stage_from_bounded_work(
         )
 
 
-def test_supported_check_cannot_claim_runtime_support_the_runner_lacks() -> None:
+@pytest.mark.parametrize("material_kind", ["task_context", "guide_context", "prepared_material"])
+def test_supported_check_cannot_claim_runtime_support_the_runner_lacks(material_kind: str) -> None:
     dependency = CheckRuntimeDependency(
         dependency_id="task_material",
-        kind="task_context",
+        kind=material_kind,
         provisioning="runtime_gap",
         purpose="Task instructions needed for evaluation.",
         unavailable_code="material_unavailable",
@@ -202,7 +203,7 @@ def test_supported_check_cannot_claim_runtime_support_the_runner_lacks() -> None
         inputs=[
             {
                 "input_id": "task_material",
-                "kind": "task_context",
+                "kind": material_kind,
                 "purpose": "Task instructions needed for evaluation.",
             }
         ],
@@ -294,24 +295,32 @@ def test_pre_submit_binding_must_fit_the_stage_budget() -> None:
 
 
 @pytest.mark.parametrize(
-    ("durations", "declare_gap", "admitted"),
+    ("stage", "durations", "declare_gap", "admitted"),
     [
-        ((3280,), False, True),
-        ((3281,), False, False),
-        ((3281,), True, True),
-        ((1600, 1600), False, True),
-        ((1800, 1600), False, False),
-        ((1800, 1600), True, True),
+        ("post_submit", (3280,), False, True),
+        ("post_submit", (3281,), False, False),
+        ("post_submit", (3281,), True, True),
+        ("post_submit", (1600, 1600), False, True),
+        ("post_submit", (1800, 1600), False, False),
+        ("post_submit", (1800, 1600), True, True),
+        ("post_submit", (1,), True, False),
+        ("pre_submit", (1,), True, False),
+        ("pre_submit", (60,) * 59, False, True),
+        ("pre_submit", (60,) * 60, False, False),
+        ("pre_submit", (60,) * 60, True, True),
     ],
 )
-def test_proposed_post_capacity_includes_materialization_and_each_cleanup(
-    durations: tuple[int, ...], declare_gap: bool, admitted: bool
+def test_proposed_capacity_includes_stage_fixed_budget_and_each_cleanup(
+    stage: str, durations: tuple[int, ...], declare_gap: bool, admitted: bool
 ) -> None:
     requirements = []
     suggestions = []
     for index, duration in enumerate(durations):
         specification = valid_specification().model_dump(mode="json")
-        specification.update(execution_mode="background", maximum_duration_seconds=duration)
+        specification.update(
+            execution_mode="background" if stage == "post_submit" else "bounded_pre_submit",
+            maximum_duration_seconds=duration,
+        )
         if index == 0 and declare_gap:
             specification["runtime_dependencies"].append(
                 {
@@ -330,14 +339,14 @@ def test_proposed_post_capacity_includes_materialization_and_each_cleanup(
             )
         requirement = _requirement(
             requirement_id=f"required_item_{index}",
-            disposition="post_submit_capability_gap",
+            disposition=f"{stage}_capability_gap",
             check_specification=specification,
         )
         requirements.append(requirement)
         suggestions.append(
             CapabilitySuggestion(
                 requirement_id=requirement.requirement_id,
-                stage="post_submit",
+                stage=stage,
                 title="Background package inspection",
                 rationale="The required implementation is not registered.",
                 evidence_refs=requirement.evidence_refs,
@@ -359,35 +368,49 @@ def test_proposed_post_capacity_includes_materialization_and_each_cleanup(
             require_complete_generated_specifications(compilation_context, proposal)
 
 
-def test_supported_post_capacity_uses_registered_deadlines_not_small_estimates() -> None:
-    entry = _entry_with_deadline(1_700_000, "post_submit")
+@pytest.mark.parametrize(
+    ("stage", "deadline_ms", "count"),
+    [
+        ("post_submit", 1_700_000, 2),
+        ("pre_submit", 60_000, 60),
+    ],
+)
+def test_supported_capacity_uses_registered_deadlines_not_small_estimates(
+    stage: str, deadline_ms: int, count: int
+) -> None:
+    entry = _entry_with_deadline(deadline_ms, stage)
     compilation_context = context(ids(), checker_capabilities=capability_projection(entry))
     requirements = tuple(
         _requirement(
             requirement_id=f"required_item_{index}",
-            disposition="supported_post_submit",
+            disposition=f"supported_{stage}",
             check_specification=_specification(
-                execution_mode="background", maximum_duration_seconds=1
+                execution_mode="background" if stage == "post_submit" else "bounded_pre_submit",
+                maximum_duration_seconds=1,
             ).model_dump(mode="json"),
         )
-        for index in range(2)
+        for index in range(count)
     )
     proposal = generated_result().model_copy(
         update={
             "requirements": requirements,
-            "post_submit_bindings": tuple(
-                PostSubmissionBindingProposal(
+            f"{stage}_bindings": tuple(
+                (
+                    PostSubmissionBindingProposal
+                    if stage == "post_submit"
+                    else PreSubmissionBindingProposal
+                )(
                     requirement_id=item.requirement_id,
                     capability_id=entry.capability_id,
                     capability_version=entry.capability_version,
-                    stage="post_submit",
+                    stage=stage,
                 )
                 for item in requirements
             ),
         }
     )
     validate_project_guide_compilation_result(compilation_context, proposal)
-    with pytest.raises(ValueError, match="supported post-submit checks exceed"):
+    with pytest.raises(ValueError, match="supported .* checks exceed"):
         require_complete_generated_specifications(compilation_context, proposal)
 
 
@@ -482,3 +505,42 @@ def test_check_specification_is_a_closed_object() -> None:
 
     with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
         CheckSpecification.model_validate(body)
+
+
+@pytest.mark.parametrize("include_dependency", [False, True])
+def test_prepared_material_input_requires_explicit_unavailable_material_custody(
+    include_dependency: bool,
+) -> None:
+    body = valid_specification().model_dump(mode="json")
+    body["inputs"] = [
+        {
+            "input_id": "prepared_images",
+            "kind": "prepared_material",
+            "purpose": "Offline images prepared outside the submitted package.",
+        }
+    ]
+    body["runtime_dependencies"] = (
+        [
+            {
+                "dependency_id": "prepared_images",
+                "kind": "prepared_material",
+                "provisioning": "runtime_gap",
+                "purpose": "Supply the exact prepared image material.",
+                "unavailable_code": "material_unavailable",
+            }
+        ]
+        if include_dependency
+        else []
+    )
+    body["infrastructure_failures"] = [
+        {
+            "code": "material_unavailable",
+            "condition": "Required prepared images are unavailable.",
+        }
+    ]
+    if include_dependency:
+        specification = CheckSpecification.model_validate(body)
+        assert specification.runtime_dependencies[0].provisioning == "runtime_gap"
+    else:
+        with pytest.raises(ValidationError, match="context input requires a runtime dependency"):
+            CheckSpecification.model_validate(body)

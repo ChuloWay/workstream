@@ -331,9 +331,10 @@ maximum is usable in a complete policy: materialization and per-entry cleanup
 must fit the existing durable worker deadline. Extend only the setup specification
 dependency enum and existing CLI decoder with `execution_capacity` as an explicit
 runtime gap, using `capacity_exceeded` as its infrastructure outcome. Supply current
-budget facts from CHECKERS' public constants through the hashed instructions, and
-require a visible capacity gap when the complete proposed POST budget cannot fit.
-Supported bindings must remain within the actual registry and aggregate deadlines.
+PRE and POST budget facts from CHECKERS' public constants through hashed
+instructions. Require a visible capacity gap exactly when a stage cannot fit,
+and reject invented shortfalls when it does fit. Supported bindings must remain
+within the actual registry and aggregate deadlines.
 No runtime limit, worker lease, registry schema or product execution is changed.
 
 Reconcile generic generation guidance and schema descriptions for atomic inventory
@@ -342,3 +343,28 @@ required versus warning findings, nested execution and infrastructure failures.
 Add discriminating capacity tests, mirror the closed enum in CLI, retain the
 existing parser and stage regressions, then run a fresh original-guide version.
 Do not add named-project logic, prewritten model results or invented guide rules.
+
+
+The v9 run finalized a warning-ready draft with two structural PRE checks and
+seven background checks. It correctly moved free-form author-note judgment to
+POST and declared nested environment dependencies. It remained unqualified:
+coverage still omitted guide obligations and it claimed a 260-second shortfall
+although its proposed POST durations plus overhead totaled 3,000 seconds, below
+the 3,400-second budget. All 24 provider resources through v9 were deleted.
+
+Review tightened capacity validation in both directions and both stages. A stage
+that fits must not claim execution_capacity; over-budget PRE includes the default
+and per-entry cleanup just as POST includes materialization and cleanup. Pure
+regressions cover both supported and proposed PRE/POST, exact POST thresholds,
+PRE's 59-versus-60 full-budget entries, and false capacity claims. Forty affected
+cases passed. Instructions require an explicit private obligation ledger and
+computed capacity totals before finalization. The next fresh run must establish
+semantic coverage; prior ready status is not an engineering readiness claim.
+
+
+V9 also exposed absent prepared-material custody: an offline build specification
+must distinguish supplied package bytes from externally prepared images or cache
+inputs, and missing cache material from defective contributor work. Add only the
+`prepared_material` input/dependency kind to the typed handoff and CLI, requiring
+`runtime_gap/material_unavailable` and a matching infrastructure condition. This
+describes an unresolved engineering prerequisite; it grants no material access.
