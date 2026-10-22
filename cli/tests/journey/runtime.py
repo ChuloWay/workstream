@@ -157,3 +157,12 @@ def durable_runtime(root: Path, directory: Path, environment: dict):
                     process.wait(timeout=10)
         for log in logs:
             log.close()
+        if location := os.environ.get("WORKSTREAM_CLI_JOURNEY_EVIDENCE"):
+            retained = Path(location) / "runtime-logs"
+            retained.mkdir(mode=0o700)
+            for source in directory.glob("*.log"):
+                target = retained / source.name
+                with target.open("xb") as destination:
+                    target.chmod(0o600)
+                    with source.open("rb") as incoming:
+                        shutil.copyfileobj(incoming, destination)
