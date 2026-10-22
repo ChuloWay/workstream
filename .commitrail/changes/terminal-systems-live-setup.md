@@ -504,3 +504,21 @@ correction versus unchanged invalid final output, no extra invocation, shared
 budgets, source reopening, structural rejection and error redaction. The rendered
 instructions remain within their 16,000-character limit (15,994). Ruff and diff
 checks passed. These are adapter proofs, not fresh live semantic qualification.
+
+### Production schema-validator dependency
+
+Independent review identified that `jsonschema==4.26.0` was declared only in the
+development extra although the existing checker contract already imports it.
+The new private parser adds another production consumer. The current agents
+release works through a transitive dependency; this is not a newly reproduced
+live import failure. Extend this repair's allowed scope to `backend/pyproject.toml`,
+`backend/uv.lock` and the existing configuration dependency regression. Move the
+single unchanged pin into base dependencies, preserve every resolved version and
+hash, and prove a no-dev/no-agents installation can import both guide runtime
+composition and the new parser. No runtime policy or authority changes.
+
+The locked base-only installation passed imports for guide runtime composition,
+private draft parsing and checker schema validation with neither `agents` nor
+`pytest` installed. The dependency regression passed. Every third-party lock entry,
+resolved version and artifact hash is unchanged; only the root dependency edge
+moves. Ruff and diff checks passed. The parser's 182-case evidence is unchanged.
