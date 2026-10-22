@@ -86,6 +86,8 @@ SHARED_FOUNDATION_MODULES = (
     "tests/test_guide_document_api_contract.py",
     "tests/test_api_contract_e2e.py",
     "tests/test_local_pilot_scripts.py",
+    "tests/test_checker_image.py",
+    "tests/checkers/external/test_harnessy_proof_checker.py",
     "tests/test_api_controls.py",
     "tests/test_identifiers.py",
     "tests/test_identifier_schema.py",

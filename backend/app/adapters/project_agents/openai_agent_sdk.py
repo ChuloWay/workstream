@@ -6,10 +6,6 @@ import asyncio
 import os
 import json
 from dataclasses import replace
-from typing import Literal
-
-from pydantic import ValidationError
-
 from app.interfaces.external_services import ExternalServiceAdapterIdentity
 from app.modules.projects.api.guide_documents import GuideRuntimeCapabilities
 from app.adapters.project_agents.openai_workspace import OpenAIGuideWorkspace, cleanup_owned_resources
@@ -23,8 +19,10 @@ from app.interfaces.project_agents import (
     ProjectGuideCompilationContext,
     ProjectGuideCompilationInvalidOutputError,
     ProjectGuideCompilationResult,
+    invalid_compilation_failure_code,
     project_guide_compilation_prompt_bytes,
     require_complete_project_guide_compilation_result,
+    require_ready_result_cites_every_document,
     validate_project_guide_compilation_result,
 )
 
@@ -126,7 +124,7 @@ class OpenAIAgentSdkProjectGuideRuntime:
         try:
             return await self._validate_output(context, output, capabilities)
         except (TypeError, ValueError) as exc:
-            invalid_failure = _invalid_compilation_failure_code(exc)
+            invalid_failure = invalid_compilation_failure_code(exc)
         output = None
         raise ProjectGuideCompilationInvalidOutputError(invalid_failure) from None
 
@@ -158,8 +156,7 @@ class OpenAIAgentSdkProjectGuideRuntime:
                          for ref in references}
         if not cited_handles <= opened:
             raise ValueError("compilation cites unopened source material")
-        if result.status != "guide_blocked" and cited_handles != set(document_handles.values()):
-            raise ValueError("ready compilation does not account for every assigned document")
+        require_ready_result_cites_every_document(context, result)
         return result
 
     async def _run(self, context: ProjectGuideCompilationContext, prompt: str,
@@ -265,17 +262,3 @@ class OpenAIAgentSdkProjectGuideRuntime:
             finally:
                 await workspace.close()
 
-
-def _invalid_compilation_failure_code(
-    error: TypeError | ValueError,
-) -> Literal["schema_invalid", "unsafe_text"]:
-    """Classify only a proven unsafe-text validation without exposing output."""
-    if isinstance(error, ValidationError):
-        for item in error.errors(include_url=False, include_input=False):
-            context = item.get("ctx") or {}
-            cause = context.get("error")
-            if isinstance(cause, ValueError) and str(cause) == "model-produced text is unsafe":
-                return "unsafe_text"
-    if str(error) == "model-produced text is unsafe":
-        return "unsafe_text"
-    return "schema_invalid"

@@ -11,6 +11,7 @@ from workstream_mcp.schemas import (
     AUTHORIZATION_CONTEXT_INPUT_SCHEMA,
     EMPTY_INPUT_SCHEMA,
     PROFILE_UPDATE_INPUT_SCHEMA,
+    PROJECT_GRANT_INPUT_SCHEMAS,
     PROJECT_INPUT_SCHEMAS,
     authorization_context_output_schema,
     profile_output_schema,
@@ -77,6 +78,11 @@ def test_mcp_tool_listing_exposes_exactly_the_chunk_catalogue(
         "workstream_actor_identity_link_get",
         "workstream_projects_create",
         "workstream_projects_get",
+        "workstream_contributor_candidates_list",
+        "workstream_project_grants_issue",
+        "workstream_project_grants_list",
+        "workstream_project_grants_get",
+        "workstream_project_grants_revoke",
     ]
     assert [item["inputSchema"] for item in listed] == [
         EMPTY_INPUT_SCHEMA,
@@ -87,6 +93,7 @@ def test_mcp_tool_listing_exposes_exactly_the_chunk_catalogue(
         *ACTOR_LIFECYCLE_INPUT_SCHEMAS.values(),
         *list(ACCESS_READ_INPUT_SCHEMAS.values())[3:],
         *PROJECT_INPUT_SCHEMAS.values(),
+        *PROJECT_GRANT_INPUT_SCHEMAS.values(),
     ]
 
 

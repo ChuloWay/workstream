@@ -239,27 +239,14 @@ and config image ID all match, and owns no-network, non-root, capability-free,
 read-only sandbox launch, bounded output/deadline handling and cleanup. Hosted
 readiness requires `runsc`; local `runc` is reported as `docker-dev`.
 
-The terminal-benchmark project uses one closed exception to the ordinary
-single-container result path. Its exact POST registry ID, entry digest, checker
-image digest and profile version must match administrator configuration before
-the service will accept the checker's private build/oracle plan. The checker can
-bind that plan only to facts in its ordinary request; the service attaches the
-parsed plan to the already verified in-memory ART grant. A PRE image, a
-conventional POST image or a different registered image cannot select the
-stronger builder profile by returning the same plan shape.
-
-For that profile, ART raises the existing POST extraction workspace to its
-fixed 512 MiB byte reservation and existing maximum-entry ceiling, then grants
-one empty private `runtime/` directory with the remaining byte and entry
-allowances. The service projects only `.dockerignore`, the approved Dockerfile
-and `workspace/**` into a no-follow build context. It never mounts the submitted
-tests, reference solution or original grant into the builder. The offline
-builder and each fresh candidate/reference oracle run remain separate
-containers under one request deadline and output budget. Trusted cache inputs
-are accepted only after a complete descriptor-relative inventory rehash and
-exact cached platform/config inspection; there is no pull fallback. Docker
-resources are removed before the service responds, and the Python grant context
-then revokes and deletes ART scratch before exposing the result.
+Project-specific requirements are implemented by registered external images.
+The shared service accepts the normalized result contract; it does not interpret
+project-private continuation plans, task-ID allowlists or named build profiles.
+Setup proposes bindings or missing capabilities from the guide and examples;
+engineering implements gaps before corrected policy approval and activation.
+The runner's existing sandbox contract does not by itself prove that arbitrary
+submitted environments can be built and tested. Any such requirement must have
+a supported, bounded image implementation before the project can activate.
 
 The service holds a nonblocking exclusive lock on the validated private socket
 parent for the listener lifetime. It acquires that custody before Docker
@@ -267,20 +254,13 @@ validation or recovery, so a losing concurrent startup cannot inspect or clean
 the live owner's resources. Startup preserves a live listener and every foreign
 or linked path, but may remove a connection-refused socket only after its owned
 inode remains unchanged. Clean shutdown removes only the listener inode it
-created. Startup recovery removes a conventional checker container only when
-its exact generated name and attempt label agree. Terminal-benchmark recovery
-likewise requires exact attempt-bound builder/candidate names, one of the three
-allowed reference iterations, the complete service-owned labels, or an exact
-tag inside its fixed temporary image repository; it does not depend on a
-parallel runtime inventory. The candidate tar's one entry and remaining ART byte allowance are
-reserved before launch and enforced in the builder with a hard file-size limit.
-All work commands share the request deadline/output meter and poll cancellation;
-all emergency cleanup shares one 10-second deadline and separate 256 KiB output
-ceiling within the adapter's 60-second margin. Cleanup is complete only after a
-successful exact container/image inventory query reports absence. If that
-cannot be established after emergency cleanup, the service suppresses the
-result and exits without admitting another request; restart performs the same
-owned-resource reconciliation while retaining socket-parent custody.
+created. Startup recovery removes a checker container only when its exact
+generated name and attempt label agree. Work commands share the request
+deadline/output meter and poll cancellation. Emergency cleanup has its separate
+bounded budget. Unsettled cleanup suppresses the result and prevents another
+request from being admitted; restart reconciles owned resources while retaining
+socket-parent custody. Project code cannot authorize additional host containers
+or access to the host Docker socket by returning a private plan.
 
 The Rust launcher owns sandbox execution; durable CHECKERS owners retain
 approved policy binding, phase authority/currentness, attempts, results and

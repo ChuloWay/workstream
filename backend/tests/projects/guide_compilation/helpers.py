@@ -102,12 +102,21 @@ def runtime_configuration():
     )
 
 
+def manager_runtime_configuration():
+    """Return the provider-free configuration recorded by manager-authored attempts."""
+    return runtime_configuration().model_copy(update={
+        "runtime_key": "manager_authored", "model_provider": "none",
+        "model_api": "none", "model": "none",
+    })
+
+
 def context(
     values: dict[str, UUID],
     *,
     generation: int = 1,
     guide_version="v1",
     checker_capabilities=None,
+    configuration=None,
 ) -> ProjectGuideCompilationContext:
     """Build one exact committed-original metadata context."""
     material = GuideDocumentManifest(
@@ -136,7 +145,7 @@ def context(
     )
     return ProjectGuideCompilationContext(
         task_examples=({"content": "Review a claim using the project guide."},),
-        runtime_configuration=runtime_configuration(),
+        runtime_configuration=configuration or runtime_configuration(),
         material=material,
         setup_run_id=values[f"setup_{generation}"],
         setup_generation=generation,

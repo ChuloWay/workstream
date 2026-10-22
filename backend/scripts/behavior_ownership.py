@@ -96,6 +96,11 @@ PILOT_08_REVISION_TARGETS = frozenset({
     "backend/app/modules/tasks/revision/service.py",
     "backend/app/workers/revision_recovery.py",
 })
+CHECKER_IMAGE_PUBLISH_TARGETS = frozenset({
+    "backend/scripts/checker_image.py",
+    "backend/scripts/checker_image_process.py",
+    "backend/scripts/checker_image_samples.py",
+})
 AWS_ARTIFACT_ACTIVATION_TARGETS = frozenset({
     "backend/app/adapters/artifacts/aws_live_proof.py",
     "backend/app/adapters/artifacts/aws_roles_anywhere.py",
@@ -298,6 +303,12 @@ LOCAL_PILOT_HELPER_TARGETS = frozenset(
         "backend/scripts/local_flow_tokens.py",
     }
 )
+LOCAL_AGENT_LOOP_TARGETS = frozenset(
+    {
+        "backend/scripts/provision_local_service_actors.py",
+        "backend/scripts/transition_review_lifecycle.py",
+    }
+)
 MODULE_PUBLIC_API_FOUNDATION_TARGETS = frozenset(
     {
         "backend/app/api/routes/artifact_submissions.py",
@@ -377,6 +388,9 @@ ARCH_04F4_RETRY_TARGETS = frozenset({
     "backend/app/modules/authorization/domain/checker_retry.py",
     "backend/app/modules/authorization/domain/checker_retry_reads.py",
     "backend/app/modules/authorization/prepared_checker_retry_replay.py",
+})
+MANAGER_AUTHORED_GUIDE_RUNTIME_TARGETS = frozenset({
+    "backend/app/adapters/project_agents/manager_authored.py",
 })
 ARCH_04F5_DELIVERY_RECONCILIATION_TARGETS = frozenset({
     "backend/app/modules/authorization/domain/post_submit_deliveries.py",
@@ -988,6 +1002,7 @@ def _validate_additive_partition_transition(
         | PILOT_08_REVISION_TARGETS
         | PILOT_READ_1_TARGETS
         | AWS_ARTIFACT_ACTIVATION_TARGETS
+        | CHECKER_IMAGE_PUBLISH_TARGETS
         | PILOT_READ_2_TARGETS
         | PILOT_READ_3_TARGETS
         | CON_02B_DELIVERY_TARGETS
@@ -1003,6 +1018,7 @@ def _validate_additive_partition_transition(
         | PILOT_04_DEFAULT_CHECKER_TARGETS
         | PILOT_04_SELECTED_FLOW_TARGETS
         | LOCAL_PILOT_HELPER_TARGETS
+        | LOCAL_AGENT_LOOP_TARGETS
         | MODULE_BOUNDARY_FOUNDATION_TARGETS
         | MODULE_PUBLIC_API_FOUNDATION_TARGETS
         | POL_03A_CALLABLE_TARGETS
@@ -1053,6 +1069,7 @@ def _validate_additive_partition_transition(
             | ARCH_04F3_REPLACEMENT_TARGETS
             | ARCH_04F4_RETRY_TARGETS
             | ARCH_04F5_DELIVERY_RECONCILIATION_TARGETS
+            | MANAGER_AUTHORED_GUIDE_RUNTIME_TARGETS
             | OBSERVABILITY_FOUNDATION_TARGETS
         | ARCH_04E1A_SOURCE_TARGETS
         | ARCH_04D2_AUTHORITY_TARGETS

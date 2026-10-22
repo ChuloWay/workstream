@@ -221,8 +221,10 @@ application credential mounts, trust checks or runtime authorization.
 
 ## Reconciliation
 
-- Current-source reconciliation: based on main `c6d916cc1`; preserve its CLI source-download,
-  task-audit and Operator capabilities, checker test isolation, and roadmap updates alongside this adapter/deployment boundary.
+- Current-source reconciliation: preserve main `b1da3f8eb`'s manager-authored
+  guide runtime, guide-first intake, CLI/MCP operations and checker-image
+  publishing. Chain the AWS custody migration after the manager-authored runtime
+  migration; retain both ownership inventories and test-family allocations.
 - Next usable boundary: persist fresh live AWS activation and run
   the public contribution drill tracked by #582/#555.
 - Remaining risks: certificate signing-key custody and renewal are operational

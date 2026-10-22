@@ -8,10 +8,11 @@ import (
 )
 
 // admin is deliberately separate from caller-owned whoami/profile operations.
-// Every invocation sends one public GET and lets backend AUTH decide afresh.
+// Each read or explicit write uses one public API operation; backend AUTH
+// decides afresh and a prior read never authorizes a later write.
 func addAdminInspection(root *cobra.Command, client func() (*api.Client, error), output *string, stdout io.Writer) {
-	admin := &cobra.Command{Use: "admin", Short: "Inspect authorized actor and administrative evidence"}
-	actor := &cobra.Command{Use: "actor", Short: "Inspect one exact actor through privileged public reads"}
+	admin := &cobra.Command{Use: "admin", Short: "Read evidence and make explicit administrative decisions"}
+	actor := &cobra.Command{Use: "actor", Short: "Read and explicitly manage one exact actor profile"}
 	actor.AddCommand(&cobra.Command{
 		Use: "show ACTOR_ID", Short: "Read one actor's privacy-bounded administrative profile", Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -42,7 +43,8 @@ func addAdminInspection(root *cobra.Command, client func() (*api.Client, error),
 	})
 	addAdminGrantRead(actor, client, output, stdout, true)
 	admin.AddCommand(actor)
-	addAdminGrantRead(admin, client, output, stdout, false)
+	grants := addAdminGrantRead(admin, client, output, stdout, false)
+	addAdminMutations(admin, actor, grants, client, output, stdout)
 	admin.AddCommand(&cobra.Command{
 		Use: "permissions", Short: "Read the public permission catalogue", Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
@@ -74,7 +76,7 @@ func addAdminInspection(root *cobra.Command, client func() (*api.Client, error),
 	root.AddCommand(admin)
 }
 
-func addAdminGrantRead(parent *cobra.Command, client func() (*api.Client, error), output *string, stdout io.Writer, actor bool) {
+func addAdminGrantRead(parent *cobra.Command, client func() (*api.Client, error), output *string, stdout io.Writer, actor bool) *cobra.Command {
 	var scope, project, status, cursor string
 	var limit int
 	command := &cobra.Command{
@@ -117,4 +119,5 @@ func addAdminGrantRead(parent *cobra.Command, client func() (*api.Client, error)
 	command.Flags().IntVar(&limit, "limit", 50, "Page size, 1–100")
 	command.Flags().StringVar(&cursor, "cursor", "", "Opaque next cursor from the prior page")
 	parent.AddCommand(command)
+	return command
 }

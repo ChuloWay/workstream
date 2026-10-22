@@ -1,0 +1,21 @@
+{
+  "version": "terminal-systems-1",
+  "change_summary": "Initial contributor guide and illustrative task for terminal systems authoring.",
+  "task_examples": [
+    {
+      "title": "Recover a file-processing queue after interruption",
+      "content": "# Example task brief: recover a file-processing queue after interruption\n\n## Authoring assignment\n\nCreate a terminal task in which the solver repairs a local file-processing queue.\nThe queue accepts jobs, persists their progress and writes a result for each\ncompleted job. Its starting implementation mishandles interruption and replay.\n\nGive the solver a small working application, a documented command interface,\nrepresentative inputs and a reproducible failure. The solver must investigate\nand repair the application while preserving its documented behavior.\n\n## Required behavior to specify\n\n- A durable job identifier distinguishes a repeated delivery from a new job.\n- Repeating an already completed job returns its retained result without\n  performing its effect again.\n- A restart recovers interrupted work without losing previously completed jobs.\n- Reusing an identifier with different input is rejected without changing the\n  original job or its result.\n- A failed input does not corrupt unrelated jobs, and the status command reports\n  a useful, accurate outcome.\n\nAs the task author, define the exact command and data formats, interruption\npoints, recovery rules and observable effects in the solver instructions. Choose\nstorage and programming tools appropriate to this small local application.\nDo not require external accounts or a network service.\n\n## Deliverable\n\nProvide the complete task package described in the project guide: starting\nworkspace, environment, solver instructions, metadata, reference repair,\nverification and author notes. Your tests should observe persisted state and\neffects before and after restart. Include a plausible repair that passes an\nordinary successful run but fails one of the interruption or replay cases.\n\nThis brief is illustrative. It does not prescribe a single implementation or\nmake this task identifier an eligibility rule for other tasks in the project.\n",
+      "labels": [
+        "storage",
+        "recovery",
+        "testing"
+      ]
+    }
+  ],
+  "documents": [
+    {
+      "label": "guide.md",
+      "media_type": "text/markdown"
+    }
+  ]
+}

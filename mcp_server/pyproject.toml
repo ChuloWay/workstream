@@ -52,6 +52,11 @@ packages = ["workstream_mcp"]
 "contracts/identity_link_reactivate.json" = "workstream_mcp/contracts/identity_link_reactivate.json"
 "contracts/projects_create.json" = "workstream_mcp/contracts/projects_create.json"
 "contracts/projects_get.json" = "workstream_mcp/contracts/projects_get.json"
+"contracts/contributor_candidates_list.json" = "workstream_mcp/contracts/contributor_candidates_list.json"
+"contracts/project_grants_issue.json" = "workstream_mcp/contracts/project_grants_issue.json"
+"contracts/project_grants_list.json" = "workstream_mcp/contracts/project_grants_list.json"
+"contracts/project_grants_get.json" = "workstream_mcp/contracts/project_grants_get.json"
+"contracts/project_grants_revoke.json" = "workstream_mcp/contracts/project_grants_revoke.json"
 
 [tool.hatch.build.targets.sdist]
 include = [

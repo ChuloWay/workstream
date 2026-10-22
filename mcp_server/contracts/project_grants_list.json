@@ -1,0 +1,699 @@
+{
+  "canonical_sha256": "1315da86549afb4d182901decbe3192aa2cb5a21f91fc967758064122542d824",
+  "components": {
+    "schemas": {
+      "ApiError": {
+        "additionalProperties": false,
+        "description": "Canonical machine-readable API error.",
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "correlation_id": {
+            "title": "Correlation Id",
+            "type": "string"
+          },
+          "details": {
+            "additionalProperties": true,
+            "title": "Details",
+            "type": "object"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "retryable": {
+            "title": "Retryable",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "code",
+          "message",
+          "details",
+          "correlation_id",
+          "retryable"
+        ],
+        "title": "ApiError",
+        "type": "object"
+      },
+      "ApiErrorResponse": {
+        "additionalProperties": false,
+        "description": "Canonical error plus additive legacy compatibility fields.",
+        "properties": {
+          "detail": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          },
+          "error": {
+            "$ref": "#/components/schemas/ApiError"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "title": "ApiErrorResponse",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "additionalProperties": false,
+        "properties": {
+          "detail": {
+            "items": {
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "error": {
+            "$ref": "#/components/schemas/ApiError"
+          }
+        },
+        "required": [
+          "detail",
+          "error"
+        ],
+        "type": "object"
+      },
+      "ProjectRole": {
+        "description": "Exact-project contributor role tokens.",
+        "enum": [
+          "submitter",
+          "reviewer"
+        ],
+        "title": "ProjectRole",
+        "type": "string"
+      },
+      "ProjectRoleGrantListResponse": {
+        "additionalProperties": false,
+        "description": "Count-free keyset page of project-role grant history.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ProjectRoleGrantRead"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items",
+          "next_cursor"
+        ],
+        "title": "ProjectRoleGrantListResponse",
+        "type": "object"
+      },
+      "ProjectRoleGrantRead": {
+        "additionalProperties": false,
+        "description": "Exact privacy-bounded project-role grant history shape.",
+        "properties": {
+          "actor_profile_id": {
+            "format": "uuid",
+            "title": "Actor Profile Id",
+            "type": "string"
+          },
+          "grant_method": {
+            "const": "manual",
+            "title": "Grant Method",
+            "type": "string"
+          },
+          "grant_reason": {
+            "title": "Grant Reason",
+            "type": "string"
+          },
+          "granted_at": {
+            "format": "date-time",
+            "title": "Granted At",
+            "type": "string"
+          },
+          "granted_by_actor_profile_id": {
+            "format": "uuid",
+            "title": "Granted By Actor Profile Id",
+            "type": "string"
+          },
+          "granted_by_admin_role_grant_id": {
+            "format": "uuid",
+            "title": "Granted By Admin Role Grant Id",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "project_id": {
+            "format": "uuid",
+            "title": "Project Id",
+            "type": "string"
+          },
+          "qualification_snapshot": {
+            "$ref": "#/components/schemas/ProjectRoleQualificationSnapshotRead"
+          },
+          "revoked_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revoked At"
+          },
+          "revoked_by_actor_profile_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revoked By Actor Profile Id"
+          },
+          "revoked_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revoked Reason"
+          },
+          "role": {
+            "$ref": "#/components/schemas/ProjectRole"
+          },
+          "status": {
+            "enum": [
+              "active",
+              "revoked"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "version": {
+            "enum": [
+              1,
+              2
+            ],
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "project_id",
+          "actor_profile_id",
+          "role",
+          "status",
+          "version",
+          "grant_method",
+          "qualification_snapshot",
+          "granted_by_actor_profile_id",
+          "granted_by_admin_role_grant_id",
+          "granted_at",
+          "grant_reason",
+          "revoked_by_actor_profile_id",
+          "revoked_at",
+          "revoked_reason"
+        ],
+        "title": "ProjectRoleGrantRead",
+        "type": "object"
+      },
+      "ProjectRoleQualificationSnapshotRead": {
+        "additionalProperties": false,
+        "description": "Strict bounded qualification evidence attached to one grant.",
+        "properties": {
+          "captured_at": {
+            "format": "date-time",
+            "title": "Captured At",
+            "type": "string"
+          },
+          "captured_by_actor_profile_id": {
+            "format": "uuid",
+            "title": "Captured By Actor Profile Id",
+            "type": "string"
+          },
+          "captured_by_admin_role_grant_id": {
+            "format": "uuid",
+            "title": "Captured By Admin Role Grant Id",
+            "type": "string"
+          },
+          "external_expertise_refs": {
+            "items": {
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]{0,119}$",
+              "type": "string"
+            },
+            "title": "External Expertise Refs",
+            "type": "array"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "prior_project_work_refs": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Prior Project Work Refs",
+            "type": "array"
+          },
+          "reputation_snapshot": {
+            "$ref": "#/components/schemas/QualificationAvailabilitySnapshot"
+          },
+          "requested_role": {
+            "$ref": "#/components/schemas/ProjectRole"
+          },
+          "skills_snapshot": {
+            "$ref": "#/components/schemas/QualificationAvailabilitySnapshot"
+          }
+        },
+        "required": [
+          "id",
+          "requested_role",
+          "skills_snapshot",
+          "reputation_snapshot",
+          "prior_project_work_refs",
+          "external_expertise_refs",
+          "captured_by_actor_profile_id",
+          "captured_by_admin_role_grant_id",
+          "captured_at"
+        ],
+        "title": "ProjectRoleQualificationSnapshotRead",
+        "type": "object"
+      },
+      "QualificationAvailability": {
+        "description": "Whether one qualification source produced bounded references.",
+        "enum": [
+          "available",
+          "unavailable"
+        ],
+        "title": "QualificationAvailability",
+        "type": "string"
+      },
+      "QualificationAvailabilitySnapshot": {
+        "additionalProperties": false,
+        "description": "Privacy-bounded availability and opaque-reference evidence.",
+        "properties": {
+          "availability": {
+            "$ref": "#/components/schemas/QualificationAvailability"
+          },
+          "reference_ids": {
+            "items": {
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]{0,119}$",
+              "type": "string"
+            },
+            "maxItems": 20,
+            "title": "Reference Ids",
+            "type": "array"
+          },
+          "unavailable_reason": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/QualificationUnavailableReason"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "availability",
+          "reference_ids",
+          "unavailable_reason"
+        ],
+        "title": "QualificationAvailabilitySnapshot",
+        "type": "object"
+      },
+      "QualificationUnavailableReason": {
+        "description": "Closed reasons why qualification references could not be captured.",
+        "enum": [
+          "not_collected",
+          "source_unavailable",
+          "no_record"
+        ],
+        "title": "QualificationUnavailableReason",
+        "type": "string"
+      }
+    }
+  },
+  "operation": {
+    "description": "List immutable project-role grant history without a count.",
+    "operationId": "list_project_role_grants_api_v1_projects__project_id__role_grants_get",
+    "parameters": [
+      {
+        "in": "path",
+        "name": "project_id",
+        "required": true,
+        "schema": {
+          "format": "uuid",
+          "title": "Project Id",
+          "type": "string"
+        }
+      },
+      {
+        "in": "query",
+        "name": "status",
+        "required": false,
+        "schema": {
+          "anyOf": [
+            {
+              "enum": [
+                "active",
+                "revoked"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Status"
+        }
+      },
+      {
+        "in": "query",
+        "name": "role",
+        "required": false,
+        "schema": {
+          "anyOf": [
+            {
+              "$ref": "#/components/schemas/ProjectRole"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Role"
+        }
+      },
+      {
+        "in": "query",
+        "name": "limit",
+        "required": false,
+        "schema": {
+          "default": 50,
+          "maximum": 100,
+          "minimum": 1,
+          "title": "Limit",
+          "type": "integer"
+        }
+      },
+      {
+        "in": "query",
+        "name": "cursor",
+        "required": false,
+        "schema": {
+          "anyOf": [
+            {
+              "maxLength": 512,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Cursor"
+        }
+      },
+      {
+        "in": "header",
+        "name": "X-Request-ID",
+        "required": false,
+        "schema": {
+          "format": "uuid",
+          "maxLength": 36,
+          "minLength": 36,
+          "type": "string"
+        }
+      },
+      {
+        "in": "header",
+        "name": "X-Correlation-ID",
+        "required": false,
+        "schema": {
+          "format": "uuid",
+          "maxLength": 36,
+          "minLength": 36,
+          "type": "string"
+        }
+      }
+    ],
+    "responses": {
+      "200": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ProjectRoleGrantListResponse"
+            }
+          }
+        },
+        "description": "Successful Response",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "400": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Invalid request.",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "401": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Authentication failed.",
+        "headers": {
+          "WWW-Authenticate": {
+            "schema": {
+              "type": "string"
+            }
+          },
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "403": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Permission denied.",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "404": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Resource not found.",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "422": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/HTTPValidationError"
+            }
+          }
+        },
+        "description": "Validation Error",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "500": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Internal server error.",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "503": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Identity verification unavailable.",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "security": [
+      {
+        "HTTPBearer": []
+      }
+    ],
+    "summary": "List Project Role Grants",
+    "tags": [
+      "authorization"
+    ],
+    "x-workstream-action-id": "project_role_grant.list"
+  },
+  "schema_version": 1,
+  "source": {
+    "action_id": "project_role_grant.list",
+    "backend_git_sha": "ae1b33eff55547e7c4dd88cd43146da26d1d1f42",
+    "method": "GET",
+    "openapi_version": "3.1.0",
+    "path": "/api/v1/projects/{project_id}/role-grants"
+  }
+}

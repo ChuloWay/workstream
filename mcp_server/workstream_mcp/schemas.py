@@ -230,6 +230,148 @@ PROJECT_INPUT_SCHEMAS: dict[str, dict[str, Any]] = {
     },
 }
 
+_REFERENCE_TOKEN_INPUT = {
+    "type": "string",
+    "minLength": 1,
+    "maxLength": 120,
+    "pattern": r"^[A-Za-z0-9][A-Za-z0-9._:/-]{0,119}$",
+    "not": {"pattern": r"://"},
+}
+_QUALIFICATION_AVAILABILITY_INPUT = {
+    "type": "object",
+    "properties": {
+        "availability": {"type": "string", "enum": ["available", "unavailable"]},
+        "reference_ids": {
+            "type": "array",
+            "items": _REFERENCE_TOKEN_INPUT,
+            "maxItems": 20,
+        },
+        "unavailable_reason": {
+            "type": ["string", "null"],
+            "enum": ["not_collected", "source_unavailable", "no_record", None],
+        },
+    },
+    "required": ["availability", "reference_ids", "unavailable_reason"],
+    "allOf": [
+        {
+            "if": {"properties": {"availability": {"const": "available"}}},
+            "then": {
+                "properties": {
+                    "reference_ids": {"minItems": 1},
+                    "unavailable_reason": {"type": "null"},
+                }
+            },
+        },
+        {
+            "if": {"properties": {"availability": {"const": "unavailable"}}},
+            "then": {
+                "properties": {
+                    "reference_ids": {"maxItems": 0},
+                    "unavailable_reason": {
+                        "type": "string",
+                        "enum": ["not_collected", "source_unavailable", "no_record"],
+                    },
+                }
+            },
+        },
+    ],
+    "additionalProperties": False,
+}
+_PROJECT_ROLE_QUALIFICATION_INPUT = {
+    "type": "object",
+    "properties": {
+        "skills_snapshot": _QUALIFICATION_AVAILABILITY_INPUT,
+        "reputation_snapshot": _QUALIFICATION_AVAILABILITY_INPUT,
+        "prior_project_work_refs": {
+            "type": "array",
+            "items": _UUID_INPUT,
+            "maxItems": 20,
+        },
+        "external_expertise_refs": {
+            "type": "array",
+            "items": _REFERENCE_TOKEN_INPUT,
+            "maxItems": 20,
+        },
+    },
+    "required": [
+        "skills_snapshot",
+        "reputation_snapshot",
+        "prior_project_work_refs",
+        "external_expertise_refs",
+    ],
+    "additionalProperties": False,
+}
+_PROJECT_ROLE_PAGE_PROPERTIES = {
+    "project_id": _UUID_INPUT,
+    "limit": {"type": "integer", "minimum": 1, "maximum": 100},
+    "cursor": {"type": "string", "maxLength": 512},
+}
+PROJECT_GRANT_INPUT_SCHEMAS: dict[str, dict[str, Any]] = {
+    "contributor_candidates_list": {
+        "type": "object",
+        "properties": _PROJECT_ROLE_PAGE_PROPERTIES,
+        "required": ["project_id"],
+        "additionalProperties": False,
+    },
+    "project_grants_issue": {
+        "type": "object",
+        "properties": {
+            "project_id": _UUID_INPUT,
+            "body": {
+                "type": "object",
+                "properties": {
+                    "target_actor_profile_id": _UUID_INPUT,
+                    "role": {"type": "string", "enum": ["submitter", "reviewer"]},
+                    "qualification": _PROJECT_ROLE_QUALIFICATION_INPUT,
+                    "reason": _REASON_INPUT,
+                },
+                "required": [
+                    "target_actor_profile_id",
+                    "role",
+                    "qualification",
+                    "reason",
+                ],
+                "additionalProperties": False,
+            },
+            "idempotency_key": _IDEMPOTENCY_KEY_INPUT,
+        },
+        "required": ["project_id", "body", "idempotency_key"],
+        "additionalProperties": False,
+    },
+    "project_grants_list": {
+        "type": "object",
+        "properties": {
+            **_PROJECT_ROLE_PAGE_PROPERTIES,
+            "status": {"type": "string", "enum": ["active", "revoked"]},
+            "role": {"type": "string", "enum": ["submitter", "reviewer"]},
+        },
+        "required": ["project_id"],
+        "additionalProperties": False,
+    },
+    "project_grants_get": {
+        "type": "object",
+        "properties": {"project_id": _UUID_INPUT, "grant_id": _UUID_INPUT},
+        "required": ["project_id", "grant_id"],
+        "additionalProperties": False,
+    },
+    "project_grants_revoke": {
+        "type": "object",
+        "properties": {
+            "project_id": _UUID_INPUT,
+            "grant_id": _UUID_INPUT,
+            "body": {
+                "type": "object",
+                "properties": {"reason": _REASON_INPUT},
+                "required": ["reason"],
+                "additionalProperties": False,
+            },
+            "idempotency_key": _IDEMPOTENCY_KEY_INPUT,
+        },
+        "required": ["project_id", "grant_id", "body", "idempotency_key"],
+        "additionalProperties": False,
+    },
+}
+
 
 class ContractError(RuntimeError):
     """The reviewed packaged contract is absent or invalid."""
@@ -387,3 +529,15 @@ def project_output_validator(name: str) -> Draft202012Validator:
         project_output_schema(name),
         format_checker=_OUTPUT_FORMAT_CHECKER,
     )
+
+
+def project_grant_output_schema(name: str) -> dict[str, Any]:
+    """Load one reviewed project-participation response contract."""
+    if name not in PROJECT_GRANT_INPUT_SCHEMAS:
+        raise ContractError("unknown project participation contract")
+    return _contract_output_schema(name)
+
+
+def project_grant_output_validator(name: str) -> Draft202012Validator:
+    """Validate one project-participation response projection."""
+    return _contract_output_validator(name)

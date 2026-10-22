@@ -262,8 +262,8 @@ func validStatus(value string) bool {
 }
 
 func validTime(value string) bool {
-	_, err := time.Parse(time.RFC3339Nano, value)
-	return err == nil
+	parsed, err := time.Parse(time.RFC3339Nano, value)
+	return err == nil && parsed.Year() >= 1
 }
 
 // Compare UUID values, not selector spelling. Keep the original selector on the
@@ -354,8 +354,29 @@ func (c *Client) requestWithResponseLimit(ctx context.Context, method, path, que
 }
 
 func (c *Client) requestWithClientAndResponseLimit(ctx context.Context, requestClient *http.Client, method, path, query string, body []byte, key string, successStatus, responseLimit int) (json.RawMessage, error) {
+	return c.requestWithClientHeadersAndResponseLimit(ctx, requestClient, method, path, query, body, key, successStatus, responseLimit, nil, false)
+}
+
+func (c *Client) requestWithCanonicalPatch(ctx context.Context, path string, body []byte, key string, responseLimit int) (json.RawMessage, error) {
+	return c.requestWithClientHeadersAndResponseLimit(ctx, c.http, http.MethodPatch, path, "", body, key, http.StatusOK, responseLimit, nil, true)
+}
+
+// requestWithIfMatch supplies only the public policy precondition header. The
+// caller owns its exact value; the shared one-shot mutation transport owns it.
+func (c *Client) requestWithIfMatch(ctx context.Context, path string, body []byte, key, ifMatch string, responseLimit int) (json.RawMessage, error) {
+	return c.requestWithClientHeadersAndResponseLimit(ctx, c.http, http.MethodPut, path, "", body, key, http.StatusOK, responseLimit,
+		http.Header{"If-Match": {ifMatch}}, false)
+}
+
+func (c *Client) requestWithClientHeadersAndResponseLimit(ctx context.Context, requestClient *http.Client, method, path, query string, body []byte, key string, successStatus, responseLimit int, headers http.Header, canonicalPatchError bool) (json.RawMessage, error) {
 	mutation := method == http.MethodPatch || method == http.MethodPost || method == http.MethodPut
-	response, err := c.openRequest(ctx, requestClient, method, path, query, body, key, "application/json")
+	var reader io.Reader
+	contentType := ""
+	if body != nil {
+		reader = bytes.NewReader(body)
+		contentType = "application/json"
+	}
+	response, err := c.openBodyRequest(ctx, requestClient, method, path, query, reader, int64(len(body)), key, "application/json", contentType, headers)
 	if err != nil {
 		return nil, err
 	}
@@ -365,7 +386,14 @@ func (c *Client) requestWithClientAndResponseLimit(ctx context.Context, requestC
 		return nil, &Failure{Code: "invalid_api_response", Status: response.StatusCode, OutcomeUnknown: mutation}
 	}
 	if response.StatusCode != successStatus {
-		return nil, c.responseFailure(method, response, responseBody)
+		failure := c.responseFailure(method, response, responseBody)
+		if canonicalPatchError && !canonicalMutationError(responseBody, response.Header.Get("Content-Type")) {
+			var typed *Failure
+			if errors.As(failure, &typed) {
+				typed.OutcomeUnknown = true
+			}
+		}
+		return nil, failure
 	}
 	mediaType, _, err := mime.ParseMediaType(response.Header.Get("Content-Type"))
 	if err != nil || mediaType != "application/json" || !jsontext.Value(responseBody).IsValid() {

@@ -10,6 +10,33 @@ from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt, model_
 from app.core.hashing import canonical_json_hash
 from app.interfaces.external_services import ExternalServiceAdapterIdentity
 
+MANAGER_AUTHORED_RUNTIME_KEY = "manager_authored"
+"""The only runtime that performs no inference and allocates no provider resources."""
+PROVIDER_FREE = "none"
+"""Provider, API and model value recorded when no inference runs."""
+
+ProjectGuideModelProvider = Literal["openai", "none"]
+ProjectGuideModelApi = Literal["responses", "none"]
+
+
+def require_project_guide_runtime_pairing(
+    runtime_key: str, model_provider: str, model_api: str, model: str
+) -> None:
+    """Allow the provider-free ``none`` identity only for the manager-authored runtime.
+
+    Every other runtime keeps the hosted OpenAI Responses identity with a real
+    model name. The schema trigger on compilation attempts enforces the same
+    rule independently.
+    """
+    provider_free = runtime_key == MANAGER_AUTHORED_RUNTIME_KEY
+    if provider_free:
+        if (model_provider, model_api, model) != (PROVIDER_FREE,) * 3:
+            raise ValueError("manager-authored guide runtime requires provider, API and model none")
+    elif (model_provider, model_api) != ("openai", "responses"):
+        raise ValueError("guide runtime provider and API must be openai and responses")
+    elif model == PROVIDER_FREE:
+        raise ValueError("hosted guide runtime requires a model other than none")
+
 
 class ProjectGuideRuntimeConfiguration(BaseModel):
     """Exact trusted configuration captured before authorizing an attempt.
@@ -22,9 +49,9 @@ class ProjectGuideRuntimeConfiguration(BaseModel):
 
     capability_key: Literal["project_guide_compilation"] = "project_guide_compilation"
     runtime_key: str = Field(pattern=r"^[a-z][a-z0-9_]{0,63}$")
-    model_provider: Literal["openai"]
+    model_provider: ProjectGuideModelProvider
     model: str = Field(min_length=1, max_length=200, pattern=r"^[a-zA-Z0-9][a-zA-Z0-9._:/-]*$")
-    model_api: Literal["responses"]
+    model_api: ProjectGuideModelApi
     instruction_id: Literal["project_guide_compilation"] = "project_guide_compilation"
     instruction_version: str = Field(min_length=1, max_length=100)
     instructions: str = Field(min_length=1, max_length=16_000)
@@ -61,7 +88,15 @@ class ProjectGuideRuntimeConfiguration(BaseModel):
             raise ValueError("document byte limit exceeds the run total")
         if self.retry_initial_delay_seconds > self.retry_max_delay_seconds:
             raise ValueError("initial retry delay exceeds maximum")
+        require_project_guide_runtime_pairing(
+            self.runtime_key, self.model_provider, self.model_api, self.model
+        )
         return self
+
+    @property
+    def provider_free(self) -> bool:
+        """Return whether this attempt runs no inference and owns no provider resources."""
+        return self.model_provider == PROVIDER_FREE
 
     @property
     def adapter_identity(self) -> ExternalServiceAdapterIdentity:

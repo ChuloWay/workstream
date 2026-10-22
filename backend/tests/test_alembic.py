@@ -136,6 +136,7 @@ def test_v01_graph_has_one_root_and_head() -> None:
 
     assert [revision.revision for revision in revisions] == [
         HEAD_REVISION,
+        "0056_manager_authored_runtime",
         "0055_delivery_reconciliation",
         "0054_artifact_proof_timing",
         "0053_project_reads",
@@ -333,6 +334,8 @@ def test_repeated_upgrade_head_preserves_current_database(
     "0052_artifact_provider_proof",
     "0053_project_reads",
     "0054_artifact_proof_timing",
+    "0055_delivery_reconciliation",
+    "0056_manager_authored_runtime",
 ])
 def test_preceding_head_upgrades_to_current_without_recreation(
     isolated_database_env: str, migration_lock, installed_revision: str,

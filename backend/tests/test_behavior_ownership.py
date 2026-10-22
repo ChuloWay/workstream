@@ -2571,6 +2571,22 @@ def test_delivery_reconciliation_ownership_allows_only_the_source_specific_seams
         )
 
 
+def test_manager_authored_runtime_ownership_admits_only_its_adapter():
+    targets = ownership.MANAGER_AUTHORED_GUIDE_RUNTIME_TARGETS
+    assert targets == {"backend/app/adapters/project_agents/manager_authored.py"}
+    retained = "backend/app/core/config.py"
+    trusted = _partition([retained])
+    ownership._validate_additive_partition_transition(
+        _partition(sorted({retained, *targets})), trusted,
+    )
+    with pytest.raises(ownership.BehaviorOwnershipError, match="untrusted_partition_change"):
+        ownership._validate_additive_partition_transition(
+            _partition(sorted({retained, *targets,
+                               "backend/app/adapters/project_agents/anthropic.py"})),
+            trusted,
+        )
+
+
 def test_revision_ownership_does_not_allow_a_parallel_exhaustion_writer():
     retained = "backend/app/core/config.py"
     trusted = _partition([retained])

@@ -197,6 +197,14 @@ class GuideRuntimeResourceCustody(GuideRuntimeCleanupCustody, Protocol):
 
     async def record_document_open(self, handle: str) -> None: ...
 
+    async def record_direct_document_open(self, handle: str) -> None:
+        """Record a provider-free runtime's read of one granted original.
+
+        No provider resource exists, so the evidence has no attachment
+        allocation. Custody refuses it for any attempt that names a provider.
+        """
+        ...
+
     async def opened_handles(self) -> frozenset[str]: ...
 
 

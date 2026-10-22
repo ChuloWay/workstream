@@ -58,6 +58,10 @@
     },
     {
       "group": "lifecycle",
+      "target": "backend/app/adapters/project_agents/manager_authored.py"
+    },
+    {
+      "group": "lifecycle",
       "target": "backend/app/adapters/project_agents/openai_agent_sdk.py"
     },
     {
@@ -2153,6 +2157,18 @@
       "target": "backend/scripts/bootstrap_access_administrator.py"
     },
     {
+      "group": "artifacts",
+      "target": "backend/scripts/checker_image.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/scripts/checker_image_process.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/scripts/checker_image_samples.py"
+    },
+    {
       "group": "shared",
       "target": "backend/scripts/coverage_policy.py"
     },
@@ -2202,6 +2218,10 @@
     },
     {
       "group": "shared",
+      "target": "backend/scripts/provision_local_service_actors.py"
+    },
+    {
+      "group": "shared",
       "target": "backend/scripts/record_id_collection.py"
     },
     {
@@ -2233,11 +2253,15 @@
       "target": "backend/scripts/test_structure_boundary.py"
     },
     {
+      "group": "lifecycle",
+      "target": "backend/scripts/transition_review_lifecycle.py"
+    },
+    {
       "group": "shared",
       "target": "backend/scripts/validate_test_lane_evidence.py"
     }
   ],
-  "authority_digest": "3ae5fb030ae9d9dada7b2a5166547677bcfa2522826315819c75abc26b80cf82",
+  "authority_digest": "874f98c2ad63737b64efea34f8e4c42f0594cebab911117efde7ded2ed96cef8",
   "protected_base_commit": "7676ce4347db0c9694962a9b587a20765e16eac6",
   "schema": "workstream.behavior-ownership-partition.v1"
 }

@@ -248,14 +248,27 @@ The deterministic merge of Workstream's default submission artifact policy and t
 
 ## Pre-Submit Checker Policy
 
-The server-generated project checker matrix produced from the effective project submission artifact policy and one immutable default-catalogue snapshot. The compiled bundle embeds the catalogue version, canonical manifest digest, ordered entry ID/version/configuration hashes, and enabled/disabled state. Its compiled bundle hash therefore commits transitively to that exact snapshot, and each task locks that hash before entering the contributor pipeline. Runtime uses the same snapshot to derive the effective-plan hash. It runs against the uploaded ZIP in bounded scratch before Workstream creates a submission. ART retains bounded check results; the public authorized ZIP preparation route returns `pre_submission_checker_failed` with those exact ordered bounded results in the same request. ARCH-02I-B publishes that route and admission-backed Submission creation in OpenAPI. POL-07B connects the internal phase service and removes the standalone JSON precheck; the bounded local public API and Celery service drill starts from public guide inputs with recorded inference. Results never use review decision values: `accept`, `needs_revision`, or `reject`.
+The approved, versioned bindings for project checks before Submission creation.
+Setup derives requirements from the guide and task examples, proposes bindings
+to registered external capabilities, and identifies missing implementations.
+Engineering supplies missing checker images; corrected or recompiled proposals
+require approval before activation. Registration alone does not update policy.
 
-The hidden 04B2 Workstream-default execution slice and the hidden 04B3 complete
-effective execution use the closed entry statuses
-`passed`, `warning`, `failed`, `advisory_disabled`, and
-`dependency_not_run`. These are checker-execution facts, not review decisions.
-04B3 executes locked project-policy entries through that same plan and persists
-one immutable ordered platform-plus-project evidence set after scratch cleanup.
+The compiled plan commits to the Workstream default checker's identity and exact
+external registry, image and configuration identities. Tasks lock the approved
+policy context. Workstream's default checks establish archive safety, verified
+bytes and manifest, high-confidence secret rejection and unchanged-work detection;
+missing summary or attestation produces warnings. Project rules execute in the
+selected external images on verified read-only material. No executable built-in
+project catalogue or task-ID allowlist supplies those rules.
+
+Default or required project PRE failure prevents Submission creation and returns
+bounded findings while preserving the working assignment. Infrastructure failure
+is a separate recoverable condition. Only complete passing intake grants admission
+to the atomic Submission operation. External results use the normalized outcome,
+verdict and findings contract; they are evidence, never review decisions such as
+`accept`, `needs_revision` or `reject`. See the
+[checker architecture](architecture_checker_framework.md) for custody and execution.
 
 ## pre_submission_checker_failed
 
