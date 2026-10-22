@@ -23,8 +23,11 @@ PREFLIGHT_PATH = ROOT / "deploy" / "hosted" / "preflight.py"
 ENTRYPOINT_PATH = ROOT / "docker" / "backend" / "release-entrypoint.sh"
 ENV_EXAMPLE = ROOT / "deploy" / "hosted" / "release.env.example"
 CHECKER_EXAMPLE = ROOT / "deploy" / "hosted" / "checker-service.example.json"
+ROLES_ANYWHERE_GUIDE = ROOT / "docs" / "operations_aws_roles_anywhere.md"
 
-SPEC = importlib.util.spec_from_file_location("hosted_release_preflight", PREFLIGHT_PATH)
+SPEC = importlib.util.spec_from_file_location(
+    "hosted_release_preflight", PREFLIGHT_PATH
+)
 assert SPEC is not None and SPEC.loader is not None
 preflight = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(preflight)
@@ -49,18 +52,73 @@ class HostedReleaseConfigTests(unittest.TestCase):
         self.checker["sandbox_uid"] = self.runtime_uid
         self.checker["sandbox_gid"] = self.runtime_gid
         self.checker_path.write_text(json.dumps(self.checker), encoding="utf-8")
+        self.identity_files = {
+            name: self.root / f"{name.replace('_', '-')}.pem"
+            for name in (
+                "runtime-certificate",
+                "runtime-private-key",
+                "readiness-certificate",
+                "readiness-private-key",
+                "negative-certificate",
+                "negative-private-key",
+            )
+        }
+        for name, path in self.identity_files.items():
+            content = f"test {name}"
+            path.write_text(content, encoding="utf-8")
+            path.chmod(0o400)
+        self.runtime_certificate = self.identity_files["runtime-certificate"]
+        self.runtime_private_key = self.identity_files["runtime-private-key"]
         environment_text = ENV_EXAMPLE.read_text(encoding="utf-8")
-        environment_text = environment_text.replace(
-            "WORKSTREAM_RUNTIME_UID=10001", f"WORKSTREAM_RUNTIME_UID={self.runtime_uid}"
-        ).replace(
-            "WORKSTREAM_RUNTIME_GID=10001", f"WORKSTREAM_RUNTIME_GID={self.runtime_gid}"
-        ).replace(
-            "WORKSTREAM_CHECKER_CONFIG_FILE=/etc/workstream/checker-service.json",
-            f"WORKSTREAM_CHECKER_CONFIG_FILE={self.checker_path}",
+        environment_text = (
+            environment_text.replace(
+                "WORKSTREAM_RUNTIME_UID=10001",
+                f"WORKSTREAM_RUNTIME_UID={self.runtime_uid}",
+            )
+            .replace(
+                "WORKSTREAM_RUNTIME_GID=10001",
+                f"WORKSTREAM_RUNTIME_GID={self.runtime_gid}",
+            )
+            .replace(
+                "WORKSTREAM_CHECKER_CONFIG_FILE=/etc/workstream/checker-service.json",
+                f"WORKSTREAM_CHECKER_CONFIG_FILE={self.checker_path}",
+            )
+            .replace(
+                "/etc/workstream/roles-anywhere/runtime-certificate.pem",
+                str(self.runtime_certificate),
+            )
+            .replace(
+                "/etc/workstream/roles-anywhere/runtime-private-key.pem",
+                str(self.runtime_private_key),
+            )
         )
+        for name in (
+            "readiness-certificate",
+            "readiness-private-key",
+            "negative-certificate",
+            "negative-private-key",
+        ):
+            environment_text = environment_text.replace(
+                f"/etc/workstream/roles-anywhere/{name}.pem",
+                str(self.identity_files[name]),
+            )
         self.environment_path = self.root / "release.env"
         self.environment_path.write_text(environment_text, encoding="utf-8")
         self.environment = preflight.parse_environment(self.environment_path)
+
+    def _render_modified_compose(self, compose_text: str) -> dict[str, object]:
+        compose_path = self.root / "compose.yml"
+        compose_path.write_text(compose_text, encoding="utf-8")
+        with patch.object(preflight, "COMPOSE_PATH", compose_path):
+            return preflight.render_compose(self.environment_path, self.environment)
+
+    def test_roles_anywhere_timer_is_bounded_and_five_minute(self) -> None:
+        guide = ROLES_ANYWHERE_GUIDE.read_text(encoding="utf-8")
+        self.assertIn("OnCalendar=*-*-* *:0/5:00", guide)
+        self.assertIn("AccuracySec=5s", guide)
+        self.assertIn("RandomizedDelaySec=10s", guide)
+        self.assertIn("TimeoutStartSec=120s", guide)
+        self.assertNotIn("OnCalendar=daily", guide)
 
     def tearDown(self) -> None:
         self.temporary.cleanup()
@@ -69,22 +127,32 @@ class HostedReleaseConfigTests(unittest.TestCase):
         preflight.validate_environment(self.environment)
         preflight.validate_checker_config(self.checker, self.environment)
         rendered = preflight.render_compose(self.environment_path, self.environment)
-        preflight.validate_compose(rendered)
-        self.assertEqual(set(rendered["services"]), {"api", "worker", "beat", "checker-service"})
+        preflight.validate_compose(rendered, self.environment)
+        self.assertEqual(
+            set(rendered["services"]),
+            {"api", "worker", "beat", "checker-service", *preflight.PROOF_SERVICES},
+        )
         self.assertNotIn("build", rendered["services"]["api"])
         services = rendered["services"]
         evidence = {
             key: self.environment[key] for key in preflight.AWS_S3_EVIDENCE_KEYS
         }
-        for service in services.values():
+        for name in ("api", "worker", "beat", "checker-service"):
+            service = services[name]
             self.assertEqual(service["pull_policy"], "always")
             self.assertTrue(service["init"])
             self.assertEqual(service["restart"], "on-failure:5")
             self.assertTrue(service["healthcheck"]["test"])
+        for name in preflight.PROOF_SERVICES:
+            self.assertEqual(services[name]["profiles"], ["aws-proof"])
+            self.assertEqual(services[name]["command"], ["/bin/false"])
         for name in preflight.ROLE_SECRET_FILE_KEYS:
             service_environment = services[name]["environment"]
             self.assertEqual(
-                {key: service_environment[key] for key in preflight.AWS_S3_EVIDENCE_KEYS},
+                {
+                    key: service_environment[key]
+                    for key in preflight.AWS_S3_EVIDENCE_KEYS
+                },
                 evidence,
             )
         api_command = " ".join(services["api"]["command"])
@@ -93,8 +161,8 @@ class HostedReleaseConfigTests(unittest.TestCase):
         self.assertNotIn("--reload", api_command)
         self.assertIn("--pool=prefork", worker_command)
         health_commands = {
-            name: " ".join(service["healthcheck"]["test"])
-            for name, service in services.items()
+            name: " ".join(services[name]["healthcheck"]["test"])
+            for name in ("api", "worker", "beat", "checker-service")
         }
         self.assertIn("/api/v1/health", health_commands["api"])
         self.assertIn("/tmp/celery-worker.pid", health_commands["worker"])
@@ -108,13 +176,25 @@ class HostedReleaseConfigTests(unittest.TestCase):
             target[0] for target in preflight.SECRET_FILE_TARGETS.values()
         }
         self.assertEqual(set(rendered["secrets"]), expected_secrets)
+        for key, (secret_name, _target) in preflight.SECRET_FILE_TARGETS.items():
+            self.assertEqual(
+                rendered["secrets"][secret_name]["file"],
+                self.environment[key],
+            )
+        for service in services.values():
+            self.assertNotIn("volumes_from", service)
+            self.assertNotIn("configs", service)
         for name, file_keys in preflight.ROLE_SECRET_FILE_KEYS.items():
-            self.assertEqual(services[name]["environment"]["WORKSTREAM_RELEASE_ROLE"], name)
+            self.assertEqual(
+                services[name]["environment"]["WORKSTREAM_RELEASE_ROLE"], name
+            )
             mounted = services[name]["secrets"]
             expected_role_secrets = {
                 preflight.SECRET_FILE_TARGETS[key][0] for key in file_keys
             }
-            self.assertEqual({item["source"] for item in mounted}, expected_role_secrets)
+            self.assertEqual(
+                {item["source"] for item in mounted}, expected_role_secrets
+            )
             self.assertTrue(all(item["mode"] in (0o400, "0400") for item in mounted))
             for key in preflight.SECRET_FILE_KEYS:
                 if key in file_keys:
@@ -125,6 +205,157 @@ class HostedReleaseConfigTests(unittest.TestCase):
                 else:
                     self.assertNotIn(key, services[name]["environment"])
         self.assertNotIn("secrets", services["checker-service"])
+        for name in ("api", "worker"):
+            mounts = preflight._service_mounts(services[name])
+            self.assertEqual(
+                mounts[str(preflight.ROLES_ANYWHERE_CERTIFICATE_TARGET)]["source"],
+                str(self.runtime_certificate),
+            )
+            self.assertTrue(
+                mounts[str(preflight.ROLES_ANYWHERE_PRIVATE_KEY_TARGET)]["read_only"]
+            )
+        beat_mounts = preflight._service_mounts(services["beat"])
+        self.assertEqual(beat_mounts, {})
+        checker_mounts = preflight._service_mounts(services["checker-service"])
+        self.assertNotIn(
+            str(preflight.ROLES_ANYWHERE_CERTIFICATE_TARGET), checker_mounts
+        )
+
+    def test_actual_render_rejects_beat_inheriting_api_volumes(self) -> None:
+        compose_text = preflight.COMPOSE_PATH.read_text(encoding="utf-8").replace(
+            "  beat:\n    <<: *backend-runtime\n",
+            "  beat:\n    <<: *backend-runtime\n    volumes_from:\n      - api:ro\n",
+            1,
+        )
+        rendered = self._render_modified_compose(compose_text)
+
+        self.assertEqual(rendered["services"]["beat"]["volumes_from"], ["api:ro"])
+        with self.assertRaisesRegex(preflight.PreflightError, "inherit"):
+            preflight.validate_compose(rendered, self.environment)
+
+    def test_actual_render_rejects_config_backed_by_runtime_private_key(self) -> None:
+        compose_text = preflight.COMPOSE_PATH.read_text(encoding="utf-8").replace(
+            "  beat:\n    <<: *backend-runtime\n",
+            "  beat:\n    <<: *backend-runtime\n"
+            "    configs:\n"
+            "      - source: runtime_private_key\n"
+            "        target: /run/unrelated/key.pem\n",
+            1,
+        )
+        compose_text += (
+            "\nconfigs:\n"
+            "  runtime_private_key:\n"
+            "    file: "
+            "${WORKSTREAM_ARTIFACT_S3_ROLES_ANYWHERE_RUNTIME_PRIVATE_KEY_HOST_FILE}\n"
+        )
+        rendered = self._render_modified_compose(compose_text)
+
+        self.assertEqual(
+            rendered["services"]["beat"]["configs"][0]["target"],
+            "/run/unrelated/key.pem",
+        )
+        self.assertEqual(
+            rendered["configs"]["runtime_private_key"]["file"],
+            str(self.runtime_private_key),
+        )
+        with self.assertRaisesRegex(preflight.PreflightError, "Compose configs"):
+            preflight.validate_compose(rendered, self.environment)
+
+    def test_actual_render_rejects_extra_backend_identity_binds(self) -> None:
+        compose_text = preflight.COMPOSE_PATH.read_text(encoding="utf-8")
+        cases = (
+            (
+                "API readiness key",
+                "    depends_on:\n      checker-service:\n",
+                "WORKSTREAM_ARTIFACT_S3_ROLES_ANYWHERE_READINESS_PRIVATE_KEY_HOST_FILE",
+                "/run/unrelated/readiness-key.pem",
+            ),
+            (
+                "API negative key",
+                "    depends_on:\n      checker-service:\n",
+                "WORKSTREAM_ARTIFACT_S3_ROLES_ANYWHERE_NEGATIVE_PRIVATE_KEY_HOST_FILE",
+                "/run/unrelated/negative-key.pem",
+            ),
+            (
+                "worker readiness certificate",
+                "    depends_on:\n      api:\n",
+                "WORKSTREAM_ARTIFACT_S3_ROLES_ANYWHERE_READINESS_CERTIFICATE_HOST_FILE",
+                "/run/unrelated/readiness-certificate.pem",
+            ),
+        )
+        for label, marker, source_key, target in cases:
+            with self.subTest(label=label):
+                extra_bind = (
+                    "      - type: bind\n"
+                    f"        source: ${{{source_key}}}\n"
+                    f"        target: {target}\n"
+                    "        read_only: true\n"
+                )
+                rendered = self._render_modified_compose(
+                    compose_text.replace(marker, extra_bind + marker, 1)
+                )
+                service_name = "worker" if label.startswith("worker") else "api"
+                rendered_mounts = preflight._service_mounts(
+                    rendered["services"][service_name]
+                )
+                self.assertEqual(
+                    rendered_mounts[target]["source"],
+                    self.environment[source_key],
+                )
+                with self.assertRaisesRegex(
+                    preflight.PreflightError,
+                    f"{service_name} bind mounts differ",
+                ):
+                    preflight.validate_compose(rendered, self.environment)
+
+    def test_actual_render_rejects_checker_hardlink_identity_bind(self) -> None:
+        private_key_alias = self.root / "runtime-key-checker-alias.pem"
+        os.link(self.runtime_private_key, private_key_alias)
+        marker = (
+            "    healthcheck:\n"
+            '      test: [CMD-SHELL, "test -S /run/workstream-checker/checker.sock'
+        )
+        extra_bind = (
+            "      - type: bind\n"
+            f"        source: {private_key_alias}\n"
+            "        target: /run/unrelated/key.pem\n"
+            "        read_only: true\n"
+        )
+        compose_text = preflight.COMPOSE_PATH.read_text(encoding="utf-8").replace(
+            marker,
+            extra_bind + marker,
+            1,
+        )
+        rendered = self._render_modified_compose(compose_text)
+
+        checker_mounts = preflight._service_mounts(
+            rendered["services"]["checker-service"]
+        )
+        self.assertEqual(
+            checker_mounts["/run/unrelated/key.pem"]["source"],
+            str(private_key_alias),
+        )
+        with self.assertRaisesRegex(preflight.PreflightError, "checker-service bind"):
+            preflight.validate_compose(rendered, self.environment)
+
+    def test_actual_render_rejects_secret_file_substitution(self) -> None:
+        compose_text = preflight.COMPOSE_PATH.read_text(encoding="utf-8").replace(
+            "${WORKSTREAM_DATABASE_URL_FILE:?set the private database URL file}",
+            "${WORKSTREAM_ARTIFACT_S3_ROLES_ANYWHERE_RUNTIME_PRIVATE_KEY_HOST_FILE}",
+            1,
+        )
+        rendered = self._render_modified_compose(compose_text)
+
+        self.assertEqual(
+            rendered["secrets"]["database_url"]["file"],
+            str(self.runtime_private_key),
+        )
+        self.assertEqual(
+            {item["source"] for item in rendered["services"]["beat"]["secrets"]},
+            {"database_url", "celery_broker_url"},
+        )
+        with self.assertRaisesRegex(preflight.PreflightError, "database_url"):
+            preflight.validate_compose(rendered, self.environment)
 
     def test_compose_secret_mode_encodings_preserve_owner_only_read(self) -> None:
         rendered = preflight.render_compose(self.environment_path, self.environment)
@@ -134,16 +365,19 @@ class HostedReleaseConfigTests(unittest.TestCase):
                 for secret in candidate["services"][role]["secrets"]:
                     secret["mode"] = mode
             with self.subTest(valid_mode=mode):
-                preflight.validate_compose(candidate)
+                preflight.validate_compose(candidate, self.environment)
         for mode in (400, 256.0, "400", "0444", 0o444, "0600", 0o600, True, None):
             candidate = copy.deepcopy(rendered)
             candidate["services"]["api"]["secrets"][0]["mode"] = mode
-            with self.subTest(invalid_mode=mode), self.assertRaisesRegex(
-                preflight.PreflightError, "mounted secrets"
+            with (
+                self.subTest(invalid_mode=mode),
+                self.assertRaisesRegex(preflight.PreflightError, "mounted secrets"),
             ):
-                preflight.validate_compose(candidate)
+                preflight.validate_compose(candidate, self.environment)
 
-    def test_render_and_compose_operation_ignore_hostile_ambient_environment(self) -> None:
+    def test_render_and_compose_operation_ignore_hostile_ambient_environment(
+        self,
+    ) -> None:
         hostile = {
             "WORKSTREAM_TOKEN_JWKS_URL": "https://attacker.invalid/jwks",
             "WORKSTREAM_DATABASE_URL_FILE": "/tmp/attacker-database",
@@ -181,15 +415,23 @@ class HostedReleaseConfigTests(unittest.TestCase):
             operation_environment["WORKSTREAM_ARTIFACT_S3_RUNTIME_ROLE_ARN"],
             self.environment["WORKSTREAM_ARTIFACT_S3_RUNTIME_ROLE_ARN"],
         )
-        self.assertEqual(operation_environment["DOCKER_HOST"], "unix:///var/run/docker.sock")
+        self.assertEqual(
+            operation_environment["DOCKER_HOST"], "unix:///var/run/docker.sock"
+        )
         for key in ("COMPOSE_FILE", "AWS_ACCESS_KEY_ID"):
             self.assertNotIn(key, operation_environment)
-        self.assertIn("deploy/hosted/compose.py", (ROOT / "deploy/hosted/README.md").read_text())
+        self.assertIn(
+            "deploy/hosted/compose.py", (ROOT / "deploy/hosted/README.md").read_text()
+        )
 
     def _compose_main(self, operation: str) -> tuple[int, str]:
         errors = io.StringIO()
         with (
-            patch.object(sys, "argv", ["compose.py", "--env-file", str(self.environment_path), operation]),
+            patch.object(
+                sys,
+                "argv",
+                ["compose.py", "--env-file", str(self.environment_path), operation],
+            ),
             redirect_stderr(errors),
         ):
             result = compose.main()
@@ -197,7 +439,9 @@ class HostedReleaseConfigTests(unittest.TestCase):
 
     def test_launch_rechecks_checker_selectors_after_preflight(self) -> None:
         with (
-            patch.object(sys, "argv", ["preflight.py", "--env-file", str(self.environment_path)]),
+            patch.object(
+                sys, "argv", ["preflight.py", "--env-file", str(self.environment_path)]
+            ),
             patch.object(preflight, "validate_private_host_inputs"),
             patch.object(preflight, "validate_docker_runtime"),
             redirect_stdout(io.StringIO()),
@@ -246,8 +490,14 @@ class HostedReleaseConfigTests(unittest.TestCase):
                     return 0
 
                 with (
-                    patch.object(compose, "validate_private_host_inputs", side_effect=private_check),
-                    patch.object(compose, "validate_docker_runtime", side_effect=runtime_check),
+                    patch.object(
+                        compose,
+                        "validate_private_host_inputs",
+                        side_effect=private_check,
+                    ),
+                    patch.object(
+                        compose, "validate_docker_runtime", side_effect=runtime_check
+                    ),
                     patch.object(compose, "run_compose", side_effect=launch) as run,
                 ):
                     result, error = self._compose_main("up")
@@ -258,7 +508,10 @@ class HostedReleaseConfigTests(unittest.TestCase):
                 else:
                     self.assertEqual(result, 1)
                     self.assertIn("rejected", error)
-                    self.assertEqual(order, ["private"] if failure == "private" else ["private", "runtime"])
+                    self.assertEqual(
+                        order,
+                        ["private"] if failure == "private" else ["private", "runtime"],
+                    )
                     run.assert_not_called()
 
     def test_stop_remains_available_with_invalid_checker_configuration(self) -> None:
@@ -275,9 +528,138 @@ class HostedReleaseConfigTests(unittest.TestCase):
         runtime.assert_not_called()
         run.assert_called_once_with(self.environment_path, self.environment, ["stop"])
 
+    def test_proof_wrapper_runs_only_the_fixed_identity_sequence(self) -> None:
+        nonce = "0199f68b-5dc2-7000-8000-000000000001"
+        with (
+            patch.object(
+                sys,
+                "argv",
+                [
+                    "compose.py",
+                    "--env-file",
+                    str(self.environment_path),
+                    "proof",
+                    "--group-nonce",
+                    nonce,
+                ],
+            ),
+            patch.object(compose, "load_checker_config", return_value=self.checker),
+            patch.object(compose, "validate_private_host_inputs"),
+            patch.object(compose, "validate_docker_runtime"),
+            patch.object(compose, "run_proof_group", return_value=0) as proof_group,
+        ):
+            self.assertEqual(compose.main(), 0)
+        self.assertEqual(str(proof_group.call_args.args[2]), nonce)
+        for invalid in (["proof"], ["proof", "--group-nonce", "not-a-uuid"]):
+            with (
+                self.subTest(invalid=invalid),
+                patch.object(
+                    sys,
+                    "argv",
+                    ["compose.py", "--env-file", str(self.environment_path), *invalid],
+                ),
+                redirect_stderr(io.StringIO()),
+                patch.object(compose, "run_proof_group") as run,
+            ):
+                self.assertEqual(compose.main(), 1)
+                run.assert_not_called()
+
+    def test_proof_group_runs_identities_then_credential_free_coordinator(self) -> None:
+        nonce = preflight.UUID("0199f68b-5dc2-7000-8000-000000000001")
+        completed = subprocess.CompletedProcess([], 0)
+        with patch.object(preflight.subprocess, "run", return_value=completed) as run:
+            self.assertEqual(
+                preflight.run_proof_group(
+                    self.environment_path, self.environment, nonce
+                ),
+                0,
+            )
+        commands = [
+            call.args[0]
+            for call in run.call_args_list
+            if call.args[0][:2] == ["docker", "compose"]
+        ]
+        cleanup = [
+            call.args[0]
+            for call in run.call_args_list
+            if call.args[0][:3] == ["docker", "rm", "--force"]
+        ]
+        self.assertEqual(
+            [command[command.index("--name") + 2] for command in commands],
+            list(preflight.PROOF_SERVICES),
+        )
+        self.assertEqual(
+            [
+                command[command.index("scripts.aws_artifact_provider_proof") + 1]
+                for command in commands
+            ],
+            list(preflight.PROOF_SERVICES.values()),
+        )
+        self.assertTrue(all("--rm" in command for command in commands))
+        self.assertTrue(
+            all(
+                command[command.index(service) + 1 : command.index(service) + 5]
+                == [
+                    "/usr/bin/timeout",
+                    "--signal=TERM",
+                    f"--kill-after={preflight.PROOF_INNER_KILL_AFTER_SECONDS}s",
+                    next(
+                        value
+                        for value in command
+                        if value.endswith("s") and value[:-1].isdigit()
+                    ),
+                ]
+                for command, service in zip(commands, preflight.PROOF_SERVICES)
+            )
+        )
+        expected_names = [
+            f"workstream-proof-{nonce.hex}-{service}"
+            for service in preflight.PROOF_SERVICES
+        ]
+        self.assertEqual(
+            [command[command.index("--name") + 1] for command in commands],
+            expected_names,
+        )
+        self.assertEqual([command[-1] for command in cleanup], expected_names)
+        self.assertTrue(
+            all(call.kwargs.get("timeout", 0) > 0 for call in run.call_args_list)
+        )
+
+    def test_proof_group_timeout_cleans_exact_container_and_stops_sequence(
+        self,
+    ) -> None:
+        nonce = preflight.UUID("0199f68b-5dc2-7000-8000-000000000001")
+        calls: list[list[str]] = []
+
+        def timeout_then_cleanup(command, **kwargs):
+            calls.append(command)
+            if command[:2] == ["docker", "compose"]:
+                raise subprocess.TimeoutExpired(command, kwargs["timeout"])
+            return subprocess.CompletedProcess(command, 0)
+
+        with patch.object(
+            preflight.subprocess, "run", side_effect=timeout_then_cleanup
+        ):
+            self.assertEqual(
+                preflight.run_proof_group(
+                    self.environment_path, self.environment, nonce
+                ),
+                preflight.PROOF_TIMEOUT_RETURN_CODE,
+            )
+        name = f"workstream-proof-{nonce.hex}-aws-proof-runtime"
+        self.assertEqual(
+            [command[:2] for command in calls],
+            [["docker", "compose"], ["docker", "rm"]],
+        )
+        self.assertEqual(calls[1], ["docker", "rm", "--force", name])
+        self.assertFalse(any("aws-proof-coordinate" in command for command in calls))
+
     def test_environment_rejects_mutable_or_development_settings(self) -> None:
         cases = {
-            "mutable image": ("WORKSTREAM_BACKEND_IMAGE", "registry.example/backend:latest"),
+            "mutable image": (
+                "WORKSTREAM_BACKEND_IMAGE",
+                "registry.example/backend:latest",
+            ),
             "local HMAC": ("WORKSTREAM_FLOW_AUTH_LOCAL_HMAC_SECRET", "private"),
             "static AWS key": ("WORKSTREAM_ARTIFACT_S3_ACCESS_KEY_ID", "private"),
             "ambient static AWS key": ("AWS_ACCESS_KEY_ID", "private"),
@@ -287,12 +669,25 @@ class HostedReleaseConfigTests(unittest.TestCase):
                 "WORKSTREAM_ARTIFACT_S3_OPERATION_TOTAL_TIMEOUT_SECONDS",
                 "NaN",
             ),
-            "insecure issuer": ("WORKSTREAM_TOKEN_ISSUER", "http://identity.example/flow"),
-            "insecure collector": ("WORKSTREAM_OBSERVABILITY_OTLP_ENDPOINT", "http://collector"),
-            "introspection expansion": ("WORKSTREAM_TOKEN_INTROSPECTION_MODE", "required"),
+            "insecure issuer": (
+                "WORKSTREAM_TOKEN_ISSUER",
+                "http://identity.example/flow",
+            ),
+            "insecure collector": (
+                "WORKSTREAM_OBSERVABILITY_OTLP_ENDPOINT",
+                "http://collector",
+            ),
+            "introspection expansion": (
+                "WORKSTREAM_TOKEN_INTROSPECTION_MODE",
+                "required",
+            ),
             "unsupported identity transport": (
                 "WORKSTREAM_ARTIFACT_S3_AWS_WORKLOAD_IDENTITY_METHOD",
-                "assume-role-with-web-identity",
+                "iam-role",
+            ),
+            "relative certificate": (
+                "WORKSTREAM_ARTIFACT_S3_ROLES_ANYWHERE_RUNTIME_CERTIFICATE_HOST_FILE",
+                "runtime-certificate.pem",
             ),
         }
         for label, (key, value) in cases.items():
@@ -332,7 +727,9 @@ class HostedReleaseConfigTests(unittest.TestCase):
         rendered = preflight.render_compose(self.environment_path, self.environment)
         cases = []
         mutable = copy.deepcopy(rendered)
-        mutable["services"]["worker"]["image"] = "registry.example/workstream/backend:latest"
+        mutable["services"]["worker"]["image"] = (
+            "registry.example/workstream/backend:latest"
+        )
         cases.append(("mutable worker image", mutable))
         networked = copy.deepcopy(rendered)
         networked["services"]["checker-service"]["network_mode"] = "default"
@@ -355,7 +752,9 @@ class HostedReleaseConfigTests(unittest.TestCase):
         expanded_worker["services"]["worker"]["environment"]["UNREVIEWED"] = "true"
         cases.append(("worker environment drift", expanded_worker))
         unknown_role = copy.deepcopy(rendered)
-        unknown_role["services"]["worker"]["environment"]["WORKSTREAM_RELEASE_ROLE"] = "setup"
+        unknown_role["services"]["worker"]["environment"]["WORKSTREAM_RELEASE_ROLE"] = (
+            "setup"
+        )
         cases.append(("unknown backend role", unknown_role))
         missing_role_secret = copy.deepcopy(rendered)
         del missing_role_secret["services"]["api"]["environment"][
@@ -372,9 +771,55 @@ class HostedReleaseConfigTests(unittest.TestCase):
             copy.deepcopy(rendered["services"]["worker"]["secrets"][-1])
         )
         cases.append(("unrelated role secret mount", unrelated_role_mount))
+        writable_identity = copy.deepcopy(rendered)
+        for mount in writable_identity["services"]["worker"]["volumes"]:
+            if mount["target"] == str(preflight.ROLES_ANYWHERE_PRIVATE_KEY_TARGET):
+                mount["read_only"] = False
+        cases.append(("writable runtime identity", writable_identity))
+        beat_identity = copy.deepcopy(rendered)
+        beat_identity["services"]["beat"]["volumes"] = [
+            copy.deepcopy(rendered["services"]["api"]["volumes"][-1])
+        ]
+        cases.append(("runtime identity exposed to Beat", beat_identity))
+        relocated_beat_identity = copy.deepcopy(rendered)
+        relocated_mount = copy.deepcopy(rendered["services"]["api"]["volumes"][-1])
+        relocated_mount["target"] = "/run/unrelated/private.pem"
+        relocated_beat_identity["services"]["beat"]["volumes"] = [relocated_mount]
+        cases.append(("runtime identity relocated into Beat", relocated_beat_identity))
+        arbitrary_beat_volume = copy.deepcopy(rendered)
+        unrelated_file = self.root / "unrelated-volume"
+        unrelated_file.write_text("unrelated", encoding="utf-8")
+        arbitrary_beat_volume["services"]["beat"]["volumes"] = [
+            {
+                "type": "bind",
+                "source": str(unrelated_file),
+                "target": "/run/unrelated/value",
+                "read_only": True,
+            }
+        ]
+        cases.append(("arbitrary Beat volume", arbitrary_beat_volume))
+        hardlink_beat_identity = copy.deepcopy(rendered)
+        private_key_alias = self.root / "runtime-private-key-alias.pem"
+        os.link(self.runtime_private_key, private_key_alias)
+        hardlink_beat_identity["services"]["beat"]["volumes"] = [
+            {
+                "type": "bind",
+                "source": str(private_key_alias),
+                "target": "/run/unrelated/key.pem",
+                "read_only": True,
+            }
+        ]
+        cases.append(
+            ("hardlink runtime identity exposed to Beat", hardlink_beat_identity)
+        )
+        checker_identity = copy.deepcopy(rendered)
+        checker_identity["services"]["checker-service"]["volumes"].append(
+            copy.deepcopy(rendered["services"]["api"]["volumes"][-1])
+        )
+        cases.append(("runtime identity exposed to checker", checker_identity))
         for label, changed in cases:
             with self.subTest(label=label), self.assertRaises(preflight.PreflightError):
-                preflight.validate_compose(changed)
+                preflight.validate_compose(changed, self.environment)
 
     def test_private_metadata_rejects_empty_broad_and_linked_files(self) -> None:
         private_file = self.root / "secret"
@@ -428,7 +873,9 @@ class HostedReleaseConfigTests(unittest.TestCase):
                 mode=0o400,
             )
 
-    def test_private_host_inputs_check_exact_socket_group_without_reading_secrets(self) -> None:
+    def test_private_host_inputs_check_exact_socket_group_without_reading_secrets(
+        self,
+    ) -> None:
         scratch = self.root / "scratch"
         socket_root = self.root / "socket"
         scratch.mkdir(mode=0o700)
@@ -453,7 +900,9 @@ class HostedReleaseConfigTests(unittest.TestCase):
         listener = socket.socket(socket.AF_UNIX)
         listener.bind(str(docker_socket))
         try:
-            environment["WORKSTREAM_DOCKER_SOCKET_GID"] = str(docker_socket.stat().st_gid)
+            environment["WORKSTREAM_DOCKER_SOCKET_GID"] = str(
+                docker_socket.stat().st_gid
+            )
             with (
                 patch.object(preflight, "SCRATCH_ROOT", scratch),
                 patch.object(preflight, "SOCKET_ROOT", socket_root),
@@ -465,6 +914,89 @@ class HostedReleaseConfigTests(unittest.TestCase):
                 )
                 with self.assertRaises(preflight.PreflightError):
                     preflight.validate_private_host_inputs(environment)
+            environment["WORKSTREAM_DOCKER_SOCKET_GID"] = str(
+                docker_socket.stat().st_gid
+            )
+            scratch_secret = scratch / "openai-secret"
+            scratch_secret.write_text("private", encoding="utf-8")
+            scratch_secret.chmod(0o400)
+            os.chown(scratch_secret, self.runtime_uid, self.runtime_gid)
+            scratch_alias = self.root / "scratch-alias"
+            scratch_alias.symlink_to(scratch, target_is_directory=True)
+            environment["OPENAI_API_KEY_FILE"] = str(
+                scratch_alias / scratch_secret.name
+            )
+            with (
+                patch.object(preflight, "SCRATCH_ROOT", scratch),
+                patch.object(preflight, "SOCKET_ROOT", socket_root),
+                patch.object(preflight, "DOCKER_SOCKET", docker_socket),
+                self.assertRaisesRegex(
+                    preflight.PreflightError, "outside shared roots"
+                ),
+            ):
+                preflight.validate_private_host_inputs(environment)
+            environment["OPENAI_API_KEY_FILE"] = str(secret_paths[-1])
+            socket_identity = socket_root / "negative-key.pem"
+            socket_identity.write_text("private", encoding="utf-8")
+            socket_identity.chmod(0o400)
+            os.chown(socket_identity, self.runtime_uid, self.runtime_gid)
+            negative_key = (
+                "WORKSTREAM_ARTIFACT_S3_ROLES_ANYWHERE_NEGATIVE_PRIVATE_KEY_HOST_FILE"
+            )
+            original_negative_key = environment[negative_key]
+            environment[negative_key] = str(socket_identity)
+            with (
+                patch.object(preflight, "SCRATCH_ROOT", scratch),
+                patch.object(preflight, "SOCKET_ROOT", socket_root),
+                patch.object(preflight, "DOCKER_SOCKET", docker_socket),
+                self.assertRaisesRegex(
+                    preflight.PreflightError, "outside shared roots"
+                ),
+            ):
+                preflight.validate_private_host_inputs(environment)
+            environment[negative_key] = original_negative_key
+            runtime_key = (
+                "WORKSTREAM_ARTIFACT_S3_ROLES_ANYWHERE_RUNTIME_PRIVATE_KEY_HOST_FILE"
+            )
+            original_runtime_key = environment[runtime_key]
+            secret_alias = self.root / "openai-secret-runtime-key-alias"
+            os.link(secret_paths[-1], secret_alias)
+            environment[runtime_key] = str(secret_alias)
+            with (
+                patch.object(preflight, "SCRATCH_ROOT", scratch),
+                patch.object(preflight, "SOCKET_ROOT", socket_root),
+                patch.object(preflight, "DOCKER_SOCKET", docker_socket),
+                self.assertRaisesRegex(preflight.PreflightError, "distinct files"),
+            ):
+                preflight.validate_private_host_inputs(environment)
+            environment[runtime_key] = original_runtime_key
+            checker_alias = self.root / "checker-negative-key-alias"
+            os.link(checker, checker_alias)
+            environment[negative_key] = str(checker_alias)
+            with (
+                patch.object(preflight, "SCRATCH_ROOT", scratch),
+                patch.object(preflight, "SOCKET_ROOT", socket_root),
+                patch.object(preflight, "DOCKER_SOCKET", docker_socket),
+                self.assertRaisesRegex(preflight.PreflightError, "distinct files"),
+            ):
+                preflight.validate_private_host_inputs(environment)
+            environment[negative_key] = original_negative_key
+            same_identity = self.root / "same-identity"
+            same_identity.write_text("private", encoding="utf-8")
+            same_identity.chmod(0o400)
+            environment.update(
+                {
+                    key: str(same_identity)
+                    for key in preflight.ROLES_ANYWHERE_HOST_FILE_KEYS
+                }
+            )
+            with (
+                patch.object(preflight, "SCRATCH_ROOT", scratch),
+                patch.object(preflight, "SOCKET_ROOT", socket_root),
+                patch.object(preflight, "DOCKER_SOCKET", docker_socket),
+                self.assertRaisesRegex(preflight.PreflightError, "distinct files"),
+            ):
+                preflight.validate_private_host_inputs(environment)
         finally:
             listener.close()
 
@@ -493,7 +1025,11 @@ class ReleaseSecretLoaderTests(unittest.TestCase):
             "WORKSTREAM_CELERY_BROKER_URL_FILE",
             "OPENAI_API_KEY_FILE",
         ),
-        "beat": ("WORKSTREAM_CELERY_BROKER_URL_FILE",),
+        "beat": (
+            "WORKSTREAM_DATABASE_URL_FILE",
+            "WORKSTREAM_CELERY_BROKER_URL_FILE",
+        ),
+        "proof": ("WORKSTREAM_DATABASE_URL_FILE",),
     }
 
     def _run_loader(
@@ -527,11 +1063,11 @@ class ReleaseSecretLoaderTests(unittest.TestCase):
         if unset_selector is not None:
             environment.pop(unset_selector, None)
         environment["WORKSTREAM_RELEASE_ROLE"] = role
-        expected = {
-            self.FILE_TO_SECRET[key] for key in self.ROLE_FILES.get(role, ())
-        }
+        expected = {self.FILE_TO_SECRET[key] for key in self.ROLE_FILES.get(role, ())}
         environment["EXPECTED_SECRET_NAMES"] = ",".join(sorted(expected))
-        environment["EXPECTED_SECRET_SHA256"] = hashlib.sha256(content.encode()).hexdigest()
+        environment["EXPECTED_SECRET_SHA256"] = hashlib.sha256(
+            content.encode()
+        ).hexdigest()
         program = (
             "import hashlib,os;"
             "expected=set(filter(None,os.environ['EXPECTED_SECRET_NAMES'].split(',')));"
@@ -587,7 +1123,9 @@ class ReleaseSecretLoaderTests(unittest.TestCase):
             self.assertEqual(unknown.stdout, "")
             self.assertIn("release role is unavailable or unsupported", unknown.stderr)
 
-    def test_loader_rejects_empty_missing_directory_and_symlink_without_disclosure(self) -> None:
+    def test_loader_rejects_empty_missing_directory_and_symlink_without_disclosure(
+        self,
+    ) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             cases: list[tuple[str, Path]] = []

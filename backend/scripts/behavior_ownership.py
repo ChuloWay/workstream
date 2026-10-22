@@ -103,8 +103,12 @@ CHECKER_IMAGE_PUBLISH_TARGETS = frozenset({
 })
 AWS_ARTIFACT_ACTIVATION_TARGETS = frozenset({
     "backend/app/adapters/artifacts/aws_live_proof.py",
+    "backend/app/adapters/artifacts/aws_roles_anywhere.py",
+    "backend/app/adapters/artifacts/aws_roles_anywhere_proof.py",
+    "backend/app/core/aws_roles_anywhere.py",
     "backend/app/modules/artifacts/provider_activation.py",
     "backend/scripts/aws_artifact_provider_proof.py",
+    "backend/scripts/aws_roles_anywhere_config.py",
 })
 PILOT_READ_1_TARGETS = frozenset({
     "backend/app/modules/tasks/submission_attempts.py",

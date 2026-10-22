@@ -949,6 +949,24 @@ class ArtifactProviderProbeResult(Base):
             name="negative_trust_policy_sha256_shape",
         ),
         CheckConstraint(
+            "(roles_anywhere_trust_anchor_arn is null and "
+            "roles_anywhere_trust_anchor_sha256 is null and "
+            "roles_anywhere_profile_arn is null and roles_anywhere_profile_sha256 is null) or "
+            "(roles_anywhere_trust_anchor_arn is not null and "
+            "roles_anywhere_trust_anchor_sha256 is not null and "
+            "roles_anywhere_trust_anchor_sha256 ~ '^sha256:[0-9a-f]{64}$' and "
+            "roles_anywhere_profile_arn is not null and "
+            "roles_anywhere_profile_sha256 is not null and "
+            "roles_anywhere_profile_sha256 ~ '^sha256:[0-9a-f]{64}$' and "
+            "roles_anywhere_trust_anchor_arn ~ ('^arn:' || aws_partition || "
+            "':rolesanywhere:' || region || ':' || aws_account_id || "
+            "':trust-anchor/[0-9a-f]{8}-([0-9a-f]{4}-){3}[0-9a-f]{12}$') and "
+            "roles_anywhere_profile_arn ~ ('^arn:' || aws_partition || "
+            "':rolesanywhere:' || region || ':' || aws_account_id || "
+            "':profile/[0-9a-f]{8}-([0-9a-f]{4}-){3}[0-9a-f]{12}$'))",
+            name="roles_anywhere_custody",
+        ),
+        CheckConstraint(
             SHA256_CHECK.format(column="evidence_sha256"),
             name="evidence_sha256_shape",
         ),
@@ -1000,6 +1018,10 @@ class ArtifactProviderProbeResult(Base):
     readiness_policy_arn: Mapped[str] = mapped_column(String(700), nullable=False)
     negative_role_arn: Mapped[str] = mapped_column(String(700), nullable=False)
     negative_trust_policy_sha256: Mapped[str] = mapped_column(String(71), nullable=False)
+    roles_anywhere_trust_anchor_arn: Mapped[str | None] = mapped_column(String(700))
+    roles_anywhere_trust_anchor_sha256: Mapped[str | None] = mapped_column(String(71))
+    roles_anywhere_profile_arn: Mapped[str | None] = mapped_column(String(700))
+    roles_anywhere_profile_sha256: Mapped[str | None] = mapped_column(String(71))
     bootstrap_principal_arn: Mapped[str] = mapped_column(String(700), nullable=False)
     expected_principal_arn: Mapped[str] = mapped_column(String(700), nullable=False)
     observed_principal_arn: Mapped[str | None] = mapped_column(String(700))
@@ -1041,6 +1063,24 @@ class ArtifactProviderActivation(Base):
         CheckConstraint(
             SHA256_CHECK.format(column="negative_trust_policy_sha256"),
             name="negative_trust_policy_sha256_shape",
+        ),
+        CheckConstraint(
+            "(roles_anywhere_trust_anchor_arn is null and "
+            "roles_anywhere_trust_anchor_sha256 is null and "
+            "roles_anywhere_profile_arn is null and roles_anywhere_profile_sha256 is null) or "
+            "(roles_anywhere_trust_anchor_arn is not null and "
+            "roles_anywhere_trust_anchor_sha256 is not null and "
+            "roles_anywhere_trust_anchor_sha256 ~ '^sha256:[0-9a-f]{64}$' and "
+            "roles_anywhere_profile_arn is not null and "
+            "roles_anywhere_profile_sha256 is not null and "
+            "roles_anywhere_profile_sha256 ~ '^sha256:[0-9a-f]{64}$' and "
+            "roles_anywhere_trust_anchor_arn ~ ('^arn:' || aws_partition || "
+            "':rolesanywhere:' || region || ':' || aws_account_id || "
+            "':trust-anchor/[0-9a-f]{8}-([0-9a-f]{4}-){3}[0-9a-f]{12}$') and "
+            "roles_anywhere_profile_arn ~ ('^arn:' || aws_partition || "
+            "':rolesanywhere:' || region || ':' || aws_account_id || "
+            "':profile/[0-9a-f]{8}-([0-9a-f]{4}-){3}[0-9a-f]{12}$'))",
+            name="roles_anywhere_custody",
         ),
         CheckConstraint("aws_account_id ~ '^[0-9]{12}$'", name="account_shape"),
         CheckConstraint(
@@ -1119,6 +1159,10 @@ class ArtifactProviderActivation(Base):
     readiness_policy_arn: Mapped[str] = mapped_column(String(700), nullable=False)
     negative_role_arn: Mapped[str] = mapped_column(String(700), nullable=False)
     negative_trust_policy_sha256: Mapped[str] = mapped_column(String(71), nullable=False)
+    roles_anywhere_trust_anchor_arn: Mapped[str | None] = mapped_column(String(700))
+    roles_anywhere_trust_anchor_sha256: Mapped[str | None] = mapped_column(String(71))
+    roles_anywhere_profile_arn: Mapped[str | None] = mapped_column(String(700))
+    roles_anywhere_profile_sha256: Mapped[str | None] = mapped_column(String(71))
     bootstrap_principal_arn: Mapped[str] = mapped_column(String(700), nullable=False)
     bucket_policy_sha256: Mapped[str] = mapped_column(String(71), nullable=False)
     group_nonce: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False)

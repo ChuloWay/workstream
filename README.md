@@ -399,6 +399,9 @@ stale or mismatched proof fails with `artifact_provider_live_proof_required`
 before credential probing or provider I/O. See the
 [artifact storage operations runbook](docs/operations_artifact_storage.md);
 repository code and MinIO tests alone do not establish live AWS readiness.
+For a host outside AWS compute, the [Roles Anywhere setup guide](docs/operations_aws_roles_anywhere.md)
+uses dedicated certificate identities and generated configuration for the same
+S3 upload, download and assigned guide-document access paths.
 
 The local development URL uses the password and PostgreSQL host port selected
 in the ignored environment files:
