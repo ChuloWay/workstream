@@ -192,6 +192,7 @@ product lifecycle or alternative storage subsystem is introduced.
 | Real AWS connection | provisioned certificate identities running the production native-AWS observation owner in isolated containers | runtime immutable upload/exact readback, readiness controls and analyzer checks, negative/anonymous object denial, and all three certificate-role separation checks pass | diagnostic observations do not create database activation or establish the public guide/Submission journey; retained challenge bytes are not deleted |
 | Database-backed live AWS proof attempt | exact-source, separate-role containers and canonical proof recorder against isolated PostgreSQL | all three observations passed and persisted; coordinator rejected activation; the cold-container sequence exceeded the fixed freshness allowance | not a passing activation; preserve the rejection and measure a viable deployment sequence without relaxing freshness; temporary database cleanup confirmed |
 | Operator command paths | shell syntax and a temporary fixture executing the documented install/proof blocks from the provisioning directory | 18 shell blocks parse; all six leaf sources and checkout script paths resolve; the previous install and proof blocks fail the same check | command adapters are stubbed; no AWS call, real-key access or host installation is claimed |
+| Release helper content custody | release-image unit suite and isolated removal of only the helper-content guard | 14 tests pass; the prior helper test survives guard removal, while the corrected test fails specifically because content rejection is absent | an image-verifier regression, not live credential or deployment proof |
 
 ## Review findings
 
@@ -232,6 +233,13 @@ update grants. These instructions do not apply IAM changes or claim that the
 live administrator already holds the additional revocation permissions.
 The capability ledger remains unchanged by this documentation correction:
 activation and the public AWS journey are still outstanding.
+
+Further external review found that the release-image helper test protected
+permissions but did not independently exercise content substitution. The same
+test now replaces helper bytes while retaining the required `0555` mode and
+the original pinned digest, then requires the specific identity rejection.
+The runtime verifier is unchanged; this adds regression protection to the
+existing release-image proof rather than a new deployment requirement.
 
 ## Reconciliation
 

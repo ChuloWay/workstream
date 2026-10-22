@@ -239,6 +239,15 @@ class ReleaseImageProofTests(unittest.TestCase):
                 helper.chmod(0o755)
                 with self.assertRaisesRegex(ValueError, "helper mode"):
                     proof.inside_backend()
+                helper.chmod(0o555)
+                replacement = root / "replacement"
+                replacement.write_bytes(b"HELPER")
+                replacement.chmod(helper.stat().st_mode & 0o777)
+                replacement.replace(helper)
+                self.assertEqual(helper.stat().st_mode & 0o777, 0o555)
+                self.assertNotEqual(proof.file_hash(helper), digest)
+                with self.assertRaisesRegex(ValueError, "^helper identity changed$"):
+                    proof.inside_backend()
 
     def test_backend_manifest_requires_the_proof_timeout_command(self):
         with tempfile.TemporaryDirectory() as directory:
