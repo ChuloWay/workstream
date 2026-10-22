@@ -31,7 +31,7 @@ readback. Workstream selects the UUIDv7 identity and retains exact AUTH and
 digest closure in PostgreSQL. This capability does not select or activate a
 checker, change an approved guide, or expose REV lifecycle controls.
 
-On merge of AUTH-ART-02D-OPERATOR, the artifact diagnosis API will use exact,
+The artifact diagnosis API uses exact,
 current system-Operator AUTH decisions for its bounded reads and independent
 verification retry. Signed local PostgreSQL tests cover the real routes and
 atomic retry evidence; the separate #611 CLI commands and hosted S3 proof are
@@ -1241,8 +1241,7 @@ Delivered foundations (bounded local journey proven; no deployment claim)
   ARCH-03C6 distinct exact-authorized locked-context reads
   WS-CLI-001-36 explicit Operator task status/reference reads + start override
   AUTH-ART-02D-OPERATOR exact system-Operator artifact GETs + separate retry
-    (intended on merge; not yet delivered on main)
-    -> client-only #611 consumes this public API after backend merge
+    -> client-only #611 remains a separate CLI implementation
   ARCH-03C7 bounded exact-authorized Audit Authority task history
   WS-CLI-001-34 CLI consumption of those two audit GETs (no new lifecycle owner)
   PILOT-13 assigned-task locked originals: document-only context + verified REST/CLI reads

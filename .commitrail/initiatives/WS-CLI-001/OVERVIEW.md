@@ -169,8 +169,8 @@ After that baseline, #617 added two live post-submit delivery discovery and
 reconciliation operations. [#634](https://github.com/Flow-Research/workstream/issues/634)
 tracks their public CLI client separately; the baseline counts do not include them.
 For #611, [AUTH-ART-02D-OPERATOR](../WS-AUTH-001/WS-AUTH-001-ART02DOPERATOR.md)
-activates the existing nine backend routes through persisted exact authority
-when that prerequisite merges. The client-only CLI follow-on still needs its
+activates the existing nine backend routes through persisted exact authority.
+The client-only CLI follow-on still needs its
 own bounded implementation and public-route proof; no dormant commands or
 client-side authority bypass belong in this initiative.
 
