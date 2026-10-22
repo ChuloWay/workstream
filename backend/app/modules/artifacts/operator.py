@@ -324,6 +324,8 @@ class ArtifactOperatorService:
         if row is None:
             raise ArtifactOperatorNotFound("artifact resource was not found")
         projects = await self._replica_projects(row.replica_id)
+        if not projects:
+            raise ArtifactOperatorNotFound("artifact resource was not found")
         await self._authorize(
             authorization_context,
             ActionId.ARTIFACT_VERIFICATION_JOB_READ,
@@ -634,21 +636,19 @@ class ArtifactOperatorService:
         return self._project_ids((*binding_values, *attempt_values))
 
     async def _replica_projects(self, replica_id: str) -> tuple[UUID, ...]:
-        values = (
-            await self._session.scalars(
-                select(ArtifactPutAttempt.project_id)
-                .where(ArtifactPutAttempt.replica_id == replica_id)
-                .with_for_update()
-            )
-        ).all()
-        if values:
-            return self._project_ids(values)
         content_id = await self._session.scalar(
+            select(ArtifactReplica.content_id)
+            .where(ArtifactReplica.id == replica_id)
+        )
+        if content_id is None:
+            return ()
+        projects = await self._content_projects(content_id)
+        locked_content_id = await self._session.scalar(
             select(ArtifactReplica.content_id)
             .where(ArtifactReplica.id == replica_id)
             .with_for_update()
         )
-        return await self._content_projects(content_id) if content_id else ()
+        return projects if locked_content_id == content_id else ()
 
     async def _binding_resource_project(self, resource_type: str, resource_id: str) -> str | None:
         if resource_type == "project":

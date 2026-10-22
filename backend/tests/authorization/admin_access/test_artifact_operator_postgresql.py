@@ -14,6 +14,7 @@ from app.modules.actors.models import ActorIdentityLink
 from app.modules.tasks.models import AuditEvent
 from app.modules.artifacts.models import (
     ArtifactBinding,
+    ArtifactOperationReceipt,
     ArtifactPutAttempt,
     ArtifactRecoveryAttempt,
     ArtifactReplica,
@@ -517,7 +518,11 @@ async def test_signed_replica_read_digests_all_stored_project_lineage(
         assert put_attempt is not None
         replica = await session.get(ArtifactReplica, put_attempt.replica_id)
         assert replica is not None
-        replica_id, content_id = replica.id, replica.content_id
+        replica_id, content_id, source_id = replica.id, replica.content_id, source.id
+        receipt_id = await session.scalar(select(ArtifactOperationReceipt.id).where(
+            ArtifactOperationReceipt.replica_id == replica_id
+        ))
+        assert receipt_id is not None
         await session.rollback()
     try:
         second_project = str(await create_project("artifact-second-lineage"))
@@ -528,30 +533,55 @@ async def test_signed_replica_read_digests_all_stored_project_lineage(
                 scope_version=1, actor_id=str(operator.id), attribution_type="human",
             ))
             await session.commit()
-        response = await signed_access.client.get(
-            f"/api/v1/operator/artifacts/contents/{content_id}/replicas",
-            headers=operator.headers,
+        request_id, correlation_id = uuid4(), uuid4()
+        headers = operator.headers | {
+            "X-Request-Id": str(request_id), "X-Correlation-Id": str(correlation_id),
+        }
+        link_id = await _operator_link_id(operator)
+        projects = tuple(sorted((UUID(first_project), UUID(second_project))))
+        cases = (
+            (f"/contents/{content_id}/replicas", None,
+             ActionId.ARTIFACT_REPLICA_READ, PermissionId.ARTIFACT_REPLICA_READ,
+             "artifact_content", UUID(content_id), content_id),
+            (f"/replicas/{replica_id}/receipts", None,
+             ActionId.ARTIFACT_RECEIPT_READ, PermissionId.ARTIFACT_RECEIPT_READ,
+             "artifact_replica", UUID(replica_id), replica_id),
+            (f"/verification-jobs/{source_id}", None,
+             ActionId.ARTIFACT_VERIFICATION_JOB_READ, PermissionId.ARTIFACT_VERIFICATION_JOB_READ,
+             "artifact_verification_job", UUID(source_id), source_id),
+            ("/audit-events", {"resource_type": "artifact_replica", "resource_id": replica_id},
+             ActionId.ARTIFACT_AUDIT_READ, PermissionId.ARTIFACT_AUDIT_READ,
+             "artifact_audit_resource", UUID(replica_id), f"artifact_replica:{replica_id}"),
+            ("/audit-events", {"resource_type": "artifact_receipt", "resource_id": receipt_id},
+             ActionId.ARTIFACT_AUDIT_READ, PermissionId.ARTIFACT_AUDIT_READ,
+             "artifact_audit_resource", UUID(receipt_id), f"artifact_receipt:{receipt_id}"),
+            ("/audit-events", {"resource_type": "artifact_verification_job", "resource_id": source_id},
+             ActionId.ARTIFACT_AUDIT_READ, PermissionId.ARTIFACT_AUDIT_READ,
+             "artifact_audit_resource", UUID(source_id), f"artifact_verification_job:{source_id}"),
         )
-        assert response.status_code == 200, response.text
-        assert response.json()["items"][0]["id"] == replica_id
-        events = await _events("artifact.replica.read", operator.id)
-        assert len(events) == 1 and events[0].matched_grant_id == grant_id
-        async with db_session.get_session_factory()() as session:
-            link = await session.scalar(select(ActorIdentityLink).where(
-                ActorIdentityLink.actor_profile_id == str(operator.id)
+        audit_count = 0
+        for path, params, action, permission, resource_type, record_id, selector in cases:
+            response = await signed_access.client.get(
+                f"/api/v1/operator/artifacts{path}", headers=headers, params=params,
+            )
+            assert response.status_code == 200, response.text
+            if action is ActionId.ARTIFACT_REPLICA_READ:
+                assert response.json()["items"][0]["id"] == replica_id
+            audit_count += action is ActionId.ARTIFACT_AUDIT_READ
+            events = await _events(action.value, operator.id)
+            assert len(events) == (audit_count if audit_count else 1)
+            _assert_exact_read_event(
+                events[-1], actor=operator, grant_id=grant_id, link_id=link_id,
+                request_id=request_id, correlation_id=correlation_id,
+                action=action, permission=permission, resource_type=resource_type,
+                record_id=record_id, selector=selector, projects=projects,
+            )
+            incomplete = authorization_resource_digest(ArtifactOperatorReadResourceContext(
+                resource_type=resource_type, resource_id=record_id, selector=selector,
+                action_id=action, identity_link_id=link_id,
+                project_ids=(UUID(first_project),),
             ))
-            assert link is not None
-        common = dict(
-            resource_type="artifact_content", resource_id=UUID(content_id), selector=content_id,
-            action_id=ActionId.ARTIFACT_REPLICA_READ, identity_link_id=UUID(link.id),
-        )
-        full = authorization_resource_digest(ArtifactOperatorReadResourceContext(
-            **common, project_ids=tuple(sorted((UUID(first_project), UUID(second_project)))),
-        ))
-        incomplete = authorization_resource_digest(ArtifactOperatorReadResourceContext(
-            **common, project_ids=(UUID(first_project),),
-        ))
-        assert events[0].after_facts["resource_context_digest"] == full != incomplete
+            assert events[-1].after_facts["resource_context_digest"] != incomplete
     finally:
         bootstrap.close()
 
