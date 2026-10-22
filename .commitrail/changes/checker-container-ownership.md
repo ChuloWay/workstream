@@ -32,6 +32,8 @@ Include `docker-compose.agent-loop.yml` to make local backend socket mounts
 read-only, matching hosted API/worker mounts. Only the checker and explicit local
 volume initializer may mutate socket-directory custody; scratch remains writable
 for backend operations. Preflight must reject writable client socket mounts.
+Extend `backend/tests/checkers/external/test_harnessy_proof_checker.py`'s existing
+Compose parity proof to enforce the local client/controller custody split.
 No checker protocol/result, policy, admission, AUTH, ART, database, dependency,
 CI selection, project-image or sandbox privilege changes. No unrelated cleanup.
 

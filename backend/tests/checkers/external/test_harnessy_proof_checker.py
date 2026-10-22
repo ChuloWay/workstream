@@ -170,3 +170,11 @@ def test_published_service_paths_match_the_compose_overlay() -> None:
     assert config["material_root"] == environment["WORKSTREAM_ARTIFACT_SCRATCH_ROOT"]
     assert config["socket_path"] == environment["WORKSTREAM_EXTERNAL_CHECKER_SERVICE_SOCKET"]
     assert len(config["socket_path"].encode()) <= 107
+    for name in ("backend", "worker", "beat", "checker", "checker-volumes-init"):
+        socket_mounts = [
+            mount
+            for mount in overlay["services"][name]["volumes"]
+            if mount.split(":")[1] == "/run/ws-checker"
+        ]
+        mode = ":ro" if name in ("backend", "worker", "beat") else ""
+        assert socket_mounts == [f"checker_socket:/run/ws-checker{mode}"], name
