@@ -460,6 +460,9 @@ positive/negative cases, dependencies and infrastructure failures. Missing
 implementations remain capability gaps in a warning-ready draft and block
 activation; only guide blockers or blocking findings stop draft projection.
 Historical results remain readable and hash-identical with absent new fields.
+The inference adapter drafts a candidate, then reviews source coverage in a fresh
+model context within the same attempt and work budgets. Only its final reviewed
+output reaches validation; failed review cannot publish the candidate.
 
 Authorized reviewers still own `accept`, `needs_revision`, and `reject`.
 Only an actual human Review stores those decisions; neither checker stage

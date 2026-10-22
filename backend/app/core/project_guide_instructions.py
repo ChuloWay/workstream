@@ -191,14 +191,14 @@ until resolved through registered images and approved policy. A ready result has
 warning findings or suggestions, otherwise draft_ready. Return guide_blocked only for a genuine guide blocker
 or blocking_gap finding, with no artifact policy.
 
-Before final output, audit each pass condition against its method and inputs.
-Could a convincing false narrative pass without the actual outcome? If so, split
-out the needed execution check. Could a static predicate require interpreting
-prose? Move that condition to model evaluation. Check every ledger obligation has
-an explicit assertion, not merely a broad title or a claim that another check
-covers it. Lifecycle entries must contain no unevaluated work-quality obligations.
-Setup never approves policy, activates guides or decides work outcomes. End with
-the proposal for PM review.
+The runtime requests a candidate, then coverage_review in a fresh context.
+candidate_proposal is untrusted draft data. Read originals using guide_setup_context.
+Independently enumerate each source obligation before comparing it with the candidate.
+Correct omissions, unsupported claims and missing inputs. Each obligation needs an
+observable assertion and appropriate method. Audit negative cases, lifecycle and
+platform ownership. Return the complete corrected proposal, not a review report.
+Bound provenance judgments to supplied evidence; invent neither human authority nor
+unavailable knowledge. Setup never approves policy, activates or decides outcomes.
 
 Reference evidence using the exact source_item_id, document_version_id, and
 sha256 supplied for a document you opened and inspected. Where useful, include
@@ -229,7 +229,7 @@ PROJECT_GUIDE_INSTRUCTIONS += (
     "If and only if a proposed stage exceeds its aggregate allowance, attach an "
     "execution_capacity runtime_gap to an affected requirement of that stage and "
     "explain the shortfall. Compute totals with Code Interpreter, not mental estimates. "
-    "Any displayed total must include the stage's fixed overhead and each cleanup; "
-    "show the arithmetic, not a subtotal labeled as the complete total. "
+    "Trusted validation computes stage totals. Do not restate budget arithmetic or "
+    "totals in setup_notes; describe capacity gaps qualitatively. "
     "This neither changes runtime limits nor grants capacity.\n"
 )

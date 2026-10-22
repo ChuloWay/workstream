@@ -250,6 +250,16 @@ authors to label automation or stages. A missing registered implementation stays
 an engineering gap in a warning-ready draft and blocks activation; only a real
 guide blocker prevents the draft.
 
+The SDK adapter first produces a typed candidate, then uses a fresh model context
+to check it against the original documents and return the corrected proposal.
+Both phases share one attempt, workspace, client, overall timeout and aggregate
+model-turn/hosted-tool budgets. The draft can use at most half the configured turn
+allowance; review receives the unused remainder. The serialized review input
+(original credential-free context plus candidate) must fit `maximum_manifest_bytes`.
+A review failure, cancellation, invalid result or exhausted budget does not publish
+the unchecked draft. This is a bounded phase of the same attempt, not a retry of
+an uncertain or terminal invocation. PM review and approval remain separate.
+
 The specification is validated as data: execution mode and duration, material
 inputs, ordered checks, pass conditions, coded findings, positive and negative
 cases, runtime dependencies and infrastructure failures must agree. Current

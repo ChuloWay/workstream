@@ -296,8 +296,14 @@ approval is public through POL-06B.
 An authorized Project Manager reviews the complete bounded proposal before
 approval. Effective intake combines mandatory platform defaults with approved
 project rules using the canonical CHECKERS compiler. Post-submit policy is a
-separate deterministic projection of the same unified result; no evaluator
-runs during setup or approval.
+separate deterministic projection of the same unified result; no contributor-work
+evaluator runs during setup or approval.
+
+Inference drafts a candidate, then checks coverage against the original documents
+in a fresh model context before returning its corrected proposal. Both phases
+share the attempt's limits; a failed review cannot publish the unchecked draft.
+This improves the handoff but does not replace the PM's review of source coverage
+and the proposed checks' observable evidence.
 
 For every newly compiled requirement, review `classification_rationale`. A
 supported PRE/POST requirement or capability gap also has one typed

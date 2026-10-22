@@ -165,22 +165,65 @@ async def test_unified_compilation_uses_scoped_tools_and_strict_output(monkeypat
         assert agent.tools[1].tool_config["container"] == "cntr_test_owned"
         assert agent.model.model == configuration.model
         assert agent.output_type.is_strict_json_schema() is True
-        assert kwargs["max_turns"] == configuration.maximum_turns
+        assert kwargs["max_turns"] == (
+            configuration.maximum_turns // 2 if len(calls) == 1
+            else configuration.maximum_turns
+        )
         assert kwargs["run_config"].tracing_disabled is True
         assert kwargs["run_config"].trace_include_sensitive_data is False
         assert agent.model_settings.store is False
         assert agent.model_settings.parallel_tool_calls is False
         assert agent.model_settings.retry.max_retries == configuration.maximum_retries
-        assert "runtime_configuration" not in json.loads(prompt)
+        supplied = json.loads(prompt)
+        assert "runtime_configuration" not in supplied
+        if len(calls) == 1:
+            return SimpleNamespace(final_output=result().model_copy(
+                update={"setup_notes": ("Unchecked candidate.",)}
+            ))
+        assert supplied["phase"] == "coverage_review"
+        assert supplied["guide_setup_context"] == json.loads(calls[0][1])
+        assert "runtime_configuration" not in supplied["guide_setup_context"]
+        assert supplied["candidate_proposal"]["setup_notes"] == ["Unchecked candidate."]
         return SimpleNamespace(final_output=result())
 
     monkeypatch.setattr(Runner, "run", run)
     output = await _compile(OpenAIAgentSdkProjectGuideRuntime(configuration), compilation_context)
     assert output == result()
-    assert len(calls) == len(clients) == 1
+    assert len(calls) == 2 and len(clients) == 1
+    assert calls[0][0] is calls[1][0]
     assert clients[0].max_retries == 0 and clients[0].is_closed()
     assert clients[0].timeout == min(configuration.request_timeout_seconds, configuration.timeout_seconds)
     assert str(clients[0].base_url).rstrip("/") == "https://api.openai.com/v1"
+
+
+@pytest.mark.parametrize("failure", ["provider", "cancelled", "oversized"])
+async def test_coverage_review_failure_never_returns_unchecked_draft(monkeypatch, failure):
+    """A successful candidate cannot bypass a failed or unbounded review phase."""
+    from agents import Runner
+
+    configuration = runtime_configuration()
+    compilation = context(ids())
+    if failure == "oversized":
+        prompt_size = len(project_guide_compilation_prompt_bytes(compilation))
+        configuration = configuration.model_copy(update={"maximum_manifest_bytes": prompt_size + 1})
+        compilation = compilation.model_copy(update={"runtime_configuration": configuration})
+    calls = []
+
+    async def run(*args, **kwargs):
+        calls.append(1)
+        if len(calls) == 1:
+            return SimpleNamespace(final_output=result())
+        if failure == "cancelled":
+            raise asyncio.CancelledError("private review detail")
+        if failure == "provider":
+            raise RuntimeError("private review detail")
+        pytest.fail("oversized review reached the provider")
+
+    monkeypatch.setattr(Runner, "run", run)
+    with pytest.raises(ProjectAgentRuntimeError) as caught:
+        await _compile(OpenAIAgentSdkProjectGuideRuntime(configuration), compilation)
+    assert "private" not in str(caught.value)
+    assert calls == ([1] if failure == "oversized" else [1, 1])
 
 
 @pytest.mark.parametrize("kind", ["mapping", "json", "model"])
@@ -351,7 +394,7 @@ async def test_actual_sdk_parser_preserves_known_invalid_output(monkeypatch, kin
         assert caught.value.failure_code == expected
         assert "secret123" not in str(caught.value)
         assert caught.value.__suppress_context__
-    assert calls == [1]
+    assert calls == ([1, 1] if expected is None else [1])
 
 
 @pytest.mark.parametrize("include_dependency", [True, False])
@@ -418,7 +461,7 @@ async def test_sdk_parser_requires_declared_isolated_execution_dependency(
         with pytest.raises(ProjectGuideCompilationInvalidOutputError) as caught:
             await _compile(runtime, context(ids()))
         assert caught.value.failure_code == "schema_invalid"
-    assert calls == [1]
+    assert calls == ([1, 1] if include_dependency else [1])
 
 
 async def test_unclassified_sdk_behavior_error_remains_unresolved(monkeypatch):
@@ -444,7 +487,8 @@ async def _capture_parser_error(runtime):
 
 
 @pytest.mark.parametrize("redacted", [True, False])
-async def test_sdk_parser_error_drops_payload_tracebacks(monkeypatch, redacted):
+@pytest.mark.parametrize("phase", ["draft", "review"])
+async def test_sdk_parser_error_drops_payload_tracebacks(monkeypatch, redacted, phase):
     """A diagnostic collector must not recover rejected output through the error graph."""
     from agents import Runner, _debug
 
@@ -454,12 +498,18 @@ async def test_sdk_parser_error_drops_payload_tracebacks(monkeypatch, redacted):
     raw = json.dumps(payload)
     monkeypatch.setattr(_debug, "DONT_LOG_MODEL_DATA", redacted)
 
+    calls = []
+
     async def run(agent, *args, **kwargs):
+        calls.append(1)
+        if phase == "review" and len(calls) == 1:
+            return SimpleNamespace(final_output=result())
         return SimpleNamespace(final_output=agent.output_type.validate_json(raw))
 
     monkeypatch.setattr(Runner, "run", run)
     error = await _capture_parser_error(OpenAIAgentSdkProjectGuideRuntime(runtime_configuration()))
     assert error.failure_code == "schema_invalid"
+    assert calls == ([1, 1] if phase == "review" else [1])
     pending = [error]
     seen = set()
     while pending:
@@ -586,7 +636,8 @@ def test_default_instructions_advertise_contextual_output_constraints():
         "File presence is structural; whether prose explains that file's role is qualitative",
         "Guide-required runtime outcomes need isolated_execution",
         "Put revision change explanations, rerun evidence and objective preservation",
-        "Any displayed total must include the stage's fixed overhead",
+        "Do not restate budget arithmetic or totals in setup_notes",
+        "Independently enumerate each source obligation before comparing it with the candidate",
         "requires both the specification and verification materials",
         "Recording paths in submission_artifact_policy does not prove",
         "Supply both start_page and end_page together",
@@ -600,7 +651,10 @@ def test_default_instructions_advertise_contextual_output_constraints():
         assert rule in instructions
 
 
-async def test_whole_run_deadline_cancels_once_and_closes_without_reinvocation(monkeypatch):
+@pytest.mark.parametrize("blocked_phase", ["draft", "review"])
+async def test_whole_run_deadline_cancels_once_and_closes_without_reinvocation(
+    monkeypatch, blocked_phase
+):
     """The whole-run budget interrupts an outstanding request before its own timeout."""
     from agents import Runner
     from app.adapters.project_agents import openai_agent_sdk
@@ -621,6 +675,8 @@ async def test_whole_run_deadline_cancels_once_and_closes_without_reinvocation(m
 
     async def blocked_run(*args, **kwargs):
         events.append("run")
+        if blocked_phase == "review" and events.count("run") == 1:
+            return SimpleNamespace(final_output=result())
         try:
             await asyncio.Event().wait()
         finally:
@@ -636,7 +692,10 @@ async def test_whole_run_deadline_cancels_once_and_closes_without_reinvocation(m
         with pytest.raises(ProjectAgentRuntimeError, match="project guide run timed out") as caught:
             await _compile(runtime, context(ids()).model_copy(update={"runtime_configuration": config}))
         assert 0.8 <= asyncio.get_running_loop().time() - started < 5
-        assert events == ["start", "run", "cancelled", "close"]
+        assert events == (
+            ["start", "run", "run", "cancelled", "close"] if blocked_phase == "review"
+            else ["start", "run", "cancelled", "close"]
+        )
         assert caught.value.__suppress_context__
     finally:
         await runtime.aclose()

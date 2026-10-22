@@ -49,7 +49,10 @@ normal task creation; no runtime change or checker allowlist is implied.
    document upload automatically queues setup; there is no separate start command.
    The manager needs a role grant on this exact project for setup and proposal
    reads; system-level project-creation authority alone is insufficient.
-2. Setup reads those actual inputs and the available registered capabilities.
+2. Setup reads those actual inputs and the available registered capabilities,
+   drafts a candidate, then reviews it against the original sources in a fresh
+   model context. Both phases share one bounded attempt; a failed review does not
+   publish the unchecked candidate.
    Inspect its source-backed requirement inventory, classification rationale,
    per-check typed specifications, proposed PRE/POST bindings and
    missing-capability suggestions. PRE is for static and other reliably bounded
@@ -93,8 +96,9 @@ normal task creation; no runtime change or checker allowlist is implied.
 ## Current boundary
 
 A real provider-backed local setup run has produced a draft from the unchanged
-guide with all four project size/entry limits null. That establishes the
-platform-limit behavior, not an approved checker plan. Earlier attempts ended
+guide with all four project size/entry limits null. This proves nullable proposal
+output; it does not establish submission-intake enforcement or an approved checker
+plan. Earlier attempts ended
 with invalid structured output, and the successful pre-specification draft
 classified the work checks as human review with no checker suggestions. The
 expanded setup contract must be replayed and reviewed before engineering handoff;

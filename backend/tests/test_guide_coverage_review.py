@@ -1,0 +1,81 @@
+"""One attempt budget must cover candidate generation and coverage review together."""
+
+from types import SimpleNamespace
+
+import pytest
+
+from app.adapters.project_agents.openai_agent_sdk import OpenAIAgentSdkProjectGuideRuntime
+from app.interfaces.project_agents import ProjectAgentRuntimeError
+from tests.projects.guide_compilation.helpers import (
+    context,
+    generated_result,
+    ids,
+    runtime_configuration,
+)
+from tests.test_agent_runtime import _compile
+
+
+@pytest.mark.parametrize("boundary", ["model_turns", "hosted_calls", "within_budget"])
+async def test_coverage_review_cannot_reset_the_attempt_work_budget(monkeypatch, boundary):
+    """Even a runner overrunning its phase allowance cannot make an extra provider call."""
+    from agents import OpenAIResponsesModel, Runner
+
+    monkeypatch.setenv("OPENAI_API_KEY", "unit-test-only")
+    events = []
+    responses = []
+    phases = []
+
+    class Workspace:
+        container_id = "cntr_budget_probe"
+
+        async def start(self):
+            events.append("start")
+
+        async def close(self):
+            events.append("close")
+
+    monkeypatch.setattr(
+        "app.adapters.project_agents.openai_agent_sdk.OpenAIGuideWorkspace",
+        lambda *_: Workspace(),
+    )
+    config = runtime_configuration().model_copy(
+        update={
+            "maximum_turns": 6 if boundary == "model_turns" else 10,
+            "maximum_hosted_tool_calls": 4 if boundary == "hosted_calls" else 8,
+        }
+    )
+
+    async def response(self, *args, **kwargs):
+        responses.append(self)
+        return SimpleNamespace(output=[SimpleNamespace(type="code_interpreter_call")])
+
+    monkeypatch.setattr(OpenAIResponsesModel, "get_response", response)
+
+    async def run(agent, prompt, **kwargs):
+        phases.append(kwargs["max_turns"])
+        # Candidate uses three turns. The review tries four more, irrespective of
+        # the SDK phase limit, to exercise the adapter's independent shared fence.
+        for _ in range(3 if len(phases) == 1 else 4):
+            await agent.model.get_response(
+                agent.instructions,
+                [],
+                agent.model_settings,
+                agent.tools,
+                agent.output_type,
+                [],
+                None,
+            )
+        return SimpleNamespace(final_output=generated_result())
+
+    monkeypatch.setattr(Runner, "run", run)
+    runtime = OpenAIAgentSdkProjectGuideRuntime(config)
+    compilation = context(ids()).model_copy(update={"runtime_configuration": config})
+    if boundary == "within_budget":
+        assert await _compile(runtime, compilation) == generated_result()
+    else:
+        with pytest.raises(ProjectAgentRuntimeError, match="project guide run failed"):
+            await _compile(runtime, compilation)
+    assert phases == [config.maximum_turns // 2, config.maximum_turns - 3]
+    assert len(responses) == {"model_turns": 6, "hosted_calls": 4, "within_budget": 7}[boundary]
+    assert all(model is responses[0] for model in responses)
+    assert events == ["start", "close"]

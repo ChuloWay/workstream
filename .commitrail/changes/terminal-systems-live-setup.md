@@ -400,3 +400,47 @@ Workstream-owned lifecycle behavior remains classifiable by its owner; prior
 context is a gap only when needed and unavailable from existing inputs; a guide
 requiring documentary or attested evidence does not acquire an invented rerun
 obligation. Runtime outcomes still require observable execution proof.
+
+
+The final affected SDK/specification suite passed 119 cases; the subsequent
+wording-only replay passed both instruction/configuration cases. Architecture,
+QA and security source reviews passed, with their bounded head/delta scopes
+retained locally. Source review is separate from semantic live qualification.
+
+The v11 rehearsal was interrupted by a local worker restart after automatic
+upload-triggered setup had already started. Its retained configuration used the
+preceding instruction snapshot; it remains an uncertain attempt and supplies no
+semantic success evidence. No automatic provider retry or row rewrite was used.
+A fresh v12 upload uses the final instruction hash, verified against the retained
+runtime configuration before inspecting the outcome. The normal lease-bound
+cleanup owns v11's remaining provider resources; do not report cleanup before it
+is observed.
+
+
+### Bounded source-to-proposal coverage review
+
+V12 used the exact final instruction hash and produced a strictly valid retained
+proposal, but independent semantic review still found missing source obligations,
+unsupported provenance certainty, absent comparison inputs and false prose budget
+arithmetic. Correct trial and revision classification did not qualify the whole
+handoff. Repeating instructions in one generation did not resolve the failure.
+
+Extend the existing SDK adapter with exactly two phases inside one attempt:
+produce a typed candidate, then inspect the original sources in a fresh model
+context and return a corrected complete proposal. The review receives only the
+existing credential-free prompt projection and the untrusted typed candidate.
+Keep the same workspace, client, admission, overall timeout and aggregate model
+and hosted-tool budgets. Reserve half the turn allowance for review; unused draft
+turns remain available to it. Budget exhaustion or review failure cannot publish
+the unchecked draft. Do not loop until green or reinvoke terminal attempts.
+Only the final reviewed output reaches existing validation and finalization.
+
+The affected scope includes the existing SDK runtime/workspace regression tests,
+configuration instructions and current setup docs. Regressions must prove that
+only the reviewed result is returned, review errors never fall back, aggregate
+turn/tool budgets do not reset, and parser redaction, timeout, cancellation and
+owned resource cleanup still hold. Capacity admission already computes exact
+stage totals in trusted code; generated notes must not restate arithmetic.
+Run a fresh unchanged-guide inference and independent source-to-output review
+before claiming a useful handoff. PM approval remains required; a model audit is
+not proof of universal model correctness or authority to activate anything.

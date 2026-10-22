@@ -32,7 +32,7 @@ _INVALID_SCHEMA_OUTPUT = object()
 
 
 class OpenAIAgentSdkProjectGuideRuntime:
-    """Investigate assigned originals in one bounded isolated SDK run."""
+    """Investigate and review assigned originals in one bounded provider attempt."""
 
     def __init__(self, configuration: ProjectGuideRuntimeConfiguration) -> None:
         """Validate the installed adapter and credentials before the dispatch fence."""
@@ -190,12 +190,14 @@ class OpenAIAgentSdkProjectGuideRuntime:
             """Bound hosted work across every model turn and compact carried input."""
 
             hosted_calls = 0
+            model_turns = 0
 
             async def get_response(self, system_instructions, input, model_settings, tools,
                                    output_schema, handoffs, tracing, previous_response_id=None,
                                    conversation_id=None, prompt=None):
                 remaining = configuration.maximum_hosted_tool_calls - self.hosted_calls
-                if remaining <= 0 or previous_response_id is not None or conversation_id is not None:
+                if (remaining <= 0 or self.model_turns >= configuration.maximum_turns
+                        or previous_response_id is not None or conversation_id is not None):
                     raise RuntimeError("guide runtime work boundary exceeded")
                 if isinstance(input, list):
                     compacted = [i for i, item in enumerate(input)
@@ -204,6 +206,7 @@ class OpenAIAgentSdkProjectGuideRuntime:
                         input = input[compacted[-1]:]
                 model_settings = replace(model_settings, extra_args={"max_tool_calls": remaining})
                 admission.before_request()
+                self.model_turns += 1
                 try:
                     response = await super().get_response(
                         system_instructions, input, model_settings, tools, output_schema,
@@ -251,9 +254,24 @@ class OpenAIAgentSdkProjectGuideRuntime:
                     handoffs=[],
                 )
                 try:
+                    run_config = RunConfig(tracing_disabled=True, trace_include_sensitive_data=False)
+                    draft = await Runner.run(
+                        agent, prompt, max_turns=configuration.maximum_turns // 2,
+                        run_config=run_config,
+                    )
+                    review_input = json.dumps({
+                        "phase": "coverage_review",
+                        "guide_setup_context": json.loads(prompt),
+                        "candidate_proposal": draft.final_output.model_dump(mode="json"),
+                    }, ensure_ascii=False, separators=(",", ":"))
+                    if len(review_input.encode("utf-8")) > configuration.maximum_manifest_bytes:
+                        raise RuntimeError("guide review input exceeds configured size limit")
+                    remaining_turns = configuration.maximum_turns - agent.model.model_turns
+                    if remaining_turns <= 0:
+                        raise RuntimeError("guide review turn budget exhausted")
                     result = await Runner.run(
-                        agent, prompt, max_turns=configuration.maximum_turns,
-                        run_config=RunConfig(tracing_disabled=True, trace_include_sensitive_data=False),
+                        agent, review_input, max_turns=remaining_turns,
+                        run_config=run_config,
                     )
                 except ModelBehaviorError:
                     if not parser_rejected:
