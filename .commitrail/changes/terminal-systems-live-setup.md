@@ -93,7 +93,7 @@ bounds. The SDK strict-output schema still requires nullable properties in its
 wire shape. ART archive/configuration regressions independently protect platform
 enforcement; no ART implementation changes are part of this repair.
 
-The first real provider run finalized a blocked proposal with 11 requirements
+Version 2, the first real provider run, finalized a blocked proposal with 11 requirements
 and five POST capability suggestions. Its blocking finding was missing finite
 file/package size limits. The user clarified that platform defaults must not
 be duplicated in the guide. The local 64 MiB task admission quota is an aggregate
@@ -123,7 +123,8 @@ task or contribution outcome is claimed. All uploaded attempts remain retained.
 The public original-document download matched all 12,110 uploaded bytes and
 SHA-256. Deliberate unchanged-key upload replay returned the original receipt
 without creating a successor setup generation. An unassigned actor's setup
-read returned concealed 404. All three recorded provider resources were deleted.
+read returned concealed 404. After version 5, all 12 provider resources recorded
+across versions 2 through 5 were confirmed deleted.
 
 The PM proposal read initially returned concealed 404 because the local actor
 had only system-level PM authority. Issuing the required exact-project grant
