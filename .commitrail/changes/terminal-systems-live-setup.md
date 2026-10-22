@@ -1,7 +1,7 @@
 # Terminal Systems — live setup qualification
 
 - Initiative: None
-- Durable disposition: Planned
+- Durable disposition: Complete
 - Intended merge outcome: Produce a useful, typed and reviewable guide-setup specification from the original guide, including correct checker classification and platform-limit inheritance; qualify it with the real provider before engineering images.
 
 ## Intent
@@ -146,17 +146,17 @@ migration or parallel inference path is needed.
 - [x] A guide without numeric intake limits is not blocked for their absence; null project overrides leave ART platform limits in control.
 - [x] The public proposal reader accepts null overrides while rejecting invalid positive limits.
 - [x] Complete the isolated PostgreSQL explicit/null approval, replay and revoked-authority regression; a timed-out run is not a pass.
-- [ ] New setup results include typed, evidence-linked specifications sufficient
+- [x] New setup results include typed, evidence-linked specifications sufficient
   to implement and test each proposed check; malformed or contradictory specs
   are rejected without policy writes.
-- [ ] Classification distinguishes mechanical checks, agent evaluation,
+- [x] Classification distinguishes mechanical checks, agent evaluation,
   explicitly human decisions and Workstream-owned lifecycle rules. Missing
   implementations remain visible engineering gaps.
-- [ ] Prior retained result hashes/readability remain exact; new specifications
+- [x] Prior retained result hashes/readability remain exact; new specifications
   survive projection, public read, approval/correction and CLI display.
-- [ ] Invalid-output diagnosis identifies reproduced failure boundaries without
+- [x] Invalid-output diagnosis identifies reproduced failure boundaries without
   exposing guide/model text, credentials or provider state.
-- [ ] Real setup of the unchanged guide yields a useful reviewed engineering
+- [x] Real setup of the unchanged guide yields a useful reviewed engineering
   handoff; no activation/image/contribution claim substitutes for that proof.
 
 ## Risk and review routing
@@ -613,3 +613,55 @@ their existing focused assertions, preserving the 16,000-character instruction
 limit and all trust, stage and authority rules. Submit source-grounded PM feedback
 through another exact correction, then qualify its actual output. No source guide
 changes, project-specific shared code or fabricated result are permitted.
+
+
+### Qualified setup handoff and remaining boundary
+
+The final source candidate `e4ac7599e42cf6186e507ff5e77cbe0e0797ae0d`
+passed architecture, QA/test-delta and security review. Its last specification
+refinement passed 72 focused cases. The complete correction work additionally
+passed 190 contract/SDK cases, nine focused context-boundary cases, five isolated
+PostgreSQL custody/replay/authority cases on clean `1e8dc833f` with database and
+role cleanup, 92 module/authorization boundary cases, and the unchanged CLI's
+11 integration cases plus Go build/vet. Full backend Ruff and the existing
+80-percent docstring gate passed (80.1%); documentation and Commitrail checks
+passed. These are scoped suites with overlap, not a unique full-suite count.
+Full hosted CI remains the independent merge check for the final PR head.
+
+Real generation 4 repaired the earlier handoff but retained metadata root/table,
+visible-example failure mapping and reference-before-verifier ambiguities.
+Generation 5 closed those, but weakened command-specific obligations into
+broader prose. Both remained unapproved. Exact-target public PM corrections,
+without changing the guide or replacing model output, produced generation 6:
+
+- Compilation: `01a165a2-7cde-7277-b789-7013d7a2088d`.
+- Result hash: `sha256:523356e72f2f4ac2541f3eb74b5939b67fd2e24af421458ac966ed2aef5f65a3`.
+- Original guide SHA-256 remains
+  `13d789d4b8df5d6b310d844c622336f265d53d2ddc38e8aa101b67765f9f7183`.
+- Two PRE specifications (20/30 seconds), eight POST specifications and two
+  lifecycle requirements; ten capability suggestions and zero image bindings.
+- POST execution plus declared cleanup/materialization is 2,880 seconds within
+  the 3,400-second bound. Four project size/entry limits remain null; required
+  artifact metadata contains only the three regular files, not directories.
+- Exact stored canonical/result/component hashes and public specifications match;
+  the public CLI renders the complete handoff. Public correction replay retained
+  the original operation and immutable predecessor. All 57 accumulated provider
+  resources are deleted; the diagnostic worker override was removed after the
+  last attempt finished.
+
+Independent architecture and QA/product source-to-proposal reviews both pass
+this actual generation. Exact reproduction commands, each documented command,
+metadata root/table semantics, visible-example findings, author-only isolation,
+and revision reference-then-verifier execution are explicit and testable. The
+remaining material/runtime dependencies are stated as gaps, not delivered
+capabilities. The model output required human review and several corrections;
+this proves one useful reviewed handoff and the correction mechanism, not
+universal or unattended semantic accuracy.
+
+The intended setup/specification repair is complete. The proposal remains
+`draft_ready_with_warnings`, without PM approval, POST policy or activation.
+Project-owned checker implementations, unresolved runtime/material services,
+image publication/registration, corrected policy binding/approval and the real
+contributor journey are separate remaining work. This record does not claim
+submission-intake enforcement, deployment, or a contribution outcome from setup
+proof. No private reference content or prewritten inference response was used.

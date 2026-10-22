@@ -95,18 +95,26 @@ normal task creation; no runtime change or checker allowlist is implied.
 
 ## Current boundary
 
-Real provider-backed local setup has produced typed drafts from the unchanged
-guide with all four project size/entry limits null. This proves nullable proposal
-output; it does not establish submission-intake enforcement or an approved checker
-plan. Source-to-proposal review found incomplete coverage and execution assumptions.
-Subsequent attempts exposed canonical draft errors that prevented coverage review.
-The runtime now keeps the structurally checked draft private and applies canonical
-validation to the reviewed final output. A real PM correction exposed missing
-predecessor content in the model input; correction now supplies the exact,
-hash-verified prior proposal alongside feedback. The retained generation-2 draft
-still has coverage gaps and remains unapproved. Fresh provider qualification and independent
-semantic review remain required before engineering handoff; no new image, approved
-policy or activated guide is claimed.
+Real provider-backed local setup and explicit PM correction of the unchanged
+guide produced a reviewed engineering handoff: two static PRE specifications
+(layout and metadata), eight background POST specifications, and two lifecycle
+requirements. The ten proposed checks remain capability gaps, with no registered
+bindings. Both independent source-to-proposal reviews passed the final corrected
+generation; stored canonical/component hashes and the public CLI output match.
+
+All four project size/entry limits remain null. This proves nullable proposal
+output, not submission-intake enforcement. The runtime keeps a structurally
+checked draft private, reviews it against the original documents, and applies
+canonical validation only to the final result. PM correction supplies the exact,
+hash-verified predecessor alongside feedback. Earlier proposals remain immutable
+and unapproved; the handoff required human review and explicit corrections, so
+this is not a claim of automatic completeness for other guides.
+
+All 57 accumulated provider resources were deleted. No new checker image,
+approved policy, activated guide or contribution outcome is claimed. Engineering
+must implement the proposed checks and resolve their runtime/material gaps,
+register the exact images, and obtain corrected bindings and PM approval before
+activation and the contributor journey.
 See the [live setup record](../../.commitrail/changes/terminal-systems-live-setup.md)
 for the retained attempt sequence and qualification limits.
 
