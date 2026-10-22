@@ -85,6 +85,7 @@ set -e
 umask 077
 mkdir -m 0700 workstream-ca
 cd workstream-ca
+CA_DIR=$(pwd -P)
 (
   set -e
   exec 9>.signing.lock
@@ -95,7 +96,12 @@ cd workstream-ca
   printf '1000\n' > serial
   printf '1000\n' > crlnumber
 )
+LEAF_STAGING_DIR=$(cd ../workstream-leaf-staging && pwd -P)
 ```
+
+Keep `CA_DIR` and `LEAF_STAGING_DIR` set to these absolute administrator-owned
+paths when moving to the checkout or provisioning directory. In a new shell,
+restore them to the existing directories; do not recreate signing state.
 
 Create `openssl.cnf` in that directory:
 
@@ -247,6 +253,11 @@ administrative lifecycle; remove only obsolete Workstream grants. A dedicated
 temporary setup identity can instead have its permissions and access key removed
 and be retired after provisioning. Ongoing proof jobs use their own certificate
 identities.
+
+Before enabling the release, also arrange the administrator permissions in
+[Renewal, revocation, and containment](#renewal-revocation-and-containment).
+The setup grants above do not themselves authorize CRL publication or emergency
+containment.
 
 Start from the reviewed repository root, record its absolute
 path, and use one separate private provisioning directory for every command in
@@ -529,18 +540,20 @@ Create the private host directory and install the staged leaf material as
 regular runtime-owned files. Never copy the CA private key or OpenSSL database.
 
 ```sh
+: "${CA_DIR:?Set the existing absolute CA directory}"
+: "${LEAF_STAGING_DIR:?Set the existing absolute leaf staging directory}"
 sudo install -d -m 0700 -o 10001 -g 10001 /etc/workstream/roles-anywhere
-sudo install -m 0400 -o 10001 -g 10001 runtime.cert.pem \
+sudo install -m 0400 -o 10001 -g 10001 "$CA_DIR/issued/runtime.cert.pem" \
   /etc/workstream/roles-anywhere/runtime-certificate.pem
-sudo install -m 0400 -o 10001 -g 10001 runtime.key.pem \
+sudo install -m 0400 -o 10001 -g 10001 "$LEAF_STAGING_DIR/runtime.key.pem" \
   /etc/workstream/roles-anywhere/runtime-private-key.pem
-sudo install -m 0400 -o 10001 -g 10001 readiness.cert.pem \
+sudo install -m 0400 -o 10001 -g 10001 "$CA_DIR/issued/readiness.cert.pem" \
   /etc/workstream/roles-anywhere/readiness-certificate.pem
-sudo install -m 0400 -o 10001 -g 10001 readiness.key.pem \
+sudo install -m 0400 -o 10001 -g 10001 "$LEAF_STAGING_DIR/readiness.key.pem" \
   /etc/workstream/roles-anywhere/readiness-private-key.pem
-sudo install -m 0400 -o 10001 -g 10001 negative.cert.pem \
+sudo install -m 0400 -o 10001 -g 10001 "$CA_DIR/issued/negative.cert.pem" \
   /etc/workstream/roles-anywhere/negative-certificate.pem
-sudo install -m 0400 -o 10001 -g 10001 negative.key.pem \
+sudo install -m 0400 -o 10001 -g 10001 "$LEAF_STAGING_DIR/negative.key.pem" \
   /etc/workstream/roles-anywhere/negative-private-key.pem
 sudo stat -Lc '%u:%g:%a %n' /etc/workstream/roles-anywhere/*.pem
 ```
@@ -556,6 +569,7 @@ acquisition, both wrong-role denials, then its own credential acquisition again.
 The coordinator cannot fabricate a passing observation.
 
 ```sh
+cd "${WORKSTREAM_CHECKOUT:?Set the existing absolute checkout directory}"
 python3 deploy/hosted/preflight.py --env-file /etc/workstream/release.env
 GROUP_NONCE=$(python3 -c 'import uuid; print(uuid.uuid4())')
 python3 deploy/hosted/compose.py --env-file /etc/workstream/release.env \
@@ -637,6 +651,29 @@ and tests create no AWS resources and make none of these calls.
 
 ## Renewal, revocation, and containment
 
+Use the selected administrator identity for CRL publication, with its credentials
+kept in administrator-only custody outside application environments and mounts.
+Record its ARN and responsible custodian in the deployment record. Before relying
+on revocation, an account administrator must add these permissions to its combined
+policy, preserving independently authorized ECR access:
+
+- For the first untagged CRL import, allow `rolesanywhere:ImportCrl` with
+  `Resource: "*"` and `aws:RequestedRegion` restricted to the selected region.
+  AWS does not support resource-level scoping for this action; an exact
+  trust-anchor ARN in `Resource` would not authorize it. Limit this grant to
+  the initial publication window and inspect the supplied trust-anchor ARN.
+- Retain the returned CRL ARN and ID. Replace the import grant with
+  `rolesanywhere:UpdateCrl` and `rolesanywhere:GetCrl` on that exact CRL ARN
+  in the selected account/region. Read back its enabled state and trust-anchor
+  binding after publication. Do not grant CRL deletion or disabling to the
+  runtime, readiness, or negative identities.
+
+The [AWS Roles Anywhere authorization reference](https://docs.aws.amazon.com/service-authorization/latest/reference/list_rolesanywhere.html)
+defines these action/resource scopes. These are required administrator grants,
+not permissions supplied by the generated workload policies. Confirm the
+administrator's publication access before enabling the release; documented
+commands alone are not proof of access.
+
 Set an alert well before the 30-day leaf expiry. Renewal means issuing a new
 leaf with the same exact role-basename CN and a new private key using the
 administrator-managed CA database, verifying its signature, securely staging the pair, stopping the
@@ -652,6 +689,7 @@ only one administrator writes the CA database at a time, using the same lock:
 ```sh
 (
   set -e
+  cd "${CA_DIR:?Set the existing absolute CA directory}"
   exec 9>.signing.lock
   flock -n 9 || exit 1
   openssl ca -config openssl.cnf -revoke issued/runtime.cert.pem
@@ -660,14 +698,21 @@ only one administrator writes the CA database at a time, using the same lock:
 )
 ```
 
-Import and enable the first PEM CRL with `aws rolesanywhere import-crl`; update
-the same CRL resource later with `aws rolesanywhere update-crl`. AWS documents
+Import and enable the first PEM CRL with `aws rolesanywhere import-crl`, using
+the exact trust-anchor ARN, selected region and
+`fileb://${CA_DIR}/crl/workstream-artifacts.crl.pem` as its data source; retain
+the returned CRL ID. Update that same CRL ID later with
+`aws rolesanywhere update-crl`. AWS documents
 the exact commands in the
 [Roles Anywhere CRL reference](https://docs.aws.amazon.com/cli/latest/reference/rolesanywhere/import-crl.html).
 Disabling the trust anchor/profile or publishing a CRL prevents future sessions;
 it does not by itself guarantee that temporary credentials already issued for a
 3600-second session lose permissions immediately.
 
+An account administrator must also hold the reviewed emergency authority:
+`rolesanywhere:DisableProfile` or `rolesanywhere:DisableTrustAnchor` scoped to
+the exact resource, plus IAM role-session revocation authority for the three
+named roles. The CRL publisher grants above do not supply those permissions.
 For emergency containment, stop the affected Workstream processes, disable the
 profile or trust anchor, publish the CRL, and revoke active sessions for all
 three roles using the AWS IAM **Revoke sessions** operation or its reviewed

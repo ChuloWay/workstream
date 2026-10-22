@@ -191,6 +191,7 @@ product lifecycle or alternative storage subsystem is introduced.
 | Reconciled migration chain | exact-head graph, immediate-predecessor upgrade and retained-proof/downgrade regressions | 3 passed on `5dadbba49`; chain reaches `0057_roles_anywhere_custody`; isolated cleanup confirmed | no deployed database migration claimed |
 | Real AWS connection | provisioned certificate identities running the production native-AWS observation owner in isolated containers | runtime immutable upload/exact readback, readiness controls and analyzer checks, negative/anonymous object denial, and all three certificate-role separation checks pass | diagnostic observations do not create database activation or establish the public guide/Submission journey; retained challenge bytes are not deleted |
 | Database-backed live AWS proof attempt | exact-source, separate-role containers and canonical proof recorder against isolated PostgreSQL | all three observations passed and persisted; coordinator rejected activation; the cold-container sequence exceeded the fixed freshness allowance | not a passing activation; preserve the rejection and measure a viable deployment sequence without relaxing freshness; temporary database cleanup confirmed |
+| Operator command paths | shell syntax and a temporary fixture executing the documented install/proof blocks from the provisioning directory | 18 shell blocks parse; all six leaf sources and checkout script paths resolve; the previous install and proof blocks fail the same check | command adapters are stubbed; no AWS call, real-key access or host installation is claimed |
 
 ## Review findings
 
@@ -221,6 +222,16 @@ The user selected same-server administrative certificate signing. Its encrypted
 key, terminal-only passphrase, exclusive signing lock and encrypted off-server
 backup replace the separate-offline-machine prerequisite without changing
 application credential mounts, trust checks or runtime authorization.
+
+External review corrected the remaining operator instructions: the storage
+runbook now uses the same administrator-only CA custody, leaf installation uses
+the actual absolute CA/staging paths, and proof commands return to the checkout.
+Revocation now names the administrator's CRL publication/readback and emergency
+permissions, including AWS's unscoped initial import action and exact-resource
+update grants. These instructions do not apply IAM changes or claim that the
+live administrator already holds the additional revocation permissions.
+The capability ledger remains unchanged by this documentation correction:
+activation and the public AWS journey are still outstanding.
 
 ## Reconciliation
 

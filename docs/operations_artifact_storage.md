@@ -85,7 +85,9 @@ For certificate-based external hosting, follow the
 [Roles Anywhere setup guide](operations_aws_roles_anywhere.md). It supplies the
 provisioning and generated configuration flow, private leaf-certificate mounts,
 renewal/revocation steps and separate proof-job instructions. The CA signing key
-must remain offline; application processes receive only the runtime identity.
+stays under administrator-only custody outside all application mounts, including
+when signing and application execution share a server. Application processes
+receive only the runtime leaf identity.
 
 Readiness and negative roles accept either a closed exact OIDC trust or the
 closed Roles Anywhere certificate trust. Runtime also supports the EC2
