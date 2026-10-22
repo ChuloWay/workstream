@@ -7,6 +7,7 @@ from pydantic import ValidationError
 
 from app.interfaces.project_agents import (
     AtomicGuideRequirement,
+    CapabilitySuggestion,
     CheckInput,
     CheckRuntimeDependency,
     CheckSpecification,
@@ -73,9 +74,7 @@ def _entry_with_deadline(
     body = original.model_dump()
     body["resources"]["deadline_ms"] = deadline_ms
     spec_fields = ExternalCheckerRegistrySpec.model_fields
-    spec = ExternalCheckerRegistrySpec.model_validate(
-        {name: body[name] for name in spec_fields}
-    )
+    spec = ExternalCheckerRegistrySpec.model_validate({name: body[name] for name in spec_fields})
     body["entry_digest"] = spec.spec_digest
     return ExternalCheckerRegistryEntry.model_validate(body)
 
@@ -83,9 +82,7 @@ def _entry_with_deadline(
 def test_valid_generated_result_and_static_specification_are_admitted() -> None:
     compilation_context = context(ids())
 
-    require_complete_generated_specifications(
-        compilation_context, generated_result()
-    )
+    require_complete_generated_specifications(compilation_context, generated_result())
     require_complete_generated_specifications(
         compilation_context, _with_requirement(_requirement())
     )
@@ -125,9 +122,7 @@ def test_every_generated_requirement_requires_source_evidence() -> None:
     requirement = _requirement(evidence_refs=[])
 
     with pytest.raises(ValueError, match="source evidence"):
-        require_complete_generated_specifications(
-            context(ids()), _with_requirement(requirement)
-        )
+        require_complete_generated_specifications(context(ids()), _with_requirement(requirement))
 
 
 @pytest.mark.parametrize(
@@ -155,16 +150,12 @@ def test_generation_admission_requires_specifications_only_for_check_disposition
     requirement = _requirement(
         disposition=disposition,
         check_specification=(
-            specification.model_dump(mode="json")
-            if specification is not None
-            else None
+            specification.model_dump(mode="json") if specification is not None else None
         ),
     )
 
     with pytest.raises(ValueError, match=message):
-        require_complete_generated_specifications(
-            context(ids()), _with_requirement(requirement)
-        )
+        require_complete_generated_specifications(context(ids()), _with_requirement(requirement))
 
 
 @pytest.mark.parametrize(
@@ -228,18 +219,63 @@ def test_supported_check_cannot_claim_runtime_support_the_runner_lacks() -> None
         require_complete_generated_specifications(
             context(ids()),
             _with_requirement(
-                _requirement(
-                    check_specification=specification.model_dump(mode="json")
-                )
+                _requirement(check_specification=specification.model_dump(mode="json"))
             ),
         )
 
 
+@pytest.mark.parametrize("stage", ["pre_submit", "post_submit"])
+def test_model_evaluation_requires_post_even_with_a_short_duration(stage: str) -> None:
+    specification = _specification(
+        evaluation_method="model_evaluation",
+        execution_mode="bounded_pre_submit" if stage == "pre_submit" else "background",
+        maximum_duration_seconds=30,
+        runtime_dependencies=[
+            {
+                "dependency_id": "model_judge",
+                "kind": "model_service",
+                "provisioning": "runtime_gap",
+                "purpose": "Evaluate the report against the rubric.",
+                "unavailable_code": "implementation_unavailable",
+            }
+        ],
+        infrastructure_failures=[
+            {
+                "code": "implementation_unavailable",
+                "condition": "The model service is unavailable.",
+            }
+        ],
+    )
+    requirement = _requirement(
+        disposition=f"{stage}_capability_gap",
+        check_specification=specification.model_dump(mode="json"),
+    )
+    proposal = _with_requirement(requirement).model_copy(
+        update={
+            "status": "draft_ready_with_warnings",
+            "capability_suggestions": (
+                CapabilitySuggestion(
+                    requirement_id=requirement.requirement_id,
+                    stage=stage,
+                    title="Report evaluation",
+                    rationale="The registered implementations do not evaluate this rubric.",
+                    evidence_refs=requirement.evidence_refs,
+                ),
+            ),
+        }
+    )
+    compilation_context = context(ids())
+    validate_project_guide_compilation_result(compilation_context, proposal)
+    if stage == "pre_submit":
+        with pytest.raises(ValueError, match="model evaluation requires post-submit"):
+            require_complete_generated_specifications(compilation_context, proposal)
+    else:
+        require_complete_generated_specifications(compilation_context, proposal)
+
+
 def test_pre_submit_binding_must_fit_the_stage_budget() -> None:
     entry = _entry_with_deadline(60_001)
-    compilation_context = context(
-        ids(), checker_capabilities=capability_projection(entry)
-    )
+    compilation_context = context(ids(), checker_capabilities=capability_projection(entry))
     proposal = _with_requirement(_requirement()).model_copy(
         update={
             "pre_submit_bindings": (
@@ -262,25 +298,17 @@ def test_supported_specification_must_fit_the_selected_checker_deadline(
     phase: str,
 ) -> None:
     entry = _entry_with_deadline(30_000, phase)
-    compilation_context = context(
-        ids(), checker_capabilities=capability_projection(entry)
-    )
+    compilation_context = context(ids(), checker_capabilities=capability_projection(entry))
     specification = _specification(
         execution_mode=("bounded_pre_submit" if phase == "pre_submit" else "background"),
         maximum_duration_seconds=31,
     )
     requirement = _requirement(
-        disposition=(
-            "supported_pre_submit"
-            if phase == "pre_submit"
-            else "supported_post_submit"
-        ),
+        disposition=("supported_pre_submit" if phase == "pre_submit" else "supported_post_submit"),
         check_specification=specification.model_dump(mode="json"),
     )
     binding_type = (
-        PreSubmissionBindingProposal
-        if phase == "pre_submit"
-        else PostSubmissionBindingProposal
+        PreSubmissionBindingProposal if phase == "pre_submit" else PostSubmissionBindingProposal
     )
     binding = binding_type(
         requirement_id="required_item",
@@ -290,11 +318,7 @@ def test_supported_specification_must_fit_the_selected_checker_deadline(
     )
     proposal = _with_requirement(requirement).model_copy(
         update={
-            (
-                "pre_submit_bindings"
-                if phase == "pre_submit"
-                else "post_submit_bindings"
-            ): (binding,)
+            ("pre_submit_bindings" if phase == "pre_submit" else "post_submit_bindings"): (binding,)
         }
     )
 

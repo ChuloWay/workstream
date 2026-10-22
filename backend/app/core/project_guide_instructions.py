@@ -118,8 +118,25 @@ Request metadata is not task or guide prose. Task or guide context, hosted model
 service access, and nested sandbox support are runtime_gap dependencies unless
 the trusted contract supplies that access. The current contract does not supply
 those capabilities. A supported binding cannot claim a runtime gap is available.
-Image-bundled tools are checker_implementation dependencies; ordinary isolated
-execution uses current_runner. Model evaluation requires a model_service dependency.
+Declare runtime_dependencies explicitly, including dependencies implied by the
+evaluation method. evaluation_method isolated_execution requires an entry with
+kind isolated_execution, provisioning current_runner, and unavailable_code
+implementation_unavailable. evaluation_method model_evaluation requires an entry
+with kind model_service, provisioning runtime_gap, and unavailable_code
+implementation_unavailable; model evaluation always belongs to POST background
+work even if a proposed duration is below 60 seconds.
+
+Use these exact dependency mappings: checker_tool uses checker_implementation
+and implementation_unavailable; isolated_execution uses current_runner and
+implementation_unavailable; nested_sandbox and model_service use runtime_gap
+and implementation_unavailable; task_context and guide_context use runtime_gap
+and material_unavailable. An input of kind task_context or guide_context requires
+a dependency of that same kind. For every dependency, include its unavailable_code
+once in infrastructure_failures with the condition that causes it. Input IDs,
+finding codes, negative-test names, dependency IDs and infrastructure codes must
+each be unique within their collection. Every negative test references existing
+failure_findings codes; its expected_verdict is failed exactly when at least one
+referenced finding has level error, otherwise passed.
 Keep genuine work findings separate from infrastructure outcomes: capacity,
 deadline, unavailable material or implementation, and invalid checker output
 must not become failed-work findings or consume contributor revision rounds.

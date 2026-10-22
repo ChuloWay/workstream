@@ -482,6 +482,9 @@ func validateProposalCheckSpecification(raw json.RawMessage, value *ProposalChec
 	if value.EvaluationMethod != "static_inspection" && value.EvaluationMethod != "isolated_execution" && value.EvaluationMethod != "model_evaluation" {
 		return errors.New("invalid evaluation method")
 	}
+	if stage == "pre_submit" && value.EvaluationMethod == "model_evaluation" {
+		return errors.New("model evaluation must run after submission")
+	}
 	if err = validateProposalStringList(fields["check_steps"], 1, 20); err != nil {
 		return err
 	}

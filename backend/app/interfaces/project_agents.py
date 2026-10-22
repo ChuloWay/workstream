@@ -295,9 +295,7 @@ class PlatformCoverageRef(BaseModel):
     )
 
 
-CheckEvaluationMethod = Literal[
-    "static_inspection", "isolated_execution", "model_evaluation"
-]
+CheckEvaluationMethod = Literal["static_inspection", "isolated_execution", "model_evaluation"]
 CheckExecutionMode = Literal["bounded_pre_submit", "background"]
 CheckInputKind = Literal[
     "package",
@@ -316,9 +314,7 @@ CheckerDependencyKind = Literal[
     "guide_context",
     "model_service",
 ]
-DependencyProvisioning = Literal[
-    "current_runner", "checker_implementation", "runtime_gap"
-]
+DependencyProvisioning = Literal["current_runner", "checker_implementation", "runtime_gap"]
 InfrastructureFailureCode = Literal[
     "capacity_exceeded",
     "deadline_exceeded",
@@ -344,14 +340,17 @@ class CheckInput(BaseModel):
 
     input_id: PolicyIdentifier
     kind: CheckInputKind
-    relative_path: Annotated[
-        str,
-        Field(
-            min_length=1,
-            max_length=500,
-            description="Canonical relative POSIX path inside the submitted package.",
-        ),
-    ] | None = Field(default=None, exclude_if=lambda value: value is None)
+    relative_path: (
+        Annotated[
+            str,
+            Field(
+                min_length=1,
+                max_length=500,
+                description="Canonical relative POSIX path inside the submitted package.",
+            ),
+        ]
+        | None
+    ) = Field(default=None, exclude_if=lambda value: value is None)
     purpose: ModelProse
 
     _input_id = field_validator("input_id")(_validated_identifier)
@@ -363,9 +362,7 @@ class CheckInput(BaseModel):
         path_required = self.kind in {"relative_file", "relative_directory"}
         if path_required != (self.relative_path is not None):
             raise ValueError("check input relative path does not match its kind")
-        if self.relative_path is not None and not is_canonical_relative_path(
-            self.relative_path
-        ):
+        if self.relative_path is not None and not is_canonical_relative_path(self.relative_path):
             raise ValueError("check input relative path is invalid")
         return self
 
@@ -393,9 +390,7 @@ class CheckNegativeTest(BaseModel):
     name: PolicyIdentifier
     scenario: ModelProse
     expected_verdict: Literal["passed", "failed"]
-    expected_finding_codes: tuple[PolicyIdentifier, ...] = Field(
-        min_length=1, max_length=10
-    )
+    expected_finding_codes: tuple[PolicyIdentifier, ...] = Field(min_length=1, max_length=10)
 
     _name = field_validator("name")(_validated_identifier)
     _scenario = field_validator("scenario")(_validated_safe_model_text)
@@ -455,7 +450,12 @@ class CheckSpecification(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    evaluation_method: CheckEvaluationMethod
+    evaluation_method: CheckEvaluationMethod = Field(
+        description=(
+            "isolated_execution requires a runtime dependency of kind isolated_execution; "
+            "model_evaluation requires model_service and belongs to POST background work."
+        )
+    )
     execution_mode: CheckExecutionMode
     maximum_duration_seconds: StrictInt = Field(
         ge=1,
@@ -470,12 +470,17 @@ class CheckSpecification(BaseModel):
     inputs: tuple[CheckInput, ...] = Field(min_length=1, max_length=20)
     check_steps: tuple[ModelProse, ...] = Field(min_length=1, max_length=20)
     pass_conditions: tuple[ModelProse, ...] = Field(min_length=1, max_length=20)
-    failure_findings: tuple[CheckFailureFinding, ...] = Field(
-        min_length=1, max_length=20
-    )
+    failure_findings: tuple[CheckFailureFinding, ...] = Field(min_length=1, max_length=20)
     positive_tests: tuple[ModelProse, ...] = Field(min_length=1, max_length=10)
     negative_tests: tuple[CheckNegativeTest, ...] = Field(min_length=1, max_length=10)
-    runtime_dependencies: tuple[CheckRuntimeDependency, ...] = Field(max_length=10)
+    runtime_dependencies: tuple[CheckRuntimeDependency, ...] = Field(
+        max_length=10,
+        description=(
+            "Declare the evaluation method's required dependency and any task_context or "
+            "guide_context input dependency. Each unavailable_code must also appear in "
+            "infrastructure_failures."
+        ),
+    )
     infrastructure_failures: tuple[CheckInfrastructureFailure, ...] = Field(
         min_length=1, max_length=5
     )
@@ -525,10 +530,7 @@ class CheckSpecification(BaseModel):
                 raise ValueError("negative test verdict disagrees with its findings")
 
         dependency_kinds = {item.kind for item in self.runtime_dependencies}
-        if (
-            self.evaluation_method == "model_evaluation"
-            and "model_service" not in dependency_kinds
-        ):
+        if self.evaluation_method == "model_evaluation" and "model_service" not in dependency_kinds:
             raise ValueError("model evaluation requires a model service dependency")
         if (
             self.evaluation_method == "isolated_execution"
@@ -536,10 +538,7 @@ class CheckSpecification(BaseModel):
         ):
             raise ValueError("isolated evaluation requires an execution dependency")
         for item in self.inputs:
-            if (
-                item.kind in {"task_context", "guide_context"}
-                and item.kind not in dependency_kinds
-            ):
+            if item.kind in {"task_context", "guide_context"} and item.kind not in dependency_kinds:
                 raise ValueError("check context input requires a runtime dependency")
         available_failures = {item.code for item in self.infrastructure_failures}
         if any(
@@ -861,6 +860,8 @@ def require_complete_generated_specifications(
         if specification is None:
             raise ValueError("check requirement lacks a check specification")
         if expected_stage is CompilationStage.PRE_SUBMIT:
+            if specification.evaluation_method == "model_evaluation":
+                raise ValueError("model evaluation requires post-submit background work")
             if (
                 specification.execution_mode != "bounded_pre_submit"
                 or specification.maximum_duration_seconds > 60

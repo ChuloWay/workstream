@@ -625,6 +625,52 @@ def test_proposal_specification_stage_semantics_and_historical_omission(cli):
             assert_failure(invoke(cli, origin), "invalid_api_response")
 
 
+def test_proposal_rejects_pre_model_evaluation_and_accepts_post_background(cli):
+    from app.modules.projects.api.guide_proposal_package import (
+        GuideProposalReviewPackage,
+    )
+
+    with http_fixture() as (origin, response, _):
+        value = proposal()
+        requirement = value["result"]["requirements"][0]
+        requirement["disposition"] = "pre_submit_capability_gap"
+        specification = requirement["check_specification"]
+        specification["evaluation_method"] = "model_evaluation"
+        specification["runtime_dependencies"] = [
+            {
+                "dependency_id": "quality_model",
+                "kind": "model_service",
+                "provisioning": "runtime_gap",
+                "purpose": "Evaluate the submitted results with the configured model.",
+                "unavailable_code": "implementation_unavailable",
+            }
+        ]
+        value["result"]["pre_submit_bindings"] = []
+        value["result"]["capability_suggestions"] = [
+            {
+                "requirement_id": "results",
+                "stage": "pre_submit",
+                "title": "Model quality evaluation",
+                "rationale": "A model service implementation is required.",
+                "evidence_refs": requirement["evidence_refs"],
+            }
+        ]
+        # The public object and specification are otherwise valid. The CLI
+        # rejects only the forbidden PRE placement of model evaluation.
+        GuideProposalReviewPackage.model_validate(value)
+        response["body"] = json.dumps(value).encode()
+        assert_failure(invoke(cli, origin), "invalid_api_response")
+
+        requirement["disposition"] = "post_submit_capability_gap"
+        specification["execution_mode"] = "background"
+        specification["maximum_duration_seconds"] = 300
+        value["result"]["capability_suggestions"][0]["stage"] = "post_submit"
+        GuideProposalReviewPackage.model_validate(value)
+        response["body"] = json.dumps(value).encode()
+        accepted = invoke(cli, origin)
+        assert accepted.returncode == 0 and json.loads(accepted.stdout) == value
+
+
 def test_proposal_rejects_malformed_nested_types_and_incomplete_policy_identity(cli):
     cases = [
         (("current",), "yes"),

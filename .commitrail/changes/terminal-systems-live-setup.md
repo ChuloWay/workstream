@@ -276,8 +276,9 @@ and completeness changes; Go build, test and vet passed. The first PostgreSQL ru
 passed the new typed-specification public read, approval, replay, retained-body
 and hash assertions; two previous positive fixtures correctly failed new admission
 because they supplied an empty inventory. Those current-generation fixtures are
-corrected; the full three-case rerun remains required. Database and MinIO cleanup
-for that first run completed.
+corrected; the clean-head rerun passed all three cases in 166.23 seconds,
+including exact stored/public specifications, approval, replay and concealed
+revoked-authority reads. Database and MinIO cleanup completed for both runs.
 
 A read-only check against the real retained v5 row preserved its complete canonical
 body, all component hashes and result hash
@@ -285,3 +286,28 @@ body, all component hashes and result hash
 A public CLI read also preserved the original result, target and target digest.
 No prior proposal was rewritten or approved. Fresh provider inference using the
 typed contract, independent review and full CI remain pending.
+
+
+### Typed handoff review repairs
+
+Independent architecture and QA review identified two contract gaps at `c2ef6ad`:
+model evaluation could claim PRE with a short proposed duration, and the prompt
+omitted the isolated-execution dependency required by schema validation. The real
+unchanged-guide v7 attempt reproduced the latter: two specifications failed that
+validator, yielding terminal `schema_invalid` with no proposal or policy. Bounded
+local diagnostics retained field locations only, not rejected model text. All
+18 provider resources through v7 were confirmed deleted.
+
+The repair explicitly declares the method/dependency and failure-code linkage in
+instructions and schema descriptions, rejects model PRE in new-generation and
+CLI validation, and reconciles the canonical guide template. The actual SDK
+parser regression admits the complete isolated specification and rejects the
+missing dependency. The short model regression first passes existing semantic
+validation, then proves PRE rejection and POST admission. The affected backend
+suite passed 99 cases. No validator was weakened and no terminal attempt was
+retried automatically. A fresh guide version will qualify the repaired handoff.
+
+The clean c2ef security review found no security defect; architecture and QA
+require repair replay. The shared architecture boundary suite passed 92 cases;
+Markdown links, stale-contract checks and Commitrail validation passed before
+this repair. These checks do not establish a live checker or activation outcome.

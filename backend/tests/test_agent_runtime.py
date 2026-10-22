@@ -29,6 +29,7 @@ from app.interfaces.project_guide_runtime import ProjectGuideRuntimeConfiguratio
 from app.modules.projects.api.guide_documents import GuideDocumentManifest
 from tests.projects.guide_compilation.helpers import (
     SOURCE_SHA256, context, ids, generated_result as result, runtime_configuration,
+    valid_specification,
 )
 
 
@@ -353,6 +354,73 @@ async def test_actual_sdk_parser_preserves_known_invalid_output(monkeypatch, kin
     assert calls == [1]
 
 
+@pytest.mark.parametrize("include_dependency", [True, False])
+async def test_sdk_parser_requires_declared_isolated_execution_dependency(
+    monkeypatch, include_dependency
+):
+    """Reproduce the live handoff failure through the actual SDK parser."""
+    from agents import Runner
+
+    payload = result().model_dump(mode="json")
+    payload["status"] = "draft_ready_with_warnings"
+    requirement = payload["requirements"][0]
+    requirement["disposition"] = "post_submit_capability_gap"
+    requirement["classification_rationale"] = "Repeated trials need background execution."
+    specification = valid_specification().model_dump(mode="json")
+    specification.update(
+        evaluation_method="isolated_execution",
+        execution_mode="background",
+        maximum_duration_seconds=120,
+        runtime_dependencies=[
+            {
+                "dependency_id": "execution",
+                "kind": "isolated_execution",
+                "provisioning": "current_runner",
+                "purpose": "Run the evaluation in an isolated environment.",
+                "unavailable_code": "implementation_unavailable",
+            }
+        ]
+        if include_dependency
+        else [],
+        infrastructure_failures=[
+            {
+                "code": "implementation_unavailable",
+                "condition": "The isolated environment is unavailable.",
+            }
+        ],
+    )
+    requirement["check_specification"] = specification
+    payload["capability_suggestions"] = [
+        {
+            "requirement_id": requirement["requirement_id"],
+            "stage": "post_submit",
+            "title": "Repeated trial evaluation",
+            "rationale": "A project implementation must run the required trials.",
+            "evidence_refs": requirement["evidence_refs"],
+        }
+    ]
+    calls = []
+
+    async def run(agent, *args, **kwargs):
+        calls.append(1)
+        return SimpleNamespace(final_output=agent.output_type.validate_json(json.dumps(payload)))
+
+    monkeypatch.setattr(Runner, "run", run)
+    runtime = OpenAIAgentSdkProjectGuideRuntime(runtime_configuration())
+    if include_dependency:
+        output = await _compile(runtime, context(ids()))
+        assert (
+            output.requirements[0].check_specification.runtime_dependencies[0].kind
+            == "isolated_execution"
+        )
+        assert output.status == "draft_ready_with_warnings"
+    else:
+        with pytest.raises(ProjectGuideCompilationInvalidOutputError) as caught:
+            await _compile(runtime, context(ids()))
+        assert caught.value.failure_code == "schema_invalid"
+    assert calls == [1]
+
+
 async def test_unclassified_sdk_behavior_error_remains_unresolved(monkeypatch):
     """A generic SDK behavior error is not proof of structured-output rejection."""
     from agents import Runner
@@ -509,6 +577,9 @@ def test_default_instructions_advertise_contextual_output_constraints():
         "can reliably finish within 60 seconds",
         "Automation alone does not make a check POST",
         "Give every atomic requirement a classification_rationale",
+        "evaluation_method isolated_execution requires an entry",
+        "model evaluation always belongs to POST background work",
+        "include its unavailable_code once in infrastructure_failures",
         "Recording paths in submission_artifact_policy does not prove",
         "Supply both start_page and end_page together",
         "for a single page use that same number at both ends",
