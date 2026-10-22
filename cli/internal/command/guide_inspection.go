@@ -46,7 +46,7 @@ func addGuideInspection(project, guide *cobra.Command, client func() (*api.Clien
 	})
 	addGuideSufficiencyMutations(sufficiency, client, output, stdout)
 	guide.AddCommand(sufficiency)
-	artifact := &cobra.Command{Use: "artifact-policy", Short: "Inspect retained and effective submission artifact policy"}
+	artifact := &cobra.Command{Use: "artifact-policy", Short: "Inspect policy or deliberately create/update a manual draft (not approval or activation)"}
 	artifact.AddCommand(&cobra.Command{
 		Use: "list PROJECT_ID GUIDE_ID", Short: "Inspect the newest 100 canonical policies; exact show reaches older retained IDs", Args: cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -78,6 +78,7 @@ func addGuideInspection(project, guide *cobra.Command, client func() (*api.Clien
 			return writeGuideInspection(stdout, *output, "Current effective artifact policy (not later-write authority)", result, err)
 		},
 	})
+	addGuideArtifactPolicyMutations(artifact, client, output, stdout)
 	guide.AddCommand(artifact)
 	guide.AddCommand(&cobra.Command{
 		Use: "pre-submit-policy PROJECT_ID GUIDE_ID", Short: "Inspect the current compiled pre-submit checker summary", Args: cobra.ExactArgs(2),
