@@ -131,7 +131,7 @@ short-lived database activation; no proof bypass or new storage owner is needed.
   changing bucket controls. KMS, unknown fields, malformed flags and unsupported
   blocked-type structures remain rejected; the live-response regression must
   fail against the prior validator.
-- [ ] Setup-agent document reads and post-submit materialization retain the
+- [x] Setup-agent document reads and post-submit materialization retain the
   existing worker activation context until provider use and cleanup finish.
   Exercise the production composition with the real activation guard; missing
   or expired activation must still deny. A regression must detect removal of
@@ -187,7 +187,10 @@ product lifecycle or alternative storage subsystem is introduced.
 | Existing public guide integration | isolated PostgreSQL/MinIO batch | earlier local run timed out after 900 seconds; cleanup confirmed; not credited as a pass | full regression execution subsequently passed in the hosted row below |
 | Complete regression execution | hosted aggregate evidence for candidate `f1e6750fd` | 10,351 unique tests completed, zero skipped/deselected; all 16 lanes record cleanup; tested merge tree equals candidate tree | later live-discovered repairs require fresh complete execution |
 | Current AWS encryption response | actual-response readiness regression, negative structure cases and full proof-transport module | reproduced prior validator rejection; repaired module passes 60 tests | local response contracts alone do not prove AWS enforcement |
+| Cached worker activation custody | real-PostgreSQL guide/post-submit matrix covering valid, missing, expired, exception and cancellation paths | 10 cases passed on `5dadbba49`; removing the database scope makes both consumer regressions fail; isolated cleanup confirmed | transport shells isolate composition; these tests do not replace live AWS or the public journey |
+| Reconciled migration chain | exact-head graph, immediate-predecessor upgrade and retained-proof/downgrade regressions | 3 passed on `5dadbba49`; chain reaches `0057_roles_anywhere_custody`; isolated cleanup confirmed | no deployed database migration claimed |
 | Real AWS connection | provisioned certificate identities running the production native-AWS observation owner in isolated containers | runtime immutable upload/exact readback, readiness controls and analyzer checks, negative/anonymous object denial, and all three certificate-role separation checks pass | diagnostic observations do not create database activation or establish the public guide/Submission journey; retained challenge bytes are not deleted |
+| Database-backed live AWS proof attempt | exact-source, separate-role containers and canonical proof recorder against isolated PostgreSQL | all three observations passed and persisted; coordinator rejected activation; the cold-container sequence exceeded the fixed freshness allowance | not a passing activation; preserve the rejection and measure a viable deployment sequence without relaxing freshness; temporary database cleanup confirmed |
 
 ## Review findings
 
