@@ -814,7 +814,8 @@ class ProjectGuideDocumentAccess(Base):
     )
     source_item_id: Mapped[str] = mapped_column(ForeignKey("guide_source_snapshot_items.id"))
     document_version_id: Mapped[str] = mapped_column(ForeignKey("guide_source_artifact_ingests.id"))
-    attachment_allocation_id: Mapped[UUID] = mapped_column(
+    # Null only for a provider-free runtime, which stages no provider file.
+    attachment_allocation_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("project_guide_runtime_allocations.id")
     )
     manifest_sha256: Mapped[str] = mapped_column(String(71))

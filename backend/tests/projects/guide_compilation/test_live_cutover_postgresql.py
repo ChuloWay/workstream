@@ -959,3 +959,140 @@ async def _published_continuation_snapshots(factory):
             assert snapshot_id is not None
             snapshots.add(UUID(str(snapshot_id)))
     return snapshots
+
+
+_RULES_LABEL = "workstream-rules.json"
+
+
+def _manager_rules(**overrides) -> bytes:
+    """A manager-authored rules document citing the PDF original by SHA-256."""
+    import json
+    from .helpers import SOURCE_SHA256
+
+    return json.dumps({
+        "format": "workstream.project_guide_rules.v1",
+        "status": "draft_ready",
+        "findings": [{"severity": "info", "code": "guide.ready", "message": "Guide is complete.",
+                      "evidence_refs": [{"document": SOURCE_SHA256, "start_page": 1, "end_page": 1}]}],
+        "submission_artifact_policy": {"maximum_file_size_bytes": 1000,
+                                       "maximum_package_size_bytes": 10000,
+                                       "required_artifacts": ["submission"]},
+        "requirements": [], "pre_submit_bindings": [], "post_submit_bindings": [],
+        "capability_suggestions": [], "setup_notes": [],
+    } | overrides).encode()
+
+
+@pytest.fixture
+async def manager_authored_source(project_client, project_database_env, monkeypatch):  # noqa: F811
+    """A guide with one PDF and one manager rules document, compiled with no provider."""
+    from sqlalchemy import select
+    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+    from app.core.config import get_settings
+    from app.modules.projects.models import ProjectSetupRun
+    from tests.projects.guide_fixtures import create_guide, create_project, read_guide_source_snapshot
+    from .test_automatic_request import acknowledge_automatic_setup
+
+    for name, value in {"RUNTIME": "manager_authored", "MODEL_PROVIDER": "none",
+                        "MODEL_API": "none", "MODEL": "none"}.items():
+        monkeypatch.setenv("WORKSTREAM_PROJECT_AGENT_" + name, value)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.setenv("WORKSTREAM_CELERY_TASK_ALWAYS_EAGER", "true")
+    get_settings.cache_clear()
+    project = await create_project(project_client)
+    guide = await create_guide(project_client, project["id"], {
+        "version": "v1", "change_summary": "Manager-authored rules",
+        "task_examples": [{"content": "Review a claim using the project guide."}],
+        "documents": [{"label": "guide.pdf", "media_type": "application/pdf"},
+                      {"label": _RULES_LABEL, "media_type": "text/markdown"}],
+    })
+    snapshot = await read_guide_source_snapshot(project["id"], guide["id"])
+    engine = create_async_engine(project_database_env)
+    factory = async_sessionmaker(engine, expire_on_commit=False)
+    async with factory() as session:
+        setup = await session.scalar(
+            select(ProjectSetupRun).where(ProjectSetupRun.source_snapshot_id == snapshot["id"]))
+        setup_id = UUID(setup.id)
+        acknowledge_automatic_setup(setup)
+        await session.commit()
+    try:
+        yield factory, setup_id, snapshot
+    finally:
+        await engine.dispose()
+        get_settings.cache_clear()
+
+
+def _serve_documents(monkeypatch, worker, bodies):
+    """Scripted ART grant serving each committed original's exact bytes."""
+    from contextlib import asynccontextmanager
+    from io import BytesIO
+    from app.modules.projects.api.guide_documents import OpenGuideDocument
+
+    @asynccontextmanager
+    async def access(_sessions, _attempt_id, manifest, _configuration):
+        class Documents:
+            @asynccontextmanager
+            async def open(self, handle):
+                item = next(item for item in manifest.documents if manifest.handle_for(item) == handle)
+                with BytesIO(bodies[item.sha256]) as stream:
+                    yield OpenGuideDocument(item, stream)
+
+            async def close(self):
+                pass
+
+        yield Documents()
+
+    monkeypatch.setattr(worker, "guide_document_access_runtime", access)
+
+
+@pytest.mark.parametrize("valid", [True, False], ids=["rules_ready", "rules_malformed"])
+async def test_manager_authored_rules_compile_through_the_live_worker_without_inference(
+    manager_authored_source, monkeypatch, valid
+):
+    import hashlib
+    from app.workers import project_setup as worker
+    from .helpers import SOURCE_BYTES, SOURCE_SHA256
+
+    factory, setup_id, snapshot = manager_authored_source
+    rules = _manager_rules() if valid else _manager_rules(status="draft_ready", findings="none")
+    manifest = await create_committed_document_fixture(snapshot["id"], contents={_RULES_LABEL: rules})
+    rules_sha256 = "sha256:" + hashlib.sha256(rules).hexdigest()
+    assert {item.sha256 for item in manifest.documents} == {SOURCE_SHA256, rules_sha256}
+    _serve_documents(monkeypatch, worker, {SOURCE_SHA256: SOURCE_BYTES, rules_sha256: rules})
+    delivery = await _delivery(factory, setup_id)
+
+    outcome = await (await worker._coordinator(factory)).run(delivery)
+
+    async with factory() as session:
+        attempt = (await session.execute(text(
+            "select id,status,failure_code,runtime_configuration::jsonb as configuration "
+            "from project_guide_compilation_attempts where setup_run_id=:id"),
+            {"id": str(setup_id)})).one()
+        accesses = (await session.execute(text(
+            "select source_item_id::text,attachment_allocation_id from project_guide_document_accesses "
+            "where attempt_id=:id"), {"id": attempt.id})).all()
+        allocations = await session.scalar(text(
+            "select count(*) from project_guide_runtime_allocations where attempt_id=:id"),
+            {"id": attempt.id})
+        compilation = await session.scalar(text(
+            "select canonical_result::jsonb from project_guide_compilations where attempt_id=:id"),
+            {"id": attempt.id})
+    # Provenance: the stored snapshot states that no provider or model ran.
+    assert {key: attempt.configuration[key] for key in
+            ("runtime_key", "model_provider", "model_api", "model")} == {
+        "runtime_key": "manager_authored", "model_provider": "none",
+        "model_api": "none", "model": "none"}
+    assert allocations == 0
+    assert sorted(row[0] for row in accesses) == sorted(
+        str(item.source_item_id) for item in manifest.documents)
+    assert {row[1] for row in accesses} == {None}
+    if not valid:
+        assert (attempt.status, attempt.failure_code) == ("compilation_invalid_terminal", "schema_invalid")
+        assert outcome["attempt_id"] == str(attempt.id)
+        assert compilation is None
+        return
+    assert outcome["status"] == "policy_draft_ready"
+    assert attempt.status == "compilation_persisted"
+    rules_item = next(item for item in manifest.documents if item.sha256 == rules_sha256)
+    [finding] = compilation["findings"]
+    assert [ref["sha256"] for ref in finding["evidence_refs"]] == [SOURCE_SHA256, rules_sha256]
+    assert finding["evidence_refs"][1]["source_item_id"] == str(rules_item.source_item_id)

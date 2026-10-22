@@ -44,6 +44,15 @@ checker implementation, an approved policy or a record of completed work.
 
 ## Current boundary
 
+For this guide-driven rehearsal, configure the inference setup runtime to derive
+requirements from the original guide and example. Main also supports an explicit
+[manager-authored rules runtime](../../docs/operations_project_operating_manual.md#manager-authored-guide-rules).
+That alternative reads supplied rules without inference; it does not discover
+checks from prose. Its proposal correction operation is unsupported, so follow
+its documented fresh-guide procedure when replacing rules. This input package
+does not supply a prewritten rules result or select that alternative.
+
+
 No checker is claimed to implement this guide yet. In particular, the previous
 fixed five-task sample is not an implementation of these requirements. Required
 semantic judgments, metadata tooling, environment support and execution needs

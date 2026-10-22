@@ -1,8 +1,11 @@
 # External checker boundary
 
-This workspace contains the shared execution service and optional Rust SDK.
-It does not contain project-specific checker implementations or a list of
-projects and tasks that may use Workstream.
+The Rust workspace contains the shared execution service and optional Rust SDK.
+Its crates do not implement project rules or restrict which projects and tasks
+may use Workstream. The separate `harnessy_proof/` image supports the opt-in
+[local agent-loop drill](../docs/engineering/local-agent-loop.md); it is outside
+the Rust workspace and is not a required dependency or the checker for the
+Terminal Systems guide.
 
 ## Project-owned images
 

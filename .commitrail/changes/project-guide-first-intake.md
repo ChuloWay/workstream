@@ -119,8 +119,12 @@ main boundary.
 
 ## Reconciliation
 
-- Current-source reconciliation: main `c6d916cc1`; task audit and Operator task CLI are merged and
-  do not change these input contracts. #576/#555 remain the project preparation
+- Current-source reconciliation: main `61dacb03d` adds the optional local
+  agent-loop composition and manager-authored guide runtime. Preserve their
+  standalone image, operator tooling and runtime custody. The shared Rust
+  workspace stays project-neutral; the new proof image does not implement this
+  guide. Onboarding distinguishes inference from supplied rules and the latter’s
+  fresh-guide replacement procedure. #576/#555 remain the project preparation
   and connected journey owners.
 - Next usable boundary: PM review of the guide and illustrative work, then live
   setup against the registry and explicit engineering handoff for missing checks.
