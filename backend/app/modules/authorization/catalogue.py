@@ -268,6 +268,7 @@ class ActionId(StrEnum):
     CONTRIBUTION_POLICY_UPDATE_DRAFT = "contribution.policy.update_draft"
     CONTRIBUTION_POLICY_PUBLISH = "contribution.policy.publish"
     CONTRIBUTION_POLICY_RETIRE = "contribution.policy.retire"
+    CONTRIBUTION_COMPENSATION_UNIT_CREATE = "contribution.compensation_unit.create"
     CONTRIBUTION_READ_SELF = "contribution.read_self"
     CONTRIBUTION_READ_PROJECT = "contribution.read_project"
     ACTOR_PROJECT_LIST = "actor.project.list"
@@ -396,6 +397,7 @@ class ActionOwner(StrEnum):
     XINT_003_08B = "WS-XINT-003-08B"
     ARCH_CP01A = "WS-ARCH-001-CP01A"
     ARCH_CP01B = "WS-ARCH-001-CP01B"
+    PROJECT_POINTS_UNIT_CREATION = "project-points-unit-creation"
 
 
 @unique
@@ -759,29 +761,23 @@ ACTION_DEFINITIONS = (
         PermissionId.ARTIFACT_BINDING_CREATE,
         ActionOwner.XINT_002_07,
     ),
-    _active(
-        ActionId.COMPENSATION_ADAPTER_BINDING_READ,
-        PermissionId.COMPENSATION_ADAPTER_BINDING_MANAGE,
-        ActionOwner.ARCH_CP01A,
-    ),
-    _active(
-        ActionId.COMPENSATION_ADAPTER_BINDING_CREATE,
-        PermissionId.COMPENSATION_ADAPTER_BINDING_MANAGE,
-        ActionOwner.ARCH_CP01A,
-    ),
-    _active(
-        ActionId.COMPENSATION_ADAPTER_BINDING_SUSPEND,
-        PermissionId.COMPENSATION_ADAPTER_BINDING_MANAGE,
-        ActionOwner.ARCH_CP01A,
-    ),
-    _active(
-        ActionId.COMPENSATION_ADAPTER_BINDING_RESUME,
-        PermissionId.COMPENSATION_ADAPTER_BINDING_MANAGE,
-        ActionOwner.ARCH_CP01A,
+    *(
+        _active(action, PermissionId.COMPENSATION_ADAPTER_BINDING_MANAGE, ActionOwner.ARCH_CP01A)
+        for action in (
+            ActionId.COMPENSATION_ADAPTER_BINDING_READ,
+            ActionId.COMPENSATION_ADAPTER_BINDING_CREATE,
+            ActionId.COMPENSATION_ADAPTER_BINDING_SUSPEND,
+            ActionId.COMPENSATION_ADAPTER_BINDING_RESUME,
+        )
     ),
     *(
         _active(action, PermissionId.COMPENSATION_POLICY_MANAGE, ActionOwner.ARCH_CP01B)
         for action in _CONTRIBUTION_POLICY_ACTION_IDS
+    ),
+    _active(
+        ActionId.CONTRIBUTION_COMPENSATION_UNIT_CREATE,
+        PermissionId.COMPENSATION_POLICY_MANAGE,
+        ActionOwner.PROJECT_POINTS_UNIT_CREATION,
     ),
 )
 
@@ -834,7 +830,7 @@ HISTORICAL_PERMISSION_IDS = PERMISSION_IDS - NEW_PERMISSION_IDS
 
 def _require_catalogue_counts() -> None:
     """Keep the closed action inventory and permission boundary exact."""
-    if len(PERMISSION_IDS) != 82 or len(ACTION_IDS) != 176:
+    if len(PERMISSION_IDS) != 82 or len(ACTION_IDS) != 177:
         raise RuntimeError("authorization catalogue count mismatch")
     if len(HISTORICAL_PERMISSION_IDS) != 49 or len(NEW_PERMISSION_IDS) != 33:
         raise RuntimeError("authorization permission boundary mismatch")
@@ -891,6 +887,7 @@ _ACTIVE_ACTION_BOUNDARY = frozenset({
     ActionId.OUTBOX_DISPATCH,
     ActionId.PROJECT_GUIDE_ACTIVATE,
     *_CONTRIBUTION_POLICY_ACTION_IDS,
+    ActionId.CONTRIBUTION_COMPENSATION_UNIT_CREATE,
     ActionId.REVIEW_LIFECYCLE_ACTIVATION_MANAGE,
     *GUIDE_PROPOSAL_ACTION_IDS,
     *POST_POLICY_MUTATION_ACTION_IDS,

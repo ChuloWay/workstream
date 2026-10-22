@@ -22,13 +22,12 @@ def parse_prepared_contribution_policy(
         return {}
     try:
         value = dict(request_value)
-        for name in (
-            "resource_id",
-            "scope_project_id",
-            "contribution_policy_version_id",
-            "operation_id",
-        ):
+        for name in ("resource_id", "scope_project_id", "operation_id"):
             value[name] = UUID(str(value[name]))
+        if "contribution_policy_version_id" in value:
+            value["contribution_policy_version_id"] = UUID(
+                str(value["contribution_policy_version_id"])
+            )
         if "adapter_binding_ids" in value:
             value["adapter_binding_ids"] = tuple(
                 UUID(str(item)) for item in value["adapter_binding_ids"]
