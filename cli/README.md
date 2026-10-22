@@ -3,11 +3,12 @@
 An independent Go client for Workstream's public REST API, for humans and
 agents using the terminal. It provides human self-profile reads and editing,
 plus draft project/guide declaration and original upload, exact-project inspection, authority reads, manager task browsing and
-administrative active-guide/intake-policy inspection,
+administrative actor, identity-link and grant inspection and explicit writes,
+active-guide/intake-policy inspection,
 contributor work discovery, claim/start, locked guide documents and governing
 context/intake requirements, explicit batch import/screen/release, Finance
 policy management, explicit ZIP preparation/submission, checker findings,
-system-Operator checker registration and terminal recovery, and
+system-Operator checker registration, terminal recovery and uncertain-delivery reconciliation, and
 contribution-evidence exports and exact Audit Authority task reads:
 
 Separate commands record human guide sufficiency diagnostics and warning
@@ -23,12 +24,20 @@ acknowledgements; neither approves policy nor activates a guide.
 | `workstream admin role-grants --scope system\|project [--project-id UUID]` | `GET /api/v1/admin-role-grants` |
 | `workstream admin permissions` | `GET /api/v1/authorization/permissions` |
 | `workstream admin role-definitions` | `GET /api/v1/authorization/admin-role-definitions` |
+| `workstream admin service-actor provision --input FILE --idempotency-key UUID` | `POST /api/v1/service-actors` |
+| `workstream admin actor suspend\|reactivate\|deactivate ACTOR_ID --input FILE --idempotency-key UUID` | `POST /api/v1/actors/ACTOR_ID/{action}` |
+| `workstream admin identity-link revoke\|reactivate LINK_ID --input FILE --idempotency-key UUID` | `POST /api/v1/actor-identity-links/LINK_ID/{action}` |
+| `workstream admin role-grants issue --input FILE --idempotency-key UUID` | `POST /api/v1/admin-role-grants` |
+| `workstream admin role-grants revoke GRANT_ID --input FILE --idempotency-key UUID` | `POST /api/v1/admin-role-grants/GRANT_ID/revoke` |
 | `workstream contributions [--project UUID]` | `GET /api/v1/actors/me/contributions` |
 | `workstream project contributions PROJECT_ID` | `GET /api/v1/projects/PROJECT_ID/contributions/export` |
 | `workstream project access PROJECT_ID` | `GET /api/v1/actors/me/authorization-context?project_id=PROJECT_ID` |
 | `workstream project show PROJECT_ID` | `GET /api/v1/projects/PROJECT_ID` |
 | `workstream project create --name TEXT --slug TEXT --idempotency-key UUID` | `POST /api/v1/projects` |
 | `workstream project guide create PROJECT_ID --input FILE --idempotency-key UUID` | `POST /api/v1/projects/PROJECT_ID/guides` |
+| `workstream project guide edit PROJECT_ID GUIDE_ID --input FILE --idempotency-key UUID` | `PATCH /api/v1/projects/PROJECT_ID/guides/GUIDE_ID` |
+| `workstream project guide set-review-policy PROJECT_ID GUIDE_ID --input FILE --if-match ETAG --idempotency-key UUID` | `PUT /api/v1/projects/PROJECT_ID/guides/GUIDE_ID/review-policy` |
+| `workstream project guide set-revision-policy PROJECT_ID GUIDE_ID --input FILE --if-match ETAG --idempotency-key UUID` | `PUT /api/v1/projects/PROJECT_ID/guides/GUIDE_ID/revision-policy` |
 | `workstream project guide upload PROJECT_ID GUIDE_ID DOCUMENT_ID --file FILE --media-type MIME --idempotency-key UUID` | `POST /api/v1/projects/PROJECT_ID/guides/GUIDE_ID/documents/DOCUMENT_ID/content` |
 | `workstream project guide setup PROJECT_ID GUIDE_ID` | `GET /api/v1/projects/PROJECT_ID/guides/GUIDE_ID/setup-runs/latest` |
 | `workstream project guide proposal PROJECT_ID GUIDE_ID COMPILATION_ID` | `GET /api/v1/projects/PROJECT_ID/guides/GUIDE_ID/compilations/COMPILATION_ID/proposal` |
@@ -97,6 +106,8 @@ acknowledgements; neither approves policy nor activates a guide.
 | `workstream operations checker registry read ENTRY_ID` | `GET /api/v1/operations/external-checker-registry/ENTRY_ID` |
 | `workstream operations checker retry-sources PROJECT_ID [--limit N] [--cursor TOKEN]` | `GET /api/v1/operations/projects/PROJECT_ID/checker-retry-sources` |
 | `workstream operations checker retry PROJECT_ID SOURCE_RUN_ID --reason TEXT --idempotency-key UUID` | `POST /api/v1/operations/projects/PROJECT_ID/checker-runs/SOURCE_RUN_ID/retry` |
+| `workstream operations delivery list PROJECT_ID [--limit N] [--cursor TOKEN]` | `GET /api/v1/operations/projects/PROJECT_ID/post-submit-deliveries` |
+| `workstream operations delivery reconcile PROJECT_ID EVENT_ID --reason TEXT --idempotency-key UUID` | `POST /api/v1/operations/projects/PROJECT_ID/post-submit-deliveries/EVENT_ID/reconcile` |
 | `workstream task ready PROJECT_ID` | `GET /api/v1/projects/PROJECT_ID/tasks/ready` |
 | `workstream task prepare TASK_ID --assignment UUID --file ZIP --idempotency-key UUID` (revision: add predecessor and exact preparation ID/SHA-256) | `POST /api/v1/tasks/TASK_ID/submission-bundle-preparations` |
 | `workstream task submit TASK_ID --assignment UUID --admission UUID` | `POST /api/v1/tasks/TASK_ID/submissions` |
@@ -531,6 +542,59 @@ Changed input conflicts. Lost, malformed, redirected or unexpected replies
 report an unknown outcome, not rollback; manually replay only the unchanged
 input and key. A complete canonical 4xx is a known denial. Local file errors
 never echo file paths, contents or OS error details.
+
+## Edit a draft guide and select its review/revision policies
+
+```sh
+workstream project guide edit PROJECT_ID GUIDE_ID --input guide-edit.json --idempotency-key EDIT_UUID --output json
+workstream project guide set-review-policy PROJECT_ID GUIDE_ID --input review-policy.json --if-match '"no-current-policy"' --idempotency-key REVIEW_UUID --output json
+workstream project guide set-revision-policy PROJECT_ID GUIDE_ID --input revision-policy.json --if-match '"no-current-policy"' --idempotency-key REVISION_UUID --output json
+```
+
+`guide-edit.json` is a closed public PATCH body: `{}` leaves fields omitted,
+`{"change_summary":null}` clears the draft summary, and a string sets it. A
+review-policy input requires integer `review_preference_window_seconds` and
+`review_lease_duration_seconds`; it may explicitly provide
+`human_review_required` (otherwise the backend applies its documented default
+or inherits the selected mode), `max_active_review_leases_per_reviewer`,
+`self_review_allowed`, `reject_policy`, `finding_evidence_requirement`,
+`requires_second_review`, `allowed_decisions`, and `minimum_finding_fields`.
+For example:
+
+```json
+{"review_preference_window_seconds":3600,"review_lease_duration_seconds":1800,"human_review_required":false}
+```
+
+A revision-policy input requires integer `max_revision_rounds` and
+`revision_deadline_hours`; it may supply `allowed_resubmission_states` and
+nullable `reviewer_reassignment_rule`. For example:
+
+```json
+{"max_revision_rounds":7,"revision_deadline_hours":48,"reviewer_reassignment_rule":null}
+```
+
+Use `"no-current-policy"` only when that policy has no current selection. To
+replace one, inspect `project guide show` and supply the exact quoted selector
+`"POLICY_ID.GENERATION.HASH_HEX"`, using its selected policy ID, generation and
+the 64 lowercase hexadecimal characters after `sha256:` in its policy hash.
+The CLI sends `If-Match` exactly as supplied; it never fetches a new selector
+or overwrites after a stale-precondition conflict. The server checks current
+Project Manager authority, draft status and policy lineage for a new mutation.
+An exact-key committed replay may return its historical receipt after a later
+change; that receipt is not current guide readiness or policy-selection proof.
+The two policies are independent; setting one does not approve or activate a
+guide, and `human_review_required=false` is a backend-governed mode, not CLI
+acceptance.
+
+All three commands require a regular JSON file of at most 1MiB and a
+caller-owned UUID idempotency key. The CLI preserves JSON field omission, null
+where supported and full integer values, while backend validation decides
+numeric and policy admissibility. JSON output is the complete validated public
+response; text output escapes terminal controls. Retain the exact project,
+guide, input bytes, key and (for PUT) `If-Match` for a deliberate replay.
+Changed-input/key reuse and stale selection are known conflicts; dropped or
+malformed responses leave the outcome unknown. No write is retried
+automatically, and a read is not proof of later write authority.
 
 ## Upload a declared guide original
 
@@ -1565,6 +1629,45 @@ delivery. A lost, malformed or unsafe success is `outcome_unknown`; a later
 read may help inspect current state but cannot prove rollback. Manually replay
 only the unchanged override request if appropriate.
 
+## Make explicit administrative decisions
+
+The eight administrative POSTs are separate from `whoami`, caller-owned
+`profile update`, project contributor grants and the six privileged `admin`
+reads. Each command requires a caller-authored JSON file (at most 1 MiB) and
+UUID idempotency key. For example:
+
+```sh
+workstream admin service-actor provision --input service-actor.json --idempotency-key PROVISION_UUID --output json
+workstream admin actor suspend ACTOR_ID --input reason.json --idempotency-key SUSPEND_UUID --output json
+workstream admin identity-link revoke LINK_ID --input reason.json --idempotency-key LINK_UUID --output json
+workstream admin role-grants issue --input admin-grant.json --idempotency-key ISSUE_UUID --output json
+workstream admin role-grants revoke GRANT_ID --input reason.json --idempotency-key REVOKE_UUID --output json
+```
+
+The provision input has `service_identity`, `subject` and `reason`; the
+service identity must be a registered fixed principal. Actor and link
+transitions and grant revocation take `{"reason":"Explicit decision"}`.
+Grant issuance takes `target_actor_profile_id`, `role`, `scope_type`, optional
+`scope_project_id`, and `reason`. Project scope requires an exact project UUID;
+system scope omits that field or sets it to null. Workstream alone decides
+current Access Administrator authority, role/scope compatibility, lifecycle
+guards and final-administrator protection. A previous read never authorizes
+a later write. Profile suspension, identity-link revocation and grant
+revocation are distinct; reactivating one does not reverse the others.
+
+The three reason contracts differ: service provisioning preserves any nonempty
+1–500 UTF-8-byte reason; actor/link lifecycle reasons are trimmed by the API
+before its 1–500-byte check and cannot contain NUL; grant reasons are untrimmed,
+nonempty 1–500 bytes and cannot contain NUL. Service subjects are nonblank,
+untrimmed and at most 200 UTF-8 bytes without NUL. The CLI sends the original
+file bytes once and validates the bounded response, selected resource identity,
+status and nullable version before printing. JSON retains the complete
+authorized receipt; text escapes controls. A complete canonical API 4xx is a
+known denial. Lost, malformed or unsafe write replies are `outcome_unknown`;
+inspect the exact resource only as an observation, then deliberately replay
+the unchanged action, selectors, file bytes and key if appropriate. The CLI
+never preflights authority or retries automatically.
+
 ## Edit your profile
 
 ```sh
@@ -1579,7 +1682,8 @@ and clearing the same field is invalid. Text must be valid UTF-8 and the JSON
 request is capped at 8 KiB. Workstream validates and normalizes the text:
 display name has a 200-character limit, contact text 320, and blank or NUL text
 is rejected. Contact text does not change your Flow login or identity.
-Service-actor editing and authority/lifecycle changes are not CLI operations.
+Caller-owned profile editing cannot provision service actors or change
+authority/lifecycle state; use the separate explicit `admin` commands above.
 
 A successful update prints the validated API profile, using the same text/JSON
 output as `whoami`. No preflight read or automatic retry is performed, and no
@@ -1640,6 +1744,32 @@ retry, cached source eligibility or local policy decision. JSON output is the
 complete validated public response; text output safely escapes terminal
 controls.
 
+## Inspect uncertain post-submit deliveries
+
+The separate `operations delivery` commands consume the two public UNKNOWN
+delivery routes. A system Operator can read one project page at a time (1..100
+items, default 50), carrying the opaque `next_cursor` to another explicit read.
+The page reports exact finalized request or completion events and the backend's
+current classification; a read neither grants write authority nor determines
+eligibility locally.
+
+```sh
+workstream operations delivery list PROJECT_ID --limit 50 -o json
+workstream operations delivery list PROJECT_ID --limit 50 --cursor 'OPAQUE_CURSOR' -o json
+workstream operations delivery reconcile PROJECT_ID EVENT_ID --reason 'Verified original UNKNOWN attempt' --idempotency-key UUID -o json
+```
+
+`reconcile` sends one POST for the selected event, a required 1..500-character
+reason without surrounding whitespace or ASCII controls, and a caller-owned
+UUID key. Fresh backend authority and exact source/child guards decide whether
+one immutable reconciliation child may be appended. The CLI does not classify
+the original effect, invoke a checker, infer retry safety, or silently replay
+the write. On an uncertain response, JSON has `error.outcome_unknown: true`;
+text advises manual replay only with the unchanged project, event, reason and
+key. An existing child can later be active, acknowledged or held on exact
+replay. This is distinct from `operations checker retry`, which selects a
+known-terminal infrastructure-failed checker run.
+
 ## Verification
 
 Behavior tests invoke the built executable from outside the repository, with
@@ -1695,6 +1825,11 @@ replay, terminal-source discovery, explicit retry/replay, foreign selection and
 grant-revocation denial. The source's infrastructure failure is arranged by a
 real backend worker fixture. This does not prove hosted OCI execution, external
 Flow issuer integration or S3 custody.
+Delivery CLI built-process hostile HTTP proof covers response boundaries. A
+separate signed public FastAPI/PostgreSQL test is present for an owner-produced
+UNKNOWN source, one keyed child, exact replay and fresh revocation denial; its
+native run remains pending. Neither test establishes a hosted interruption or
+S3 custody drill.
 
 ```sh
 go mod verify
