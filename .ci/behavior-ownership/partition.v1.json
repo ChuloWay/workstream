@@ -58,6 +58,10 @@
     },
     {
       "group": "lifecycle",
+      "target": "backend/app/adapters/project_agents/compilation_draft.py"
+    },
+    {
+      "group": "lifecycle",
       "target": "backend/app/adapters/project_agents/manager_authored.py"
     },
     {
@@ -2261,7 +2265,7 @@
       "target": "backend/scripts/validate_test_lane_evidence.py"
     }
   ],
-  "authority_digest": "874f98c2ad63737b64efea34f8e4c42f0594cebab911117efde7ded2ed96cef8",
+  "authority_digest": "417cc8100dc1e93e67486f90aebeeeba8412305023c733cc840e24ea38e51033",
   "protected_base_commit": "7676ce4347db0c9694962a9b587a20765e16eac6",
   "schema": "workstream.behavior-ownership-partition.v1"
 }

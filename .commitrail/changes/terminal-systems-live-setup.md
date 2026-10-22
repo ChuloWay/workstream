@@ -733,3 +733,16 @@ deliberately invalid-output tests; never auto-enrich supplied outcomes or bypass
 generation validation. Extend test scope to their existing backend and CLI
 consumers. Reproduce the failing public approval journey, rerun affected real-API
 journeys on isolated PostgreSQL, and retain cleanup evidence.
+
+The next hosted preflight passed module/authorization and structural validation,
+then exposed the new private `compilation_draft.py` missing from the independent
+behavior-ownership partition. Extend this repair to
+`backend/scripts/behavior_ownership.py` and
+`.ci/behavior-ownership/partition.v1.json`: permit and register only that exact
+parser path, preserve the protected base and every prior assignment, and recompute
+the authority digest. Run the actual catalogue validator and existing transition
+regressions; independently prove neighboring unapproved targets still fail.
+No runtime code, ownership claim, test exclusion or gate weakening is authorized.
+The same run stopped CLI lint because formatting moved an existing delayed-import
+annotation to the closing parenthesis. Restore it on the import statement and
+run formatting followed by lint across all CLI tests. This changes no test body.
