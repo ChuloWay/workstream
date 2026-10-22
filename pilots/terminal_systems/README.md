@@ -87,6 +87,15 @@ normal task creation; no runtime change or checker allowlist is implied.
 
 ## Current boundary
 
+A real provider-backed local setup run has produced a draft from the unchanged
+guide with all four project size/entry limits null. That establishes the
+platform-default behavior, not an approved checker plan. Earlier attempts ended
+with invalid structured output, and the successful draft classifies the work
+checks as human review with no checker suggestions. Those classifications need
+review before engineering handoff; no policy or guide has been activated.
+See the [live setup record](../../.commitrail/changes/terminal-systems-live-setup.md)
+for the retained attempt sequence and qualification limits.
+
 For this guide-driven rehearsal, configure the inference setup runtime to derive
 requirements from the original guide and example. Main also supports an explicit
 [manager-authored rules runtime](../../docs/operations_project_operating_manual.md#manager-authored-guide-rules).

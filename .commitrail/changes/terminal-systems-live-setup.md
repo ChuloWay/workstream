@@ -14,8 +14,11 @@ engineering input. Do not replace inference with a prepared response.
 
 Main `91df16e76` includes the original guide/example/briefs and generic ECR image
 publisher. Real setup of the original guide finalized a proposal blocked on
-missing file/package limits despite ART already enforcing platform limits. Other
-test containers on the workstation are separate retained environments.
+missing file/package limits despite ART already enforcing platform limits. The
+corrected nullable contract produced a retained v5 draft from unchanged original
+bytes, with all four project limits null. This proves that size-limit omission
+need not block setup; it does not qualify the draft's checker classifications.
+Other test containers on the workstation are separate retained environments.
 
 ## Bounded change
 
@@ -62,13 +65,14 @@ migration or parallel inference path is needed.
 
 ## Acceptance criteria
 
-- [ ] Isolated API, durable worker, scheduler and storage are healthy at a recorded source head.
-- [ ] Distinct local actors and service identities receive authority through existing supported operations.
-- [ ] The exact merged guide/example is uploaded through public routes, with verified document custody.
-- [ ] Real provider setup produces retained requirements/proposals or a diagnosed explicit failure; no result is substituted.
-- [ ] A guide without numeric intake limits is not blocked for their absence; null project overrides leave ART platform limits in control.
-- [ ] The public proposal reader accepts null overrides while rejecting invalid positive limits; explicit retained policies and immutable runtime configurations remain readable.
-- [ ] Missing capabilities and any configuration/input gaps are reported accurately for the next engineering step.
+- [x] Isolated API, durable worker, scheduler and storage are healthy at a recorded source head.
+- [x] Distinct local actors and service identities receive authority through existing supported operations.
+- [x] The exact merged guide/example is uploaded through public routes, with verified document custody.
+- [x] Real provider setup produces a retained proposal; no result is substituted.
+- [x] A guide without numeric intake limits is not blocked for their absence; null project overrides leave ART platform limits in control.
+- [x] The public proposal reader accepts null overrides while rejecting invalid positive limits.
+- [ ] Complete the isolated PostgreSQL explicit/null approval, replay and revoked-authority regression; a timed-out run is not a pass.
+- [ ] Qualify the proposed requirement classifications before using them as the next checker engineering handoff. This remains project rehearsal work, not a claim of this contract repair.
 
 ## Risk and review routing
 
@@ -95,8 +99,26 @@ file/package size limits. The user clarified that platform defaults must not
 be duplicated in the guide. The local 64 MiB task admission quota is an aggregate
 storage limit, distinct from the configured per-source byte ceiling; do not turn
 that quota into a project archive rule. Version 3 was already uploaded and produced terminal
-`schema_invalid`; retain it unchanged. The corrected source returns to the
-original guide and uses a fresh version after the setup repair.
+`schema_invalid`; retain it unchanged. Version 4 used the original guide with the
+nullable repair but also ended `compilation_invalid_terminal` / `schema_invalid`.
+Neither result is repaired or retried in place, and their invalid-output cause
+has not been diagnosed. A manually initiated fresh version 5 returned
+`policy_draft_ready` from the same 12,110 original bytes (SHA-256
+`13d789d4b8df5d6b310d844c622336f265d53d2ddc38e8aa101b67765f9f7183`).
+The exact public proposal reports all four project limits null and nine
+requirements: eight human-review dispositions and one lifecycle disposition,
+with no bindings or capability suggestions. This proves nullable handling on
+one real provider run, not repeatable model correctness or a complete checker
+handoff. Review those classifications before approving anything.
+
+Version 5 ran through the real durable worker and provider with local diagnostic
+wrappers that retained normal validation and only attempted to report validator
+locations/types on failure. No model output was substituted or repaired. The
+ordinary worker command is restored after that run. Local retained evidence is
+under the ignored `.local-agent-loop/terminal-systems-live/` directory: v4/v5
+setup statuses, the exact v5 public proposal, original-byte proofs, and test
+logs. No PRE/POST approval, guide activation, project checker/image, released
+task or contribution outcome is claimed. All uploaded attempts remain retained.
 
 The public original-document download matched all 12,110 uploaded bytes and
 SHA-256. Deliberate unchanged-key upload replay returned the original receipt
@@ -123,6 +145,9 @@ needed.
 ## Reconciliation
 
 - Current-source reconciliation: merged #647 and #649 on main `91df16e76`.
-- Next usable boundary: actual setup requirements and capability suggestions.
-- Remaining risks: model/tool availability, offline build capabilities and later
-  runtime/project qualification remain to be tested.
+- Next usable boundary: review the actual v5 requirements and determine correct
+  PRE/POST capability gaps before engineering images or approving policy.
+- Remaining risks: earlier schema-invalid model outcomes remain unexplained;
+  requirement classification, model/tool reliability, offline builds and the
+  contribution journey still need qualification. A successful nullable proposal
+  is not end-to-end project readiness.

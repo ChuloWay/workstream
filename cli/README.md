@@ -673,7 +673,8 @@ document handles are not part of this public projection. Unknown/duplicate
 members, missing/null required facts, malformed nested types or substituted
 identities fail with empty stdout. Integer facts retain the backend range.
 
-Project file and expanded-package size limits may be null or omitted. The reader
+Project file, expanded-package, compressed-archive and entry-count limits may
+be null or omitted. The reader
 preserves those values: absence means no additional project restriction, while
 Workstream's platform upload and archive limits still apply. Explicit project
 limits must remain positive integers within the backend range.
