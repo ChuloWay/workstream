@@ -21,6 +21,7 @@ The human explicitly approved this backend prerequisite to client-only issue #61
 - `backend/app/modules/artifacts/authorization.py`, `router.py`, `schemas.py`, `operator.py`, `service.py`, and only their directly affected callers for exact owner-local lineage, public-port migration, actor-read-root cleanup, request-local factory composition, read commit/concealment and recovery transaction ownership.
 - Focused `backend/tests/authorization/` and `backend/tests/test_artifact_operator_api.py`, `test_artifact_authorization.py`, `test_artifact_recovery.py` tests using real PostgreSQL and non-overridden production AUTH; update current expected catalogue availability only with matching proof. Include exact module-boundary/negative-structure checks.
 - `.ci/auth-boundaries/IMPORT_LEDGER.md` only to remove the superseded `artifacts.schemas` → private AUTH runtime import; frozen edge growth remains prohibited.
+- `.ci/auth-boundaries/TEST_STRUCTURE_DEBT.json` only to record the actual reduction of pre-existing oversized AUTH kernel and ART route-test entries; no new structural debt, policy change or exception is allowed.
 - `docs/spec_authorization_service.md`, `docs/engineering/authorization_activation_custody.md`, `docs/operations_authorization_service.md`, `docs/operations_artifact_storage.md`, `docs/roadmap_status.md`, and the current WS-AUTH overview/record only for affected intended-merge claims.
 
 ### Not allowed

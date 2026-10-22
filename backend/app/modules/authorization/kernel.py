@@ -24,7 +24,7 @@ from app.modules.authorization.catalogue import (
     PermissionId,
 )
 from app.modules.authorization.domain.guide_manager_resources import guide_manager_resource_denial
-from app.modules.authorization.domain import adapter_bindings, checker_registry, checker_retry, contribution_policies, guide_compilation as compilation, post_submit_deliveries
+from app.modules.authorization.domain import adapter_bindings, artifact_operator, checker_registry, checker_retry, contribution_policies, guide_compilation as compilation, post_submit_deliveries
 from app.modules.authorization.domain.action_groups import (
     GUIDE_BOUND_PROJECT_MANAGER_ACTIONS as _GUIDE_BOUND_PROJECT_MANAGER_ACTIONS,
     CONTEXT_DIGEST_ACTIONS,
@@ -32,13 +32,6 @@ from app.modules.authorization.domain.action_groups import (
     supports_prepared_denial,
 )
 from app.modules.authorization.domain.audit import CONTEXT_DIGEST_RESOURCE_TYPES
-from app.modules.authorization.domain.artifact_operator import (
-    ARTIFACT_OPERATOR_ACTIONS,
-    ARTIFACT_OPERATOR_READ_ACTIONS,
-    ARTIFACT_OPERATOR_READ_RESOURCES,
-    ArtifactOperatorReadResourceContext,
-    ArtifactOperatorRetryResourceContext,
-)
 from app.modules.authorization.domain.audit_targets import project_authority_audit_target
 from app.modules.authorization.domain.lifecycle import ReviewLifecycleActivationContract
 from app.modules.authorization.domain.prepared_service import (
@@ -159,7 +152,7 @@ _ADMIN_ACTIONS = frozenset(
         ActionId.PROJECT_PRE_SUBMIT_CHECKER_POLICY_READ,
         ActionId.PROJECT_ACTIVE_GUIDE_READ,
     }
-) | adapter_bindings.ADAPTER_BINDING_READ_ACTIONS | contribution_policies.CONTRIBUTION_POLICY_READ_ACTIONS | checker_registry.CHECKER_REGISTRY_ACTIONS | checker_retry.CHECKER_RETRY_ACTIONS | post_submit_deliveries.POST_SUBMIT_DELIVERY_MUTATION_ACTIONS | ARTIFACT_OPERATOR_ACTIONS
+) | adapter_bindings.ADAPTER_BINDING_READ_ACTIONS | contribution_policies.CONTRIBUTION_POLICY_READ_ACTIONS | checker_registry.CHECKER_REGISTRY_ACTIONS | checker_retry.CHECKER_RETRY_ACTIONS | post_submit_deliveries.POST_SUBMIT_DELIVERY_MUTATION_ACTIONS | artifact_operator.ARTIFACT_OPERATOR_ACTIONS
 _SERIALIZED_ADMIN_READS = frozenset(
     {
         ActionId.ACTOR_PROFILE_READ,
@@ -173,7 +166,7 @@ _SERIALIZED_ADMIN_READS = frozenset(
         ActionId.PROJECT_PRE_SUBMIT_CHECKER_POLICY_READ,
         ActionId.PROJECT_ACTIVE_GUIDE_READ,
     }
-) | adapter_bindings.ADAPTER_BINDING_READ_ACTIONS | contribution_policies.CONTRIBUTION_POLICY_READ_ACTIONS | checker_registry.CHECKER_REGISTRY_READ_ACTIONS | ARTIFACT_OPERATOR_READ_ACTIONS
+) | adapter_bindings.ADAPTER_BINDING_READ_ACTIONS | contribution_policies.CONTRIBUTION_POLICY_READ_ACTIONS | checker_registry.CHECKER_REGISTRY_READ_ACTIONS | artifact_operator.ARTIFACT_OPERATOR_READ_ACTIONS
 _ADMIN_MUTATIONS = frozenset(
     {
         ActionId.REVIEW_LIFECYCLE_ACTIVATION_MANAGE,
@@ -267,9 +260,7 @@ _ADMIN_EXPECTED_RESOURCES = MappingProxyType(
         ActionId.PROJECT_ACTIVE_GUIDE_READ: ProjectActiveGuideReadResourceContext,
         **adapter_bindings.ADAPTER_BINDING_RESOURCE_BY_ACTION,
         **contribution_policies.CONTRIBUTION_POLICY_RESOURCE_BY_ACTION, **checker_registry.CHECKER_REGISTRY_RESOURCE_BY_ACTION,
-        ActionId.OPERATIONS_CHECKER_RETRY: checker_retry.CheckerRetryResourceContext, **post_submit_deliveries.POST_SUBMIT_DELIVERY_RESOURCE_BY_ACTION,
-        **{action: ArtifactOperatorReadResourceContext for action in ARTIFACT_OPERATOR_READ_ACTIONS},
-        ActionId.ARTIFACT_VERIFICATION_JOB_RETRY: ArtifactOperatorRetryResourceContext,
+        ActionId.OPERATIONS_CHECKER_RETRY: checker_retry.CheckerRetryResourceContext, **post_submit_deliveries.POST_SUBMIT_DELIVERY_RESOURCE_BY_ACTION, **artifact_operator.ARTIFACT_OPERATOR_RESOURCE_BY_ACTION,
         **PROJECT_MUTATION_RESOURCE_BY_ACTION,
         **GUIDE_PROPOSAL_RESOURCE_BY_ACTION,
     }
@@ -965,7 +956,7 @@ class AuthorizationService:
                 adapter_bindings.finance_authority_grant_filters(action.action_id)
             )
         grant_filters.update({**contribution_policies.policy_finance_grant_filters(action.action_id), **checker_registry.checker_registry_grant_filters(action.action_id)})
-        if action.action_id in checker_retry.CHECKER_RETRY_ACTIONS | post_submit_deliveries.POST_SUBMIT_DELIVERY_MUTATION_ACTIONS | ARTIFACT_OPERATOR_ACTIONS:
+        if action.action_id in checker_retry.CHECKER_RETRY_ACTIONS | post_submit_deliveries.POST_SUBMIT_DELIVERY_MUTATION_ACTIONS | artifact_operator.ARTIFACT_OPERATOR_ACTIONS:
             grant_filters["allowed_roles"] = (AdminRole.OPERATOR,)
         matched = await self._admin.find_effective_grant(
             context.actor_profile_id,
@@ -1006,13 +997,9 @@ class AuthorizationService:
         context: AuthorizationContext,
     ) -> AuthorizationDenialCode | None:
         """Apply target existence and self-authority guards after permission match."""
-        if type(resource) is ArtifactOperatorReadResourceContext:
-            if resource.identity_link_id != context.identity_link_id:
-                return AuthorizationDenialCode.RESOURCE_GUARD_DENIED
-        elif type(resource) is ArtifactOperatorRetryResourceContext:
-            if resource.identity_link_id != context.identity_link_id:
-                return AuthorizationDenialCode.RESOURCE_GUARD_DENIED
-        elif isinstance(resource, AdminRoleGrantIssueResourceContext):
+        if type(resource) in (artifact_operator.ArtifactOperatorReadResourceContext, artifact_operator.ArtifactOperatorRetryResourceContext) and resource.identity_link_id != context.identity_link_id:
+            return AuthorizationDenialCode.RESOURCE_GUARD_DENIED
+        if isinstance(resource, AdminRoleGrantIssueResourceContext):
             if resource.resource_id == context.actor_profile_id:
                 return AuthorizationDenialCode.SELF_GRANT_FORBIDDEN
             if await self._admin.lock_eligible_human(resource.resource_id) is None:
@@ -1073,10 +1060,7 @@ class AuthorizationService:
         elif isinstance(resource, ProjectDiagnosticReadResourceContext):
             if not (resource.project_exists and resource.guide_exists and resource.target_exists):
                 return AuthorizationDenialCode.RESOURCE_NOT_FOUND
-        elif isinstance(
-            resource,
-            (ProjectPolicyReadResourceContext, ProjectActiveGuideReadResourceContext),
-        ):
+        elif isinstance(resource, (ProjectPolicyReadResourceContext, ProjectActiveGuideReadResourceContext)):
             if not (resource.project_exists and resource.guide_exists and resource.target_exists):
                 return AuthorizationDenialCode.RESOURCE_NOT_FOUND
         return None
@@ -1090,12 +1074,8 @@ class AuthorizationService:
             return type(resource) is contribution_policies.CONTRIBUTION_POLICY_RESOURCE_BY_ACTION[action_id]
         if type(resource) is PostPolicyResourceContext:
             return action_id in POST_POLICY_ACTION_IDS and resource.facts.locator.action_id == action_id
-        if type(resource) is ArtifactOperatorReadResourceContext:
-            return ARTIFACT_OPERATOR_READ_RESOURCES.get(action_id) == resource.resource_type and resource.action_id is action_id
-        if type(resource) is ArtifactOperatorRetryResourceContext:
-            return action_id is ActionId.ARTIFACT_VERIFICATION_JOB_RETRY
         expected = _ADMIN_EXPECTED_RESOURCES.get(action_id)
-        if expected is None or not isinstance(resource, expected):
+        if expected is None or not isinstance(resource, expected) or (type(resource) is artifact_operator.ArtifactOperatorReadResourceContext and resource.action_id is not action_id):
             return False
         diagnostic_kind = PROJECT_DIAGNOSTIC_TARGET_KIND_BY_ACTION.get(action_id)
         if diagnostic_kind is not None and resource.target_kind != diagnostic_kind:

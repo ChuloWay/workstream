@@ -145,6 +145,46 @@ def _retry_payload(project_id: str, task_id: str, submission_id: str | None,
     return payload
 
 
+async def _assert_operator_concealment(
+    app, client: AsyncClient, *, content_id: str, source_job_id: str,
+    project_id: str, task_id: str, submission_id: str | None, source_job_cas_version: int,
+) -> None:
+    app.dependency_overrides[get_artifact_operator_authority] = lambda: (
+        _ProjectOperatorAuthority(str(uuid4()))
+    )
+    cross_project = await client.get(
+        f"/api/v1/operator/artifacts/contents/{content_id}/replicas"
+    )
+    missing = await client.get(
+        f"/api/v1/operator/artifacts/contents/{uuid4()}/replicas"
+    )
+    assert cross_project.status_code == missing.status_code == 404
+    assert cross_project.json()["detail"] == missing.json()["detail"]
+    assert cross_project.json()["error"]["code"] == missing.json()["error"]["code"]
+
+    app.dependency_overrides[get_artifact_operator_authority] = _DenyOperatorAuthority
+    concealed = await client.get(
+        f"/api/v1/operator/artifacts/contents/{content_id}/replicas"
+    )
+    assert concealed.status_code == 404
+    assert content_id not in concealed.text
+
+    app.dependency_overrides[get_artifact_recovery_authority] = lambda: (
+        _ProjectRecoveryAuthority(str(uuid4()))
+    )
+    cross_project_retry = await client.post(
+        f"/api/v1/operator/artifacts/verification-jobs/{source_job_id}/retry",
+        json=_retry_payload(project_id, task_id, submission_id, "cross-project probe",
+                            "cross-project-probe", source_job_cas_version),
+    )
+    denied_retry = await client.post(
+        f"/api/v1/operator/artifacts/verification-jobs/{uuid4()}/retry",
+        json=_retry_payload(project_id, task_id, None, "probe", "denied-probe", 0),
+    )
+    assert cross_project_retry.status_code == denied_retry.status_code == 404
+    assert cross_project_retry.json()["detail"] == denied_retry.json()["detail"]
+
+
 @pytest.mark.asyncio
 async def test_real_http_operator_path_returns_redacted_lineage_and_recovery(
     recovery_database_env: str,  # noqa: F811
@@ -464,43 +504,12 @@ async def test_real_http_operator_path_returns_redacted_lineage_and_recovery(
                 assert readiness.status_code == 200
                 assert readiness.json()["active"] is False
 
-                app.dependency_overrides[get_artifact_operator_authority] = lambda: (
-                    _ProjectOperatorAuthority(str(uuid4()))
+                await _assert_operator_concealment(
+                    app, client, content_id=content_id, source_job_id=source_job_id,
+                    project_id=project_id, task_id=task_id,
+                    submission_id=submission_id,
+                    source_job_cas_version=source_job_cas_version,
                 )
-                cross_project = await client.get(
-                    f"/api/v1/operator/artifacts/contents/{content_id}/replicas"
-                )
-                missing = await client.get(
-                    f"/api/v1/operator/artifacts/contents/{uuid4()}/replicas"
-                )
-                assert cross_project.status_code == missing.status_code == 404
-                assert cross_project.json()["detail"] == missing.json()["detail"]
-                assert cross_project.json()["error"]["code"] == missing.json()["error"]["code"]
-
-                app.dependency_overrides[get_artifact_operator_authority] = (
-                    _DenyOperatorAuthority
-                )
-                concealed = await client.get(
-                    f"/api/v1/operator/artifacts/contents/{content_id}/replicas"
-                )
-                assert concealed.status_code == 404
-                assert content_id not in concealed.text
-
-                app.dependency_overrides[get_artifact_recovery_authority] = lambda: (
-                    _ProjectRecoveryAuthority(str(uuid4()))
-                )
-                cross_project_retry = await client.post(
-                    f"/api/v1/operator/artifacts/verification-jobs/{source_job_id}/retry",
-                    json=_retry_payload(project_id, task_id, submission_id, "cross-project probe",
-                                        "cross-project-probe", source_job_cas_version),
-                )
-                denied_retry = await client.post(
-                    f"/api/v1/operator/artifacts/verification-jobs/{uuid4()}/retry",
-                    json=_retry_payload(
-                        project_id, task_id, None, "probe", "denied-probe", 0),
-                )
-                assert cross_project_retry.status_code == denied_retry.status_code == 404
-                assert cross_project_retry.json()["detail"] == denied_retry.json()["detail"]
     finally:
         if bootstrap is not None:
             bootstrap.close()

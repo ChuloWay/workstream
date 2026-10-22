@@ -72,3 +72,9 @@ class ArtifactOperatorRetryResourceContext(BaseModel):
     submission_id: UUID | None
     expected_source_job_cas_version: int = Field(ge=0)
     identity_link_id: UUID
+
+
+ARTIFACT_OPERATOR_RESOURCE_BY_ACTION = {
+    **{action: ArtifactOperatorReadResourceContext for action in ARTIFACT_OPERATOR_READ_ACTIONS},
+    ActionId.ARTIFACT_VERIFICATION_JOB_RETRY: ArtifactOperatorRetryResourceContext,
+}

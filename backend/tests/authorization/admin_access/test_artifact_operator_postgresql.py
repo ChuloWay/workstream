@@ -113,6 +113,63 @@ async def test_signed_artifact_denial_evidence_failure_is_unavailable(
     assert await _events("operations.artifact_storage_admission.read", operator.id) == []
 
 
+async def _assert_signed_resource_reads(
+    signed_access: SignedAccess,
+    operator,
+    grant_id: str,
+    source_id: str,
+    replica_id: str,
+    content_id: str,
+    project_id: str,
+    task_id: str,
+) -> None:
+    base = "/api/v1/operator/artifacts"
+    job = await signed_access.client.get(
+        f"{base}/verification-jobs/{source_id}", headers=operator.headers
+    )
+    assert job.status_code == 200, job.text
+    assert job.json()["status"] == "provider_unavailable"
+    job_events = await _events("artifact.verification_job.read", operator.id)
+    assert len(job_events) == 1
+    assert job_events[0].matched_grant_id == grant_id
+    assert job_events[0].after_facts["resource_context_digest"].startswith("sha256:")
+
+    replicas = await signed_access.client.get(
+        f"{base}/contents/{content_id}/replicas", headers=operator.headers
+    )
+    assert replicas.status_code == 200, replicas.text
+    assert replicas.json()["items"][0]["id"] == replica_id
+    assert len(await _events("artifact.replica.read", operator.id)) == 1
+    bindings = await signed_access.client.get(
+        f"{base}/bindings",
+        headers=operator.headers,
+        params={"resource_type": "task", "resource_id": task_id},
+    )
+    assert bindings.status_code == 200, bindings.text
+    assert len(await _events("artifact.binding.read", operator.id)) == 1
+    receipts = await signed_access.client.get(
+        f"{base}/replicas/{replica_id}/receipts", headers=operator.headers
+    )
+    assert receipts.status_code == 200, receipts.text
+    assert len(await _events("artifact.receipt.read", operator.id)) == 1
+    audit = await signed_access.client.get(
+        f"{base}/audit-events",
+        headers=operator.headers,
+        params={"resource_type": "artifact_verification_job", "resource_id": source_id},
+    )
+    assert audit.status_code == 200, audit.text
+    assert len(await _events("artifact.audit.read", operator.id)) == 1
+    usage = await signed_access.client.get(
+        f"{base}/admission-usage",
+        headers=operator.headers,
+        params={"project_id": project_id},
+    )
+    assert usage.status_code == 200, usage.text
+    assert usage.json()["items"]
+    assert all(item["configured_limit_bytes"] is None for item in usage.json()["items"])
+    assert len(await _events("operations.artifact_storage_admission.read", operator.id)) == 1
+
+
 async def test_signed_artifact_job_read_and_retry_commit_exact_authority(
     signed_access: SignedAccess,
     tmp_path: Path,
@@ -140,51 +197,16 @@ async def test_signed_artifact_job_read_and_retry_commit_exact_authority(
 
     try:
         job_path = f"/api/v1/operator/artifacts/verification-jobs/{source_id}"
-        job = await signed_access.client.get(job_path, headers=operator.headers)
-        assert job.status_code == 200, job.text
-        assert job.json()["status"] == "provider_unavailable"
-        job_events = await _events("artifact.verification_job.read", operator.id)
-        assert len(job_events) == 1
-        assert job_events[0].matched_grant_id == grant_id
-        assert job_events[0].after_facts["resource_context_digest"].startswith("sha256:")
-
-        replicas = await signed_access.client.get(
-            f"/api/v1/operator/artifacts/contents/{content_id}/replicas",
-            headers=operator.headers,
+        await _assert_signed_resource_reads(
+            signed_access,
+            operator,
+            grant_id,
+            source_id,
+            replica_id,
+            content_id,
+            project_id,
+            task_id,
         )
-        assert replicas.status_code == 200, replicas.text
-        assert replicas.json()["items"][0]["id"] == replica_id
-        assert len(await _events("artifact.replica.read", operator.id)) == 1
-
-        bindings = await signed_access.client.get(
-            "/api/v1/operator/artifacts/bindings",
-            headers=operator.headers,
-            params={"resource_type": "task", "resource_id": task_id},
-        )
-        assert bindings.status_code == 200, bindings.text
-        assert len(await _events("artifact.binding.read", operator.id)) == 1
-        receipts = await signed_access.client.get(
-            f"/api/v1/operator/artifacts/replicas/{replica_id}/receipts",
-            headers=operator.headers,
-        )
-        assert receipts.status_code == 200, receipts.text
-        assert len(await _events("artifact.receipt.read", operator.id)) == 1
-        audit = await signed_access.client.get(
-            "/api/v1/operator/artifacts/audit-events",
-            headers=operator.headers,
-            params={"resource_type": "artifact_verification_job", "resource_id": source_id},
-        )
-        assert audit.status_code == 200, audit.text
-        assert len(await _events("artifact.audit.read", operator.id)) == 1
-        usage = await signed_access.client.get(
-            "/api/v1/operator/artifacts/admission-usage",
-            headers=operator.headers,
-            params={"project_id": project_id},
-        )
-        assert usage.status_code == 200, usage.text
-        assert usage.json()["items"]
-        assert all(item["configured_limit_bytes"] is None for item in usage.json()["items"])
-        assert len(await _events("operations.artifact_storage_admission.read", operator.id)) == 1
 
         payload = {
             "project_id": project_id,
