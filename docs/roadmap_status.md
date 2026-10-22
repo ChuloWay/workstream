@@ -259,7 +259,8 @@ and locked intake-requirement reads, assigned locked-original listing/download,
 and distinct system-Operator task status/locked-reference reads and deliberate
 reasoned start override through the already-public routes,
 draft project creation, guide declaration
-with illustrative tasks/document selectors, and declared-original upload with
+with illustrative tasks/document selectors, explicit draft-summary edits and
+review/revision policy selection with caller-owned preconditions, and declared-original upload with
 hash/size-bound storage receipts and a local-original recheck before success, using explicit
 caller-owned retry keys, with
 text/JSON output, plus latest guide-setup diagnostic inspection without polling
@@ -644,6 +645,13 @@ cannot be reused as post-submission review-gate evidence. See the
   through public POST. The API reauthorizes exact replay and setup waits for
   document upload; the declaration command does not upload, approve or activate
   the guide.
+  [CLI guide configuration](../.commitrail/initiatives/WS-CLI-001/WS-CLI-001-26.md)
+  exposes the public draft-guide PATCH and separate review/revision policy PUTs.
+  Caller-owned keys and exact `If-Match` selectors preserve replay and stale
+  precondition boundaries; backend authorization for new writes and exact
+  replays, policy semantics and activation remain decisive. The backend
+  [exact-replay authority correction](https://github.com/Flow-Research/workstream/pull/621)
+  does not transfer authorization decisions to the CLI.
   [CLI guide original upload](../.commitrail/initiatives/WS-CLI-001/WS-CLI-001-10.md)
   sends one declared document through the public binary POST, with bounded
   streaming, explicit replay custody and SHA-256/size-bound storage receipts.
