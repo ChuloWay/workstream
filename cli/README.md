@@ -1895,6 +1895,11 @@ failed prerequisite or substitute a synthetic checker result.
 The optional evidence directory retains command arguments, exit codes and raw
 stdout/stderr after checking for bearer disclosure. It contains local project
 data: keep it private and do not commit it. Use a fresh directory for each run.
+Setup-enabled runs also retain private runtime logs after stopping their owned
+processes. These logs are diagnostic evidence, not proof that a failed stage
+succeeded. To verify an explicitly reviewed checker repair before merge, set
+`WORKSTREAM_CLI_JOURNEY_CHECKER_EXECUTABLE` to its built binary and record that
+binary's SHA-256 and source commit; this is cross-branch integration evidence.
 
 The scope is manager-authored setup, an explicitly unpaid policy and the locked
 no-human-review acceptance branch. The example checker validates declared proof
