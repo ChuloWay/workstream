@@ -1,38 +1,53 @@
-# Example task brief: recover a file-processing queue after interruption
+# Author a restart-safe file-processing queue
 
-## Authoring assignment
+## Situation
 
-Create a terminal task in which the solver repairs a local file-processing queue.
-The queue accepts jobs, persists their progress and writes a result for each
-completed job. Its starting implementation mishandles interruption and replay.
+A small operations team processes locally submitted jobs into result files. A
+worker can stop after producing a result but before recording completion. On
+restart, the current implementation either repeats the effect or loses the job.
+Create a terminal task in which a solver diagnoses and repairs this behavior.
 
-Give the solver a small working application, a documented command interface,
-representative inputs and a reproducible failure. The solver must investigate
-and repair the application while preserving its documented behavior.
+## What you create
 
-## Required behavior to specify
+Provide a small application, starting source, sample jobs and a documented local
+command interface for accepting jobs, processing them, inspecting status and
+recovering interrupted work. Choose a suitable language and local persistence
+mechanism. Use original data and make the failure reproducible without a network
+service or credentials.
 
-- A durable job identifier distinguishes a repeated delivery from a new job.
-- Repeating an already completed job returns its retained result without
-  performing its effect again.
-- A restart recovers interrupted work without losing previously completed jobs.
-- Reusing an identifier with different input is rejected without changing the
-  original job or its result.
-- A failed input does not corrupt unrelated jobs, and the status command reports
-  a useful, accurate outcome.
+The solver must receive a functioning but incorrect application. Do not make the
+exercise consist only of filling an empty function or installing a missing tool.
 
-As the task author, define the exact command and data formats, interruption
-points, recovery rules and observable effects in the solver instructions. Choose
-storage and programming tools appropriate to this small local application.
-Do not require external accounts or a network service.
+## Behavior the finished task must specify
 
-## Deliverable
+- Each accepted job has an identifier and immutable input. Repeating the same
+  request returns the retained facts. Reusing that identifier for different input
+  fails without replacing the original job.
+- A completed job has one observable result. Recovery cannot silently duplicate
+  its effect or discard a result that was already committed.
+- An interrupted job can resume according to a documented recovery rule. Status
+  distinguishes unfinished work from a completed result.
+- Invalid work does not damage unrelated jobs or erase their history.
 
-Provide the complete task package described in the project guide: starting
-workspace, environment, solver instructions, metadata, reference repair,
-verification and author notes. Your tests should observe persisted state and
-effects before and after restart. Include a plausible repair that passes an
-ordinary successful run but fails one of the interruption or replay cases.
+You decide the exact formats, command names and commit boundary, and explain them
+in `instruction.md`. Define what counts as the job's effect. A useful choice is
+publication of a result file plus a durable completion record; make the allowed
+state at every interruption point explicit. State whether simultaneous workers
+are supported rather than leaving the solver to guess.
 
-This brief is illustrative. It does not prescribe a single implementation or
-make this task identifier an eligibility rule for other tasks in the project.
+## Evidence the task must support
+
+Verification should stop execution at a controlled boundary, restart using the
+same retained state and inspect both job records and output files. Avoid relying
+only on a timing-sensitive sleep. Include a sequence with completed and unfinished
+jobs, exact replay, changed-input replay and invalid work.
+
+Supply a plausible wrong repair that marks work complete before publishing its
+result, or repeats publication after a restart. Explain the concrete case that
+rejects it. Expected effects must follow from the documented commit rule.
+
+## Submission
+
+Deliver the full authoring package in the project guide, including a reference
+repair, independent verification and reproduction notes. The work is the complete
+task another solver can attempt, not a report describing queue design.
