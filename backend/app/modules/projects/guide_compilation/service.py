@@ -380,6 +380,19 @@ class GuideCompilationService:
             receipt = _dispatch_receipt(operation, attempt, dispatch_permitted=True)
         return receipt
 
+    async def release_provider_free_dispatch(
+        self,
+        *,
+        actor: ActorIdentityFacts,
+        facts: ProjectGuideCompilationExecutePreflightFacts,
+    ) -> None:
+        """Reopen a provider-free fence after a transient failure so delivery can retry."""
+        self._require_fresh_session()
+        async with self._session.begin():
+            repository = GuideCompilationRepository(self._session)
+            _operation, attempt = await self._lock_execution(repository, actor, facts)
+            await repository.release_provider_free_fence(attempt.id)
+
     async def record_accepted_result(
         self,
         *,

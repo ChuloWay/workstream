@@ -349,7 +349,7 @@ carry no source filenames and JSON is not an admitted guide media type:
 - Exactly one guide document may match. None, two, or an invalid body ends the
   attempt as invalid output with failure code `schema_invalid` (or
   `unsafe_text` when prose fails the shared safe-text rule). Fix the rules and
-  create a new guide version or correction; the failed attempt is not retried.
+  create a new guide version; the failed attempt is not retried.
 
 Besides `format`, the object has exactly the result fields `status`,
 `findings`, `submission_artifact_policy`, `requirements`,
@@ -403,6 +403,17 @@ file, so each read is recorded without a provider attachment; the database
 accepts such a record only for an attempt whose stored provider is `none`, and
 refuses provider allocations for such an attempt. The stored attempt
 configuration shows `manager_authored` and `none`.
+
+A correction request on a manager-authored proposal is refused with
+`correction_unsupported` (409), because a correction reason cannot change rules
+taken verbatim from the document. Upload revised rules in a new guide version
+instead. A transient read, timeout or storage failure is not an uncertain
+provider outcome for this runtime: the attempt returns from
+`compilation_provider_uncertain` to `compilation_reserved` and the next delivery
+retries it. The database allows that return only for an attempt whose stored
+provider is `none`; hosted attempts keep the one-way fence. Only the first
+matching rules document stays parsed in memory; later matches are recorded as
+duplicates without their bodies.
 
 ## v0.1 Quality Gates
 

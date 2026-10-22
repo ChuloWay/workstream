@@ -567,6 +567,7 @@ _MANAGER_PAIR = {"runtime_key": "manager_authored", "model_provider": "none",
         _MANAGER_PAIR | {"model_provider": "openai", "model_api": "responses"},
         _MANAGER_PAIR | {"model_api": "responses"},
         _MANAGER_PAIR | {"model": "gpt-5.6-terra"},
+        {"model": "none"},
     ],
 )
 def test_provider_none_is_only_valid_for_the_manager_authored_runtime(patch):
@@ -787,6 +788,40 @@ async def test_manager_authored_runtime_guards_admission_configuration_and_acces
 
     assert await runtime.cleanup_resources(Custody(())) is True
     assert await runtime.cleanup_resources(Custody(("unexpected",))) is False
+
+
+async def test_manager_authored_runtime_refuses_correction_successors_before_reading(monkeypatch):
+    """A correction reason cannot change authored rules, so it is never silently ignored."""
+    from app.interfaces.project_agents import ProjectGuideCorrectionFeedback
+
+    monkeypatch.delenv("OPENAI_API_KEY")
+    compilation_context, bodies = _manager_material(_rules())
+    corrected = compilation_context.model_copy(update={
+        "correction_feedback": ProjectGuideCorrectionFeedback(
+            operation_id=uuid4(), predecessor_compilation_id=uuid4(),
+            predecessor_result_hash="sha256:" + "1" * 64, target_digest="sha256:" + "2" * 64,
+            reason="Require a test report.")})
+    grant = _DirectGrant(corrected, bodies)
+    with pytest.raises(ProjectGuideCompilationInvalidOutputError) as caught:
+        await _manager_compile(corrected, grant)
+    assert caught.value.failure_code == "schema_invalid"
+    assert grant.opened == grant.recorded == []
+
+
+async def test_manager_authored_runtime_retains_only_the_first_parsed_rules_document(monkeypatch):
+    """Later rules documents already invalidate the guide, so their bodies are not kept."""
+    from app.adapters.project_agents.manager_authored import _read_rules_documents
+
+    monkeypatch.delenv("OPENAI_API_KEY")
+    compilation_context, bodies = _manager_material(
+        _rules(), extra=(_rules(setup_notes=["Second."]), _rules(setup_notes=["Third."])))
+    grant = _DirectGrant(compilation_context, bodies)
+    candidates = await _read_rules_documents(compilation_context, grant.capabilities)
+    assert [document for document, _ in candidates] == list(compilation_context.material.documents[1:])
+    assert isinstance(candidates[0][1], dict)
+    assert [parsed for _, parsed in candidates[1:]] == [None, None]
+    material = compilation_context.material
+    assert grant.recorded == [material.handle_for(item) for item in material.documents]
 
 
 async def test_manager_authored_runtime_rejects_rules_the_citation_rule_would_not_catch(monkeypatch):

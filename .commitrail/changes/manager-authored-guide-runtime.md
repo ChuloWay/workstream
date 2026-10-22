@@ -54,13 +54,21 @@ recorded option while every downstream check stays unchanged.
   drop `NOT NULL` from `project_guide_document_accesses.attachment_allocation_id`;
   register the head in `alembic/env.py` and `tests/test_alembic.py`; refresh the
   test schema fingerprint in `tests/conftest.py`.
+- Migration `0056_manager_authored_runtime` also lets a provider-free attempt
+  return from `compilation_provider_uncertain` to `compilation_reserved`
+  (`guard_project_guide_compilation_attempt_update()`), and refuses model
+  `none` for hosted runtimes. The orchestrator, service and repository gain
+  the matching `release_provider_free` path.
+- Proposal correction refuses a manager-authored predecessor with the new
+  `correction_unsupported` code.
 - Behavior-ownership partition registration of the new adapter target.
 - Focused tests, README, operations manual, `.env.example` and roadmap updates.
 
 ### Not allowed
 
 - No change to compilation validation, proposal review, PRE/POST approval,
-  correction, finalization or activation.
+  finalization or activation. Correction changes only by refusing
+  manager-authored proposals.
 - No new admitted guide media type, upload path or manifest field.
 - No relaxation of OpenAI validation, credentials, retry/circuit behavior or
   provider-resource custody for the hosted runtime.
@@ -217,9 +225,8 @@ candidate `7f42f7682`; no blocking finding. Dispositions:
   `require_ready_result_cites_every_document` used by both runtimes; the
   provider-free value is one constant `PROVIDER_FREE`; the custody lock flag is
   renamed `in_flight`.
-- Architecture NIT-4: a transient read failure leaves a provider-free attempt
-  provider-uncertain, as for any runtime failure. Accepted as existing
-  behavior.
+- Architecture NIT-4: a transient read failure left a provider-free attempt
+  provider-uncertain. Superseded by Codex P1 below: the attempt now reopens.
 - QA-01/QA-02 (medium): the duplicate-rules and unresolvable-reference tests
   failed only through the citation rule. Added cases where every document is
   cited; re-ran both mutations (exactly-one guard removed; unresolvable
@@ -237,6 +244,33 @@ candidate `7f42f7682`; no blocking finding. Dispositions:
   Security noted, unverified, that lone-surrogate escapes in prose might fail
   the evidence guard's `jsonb` cast and leave the attempt provider-uncertain;
   the hosted runtime shares this pre-existing exposure.
+- Codex review on PR #643 (four findings, all fixed):
+  - P1, keep provider-free failures retryable: any non-invalid runtime failure
+    after the fence left the attempt provider-uncertain, which recovery treats
+    as terminal, so the guide was stranded although no provider call existed.
+    Fixed: for a provider-free attempt the orchestrator releases the fence back
+    to `compilation_reserved` and raises `runtime_unavailable`, the same
+    retryable outcome as a pre-fence failure. The attempt-update guard allows
+    this one transition only when the stored provider is `none`. Tests: a
+    provider-free transient failure reopens and the retry reaches a terminal
+    outcome; a hosted attempt cannot be released through the repository or
+    by direct SQL.
+  - P1, corrections were silently ignored: a successor recompiled the same
+    rules and dropped the manager's reason. Fixed: correction requests on a
+    manager-authored proposal are refused with `correction_unsupported` before
+    authority is consumed, and the runtime refuses any context carrying
+    correction feedback as `schema_invalid` without reading documents.
+  - P2, unbounded retention of duplicate rules: every parsed candidate was kept
+    until compilation rejected duplicates (up to 100 × 4 MiB of JSON). Fixed:
+    only the first candidate keeps its parsed body; later ones are kept as
+    `None`, which is enough to reject.
+  - P2, hosted runtime with model `none`: the Python pairing and the SQL
+    configuration guard accepted `openai`/`responses` with model `none`.
+    Fixed in both; covered by the Python and SQL pairing tests.
+  - Verification: 324 + 3 new unit tests, 121 PostgreSQL tests (guide
+    compilation orchestrator, runtime configuration, document custody,
+    Alembic), Ruff, architecture tests and the module, AUTH, test-structure and
+    behavior-ownership validators pass. Schema fingerprint refreshed.
 - Coordination: PR #633 also adds `0056`; whichever merges second renumbers its
   migration and refreshes `alembic/env.py`, `tests/test_alembic.py` and the
   schema fingerprint.

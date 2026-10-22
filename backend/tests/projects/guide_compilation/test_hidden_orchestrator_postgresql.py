@@ -10,6 +10,7 @@ from contextlib import asynccontextmanager
 
 import pytest
 from sqlalchemy import text
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.adapters.artifacts import (
@@ -43,7 +44,7 @@ from app.modules.projects.guide_compilation.orchestrator import (
 )
 from tests.checkers.external.support import capability_projection
 
-from .helpers import context, identity, result, seed_database
+from .helpers import context, identity, manager_runtime_configuration, result, seed_database
 from .runtime_fixtures import document_access, record_scripted_document_access
 from .test_authorized_request_service import _authorized_service, _request, _seed_human
 
@@ -479,6 +480,70 @@ async def test_uncertain_provider_failure_never_redispatches(
             is ProjectGuideCompilationExecutionClassification.PROVIDER_UNRESOLVED
         )
         assert runtime.calls == 1
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_hosted_provider_fence_cannot_be_reopened(
+    clean_postgres_database: str,
+) -> None:
+    """Only a provider-free attempt may return to reservation; hosted uncertainty is final."""
+    values = await seed_database(clean_postgres_database)
+    requested = await _authorized_attempt(clean_postgres_database, values)
+    engine = create_async_engine(clean_postgres_database)
+    factory = async_sessionmaker(engine, expire_on_commit=False)
+    try:
+        backend = _backend(factory)
+        state = await backend.load(requested.attempt_id)
+        assert (await backend.fence(state)).dispatch_permitted
+        with pytest.raises(ProjectGuideCompilationExecutionError, match="context_unavailable"):
+            await backend.release_provider_free(state)
+        async with factory() as session, session.begin():
+            with pytest.raises(DBAPIError, match="provider uncertainty timestamp is immutable"):
+                await session.execute(text(
+                    "update project_guide_compilation_attempts set status='compilation_reserved',"
+                    "provider_uncertain_at=null where id=:id"), {"id": requested.attempt_id})
+    finally:
+        await engine.dispose()
+
+
+class _ManagerRuntime(_Runtime):
+    identity = manager_runtime_configuration().adapter_identity
+
+    async def compile_project_guide(self, _context, capabilities):
+        self.calls += 1
+        raise self.outcome
+
+
+@pytest.mark.asyncio
+async def test_provider_free_transient_failure_reopens_the_attempt_for_retry(
+    clean_postgres_database: str,
+) -> None:
+    """A provider-free attempt has no uncertain provider outcome, so delivery can retry it."""
+    values = await seed_database(clean_postgres_database)
+    configuration = manager_runtime_configuration()
+    requested = await _authorized_attempt(clean_postgres_database, values, configuration)
+    engine = create_async_engine(clean_postgres_database)
+    factory = async_sessionmaker(engine, expire_on_commit=False)
+    command = ProjectGuideCompilationExecutionCommand(attempt_id=requested.attempt_id)
+    transient = _ManagerRuntime(ProjectAgentRuntimeError("project guide document access failed"))
+    try:
+        with pytest.raises(ProjectGuideCompilationExecutionError, match="runtime_unavailable"):
+            await _port(factory, transient).execute(command)
+        async with factory() as session:
+            row = (await session.execute(text(
+                "select status,provider_uncertain_at from project_guide_compilation_attempts "
+                "where id=:id"), {"id": requested.attempt_id})).one()
+            await session.rollback()
+        assert tuple(row) == ("compilation_reserved", None)
+        invalid = _ManagerRuntime(ProjectGuideCompilationInvalidOutputError("schema_invalid"))
+        retried = await _port(factory, invalid).execute(command)
+        assert (
+            retried.classification
+            is ProjectGuideCompilationExecutionClassification.INVALID_TERMINAL
+        )
+        assert (transient.calls, invalid.calls) == (1, 1)
     finally:
         await engine.dispose()
 

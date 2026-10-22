@@ -24,8 +24,9 @@ def require_project_guide_runtime_pairing(
 ) -> None:
     """Allow the provider-free ``none`` identity only for the manager-authored runtime.
 
-    Every other runtime keeps the hosted OpenAI Responses identity. The schema
-    trigger on compilation attempts enforces the same rule independently.
+    Every other runtime keeps the hosted OpenAI Responses identity with a real
+    model name. The schema trigger on compilation attempts enforces the same
+    rule independently.
     """
     provider_free = runtime_key == MANAGER_AUTHORED_RUNTIME_KEY
     if provider_free:
@@ -33,6 +34,8 @@ def require_project_guide_runtime_pairing(
             raise ValueError("manager-authored guide runtime requires provider, API and model none")
     elif (model_provider, model_api) != ("openai", "responses"):
         raise ValueError("guide runtime provider and API must be openai and responses")
+    elif model == PROVIDER_FREE:
+        raise ValueError("hosted guide runtime requires a model other than none")
 
 
 class ProjectGuideRuntimeConfiguration(BaseModel):

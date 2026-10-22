@@ -98,6 +98,9 @@ class ManagerAuthoredProjectGuideRuntime:
             )
         if not self._admitted:
             raise ProjectAgentRuntimeError("project guide runtime was not admitted")
+        if context.correction_feedback is not None:
+            # Corrections are refused when requested; never silently ignore a reason.
+            raise ProjectGuideCompilationInvalidOutputError("schema_invalid")
         runtime_failure = None
         rules = None
         try:
@@ -129,10 +132,14 @@ class ManagerAuthoredProjectGuideRuntime:
 async def _read_rules_documents(
     context: ProjectGuideCompilationContext,
     capabilities: GuideRuntimeCapabilities,
-) -> list[tuple[GuideDocumentVersion, object]]:
-    """Open and record every assigned original; return each rules-document candidate."""
+) -> list[tuple[GuideDocumentVersion, object | None]]:
+    """Open and record every assigned original; return each rules-document candidate.
+
+    Only the first candidate keeps its parsed body. Any later candidate already
+    makes the guide invalid, so it is kept as ``None`` to bound memory.
+    """
     manifest = context.material
-    candidates: list[tuple[GuideDocumentVersion, object]] = []
+    candidates: list[tuple[GuideDocumentVersion, object | None]] = []
     for document in manifest.documents:
         handle = manifest.handle_for(document)
         # The ART grant authorizes and checksum-verifies bytes before yielding a reader.
@@ -143,8 +150,10 @@ async def _read_rules_documents(
                     if document.media_type == "text/markdown" else b"")
             await capabilities.resources.record_direct_document_open(handle)
         parsed = _rules_candidate(body)
+        body = b""
         if parsed is not None:
-            candidates.append((document, parsed))
+            candidates.append((document, None if candidates else parsed))
+        parsed = None
     return candidates
 
 
@@ -165,7 +174,7 @@ def _rules_candidate(body: bytes) -> object | None:
 
 def _compile_rules(
     context: ProjectGuideCompilationContext,
-    candidates: list[tuple[GuideDocumentVersion, object]] | None,
+    candidates: list[tuple[GuideDocumentVersion, object | None]] | None,
 ) -> ProjectGuideCompilationResult:
     """Resolve author references and apply the shared trusted validation."""
     if not candidates or len(candidates) != 1:

@@ -2,8 +2,14 @@
 
 The runtime records provider, API and model ``none`` and allocates no provider
 resources. Its document reads therefore carry no attachment allocation. Every
-other runtime keeps the strict OpenAI Responses identity and the full
-container/file/attachment lineage for each document read.
+other runtime keeps the strict OpenAI Responses identity, may not use the
+provider-free model ``none``, and keeps the full container/file/attachment
+lineage for each document read.
+
+A provider-free attempt may also return from ``compilation_provider_uncertain``
+to ``compilation_reserved``. Its dispatch fence guards no provider call, so a
+transient document or storage failure must stay retryable rather than strand
+the guide. Hosted attempts keep the one-way fence.
 """
 
 from alembic import op
@@ -16,6 +22,7 @@ depends_on = None
 
 _CONFIGURATION_GUARD = "public.guard_project_guide_runtime_configuration()"
 _ALLOCATION_GUARD = "public.guard_guide_runtime_allocation()"
+_ATTEMPT_GUARD = "public.guard_project_guide_compilation_attempt_update()"
 _ACCESS_GUARD = "public.guard_guide_document_access()"
 
 _PROVIDER_PREDECESSOR = (
@@ -26,7 +33,8 @@ _PROVIDER_PREDECESSOR = (
 _PROVIDER_CURRENT = (
     "or not ((config->>'runtime_key' is distinct from 'manager_authored'\n"
     "                    and config->>'model_provider' is not distinct from 'openai'\n"
-    "                    and config->>'model_api' is not distinct from 'responses')\n"
+    "                    and config->>'model_api' is not distinct from 'responses'\n"
+    "                    and config->>'model' is distinct from 'none')\n"
     "                or (config->>'runtime_key' is not distinct from 'manager_authored'\n"
     "                    and config->>'model_provider' is not distinct from 'none'\n"
     "                    and config->>'model_api' is not distinct from 'none'\n"
@@ -73,6 +81,25 @@ _ACCESS_TAIL_CURRENT = (
 )
 
 
+_PROVIDER_FREE_RELEASE = (
+    "(old.status='compilation_provider_uncertain' and new.status='compilation_reserved'\n"
+    "              and new.provider_uncertain_at is null\n"
+    "              and old.runtime_configuration->>'model_provider' is not distinct from 'none')"
+)
+_UNCERTAIN_AT_PREDECESSOR = (
+    "not (old.status='compilation_reserved' and new.status='compilation_provider_uncertain') then"
+)
+_UNCERTAIN_AT_CURRENT = (
+    "not ((old.status='compilation_reserved' and new.status='compilation_provider_uncertain')\n"
+    "            or " + _PROVIDER_FREE_RELEASE + ") then"
+)
+_TRANSITION_PREDECESSOR = (
+    "(old.status='compilation_provider_uncertain' and new.status in "
+    "('provider_result_accepted','compilation_invalid_terminal')) or"
+)
+_TRANSITION_CURRENT = _TRANSITION_PREDECESSOR + "\n                  " + _PROVIDER_FREE_RELEASE + " or"
+
+
 def _replace_function(signature: str, *replacements: tuple[str, str]) -> None:
     """Refuse to modify an unexpected predecessor custody function."""
     body = op.get_bind().execute(
@@ -89,6 +116,11 @@ def _replace_function(signature: str, *replacements: tuple[str, str]) -> None:
 def upgrade() -> None:
     op.execute("set local search_path = pg_catalog, public, pg_temp")
     _replace_function(_CONFIGURATION_GUARD, (_PROVIDER_PREDECESSOR, _PROVIDER_CURRENT))
+    _replace_function(
+        _ATTEMPT_GUARD,
+        (_UNCERTAIN_AT_PREDECESSOR, _UNCERTAIN_AT_CURRENT),
+        (_TRANSITION_PREDECESSOR, _TRANSITION_CURRENT),
+    )
     _replace_function(_ALLOCATION_GUARD, (_ALLOCATION_PREDECESSOR, _ALLOCATION_CURRENT))
     _replace_function(
         _ACCESS_GUARD,

@@ -153,6 +153,11 @@ class SqlAlchemyGuideCompilationExecutionBackend:
         async with self._authorized_service(state) as (service, actor):
             return await service.fence_dispatch(actor=actor, facts=state.preflight_facts)
 
+    async def release_provider_free(self, state: CompilationExecutionState) -> None:
+        """Reopen a provider-free fence so a transient failure stays retryable."""
+        async with self._authorized_service(state) as (service, actor):
+            await service.release_provider_free_dispatch(actor=actor, facts=state.preflight_facts)
+
     async def record_accepted(
         self,
         state: CompilationExecutionState,
@@ -247,6 +252,8 @@ class GuideCompilationExecutionBackend(Protocol):
 
     async def fence(self, state: CompilationExecutionState) -> CompilationDispatchReceipt: ...
 
+    async def release_provider_free(self, state: CompilationExecutionState) -> None: ...
+
     async def record_accepted(
         self,
         state: CompilationExecutionState,
@@ -330,6 +337,12 @@ class GuideCompilationOrchestrator(ProjectGuideCompilationExecutionPort):
                             accepted = True
             except Exception:  # noqa: BLE001 - preserve known evidence across cleanup failure
                 if terminal_receipt is None and not accepted:
+                    if context.runtime_configuration.provider_free:
+                        # No provider call exists to be uncertain about; reopen and retry.
+                        await self._backend.release_provider_free(state)
+                        raise ProjectGuideCompilationExecutionError(
+                            "runtime_unavailable"
+                        ) from None
                     return _receipt_result(dispatch)
             if terminal_receipt is not None:
                 return _receipt_result(terminal_receipt)

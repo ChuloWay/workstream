@@ -312,8 +312,9 @@ document (conventionally labelled `workstream-rules.json`, declared as
 `text/markdown`) with the guide originals; a person, a script or any AI provider
 outside Workstream can write it. The runtime opens and records every original,
 converts the rules document into the same untrusted compilation result a model
-returns, and then the unchanged validation, proposal review, approvals,
-correction and activation apply. The attempt's stored configuration records
+returns, and then the unchanged validation, proposal review, approvals and
+activation apply. Corrections are refused; revised rules need a new guide
+version. The attempt's stored configuration records
 `manager_authored` and `none`, so the absence of inference is explicit. The
 rules document is an ordinary guide original: every reader of the locked guide,
 including contributors, can open it, so keep internal notes out of it. See

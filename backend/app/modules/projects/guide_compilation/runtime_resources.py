@@ -97,7 +97,7 @@ class SqlAlchemyGuideRuntimeCustody(SqlAlchemyGuideRuntimeCleanupCustody):
                 or attempt.runtime_configuration.get("runtime_key") != self._runtime_key
                 or (in_flight and attempt.status != "compilation_provider_uncertain")
                 or (provider_free is not None
-                    and _provider_free(attempt) is not provider_free)):
+                    and attempt_is_provider_free(attempt) is not provider_free)):
             raise RuntimeError("guide runtime custody is unavailable")
         return attempt
 
@@ -217,9 +217,10 @@ class SqlAlchemyGuideRuntimeCustody(SqlAlchemyGuideRuntimeCleanupCustody):
 
 
 
-def _provider_free(attempt) -> bool:
+def attempt_is_provider_free(attempt) -> bool:
     """Read the attempt's recorded provider identity; only ``none`` runs no inference."""
-    return attempt.runtime_configuration.get("model_provider") == PROVIDER_FREE
+    return (attempt.runtime_configuration is not None
+            and attempt.runtime_configuration.get("model_provider") == PROVIDER_FREE)
 
 
 def _file_document_facts(document):
@@ -245,7 +246,7 @@ async def require_compilation_document_access(session, attempt_id, manifest, res
     attempt = await session.get(ProjectGuideCompilationAttempt, attempt_id)
     if attempt is None or attempt.runtime_configuration is None:
         raise ValueError("compilation attempt is unavailable")
-    provider_free = _provider_free(attempt)
+    provider_free = attempt_is_provider_free(attempt)
     opened = set()
     for row in rows:
         document = documents.get(row.source_item_id)
