@@ -28,6 +28,9 @@ command. Registration and approved policy binding remain separate operations.
 - `backend/scripts/test_lane_catalogue.py`: select the new script regression file.
 - `backend/scripts/behavior_ownership.py` and its partition: register exactly the
   three added script targets under the existing ownership rules.
+- `backend/scripts/identifier_generation_classifications.json`: classify the
+  command's disposable external names and synthetic sample-envelope identities;
+  preserve the UUID inventory validator and persisted-record rules.
 - `external_checkers/README.md`, engineering runbook, affected roadmap claims,
   and this record.
 
@@ -121,3 +124,9 @@ Buildx. The sanitized configuration now preserves only plugin search directories
 in their original order; proxy, login and credential-helper settings remain
 excluded. A real Docker CLI probe selects a user-only fixture plugin and the
 regression checks both discovery paths and credential exclusion.
+
+The full hosted run found sixteen unclassified UUID generation sites in the new
+command. They create container/image/output names or non-persisted synthetic
+sample-envelope identities, never product rows. The exact sites are now listed
+in the existing identifier inventory; no validator, test or UUIDv7 requirement
+is relaxed. The existing inventory regressions cover this repair.
