@@ -110,7 +110,9 @@ def test_art_custody_documentation_matches_the_independent_activation_fixture() 
     assert "all 22 ART rows to ten exact activation custodians" in operations
     assert "the original 19 REV\nrows to seven exact AUTH custodians" in operations
     assert "v0.1 baseline.\nThe REV transfer adds no migration." in operations
-    assert "does not grant Operator" in operations
+    assert "The ART transfer itself granted no Operator\nauthority" in operations
+    assert "now delivered\nfor the eight reserved system-Operator actions" in operations
+    assert "A current persisted grant is\nstill required" in operations
     assert "verification retry remains independently gated" in operations
     assert "Catalogue entries and explicit runtime composition determine availability" in operations
     assert "a planned action is not activated by its presence in the catalogue" in operations

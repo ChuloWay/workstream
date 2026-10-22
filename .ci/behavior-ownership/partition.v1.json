@@ -390,6 +390,10 @@
     },
     {
       "group": "artifacts",
+      "target": "backend/app/modules/artifacts/api/operator_authority.py"
+    },
+    {
+      "group": "artifacts",
       "target": "backend/app/modules/artifacts/api/review_packet.py"
     },
     {
@@ -642,6 +646,10 @@
     },
     {
       "group": "auth",
+      "target": "backend/app/modules/authorization/artifact_operator_authorization.py"
+    },
+    {
+      "group": "auth",
       "target": "backend/app/modules/authorization/artifact_project_authority.py"
     },
     {
@@ -683,6 +691,10 @@
     {
       "group": "auth",
       "target": "backend/app/modules/authorization/domain/adapter_bindings.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/domain/artifact_operator.py"
     },
     {
       "group": "auth",
@@ -2261,7 +2273,7 @@
       "target": "backend/scripts/validate_test_lane_evidence.py"
     }
   ],
-  "authority_digest": "874f98c2ad63737b64efea34f8e4c42f0594cebab911117efde7ded2ed96cef8",
+  "authority_digest": "a130ef66d237fa220543bfd9167dc4c83ab16d152d70d3e52b013cc713b528e6",
   "protected_base_commit": "7676ce4347db0c9694962a9b587a20765e16eac6",
   "schema": "workstream.behavior-ownership-partition.v1"
 }
