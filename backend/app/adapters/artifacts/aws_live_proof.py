@@ -871,13 +871,22 @@ def _validate_bucket_policy(policy: dict[str, Any], settings: Settings) -> None:
 
 
 def _has_only_sse_s3(rules: object) -> bool:
+    """Require AES256 while accepting AWS's separate, typed encryption metadata."""
     if not isinstance(rules, list) or len(rules) != 1 or not isinstance(rules[0], dict):
         return False
-    default = rules[0].get("ApplyServerSideEncryptionByDefault")
+    rule = rules[0]
+    # Bucket keys affect SSE-KMS, not the exact AES256 default required here.
+    if "BucketKeyEnabled" in rule and type(rule["BucketKeyEnabled"]) is not bool:
+        return False
+    if "BlockedEncryptionTypes" in rule and rule["BlockedEncryptionTypes"] != {
+        "EncryptionType": ["SSE-C"]
+    }:
+        return False
     return (
-        default == {"SSEAlgorithm": "AES256"}
-        and rules[0].get("BucketKeyEnabled") in {None, False}
-        and set(rules[0]) <= {"ApplyServerSideEncryptionByDefault", "BucketKeyEnabled"}
+        rule.get("ApplyServerSideEncryptionByDefault") == {"SSEAlgorithm": "AES256"}
+        and set(rule) <= {
+            "ApplyServerSideEncryptionByDefault", "BucketKeyEnabled", "BlockedEncryptionTypes"
+        }
     )
 
 

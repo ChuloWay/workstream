@@ -207,11 +207,14 @@ CA directory and its encrypted backup, never in application mounts.
 
 ## Provision the closed AWS trust
 
-Use an authorized provisioning identity only for this section. A dedicated IAM
-user with an access key is supported for this temporary setup administration;
-its credentials must stay separate from the application environment. An existing
-authorized provisioning role is also supported. Neither identity is a runtime
-credential.
+Use an authorized provisioning identity only for this section. For this pilot,
+the selected IAM administrator user is also independently authorized to publish
+release images to ECR. Keep one combined administrator policy: preserve its
+independently authorized existing permissions, including ECR access, while
+adding and later removing only the Workstream setup permissions described here.
+A dedicated temporary IAM user or an authorized provisioning role is also
+supported. Provisioning credentials always stay separate from the application
+environment; none is a runtime credential.
 
 Have an account administrator grant only the actions needed for the declared
 resource names. Use two stages because AWS assigns the trust-anchor and profile
@@ -228,16 +231,22 @@ IDs when creating them:
    reads and writes below only for the declared bucket, with no direct object
    read, write, or delete actions.
 2. After both create responses supply their ARNs, have the account administrator
-   replace the setup policy with exact-resource read/mapping access described
-   below and `iam:CreatePolicyVersion` only for the readiness policy. The setup
-   identity does not need permission to modify its own IAM policy.
+   update the same combined policy. Preserve the shared user's independently
+   authorized existing permissions, including ECR access, and add the three exact
+   completion grants described below. Keep the setup grants still needed to
+   finish provisioning. The setup identity does not need permission to modify its
+   own IAM policy.
 
 This is trusted setup administration. Exact resource names do not constrain the
 contents of submitted trust policies, managed policies, CA bundles, or bucket
 policies. In particular, bucket-policy administration can grant data access.
 Review those generated documents before applying them; do not give this setup
-identity to application processes. Remove its temporary permissions and access
-key after provisioning. Ongoing proof jobs use their own certificate identities.
+identity to application processes. For the shared administrator user, retain its
+independently authorized ECR access and manage its access key under that existing
+administrative lifecycle; remove only obsolete Workstream grants. A dedicated
+temporary setup identity can instead have its permissions and access key removed
+and be retired after provisioning. Ongoing proof jobs use their own certificate
+identities.
 
 Start from the reviewed repository root, record its absolute
 path, and use one separate private provisioning directory for every command in
@@ -408,6 +417,15 @@ aws s3api put-bucket-policy --bucket "$BUCKET" \
   --policy "file://${PROVISION_DIR}/generated-bootstrap/bucket-policy.json"
 ```
 
+Readiness requires the exact `AES256` default. AWS may also return a boolean
+`BucketKeyEnabled` (which applies to SSE-KMS, not this default) and
+`BlockedEncryptionTypes={"EncryptionType":["SSE-C"]}`. Keep that customer-key
+block enabled; it is accepted without changing bucket controls. Unknown fields,
+malformed values and KMS defaults still reject. See AWS's
+[encryption rule](https://docs.aws.amazon.com/AmazonS3/latest/API/API_ServerSideEncryptionRule.html)
+and [blocked encryption types](https://docs.aws.amazon.com/AmazonS3/latest/API/API_BlockedEncryptionTypes.html)
+contracts.
+
 Do not add an enabled lifecycle rule that can expire or delete completed objects
 under the configured private prefix. The generated bucket policy permits object
 data only through the runtime role and denies unconditional writes.
@@ -423,15 +441,23 @@ PROFILE_ID=$(python3 -c \
   'import json; print(json.load(open("profile-create.json"))["profile"]["profileId"])')
 ```
 
-Before continuing, have the account administrator replace the setup policy.
-Use `trustAnchor.trustAnchorArn` from `trust-anchor-create.json` for
-`rolesanywhere:GetTrustAnchor`. Use `profile.profileArn` from
-`profile-create.json` for `rolesanywhere:GetProfile`,
-`rolesanywhere:PutAttributeMapping`, and `rolesanywhere:DeleteAttributeMapping`.
-Retain only the necessary exact-role/policy read access and allow
-`iam:CreatePolicyVersion` on the readiness policy alone. Remove the initial
-creation, role attachment, pass-role, and bucket-administration grants. Do not
-substitute wildcard resource ARNs or add tag permissions.
+Before continuing, have the account administrator update the one combined
+administrator policy. Preserve the shared user's independently authorized
+existing permissions, including ECR capabilities. Merge exactly these three
+completion grants:
+
+1. `rolesanywhere:GetTrustAnchor` on the `trustAnchor.trustAnchorArn` returned in
+   `trust-anchor-create.json`.
+2. `rolesanywhere:GetProfile`, `rolesanywhere:PutAttributeMapping`, and
+   `rolesanywhere:DeleteAttributeMapping` on the `profile.profileArn` returned in
+   `profile-create.json`.
+3. `iam:CreatePolicyVersion` on the readiness policy alone.
+
+Keep the Workstream setup grants needed for the remaining provisioning commands.
+After provisioning is complete, review the combined policy and remove only
+Workstream setup grants that are no longer needed. Do not replace the combined
+policy with a reduced Workstream-only policy, remove ECR permissions, substitute
+wildcard resource ARNs, or add tag permissions.
 
 The profile must add only the issuer-CN and subject-CN mappings used by the
 generated trust policies. Roles Anywhere may create a broader default SAN

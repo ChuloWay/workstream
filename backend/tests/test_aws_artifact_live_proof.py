@@ -16,6 +16,7 @@ import pytest
 
 from app.adapters.artifacts.aws_live_proof import (
     AwsArtifactLiveProof,
+    _has_only_sse_s3,
     _trust_policy_subjects,
     _validate_bucket_policy,
     _validate_lifecycle,
@@ -846,12 +847,30 @@ def test_lifecycle_allows_disabled_or_disjoint_expiration() -> None:
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "encryption_metadata",
+    [
+        {},
+        {"BucketKeyEnabled": False},
+        {"BucketKeyEnabled": True, "BlockedEncryptionTypes": {"EncryptionType": ["SSE-C"]}},
+    ],
+    ids=["minimal", "bucket-key-false", "live-aws-response"],
+)
 async def test_readiness_uses_bounded_bucket_responses_and_runs_every_denial_guard(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
+    encryption_metadata: dict[str, object],
 ) -> None:
     bucket_policy = _bucket_policy()
     client = _ReadinessS3Client(bucket_policy, lifecycle=[])
+
+    async def encryption(**_kwargs: object) -> dict[str, object]:
+        return {"ServerSideEncryptionConfiguration": {"Rules": [{
+            "ApplyServerSideEncryptionByDefault": {"SSEAlgorithm": "AES256"},
+            **encryption_metadata,
+        }]}}
+
+    monkeypatch.setattr(client, "get_bucket_encryption", encryption)
     proof = AwsArtifactLiveProof(
         _settings(tmp_path, bucket_policy=bucket_policy),
         _Session(s3=client),
@@ -883,6 +902,66 @@ async def test_readiness_uses_bounded_bucket_responses_and_runs_every_denial_gua
         "readiness_object_access_denied": True,
         "anonymous_object_access_denied": True,
     }
+
+
+@pytest.mark.parametrize(
+    "alteration",
+    [
+        {"BucketKeyEnabled": 1},
+        {"BucketKeyEnabled": 0},
+        {"BucketKeyEnabled": "true"},
+        {"BucketKeyEnabled": None},
+        {"BucketKeyEnabled": []},
+        {"BlockedEncryptionTypes": None},
+        {"BlockedEncryptionTypes": {"EncryptionType": ["NONE"]}},
+        {"BlockedEncryptionTypes": {"EncryptionType": ["SSE-C", "NONE"]}},
+        {"BlockedEncryptionTypes": {"EncryptionType": "SSE-C"}},
+        {"BlockedEncryptionTypes": {"EncryptionType": ["SSE-C"], "unknown": True}},
+        {"unknown": True},
+        {"ApplyServerSideEncryptionByDefault": {"SSEAlgorithm": "aws:kms"}},
+        {"ApplyServerSideEncryptionByDefault": {"SSEAlgorithm": "aws:kms:dsse"}},
+        {"ApplyServerSideEncryptionByDefault": {"SSEAlgorithm": "AES256", "KMSMasterKeyID": "key"}},
+    ],
+)
+def test_sse_s3_readiness_rejects_noncanonical_encryption(alteration: dict[str, object]) -> None:
+    rule = {
+        "ApplyServerSideEncryptionByDefault": {"SSEAlgorithm": "AES256"},
+        "BucketKeyEnabled": True,
+        "BlockedEncryptionTypes": {"EncryptionType": ["SSE-C"]},
+        **alteration,
+    }
+    assert _has_only_sse_s3([rule]) is False
+
+
+def test_sse_s3_readiness_rejects_mixed_encryption_rules() -> None:
+    rule = {"ApplyServerSideEncryptionByDefault": {"SSEAlgorithm": "AES256"}}
+    assert _has_only_sse_s3([rule, rule]) is False
+
+
+@pytest.mark.asyncio
+async def test_readiness_rejects_invalid_encryption_before_iam(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+) -> None:
+    policy = _bucket_policy()
+    client = _ReadinessS3Client(policy, lifecycle=[])
+    proof = AwsArtifactLiveProof(_settings(tmp_path, bucket_policy=policy), _Session(s3=client))
+    events = []
+
+    async def encryption(**_kwargs: object) -> dict[str, object]:
+        events.append("encryption")
+        return {"ServerSideEncryptionConfiguration": {"Rules": [{
+            "ApplyServerSideEncryptionByDefault": {"SSEAlgorithm": "AES256"},
+            "BlockedEncryptionTypes": {"EncryptionType": ["NONE"]},
+        }]}}
+
+    async def forbidden() -> None:
+        raise AssertionError("IAM was queried after invalid encryption")
+
+    monkeypatch.setattr(client, "get_bucket_encryption", encryption)
+    monkeypatch.setattr(proof, "_validate_iam", forbidden)
+    with pytest.raises(ArtifactConfigurationError, match="encryption is not exact SSE-S3"):
+        await proof._readiness(_GROUP_NONCE)
+    assert events == ["encryption"]
 
 
 @pytest.mark.asyncio

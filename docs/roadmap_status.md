@@ -384,8 +384,9 @@ activation guards; it does not require EC2 or interactive login. The integrated
 canonical S3 Settings owner validates their format
 and relationships at startup; image proof first exercises that owner directly.
 Its preflight proves
-local configuration and host prerequisites only. Provisioned role-isolated AWS
-proof jobs, deployment, active cloud/IAM identity, representative resource limits,
+local configuration and host prerequisites only. Real certificate-role diagnostics
+have passed immutable upload/readback, bucket controls and access isolation.
+Persisted activation proof jobs, deployment, representative resource limits,
 diagnostic privacy/outage behavior, drain/restart and isolated backup/restore
 remain environment evidence for #583 and the parent release drill.
 
@@ -495,7 +496,9 @@ cannot be reused as post-submission review-gate evidence. See the
   and provider-derived terminal commit. Certificate-based external hosting also
   binds the exact Roles Anywhere trust-anchor and profile state. The
   [setup guide](operations_aws_roles_anywhere.md) covers generated configuration,
-  private certificate custody and renewal; no live AWS access is implied.
+  private certificate custody and renewal. Real AWS connection diagnostics passed
+  immutable upload/readback and role/anonymous isolation; database activation and
+  the public guide/Submission custody drill remain separate requirements.
   Proof clients use the configured region;
   settings reserve a fixed 120-second proof sequence, and ART/PostgreSQL reject
   overlong activation using database time. Lazy configuration outages remain

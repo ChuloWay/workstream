@@ -519,34 +519,37 @@ async def guide_document_access_runtime(session_factory, attempt_id, manifest, c
     from uuid import uuid4
     from app.core.config import get_settings
     from app.adapters.artifacts.internal_workers import (
-        initialize_artifact_internal_runtime, _artifact_internal_runtime,
+        _artifact_internal_runtime,
+        _artifact_worker_database,
+        initialize_artifact_internal_runtime,
     )
     from app.adapters.projects import project_guide_document_scope_port
     from app.modules.artifacts.guide_document_access import ScopedGuideDocumentGrant
     from app.modules.artifacts.authorization import PreparedGuideSourceReadAuthorization
 
-    await initialize_artifact_internal_runtime()
-    manager = create_artifact_scratch_manager(get_settings())
-    try:
-        with _artifact_internal_runtime() as (store, namespace):
-            def authority(session):
-                request_id = uuid4()
-                return PreparedGuideSourceReadAuthorization(
-                    session, request_id=request_id, correlation_id=request_id,
+    async with _artifact_worker_database():
+        await initialize_artifact_internal_runtime()
+        manager = create_artifact_scratch_manager(get_settings())
+        try:
+            with _artifact_internal_runtime() as (store, namespace):
+                def authority(session):
+                    request_id = uuid4()
+                    return PreparedGuideSourceReadAuthorization(
+                        session, request_id=request_id, correlation_id=request_id,
+                    )
+                grant = ScopedGuideDocumentGrant(
+                    session_factory, store, namespace, ArtifactPreparationService(manager), authority,
+                    scope_factory=project_guide_document_scope_port, manifest_factory=guide_document_manifest_port,
+                    attempt_id=attempt_id, manifest=manifest,
+                    lifetime_seconds=configuration.timeout_seconds,
+                    maximum_document_bytes=configuration.maximum_document_bytes,
                 )
-            grant = ScopedGuideDocumentGrant(
-                session_factory, store, namespace, ArtifactPreparationService(manager), authority,
-                scope_factory=project_guide_document_scope_port, manifest_factory=guide_document_manifest_port,
-                attempt_id=attempt_id, manifest=manifest,
-                lifetime_seconds=configuration.timeout_seconds,
-                maximum_document_bytes=configuration.maximum_document_bytes,
-            )
-            try:
-                yield grant
-            finally:
-                await grant.close()
-    finally:
-        manager.close()
+                try:
+                    yield grant
+                finally:
+                    await grant.close()
+        finally:
+            manager.close()
 
 
 def post_submission_materialization(*, sessions, store, namespace, preparation, inspector) -> PostSubmissionMaterializationPort:
@@ -575,6 +578,7 @@ class _WorkerPostSubmissionMaterialization:
         from app.core.config import get_settings
         from app.adapters.artifacts.internal_workers import (
             _artifact_internal_runtime,
+            _artifact_worker_database,
             initialize_artifact_internal_runtime,
         )
         from app.modules.artifacts.submission_archive import SubmissionArchiveInspector
@@ -598,19 +602,20 @@ class _WorkerPostSubmissionMaterialization:
             raise PostSubmissionMaterializationFailure(
                 "post_submit_material_deadline_unavailable"
             ) from None
-        await initialize_artifact_internal_runtime()
-        with _artifact_internal_runtime() as (store, namespace):
-            manager = create_artifact_scratch_manager(settings)
-            try:
-                return await post_submission_materialization(
-                    sessions=self._sessions,
-                    store=store,
-                    namespace=namespace,
-                    preparation=ArtifactPreparationService(manager),
-                    inspector=SubmissionArchiveInspector(submission_archive_limits(settings)),
-                ).materialize(facts, consumer)
-            finally:
-                manager.close()
+        async with _artifact_worker_database():
+            await initialize_artifact_internal_runtime()
+            with _artifact_internal_runtime() as (store, namespace):
+                manager = create_artifact_scratch_manager(settings)
+                try:
+                    return await post_submission_materialization(
+                        sessions=self._sessions,
+                        store=store,
+                        namespace=namespace,
+                        preparation=ArtifactPreparationService(manager),
+                        inspector=SubmissionArchiveInspector(submission_archive_limits(settings)),
+                    ).materialize(facts, consumer)
+                finally:
+                    manager.close()
 
 
 def worker_post_submission_materialization(*, sessions) -> PostSubmissionMaterializationPort:

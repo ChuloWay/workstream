@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import asyncio
+from contextlib import asynccontextmanager
 from datetime import timedelta
 from pathlib import Path
+from types import SimpleNamespace
 from uuid import UUID, uuid4
 
 import pytest
@@ -667,6 +670,280 @@ async def test_worker_activation_guard_uses_real_postgresql_across_two_sync_task
 
     assert run_async_task(select_in_owned_loop) == activation_id
     assert run_async_task(select_in_owned_loop) == activation_id
+
+
+_WORKER_PROVIDER_REF = "sha256/00/" + "0" * 62
+
+
+class _WorkerCompositionClient:
+    """Observe the SDK boundary below the real PostgreSQL activation guard."""
+
+    def __init__(self, events: list[str]) -> None:
+        self._events = events
+
+    async def head_object(self, **_kwargs: object) -> dict[str, int]:
+        self._events.append("transport")
+        return {"ContentLength": 1}
+
+
+async def _cache_native_aws_worker_runtime(
+    *,
+    database_url: str,
+    monkeypatch: pytest.MonkeyPatch,
+    settings: Settings,
+) -> UUID:
+    """Initialize once, then leave the process runtime cached outside its loop scope."""
+    import app.core.config as config
+    from app.adapters.artifacts import internal_workers
+
+    namespace = aws_s3_namespace_fingerprint(settings)
+    engine = create_async_engine(database_url)
+    factory = async_sessionmaker(engine, expire_on_commit=False)
+    group_nonce = uuid4()
+    try:
+        await _insert_group(factory, settings, namespace, group_nonce)
+        async with factory() as session, session.begin():
+            activation_id = await coordinate_artifact_provider_activation(
+                session,
+                settings,
+                namespace_fingerprint=namespace,
+                group_nonce=group_nonce,
+            )
+    finally:
+        await engine.dispose()
+
+    monkeypatch.setattr(config, "get_settings", lambda: settings)
+    monkeypatch.setattr(internal_workers, "get_settings", lambda: settings)
+    monkeypatch.setattr(internal_workers, "get_database_url", lambda: database_url)
+    assert internal_workers._runtime is None
+    await internal_workers.initialize_artifact_internal_runtime()
+    assert internal_workers._runtime is not None
+    assert internal_workers._loop_sessions.get() is None
+    return activation_id
+
+
+async def _change_cached_worker_activation(
+    database_url: str,
+    activation_id: UUID,
+    state: str,
+) -> None:
+    """Model proof loss after startup without weakening the production guard."""
+    if state == "valid":
+        return
+    engine = create_async_engine(database_url)
+    try:
+        async with engine.begin() as connection:
+            await connection.execute(
+                text("ALTER TABLE artifact_provider_activations DISABLE TRIGGER USER")
+            )
+            try:
+                if state == "missing":
+                    await connection.execute(
+                        text("DELETE FROM artifact_provider_activations WHERE id=:id"),
+                        {"id": str(activation_id)},
+                    )
+                else:
+                    assert state == "expired"
+                    await connection.execute(
+                        text(
+                            "UPDATE artifact_provider_activations "
+                            "SET activated_at=clock_timestamp() - interval '2 seconds', "
+                            "expires_at=clock_timestamp() - interval '1 second' "
+                            "WHERE id=:id"
+                        ),
+                        {"id": str(activation_id)},
+                    )
+            finally:
+                await connection.execute(
+                    text("ALTER TABLE artifact_provider_activations ENABLE TRIGGER USER")
+                )
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("consumer", ["guide", "post_submit"])
+@pytest.mark.parametrize(
+    "outcome",
+    ["valid", "missing", "expired", "exception", "cancellation"],
+)
+async def test_cached_native_aws_worker_consumers_retain_activation_scope_through_cleanup(
+    isolated_database_env: str,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    consumer: str,
+    outcome: str,
+) -> None:
+    """Keep real activation custody live through I/O and all consumer cleanup."""
+    import app.adapters.artifacts as artifact_adapter
+    from app.adapters.artifacts import internal_workers
+    from app.interfaces.artifacts import ArtifactProviderLiveProofRequiredError
+    from app.modules.artifacts import guide_document_access
+    from app.modules.checkers.api import external_policy
+
+    settings = _settings(tmp_path)
+    activation_id = await _cache_native_aws_worker_runtime(
+        database_url=isolated_database_env,
+        monkeypatch=monkeypatch,
+        settings=settings,
+    )
+    try:
+        await _change_cached_worker_activation(
+            isolated_database_env,
+            activation_id,
+            outcome if outcome in {"missing", "expired"} else "valid",
+        )
+    except BaseException:
+        internal_workers.shutdown_artifact_internal_runtime()
+        raise
+
+    events: list[str] = []
+    operation_entered = asyncio.Event()
+    business_sessions = object()
+    runtime = internal_workers._runtime
+    assert runtime is not None
+    store = runtime[1]
+
+    @asynccontextmanager
+    async def client():
+        yield _WorkerCompositionClient(events)
+
+    monkeypatch.setattr(store, "_client", client)
+
+    original_worker_database = internal_workers._artifact_worker_database
+
+    @asynccontextmanager
+    async def observed_worker_database():
+        events.append("scope-enter")
+        try:
+            async with original_worker_database() as sessions:
+                yield sessions
+        finally:
+            assert internal_workers._loop_sessions.get() is None
+            events.append("scope-exit")
+
+    monkeypatch.setattr(
+        internal_workers,
+        "_artifact_worker_database",
+        observed_worker_database,
+    )
+
+    class Manager:
+        def close(self) -> None:
+            assert internal_workers._loop_sessions.get() is not None
+            events.append("manager-close")
+
+    monkeypatch.setattr(
+        artifact_adapter,
+        "create_artifact_scratch_manager",
+        lambda _settings: Manager(),
+    )
+
+    async def complete_operation() -> None:
+        if outcome == "exception":
+            raise RuntimeError("controlled consumer failure")
+        if outcome == "cancellation":
+            operation_entered.set()
+            await asyncio.Event().wait()
+
+    class Grant:
+        def __init__(self, sessions, selected_store, *_args, **_kwargs) -> None:
+            assert sessions is business_sessions
+            assert selected_store is store
+
+        @asynccontextmanager
+        async def open(self, _handle: str):
+            try:
+                await store.head(_WORKER_PROVIDER_REF)
+                await complete_operation()
+                yield SimpleNamespace()
+            finally:
+                assert internal_workers._loop_sessions.get() is not None
+                events.append("prepared-close")
+
+        async def close(self) -> None:
+            assert internal_workers._loop_sessions.get() is not None
+            events.append("grant-close")
+
+    class Materialization:
+        async def materialize(self, _facts, _consumer):
+            try:
+                await store.head(_WORKER_PROVIDER_REF)
+                await complete_operation()
+                return "materialized"
+            finally:
+                assert internal_workers._loop_sessions.get() is not None
+                events.append("prepared-close")
+
+    monkeypatch.setattr(guide_document_access, "ScopedGuideDocumentGrant", Grant)
+
+    def compose_materialization(**kwargs):
+        assert kwargs["sessions"] is business_sessions
+        assert kwargs["store"] is store
+        return Materialization()
+
+    monkeypatch.setattr(
+        artifact_adapter,
+        "post_submission_materialization",
+        compose_materialization,
+    )
+    monkeypatch.setattr(
+        external_policy,
+        "selected_post_submit_execution_budget_ms",
+        lambda *_args, **_kwargs: 1,
+    )
+
+    async def invoke():
+        if consumer == "guide":
+            configuration = SimpleNamespace(
+                timeout_seconds=30,
+                maximum_document_bytes=1024,
+            )
+            async with artifact_adapter.guide_document_access_runtime(
+                business_sessions,
+                uuid4(),
+                SimpleNamespace(),
+                configuration,
+            ) as grant:
+                async with grant.open("assigned-handle"):
+                    return "opened"
+        facts = SimpleNamespace(request=SimpleNamespace(policy=object()))
+        return await artifact_adapter.worker_post_submission_materialization(
+            sessions=business_sessions
+        ).materialize(facts, object())
+
+    try:
+        if outcome in {"missing", "expired"}:
+            with pytest.raises(
+                ArtifactProviderLiveProofRequiredError,
+                match="requires fresh exact live proof",
+            ):
+                await invoke()
+        elif outcome == "exception":
+            with pytest.raises(RuntimeError, match="controlled consumer failure"):
+                await invoke()
+        elif outcome == "cancellation":
+            task = asyncio.create_task(invoke())
+            await asyncio.wait_for(operation_entered.wait(), timeout=10)
+            task.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await task
+        else:
+            assert await invoke() == ("opened" if consumer == "guide" else "materialized")
+
+        assert internal_workers._runtime_active_operations == 0
+        assert internal_workers._loop_sessions.get() is None
+        assert events[0] == "scope-enter"
+        assert events[-1] == "scope-exit"
+        assert events.index("prepared-close") < events.index("manager-close")
+        if consumer == "guide":
+            assert events.index("grant-close") < events.index("manager-close")
+        if outcome in {"missing", "expired"}:
+            assert "transport" not in events
+        else:
+            assert events.count("transport") == 1
+    finally:
+        internal_workers.shutdown_artifact_internal_runtime()
 
 
 @pytest.mark.asyncio

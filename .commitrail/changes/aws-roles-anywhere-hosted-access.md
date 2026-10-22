@@ -40,6 +40,9 @@ short-lived database activation; no proof bypass or new storage owner is needed.
   specification, README setup navigation, affected roadmap statements, and this record.
 - Focused consumer composition tests and necessary exact-custody fixture
   extensions for assigned guide access; no product route or permission changes.
+- Existing ART worker composition in `backend/app/adapters/artifacts/__init__.py`
+  and `internal_workers.py`, plus affected guide/post-submit composition tests,
+  to retain loop-owned activation database custody throughout provider use.
 
 ### Not allowed
 
@@ -77,6 +80,15 @@ short-lived database activation; no proof bypass or new storage owner is needed.
   and the privileged checker controller; it is not offline or host-compromise
   isolation. Renewal/revocation remain explicit; generated test certificates do
   not stand in for provisioned identities.
+- The user selected an existing IAM administrator user that is independently
+  authorized for ECR publication as the provisioning identity. Preserve its
+  independently authorized existing permissions, including ECR access, in one
+  combined administrator policy and merge only the three exact-resource Roles
+  Anywhere completion grants. Keep setup grants needed during provisioning; its
+  later cleanup removes only Workstream grants that are no longer needed. A
+  dedicated temporary identity remains supported and can be retired after setup.
+  No administrator access key or policy is an application credential; runtime
+  processes continue to use only the restricted certificate roles.
 - Readiness validates enabled trust-anchor/profile resources, expected CA
   certificate identity, exact allowed roles and a closed trust shape bound to
   account, anchor, issuer and distinct exact subject common names. Bind these
@@ -114,6 +126,16 @@ short-lived database activation; no proof bypass or new storage owner is needed.
 
 ## Acceptance criteria
 
+- [x] Readiness accepts the actual AWS AES256 encryption response with its
+  optional boolean bucket-key flag and exact customer-key block, without
+  changing bucket controls. KMS, unknown fields, malformed flags and unsupported
+  blocked-type structures remain rejected; the live-response regression must
+  fail against the prior validator.
+- [ ] Setup-agent document reads and post-submit materialization retain the
+  existing worker activation context until provider use and cleanup finish.
+  Exercise the production composition with the real activation guard; missing
+  or expired activation must still deny. A regression must detect removal of
+  the operation's database scope, including after cached runtime initialization.
 - [x] Explicit Roles Anywhere settings construct only that credential provider;
   absent/mixed/foreign configuration rejects before helper or cloud I/O.
 - [x] Valid helper output yields refreshable credentials; malformed, expired,
@@ -132,10 +154,11 @@ short-lived database activation; no proof bypass or new storage owner is needed.
 - [x] An integrated proof exercises upload, exact verified read-back/download
   and the setup agent opening only its assigned guide documents through the
   selected provider; retained bytes and hashes match. The real AWS execution
-  of this journey is separately pending provisioned certificates/roles.
+  of this journey is separately pending persisted activation and public workflow
+  execution; the real certificate identities are provisioned.
 - [x] Existing AWS/MinIO, settings, release and activation regressions pass.
-  Real helper/local process tests are distinguished from unexecuted live AWS
-  trust, permission and ZIP custody proof.
+  Real helper/local process tests remain distinct from real AWS diagnostics and
+  the still-outstanding public ZIP custody proof.
 
 ## Risk and review routing
 
@@ -162,8 +185,9 @@ product lifecycle or alternative storage subsystem is introduced.
 | Hosted configuration | generator/normalizer and release configuration/image-contract tests | 24 affected release configuration tests passed after exact-file-custody repairs; earlier 14 image-contract tests and candidate release image build passed | repaired-head image build and real deployment remain separate |
 | Owner boundaries | architecture and authorization boundary tests | 127 passed locally | no new storage owner or public route |
 | Existing public guide integration | isolated PostgreSQL/MinIO batch | earlier local run timed out after 900 seconds; cleanup confirmed; not credited as a pass | full regression execution subsequently passed in the hosted row below |
-| Complete regression execution | hosted aggregate evidence for candidate `f1e6750fd` | 10,351 unique tests completed, zero skipped/deselected; all 16 lanes record cleanup; tested merge tree equals candidate tree | subsequent changes affect only CA operating instructions; live AWS is separate |
-| Real pilot | provision three identities, run existing proof modes, then public ZIP contribution drill | provisioning identity and five live bucket configuration reads verified | CA, application roles/profile and runtime proof remain pending |
+| Complete regression execution | hosted aggregate evidence for candidate `f1e6750fd` | 10,351 unique tests completed, zero skipped/deselected; all 16 lanes record cleanup; tested merge tree equals candidate tree | later live-discovered repairs require fresh complete execution |
+| Current AWS encryption response | actual-response readiness regression, negative structure cases and full proof-transport module | reproduced prior validator rejection; repaired module passes 60 tests | local response contracts alone do not prove AWS enforcement |
+| Real AWS connection | provisioned certificate identities running the production native-AWS observation owner in isolated containers | runtime immutable upload/exact readback, readiness controls and analyzer checks, negative/anonymous object denial, and all three certificate-role separation checks pass | diagnostic observations do not create database activation or establish the public guide/Submission journey; retained challenge bytes are not deleted |
 
 ## Review findings
 
@@ -185,8 +209,11 @@ unexpected direct mounts and substituted secret sources. Exact source inventorie
 replace the partial mount checks. Host validation also rejects private files
 under shared scratch/socket roots and inode aliases across configured private
 inputs; these controls preserve role separation across the supported file paths.
-The temporary provisioning instructions create untagged resources before an
-administrator replaces creation grants with exact returned-resource permissions.
+The provisioning instructions create untagged resources before an administrator
+adds exact returned-resource permissions to the combined policy. Needed setup
+grants remain through provisioning; later cleanup removes only obsolete
+Workstream grants and preserves independently authorized permissions, including
+ECR. Only a dedicated temporary setup identity is retired after provisioning.
 The user selected same-server administrative certificate signing. Its encrypted
 key, terminal-only passphrase, exclusive signing lock and encrypted off-server
 backup replace the separate-offline-machine prerequisite without changing
@@ -196,7 +223,8 @@ application credential mounts, trust checks or runtime authorization.
 
 - Current-source reconciliation: based on main `c6d916cc1`; preserve its CLI source-download,
   task-audit and Operator capabilities, checker test isolation, and roadmap updates alongside this adapter/deployment boundary.
-- Next usable boundary: provision identities and run live AWS activation and
+- Next usable boundary: persist fresh live AWS activation and run
   the public contribution drill tracked by #582/#555.
 - Remaining risks: certificate signing-key custody and renewal are operational
-  responsibilities; no live AWS claim can be made without real provisioning.
+  responsibilities; passing cloud diagnostics do not establish deployed product
+  custody, recovery, or the hosted journey.
