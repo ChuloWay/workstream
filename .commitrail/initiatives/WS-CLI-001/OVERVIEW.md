@@ -32,6 +32,7 @@
   [WS-CLI-001-25](WS-CLI-001-25.md), explicit public ZIP preparation, Submission replay/history and contributor checker findings;
   [WS-CLI-001-27](WS-CLI-001-27.md), manager task-context and retained Submission/checker evidence reads;
   [WS-CLI-001-28](WS-CLI-001-28.md), privileged actor, identity-link, grant-history and catalogue reads;
+  [WS-CLI-001-39](WS-CLI-001-39.md), explicit actor, identity-link and administrative grant mutations;
   [WS-CLI-001-29](WS-CLI-001-29.md), Operator checker registry and exact retry commands;
   [WS-CLI-001-31](WS-CLI-001-31.md), verified retained task-import source download;
   [WS-CLI-001-32](WS-CLI-001-32.md), read-only active-guide and retained/current intake-policy inspection;
@@ -99,6 +100,13 @@ preserves locked lineage and opaque cursors and makes no lifecycle decision.
 exact actor profile/identity-link inspection, explicitly scoped actor/admin grant
 history pages, and permission/role-definition catalogues. These remain separate
 from self-profile operations and never treat observed grants as local authority.
+
+[WS-CLI-001-39](WS-CLI-001-39.md) adds eight existing public administrative
+writes under the existing `admin` command tree. Service provisioning, actor
+lifecycle, identity-link lifecycle and administrative grants remain separate
+backend-owned decisions. Every write requires explicit input and a caller-owned
+replay key; prior inspection confers no authority and uncertainty never triggers
+automatic retry. Local deployment bootstrap remains outside this public client.
 
 [WS-CLI-001-33](WS-CLI-001-33.md) adds `project role-grant candidates PROJECT_ID`
 over the existing exact-project candidate page. A covered Project Manager sees

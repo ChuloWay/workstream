@@ -359,6 +359,11 @@ authorized and do not confer later-write authority or compute readiness locally.
 No public project-list
 route is invented; `GET /actors/me/projects` lists only the caller's own
 exact-grant projects.
+The CLI also exposes the eight existing administrative actor, identity-link,
+fixed-service provision and grant POSTs as deliberate keyed commands under the
+single `admin` root. Backend authorization and lifecycle guards remain decisive;
+administrative reads are observations, not permission for later writes. This
+client exposure is not a deployed-service or independent conformance claim.
 CLI write uncertainty is explicit and never automatically
 retried. These source packages do not claim
 hosted deployment, published CLI binaries or the complete proposed workflow catalogue.
@@ -449,8 +454,8 @@ cannot be reused as post-submission review-gate evidence. See the
 
 | Lifecycle stage | Intended merged status | What is already proven | What remains before v0.1 |
 | --- | --- | --- | --- |
-| Identity and actor resolution | **Live foundation** | Flow-token verification; canonical ActorProfile and ActorIdentityLink; human/service separation; lifecycle controls; canonical `/actors/me` self-read with duplicate `/auth/me` removed; suspension denies both self-read and self-update; CLI privileged exact-actor/profile and identity-link reads remain separate from self-service | Final end-to-end operational and conformance proof |
-| Authorization kernel | **Live foundation** | Closed action/permission catalogues; deny-by-default evaluation; grants; exact-project, privacy-safe candidate read now consumed by the CLI; fixed services; rate controls; opaque transaction-bound PREP; atomic decision evidence; CLI scope-filtered administrative grant and catalogue inspection consumes existing public reads without local authority decisions | Activate only the remaining owner-proven TASK, checker, REV, and CON boundaries; remove obsolete authority after replacement paths are live |
+| Identity and actor resolution | **Live foundation** | Flow-token verification; canonical ActorProfile and ActorIdentityLink; human/service separation; lifecycle controls; canonical `/actors/me` self-read with duplicate `/auth/me` removed; suspension denies both self-read and self-update; CLI privileged exact-actor/profile and identity-link reads and explicit separate profile/link lifecycle writes remain distinct from self-service and backend guards | Final end-to-end operational and conformance proof |
+| Authorization kernel | **Live foundation** | Closed action/permission catalogues; deny-by-default evaluation; grants; exact-project, privacy-safe candidate read now consumed by the CLI; fixed services; rate controls; opaque transaction-bound PREP; atomic decision evidence; CLI scope-filtered administrative grant/catalogue reads and explicit keyed grant issue/revoke consume existing public APIs without local authority decisions | Activate only the remaining owner-proven TASK, checker, REV, and CON boundaries; remove obsolete authority after replacement paths are live |
 | Project Guide source custody | **Live foundation** | Guide creation declares documents and task examples; public document upload; immutable internal metadata snapshots; draft guide and review/revision policy writes with fresh-authorized exact replay of original receipts; exact run-scoped setup reads and assigned-task locked-original reads; S3-backed originals and isolated agent document inspection; exact document generation through separate manager approvals and public exact-authorized CP07 activation; Project Manager guide list, guide detail, activation readiness dry run and verified original read-back (PILOT-READ-3); the CLI exposes existing administrative active-chain and retained sufficiency/artifact-policy reads without local policy decisions | Public original upload, task examples, Celery setup and separate approvals are connected locally with recorded inference; prove configured live inference and readers in the intended environment |
 | Unified Project Guide compilation | **Live setup and manager proposal operations** | Committed original-document readiness dispatches one immutable attempt through Celery; complete result and crash/recovery custody; distinct pre/post proposals; deterministic sufficiency and submission-artifact-policy projections; immutable authorized setup finalization; public exact manager review, pre-submit approval and manual correction dispatch; automatic deterministic post-policy derivation, public complete policy read, separate approval and shared correction custody; provider-free `manager_authored` runtime compiles a manager-uploaded rules document with no inference or provider resources ([change record](../.commitrail/changes/manager-authored-guide-runtime.md)) | The bounded local contributor drill starts from public guide inputs with recorded inference; live model setup and hosted operation remain separate |
 | Contribution policy administration | **Public Finance policy workflow; binding administration internal** | Internal Finance Authority adapter-binding lifecycle; public ContributionPolicy discovery/read/create/update/publish/retire with exact Finance Authority and recoverable draft selectors, and a Finance list of every version (PILOT-READ-3); immutable operation and event history; internal exact selected-version validation; CP07 binding with live exact-project manager authority of the selected published version to the active guide generation | The bounded local public drill passed; policy publication alone does not create a contribution, and hosted operation remains unproven |
@@ -593,6 +598,12 @@ cannot be reused as post-submission review-gate evidence. See the
   identity link, system/project-scoped grant pages, and permission/role
   catalogues. Self-service stays separate; each read uses current backend
   authority and does not authorize a later mutation.
+  [CLI administrative mutations](../.commitrail/initiatives/WS-CLI-001/WS-CLI-001-39.md)
+  expose eight existing public POSTs beneath that same command root: fixed
+  service provision, separate actor/link lifecycle transitions, and exact
+  administrative grant issue/revoke. Caller-owned keys and strict receipts
+  do not move authorization, final-administrator protection or replay policy
+  into the client.
   [PILOT-02A task-import source custody](../.commitrail/changes/pilot02-task-import-source-custody.md)
   provides public covered-PM declaration, exact JSON upload, status and verified
   download with immutable failed/abandoned-source retention and existing ART
