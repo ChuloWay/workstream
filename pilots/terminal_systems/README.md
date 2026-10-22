@@ -59,9 +59,11 @@ normal task creation; no runtime change or checker allowlist is implied.
    that the repository or image exists. Keep implementations in the project's
    own source directory; do not add rules to the shared Rust service.
 4. Register the exact immutable image/configuration capabilities through the
-   authorized Operator operation. Rerun setup or use the supported correction
-   path so the proposal binds those entries; registration alone does not repair
-   an earlier proposal or approve a policy.
+   authorized Operator operation. A Project Manager with authority on this
+   project creates and explicitly dispatches a correction successor, or creates
+   a new guide version, so a fresh proposal can bind the registered entries.
+   A finalized setup run cannot be rerun. Registration alone does not repair an
+   earlier proposal or approve a policy.
    Provision the exact digest and generated cache entry on the execution host;
    the current service reads its cache configuration at startup. The publisher
    does not deploy images to that host or enable a policy.

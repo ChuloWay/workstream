@@ -1437,8 +1437,10 @@ These are assignments to author complete tasks, not completed benchmark packages
 or a fixed eligibility list. They deliberately contain no Workstream PRE/POST bindings or policy
 defaults. The PM supplies those inputs to setup; its requirements, proposed
 bindings and missing-capability suggestions drive engineering's external image
-work. Registration must be followed by a corrected or recompiled proposal,
-separate approvals and complete activation before tasks can be released.
+work. After registration, a Project Manager creates and dispatches a correction
+successor or creates a new guide version; a finalized setup run is not rerun.
+The fresh proposal needs separate approvals and complete activation before tasks
+can be released.
 
 The fixed five-task corpus, its project-specific checker and runtime exception,
 and its dedicated proof workflow are retired. Earlier evidence remains historical

@@ -74,6 +74,10 @@ The metadata example is embedded in the uploadable guide as well as supplied as
 a local TOML file, so the contributor document does not depend on a repository
 relative attachment. The onboarding notes preserve the execution-host cache step
 and distinguish image publication from registration, approval and activation.
+Scoped documentation/product review also replaced the misleading instruction to
+rerun a finalized setup run with the actual public choices: a PM correction
+successor with explicit dispatch, or a new guide version. The same correction is
+reflected in the capability ledger.
 
 ## Reconciliation
 
