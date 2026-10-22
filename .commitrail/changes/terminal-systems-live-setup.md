@@ -682,3 +682,19 @@ proposal, skip or test assertion may be weakened. Qualify the actual structural
 validator, focused fixture tests and both PostgreSQL invariants, then replay
 QA/test-delta and architecture review. Existing live Gen6 qualification remains
 applicable because runtime source and instructions are unchanged.
+
+The same hosted run also refused every lane before collection because four new
+test modules had not been registered in the explicit lane catalogue. Add those
+modules and the newly split PostgreSQL module to their existing shared/project
+families. Extend allowed paths to `backend/scripts/test_lane_catalogue.py` and
+its existing inventory/ownership checks; preserve all lane counts, owners,
+timeouts, completeness rules and required checks. Verify recursive module
+inventory and a complete collect-only run before another push.
+
+CodeRabbit separately found a real CLI/backend path mismatch: the CLI rejected
+literal braces which canonical backend relative paths permit. Remove only that
+extra restriction in the existing proposal decoder; add a process regression
+using the backend-validated public response and keep invalid path rejection
+coverage. This is within the existing CLI contract scope; no backend path rule,
+execution boundary or guide instruction changes. Batch these repairs with the
+structural fix and replay the affected independent reviews.

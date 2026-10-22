@@ -1,31 +1,18 @@
 """Real proposal, approval and correction transactions over finalized setup evidence."""
 
+import json
 from uuid import uuid4
 
 import pytest
 from sqlalchemy import select
 
-from app.core.identifiers import new_record_id
 from app.adapters.artifacts import guide_document_manifest_port
-from app.modules.projects.api.guide_proposals import (
-    GuideProposalApproval,
-    GuideProposalCorrection,
-    GuideProposalError,
-)
-from app.modules.projects.guide_compilation.models import (
-    ProjectGuideProposalApproval,
-    ProjectGuideProposalCorrection,
-)
-from app.modules.projects.guide_compilation.proposal_service import GuideProposalService
-from app.modules.projects.guide_setup_continuation import retryable_compilation_dispatch_predicate
-from app.modules.projects.models import ProjectSetupRun
-from tests.projects.guide_compilation.finalization.pg_support import finalize, stored_state
-from tests.checkers.external.support import capability_projection
-from .pg_support import ProposalAuthority, proposal_case, read_package
-
-import json
 from app.core.hashing import canonical_json_hash
-from app.interfaces.project_agents import project_guide_compilation_prompt_bytes
+from app.core.identifiers import new_record_id
+from app.interfaces.project_agents import (
+    ProjectAgentRuntimeError,
+    project_guide_compilation_prompt_bytes,
+)
 from app.modules.authorization.guide_compilation import (
     ProjectGuideCompilationAuthorizationAdapter,
 )
@@ -37,25 +24,34 @@ from app.modules.authorization.runtime import (
     HumanAuthorizationContext,
     IdentityLinkStatus,
 )
-from app.modules.projects.guide_compilation.request_inputs import CompilationRequestInputs
-from app.modules.projects.guide_compilation.service import GuideCompilationService
-from app.modules.projects.guide_compilation.validation import identity_from_attempt
-from app.modules.projects.guide_compilation.models import (
-    ProjectGuideCompilation, ProjectGuideCompilationAttempt,
-)
-from tests.projects.guide_compilation.helpers import runtime_configuration
-
-
-from app.interfaces.project_agents import ProjectAgentRuntimeError
 from app.modules.projects.api import (
     ProjectGuideCompilationExecutionClassification,
     ProjectGuideCompilationExecutionCommand,
 )
-from app.modules.projects.guide_compilation.orchestrator import GuideCompilationOrchestrator
-from tests.projects.guide_compilation.test_hidden_orchestrator_postgresql import (
-    _Runtime, _backend,
+from app.modules.projects.api.guide_proposals import (
+    GuideProposalApproval,
+    GuideProposalCorrection,
+    GuideProposalError,
 )
+from app.modules.projects.guide_compilation.models import (
+    ProjectGuideCompilation,
+    ProjectGuideCompilationAttempt,
+    ProjectGuideProposalApproval,
+    ProjectGuideProposalCorrection,
+)
+from app.modules.projects.guide_compilation.orchestrator import GuideCompilationOrchestrator
+from app.modules.projects.guide_compilation.proposal_service import GuideProposalService
+from app.modules.projects.guide_compilation.request_inputs import CompilationRequestInputs
+from app.modules.projects.guide_compilation.service import GuideCompilationService
+from app.modules.projects.guide_compilation.validation import identity_from_attempt
+from app.modules.projects.guide_setup_continuation import retryable_compilation_dispatch_predicate
+from app.modules.projects.models import ProjectSetupRun
+from tests.checkers.external.support import capability_projection
+from tests.projects.guide_compilation.finalization.pg_support import finalize, stored_state
+from tests.projects.guide_compilation.helpers import runtime_configuration
+from tests.projects.guide_compilation.test_hidden_orchestrator_postgresql import _Runtime, _backend
 
+from .pg_support import ProposalAuthority, proposal_case, read_package
 
 
 async def approve(factory, command, actor, grant, payload):

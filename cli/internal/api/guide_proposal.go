@@ -663,7 +663,7 @@ func proposalInfraCode(value string) bool {
 
 func proposalRelativePath(value string) bool {
 	if value == "" || strings.TrimSpace(value) != value || strings.HasPrefix(value, "/") || strings.HasPrefix(value, "~") ||
-		strings.ContainsAny(value, `\\:%#`+"`$;|<>*?[]{}") {
+		strings.ContainsAny(value, `\\:%#`+"`$;|<>*?[]") {
 		return false
 	}
 	for _, segment := range strings.Split(value, "/") {

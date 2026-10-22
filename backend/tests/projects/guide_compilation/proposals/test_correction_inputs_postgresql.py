@@ -26,7 +26,9 @@ class AlteredPredecessorStorage:
 
     async def get(self, model, key):
         """Hide only the selected finalization; preserve other exact lookups."""
-        if model is ProjectGuideSetupFinalization and self.changes == {"missing_finalization": True}:
+        if model is ProjectGuideSetupFinalization and self.changes == {
+            "missing_finalization": True
+        }:
             return None
         return await self.session.get(model, key)
 
@@ -36,10 +38,12 @@ class AlteredPredecessorStorage:
         if isinstance(row, ProjectGuideCompilation):
             if self.changes is None:
                 return None
-            return SimpleNamespace(**{
-                **{column.key: getattr(row, column.key) for column in row.__table__.columns},
-                **self.changes,
-            })
+            return SimpleNamespace(
+                **{
+                    **{column.key: getattr(row, column.key) for column in row.__table__.columns},
+                    **self.changes,
+                }
+            )
         return row
 
 
@@ -48,7 +52,10 @@ async def test_correction_rejects_missing_or_altered_predecessor_custody(clean_p
     async with proposal_case(clean_postgres_database) as (_, factory, command, actor, grant):
         package = await read_package(factory, command, actor, grant)
         correction = await correct(
-            factory, command, actor, grant,
+            factory,
+            command,
+            actor,
+            grant,
             GuideProposalCorrection(
                 target=package.target,
                 idempotency_key=uuid4(),
@@ -64,15 +71,23 @@ async def test_correction_rejects_missing_or_altered_predecessor_custody(clean_p
                 {"project_id": str(uuid4())},
                 {"source_snapshot_id": str(uuid4())},
                 {"setup_generation": predecessor.setup_generation + 1},
-                {"canonical_result": {
-                    **predecessor.canonical_result, "setup_notes": ["Substituted result."],
-                }},
-                {"component_hashes": {
-                    **predecessor.component_hashes, "setup_notes_hash": "sha256:" + "f" * 64,
-                }},
+                {
+                    "canonical_result": {
+                        **predecessor.canonical_result,
+                        "setup_notes": ["Substituted result."],
+                    }
+                },
+                {
+                    "component_hashes": {
+                        **predecessor.component_hashes,
+                        "setup_notes_hash": "sha256:" + "f" * 64,
+                    }
+                },
             ):
                 with pytest.raises(GuideCompilationIntegrityError, match="correction predecessor"):
-                    await load_correction_input(AlteredPredecessorStorage(session, changes), setup_id)
+                    await load_correction_input(
+                        AlteredPredecessorStorage(session, changes), setup_id
+                    )
 
             intact = await load_correction_input(session, setup_id)
             assert intact.predecessor.model_dump(mode="json") == predecessor.canonical_result

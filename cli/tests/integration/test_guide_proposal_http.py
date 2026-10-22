@@ -538,6 +538,30 @@ def test_proposal_rejects_null_array_members_and_parameter_objects(cli):
             assert_failure(invoke(cli, origin), "invalid_api_response")
 
 
+def test_proposal_accepts_backend_canonical_paths_with_literal_braces(cli):
+    from app.modules.projects.api.guide_proposal_package import (
+        GuideProposalReviewPackage,
+    )
+
+    with http_fixture() as (origin, response, _):
+        for path in ("reports/{summary}", "reports/result}"):
+            value = proposal()
+            value["result"]["requirements"][0]["check_specification"]["inputs"][1][
+                "relative_path"
+            ] = path
+            validated = GuideProposalReviewPackage.model_validate(value)
+            response["body"] = validated.model_dump_json().encode()
+            result = invoke(cli, origin)
+            assert result.returncode == 0
+            actual = json.loads(result.stdout)
+            assert (
+                actual["result"]["requirements"][0]["check_specification"]["inputs"][1][
+                    "relative_path"
+                ]
+                == path
+            )
+
+
 def test_proposal_specification_stage_semantics_and_historical_omission(cli):
     with http_fixture() as (origin, response, _):
         historical = proposal()
