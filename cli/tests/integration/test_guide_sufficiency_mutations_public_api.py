@@ -53,8 +53,13 @@ async def ready_with_diagnostics(url, process, log_path, env):
     except AssertionError as exc:
         log = log_path.read_text(encoding="utf-8", errors="replace")
         for name, value in env.items():
-            if value and len(value) >= 6 and any(
-                marker in name for marker in ("PASSWORD", "SECRET", "TOKEN", "KEY", "DATABASE_URL")
+            if (
+                value
+                and len(value) >= 6
+                and any(
+                    marker in name
+                    for marker in ("PASSWORD", "SECRET", "TOKEN", "KEY", "DATABASE_URL")
+                )
             ):
                 log = log.replace(value, "[REDACTED]")
         raise AssertionError(
@@ -77,58 +82,103 @@ async def test_manual_sufficiency_cli_uses_current_public_authority_and_exact_re
     try:
         async with factory() as session, session.begin():
             await seed_authorized_project(
-                session, project_id=project, name="Manual sufficiency CLI",
+                session,
+                project_id=project,
+                name="Manual sufficiency CLI",
                 slug="manual-sufficiency-" + uuid4().hex,
             )
         manager, grant = await seed_review_actor(factory, project)
-        outsider, _ = await seed_review_actor(factory, None, role="audit_authority", scope="system")
+        outsider, _ = await seed_review_actor(
+            factory, None, role="audit_authority", scope="system"
+        )
 
         def token(actor):
             return issue_flow_token(
-                str(actor.actor_profile_id), [], issuer=issuer, audience=audience,
+                str(actor.actor_profile_id),
+                [],
+                issuer=issuer,
+                audience=audience,
                 secret=secret,
             )
 
         origin = f"http://127.0.0.1:{find_free_port()}"
         with (tmp_path / "sufficiency-api.log").open("wb") as log:
             process = subprocess.Popen(  # noqa: S603 - fixed isolated public API
-                [sys.executable, "-m", "uvicorn", "app.main:app", "--host", "127.0.0.1",
-                 "--port", origin.rsplit(":", 1)[1], "--log-level", "error", "--no-access-log"],
-                cwd=BACKEND, env=env, stdout=log, stderr=subprocess.STDOUT,
+                [
+                    sys.executable,
+                    "-m",
+                    "uvicorn",
+                    "app.main:app",
+                    "--host",
+                    "127.0.0.1",
+                    "--port",
+                    origin.rsplit(":", 1)[1],
+                    "--log-level",
+                    "error",
+                    "--no-access-log",
+                ],
+                cwd=BACKEND,
+                env=env,
+                stdout=log,
+                stderr=subprocess.STDOUT,
             )
             try:
                 await ready_with_diagnostics(
-                    origin + "/api/v1/health", process, tmp_path / "sufficiency-api.log", env
+                    origin + "/api/v1/health",
+                    process,
+                    tmp_path / "sufficiency-api.log",
+                    env,
                 )
-                async with httpx.AsyncClient(base_url=origin, trust_env=False, timeout=20) as direct:
+                async with httpx.AsyncClient(
+                    base_url=origin, trust_env=False, timeout=20
+                ) as direct:
                     manager_headers = {"Authorization": "Bearer " + token(manager)}
                     guide_created = await direct.post(
                         f"/api/v1/projects/{project}/guides",
                         headers=manager_headers | {"Idempotency-Key": str(uuid4())},
                         json={
-                            "version": "v1", "change_summary": "Manual diagnostic source",
-                            "task_examples": [{"content": "Review a claim using the guide."}],
+                            "version": "v1",
+                            "change_summary": "Manual diagnostic source",
+                            "task_examples": [
+                                {"content": "Review a claim using the guide."}
+                            ],
                             "documents": [
                                 {"label": "guide.pdf", "media_type": "application/pdf"},
-                                {"label": "rubric.pdf", "media_type": "application/pdf"},
+                                {
+                                    "label": "rubric.pdf",
+                                    "media_type": "application/pdf",
+                                },
                             ],
                         },
                     )
                     assert guide_created.status_code == 201, guide_created.text
                     guide = guide_created.json()["id"]
                     root = f"/api/v1/projects/{project}/guides/{guide}"
-                    setup = await direct.get(root + "/setup-runs/latest", headers=manager_headers)
+                    setup = await direct.get(
+                        root + "/setup-runs/latest", headers=manager_headers
+                    )
                     assert setup.status_code == 200, setup.text
                     snapshot = setup.json()["source_snapshot_id"]
-                    specification = (await direct.get("/openapi.json", timeout=60)).json()["paths"]
+                    specification = (
+                        await direct.get("/openapi.json", timeout=60)
+                    ).json()["paths"]
                     template = "/api/v1/projects/{project_id}/guides/{guide_id}/sufficiency-reports"
                     assert "post" in specification[template]
-                    assert "post" in specification[template + "/{report_id}/acknowledge-warnings"]
+                    assert (
+                        "post"
+                        in specification[template + "/{report_id}/acknowledge-warnings"]
+                    )
 
                     create_body = {
                         "source_snapshot_id": snapshot,
                         "status": "passed_with_warnings",
-                        "findings": [{"severity": "warning", "code": "thin_examples", "message": "Examples need a human note."}],
+                        "findings": [
+                            {
+                                "severity": "warning",
+                                "code": "thin_examples",
+                                "message": "Examples need a human note.",
+                            }
+                        ],
                         "summary": "Manual diagnostic only",
                     }
                     create_path = tmp_path / "report.json"
@@ -136,63 +186,130 @@ async def test_manual_sufficiency_cli_uses_current_public_authority_and_exact_re
                     create_key = str(uuid4())
 
                     def create(presented, key=create_key):
-                        return cli(origin, presented, "-o", "json", "project", "guide", "sufficiency",
-                                   "create", project, guide, "--input", str(create_path),
-                                   "--idempotency-key", key)
+                        return cli(
+                            origin,
+                            presented,
+                            "-o",
+                            "json",
+                            "project",
+                            "guide",
+                            "sufficiency",
+                            "create",
+                            project,
+                            guide,
+                            "--input",
+                            str(create_path),
+                            "--idempotency-key",
+                            key,
+                        )
 
                     # An Audit Authority may inspect reports, not write diagnostics.
                     denied = output(create(token(outsider)), 1)["error"]
                     assert denied["status"] in (403, 404)
                     created = output(create(token(manager)))
-                    assert created["project_id"] == project and created["guide_id"] == guide
+                    assert (
+                        created["project_id"] == project
+                        and created["guide_id"] == guide
+                    )
                     assert created["source_snapshot_id"] == snapshot
                     assert created["project_setup_run_id"] is None
                     assert output(create(token(manager))) == created
-                    assert output(create(token(manager), str(uuid4())), 1)["error"]["status"] == 409
-                    create_path.write_text(json.dumps(create_body | {"summary": "Changed"}), encoding="utf-8")
-                    assert output(create(token(manager)), 1)["error"]["code"] == "idempotency_mismatch"
+                    assert (
+                        output(create(token(manager), str(uuid4())), 1)["error"][
+                            "status"
+                        ]
+                        == 409
+                    )
+                    create_path.write_text(
+                        json.dumps(create_body | {"summary": "Changed"}),
+                        encoding="utf-8",
+                    )
+                    assert (
+                        output(create(token(manager)), 1)["error"]["code"]
+                        == "idempotency_mismatch"
+                    )
                     create_path.write_text(json.dumps(create_body), encoding="utf-8")
 
-                    note = {"acknowledgement_note": "Warnings read; not policy approval"}
+                    note = {
+                        "acknowledgement_note": "Warnings read; not policy approval"
+                    }
                     note_path = tmp_path / "acknowledgement.json"
                     note_path.write_text(json.dumps(note), encoding="utf-8")
                     acknowledge_key = str(uuid4())
 
                     def acknowledge(presented, key=acknowledge_key):
-                        return cli(origin, presented, "-o", "json", "project", "guide", "sufficiency",
-                                   "acknowledge-warnings", project, guide, created["id"],
-                                   "--input", str(note_path), "--idempotency-key", key)
+                        return cli(
+                            origin,
+                            presented,
+                            "-o",
+                            "json",
+                            "project",
+                            "guide",
+                            "sufficiency",
+                            "acknowledge-warnings",
+                            project,
+                            guide,
+                            created["id"],
+                            "--input",
+                            str(note_path),
+                            "--idempotency-key",
+                            key,
+                        )
 
                     denied = output(acknowledge(token(outsider)), 1)["error"]
                     assert denied["status"] in (403, 404)
                     acknowledged = output(acknowledge(token(manager)))
                     assert acknowledged["id"] == created["id"]
-                    assert acknowledged["warnings_acknowledged_by_role"] == "project_manager"
-                    assert acknowledged["warnings_acknowledged_by_actor"] == str(manager.actor_profile_id)
-                    assert acknowledged["acknowledgement_note"] == note["acknowledgement_note"]
+                    assert (
+                        acknowledged["warnings_acknowledged_by_role"]
+                        == "project_manager"
+                    )
+                    assert acknowledged["warnings_acknowledged_by_actor"] == str(
+                        manager.actor_profile_id
+                    )
+                    assert (
+                        acknowledged["acknowledgement_note"]
+                        == note["acknowledgement_note"]
+                    )
                     assert output(acknowledge(token(manager))) == acknowledged
-                    assert output(acknowledge(token(manager), str(uuid4())), 1)["error"]["status"] == 409
+                    assert (
+                        output(acknowledge(token(manager), str(uuid4())), 1)["error"][
+                            "status"
+                        ]
+                        == 409
+                    )
                     note_path.write_text(
                         json.dumps({"acknowledgement_note": "Changed acknowledgement"}),
                         encoding="utf-8",
                     )
-                    assert output(acknowledge(token(manager)), 1)["error"]["code"] == "idempotency_mismatch"
+                    assert (
+                        output(acknowledge(token(manager)), 1)["error"]["code"]
+                        == "idempotency_mismatch"
+                    )
                     note_path.write_text(json.dumps(note), encoding="utf-8")
                     async with factory() as session:
                         stored = (
                             await session.execute(
-                                text("SELECT id,project_setup_run_id,warnings_acknowledged_by_actor_profile_id "
-                                     "FROM guide_sufficiency_reports WHERE source_snapshot_id=:snapshot"),
+                                text(
+                                    "SELECT id,project_setup_run_id,warnings_acknowledged_by_actor_profile_id "
+                                    "FROM guide_sufficiency_reports WHERE source_snapshot_id=:snapshot"
+                                ),
                                 {"snapshot": snapshot},
                             )
                         ).all()
                         assert len(stored) == 1
                         assert str(stored[0].id) == created["id"]
                         assert stored[0].project_setup_run_id is None
-                        assert stored[0].warnings_acknowledged_by_actor_profile_id == str(manager.actor_profile_id)
+                        assert (
+                            stored[0].warnings_acknowledged_by_actor_profile_id
+                            == manager.actor_profile_id
+                        )
 
                     await revoke_review_grant(factory, manager, grant)
-                    for attempt in (create(token(manager)), acknowledge(token(manager))):
+                    for attempt in (
+                        create(token(manager)),
+                        acknowledge(token(manager)),
+                    ):
                         denied = output(attempt, 1)["error"]
                         assert denied["status"] in (403, 404)
             finally:
@@ -203,45 +320,79 @@ async def test_manual_sufficiency_cli_uses_current_public_authority_and_exact_re
 
 
 @pytest.mark.asyncio
-async def test_manual_policy_feasibility_after_owner_finalization(clean_postgres_database, tmp_path):
+async def test_manual_policy_feasibility_after_owner_finalization(
+    clean_postgres_database, tmp_path
+):
     """Probe the later #601 boundary without fabricating a compiled report."""
     env = api_environment()
     env["WORKSTREAM_E2E_FLOW_ISSUER"] = "https://identity.flowresearch.tech"
     env["WORKSTREAM_FLOW_AUTH_ISSUER"] = env["WORKSTREAM_E2E_FLOW_ISSUER"]
     assert_isolated_database_url(env["WORKSTREAM_DATABASE_URL"])
     issuer, audience, secret = flow_settings(env)
-    async with source_case(clean_postgres_database) as (values, factory, _finalization, actor, _grant):
+    async with source_case(clean_postgres_database) as (
+        values,
+        factory,
+        _finalization,
+        actor,
+        _grant,
+    ):
         project, guide, snapshot = (
             str(values[name]) for name in ("project", "guide", "snapshot")
         )
         async with factory() as session:
             setup = (
                 await session.execute(
-                    text("SELECT status,output_sufficiency_report_id "
-                         "FROM project_setup_runs WHERE id=:id"),
+                    text(
+                        "SELECT status,output_sufficiency_report_id "
+                        "FROM project_setup_runs WHERE id=:id"
+                    ),
                     {"id": str(values["setup_1"])},
                 )
             ).one()
             assert setup.output_sufficiency_report_id is not None
         token = issue_flow_token(
-            str(actor.actor_profile_id), [], issuer=issuer, audience=audience, secret=secret
+            str(actor.actor_profile_id),
+            [],
+            issuer=issuer,
+            audience=audience,
+            secret=secret,
         )
         origin = f"http://127.0.0.1:{find_free_port()}"
         with (tmp_path / "manual-policy-api.log").open("wb") as log:
             process = subprocess.Popen(  # noqa: S603 - fixed isolated public API
-                [sys.executable, "-m", "uvicorn", "app.main:app", "--host", "127.0.0.1",
-                 "--port", origin.rsplit(":", 1)[1], "--log-level", "error", "--no-access-log"],
-                cwd=BACKEND, env=env, stdout=log, stderr=subprocess.STDOUT,
+                [
+                    sys.executable,
+                    "-m",
+                    "uvicorn",
+                    "app.main:app",
+                    "--host",
+                    "127.0.0.1",
+                    "--port",
+                    origin.rsplit(":", 1)[1],
+                    "--log-level",
+                    "error",
+                    "--no-access-log",
+                ],
+                cwd=BACKEND,
+                env=env,
+                stdout=log,
+                stderr=subprocess.STDOUT,
             )
             try:
                 await ready_with_diagnostics(
-                    origin + "/api/v1/health", process, tmp_path / "manual-policy-api.log", env
+                    origin + "/api/v1/health",
+                    process,
+                    tmp_path / "manual-policy-api.log",
+                    env,
                 )
-                async with httpx.AsyncClient(base_url=origin, trust_env=False, timeout=20) as direct:
+                async with httpx.AsyncClient(
+                    base_url=origin, trust_env=False, timeout=20
+                ) as direct:
                     root = f"/api/v1/projects/{project}/guides/{guide}/submission-artifact-policies"
                     headers = {"Authorization": "Bearer " + token}
                     created = await direct.post(
-                        root, headers=headers | {"Idempotency-Key": str(uuid4())},
+                        root,
+                        headers=headers | {"Idempotency-Key": str(uuid4())},
                         json={
                             "source_snapshot_id": snapshot,
                             "policy_version": "manual-v1",
@@ -251,7 +402,7 @@ async def test_manual_policy_feasibility_after_owner_finalization(clean_postgres
                     )
                     assert created.status_code == 201, created.text
                     manual = created.json()
-                    assert manual["derivation_source"] == "manual"
+                    assert manual["derivation_source"] == "manual_admin_derivation"
                     assert manual["lifecycle_status"] == "draft"
                     updated = await direct.patch(
                         root + "/" + manual["id"],
@@ -265,12 +416,15 @@ async def test_manual_policy_feasibility_after_owner_finalization(clean_postgres
                     assert updated.status_code == 200, updated.text
                     successor = updated.json()
                     assert successor["supersedes_policy_id"] == manual["id"]
-                    assert successor["derivation_source"] == "manual"
+                    assert successor["derivation_source"] == "manual_admin_derivation"
                     assert successor["lifecycle_status"] == "draft"
                     async with factory() as session:
                         predecessor = await session.scalar(
-                            text("SELECT lifecycle_status FROM submission_artifact_policies "
-                                 "WHERE id=:id"), {"id": manual["id"]}
+                            text(
+                                "SELECT lifecycle_status FROM submission_artifact_policies "
+                                "WHERE id=:id"
+                            ),
+                            {"id": manual["id"]},
                         )
                         assert predecessor == "superseded"
             finally:
