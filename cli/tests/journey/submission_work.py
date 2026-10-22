@@ -3,6 +3,7 @@
 import csv
 import hashlib
 import json
+import subprocess
 import time
 from uuid import uuid4
 from zipfile import ZipFile
@@ -110,6 +111,26 @@ def submit_and_observe(
             )
         time.sleep(1)
     else:
+        # Capture the public failure state before the isolated runtime is torn
+        # down. These reads never repair/retry work or turn the timeout into a
+        # pass; one failed diagnostic must not hide the original failure.
+        for diagnostic_token, arguments in (
+            (token, ("submission", "findings", receipt["submission_id"])),
+            (
+                tokens["operator"],
+                ("operations", "checker", "retry-sources", project_id),
+            ),
+            (
+                tokens["operator"],
+                ("operations", "delivery", "list", project_id),
+            ),
+        ):
+            try:
+                client.call(diagnostic_token, *arguments)
+            except (AssertionError, subprocess.TimeoutExpired, OSError, ValueError):
+                # The client retains redacted execution metadata and private
+                # receipts when available. Do not print arbitrary server text.
+                print("Evaluation diagnostic unavailable: " + arguments[1])
         raise AssertionError("durable evaluation did not reach acceptance")
     retained = client.call(token, "me", "submissions", "--task", task_id)
     if retained["next_cursor"] is not None or len(retained["items"]) != 1:
