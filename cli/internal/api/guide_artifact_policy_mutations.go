@@ -223,9 +223,12 @@ func validManualPolicyResponse(fields inspectionObject, version string, summary 
 	status, statusOK := inspectString(fields, "lifecycle_status")
 	derivation, derivationOK := inspectString(fields, "derivation_source")
 	var actualSummary *string
+	var sourceRefs []string
 	if json.Unmarshal(fields["change_summary"], &actualSummary) != nil ||
+		json.Unmarshal(fields["source_material_refs"], &sourceRefs) != nil || len(sourceRefs) == 0 ||
 		!versionOK || responseVersion != version || !statusOK || status != "draft" ||
 		!derivationOK || derivation != "manual_admin_derivation" ||
+		string(fields["superseded_at"]) != "null" ||
 		string(fields["derivation_agent_name"]) != "null" ||
 		string(fields["derivation_agent_version"]) != "null" ||
 		string(fields["approved_by_role"]) != "null" ||

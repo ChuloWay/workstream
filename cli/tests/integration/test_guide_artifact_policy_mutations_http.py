@@ -10,6 +10,7 @@ from test_guide_inspection_http import (
     HASH,
     POLICY,
     SNAPSHOT,
+    WHEN,
     artifact_policy,
 )
 from test_http_boundary import ACTOR, PROJECT, TOKEN, assert_failure, http_fixture
@@ -50,7 +51,7 @@ def manual_response(update=False):
         lifecycle_status="draft",
         policy_body=create_input()["policy_body"],
         derivation_source="manual_admin_derivation",
-        source_material_refs=[],
+        source_material_refs=[f"guide-document:{SNAPSHOT}#{HASH}"],
         created_by=ACTOR,
         approved_by_role=None,
         approved_by_actor=None,
@@ -212,6 +213,8 @@ def test_malformed_or_mismatched_success_is_uncertain_without_retry(
         valid | {"derivation_source": "unified_compilation"},
         valid | {"lifecycle_status": "approved"},
         valid | {"approved_by_actor": ACTOR},
+        valid | {"superseded_at": WHEN},
+        valid | {"source_material_refs": []},
         valid | {"policy_hash": "bad"},
         valid | {"change_summary": TOKEN},
     ]
