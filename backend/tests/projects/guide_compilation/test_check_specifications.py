@@ -293,6 +293,104 @@ def test_pre_submit_binding_must_fit_the_stage_budget() -> None:
         require_complete_generated_specifications(compilation_context, proposal)
 
 
+@pytest.mark.parametrize(
+    ("durations", "declare_gap", "admitted"),
+    [
+        ((3280,), False, True),
+        ((3281,), False, False),
+        ((3281,), True, True),
+        ((1600, 1600), False, True),
+        ((1800, 1600), False, False),
+        ((1800, 1600), True, True),
+    ],
+)
+def test_proposed_post_capacity_includes_materialization_and_each_cleanup(
+    durations: tuple[int, ...], declare_gap: bool, admitted: bool
+) -> None:
+    requirements = []
+    suggestions = []
+    for index, duration in enumerate(durations):
+        specification = valid_specification().model_dump(mode="json")
+        specification.update(execution_mode="background", maximum_duration_seconds=duration)
+        if index == 0 and declare_gap:
+            specification["runtime_dependencies"].append(
+                {
+                    "dependency_id": "policy_capacity",
+                    "kind": "execution_capacity",
+                    "provisioning": "runtime_gap",
+                    "purpose": "The proposed policy exceeds the current aggregate worker budget.",
+                    "unavailable_code": "capacity_exceeded",
+                }
+            )
+            specification["infrastructure_failures"].append(
+                {
+                    "code": "capacity_exceeded",
+                    "condition": "The runtime cannot supply the required aggregate capacity.",
+                }
+            )
+        requirement = _requirement(
+            requirement_id=f"required_item_{index}",
+            disposition="post_submit_capability_gap",
+            check_specification=specification,
+        )
+        requirements.append(requirement)
+        suggestions.append(
+            CapabilitySuggestion(
+                requirement_id=requirement.requirement_id,
+                stage="post_submit",
+                title="Background package inspection",
+                rationale="The required implementation is not registered.",
+                evidence_refs=requirement.evidence_refs,
+            )
+        )
+    proposal = generated_result().model_copy(
+        update={
+            "status": "draft_ready_with_warnings",
+            "requirements": tuple(requirements),
+            "capability_suggestions": tuple(suggestions),
+        }
+    )
+    compilation_context = context(ids())
+    validate_project_guide_compilation_result(compilation_context, proposal)
+    if admitted:
+        require_complete_generated_specifications(compilation_context, proposal)
+    else:
+        with pytest.raises(ValueError, match="execution capacity gap"):
+            require_complete_generated_specifications(compilation_context, proposal)
+
+
+def test_supported_post_capacity_uses_registered_deadlines_not_small_estimates() -> None:
+    entry = _entry_with_deadline(1_700_000, "post_submit")
+    compilation_context = context(ids(), checker_capabilities=capability_projection(entry))
+    requirements = tuple(
+        _requirement(
+            requirement_id=f"required_item_{index}",
+            disposition="supported_post_submit",
+            check_specification=_specification(
+                execution_mode="background", maximum_duration_seconds=1
+            ).model_dump(mode="json"),
+        )
+        for index in range(2)
+    )
+    proposal = generated_result().model_copy(
+        update={
+            "requirements": requirements,
+            "post_submit_bindings": tuple(
+                PostSubmissionBindingProposal(
+                    requirement_id=item.requirement_id,
+                    capability_id=entry.capability_id,
+                    capability_version=entry.capability_version,
+                    stage="post_submit",
+                )
+                for item in requirements
+            ),
+        }
+    )
+    validate_project_guide_compilation_result(compilation_context, proposal)
+    with pytest.raises(ValueError, match="supported post-submit checks exceed"):
+        require_complete_generated_specifications(compilation_context, proposal)
+
+
 @pytest.mark.parametrize("phase", ["pre_submit", "post_submit"])
 def test_supported_specification_must_fit_the_selected_checker_deadline(
     phase: str,

@@ -625,7 +625,7 @@ def test_proposal_specification_stage_semantics_and_historical_omission(cli):
             assert_failure(invoke(cli, origin), "invalid_api_response")
 
 
-def test_proposal_rejects_pre_model_evaluation_and_accepts_post_background(cli):
+def test_proposal_rejects_pre_model_evaluation_and_accepts_post_capacity_gap(cli):
     from app.modules.projects.api.guide_proposal_package import (
         GuideProposalReviewPackage,
     )
@@ -664,11 +664,30 @@ def test_proposal_rejects_pre_model_evaluation_and_accepts_post_background(cli):
         requirement["disposition"] = "post_submit_capability_gap"
         specification["execution_mode"] = "background"
         specification["maximum_duration_seconds"] = 300
+        specification["runtime_dependencies"].append(
+            {
+                "dependency_id": "worker_capacity",
+                "kind": "execution_capacity",
+                "provisioning": "runtime_gap",
+                "purpose": "Provide enough background worker time for the evaluation.",
+                "unavailable_code": "capacity_exceeded",
+            }
+        )
+        specification["infrastructure_failures"].append(
+            {
+                "code": "capacity_exceeded",
+                "condition": "The proposed evaluation exceeds the worker time budget.",
+            }
+        )
         value["result"]["capability_suggestions"][0]["stage"] = "post_submit"
         GuideProposalReviewPackage.model_validate(value)
         response["body"] = json.dumps(value).encode()
         accepted = invoke(cli, origin)
         assert accepted.returncode == 0 and json.loads(accepted.stdout) == value
+
+        specification["runtime_dependencies"][1]["provisioning"] = "current_runner"
+        response["body"] = json.dumps(value).encode()
+        assert_failure(invoke(cli, origin), "invalid_api_response")
 
 
 def test_proposal_rejects_malformed_nested_types_and_incomplete_policy_identity(cli):

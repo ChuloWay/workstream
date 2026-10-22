@@ -94,6 +94,18 @@ from whether the guide says automated, PRE or POST. A newly proposed PRE binding
 must fit the `bounded_pre_submit` mode, propose at most 60 seconds and select a
 registry entry whose deadline does not exceed that boundary. Longer work uses
 the background POST stage. A cheap automated structural check stays PRE.
+Static means a deterministic predicate over explicit syntax or a guide-defined
+grammar. Free-form completeness and consistency judgments belong to model-based
+POST evaluation; setup must not invent document headings or keywords to force
+them into PRE.
+
+Setup also checks aggregate POST capacity against the existing worker budget,
+including materialization and per-entry cleanup. A proposed policy that cannot
+fit must expose an `execution_capacity` runtime gap with a `capacity_exceeded`
+infrastructure outcome; supported bindings cannot exceed the actual aggregate
+deadline. This does not increase runtime capacity. Ordinary checker-image
+isolation also does not supply nested task environments, which remain explicit
+runtime gaps until supported.
 
 The trusted compiler binds approved requirement identities to exact immutable
 registry entries, image/configuration/schema digests and ordered PRE/POST

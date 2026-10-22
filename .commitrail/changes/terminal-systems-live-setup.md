@@ -241,8 +241,9 @@ needed.
 ## Reconciliation
 
 - Current-source reconciliation: merged #647 and #649 on main `91df16e76`, then incorporated main `a82f0d45` including #633 and its linear 0057 migration.
-- Next usable boundary: review the actual v5 requirements and determine correct
-  PRE/POST capability gaps before engineering images or approving policy.
+- Next usable boundary: qualify a repaired fresh provider handoff against the
+  unchanged guide before engineering images or approving policy. The v8 result
+  is schema-valid but its semantic review found incomplete and misclassified checks.
 - Remaining risks: earlier schema-invalid model outcomes remain unexplained;
   requirement classification, model/tool reliability, offline builds and the
   contribution journey still need qualification. A successful nullable proposal
@@ -311,3 +312,33 @@ The clean c2ef security review found no security defect; architecture and QA
 require repair replay. The shared architecture boundary suite passed 92 cases;
 Markdown links, stale-contract checks and Commitrail validation passed before
 this repair. These checks do not establish a live checker or activation outcome.
+
+
+### Live semantic handoff repair
+
+The unchanged-guide v8 run finalized a warning-ready draft with six checker gaps,
+four null project limits and no registered bindings. All 21 provider resources
+were deleted. Independent review rejected it as an engineering handoff: semantic
+free-form checks were labeled static PRE, required violations became warnings,
+inputs omitted material needed to observe a negative case, nested task execution
+was confused with ordinary checker isolation, and requirements were omitted or
+bundled without complete assertions. One work finding also conflated unavailable
+tooling with a contributor failure. Preserve this result as evidence, not approved
+policy.
+
+The aggregate POST budget owner also disproved the assumption that every registry
+maximum is usable in a complete policy: materialization and per-entry cleanup
+must fit the existing durable worker deadline. Extend only the setup specification
+dependency enum and existing CLI decoder with `execution_capacity` as an explicit
+runtime gap, using `capacity_exceeded` as its infrastructure outcome. Supply current
+budget facts from CHECKERS' public constants through the hashed instructions, and
+require a visible capacity gap when the complete proposed POST budget cannot fit.
+Supported bindings must remain within the actual registry and aggregate deadlines.
+No runtime limit, worker lease, registry schema or product execution is changed.
+
+Reconcile generic generation guidance and schema descriptions for atomic inventory
+coverage, observable inputs, deterministic grammar versus semantic judgment,
+required versus warning findings, nested execution and infrastructure failures.
+Add discriminating capacity tests, mirror the closed enum in CLI, retain the
+existing parser and stage regressions, then run a fresh original-guide version.
+Do not add named-project logic, prewritten model results or invented guide rules.

@@ -1486,10 +1486,12 @@ remaining sample PID probe as sufficient project readiness.
 [#555](https://github.com/Flow-Research/workstream/issues/555) owns the connected
 public journey. The [live setup qualification](../.commitrail/changes/terminal-systems-live-setup.md)
 now includes a real provider draft from unchanged guide bytes with all project
-size/entry limits null. Earlier schema-invalid outcomes remain unexplained; the
-successful pre-specification draft's human-review classifications are not a
-qualified checker handoff. The expanded typed contract still needs a fresh
-provider replay and review before image engineering. No new image, approved
+size/entry limits null. The typed v7 run identified and repaired a missing
+isolated-dependency instruction. The v8 run produced a schema-valid draft, but
+semantic review found incomplete inputs, qualitative PRE checks and unsupported
+execution assumptions. Its handoff is not qualified. The repaired generic
+instructions and explicit capacity gaps still need fresh provider qualification
+before image engineering. No new image, approved
 binding, guide activation or contribution outcome for these inputs is established.
 
 The [offline gVisor build spike](engineering/pilot00-gvisor-offline-build-spike.md)

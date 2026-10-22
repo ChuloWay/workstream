@@ -587,6 +587,7 @@ func validateProposalCheckSpecification(raw json.RawMessage, value *ProposalChec
 			"task_context":       {"runtime_gap", "material_unavailable"},
 			"guide_context":      {"runtime_gap", "material_unavailable"},
 			"model_service":      {"runtime_gap", "implementation_unavailable"},
+			"execution_capacity": {"runtime_gap", "capacity_exceeded"},
 		}[item.Kind]
 		if expected == [2]string{} || item.Provisioning != expected[0] || item.UnavailableCode != expected[1] || (supported && item.Provisioning == "runtime_gap") {
 			return errors.New("invalid runtime dependency provisioning")
