@@ -16,9 +16,10 @@ The human explicitly approved this backend prerequisite to client-only issue #61
 
 ### Allowed
 
-- `backend/app/modules/authorization/catalogue.py`, `runtime.py`, `kernel.py`, and one cohesive AUTH domain/adapter module for exact typed Operator ART resources, action dispatch, system-Operator grant/lifecycle evaluation and decision evidence.
-- `backend/app/modules/artifacts/authorization.py`, `router.py`, and only necessary ART owner/port code for canonical resource-fact translation and request-local production composition; preserve owner-local lineage lookup and recovery transaction ownership.
-- Focused `backend/tests/authorization/` and `backend/tests/test_artifact_operator_api.py`, `test_artifact_authorization.py`, `test_artifact_recovery.py` tests using real PostgreSQL and non-overridden production AUTH; update current expected catalogue availability only with matching proof.
+- `backend/app/modules/authorization/catalogue.py`, `runtime.py`, `kernel.py`, the existing read dispatcher and audit-domain types, and one cohesive AUTH domain/adapter module for exact typed Operator ART resources, action dispatch, system-Operator grant/lifecycle evaluation and decision evidence.
+- One public `backend/app/modules/artifacts/api/operator_authority.py` contract for ART-owned authority facts/ports/evidence; `backend/app/adapters/auth/__init__.py` is the sole new AUTH factory registration. AUTH may import only the public ART contract, not `artifacts.schemas` or another private ART owner.
+- `backend/app/modules/artifacts/authorization.py`, `router.py`, `schemas.py`, `operator.py`, `service.py`, and only their directly affected callers for exact owner-local lineage, public-port migration, actor-read-root cleanup, request-local factory composition, read commit/concealment and recovery transaction ownership.
+- Focused `backend/tests/authorization/` and `backend/tests/test_artifact_operator_api.py`, `test_artifact_authorization.py`, `test_artifact_recovery.py` tests using real PostgreSQL and non-overridden production AUTH; update current expected catalogue availability only with matching proof. Include exact module-boundary/negative-structure checks.
 - `docs/spec_authorization_service.md`, `docs/engineering/authorization_activation_custody.md`, `docs/operations_artifact_storage.md`, `docs/roadmap_status.md`, and the current WS-AUTH overview/record only for affected intended-merge claims.
 
 ### Not allowed
@@ -28,19 +29,21 @@ The human explicitly approved this backend prerequisite to client-only issue #61
 
 ## Design and decisions
 
-Reuse the existing ART `ArtifactOperatorAuthorityFacts` and `ArtifactRecoveryAuthorityFacts` ports. ART composes canonical resource identity and all associated project IDs before calling AUTH; AUTH receives a strict typed resource context and requires the exact existing action and system-scoped human Operator grant. The authority adapter returns only the actual action, permission and persisted decision ID. Operator reads use fresh request-local decisions and preserve concealed not-found behavior. Readiness and admission usage use the existing exact `operations.artifact_storage_admission.read` action, not an alias to a generic status route.
+Move the existing ART `ArtifactOperatorAuthorityFacts` and `ArtifactRecoveryAuthorityFacts` contracts into a public ART API module, replacing the private definitions and updating callers, not retaining aliases. ART composes canonical resource identity and the complete sorted associated project-ID set from locked owner rows before calling AUTH; AUTH imports only that public contract. Its strict typed resource context binds action, resource selector, actor identity, canonical project IDs and exact retry CAS/lineage as applicable. Only the matching existing action and current system-scoped human Operator grant can allow. The AUTH adapter stages the real action/permission/decision ID in the caller's session; it never commits. `app.adapters.auth` constructs it, and ART's dependencies consume only that factory. Readiness and admission usage use the exact `operations.artifact_storage_admission.read` action, not a generic status alias. A read resource cannot satisfy retry, nor the reverse.
 
-Retry remains a separate action and evaluator path. ART keeps source, put-attempt, task and replay locks in its one recovery transaction; AUTH revalidates the current human actor/link and grant and records an exact decision within that transaction before any recovery/job/audit success can commit. Exact replay gets fresh current authority, never authority from an old read or response. Reuse the existing AUTH kernel and audit event custody; do not add an ART-owned grant evaluator or alternate factory.
+ART's context dependency projects the resolved actor, then rolls back the actor-resolution read root before entering its owner transaction. Each GET keeps canonical lookup, AUTH decision, response projection/validation and one success commit in a single request-owned session. Missing resources produce the same concealed 404 as AUTH denials. An AUTH denial is rolled back and the issuing AUTH kernel's *same* decision is restaged and committed in a clean AUTH-only transaction before the concealed response; a late read/response/evidence failure rolls back any allow decision and returns bounded unavailability, not 200. No adapter commits before ART's response is complete. Malformed UUID/body/query remains a bounded transport 422, not an AUTH concealment claim.
+
+Retry remains a separate action and evaluator path. ART keeps source, put-attempt, task and replay locks in its one recovery transaction; AUTH revalidates the current human actor/link and grant and stages exact decisions *inside* that transaction. The current ART service makes a preliminary and a terminal AUTH check for new work; both decisions commit with the chain, and only the terminal decision ID is linked by `ArtifactRecoveryInitiated`. Replay stages one fresh decision before returning the original IDs, then commits it without a duplicate chain/audit. A failed operation rolls back every staged allow decision, recovery, job and initiation audit; a denied decision is restaged by the issuing kernel only after rollback. Evidence-persistence failure is bounded unavailability, never successful retry. Reuse the existing AUTH kernel and audit event custody; do not add an ART-owned grant evaluator or alternate factory.
 
 Rejected alternatives: composing `operations.status.read` for admission/readiness, using only the pre-existing Operator permission tuple, or copying allow-authority test fakes into production. Each bypasses the reserved action/resource decision and planned-action gate.
 
 ## Acceptance criteria
 
 - [ ] The eight reserved actions alone become active with exact typed resource matching; no unrelated availability or permission changes.
-- [ ] A real system-scoped human Operator can read each of the eight existing GET routes through production AUTH composition. Non-Operators, inactive actors/links, malformed or missing resources, and wrong canonical lineage stay denied/concealed without provider details.
+- [ ] A real system-scoped human Operator can read each of the eight existing GET routes through production AUTH composition, with the exact durable decision after a successful response. A token role without a persisted grant, non-Operator human, service actor, suspended actor, revoked link/grant, well-formed missing resource and wrong canonical lineage remain denied with the same concealed 404 envelope; malformed transport input is bounded 422 without internals. Provider fields remain redacted.
 - [ ] Shared content/replica lineage cannot expose another project's custody through an incomplete or caller-invented project tuple; resource facts are canonical and decision evidence is exact.
-- [ ] Retry remains independently gated: only exhausted eligible source work with matching project/task/submission/CAS, reason and key can create one recovery attempt, retry job and initiation audit. Current actor/link/grant revocation, stale CAS, changed replay and failure roll back success effects; exact replay returns the original IDs only after fresh authority.
-- [ ] PostgreSQL-backed public-API tests use no authority dependency overrides for positive and negative calls. They inspect persisted decision/effect evidence where the claim requires it. Existing Local/MinIO and ART response tests remain intact.
+- [ ] Retry remains independently gated: only exhausted eligible source work with matching project/task/submission/CAS, reason and key can create one recovery attempt, retry job and initiation audit. A read context never grants retry and vice versa. Current actor/link/grant revocation, stale CAS, changed replay and post-decision failure roll back success effects; exact replay returns the original IDs only after fresh authority.
+- [ ] Signed-token PostgreSQL public-API tests use no override of database session, actor/context or either authority dependency for positive and negative calls. They inspect persisted decision/effect evidence in an independent session. Existing Local/MinIO and ART response tests remain intact.
 - [ ] Current AUTH/ART docs and roadmap distinguish executable backend routes from later CLI and hosted AWS proof; no deployment or live S3 claim is inferred.
 
 ## Risk and review routing
@@ -51,19 +54,29 @@ Rejected alternatives: composing `operations.status.read` for admission/readines
 
 ## Evidence
 
-| Claim | Command or proof | Result | Remaining uncertainty |
-|---|---|---|---|
-| Existing production deny and planned actions | source inspection of ART router, AUTH catalogue/kernel, current route tests | Confirmed on origin/main 8f65c9d74 | None for current source |
-| Exact HTTP authority and concealed reads | future isolated PostgreSQL `test_artifact_operator_api.py` production-dependency cases | Planned | Must execute after implementation |
-| Retry current authority, replay and rollback | future isolated PostgreSQL `test_artifact_recovery.py`/route cases and independent-session revocation race | Planned | Must execute after implementation |
-| Source integrity | focused pytest, Ruff, boundary/stale/link checks and hosted complete suite | Planned | Hosted evidence pending |
+The following are named future tests, not executed evidence. The shared fixture signs a real bearer, provisions a human through `/actors/me`, bootstraps an Access Administrator and issues a persisted system Operator grant through public administration. It uses the migrated PostgreSQL schema, real FastAPI dependencies and an independent observer session. ART seeds only canonical artifact rows needed to reach the route; no authority port or context is overridden.
+
+| Behavior atom / owner | Future discriminating proof | Required observation |
+|---|---|---|
+| Exact eight-action availability and no unrelated growth / AUTH catalogue | `test_artifact_operator_action_activation_is_exact` | Before/after action/permission set; wrong typed resource/action pair denied |
+| Binding, replica, receipt, job, recovery, audit GETs / ART router + AUTH read evaluator | `test_signed_operator_artifact_resource_reads_record_exact_decisions` | Six route/action pairs succeed and persist action, permission, matched grant, actor/link, resource digest and request/correlation IDs after response |
+| Admission usage and readiness GETs / ART router + exact operations action | `test_signed_operator_artifact_operations_reads_record_exact_decisions` | Both operations use their shared exact action and distinct canonical resource digests; no inferred AWS activation |
+| All read negative identities / AUTH evaluator and ART concealment | `test_signed_artifact_read_denial_matrix` | No grant, wrong role, token role only, service actor, suspended actor, revoked link/grant each conceal with durable matching denial; malformed input separately 422 |
+| Missing, foreign and multi-project lineage / ART resolvers + AUTH digest | `test_signed_artifact_shared_content_lineage_is_complete` | Two-project content/replica, sorted complete project tuple in exact decision digest, missing/foreign 404 equivalence; dropping one project makes assertion fail |
+| Read commit and late failure / ART route transaction owner | `test_artifact_read_response_failure_rolls_back_allow_decision` | Independent observer sees decision only after 200; injected post-decision response fault yields bounded error and no committed allow |
+| Retry new result and typed action isolation / ART recovery + AUTH | `test_signed_artifact_retry_records_exact_atomic_authority` | 202 with exact source, attempt/job and initiation audit; two fresh allow decisions in the same commit, audit links the terminal one, no read-context substitution |
+| Retry negative eligibility and rollback / ART recovery transaction | `test_signed_artifact_retry_denial_and_fault_matrix` | Mismatched lineage, stale CAS, non-exhausted source, revoked actor/link/grant, and failures after decision/job/audit/attempt staging leave zero new success facts or allow decisions; 404/409/422 remain bounded |
+| Exact/changed/revoked replay / ART recovery + AUTH | `test_signed_artifact_retry_replay_rechecks_authority` | Exact replay original IDs plus one fresh decision and no duplicate chain; changed replay 409; revoked replay concealed without returning IDs |
+| Revocation and same-key races / independent PostgreSQL sessions | `test_artifact_retry_revocation_and_replay_serialization` | Revocation-first: no chain/effect/allow decision. Retry-first: revocation blocks until one chain commits, later replay denies. Concurrent exact keys: one new/one replay, identical IDs, one attempt/job/initiation audit, fresh decision per call |
+| Public boundary and source checks | `cd backend && .venv/bin/python -m scripts.module_boundaries validate` plus `tests/architecture/test_authorization_boundary.py`; focused pytest, Ruff, stale/link checks, hosted complete suite | No AUTH→private ART or ART→private AUTH edge, no role-only bypass, no test/CI weakening; hosted evidence remains future |
 
 ## Review findings
 
-Pre-implementation and exact-head findings will be recorded here only when material to the durable design.
+The first L1 plan review found that the original contract omitted production actor-root cleanup, GET decision commit/denial restaging, public ART port and AUTH composition-root ownership, and reachable negative/race fixtures. The revised bounded change and evidence matrix incorporate those blocking findings. Exact-head implementation findings remain future evidence.
 
 ## Reconciliation
 
 - Current-source reconciliation: #598 merged AWS activation timing/source corrections; #582 remains an open live-AWS proof boundary. Neither activates these Operator actions. Open #633 (AWS Roles Anywhere) and #647 (checker image publication) have no ART Operator AUTH ownership.
 - Next usable boundary: separate #611 CLI client implementation against this merged, usable public API; hosted AWS proof remains separately owned by #582.
 - Remaining risks: exact production AUTH/API and PostgreSQL evidence is not yet available; do not claim this record's intended outcome delivered before those proofs pass.
+- Human decision: backend prerequisite scope is explicitly approved; no new role, entitlement, provider or product-lifecycle decision is inferred. A later eligible human must approve this specific PR for merge.
