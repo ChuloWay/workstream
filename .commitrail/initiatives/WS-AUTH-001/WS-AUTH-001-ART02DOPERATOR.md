@@ -1,4 +1,4 @@
-# WS-AUTH-001-ART-02D-OPERATOR — Activate exact artifact Operator authority
+# WS-AUTH-001-ART02DOPERATOR — Activate exact artifact Operator authority
 
 - Initiative: WS-AUTH-001
 - Durable disposition: Planned

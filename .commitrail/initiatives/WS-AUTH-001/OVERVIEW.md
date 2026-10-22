@@ -55,7 +55,7 @@ Historical pre-cutover work records: [`STATUS.md`](pre-cutover/STATUS.md),
 - Public post-policy composition: POL-06B delivered using existing AUTH-12G.
 - Completed activation boundary: AUTH-12H exact-project manager authority for
   CP07 complete-guide activation/binding, with live-authority replay.
-- Artifact Operator boundary: [AUTH-ART-02D-OPERATOR](WS-AUTH-001-ART-02D-OPERATOR.md)
+- Artifact Operator boundary: [AUTH-ART-02D-OPERATOR](WS-AUTH-001-ART02DOPERATOR.md)
   activates the eight already reserved system-Operator actions for bounded
   artifact diagnosis and independently guarded verification retry through the
   existing public ART routes. Client-only #611 remains a dependent CLI change;
