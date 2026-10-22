@@ -39,6 +39,20 @@ OPERATIONS = {
     ),
     "projects_create": ("/api/v1/projects", "post"),
     "projects_get": ("/api/v1/projects/{project_id}", "get"),
+    "contributor_candidates_list": (
+        "/api/v1/projects/{project_id}/contributor-candidates",
+        "get",
+    ),
+    "project_grants_issue": ("/api/v1/projects/{project_id}/role-grants", "post"),
+    "project_grants_list": ("/api/v1/projects/{project_id}/role-grants", "get"),
+    "project_grants_get": (
+        "/api/v1/projects/{project_id}/role-grants/{grant_id}",
+        "get",
+    ),
+    "project_grants_revoke": (
+        "/api/v1/projects/{project_id}/role-grants/{grant_id}/revoke",
+        "post",
+    ),
 }
 
 

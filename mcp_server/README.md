@@ -1,6 +1,6 @@
 # Workstream MCP Adapter
 
-An independently installed adapter exposing eighteen tools under the caller's authority:
+An independently installed adapter exposing twenty-three tools under the caller's authority:
 
 - `workstream_profile_get` calls `GET /api/v1/actors/me`.
 - `workstream_profile_update` calls the unkeyed `PATCH /api/v1/actors/me`.
@@ -29,6 +29,16 @@ An independently installed adapter exposing eighteen tools under the caller's au
   `POST /api/v1/actor-identity-links/{identity_link_id}/reactivate`.
 - `workstream_projects_create` calls keyed `POST /api/v1/projects`.
 - `workstream_projects_get` calls `GET /api/v1/projects/{project_id}`.
+- `workstream_contributor_candidates_list` calls
+  `GET /api/v1/projects/{project_id}/contributor-candidates`.
+- `workstream_project_grants_issue` calls keyed
+  `POST /api/v1/projects/{project_id}/role-grants`.
+- `workstream_project_grants_list` calls
+  `GET /api/v1/projects/{project_id}/role-grants`.
+- `workstream_project_grants_get` calls
+  `GET /api/v1/projects/{project_id}/role-grants/{grant_id}`.
+- `workstream_project_grants_revoke` calls keyed
+  `POST /api/v1/projects/{project_id}/role-grants/{grant_id}/revoke`.
 
 Each call forwards the caller's bearer to its fixed public Workstream operation.
 There are no MCP resources or prompts. Workstream, not the adapter, owns every
@@ -119,6 +129,17 @@ administrative response or the exact contributor response containing only
 `id`, `name` and `status`; the adapter validates that projection and the returned
 project identity without calculating access itself.
 
+Project participation reads take one project UUID. Candidate and grant lists
+accept an optional bounded `limit` and opaque `cursor`; grant lists also accept
+optional `active`/`revoked` status and `submitter`/`reviewer` role filters. Issue
+takes a target human actor UUID, one of those two roles, explicit bounded
+qualification evidence, a reason and a typed UUID idempotency key. Revoke takes
+the canonical project/grant UUID pair, a reason and a typed key. Workstream
+alone decides candidate visibility, target eligibility, manager authority,
+duplicate/current state and replay. The adapter forwards caller inputs unchanged,
+validates project/target/grant binding in successful responses and never turns
+project participation into task eligibility.
+
 ## Deployment Boundary
 
 Build from this directory only:
@@ -141,7 +162,7 @@ retries. A mutation transport failure, upstream 5xx response, or unexpected
 success/redirect response is reported as non-retryable uncertain execution.
 Connections may be pooled, but
 caller credentials and results are not shared or cached. Response validation is
-pinned to the eighteen selected public contracts in `contracts/`; upstream drift
+pinned to the twenty-three selected public contracts in `contracts/`; upstream drift
 must be reviewed, not silently accepted. There is no fallback service or
 backend-private import.
 
@@ -158,10 +179,10 @@ Real API tests require the repository's isolated PostgreSQL runner, controlled
 fixture identities and a separate installed adapter process. Never supply a
 production database or real user token to a test. Integration and container
 commands are recorded in the additive MCP workflow and the
-[current chunk record](../.commitrail/initiatives/WS-MCP-002/WS-MCP-002-06.md).
+[current chunk record](../.commitrail/initiatives/WS-MCP-002/WS-MCP-002-07.md).
 Selected schemas are compared with the running backend OpenAPI operations;
 custom admission, lifecycle and exact-project semantics are exercised separately.
 
 Local fixture evidence does not certify the deployed Flow provider, a public
-gateway or all MCP clients. The remaining 9 mapped tools belong to later
+gateway or all MCP clients. The remaining 4 mapped tools belong to later
 bounded changes in the [initiative](../.commitrail/initiatives/WS-MCP-002/OVERVIEW.md).
