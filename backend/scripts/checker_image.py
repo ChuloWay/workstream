@@ -21,7 +21,7 @@ if __package__ in {None, ""}:
 from pydantic import ValidationError
 
 from app.modules.checkers.api.external import ExternalCheckerExecutionResult
-from scripts.checker_image_process import ImageError, run
+from scripts.checker_image_process import ExecutionBudget, ImageError, run
 from scripts.checker_image_samples import (
     Descriptor,
     load_descriptor,
@@ -48,7 +48,7 @@ def decode(raw: bytes):
 class Docker:
     """One explicit local daemon for build, compatibility tests and publication."""
 
-    def __init__(self) -> None:
+    def __init__(self, config: Path) -> None:
         host = os.environ.get("DOCKER_HOST")
         if not host:
             host = decode(
@@ -59,17 +59,25 @@ class Docker:
             )
         if not isinstance(host, str) or not host.startswith("unix:///"):
             raise ImageError("use a local Docker Unix socket so sample mounts name local files")
-        self.prefix = ["docker", "--host", host]
-        self.env = {k: v for k, v in os.environ.items() if k != "DOCKER_CONTEXT"}
+        config.mkdir(mode=0o700)
+        (config / "config.json").write_text("{}\n")
+        self.prefix = ["docker", "--host", host, "--config", str(config)]
+        self.env = {
+            k: v
+            for k, v in os.environ.items()
+            if k not in {"DOCKER_CONTEXT", "DOCKER_CONFIG"} and not k.lower().endswith("_proxy")
+        }
 
     def call(self, *arguments: str, step: str, **kwargs) -> bytes:
         """Use the selected daemon without shell interpolation or automatic retries."""
         return run([*self.prefix, *arguments], step=step, env=self.env, **kwargs)
 
-    def inspect(self, image: str) -> dict:
+    def inspect(self, image: str, **kwargs) -> dict:
         """Read the exact local image identity and configuration."""
         value = decode(
-            self.call("image", "inspect", "--format", "{{json .}}", image, step="inspect image")
+            self.call(
+                "image", "inspect", "--format", "{{json .}}", image, step="inspect image", **kwargs
+            )
         )
         if not isinstance(value, dict) or not DIGEST.fullmatch(value.get("Id", "")):
             raise ImageError("Docker returned an invalid image identity")
@@ -77,6 +85,9 @@ class Docker:
             raise ImageError("checker image must target linux/amd64 or linux/arm64")
         if value.get("Config", {}).get("Volumes"):
             raise ImageError("checker images cannot declare writable VOLUME mounts")
+        healthcheck = value.get("Config", {}).get("Healthcheck", {}).get("Test", [])
+        if healthcheck and healthcheck != ["NONE"]:
+            raise ImageError("checker images cannot declare an active HEALTHCHECK")
         return value
 
 
@@ -86,12 +97,12 @@ def test_sample(docker: Docker, image_id: str, request, directory: Path, runtime
     name = "workstream-image-test-" + uuid4().hex
     uid = os.getuid() or 1000
     gid = os.getgid() or 1000
-    deadline = time.monotonic() + limits.deadline_ms / 1000
-
-    def remaining() -> float:
-        return max(0.001, deadline - time.monotonic())
-
+    budget = ExecutionBudget(
+        time.monotonic() + limits.deadline_ms / 1000, limits.maximum_output_bytes
+    )
+    cleaned = False
     try:
+        docker.inspect(image_id, budget=budget)
         docker.call(
             "create",
             "--name",
@@ -109,7 +120,6 @@ def test_sample(docker: Docker, image_id: str, request, directory: Path, runtime
             "ALL",
             "--security-opt",
             "no-new-privileges",
-            "--no-healthcheck",
             "--pids-limit",
             str(min(256, max(16, limits.memory_bytes // (16 * 1024 * 1024)))),
             "--memory",
@@ -123,7 +133,8 @@ def test_sample(docker: Docker, image_id: str, request, directory: Path, runtime
             "-i",
             image_id,
             step="create sample container",
-            timeout=min(15, remaining()),
+            budget=budget,
+            timeout=limits.deadline_ms / 1000,
         )
         raw = docker.call(
             "start",
@@ -132,8 +143,8 @@ def test_sample(docker: Docker, image_id: str, request, directory: Path, runtime
             name,
             step="execute sample",
             data=request.model_dump_json().encode(),
-            timeout=remaining(),
-            limit=limits.maximum_output_bytes,
+            timeout=limits.deadline_ms / 1000,
+            budget=budget,
         )
         state = decode(
             docker.call(
@@ -142,32 +153,45 @@ def test_sample(docker: Docker, image_id: str, request, directory: Path, runtime
                 "{{json .State}}",
                 name,
                 step="inspect sample",
-                timeout=remaining(),
+                timeout=limits.deadline_ms / 1000,
+                budget=budget,
             )
         )
         if state.get("Running") or state.get("OOMKilled") or state.get("ExitCode") != 0:
             raise ImageError("sample did not exit cleanly")
+        remove_sample(docker, name, budget)
+        cleaned = True
         return raw
     finally:
-        # No final success, no next sample and no push while owned cleanup is uncertain.
-        try:
-            docker.call("rm", "--force", name, step="remove sample container", timeout=15)
-        except ImageError:
-            pass  # Absence is established by the independent inventory below.
-        remaining = docker.call(
-            "container",
-            "ls",
-            "--all",
-            "--quiet",
-            "--filter",
-            f"name=^/{name}$",
-            step="confirm sample cleanup",
-            timeout=15,
+        if not cleaned:
+            # Emergency cleanup cannot turn an over-budget sample into a passing one.
+            remove_sample(docker, name, ExecutionBudget(time.monotonic() + 30, 65536))
+
+
+def remove_sample(docker: Docker, name: str, budget: ExecutionBudget) -> None:
+    """Charge normal cleanup to the sample; confirm absence even if removal fails."""
+    removal_error = None
+    try:
+        docker.call("rm", "--force", name, step="remove sample container", budget=budget)
+    except ImageError as exc:
+        removal_error = exc
+    remaining = docker.call(
+        "container",
+        "ls",
+        "--all",
+        "--quiet",
+        "--no-trunc",
+        "--filter",
+        f"name=^/{name}$",
+        step="confirm sample cleanup",
+        budget=budget,
+    )
+    if remaining.strip():
+        raise ImageError(
+            f"sample cleanup incomplete; remove owned container {name} before retrying"
         )
-        if remaining.strip():
-            raise ImageError(
-                f"sample cleanup incomplete; remove owned container {name} before retrying"
-            )
+    if removal_error:
+        raise removal_error
 
 
 def run_samples(
@@ -240,12 +264,22 @@ def verify_manifest(response: dict, digest: str, image_id: str) -> tuple[str, in
 
 
 def publish(
-    docker: Docker, descriptor: Descriptor, image: dict, region: str, evidence: dict, checkpoint
+    docker: Docker,
+    descriptor: Descriptor,
+    image: dict,
+    region: str,
+    expected_account: str,
+    evidence: dict,
+    checkpoint,
 ) -> dict:
     """Push one tested immutable image, then independently resolve and verify its digest."""
     account = decode(aws(region, "sts", "get-caller-identity", "--output", "json"))["Account"]
     if not isinstance(account, str) or not re.fullmatch(r"[0-9]{12}", account):
         raise ImageError("AWS returned an invalid account identity")
+    if account != expected_account:
+        raise ImageError(
+            "AWS credentials do not match the requested account; nothing was published"
+        )
     stage = "pre" if descriptor.phase == "pre_submit" else "post"
     repository = f"workstream-checker-{stage}-{descriptor.project}"
     expected_uri = f"{account}.dkr.ecr.{region}.amazonaws.com/{repository}"
@@ -347,14 +381,16 @@ def execute(args, evidence: dict, checkpoint) -> dict:
     descriptor = load_descriptor(context)
     if not (context / "Dockerfile").is_file():
         raise ImageError("build context must contain Dockerfile")
-    docker = Docker()
     runtime = "runsc" if args.isolation == "gvisor" else "runc"
-    available = decode(docker.call("info", "--format", "{{json .Runtimes}}", step="check runtime"))
-    if runtime not in available:
-        raise ImageError(f"required Docker runtime {runtime} is unavailable")
-    evidence.update(isolation=args.isolation, publication="not_requested", samples=[])
+    evidence.update(isolation=args.isolation, samples=[])
     with tempfile.TemporaryDirectory(prefix="workstream-image-test-") as scratch:
         root = Path(scratch)
+        docker = Docker(root / "docker-config")
+        available = decode(
+            docker.call("info", "--format", "{{json .Runtimes}}", step="check runtime")
+        )
+        if runtime not in available:
+            raise ImageError(f"required Docker runtime {runtime} is unavailable")
         if "," in str(root):
             raise ImageError("temporary directory cannot contain a comma")
         samples = []
@@ -387,7 +423,11 @@ def execute(args, evidence: dict, checkpoint) -> dict:
         if not args.publish:
             return {}
         print("Publishing tested image to ECR…", file=sys.stderr)
-        cache = publish(docker, descriptor, image, args.region, evidence, checkpoint)
+        evidence["publication"] = "preflight"
+        checkpoint()
+        cache = publish(
+            docker, descriptor, image, args.region, args.account_id, evidence, checkpoint
+        )
         evidence["published_samples"] = run_samples(
             docker,
             descriptor,
@@ -430,6 +470,9 @@ def main(argv: list[str] | None = None) -> int:
         help="publish after tests pass; default only builds and tests",
     )
     parser.add_argument("--region", default="eu-north-1")
+    parser.add_argument(
+        "--account-id", help="expected 12-digit AWS account; required with --publish"
+    )
     parser.add_argument("--platform", choices=("linux/amd64", "linux/arm64"), default="linux/amd64")
     parser.add_argument("--isolation", choices=("docker-dev", "gvisor"), default="docker-dev")
     parser.add_argument(
@@ -438,8 +481,15 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if not re.fullmatch(r"[a-z]{2}-[a-z]+-[0-9]", args.region):
         parser.error("region must be an AWS region name")
+    if args.publish and (not args.account_id or not re.fullmatch(r"[0-9]{12}", args.account_id)):
+        parser.error("--publish requires --account-id with the intended 12-digit AWS account")
     output = args.out or Path.cwd() / ".checker-images" / uuid4().hex
-    evidence = {"kind": "checker_image_compatibility", "status": "failed"}
+    evidence = {
+        "kind": "checker_image_compatibility",
+        "status": "failed",
+        "publication": "not_started" if args.publish else "not_requested",
+        "expected_account_id": args.account_id,
+    }
     owned_output = False
     try:
         output.mkdir(mode=0o700, parents=True, exist_ok=False)

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from dataclasses import dataclass
 import selectors
 import signal
 import subprocess
@@ -14,6 +15,20 @@ class ImageError(RuntimeError):
     """A publish prerequisite failed; messages never include child output."""
 
 
+@dataclass
+class ExecutionBudget:
+    """One absolute deadline and combined output allowance for a complete sample."""
+
+    deadline: float
+    remaining: int
+
+    def charge(self, count: int) -> None:
+        """Include both control-command and checker output in the same allowance."""
+        self.remaining -= count
+        if self.remaining < 0:
+            raise ImageError("sample aggregate output limit exceeded")
+
+
 def run(
     argv: list[str],
     *,
@@ -22,8 +37,14 @@ def run(
     limit: int = 8 * 1024 * 1024,
     data: bytes = b"",
     env: dict[str, str] | None = None,
+    budget: ExecutionBudget | None = None,
 ) -> bytes:
     """Drain both pipes within one byte/time budget and kill owned processes on failure."""
+    deadline = (
+        min(time.monotonic() + timeout, budget.deadline) if budget else time.monotonic() + timeout
+    )
+    if deadline <= time.monotonic():
+        raise ImageError(f"{step}: deadline exceeded")
     with tempfile.TemporaryFile() as source:
         source.write(data)
         source.seek(0)
@@ -40,7 +61,6 @@ def run(
             raise ImageError(f"{step}: could not start the required command") from exc
         output = bytearray()
         consumed = 0
-        deadline = time.monotonic() + timeout
         try:
             with selectors.DefaultSelector() as selector:
                 selector.register(process.stdout, selectors.EVENT_READ, True)
@@ -55,6 +75,8 @@ def run(
                             selector.unregister(key.fileobj)
                             continue
                         consumed += len(chunk)
+                        if budget is not None:
+                            budget.charge(len(chunk))
                         if consumed > limit:
                             raise ImageError(f"{step}: output limit exceeded")
                         if key.data:

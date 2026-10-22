@@ -68,12 +68,20 @@ never registers or changes policy. Dry run performs no AWS calls.
 
 | Claim | Command or proof | Result | Remaining uncertainty |
 |---|---|---|---|
-| Publishing and failure boundaries | `pytest -q tests/test_checker_image.py`; actual Docker sample run | 17 focused tests passed; real positive/negative Docker samples passed with read-only checks and container cleanup | Live ECR is not attested: configured AWS identity returned InvalidClientTokenId; gVisor is not installed on this host |
+| Publishing and failure boundaries | `pytest -q tests/test_checker_image.py`; actual Docker sample run | 111 script, lane-catalogue and checker-contract tests passed; real positive/negative Docker samples passed; a 2,048-byte aggregate output budget correctly rejected the image | Live ECR verification is pending; gVisor is not installed on this host |
 | Architecture and documentation | Public CHECKERS contracts; existing Markdown and lint checks | Public request/result validation reused; focused lint and Markdown checks passed | Independent candidate review and full hosted CI are required before merge |
 
 ## Review findings
 
 The design review selected a small Python engineering command that reuses public CHECKERS models. It required expected negative finding codes, explicit image-compatibility proof limits, and a second sample run using the final registry digest. Those requirements are implemented; the shared Rust runtime remains unchanged.
+
+Candidate review also required an explicit expected AWS account, isolated Docker
+client configuration, one sample-wide output/deadline budget, rejection of image
+health checks, accurate preflight receipt state, and corrected CI membership and
+runbook wording. These repairs are covered by discriminating regressions; a real
+Docker low-budget counterexample now fails before checker execution. Builds use
+locally cached or publicly pullable bases; private-base authentication is outside
+this bounded command.
 
 ## Reconciliation
 

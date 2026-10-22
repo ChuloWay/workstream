@@ -14,7 +14,7 @@ From a Workstream checkout, build and test it:
 To also publish the tested image:
 
 ```bash
-./scripts/checker-image /path/to/project/checkers/pre --publish
+./scripts/checker-image /path/to/project/checkers/pre --publish --account-id 123456789012
 ```
 
 The default AWS region is `eu-north-1`. The project name and phase in
@@ -25,13 +25,13 @@ The default AWS region is `eu-north-1`. The project name and phase in
 
 Each release uses a unique tag. Workstream registration and policies use the
 verified platform-manifest **digest**, never that tag. Releasing another version
-does not require another repository or a Workstream deployment.
+does not require another repository or a Workstream source change or rebuild.
 
 ## Prerequisites
 
 Install `uv` and Docker using the [developer setup](developer-setup.md).
 The command uses the locked backend environment solely for the existing public
-checker validation contracts; it starts no API, database or worker. The project
+checker validation contracts; it starts no API, database or Celery process. The project
 image itself does not depend on the Workstream backend or Rust SDK.
 
 Docker must use a local Unix socket so the sample bind mounts resolve on the
@@ -41,7 +41,8 @@ download base images and dependencies; sample execution has no network.
 
 Publishing additionally requires the AWS CLI, an authenticated AWS profile or
 role, and the selected private ECR repository. `AWS_PROFILE` selects the AWS
-identity in the usual way. Set up the repository once, for example:
+identity in the usual way. `--account-id` must match the intended account; the
+command refuses mismatched credentials before login or push. Set up the repository once, for example:
 
 ```bash
 aws ecr create-repository --region eu-north-1 \
@@ -53,6 +54,9 @@ The publisher needs repository inspection, authorization-token, image upload,
 manifest read and image pull permissions. It does not create repositories,
 change IAM or install credentials into the image. ECR authentication uses a
 private temporary Docker configuration that is removed when the command ends.
+Builds and samples also use an empty Docker client configuration, so host proxy
+credentials and registry logins are not inherited. Base images must be locally
+cached or publicly pullable; private-base authentication is outside this command.
 See AWS's [private image push instructions](https://docs.aws.amazon.com/AmazonECR/latest/userguide/docker-push-ecr-image.html)
 for the required account setup.
 
@@ -108,7 +112,7 @@ are refused. The development harness bounds each sample to 128 MiB and 10,000
 entries; these are test-harness ceilings, not project submission policy. Exclude
 samples, local outputs and credentials from the built image with the project's
 `.dockerignore`; only the implementation and its runtime dependencies belong in
-the image. Images must not declare `VOLUME` mounts.
+the image. Images must not declare `VOLUME` mounts or an active `HEALTHCHECK`.
 
 The image reads one normalized request from stdin and writes one normalized JSON
 result to stdout. Protocol identities are synthetic for these tests; no registry,
@@ -123,7 +127,9 @@ the existing public CHECKERS contracts.
 The command builds once and tests the immutable local image ID. Each test runs
 as non-root, without network, with a read-only root and input mount, no Linux
 capabilities, no privilege escalation, finite CPU/memory/PID limits, a bounded
-temporary filesystem and bounded output/time. Container cleanup must be
+temporary filesystem and one aggregate output/time budget covering image inspection,
+creation, execution, state inspection and cleanup. Emergency cleanup after budget
+exhaustion cannot qualify a sample as passed. Container cleanup must be
 confirmed before proceeding. Image compatibility testing does not execute the
 Rust service's ART grant checks or the live Workstream journey.
 

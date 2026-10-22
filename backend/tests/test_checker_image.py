@@ -16,7 +16,7 @@ from app.modules.checkers.api.external import (
     make_external_checker_execution_result,
 )
 from scripts import checker_image as cli
-from scripts.checker_image_process import ImageError, run
+from scripts.checker_image_process import ExecutionBudget, ImageError, run
 from scripts.checker_image_samples import load_descriptor, snapshot_sample
 
 IMAGE = "sha256:" + "a" * 64
@@ -84,7 +84,10 @@ class FakeDocker:
         self.digest = "sha256:" + hashlib.sha256(self.manifest.encode()).hexdigest()
         self.reference = URI + "@" + self.digest
 
-    def inspect(self, image):
+    def inspect(self, image, **kwargs):
+        return json.loads(self.call("image", "inspect", image, step="inspect image", **kwargs))
+
+    def image(self):
         return {
             "Id": IMAGE,
             "Os": "linux",
@@ -95,6 +98,17 @@ class FakeDocker:
 
     def call(self, *args, step, **kwargs):
         self.calls.append((args, kwargs))
+        budget = kwargs.get("budget")
+        if budget and time.monotonic() >= budget.deadline:
+            raise ImageError("sample deadline exceeded")
+        output = self.response(*args, step=step, **kwargs)
+        if budget:
+            budget.charge(len(output))
+        return output
+
+    def response(self, *args, step, **kwargs):
+        if args[:2] == ("image", "inspect"):
+            return json.dumps(self.image()).encode()
         if args[0] == "info":
             return b'{"runc":{}}'
         if args[0] == "build":
@@ -105,6 +119,7 @@ class FakeDocker:
             assert mount.endswith(",dst=/work/input,readonly")
             directory = Path(mount.split("src=")[1].split(",dst=")[0])
             assert (directory / "answer.txt").stat().st_mode & 0o222 == 0
+            return b"c" * 64 + b"\n"
         if args[0] == "start":
             if self.failure == "timeout":
                 raise ImageError("execute sample: deadline exceeded")
@@ -155,7 +170,7 @@ class FakeDocker:
 @pytest.fixture
 def transport(monkeypatch):
     docker = FakeDocker()
-    monkeypatch.setattr(cli, "Docker", lambda: docker)
+    monkeypatch.setattr(cli, "Docker", lambda config: docker)
     calls = []
 
     def aws(region, *args):
@@ -206,7 +221,10 @@ def test_publish_verifies_exact_image_and_rechecks_digest_before_outputs(
     project, transport, tmp_path, capsys
 ):
     output = tmp_path / "release"
-    assert cli.main([str(project), "--publish", "--out", str(output)]) == 0
+    assert (
+        cli.main([str(project), "--publish", "--account-id", "123456789012", "--out", str(output)])
+        == 0
+    )
     docker, _ = transport
     calls = [c for c, _ in docker.calls]
     assert len([c for c in calls if c[0] == "build"]) == 1
@@ -231,7 +249,10 @@ def test_failed_sample_or_cleanup_prevents_all_aws_calls(project, transport, tmp
     docker, aws_calls = transport
     docker.failure = failure
     output = tmp_path / "release"
-    assert cli.main([str(project), "--publish", "--out", str(output)]) == 1
+    assert (
+        cli.main([str(project), "--publish", "--account-id", "123456789012", "--out", str(output)])
+        == 1
+    )
     assert not aws_calls
     assert any(c[0:2] == ("rm", "--force") for c, _ in docker.calls)
     assert not (output / "registry.json").exists()
@@ -244,7 +265,10 @@ def test_uncertain_or_unqualified_publication_retains_identity_without_registry_
     docker, _ = transport
     docker.failure = failure
     output = tmp_path / "release"
-    assert cli.main([str(project), "--publish", "--out", str(output)]) == 1
+    assert (
+        cli.main([str(project), "--publish", "--account-id", "123456789012", "--out", str(output)])
+        == 1
+    )
     receipt = json.loads((output / "receipt.json").read_text())
     assert receipt["status"] == "failed"
     assert receipt["publication"] in {"uncertain", "published_unverified"}
@@ -334,3 +358,88 @@ def test_child_deadline_and_combined_output_are_bounded(program, limit, timeout)
     with pytest.raises(ImageError):
         run([sys.executable, "-c", program], step="bounded probe", limit=limit, timeout=timeout)
     assert time.monotonic() - start < 10
+
+
+@pytest.mark.parametrize("failure", ["identity", "preflight"])
+def test_account_mismatch_and_aws_preflight_failure_never_login_or_push(
+    project, transport, tmp_path, monkeypatch, failure
+):
+    """Wrong credentials cannot select a destination or conceal an attempted publication."""
+
+    def aws(region, *args):
+        if failure == "preflight":
+            raise ImageError("AWS sts: command exited 1")
+        return b'{"Account":"999999999999"}'
+
+    monkeypatch.setattr(cli, "aws", aws)
+    output = tmp_path / "release"
+    assert (
+        cli.main([str(project), "--publish", "--account-id", "123456789012", "--out", str(output)])
+        == 1
+    )
+    assert not any("login" in c or "push" in c or c[0] == "tag" for c, _ in transport[0].calls)
+    receipt = json.loads((output / "receipt.json").read_text())
+    assert receipt["publication"] == "preflight"
+    assert receipt["expected_account_id"] == "123456789012"
+    assert not (output / "registry.json").exists()
+
+
+def test_image_inspection_and_cleanup_share_the_sample_output_budget(project, transport, tmp_path):
+    """Control output alone can exhaust a valid registry limit before execution."""
+    path = project / "checker.json"
+    value = json.loads(path.read_text())
+    value["resources"]["maximum_output_bytes"] = 256
+    path.write_text(json.dumps(value))
+    output = tmp_path / "release"
+    assert (
+        cli.main([str(project), "--publish", "--account-id", "123456789012", "--out", str(output)])
+        == 1
+    )
+    docker, aws_calls = transport
+    assert not aws_calls
+    assert not any(c[0] == "start" for c, _ in docker.calls)
+    assert "aggregate output" in json.loads((output / "receipt.json").read_text())["error"]
+
+
+def test_combined_stderr_is_charged_across_processes():
+    """Individually small commands cannot each reuse the full request allowance."""
+    budget = ExecutionBudget(time.monotonic() + 5, 150)
+    command = [sys.executable, "-c", "import os; os.write(2,b'x'*100)"]
+    run(command, step="inspect", budget=budget)
+    with pytest.raises(ImageError, match="aggregate output"):
+        run(command, step="create", budget=budget)
+
+
+def test_active_healthcheck_is_rejected_without_disabling_it(monkeypatch, tmp_path):
+    """Qualification cannot silently remove image behavior present in production."""
+    monkeypatch.setenv("DOCKER_HOST", "unix:///var/run/docker.sock")
+    docker = cli.Docker(tmp_path / "config")
+    image = FakeDocker().image()
+    image["Config"] = {"Healthcheck": {"Test": ["CMD", "false"]}}
+    monkeypatch.setattr(docker, "call", lambda *a, **kw: json.dumps(image).encode())
+    with pytest.raises(ImageError, match="HEALTHCHECK"):
+        docker.inspect(IMAGE)
+
+
+def test_build_and_samples_do_not_inherit_docker_proxy_configuration(monkeypatch, tmp_path):
+    """A user's Docker config and proxy environment never enter build or sample calls."""
+    host_config = tmp_path / "host-config"
+    host_config.mkdir()
+    marker = "https://user:private-marker@proxy.example"
+    (host_config / "config.json").write_text(
+        json.dumps({"proxies": {"default": {"httpsProxy": marker}}})
+    )
+    monkeypatch.setenv("DOCKER_HOST", "unix:///var/run/docker.sock")
+    monkeypatch.setenv("DOCKER_CONFIG", str(host_config))
+    monkeypatch.setenv("HTTPS_PROXY", marker)
+    calls = []
+    monkeypatch.setattr(cli, "run", lambda argv, **kw: calls.append((argv, kw)) or b"")
+    config = tmp_path / "private-config"
+    docker = cli.Docker(config)
+    docker.call("build", ".", step="build")
+    docker.call("create", IMAGE, step="sample")
+    assert json.loads((config / "config.json").read_text()) == {}
+    for argv, options in calls:
+        assert argv[argv.index("--config") + 1] == str(config)
+        assert marker not in str(options["env"])
+        assert "DOCKER_CONFIG" not in options["env"]
