@@ -22,6 +22,7 @@ The human explicitly approved this backend prerequisite to client-only issue #61
 - Focused `backend/tests/authorization/` and `backend/tests/test_artifact_operator_api.py`, `test_artifact_authorization.py`, `test_artifact_recovery.py` tests using real PostgreSQL and non-overridden production AUTH; update current expected catalogue availability only with matching proof. Include exact module-boundary/negative-structure checks.
 - `.ci/auth-boundaries/IMPORT_LEDGER.md` only to remove the superseded `artifacts.schemas` → private AUTH runtime import; frozen edge growth remains prohibited.
 - `.ci/auth-boundaries/TEST_STRUCTURE_DEBT.json` only to record the actual reduction of pre-existing oversized AUTH kernel and ART route-test entries; no new structural debt, policy change or exception is allowed.
+- `backend/scripts/test_lane_catalogue.py` and `backend/tests/test_ci_lane_catalogue.py` only to assign the new signed PostgreSQL module to the existing shared-foundations CI family and refresh its exact inventory fingerprint; do not alter the lane runner, workflow, timeout or gate.
 - `docs/spec_authorization_service.md`, `docs/engineering/authorization_activation_custody.md`, `docs/operations_authorization_service.md`, `docs/operations_artifact_storage.md`, `docs/roadmap_status.md`, the current WS-AUTH overview/record, and the #611 dependency lines of the current WS-CLI overview only for affected intended-merge claims.
 
 ### Not allowed
@@ -68,7 +69,7 @@ Rejected alternatives: composing `operations.status.read` for admission/readines
 ## Risk and review routing
 
 - Risk class: L1 (authorization, tenant isolation, retry/audit atomicity).
-- Required reviewers: pre-implementation security, QA and architecture plan review; exact-head implementation security, QA/test delta, architecture/reuse and documentation review. CI integrity only if CI/test workflow changes.
+- Required reviewers: pre-implementation security, QA and architecture plan review; exact-head implementation security, QA/test delta, architecture/reuse, documentation and CI-integrity review because the test-lane inventory changes.
 - Human review focus: exact system-Operator scope, multi-project resource lineage, independent retry activation and transaction-time revocation/rollback; client-only #611 remains separate.
 
 ## Evidence
