@@ -238,6 +238,11 @@ func validManualPolicyResponse(fields inspectionObject, version string, summary 
 		(!create && summary != nil && !sameOptionalString(actualSummary, summary)) {
 		return false
 	}
+	for _, ref := range sourceRefs {
+		if pythonStrip(ref) == "" {
+			return false
+		}
+	}
 	if create {
 		return string(fields["supersedes_policy_id"]) == "null"
 	}

@@ -215,6 +215,7 @@ def test_malformed_or_mismatched_success_is_uncertain_without_retry(
         valid | {"approved_by_actor": ACTOR},
         valid | {"superseded_at": WHEN},
         valid | {"source_material_refs": []},
+        valid | {"source_material_refs": [""]},
         valid | {"policy_hash": "bad"},
         valid | {"change_summary": TOKEN},
     ]
