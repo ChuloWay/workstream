@@ -554,8 +554,9 @@ route mapping is in `docs/spec_authorization_service.md`. WS-XINT-002-04A
 activates Project Manager guide-source ingest, and WS-XINT-002-04B activates
 only the fixed-service guide binding and read actions. WS-ARCH-001-02G activates
 contributor bundle preparation; 02H activates hidden human Submission creation
-and fixed-service submission binding. The other 14 ART actions remain planned,
-including every Operator artifact action.
+and fixed-service submission binding. AUTH-ART-02D-OPERATOR activates the eight
+reserved system-Operator artifact actions through exact persisted authority;
+remaining planned ART actions retain their separate activation boundaries.
 The v0.1 schema keeps each allowed or denied internal ART decision bound to
 the exact privacy-bounded resource-context digest in append-only audit facts.
 

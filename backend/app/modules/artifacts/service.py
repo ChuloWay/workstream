@@ -123,7 +123,7 @@ from app.modules.authorization.runtime import (
     HumanAuthorizationContext,
 )
 from app.modules.authorization.prepared import PreparedAuthorizationHandle
-from app.modules.authorization.catalogue import ActionId, PermissionId
+from app.modules.authorization.catalogue import ACTION_BY_ID, ActionId
 from app.modules.audit.repository import AuditRepository
 from app.modules.tasks.models import AuditEvent
 
@@ -993,6 +993,10 @@ class ArtifactStorageOrchestrator:
                     normalized_display_name=None,
                 )
             )
+            locked_content = await self._repo.lock_content(content.id)
+            if locked_content is None:
+                raise ArtifactIngestStateError("artifact content is unavailable")
+            content = locked_content
             await self._require_terminal_activation(activation_id)
             replica = await self._repo.get_or_create_replica(
                 ArtifactReplica(
@@ -2063,7 +2067,8 @@ class ArtifactRecoveryService:
         )
         if (
             authorization.action_id != ActionId.ARTIFACT_VERIFICATION_JOB_RETRY.value
-            or authorization.permission_id != PermissionId.ARTIFACT_VERIFICATION_JOB_RETRY.value
+            or authorization.permission_id
+            != ACTION_BY_ID[ActionId.ARTIFACT_VERIFICATION_JOB_RETRY].permission_id.value
         ):
             raise ArtifactAuthorityDeniedError(
                 "artifact recovery authorization evidence is invalid"

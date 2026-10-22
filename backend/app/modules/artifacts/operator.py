@@ -23,6 +23,7 @@ from app.modules.artifacts.models import (
     ArtifactAdmissionCharge,
     ArtifactAdmissionScope,
     ArtifactBinding,
+    ArtifactContent,
     ArtifactOperationReceipt,
     ArtifactPutAttempt,
     ArtifactPutAttemptCharge,
@@ -42,7 +43,7 @@ from app.modules.projects.models import (
     Project,
     ProjectGuide,
 )
-from app.modules.authorization.catalogue import ActionId, PermissionId
+from app.modules.authorization.catalogue import ACTION_BY_ID, ActionId
 from app.modules.authorization.runtime import AuthorizationContext
 from app.modules.tasks.models import AuditEvent, Submission, WorkstreamTask
 
@@ -63,17 +64,6 @@ class ArtifactOperatorEvidenceError(RuntimeError):
 
 class ArtifactOperatorInputError(ValueError):
     """Bounded invalid pagination or filter input."""
-
-
-_PERMISSIONS = {
-    ActionId.ARTIFACT_BINDING_READ: PermissionId.ARTIFACT_BINDING_READ,
-    ActionId.ARTIFACT_REPLICA_READ: PermissionId.ARTIFACT_REPLICA_READ,
-    ActionId.ARTIFACT_RECEIPT_READ: PermissionId.ARTIFACT_RECEIPT_READ,
-    ActionId.ARTIFACT_VERIFICATION_JOB_READ: PermissionId.ARTIFACT_VERIFICATION_JOB_READ,
-    ActionId.ARTIFACT_RECOVERY_ATTEMPT_READ: PermissionId.ARTIFACT_RECOVERY_ATTEMPT_READ,
-    ActionId.ARTIFACT_AUDIT_READ: PermissionId.ARTIFACT_AUDIT_READ,
-    ActionId.OPERATIONS_ARTIFACT_STORAGE_ADMISSION_READ: PermissionId.OPERATIONS_STATUS_READ,
-}
 
 
 class ArtifactOperatorService:
@@ -610,7 +600,7 @@ class ArtifactOperatorService:
             authorization_context=context,
             facts=ArtifactOperatorAuthorityFacts(resource_type, resource_id, projects, action.value, record_id),
         )
-        expected = _PERMISSIONS[action].value
+        expected = ACTION_BY_ID[action].permission_id.value
         if evidence.action_id != action.value or evidence.permission_id != expected:
             raise ArtifactOperatorEvidenceError(
                 "artifact Operator authorization evidence is invalid"
@@ -618,11 +608,18 @@ class ArtifactOperatorService:
         return evidence
 
     async def _content_projects(self, content_id: str) -> tuple[UUID, ...]:
+        # Binding and put-completion writers take this same row before publication.
+        content = await self._session.scalar(
+            select(ArtifactContent.id)
+            .where(ArtifactContent.id == content_id)
+            .with_for_update()
+        )
+        if content is None:
+            return ()
         binding_values = (
             await self._session.scalars(
                 select(ArtifactBinding.project_id)
                 .where(ArtifactBinding.content_id == content_id)
-                .with_for_update()
             )
         ).all()
         attempt_values = (
@@ -630,7 +627,6 @@ class ArtifactOperatorService:
                 select(ArtifactPutAttempt.project_id)
                 .join(ArtifactReplica, ArtifactReplica.id == ArtifactPutAttempt.replica_id)
                 .where(ArtifactReplica.content_id == content_id)
-                .with_for_update(of=(ArtifactPutAttempt, ArtifactReplica))
             )
         ).all()
         return self._project_ids((*binding_values, *attempt_values))
@@ -643,12 +639,11 @@ class ArtifactOperatorService:
         if content_id is None:
             return ()
         projects = await self._content_projects(content_id)
-        locked_content_id = await self._session.scalar(
+        current_content_id = await self._session.scalar(
             select(ArtifactReplica.content_id)
             .where(ArtifactReplica.id == replica_id)
-            .with_for_update()
         )
-        return projects if locked_content_id == content_id else ()
+        return projects if current_content_id == content_id else ()
 
     async def _binding_resource_project(self, resource_type: str, resource_id: str) -> str | None:
         if resource_type == "project":

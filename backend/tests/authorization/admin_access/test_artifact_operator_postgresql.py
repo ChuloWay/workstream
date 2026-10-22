@@ -6,7 +6,7 @@ from uuid import UUID, uuid4
 
 import pytest
 from sqlalchemy.exc import DBAPIError, SQLAlchemyError
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 
 from app.core.identifiers import new_record_id
 from app.db import session as db_session
@@ -21,6 +21,7 @@ from app.modules.artifacts.models import (
     ArtifactVerificationJob,
 )
 from app.modules.artifacts import router as artifact_router
+from app.modules.artifacts.operator import ArtifactOperatorService
 from app.modules.artifacts.repository import ArtifactRepository
 from app.modules.authorization.artifact_operator_authorization import (
     ArtifactOperatorReadAuthorization,
@@ -35,6 +36,7 @@ from scripts.bootstrap_access_administrator import _run as run_bootstrap
 from tests.authorization.admin_access.support import SignedAccess, SignedActor, create_project, grant_body
 from tests.authorization.admin_access.concurrency_support import ordered_owner_calls
 from tests.authorization.contribution_policies.audit_schema_support import clone_decision
+from tests.auth_concurrency_support import wait_for_named_database_lock
 from tests.authentication.support import issue_asymmetric_token
 from tests.test_artifact_recovery import _context, _exhausted_job, _settings
 
@@ -583,6 +585,129 @@ async def test_signed_replica_read_digests_all_stored_project_lineage(
             ))
             assert events[-1].after_facts["resource_context_digest"] != incomplete
     finally:
+        bootstrap.close()
+
+
+@pytest.mark.parametrize("writer_kind", ("binding", "put_completion"))
+async def test_signed_content_lineage_serializes_new_project_association(
+    signed_access: SignedAccess,
+    auth_database_env: str,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    writer_kind: str,
+) -> None:
+    admin = await signed_access.actor(f"artifact-lineage-race-admin-{writer_kind}")
+    operator = await signed_access.actor(f"artifact-lineage-race-operator-{writer_kind}")
+    code, bootstrap_result = await run_bootstrap(admin.id, execute=True)
+    assert code == 0, bootstrap_result
+    await signed_access.grant(admin, operator)
+    settings = _settings(tmp_path)
+    async with db_session.get_session_factory()() as session:
+        first_project, task_id, _, source, _, bootstrap = await _exhausted_job(
+            session, settings, tmp_path, _context()
+        )
+        attempt = await session.get(ArtifactPutAttempt, source.originating_put_attempt_id)
+        assert attempt is not None
+        replica = await session.get(ArtifactReplica, attempt.replica_id)
+        assert replica is not None
+        content_id, replica_id = replica.content_id, replica.id
+        await session.rollback()
+    identity = f"art-lineage-{writer_kind[:3]}-{uuid4().hex}"
+    collected, writer_ready, release = asyncio.Event(), asyncio.Event(), asyncio.Event()
+    reader_pid = writer_pid = None
+    original_projects = ArtifactOperatorService._content_projects
+    original_lock = ArtifactRepository.lock_content
+    path = f"/api/v1/operator/artifacts/contents/{content_id}/replicas"
+    async def paused_projects(service, candidate):
+        nonlocal reader_pid
+        projects = await original_projects(service, candidate)
+        if candidate == content_id and not collected.is_set():
+            reader_pid = await service._session.scalar(text("select pg_backend_pid()"))
+            collected.set()
+            await release.wait()
+        return projects
+    async def captured_lock(repository, candidate):
+        nonlocal writer_pid
+        if candidate == content_id and asyncio.current_task().get_name() == identity + "-writer":
+            await repository._session.execute(
+                text("select set_config('application_name', :name, true)"), {"name": identity}
+            )
+            writer_pid = await repository._session.scalar(text("select pg_backend_pid()"))
+            writer_ready.set()
+        return await original_lock(repository, candidate)
+    async def writer():
+        nonlocal writer_pid
+        await collected.wait()
+        if writer_kind == "put_completion":
+            async with db_session.get_session_factory()() as session:
+                project, _, _, later_source, _, later_bootstrap = await _exhausted_job(
+                    session, settings, tmp_path, _context()
+                )
+                try:
+                    later_attempt = await session.get(
+                        ArtifactPutAttempt, later_source.originating_put_attempt_id
+                    )
+                    assert later_attempt is not None and later_attempt.replica_id == replica_id
+                finally:
+                    later_bootstrap.close()
+            return project
+        project = str(await create_project("artifact-binding-race-project"))
+        async with db_session.get_session_factory()() as session:
+            await session.execute(
+                text("select set_config('application_name', :name, true)"), {"name": identity}
+            )
+            writer_pid = await session.scalar(text("select pg_backend_pid()"))
+            writer_ready.set()
+            assert await ArtifactRepository(session).lock_content(content_id) is not None
+            session.add(ArtifactBinding(
+                id=str(new_record_id()), content_id=content_id, project_id=project,
+                resource_type="task", resource_id=task_id, logical_role="lineage-race",
+                scope_version=1, actor_id=str(operator.id), attribution_type="human",
+            ))
+            await session.commit()
+        return project
+
+    async def observe_waiter():
+        await writer_ready.wait()
+        assert reader_pid is not None and writer_pid is not None and reader_pid != writer_pid
+        await wait_for_named_database_lock(
+            auth_database_env, identity,
+            expected_waiter_pid=writer_pid, expected_blocker_pid=reader_pid,
+        )
+        release.set()
+
+    try:
+        with monkeypatch.context() as patch:
+            patch.setattr(ArtifactOperatorService, "_content_projects", paused_projects)
+            patch.setattr(ArtifactRepository, "lock_content", captured_lock)
+            first, second_project, _ = await asyncio.wait_for(asyncio.gather(
+                asyncio.create_task(signed_access.client.get(path, headers=operator.headers), name=identity + "-reader"),
+                asyncio.create_task(writer(), name=identity + "-writer"),
+                asyncio.create_task(observe_waiter(), name=identity + "-observer"),
+            ), timeout=120)
+        assert first.status_code == 200, first.text
+        assert first.json()["items"][0]["id"] == replica_id
+        first_events = await _events("artifact.replica.read", operator.id)
+        assert len(first_events) == 1
+        link_id = await _operator_link_id(operator)
+        first_digest = authorization_resource_digest(ArtifactOperatorReadResourceContext(
+            resource_type="artifact_content", resource_id=UUID(content_id), selector=content_id,
+            project_ids=(UUID(first_project),), action_id=ActionId.ARTIFACT_REPLICA_READ,
+            identity_link_id=link_id,
+        ))
+        assert first_events[0].after_facts["resource_context_digest"] == first_digest
+        second = await signed_access.client.get(path, headers=operator.headers)
+        assert second.status_code == 200, second.text
+        events = await _events("artifact.replica.read", operator.id)
+        assert len(events) == 2
+        full_digest = authorization_resource_digest(ArtifactOperatorReadResourceContext(
+            resource_type="artifact_content", resource_id=UUID(content_id), selector=content_id,
+            project_ids=tuple(sorted((UUID(first_project), UUID(second_project)))),
+            action_id=ActionId.ARTIFACT_REPLICA_READ, identity_link_id=link_id,
+        ))
+        assert events[-1].after_facts["resource_context_digest"] == full_digest
+    finally:
+        release.set()
         bootstrap.close()
 
 
