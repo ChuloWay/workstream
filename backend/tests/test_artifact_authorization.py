@@ -30,6 +30,7 @@ from app.modules.authorization.catalogue import (
     ActionOwner,
     PermissionId,
 )
+from app.modules.authorization.domain.artifact_operator import ArtifactOperatorReadResourceContext
 from app.modules.authorization.runtime import (
     ActorKind,
     ActorStatus,
@@ -100,6 +101,16 @@ async def test_real_kernel_rejects_wrong_resource_for_operator_artifact_actions(
             SystemResourceContext(resource_type="system", resource_id="workstream:system"),
         )
     assert caught.value.decision.denial_code is AuthorizationDenialCode.RESOURCE_GUARD_DENIED
+
+
+def test_artifact_operator_read_context_rejects_cross_wired_valid_art_action() -> None:
+    project_id, content_id, link_id = new_record_id(), new_record_id(), new_record_id()
+    with pytest.raises(ValidationError, match="artifact Operator action/resource mismatch"):
+        ArtifactOperatorReadResourceContext(
+            resource_type="artifact_content", resource_id=content_id,
+            selector=str(content_id), project_ids=(project_id,),
+            action_id=ActionId.ARTIFACT_BINDING_READ, identity_link_id=link_id,
+        )
 
 
 @pytest.mark.parametrize("action", INTERNAL_ACTIONS)

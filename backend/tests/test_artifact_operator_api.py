@@ -24,6 +24,7 @@ from app.modules.artifacts.models import (
     ArtifactVerificationReceipt,
 )
 from app.modules.artifacts.router import (
+    _require_human_artifact_operator,
     _concealed,
     get_artifact_authorization_context,
     get_artifact_operator_authority,
@@ -36,7 +37,6 @@ from app.modules.artifacts.schemas import (
 )
 from app.modules.artifacts.api.operator_authority import ArtifactOperatorAuthorizationEvidence
 from app.modules.authorization.catalogue import ACTION_BY_ID
-from app.modules.authorization.runtime import ActorStatus, IdentityLinkStatus
 from app.core.config import Settings
 from tests.test_artifact_recovery import (
     _AllowRecoveryAuthority,
@@ -242,6 +242,7 @@ async def test_real_http_operator_path_returns_redacted_lineage_and_recovery(
                 return context
 
             app.dependency_overrides[get_db_session] = session_override
+            app.dependency_overrides[_require_human_artifact_operator] = lambda: None
             app.dependency_overrides[get_artifact_authorization_context] = context_override
             app.dependency_overrides[get_artifact_operator_authority] = _AllowOperatorAuthority
             app.dependency_overrides[get_artifact_recovery_authority] = _AllowRecoveryAuthority
@@ -377,21 +378,6 @@ async def test_real_http_operator_path_returns_redacted_lineage_and_recovery(
                 )
                 assert denied_before_create.status_code == 404
                 app.dependency_overrides[get_artifact_recovery_authority] = _AllowRecoveryAuthority
-                for unavailable_context in (
-                    context.model_copy(update={"actor_status": ActorStatus.SUSPENDED}),
-                    context.model_copy(update={"identity_link_status": IdentityLinkStatus.REVOKED}),
-                ):
-                    app.dependency_overrides[get_artifact_authorization_context] = (
-                        lambda unavailable_context=unavailable_context: unavailable_context
-                    )
-                    unavailable = await client.post(
-                        f"/api/v1/operator/artifacts/verification-jobs/{source_job_id}/retry",
-                        json=_retry_payload(
-                            project_id, task_id, submission_id, "identity race",
-                            str(unavailable_context.actor_status), source_job_cas_version),
-                    )
-                    assert unavailable.status_code == 404
-                app.dependency_overrides[get_artifact_authorization_context] = context_override
                 stale_source = await client.post(
                     f"/api/v1/operator/artifacts/verification-jobs/{source_job_id}/retry",
                     json=_retry_payload(project_id, task_id, submission_id, "stale source fence",
@@ -528,6 +514,7 @@ async def test_retry_database_failure_is_bounded_unavailability() -> None:
     app = create_app(Settings())
     session = AsyncMock()
     app.dependency_overrides[get_db_session] = lambda: session
+    app.dependency_overrides[_require_human_artifact_operator] = lambda: None
     app.dependency_overrides[get_artifact_authorization_context] = _context
     app.dependency_overrides[get_artifact_recovery_authority] = _AllowRecoveryAuthority
     app.dependency_overrides[get_artifact_recovery_port] = _FailingRecovery

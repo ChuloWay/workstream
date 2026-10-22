@@ -12,6 +12,7 @@ from pydantic import ValidationError
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.deps.auth import get_auth_verification_result
 from app.db.session import get_db_session
 from app.interfaces.artifact_operations import (
     ArtifactAuditResourceType,
@@ -46,10 +47,24 @@ from app.modules.artifacts.schemas import (
 )
 from app.modules.artifacts.service import ArtifactRecoveryService
 from app.modules.authorization.runtime import AuthorizationContext, HumanAuthorizationContext
+from app.schemas.auth import AuthVerificationResult
 
 __all__ = ("router",)
 
-router = APIRouter(prefix="/operator/artifacts", tags=["operator-artifacts"])
+
+async def _require_human_artifact_operator(
+    result: Annotated[AuthVerificationResult, Depends(get_auth_verification_result)],
+) -> None:
+    """Conceal nonhuman subjects before actor resolution can disclose registry state."""
+    if result.token.subject_kind != "human":
+        raise HTTPException(status_code=404, detail="Artifact resource not found")
+
+
+router = APIRouter(
+    prefix="/operator/artifacts",
+    tags=["operator-artifacts"],
+    dependencies=[Depends(_require_human_artifact_operator)],
+)
 
 
 class StrictOperatorResponse(BaseModel):

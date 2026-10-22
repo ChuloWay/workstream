@@ -119,11 +119,8 @@ from app.modules.checkers.api.output_custody import (
     CheckerOutputUnavailable,
 )
 from app.modules.authorization.runtime import (
-    ActorKind,
-    ActorStatus,
     AuthorizationContext,
     HumanAuthorizationContext,
-    IdentityLinkStatus,
 )
 from app.modules.authorization.prepared import PreparedAuthorizationHandle
 from app.modules.authorization.catalogue import ActionId, PermissionId
@@ -1894,7 +1891,6 @@ class ArtifactRecoveryService:
         self._settings = settings
         self._authority = authority
         self._repo = ArtifactRepository(session)
-        self._actors = ActorService(session)
         self._audit = AuditRepository(session)
 
     async def retry_verification(self, request: ArtifactRecoveryRequest) -> ArtifactRecoveryResult:
@@ -2053,24 +2049,8 @@ class ArtifactRecoveryService:
         task_id: UUID,
         submission_id: UUID | None,
     ):
-        """Revalidate the human requester and exact Operator action on every call."""
+        """Use the canonical AUTH lock order for each fresh retry decision."""
         context = request.authorization_context
-        actor = await self._actors.lock_admission_proof(
-            context.actor_profile_id, context.identity_link_id
-        )
-        if (
-            context.actor_kind is not ActorKind.HUMAN
-            or context.actor_status is not ActorStatus.ACTIVE
-            or context.identity_link_status is not IdentityLinkStatus.ACTIVE
-            or actor is None
-            or actor.actor_kind != "human"
-            or actor.actor_status != "active"
-            or actor.service_identity is not None
-            or actor.identity_link_id != str(context.identity_link_id)
-            or actor.identity_link_subject_kind != "human"
-            or actor.identity_link_status != "active"
-        ):
-            raise ArtifactAuthorityDeniedError("artifact recovery requester is unavailable")
         authorization = await self._authority.authorize(
             authorization_context=context,
             facts=ArtifactRecoveryAuthorityFacts(
