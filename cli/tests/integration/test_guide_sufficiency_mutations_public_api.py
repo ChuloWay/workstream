@@ -420,10 +420,13 @@ async def test_manual_policy_cli_after_owner_finalization_and_fresh_authority(
                 assert manual["source_snapshot_id"] == snapshot
                 assert output(create()) == manual
                 assert output(create(key=str(uuid4())), 1)["error"]["status"] == 409
-                assert output(create(selected_guide=str(uuid4())), 1)["error"]["code"] == "idempotency_mismatch"
-                assert output(create(selected_guide=str(uuid4()), key=str(uuid4())), 1)["error"][
-                    "status"
-                ] in (403, 404)
+                assert (
+                    output(create(selected_guide=str(uuid4())), 1)["error"]["code"]
+                    == "idempotency_mismatch"
+                )
+                assert output(create(selected_guide=str(uuid4()), key=str(uuid4())), 1)[
+                    "error"
+                ]["status"] in (403, 404)
                 create_path.write_text(
                     json.dumps(create_body | {"policy_version": "manual-v1-changed"}),
                     encoding="utf-8",
@@ -467,10 +470,13 @@ async def test_manual_policy_cli_after_owner_finalization_and_fresh_authority(
                 assert successor["lifecycle_status"] == "draft"
                 assert output(update()) == successor
                 assert output(update(key=str(uuid4())), 1)["error"]["status"] == 409
-                assert output(update(selected_policy=str(uuid4())), 1)["error"]["code"] == "idempotency_mismatch"
-                assert output(update(selected_policy=str(uuid4()), key=str(uuid4())), 1)["error"][
-                    "status"
-                ] in (403, 404)
+                assert (
+                    output(update(selected_policy=str(uuid4())), 1)["error"]["code"]
+                    == "idempotency_mismatch"
+                )
+                assert output(
+                    update(selected_policy=str(uuid4()), key=str(uuid4())), 1
+                )["error"]["status"] in (403, 404)
                 update_path.write_text(
                     json.dumps(update_body | {"change_summary": "Changed"}),
                     encoding="utf-8",
