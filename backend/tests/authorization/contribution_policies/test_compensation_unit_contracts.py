@@ -176,3 +176,19 @@ async def test_con_adapter_conceals_invalid_facts_and_auth_denial() -> None:
         await ContributionPolicyAuthorization(
             _Port(AuthorizationDenied("denied"))
         ).prepare_contribution_policy_mutation(_con_facts())
+
+
+def test_prepared_scope_for_the_unit_resource_is_its_exact_project() -> None:
+    """PREP derives project scope through the admin project-scoped mutation path."""
+    from app.modules.authorization.prepared import PreparedAuthorizationService
+    from app.modules.authorization.runtime import (
+        PreparedAuthorityScope,
+        PreparedAuthorityScopeKind,
+    )
+
+    resource = _resource()
+    assert PreparedAuthorizationService._scope_from_resource(ACTION, resource) == (
+        PreparedAuthorityScope(
+            kind=PreparedAuthorityScopeKind.PROJECT, project_id=resource.scope_project_id
+        )
+    )

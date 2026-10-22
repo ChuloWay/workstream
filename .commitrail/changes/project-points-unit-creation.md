@@ -96,9 +96,10 @@ second creation of an existing unit conflicts before authority is consumed.
 Rejected: storing the operation on the unit row (it would mix custody into the
 unit and still need an update path).
 
-**Operator script.** Each step commits separately, so reruns report existing
-state; a deterministic UUIDv5 operation ID turns a crash between the existence
-check and creation into an exact replay. An active binding with another adapter
+**Operator script.** Each step commits separately. A rerun reuses an existing
+unit (found by its natural key) and calls the creation service only when the
+unit is missing; exact replay is a service behavior, which the script's
+deterministic UUIDv5 operation ID can use. An active binding with another adapter
 actor or route key is reported as `active_binding_mismatch`. The script refuses
 production-like environments (the default `production` included). The adapter
 actor is created through `POST /api/v1/service-actors` with the existing
