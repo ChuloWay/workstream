@@ -1431,11 +1431,16 @@ runsc/cache checks repeated before every launch, and the live environment eviden
 
 The [Terminal Systems project inputs](../pilots/terminal_systems/README.md)
 provide an original contributor guide, one illustrative task and five authoring
-briefs. They deliberately contain no Workstream PRE/POST bindings or policy
+briefs. The guide now defines its project-local metadata and reproducibility
+contract; each brief has readable source synchronized with the native import.
+These are assignments to author complete tasks, not completed benchmark packages
+or a fixed eligibility list. They deliberately contain no Workstream PRE/POST bindings or policy
 defaults. The PM supplies those inputs to setup; its requirements, proposed
 bindings and missing-capability suggestions drive engineering's external image
-work. Registration must be followed by a corrected or recompiled proposal,
-separate approvals and complete activation before tasks can be released.
+work. After registration, a Project Manager creates and dispatches a correction
+successor or creates a new guide version; a finalized setup run is not rerun.
+The fresh proposal needs separate approvals and complete activation before tasks
+can be released.
 
 The fixed five-task corpus, its project-specific checker and runtime exception,
 and its dedicated proof workflow are retired. Earlier evidence remains historical
