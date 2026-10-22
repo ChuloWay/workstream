@@ -30,6 +30,11 @@ from app.core.s3_validation import (
     is_canonical_s3_prefix,
     is_canonical_s3_region,
 )
+from app.interfaces.project_guide_runtime import (
+    ProjectGuideModelApi,
+    ProjectGuideModelProvider,
+    require_project_guide_runtime_pairing,
+)
 
 
 _ARTIFACT_S3_SECRET_FIELDS = frozenset(
@@ -127,9 +132,9 @@ class Settings(BaseSettings):
     token_introspection_pool_timeout_seconds: float = Field(default=1.0, ge=0.1, le=10.0)
     token_introspection_total_timeout_seconds: float = Field(default=5.0, ge=0.5, le=15.0)
     project_agent_runtime: str = "openai_agents_sdk"
-    project_agent_model_provider: Literal["openai"] = "openai"
+    project_agent_model_provider: ProjectGuideModelProvider = "openai"
     project_agent_model: str = "gpt-5.6-terra"
-    project_agent_model_api: Literal["responses"] = "responses"
+    project_agent_model_api: ProjectGuideModelApi = "responses"
     project_agent_instructions: str | None = None
     project_agent_instruction_version: str = "v1"
     project_agent_run_timeout_seconds: int = Field(default=1800, ge=1, le=7200)
@@ -552,6 +557,17 @@ class Settings(BaseSettings):
         ):
             secrets = _EMPTY_ARTIFACT_S3_SECRETS
             raise ValueError("native AWS S3 rejects static credentials")
+
+    @model_validator(mode="after")
+    def validate_project_agent_runtime(self) -> Settings:
+        """Reject provider ``none`` outside the manager-authored guide runtime."""
+        require_project_guide_runtime_pairing(
+            self.project_agent_runtime,
+            self.project_agent_model_provider,
+            self.project_agent_model_api,
+            self.project_agent_model,
+        )
+        return self
 
     @model_validator(mode="after")
     def validate_artifact_storage(self) -> Settings:

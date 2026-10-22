@@ -325,6 +325,102 @@ It remains blocked without another call until the adapter supports verified
 retrieval/resume/idempotent recovery of that same operation. A stored local
 idempotency UUID does not establish provider support.
 
+### Manager-authored guide rules
+
+An operator may select the provider-free `manager_authored` runtime
+(`WORKSTREAM_PROJECT_AGENT_RUNTIME=manager_authored` with
+`WORKSTREAM_PROJECT_AGENT_MODEL_PROVIDER`, `..._MODEL_API` and `..._MODEL` all set
+to `none`). The compilation then runs no inference: the Project Manager
+supplies the compilation result in a rules document uploaded with the guide.
+The rules can come from a person, a deterministic generator or any AI tool
+outside Workstream. Workstream treats them exactly like model output.
+The rules document is an ordinary guide original, so every reader of the
+locked guide, including contributors, can open it; keep internal notes out of
+it. The hosted release configuration still requires its OpenAI key file
+regardless of the selected runtime.
+
+The runtime identifies the rules document by content, because guide manifests
+carry no source filenames and JSON is not an admitted guide media type:
+
+- Declare it as `text/markdown`. Label it `workstream-rules.json` so people can
+  find it.
+- Its whole UTF-8 body must be one JSON object whose `format` is
+  `workstream.project_guide_rules.v1`.
+- Exactly one guide document may match. None, two, or an invalid body ends the
+  attempt as invalid output with failure code `schema_invalid` (or
+  `unsafe_text` when prose fails the shared safe-text rule). Fix the rules and
+  create a new guide version; the failed attempt is not retried.
+
+Besides `format`, the object has exactly the result fields `status`,
+`findings`, `submission_artifact_policy`, `requirements`,
+`pre_submit_bindings`, `post_submit_bindings`, `capability_suggestions` and
+`setup_notes`, with the same meaning and limits as the model result. The
+runtime adds `agent_name`, `agent_version` and `schema_version`. Each evidence
+reference names a document by `"document"`: either its `sha256:` digest or its
+manifest filename (`<source_item_id>.<extension>`), plus optional `start_page`,
+`end_page` and `section`. The runtime resolves it to the exact source item and
+document version, and also cites the rules document itself on every finding,
+requirement and suggestion, so each item may carry at most 19 authored
+references. A ready result must cite every other guide document at least once.
+
+```json
+{
+  "format": "workstream.project_guide_rules.v1",
+  "status": "draft_ready",
+  "findings": [
+    {
+      "severity": "info",
+      "code": "guide.ready",
+      "message": "The guide states the deliverable and its review criteria.",
+      "evidence_refs": [
+        {"document": "sha256:<64 lowercase hex of guide.pdf>", "start_page": 1, "end_page": 2}
+      ]
+    }
+  ],
+  "submission_artifact_policy": {
+    "maximum_file_size_bytes": 1000000,
+    "maximum_package_size_bytes": 10000000,
+    "required_artifacts": ["submission"]
+  },
+  "requirements": [
+    {
+      "requirement_id": "reviewer_checks_rubric",
+      "statement": "A reviewer checks the submission against the rubric.",
+      "disposition": "human_review",
+      "evidence_refs": [{"document": "sha256:<64 lowercase hex of guide.pdf>", "section": "Rubric"}]
+    }
+  ],
+  "pre_submit_bindings": [],
+  "post_submit_bindings": [],
+  "capability_suggestions": [],
+  "setup_notes": []
+}
+```
+
+The runtime opens every assigned original once through the attempt's exact
+document grant and records each read. It allocates no provider container or
+file, so each read is recorded without a provider attachment; the database
+accepts such a record only for an attempt whose stored provider is `none`, and
+refuses provider allocations for such an attempt. The stored attempt
+configuration shows `manager_authored` and `none`.
+
+A correction request on a manager-authored proposal is refused with
+`correction_unsupported` (409), because a correction reason cannot change rules
+taken verbatim from the document. Upload revised rules in a new guide version
+instead. A transient read, timeout or storage failure is not an uncertain
+provider outcome for this runtime: the attempt returns from
+`compilation_provider_uncertain` to `compilation_reserved` and the next delivery
+retries it. Cancellation reopens the attempt before it propagates. A fence left
+by a crashed process reopens on a later delivery once the run deadline
+(`timeout_seconds` plus `cleanup_timeout_seconds`) has passed, and setup
+continuation keeps such attempts eligible for redelivery. A retried run reuses
+the read records of the failed run. The database allows the return only for an
+attempt whose stored provider is `none`; hosted attempts keep the one-way
+fence. The hosted prompt-size limit (`maximum_manifest_bytes`) does not apply,
+because no prompt is built. Only the first
+matching rules document stays parsed in memory; later matches are recorded as
+duplicates without their bodies.
+
 ## v0.1 Quality Gates
 
 ### Project Activation Gate

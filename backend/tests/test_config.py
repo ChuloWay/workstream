@@ -704,6 +704,42 @@ def test_settings_reject_unknown_environment() -> None:
         Settings(environment="unknown")
 
 
+_MANAGER_AUTHORED_ENVIRONMENT = {
+    "WORKSTREAM_PROJECT_AGENT_RUNTIME": "manager_authored",
+    "WORKSTREAM_PROJECT_AGENT_MODEL_PROVIDER": "none",
+    "WORKSTREAM_PROJECT_AGENT_MODEL_API": "none",
+    "WORKSTREAM_PROJECT_AGENT_MODEL": "none",
+}
+
+
+def test_project_agent_settings_default_to_openai_and_load_manager_authored_pairing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    default = Settings()
+    assert (default.project_agent_runtime, default.project_agent_model_provider,
+            default.project_agent_model_api) == ("openai_agents_sdk", "openai", "responses")
+    for name, value in _MANAGER_AUTHORED_ENVIRONMENT.items():
+        monkeypatch.setenv(name, value)
+    settings = Settings()
+    assert (settings.project_agent_runtime, settings.project_agent_model_provider,
+            settings.project_agent_model_api, settings.project_agent_model) == (
+        "manager_authored", "none", "none", "none")
+
+
+@pytest.mark.parametrize(
+    "omitted",
+    sorted(_MANAGER_AUTHORED_ENVIRONMENT),
+)
+def test_project_agent_settings_reject_any_partial_provider_free_pairing(
+    monkeypatch: pytest.MonkeyPatch, omitted: str
+) -> None:
+    for name, value in _MANAGER_AUTHORED_ENVIRONMENT.items():
+        if name != omitted:
+            monkeypatch.setenv(name, value)
+    with pytest.raises(ValidationError, match="guide runtime"):
+        Settings()
+
+
 def _flow_settings(**overrides) -> Settings:
     values = {
         "environment": "test",

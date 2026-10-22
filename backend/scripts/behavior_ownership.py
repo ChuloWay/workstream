@@ -380,6 +380,9 @@ ARCH_04F4_RETRY_TARGETS = frozenset({
     "backend/app/modules/authorization/domain/checker_retry_reads.py",
     "backend/app/modules/authorization/prepared_checker_retry_replay.py",
 })
+MANAGER_AUTHORED_GUIDE_RUNTIME_TARGETS = frozenset({
+    "backend/app/adapters/project_agents/manager_authored.py",
+})
 ARCH_04F5_DELIVERY_RECONCILIATION_TARGETS = frozenset({
     "backend/app/modules/authorization/domain/post_submit_deliveries.py",
     "backend/app/modules/authorization/post_submit_delivery_authorization.py",
@@ -1056,6 +1059,7 @@ def _validate_additive_partition_transition(
             | ARCH_04F3_REPLACEMENT_TARGETS
             | ARCH_04F4_RETRY_TARGETS
             | ARCH_04F5_DELIVERY_RECONCILIATION_TARGETS
+            | MANAGER_AUTHORED_GUIDE_RUNTIME_TARGETS
             | OBSERVABILITY_FOUNDATION_TARGETS
         | ARCH_04E1A_SOURCE_TARGETS
         | ARCH_04D2_AUTHORITY_TARGETS

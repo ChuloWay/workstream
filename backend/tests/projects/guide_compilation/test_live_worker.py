@@ -7,7 +7,7 @@ import pytest
 
 from app.core.config import get_settings
 from app.interfaces.external_services import UnknownExternalServiceProviderError
-from .helpers import runtime_configuration
+from .helpers import manager_runtime_configuration, runtime_configuration
 
 
 @pytest.fixture
@@ -106,6 +106,22 @@ def test_runtime_factory_uses_shared_identity_and_rejects_unknown_runtime(worker
         worker.create_project_guide_runtime(
             configuration.model_copy(update={"runtime_key": "uninstalled"})
         )
+
+
+def test_runtime_factory_constructs_manager_authored_runtime_without_provider_credentials(
+    worker, monkeypatch
+):
+    from app.adapters.project_agents.manager_authored import ManagerAuthoredProjectGuideRuntime
+    from app.interfaces.external_services import ExternalServiceConfigurationError
+
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    configuration = manager_runtime_configuration()
+    runtime = worker.create_project_guide_runtime(configuration)
+    assert isinstance(runtime, ManagerAuthoredProjectGuideRuntime)
+    assert runtime.identity == configuration.adapter_identity
+    # The OpenAI runtime still refuses to start without its credential.
+    with pytest.raises(ExternalServiceConfigurationError):
+        worker.create_project_guide_runtime(runtime_configuration())
 
 
 def test_stale_coordinator_error_is_rejected_without_transport_retry(worker, monkeypatch):

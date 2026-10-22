@@ -16,8 +16,8 @@ from app.modules.actors.models import ActorProfile, ActorIdentityLink
 from app.modules.artifacts.models import ArtifactContent, ArtifactReplica, ArtifactStorageNamespace, ArtifactPutAttempt, ArtifactOperationReceipt
 from app.modules.projects.models import GuideSourceSnapshot, GuideSourceSnapshotItem, GuideSourceArtifactIngest, ProjectSetupRun, GuideSufficiencyReport
 from app.adapters.artifacts import guide_document_manifest_port
-from app.modules.projects.api.guide_documents import GuideDocumentManifestRequest
-from tests.projects.guide_compilation.helpers import SOURCE_BYTES, SOURCE_SHA256, runtime_configuration, result
+from app.modules.projects.api.guide_documents import DOCUMENT_EXTENSIONS, GuideDocumentManifestRequest
+from tests.projects.guide_compilation.helpers import SOURCE_BYTES, runtime_configuration, result
 from tests.projects.guide_compilation.runtime_fixtures import document_access, record_scripted_document_access
 
 
@@ -25,9 +25,14 @@ def sha256_hash(seed: str) -> str:
     return "sha256:" + hashlib.sha256(seed.encode()).hexdigest()
 
 
-async def create_committed_document_fixture(source_snapshot_id: str, *, sessions=None):
-    """Persist exact committed upload receipts; never mark a replica verified."""
+async def create_committed_document_fixture(source_snapshot_id: str, *, sessions=None, contents=None):
+    """Persist exact committed upload receipts; never mark a replica verified.
+
+    ``contents`` optionally maps a source label to its exact original bytes; any
+    other item stores the shared PDF fixture under its declared media type.
+    """
     sessions = sessions or db_session.get_session_factory()
+    contents = contents or {}
     async with sessions() as session:
         snapshot = await session.get(GuideSourceSnapshot, source_snapshot_id)
         setup = await session.scalar(select(ProjectSetupRun).where(ProjectSetupRun.source_snapshot_id == source_snapshot_id).order_by(ProjectSetupRun.setup_generation.desc()).limit(1))
@@ -41,25 +46,27 @@ async def create_committed_document_fixture(source_snapshot_id: str, *, sessions
             namespace = ArtifactStorageNamespace(id="primary", backend="local", adapter="local", provider_profile="test", namespace_descriptor={"root": "committed-guide-fixture"}, namespace_fingerprint=sha256_hash("committed-guide-fixture"))
             session.add(namespace)
             await session.flush()
-        content = await session.scalar(select(ArtifactContent).where(ArtifactContent.sha256 == SOURCE_SHA256))
-        if content is None:
-            content = ArtifactContent(id=str(new_record_id()), sha256=SOURCE_SHA256, byte_count=len(SOURCE_BYTES), media_type="application/pdf", normalized_display_name="guide.pdf")
-            session.add(content)
-            await session.flush()
-        replica = await session.scalar(select(ArtifactReplica).where(ArtifactReplica.content_id == content.id, ArtifactReplica.storage_namespace_id == namespace.id))
-        if replica is None:
-            replica = ArtifactReplica(id=str(new_record_id()), content_id=content.id, storage_namespace_id=namespace.id, namespace_fingerprint=namespace.namespace_fingerprint, adapter=namespace.adapter, provider_profile=namespace.provider_profile, provider_object_ref=f"fixtures/{content.id}", verification_state="pending", availability_state="unknown", integrity_state="unknown")
-            session.add(replica)
-            await session.flush()
         for item in items:
             assert (item.source_kind, item.ingestion_adapter) == ("document", "upload")
             existing = await session.scalar(select(GuideSourceArtifactIngest).where(GuideSourceArtifactIngest.source_item_id == item.id))
             if existing is not None:
                 assert existing.media_type == item.media_type
                 continue
-            assert item.media_type == "application/pdf"
-            session.add(GuideSourceArtifactIngest(id=str(new_record_id()), source_item_id=item.id, actor_profile_id=actor.id, sha256=SOURCE_SHA256, byte_count=len(SOURCE_BYTES), media_type="application/pdf"))
-            put = ArtifactPutAttempt(id=str(new_record_id()), producer_request_type="guide", producer_type="actor_profile", producer_ref=actor.id, project_id=snapshot.project_id, guide_source_item_id=item.id, sha256=SOURCE_SHA256, byte_count=len(SOURCE_BYTES), media_type="application/pdf", storage_namespace_id=namespace.id, namespace_fingerprint=namespace.namespace_fingerprint, canonical_target=f"sha256/{SOURCE_SHA256[7:9]}/{SOURCE_SHA256[9:]}", operation_identity=sha256_hash(item.id), request_digest=sha256_hash("request:" + item.id), status="object_confirmed", terminal_result_code="document_stored", replica_id=replica.id, terminal_at=datetime.now(timezone.utc))
+            body = contents.get(item.source_label, SOURCE_BYTES)
+            assert item.source_label in contents or item.media_type == "application/pdf"
+            digest = "sha256:" + hashlib.sha256(body).hexdigest()
+            content = await session.scalar(select(ArtifactContent).where(ArtifactContent.sha256 == digest))
+            if content is None:
+                content = ArtifactContent(id=str(new_record_id()), sha256=digest, byte_count=len(body), media_type=item.media_type, normalized_display_name="guide." + DOCUMENT_EXTENSIONS[item.media_type])
+                session.add(content)
+                await session.flush()
+            replica = await session.scalar(select(ArtifactReplica).where(ArtifactReplica.content_id == content.id, ArtifactReplica.storage_namespace_id == namespace.id))
+            if replica is None:
+                replica = ArtifactReplica(id=str(new_record_id()), content_id=content.id, storage_namespace_id=namespace.id, namespace_fingerprint=namespace.namespace_fingerprint, adapter=namespace.adapter, provider_profile=namespace.provider_profile, provider_object_ref=f"fixtures/{content.id}", verification_state="pending", availability_state="unknown", integrity_state="unknown")
+                session.add(replica)
+                await session.flush()
+            session.add(GuideSourceArtifactIngest(id=str(new_record_id()), source_item_id=item.id, actor_profile_id=actor.id, sha256=digest, byte_count=len(body), media_type=item.media_type))
+            put = ArtifactPutAttempt(id=str(new_record_id()), producer_request_type="guide", producer_type="actor_profile", producer_ref=actor.id, project_id=snapshot.project_id, guide_source_item_id=item.id, sha256=digest, byte_count=len(body), media_type=item.media_type, storage_namespace_id=namespace.id, namespace_fingerprint=namespace.namespace_fingerprint, canonical_target=f"sha256/{digest[7:9]}/{digest[9:]}", operation_identity=sha256_hash(item.id), request_digest=sha256_hash("request:" + item.id), status="object_confirmed", terminal_result_code="document_stored", replica_id=replica.id, terminal_at=datetime.now(timezone.utc))
             session.add(put)
             await session.flush()
             receipt = ArtifactOperationReceipt(id=str(new_record_id()), contract_version=2, put_attempt_id=put.id, guide_source_item_id=item.id, replica_id=replica.id, operation="put", idempotency_key=put.operation_identity, request_digest=put.request_digest, provider_object_ref=replica.provider_object_ref, replayed=False, outcome="document_stored", attempt_number=1, correlation_id=str(uuid4()), details=[])

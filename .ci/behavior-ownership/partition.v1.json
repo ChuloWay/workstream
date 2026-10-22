@@ -50,6 +50,10 @@
     },
     {
       "group": "lifecycle",
+      "target": "backend/app/adapters/project_agents/manager_authored.py"
+    },
+    {
+      "group": "lifecycle",
       "target": "backend/app/adapters/project_agents/openai_agent_sdk.py"
     },
     {
@@ -2229,7 +2233,7 @@
       "target": "backend/scripts/validate_test_lane_evidence.py"
     }
   ],
-  "authority_digest": "4075ed85600e0772e7dc155d0dc0bec72b80ac2c606548a1cfa3b9476b206f27",
+  "authority_digest": "0d137f6ea32259e8f0fb55387d02c668feb72d4921dee6c39ad05b25cb5ec2ca",
   "protected_base_commit": "7676ce4347db0c9694962a9b587a20765e16eac6",
   "schema": "workstream.behavior-ownership-partition.v1"
 }

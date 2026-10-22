@@ -337,3 +337,33 @@ def test_factory_removes_secret_bearing_root_error_context() -> None:
     assert error.__context__ is None
     assert secret not in str(error)
     assert secret not in repr(error)
+
+
+def test_project_guide_composition_constructs_only_the_selected_runtime(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Selecting the provider-free runtime never constructs or credentials the OpenAI one."""
+    import app.adapters.project_agents as composition
+    from app.adapters.project_agents.manager_authored import ManagerAuthoredProjectGuideRuntime
+    from tests.projects.guide_compilation.helpers import manager_runtime_configuration
+
+    def forbidden(_configuration):
+        raise AssertionError("unselected runtime was constructed")
+
+    monkeypatch.setattr(composition, "OpenAIAgentSdkProjectGuideRuntime", forbidden)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    configuration = manager_runtime_configuration()
+
+    runtime = composition.create_project_guide_runtime(configuration)
+
+    assert isinstance(runtime, ManagerAuthoredProjectGuideRuntime)
+    assert runtime.identity == ExternalServiceAdapterIdentity(
+        "project_guide_compilation", "manager_authored"
+    )
+    with pytest.raises(UnknownExternalServiceProviderError) as unknown:
+        composition.create_project_guide_runtime(
+            configuration.model_copy(update={"runtime_key": "manager_authored_v2"})
+        )
+    assert unknown.value.identity == ExternalServiceAdapterIdentity(
+        "project_guide_compilation", "manager_authored_v2"
+    )

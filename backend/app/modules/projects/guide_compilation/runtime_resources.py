@@ -9,6 +9,7 @@ from app.core.identifiers import new_record_id
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from app.interfaces.project_guide_runtime import PROVIDER_FREE
 from app.modules.projects.api.guide_documents import GuideDocumentManifest, GuideRuntimeResource
 from .models import ProjectGuideCompilationAttempt, ProjectGuideRuntimeAllocation, ProjectGuideDocumentAccess
 
@@ -85,7 +86,8 @@ class SqlAlchemyGuideRuntimeCustody(SqlAlchemyGuideRuntimeCleanupCustody):
         self._manifest = manifest
         self._documents = {manifest.handle_for(item): item for item in manifest.documents}
 
-    async def _lock_attempt(self, session: AsyncSession, *, allocating: bool = False):
+    async def _lock_attempt(self, session: AsyncSession, *, in_flight: bool = False,
+                            provider_free: bool | None = None):
         attempt = await session.scalar(select(ProjectGuideCompilationAttempt)
                                        .where(ProjectGuideCompilationAttempt.id == self._attempt_id)
                                        .with_for_update())
@@ -93,7 +95,9 @@ class SqlAlchemyGuideRuntimeCustody(SqlAlchemyGuideRuntimeCleanupCustody):
                 or attempt.setup_run_id != str(self._manifest.setup_run_id)
                 or attempt.runtime_configuration is None
                 or attempt.runtime_configuration.get("runtime_key") != self._runtime_key
-                or (allocating and attempt.status != "compilation_provider_uncertain")):
+                or (in_flight and attempt.status != "compilation_provider_uncertain")
+                or (provider_free is not None
+                    and attempt_is_provider_free(attempt) is not provider_free)):
             raise RuntimeError("guide runtime custody is unavailable")
         return attempt
 
@@ -106,7 +110,7 @@ class SqlAlchemyGuideRuntimeCustody(SqlAlchemyGuideRuntimeCleanupCustody):
         if document_handle is not None and document_handle not in self._documents:
             raise ValueError("guide runtime document is not granted")
         async with self._sessions() as session, session.begin():
-            await self._lock_attempt(session, allocating=True)
+            await self._lock_attempt(session, in_flight=True, provider_free=False)
             if kind == "attachment":
                 parent = await session.scalar(select(ProjectGuideRuntimeAllocation).where(
                     ProjectGuideRuntimeAllocation.attempt_id == self._attempt_id,
@@ -173,7 +177,7 @@ class SqlAlchemyGuideRuntimeCustody(SqlAlchemyGuideRuntimeCleanupCustody):
         if document is None:
             raise ValueError("guide runtime document is not granted")
         async with self._sessions() as session, session.begin():
-            await self._lock_attempt(session, allocating=True)
+            await self._lock_attempt(session, in_flight=True, provider_free=False)
             attachment = await session.scalar(select(ProjectGuideRuntimeAllocation).where(
                 ProjectGuideRuntimeAllocation.attempt_id == self._attempt_id,
                 ProjectGuideRuntimeAllocation.kind == "attachment",
@@ -189,6 +193,28 @@ class SqlAlchemyGuideRuntimeCustody(SqlAlchemyGuideRuntimeCleanupCustody):
                 document_handle=UUID(handle),
             ))
 
+    async def record_direct_document_open(self, handle):
+        document = self._documents.get(handle)
+        if document is None:
+            raise ValueError("guide runtime document is not granted")
+        async with self._sessions() as session, session.begin():
+            await self._lock_attempt(session, in_flight=True, provider_free=True)
+            recorded = await session.scalar(select(ProjectGuideDocumentAccess.document_handle).where(
+                ProjectGuideDocumentAccess.attempt_id == self._attempt_id,
+                ProjectGuideDocumentAccess.source_item_id == str(document.source_item_id),
+            ))
+            if recorded is not None:
+                # A retried provider-free run rereads documents a failed run recorded.
+                if str(recorded) != handle:
+                    raise RuntimeError("guide runtime custody is unavailable")
+                return
+            session.add(ProjectGuideDocumentAccess(
+                id=new_record_id(), attempt_id=self._attempt_id, source_item_id=str(document.source_item_id),
+                document_version_id=str(document.ingest_id), attachment_allocation_id=None,
+                manifest_sha256=self._manifest.sha256, sha256=document.sha256,
+                document_handle=UUID(handle),
+            ))
+
     async def opened_handles(self):
         async with self._sessions() as session, session.begin():
             await self._lock_attempt(session)
@@ -198,6 +224,12 @@ class SqlAlchemyGuideRuntimeCustody(SqlAlchemyGuideRuntimeCleanupCustody):
             ))
             return frozenset(str(value) for value in handles)
 
+
+
+def attempt_is_provider_free(attempt) -> bool:
+    """Read the attempt's recorded provider identity; only ``none`` runs no inference."""
+    return (attempt.runtime_configuration is not None
+            and attempt.runtime_configuration.get("model_provider") == PROVIDER_FREE)
 
 
 def _file_document_facts(document):
@@ -220,6 +252,10 @@ async def require_compilation_document_access(session, attempt_id, manifest, res
     documents = {str(item.source_item_id): item for item in manifest.documents}
     if not rows:
         raise ValueError("compilation has no document access evidence")
+    attempt = await session.get(ProjectGuideCompilationAttempt, attempt_id)
+    if attempt is None or attempt.runtime_configuration is None:
+        raise ValueError("compilation attempt is unavailable")
+    provider_free = attempt_is_provider_free(attempt)
     opened = set()
     for row in rows:
         document = documents.get(row.source_item_id)
@@ -228,6 +264,14 @@ async def require_compilation_document_access(session, attempt_id, manifest, res
                 or row.sha256 != document.sha256
                 or str(row.document_handle) != manifest.handle_for(document)):
             raise ValueError("compilation document access lineage mismatch")
+        if provider_free:
+            # A provider-free runtime reads the grant directly; no provider file exists.
+            if row.attachment_allocation_id is not None:
+                raise ValueError("compilation provider file lineage mismatch")
+            opened.add(row.source_item_id)
+            continue
+        if row.attachment_allocation_id is None:
+            raise ValueError("compilation provider file lineage mismatch")
         attachment = await session.get(ProjectGuideRuntimeAllocation, row.attachment_allocation_id)
         file = (await session.get(ProjectGuideRuntimeAllocation, attachment.source_file_allocation_id)
                 if attachment is not None and attachment.source_file_allocation_id is not None else None)

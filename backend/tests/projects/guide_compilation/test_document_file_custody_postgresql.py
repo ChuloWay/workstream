@@ -145,3 +145,111 @@ async def test_original_file_mapping_is_immutable_after_provider_receipt(grant_c
                                   .values(replica_id=str(uuid4())))
         await savepoint.rollback()
         assert (await session.get(ProjectGuideRuntimeAllocation, file)).replica_id == str(context.material.documents[0].replica_id)
+
+
+@pytest.fixture
+async def manager_attempt(clean_postgres_database):
+    """A fenced manager-authored attempt; it records reads but owns no provider resources."""
+    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+    from .helpers import context, manager_runtime_configuration, seed_database
+    from .test_hidden_orchestrator_postgresql import _authorized_attempt, _backend
+
+    values = await seed_database(clean_postgres_database)
+    configuration = manager_runtime_configuration()
+    request = await _authorized_attempt(clean_postgres_database, values, configuration)
+    engine = create_async_engine(clean_postgres_database)
+    sessions = async_sessionmaker(engine, expire_on_commit=False)
+    backend = _backend(sessions)
+    assert (await backend.fence(await backend.load(request.attempt_id))).dispatch_permitted
+    compilation = context(values, configuration=configuration)
+    custody = SqlAlchemyGuideRuntimeCustody(sessions, request.attempt_id, compilation.material,
+                                            configuration.runtime_key)
+    try:
+        yield sessions, request.attempt_id, compilation, custody
+    finally:
+        await engine.dispose()
+
+
+def _direct_access(attempt_id, compilation):
+    doc = compilation.material.documents[0]
+    return dict(id=new_record_id(), attempt_id=attempt_id, attachment_allocation_id=None,
+                source_item_id=str(doc.source_item_id), document_version_id=str(doc.ingest_id),
+                sha256=doc.sha256, manifest_sha256=compilation.material.sha256,
+                document_handle=UUID(compilation.material.handle_for(doc)))
+
+
+async def test_manager_authored_read_is_recorded_without_any_provider_resource(manager_attempt):
+    sessions, attempt_id, compilation, custody = manager_attempt
+    handle = compilation.material.handle_for(compilation.material.documents[0])
+    expiry = datetime.now(timezone.utc) + timedelta(minutes=20)
+    for kind, document_handle in (("container", None), ("file", handle)):
+        with pytest.raises(RuntimeError, match="custody is unavailable"):
+            await custody.begin_allocation(kind=kind, document_handle=document_handle,
+                                           parent_provider_id=None, expires_at=expiry)
+    with pytest.raises(RuntimeError, match="custody is unavailable"):
+        await custody.record_document_open(handle)
+    await custody.record_direct_document_open(handle)
+    assert await custody.opened_handles() == {handle}
+    assert await custody.cleanup_resources() == ()
+    async with sessions() as session:
+        rows = (await session.execute(text(
+            "select attachment_allocation_id from project_guide_document_accesses "
+            "where attempt_id=:id"), {"id": attempt_id})).all()
+        assert rows == [(None,)]
+        assert await session.scalar(text(
+            "select count(*) from project_guide_runtime_allocations where attempt_id=:id"),
+            {"id": attempt_id}) == 0
+
+
+async def test_manager_authored_read_is_recorded_once_across_a_retry(manager_attempt):
+    """A retried provider-free run rereads documents the failed run already recorded."""
+    sessions, attempt_id, compilation, custody = manager_attempt
+    handle = compilation.material.handle_for(compilation.material.documents[0])
+    await custody.record_direct_document_open(handle)
+    await custody.record_direct_document_open(handle)
+    async with sessions() as session:
+        assert await session.scalar(text(
+            "select count(*) from project_guide_document_accesses where attempt_id=:id"),
+            {"id": attempt_id}) == 1
+
+
+async def test_sql_refuses_provider_resources_for_a_manager_authored_attempt(manager_attempt):
+    sessions, attempt_id, compilation, _custody = manager_attempt
+    async with sessions() as session, session.begin():
+        with pytest.raises(DBAPIError, match="allocates no provider resources") as error:
+            await session.execute(insert(ProjectGuideRuntimeAllocation).values(
+                id=new_record_id(), attempt_id=attempt_id, manifest_sha256=compilation.material.sha256,
+                runtime_key="manager_authored", kind="container", state="allocating",
+                expires_at=datetime.now(timezone.utc) + timedelta(minutes=20)))
+        assert error.value.orig.sqlstate == "23514"
+
+
+@pytest.mark.parametrize("field", ["source_item_id", "document_version_id", "sha256", "document_handle"])
+async def test_sql_direct_read_requires_the_exact_assigned_original(manager_attempt, field):
+    sessions, attempt_id, compilation, _custody = manager_attempt
+    valid = _direct_access(attempt_id, compilation)
+    value = ("sha256:" + "b" * 64 if field == "sha256" else
+             str(uuid4()) if field in ("source_item_id", "document_version_id") else uuid4())
+    mutant = valid | {field: value}
+    if field in ("source_item_id", "document_version_id"):
+        # Keep the handle canonical so only the snapshot/ingest lineage can reject.
+        mutant["document_handle"] = guide_document_handle(compilation.material.setup_run_id,
+            UUID(mutant["source_item_id"]), UUID(mutant["document_version_id"]))
+    async with sessions() as session, session.begin():
+        await assert_insert_rejected_after_valid_control(
+            session, ProjectGuideDocumentAccess.__table__, valid, mutant, "access lineage is invalid")
+
+
+async def test_hosted_runtime_cannot_record_a_read_without_provider_staging(grant_case):
+    grant, _, _, _, context = grant_case
+    custody = SqlAlchemyGuideRuntimeCustody(grant._sessions, grant._attempt_id,
+        context.material, runtime_configuration().runtime_key)
+    handle = context.material.handle_for(context.material.documents[0])
+    with pytest.raises(RuntimeError, match="custody is unavailable"):
+        await custody.record_direct_document_open(handle)
+    async with grant._sessions() as session, session.begin():
+        with pytest.raises(DBAPIError, match="access lineage is invalid") as error:
+            await session.execute(insert(ProjectGuideDocumentAccess).values(
+                **_direct_access(grant._attempt_id, context)))
+        assert error.value.orig.sqlstate == "23514"
+    assert await custody.opened_handles() == set()

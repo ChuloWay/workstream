@@ -202,6 +202,7 @@ class GuideProposalError(RuntimeError):
             "proposal_unavailable",
             "proposal_stale",
             "approval_blocked",
+            "correction_unsupported",
             "operation_conflict",
             "storage_unavailable",
         ],
