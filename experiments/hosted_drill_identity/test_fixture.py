@@ -242,6 +242,7 @@ def test_exclusive_private_files_and_no_token_output(material, tmp_path, capsys)
 def test_unsafe_output_parent_creates_no_token(material, tmp_path):
     directory = tmp_path / "public"
     directory.mkdir(mode=0o755)
+    directory.chmod(0o755)  # Make the adversarial mode independent of operator umask.
     output = directory / "token.jwt"
     with pytest.raises(ValueError, match="output directory must be private and owned"):
         mint(material, "contributor", output)
