@@ -33,6 +33,7 @@ def main():
     image = json.loads(call("image", "inspect", args.image))[0]
     containers = []
     processes = []
+    pending_creation = None
 
     def inspect(identity):
         result = subprocess.run(
@@ -141,6 +142,7 @@ def main():
                     process.wait(timeout=10)
 
         def create(owner, attempt):
+            nonlocal pending_creation
             name = f"ws-checker-{owner}-{attempt}" if owner else f"ws-checker-{attempt}"
             labels = [
                 "--label",
@@ -150,6 +152,7 @@ def main():
             ]
             if owner:
                 labels += ["--label", f"workstream.external-checker-owner={owner}"]
+            pending_creation = name
             identity = call(
                 "create",
                 "--name",
@@ -170,6 +173,7 @@ def main():
             if not re.fullmatch("[0-9a-f]{64}", identity):
                 raise RuntimeError("Docker did not return a full container ID")
             containers.append(identity)
+            pending_creation = None
             return identity
 
         try:
@@ -203,6 +207,11 @@ def main():
                 if inspect(identity) is not None:
                     call("rm", "-f", identity)
             assert all(inspect(identity) is None for identity in containers)
+            if pending_creation is not None:
+                raise RuntimeError(
+                    "Container creation outcome is uncertain; inspect exact fixture name "
+                    f"{pending_creation}. Recorded IDs were cleaned; no global cleanup was attempted."
+                )
             print("Cleanup confirmed for all recorded fixture container IDs")
 
 
