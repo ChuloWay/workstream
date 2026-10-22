@@ -1876,6 +1876,8 @@ export WORKSTREAM_CLI_EXECUTABLE="$PWD/.local-agent-loop/workstream"
 export WORKSTREAM_CLI_JOURNEY_SETUP=1
 export WORKSTREAM_CLI_JOURNEY_TASKS=1
 export WORKSTREAM_CLI_JOURNEY_SUBMIT=1
+# Optional private raw CLI receipts for independent review; keep outside git.
+export WORKSTREAM_CLI_JOURNEY_EVIDENCE="$(mktemp -d /tmp/workstream-journey-evidence.XXXXXX)"
 # Supply a disposable local PostgreSQL admin URL and the local MinIO endpoint
 # through WORKSTREAM_TEST_ADMIN_DATABASE_URL and WORKSTREAM_TEST_MINIO_ENDPOINT.
 cd backend
@@ -1890,6 +1892,9 @@ credentials. Each run owns a unique database/role and bucket/prefix. Require its
 cleanup metadata as well as exit zero; neither a completed migration nor a
 successful intermediate stage proves the remaining journey. Do not bypass a
 failed prerequisite or substitute a synthetic checker result.
+The optional evidence directory retains command arguments, exit codes and raw
+stdout/stderr after checking for bearer disclosure. It contains local project
+data: keep it private and do not commit it. Use a fresh directory for each run.
 
 The scope is manager-authored setup, an explicitly unpaid policy and the locked
 no-human-review acceptance branch. The example checker validates declared proof

@@ -17,6 +17,10 @@ class JourneyClient:
         self.directory = directory
         self.steps: list[dict[str, object]] = []
         self.completed_stages: list[str] = []
+        self.evidence = None
+        if location := os.environ.get("WORKSTREAM_CLI_JOURNEY_EVIDENCE"):
+            self.evidence = Path(location) / "cli-receipts"
+            self.evidence.mkdir(mode=0o700)
 
     def complete_stage(self, stage: str):
         self.completed_stages.append(stage)
@@ -42,6 +46,19 @@ class JourneyClient:
             raise AssertionError("CLI credential disclosure; output withheld")
         # Never print input contents, credentials, or arbitrary server output.
         self.steps.append({"command": arguments[:3], "exit_code": result.returncode})
+        if self.evidence is not None:
+            path = self.evidence / f"{len(self.steps):04d}.json"
+            with path.open("x", encoding="utf-8") as stream:
+                path.chmod(0o600)
+                json.dump(
+                    {
+                        "arguments": arguments,
+                        "exit_code": result.returncode,
+                        "stdout": result.stdout,
+                        "stderr": result.stderr,
+                    },
+                    stream,
+                )
         if result.returncode != expected_exit:
             evidence = Path(tempfile.mkdtemp(prefix="workstream-cli-failure-"))
             (evidence / "stdout.json").write_text(result.stdout)

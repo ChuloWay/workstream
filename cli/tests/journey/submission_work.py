@@ -111,6 +111,49 @@ def submit_and_observe(
         time.sleep(1)
     else:
         raise AssertionError("durable evaluation did not reach acceptance")
+    retained = client.call(token, "me", "submissions", "--task", task_id)
+    if retained["next_cursor"] is not None or len(retained["items"]) != 1:
+        raise AssertionError("submission replay did not retain exactly one attempt")
+    for field, value in {
+        "id": receipt["submission_id"],
+        "task_id": task_id,
+        "version": receipt["submission_version"],
+        "status": "accepted",
+    }.items():
+        if retained["items"][0][field] != value or outcome[field] != value:
+            raise AssertionError("retained submission differs from accepted receipt")
+    runs = client.call(token, "submission", "findings", receipt["submission_id"])
+    if runs["next_cursor"] is not None or len(runs["items"]) != 1:
+        raise AssertionError("expected one real post-submit checker run")
+    run = runs["items"][0]
+    for field, value in {
+        "task_id": task_id,
+        "submission_id": receipt["submission_id"],
+        "submission_version": receipt["submission_version"],
+        "status": "completed",
+        "is_current_for_submission": True,
+    }.items():
+        if run[field] != value:
+            raise AssertionError("checker run does not bind the accepted attempt")
+    if not run["completed_at"] or not any(
+        # Public findings name the locked requirement, not its capability ID.
+        # authored_rules binds this requirement to harnessy.work_proof.
+        result["checker_name"] == "proof.post_submit" and result["status"] == "passed"
+        for result in run["results"]
+    ):
+        raise AssertionError("registered checker has no completed passing evidence")
+    if (
+        client.call(
+            token,
+            "submission",
+            "findings",
+            receipt["submission_id"],
+            "--run",
+            run["id"],
+        )
+        != run
+    ):
+        raise AssertionError("exact checker run differs from listed evidence")
     records = client.call(token, "contributions", "--project", project_id)["items"]
     if len(records) != 1:
         raise AssertionError("expected exactly one unpaid submitter contribution")
