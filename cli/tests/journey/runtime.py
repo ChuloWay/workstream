@@ -92,8 +92,12 @@ def durable_runtime(root: Path, directory: Path, environment: dict):
         )
         checker = start(
             [
-                str(
-                    root / "external_checkers/target/release/workstream-checker-service"
+                os.environ.get(
+                    "WORKSTREAM_CLI_JOURNEY_CHECKER_EXECUTABLE",
+                    str(
+                        root
+                        / "external_checkers/target/release/workstream-checker-service"
+                    ),
                 ),
                 str(config_file),
             ],
