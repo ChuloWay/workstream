@@ -1,5 +1,6 @@
 """Current ART and REV documentation matches canonical authorization custody."""
 
+import re
 from pathlib import Path
 
 from tests.authorization.catalogue_fixtures import ART_CUSTODY_EXPECTATIONS, REV_CUSTODY_EXPECTATIONS
@@ -116,6 +117,17 @@ def test_art_custody_documentation_matches_the_independent_activation_fixture() 
     assert "verification retry remains independently gated" in operations
     assert "Catalogue entries and explicit runtime composition determine availability" in operations
     assert "a planned action is not activated by its presence in the catalogue" in operations
+
+    activation_custody = custody_documents[1].read_text(encoding="utf-8")
+    assert "the historical transfer granted no Operator authority" in activation_custody
+    assert "The eight reserved\nsystem-Operator actions are now active" in activation_custody
+    assert "`artifact.verification_job.retry` has its own active,\nindependently guarded evaluator" in activation_custody
+    assert "read/status proof cannot authorize it" in activation_custody
+    assert "future activation custody" not in activation_custody
+    assert not re.search(
+        r"`artifact\.verification_job\.retry`[\s\S]{0,80}remains planned",
+        activation_custody,
+    )
 
 def test_rev_custody_documentation_matches_the_independent_catalogue_fixture() -> None:
     repository_root = Path(__file__).resolve().parents[3]

@@ -85,14 +85,12 @@ remains planned and unavailable pending a separate REV-owned intent.
 reconciles the live catalogue by removing the six unused multi-step upload rows
 and registering three end-to-end bundle/review rows. The resulting 22 rows have
 exact action cardinalities `3/8/2/1/1/1/1/3/1/1` in the table order above. The
-`OPERATOR` suffix denotes only future activation custody; it grants no Operator
-entitlement. Fourteen actions remain planned after the three ART foundation
-service actions, `artifact.guide_source.ingest`, the two fixed-service guide
-binding/read actions, `artifact.submission_bundle.prepare`, and fixed-service
-`artifact.submission.binding.create` activate. The independently
-gated `artifact.verification_job.retry`
-remains planned and
-cannot be activated by read/status proof. The historical transfer added no
+`OPERATOR` suffix identified exact activation custody, not an entitlement;
+the historical transfer granted no Operator authority. The eight reserved
+system-Operator actions are now active through current persisted grants and
+exact evaluators. `artifact.verification_job.retry` has its own active,
+independently guarded evaluator; read/status proof cannot authorize it.
+The historical transfer added no
 migration because owner and availability are typed metadata. WS-XINT-002-01
 historically reconciled PostgreSQL parity through migration `0036`, now folded
 into the v0.1 baseline. At that historical boundary, the closed registry contained
