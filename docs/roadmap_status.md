@@ -408,6 +408,12 @@ Persisted activation proof jobs, deployment, representative resource limits,
 diagnostic privacy/outage behavior, drain/restart and isolated backup/restore
 remain environment evidence for #583 and the parent release drill.
 
+Checker startup recovery is deployment-scoped through persistent owner custody
+in the locked private socket directory, exact container labels/names and inspected
+Docker IDs. It does not adopt another deployment's or unowned containers. See
+[ownership and restart guidance](../external_checkers/README.md#container-recovery-ownership).
+This repair does not establish a hosted or complete CLI journey.
+
 The generic [checker image command](engineering/checker-images.md) builds a project-owned image, tests positive and negative samples, and optionally publishes that same image to private ECR. It verifies the platform manifest/configuration identity and emits registration and cache inputs. Dry-run compatibility evidence is explicitly `docker-dev` or `gvisor`; it is not live ART custody, project activation or deployed operation. Operator registration, execution-host provisioning and approved policy binding remain separate.
 
 [ARCH-04E1B-B1](../.commitrail/initiatives/WS-ARCH-001/WS-ARCH-001-04E1BB1.md)

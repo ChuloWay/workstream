@@ -1,5 +1,5 @@
 {
-  "socket_path": "/run/workstream-checker/checker.sock",
+  "socket_path": "/var/lib/workstream/checker-runtime/checker.sock",
   "material_root": "/var/lib/workstream/scratch",
   "docker_binary": "/usr/local/bin/docker",
   "runtime": "runsc",

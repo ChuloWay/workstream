@@ -20,7 +20,7 @@ from uuid import UUID
 
 COMPOSE_PATH = Path(__file__).with_name("compose.yml")
 SCRATCH_ROOT = Path("/var/lib/workstream/scratch")
-SOCKET_ROOT = Path("/run/workstream-checker")
+SOCKET_ROOT = Path("/var/lib/workstream/checker-runtime")
 SOCKET_PATH = SOCKET_ROOT / "checker.sock"
 DOCKER_SOCKET = Path("/var/run/docker.sock")
 ROLES_ANYWHERE_CERTIFICATE_TARGET = Path(
@@ -664,7 +664,7 @@ def validate_compose(rendered: dict[str, Any], values: dict[str, str]) -> None:
     }
     shared_backend_mounts = {
         str(SCRATCH_ROOT): (str(SCRATCH_ROOT), False),
-        str(SOCKET_ROOT): (str(SOCKET_ROOT), False),
+        str(SOCKET_ROOT): (str(SOCKET_ROOT), True),
     }
     expected_mounts = {
         "checker-service": {
