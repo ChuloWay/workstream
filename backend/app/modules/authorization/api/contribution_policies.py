@@ -221,6 +221,40 @@ class ContributionPolicyMutationAuthorityFacts:
                 raise ValueError("retirement requires active policy")
 
 
+_UNIT_CODE = re.compile(r"[A-Za-z][A-Za-z0-9._:-]{0,31}\Z")
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class CompensationUnitCreateAuthorityFacts:
+    """Complete server-owned facts for creating one project points unit."""
+
+    action_id: ActionId
+    actor_profile_id: UUID
+    operation_id: UUID
+    request_digest: str
+    project_id: UUID
+    instrument_type: str
+    unit_code: str
+
+    def __post_init__(self) -> None:
+        """Reject other actions, instruments, malformed codes, and digests."""
+        if str(self.action_id) != "contribution.compensation_unit.create":
+            raise ValueError("invalid compensation-unit action")
+        for name in ("actor_profile_id", "operation_id", "project_id"):
+            _require_uuid(name, getattr(self, name))
+        if not isinstance(self.request_digest, str) or not _SHA256.fullmatch(self.request_digest):
+            raise ValueError("request_digest must be canonical sha256")
+        if self.instrument_type != "project_points":
+            raise ValueError("only project_points units can be created")
+        if not isinstance(self.unit_code, str) or not _UNIT_CODE.fullmatch(self.unit_code):
+            raise ValueError("unit_code is invalid")
+
+
+ContributionPolicyMutationFacts: TypeAlias = (
+    ContributionPolicyMutationAuthorityFacts | CompensationUnitCreateAuthorityFacts
+)
+
+
 class ContributionPolicyAuthorizationPort(Protocol):
     """Authorize exact reads and opaque transaction-bound policy mutations."""
 
@@ -234,11 +268,11 @@ class ContributionPolicyAuthorizationPort(Protocol):
     ) -> None:
         """Lock current mutation authority before product owners; issue no capability."""
 
-    async def prepare_mutation(self, facts: ContributionPolicyMutationAuthorityFacts) -> object:
+    async def prepare_mutation(self, facts: ContributionPolicyMutationFacts) -> object:
         """Prepare exact mutation authority in the caller transaction."""
 
     async def consume_mutation(
-        self, prepared: object, facts: ContributionPolicyMutationAuthorityFacts
+        self, prepared: object, facts: ContributionPolicyMutationFacts
     ) -> UUID:
         """Consume once and return the authorized actor identity."""
 

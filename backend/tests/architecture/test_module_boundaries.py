@@ -557,6 +557,9 @@ def test_policy_public_api_exports_immutable_contracts() -> None:
             "PolicyRuleView",
             "LockedCompensationAward",
             "LockedCompensationTerms",
+            "CompensationUnitCreateAuthorizationFacts",
+            "ProjectCompensationUnitCreateRequest",
+            "ProjectCompensationUnitCreateResult",
         )
     }
     assert all(value.__dataclass_params__.frozen for value in public_dataclasses.values())

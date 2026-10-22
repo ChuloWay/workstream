@@ -1,5 +1,5 @@
 {
-  "canonical_sha256": "d002d8646eb3bbdbc0c1f00ff38e8424dd4dee629413247cdfbac18b2e2cc804",
+  "canonical_sha256": "5972b939c5c83b6790b6025d18e08623199cb1ad288851d62f5ba34bedae7061",
   "components": {
     "schemas": {
       "ActionId": {
@@ -163,6 +163,7 @@
           "contribution.policy.update_draft",
           "contribution.policy.publish",
           "contribution.policy.retire",
+          "contribution.compensation_unit.create",
           "contribution.read_self",
           "contribution.read_project",
           "actor.project.list",
