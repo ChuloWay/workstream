@@ -218,6 +218,7 @@ SHARED_FOUNDATION_MODULES = (
     "tests/authorization/admin_access/test_api_journey.py",
     "tests/authorization/admin_access/test_bootstrap_postgresql.py",
     "tests/authorization/admin_access/test_admin_reads_postgresql.py",
+    "tests/authorization/admin_access/test_artifact_operator_postgresql.py",
     "tests/authorization/admin_access/test_grant_api_postgresql.py",
     "tests/authorization/admin_access/test_grant_reads_postgresql.py",
     "tests/authorization/admin_access/test_grant_validation_postgresql.py",

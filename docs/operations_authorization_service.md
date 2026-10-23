@@ -526,9 +526,11 @@ WS-XINT-002-01 then reconciles the live ART set to 22 planned rows by deleting
 six obsolete upload actions and adding three bundle/review actions. The ART
 transfer and later WS-XINT-002-01 catalogue reconciliation are included in the
 v0.1 baseline.
-The REV transfer adds no migration. The ART transfer does not grant Operator
-authority; its `OPERATOR` suffix denotes only future activation custody, and
-verification retry remains independently gated from read/status actions.
+The REV transfer adds no migration. The ART transfer itself granted no Operator
+authority; its `OPERATOR` suffix denotes exact activation custody, now delivered
+for the eight reserved system-Operator actions. A current persisted grant is
+still required, and verification retry remains independently gated from
+read/status actions.
 Catalogue entries and explicit runtime composition determine availability;
 a planned action is not activated by its presence in the catalogue.
 CP01A added four initially unavailable adapter-binding actions under
@@ -552,8 +554,9 @@ route mapping is in `docs/spec_authorization_service.md`. WS-XINT-002-04A
 activates Project Manager guide-source ingest, and WS-XINT-002-04B activates
 only the fixed-service guide binding and read actions. WS-ARCH-001-02G activates
 contributor bundle preparation; 02H activates hidden human Submission creation
-and fixed-service submission binding. The other 14 ART actions remain planned,
-including every Operator artifact action.
+and fixed-service submission binding. AUTH-ART-02D-OPERATOR activates the eight
+reserved system-Operator artifact actions through exact persisted authority;
+remaining planned ART actions retain their separate activation boundaries.
 The v0.1 schema keeps each allowed or denied internal ART decision bound to
 the exact privacy-bounded resource-context digest in append-only audit facts.
 

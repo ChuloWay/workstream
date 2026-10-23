@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+from unittest.mock import AsyncMock
 from uuid import UUID, uuid4
 from app.core.identifiers import new_record_id
 
 from fastapi.routing import APIRoute
 from httpx import ASGITransport, AsyncClient
 import pytest
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.db.session import get_db_session
@@ -22,23 +24,23 @@ from app.modules.artifacts.models import (
     ArtifactVerificationReceipt,
 )
 from app.modules.artifacts.router import (
+    _require_human_artifact_operator,
     _concealed,
     get_artifact_authorization_context,
     get_artifact_operator_authority,
     get_artifact_recovery_authority,
+    get_artifact_recovery_port,
     router,
 )
 from app.modules.artifacts.schemas import (
     ArtifactAuthorityDeniedError,
-    ArtifactOperatorAuthorizationEvidence,
-    DenyArtifactOperatorAuthority,
-    DenyArtifactRecoveryAuthority,
 )
+from app.modules.artifacts.api.operator_authority import ArtifactOperatorAuthorizationEvidence
 from app.modules.authorization.catalogue import ACTION_BY_ID
-from app.modules.authorization.runtime import ActorStatus, IdentityLinkStatus
 from app.core.config import Settings
 from tests.test_artifact_recovery import (
     _AllowRecoveryAuthority,
+    _DenyRecoveryAuthority,
     _context,
     _exhausted_job,
     _settings,
@@ -90,6 +92,15 @@ def test_readiness_contract_contains_no_provider_internals() -> None:
     assert "credential" not in str(payload).lower()
 
 
+def test_admission_usage_openapi_represents_unconfigured_limit() -> None:
+    schema = create_app(Settings()).openapi()["components"]["schemas"][
+        "ArtifactAdmissionUsageResponse"
+    ]
+    assert schema["properties"]["configured_limit_bytes"]["anyOf"] == [
+        {"type": "integer"}, {"type": "null"},
+    ]
+
+
 class _AllowOperatorAuthority:
     async def authorize(self, *, facts, **_values: object) -> ArtifactOperatorAuthorizationEvidence:
         return ArtifactOperatorAuthorizationEvidence(
@@ -97,6 +108,11 @@ class _AllowOperatorAuthority:
             permission_id=ACTION_BY_ID[facts.action_id].permission_id.value,
             decision_id=new_record_id(),
         )
+
+
+class _DenyOperatorAuthority:
+    async def authorize(self, **_values: object):
+        raise ArtifactAuthorityDeniedError("artifact Operator action denied")
 
 
 class _ProjectOperatorAuthority(_AllowOperatorAuthority):
@@ -130,6 +146,46 @@ def _retry_payload(project_id: str, task_id: str, submission_id: str | None,
     if submission_id is not None:
         payload["submission_id"] = submission_id
     return payload
+
+
+async def _assert_operator_concealment(
+    app, client: AsyncClient, *, content_id: str, source_job_id: str,
+    project_id: str, task_id: str, submission_id: str | None, source_job_cas_version: int,
+) -> None:
+    app.dependency_overrides[get_artifact_operator_authority] = lambda: (
+        _ProjectOperatorAuthority(str(uuid4()))
+    )
+    cross_project = await client.get(
+        f"/api/v1/operator/artifacts/contents/{content_id}/replicas"
+    )
+    missing = await client.get(
+        f"/api/v1/operator/artifacts/contents/{uuid4()}/replicas"
+    )
+    assert cross_project.status_code == missing.status_code == 404
+    assert cross_project.json()["detail"] == missing.json()["detail"]
+    assert cross_project.json()["error"]["code"] == missing.json()["error"]["code"]
+
+    app.dependency_overrides[get_artifact_operator_authority] = _DenyOperatorAuthority
+    concealed = await client.get(
+        f"/api/v1/operator/artifacts/contents/{content_id}/replicas"
+    )
+    assert concealed.status_code == 404
+    assert content_id not in concealed.text
+
+    app.dependency_overrides[get_artifact_recovery_authority] = lambda: (
+        _ProjectRecoveryAuthority(str(uuid4()))
+    )
+    cross_project_retry = await client.post(
+        f"/api/v1/operator/artifacts/verification-jobs/{source_job_id}/retry",
+        json=_retry_payload(project_id, task_id, submission_id, "cross-project probe",
+                            "cross-project-probe", source_job_cas_version),
+    )
+    denied_retry = await client.post(
+        f"/api/v1/operator/artifacts/verification-jobs/{uuid4()}/retry",
+        json=_retry_payload(project_id, task_id, None, "probe", "denied-probe", 0),
+    )
+    assert cross_project_retry.status_code == denied_retry.status_code == 404
+    assert cross_project_retry.json()["detail"] == denied_retry.json()["detail"]
 
 
 @pytest.mark.asyncio
@@ -186,6 +242,7 @@ async def test_real_http_operator_path_returns_redacted_lineage_and_recovery(
                 return context
 
             app.dependency_overrides[get_db_session] = session_override
+            app.dependency_overrides[_require_human_artifact_operator] = lambda: None
             app.dependency_overrides[get_artifact_authorization_context] = context_override
             app.dependency_overrides[get_artifact_operator_authority] = _AllowOperatorAuthority
             app.dependency_overrides[get_artifact_recovery_authority] = _AllowRecoveryAuthority
@@ -312,7 +369,7 @@ async def test_real_http_operator_path_returns_redacted_lineage_and_recovery(
                 assert job.json()["status"] == "provider_unavailable"
 
                 app.dependency_overrides[get_artifact_recovery_authority] = (
-                    DenyArtifactRecoveryAuthority
+                    _DenyRecoveryAuthority
                 )
                 denied_before_create = await client.post(
                     f"/api/v1/operator/artifacts/verification-jobs/{source_job_id}/retry",
@@ -321,21 +378,6 @@ async def test_real_http_operator_path_returns_redacted_lineage_and_recovery(
                 )
                 assert denied_before_create.status_code == 404
                 app.dependency_overrides[get_artifact_recovery_authority] = _AllowRecoveryAuthority
-                for unavailable_context in (
-                    context.model_copy(update={"actor_status": ActorStatus.SUSPENDED}),
-                    context.model_copy(update={"identity_link_status": IdentityLinkStatus.REVOKED}),
-                ):
-                    app.dependency_overrides[get_artifact_authorization_context] = (
-                        lambda unavailable_context=unavailable_context: unavailable_context
-                    )
-                    unavailable = await client.post(
-                        f"/api/v1/operator/artifacts/verification-jobs/{source_job_id}/retry",
-                        json=_retry_payload(
-                            project_id, task_id, submission_id, "identity race",
-                            str(unavailable_context.actor_status), source_job_cas_version),
-                    )
-                    assert unavailable.status_code == 404
-                app.dependency_overrides[get_artifact_authorization_context] = context_override
                 stale_source = await client.post(
                     f"/api/v1/operator/artifacts/verification-jobs/{source_job_id}/retry",
                     json=_retry_payload(project_id, task_id, submission_id, "stale source fence",
@@ -451,44 +493,39 @@ async def test_real_http_operator_path_returns_redacted_lineage_and_recovery(
                 assert readiness.status_code == 200
                 assert readiness.json()["active"] is False
 
-                app.dependency_overrides[get_artifact_operator_authority] = lambda: (
-                    _ProjectOperatorAuthority(str(uuid4()))
+                await _assert_operator_concealment(
+                    app, client, content_id=content_id, source_job_id=source_job_id,
+                    project_id=project_id, task_id=task_id,
+                    submission_id=submission_id,
+                    source_job_cas_version=source_job_cas_version,
                 )
-                cross_project = await client.get(
-                    f"/api/v1/operator/artifacts/contents/{content_id}/replicas"
-                )
-                missing = await client.get(
-                    f"/api/v1/operator/artifacts/contents/{uuid4()}/replicas"
-                )
-                assert cross_project.status_code == missing.status_code == 404
-                assert cross_project.json()["detail"] == missing.json()["detail"]
-                assert cross_project.json()["error"]["code"] == missing.json()["error"]["code"]
-
-                app.dependency_overrides[get_artifact_operator_authority] = (
-                    DenyArtifactOperatorAuthority
-                )
-                concealed = await client.get(
-                    f"/api/v1/operator/artifacts/contents/{content_id}/replicas"
-                )
-                assert concealed.status_code == 404
-                assert content_id not in concealed.text
-
-                app.dependency_overrides[get_artifact_recovery_authority] = lambda: (
-                    _ProjectRecoveryAuthority(str(uuid4()))
-                )
-                cross_project_retry = await client.post(
-                    f"/api/v1/operator/artifacts/verification-jobs/{source_job_id}/retry",
-                    json=_retry_payload(project_id, task_id, submission_id, "cross-project probe",
-                                        "cross-project-probe", source_job_cas_version),
-                )
-                denied_retry = await client.post(
-                    f"/api/v1/operator/artifacts/verification-jobs/{uuid4()}/retry",
-                    json=_retry_payload(
-                        project_id, task_id, None, "probe", "denied-probe", 0),
-                )
-                assert cross_project_retry.status_code == denied_retry.status_code == 404
-                assert cross_project_retry.json()["detail"] == denied_retry.json()["detail"]
     finally:
         if bootstrap is not None:
             bootstrap.close()
         await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_retry_database_failure_is_bounded_unavailability() -> None:
+    class _FailingRecovery:
+        async def retry_verification(self, _request):
+            raise SQLAlchemyError("injected persistence failure")
+
+    app = create_app(Settings())
+    session = AsyncMock()
+    app.dependency_overrides[get_db_session] = lambda: session
+    app.dependency_overrides[_require_human_artifact_operator] = lambda: None
+    app.dependency_overrides[get_artifact_authorization_context] = _context
+    app.dependency_overrides[get_artifact_recovery_authority] = _AllowRecoveryAuthority
+    app.dependency_overrides[get_artifact_recovery_port] = _FailingRecovery
+    async with AsyncClient(
+        transport=ASGITransport(app=app, raise_app_exceptions=False),
+        base_url="http://workstream.test",
+    ) as client:
+        response = await client.post(
+            f"/api/v1/operator/artifacts/verification-jobs/{uuid4()}/retry",
+            json=_retry_payload(str(uuid4()), str(uuid4()), None, "retry", "fault-probe", 0),
+        )
+    assert response.status_code == 503, response.text
+    assert "injected persistence failure" not in response.text
+    session.rollback.assert_awaited_once()
