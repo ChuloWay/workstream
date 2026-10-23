@@ -93,9 +93,17 @@ if docker inspect "${CONTAINER}" >/dev/null 2>&1; then
 fi
 mkdir -p -- "${SHARED_ROOT}/cache"
 chmod 0700 "${SHARED_ROOT}" "${SHARED_ROOT}/cache"
-rm -rf -- "${SHARED_ROOT}/cache/content"
-cp -a -- "${STATE_ROOT}/cache/content" "${SHARED_ROOT}/cache/content"
-cp -- "${STATE_ROOT}/cache/cache.sha256" "${SHARED_ROOT}/cache/cache.sha256"
+if [[ -e "${SHARED_ROOT}/cache/content" ]]; then
+  diff --brief --recursive --no-dereference \
+    "${STATE_ROOT}/cache/content" "${SHARED_ROOT}/cache/content" >/dev/null
+else
+  cp -a -- "${STATE_ROOT}/cache/content" "${SHARED_ROOT}/cache/content"
+fi
+if [[ -e "${SHARED_ROOT}/cache/cache.sha256" ]]; then
+  cmp -- "${STATE_ROOT}/cache/cache.sha256" "${SHARED_ROOT}/cache/cache.sha256"
+else
+  cp -- "${STATE_ROOT}/cache/cache.sha256" "${SHARED_ROOT}/cache/cache.sha256"
+fi
 cp -- "${STATE_ROOT}/daemon.json" "${SHARED_ROOT}/daemon.json"
 chmod 0444 "${SHARED_ROOT}/cache/cache.sha256"
 chmod 0644 "${SHARED_ROOT}/daemon.json"
