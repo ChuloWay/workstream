@@ -39,7 +39,7 @@ pub(crate) struct SandboxStepRequest {
     pub(crate) slot_id: String,
     pub(crate) candidate_image_digest: String,
     pub(crate) workspace_root: PathBuf,
-    pub(crate) visible_roles: Vec<(String, PathBuf)>,
+    pub(crate) visible_roles: Vec<ProjectedRoleMount>,
     pub(crate) visible_role_inventory_digests: Vec<RoleInventoryDigest>,
     pub(crate) command: Vec<String>,
     pub(crate) working_directory: String,
@@ -47,6 +47,13 @@ pub(crate) struct SandboxStepRequest {
     pub(crate) timeout_ms: u64,
     pub(crate) maximum_output_bytes: usize,
     pub(crate) enforcement_overruns: SandboxEnforcementOverruns,
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct ProjectedRoleMount {
+    pub(crate) role: String,
+    pub(crate) path: PathBuf,
+    pub(crate) destination_relative: String,
 }
 
 #[derive(Clone, Debug)]
@@ -185,9 +192,15 @@ impl<B: TrialSandboxBackend> GenericTrialEngine<B> {
         {
             return Err(implementation_failure());
         }
-        let inventories = inspect_roles(
+        inspect_roles(
             &context.verified_material_root,
-            &context.profile.allowed_material_roles,
+            &context.profile.source_material_roles,
+            plan.resources.maximum_entries,
+            plan.resources.disk_bytes,
+        )?;
+        let projections = materialize_projections(context, owned, plan)?;
+        let inventories = projection_inventories(
+            &projections,
             plan.resources.maximum_entries,
             plan.resources.disk_bytes,
         )?;
@@ -196,9 +209,11 @@ impl<B: TrialSandboxBackend> GenericTrialEngine<B> {
         let mut projection_budget =
             ProjectionBudget::new(plan.resources.maximum_entries, plan.resources.disk_bytes);
         for role in &context.profile.build_context_roles {
-            copy_tree(
-                &context.verified_material_root.join(role),
-                &projected.join(role),
+            let source = projections.get(role).ok_or_else(implementation_failure)?;
+            copy_projection(
+                &source.path,
+                &projected,
+                &source.destination_relative,
                 &mut projection_budget,
             )?;
         }
@@ -245,6 +260,11 @@ impl<B: TrialSandboxBackend> GenericTrialEngine<B> {
                 .clone()
                 .ok_or_else(implementation_failure)?;
             for (index, step) in plan.steps.iter().enumerate() {
+                let slot_profile = context
+                    .profile
+                    .required_slots
+                    .get(index)
+                    .ok_or_else(implementation_failure)?;
                 require_available(deadline, invocation_cancelled, relay_cancelled)?;
                 if step.state_source != "fresh" && !workspaces.contains_key(&step.state_source) {
                     steps.push(skipped_observation(step, index, &inventory_by_role)?);
@@ -253,6 +273,19 @@ impl<B: TrialSandboxBackend> GenericTrialEngine<B> {
                 let workspace = owned.root.join("workspaces").join(&step.slot_id);
                 if step.state_source == "fresh" {
                     create_private_directory(&workspace)?;
+                    let mut budget = ProjectionBudget::new(
+                        plan.resources.maximum_entries,
+                        plan.resources.disk_bytes,
+                    );
+                    for role in &slot_profile.seed_roles {
+                        let source = projections.get(role).ok_or_else(implementation_failure)?;
+                        copy_projection(
+                            &source.path,
+                            &workspace,
+                            &source.destination_relative,
+                            &mut budget,
+                        )?;
+                    }
                 } else {
                     let source = workspaces
                         .get(&step.state_source)
@@ -266,8 +299,16 @@ impl<B: TrialSandboxBackend> GenericTrialEngine<B> {
                 let visible_roles = step
                     .visible_roles
                     .iter()
-                    .map(|role| (role.clone(), context.verified_material_root.join(role)))
-                    .collect();
+                    .map(|role| {
+                        let projection =
+                            projections.get(role).ok_or_else(implementation_failure)?;
+                        Ok(ProjectedRoleMount {
+                            role: role.clone(),
+                            path: projection.path.clone(),
+                            destination_relative: projection.destination_relative.clone(),
+                        })
+                    })
+                    .collect::<Result<Vec<_>, TrialEngineFailure>>()?;
                 let visible_role_inventory_digests = step
                     .visible_roles
                     .iter()
@@ -306,7 +347,11 @@ impl<B: TrialSandboxBackend> GenericTrialEngine<B> {
                     .map_err(sandbox_failure)?;
                 let outcome = result.observation.outcome;
                 steps.push(result.observation);
-                if outcome == TrialOperationOutcome::Succeeded {
+                if slot_profile
+                    .retain_state_after
+                    .iter()
+                    .any(|allowed| allowed == operation_outcome_name(outcome))
+                {
                     workspaces.insert(step.slot_id.clone(), workspace);
                 }
             }
@@ -430,6 +475,170 @@ impl OwnedTrialScratch {
             return false;
         }
         fs::remove_dir_all(&self.root).is_ok()
+    }
+}
+
+struct MaterializedProjection {
+    path: PathBuf,
+    destination_relative: String,
+}
+
+fn materialize_projections(
+    context: &TrialEngineContext,
+    owned: &OwnedTrialScratch,
+    plan: &TrialPlan,
+) -> Result<HashMap<String, MaterializedProjection>, TrialEngineFailure> {
+    let root = owned.root.join("projections");
+    create_private_directory(&root)?;
+    let mut budget =
+        ProjectionBudget::new(plan.resources.maximum_entries, plan.resources.disk_bytes);
+    let mut projected = HashMap::new();
+    for projection in &context.profile.material_projections {
+        let source = context
+            .verified_material_root
+            .join(&projection.source_role)
+            .join(&projection.source_relative);
+        let destination = root.join(&projection.role);
+        let exclusions = projection
+            .exclusions
+            .iter()
+            .map(PathBuf::from)
+            .collect::<Vec<_>>();
+        copy_tree_filtered(
+            &source,
+            &destination,
+            Path::new(""),
+            &exclusions,
+            &mut budget,
+        )?;
+        if projected
+            .insert(
+                projection.role.clone(),
+                MaterializedProjection {
+                    path: destination,
+                    destination_relative: projection.destination_relative.clone(),
+                },
+            )
+            .is_some()
+        {
+            return Err(implementation_failure());
+        }
+    }
+    Ok(projected)
+}
+
+fn projection_inventories(
+    projections: &HashMap<String, MaterializedProjection>,
+    maximum_entries: u64,
+    maximum_bytes: u64,
+) -> Result<Vec<RoleInventoryDigest>, TrialEngineFailure> {
+    let mut roles = projections.keys().collect::<Vec<_>>();
+    roles.sort();
+    let mut budget = ProjectionBudget::new(maximum_entries, maximum_bytes);
+    roles
+        .into_iter()
+        .map(|role| {
+            let mut inventory = Vec::new();
+            inspect_tree(
+                &projections[role].path,
+                Path::new(""),
+                &mut inventory,
+                &mut budget,
+            )?;
+            Ok(RoleInventoryDigest {
+                role: role.clone(),
+                digest: canonical_hash(&json!(inventory)).map_err(|_| implementation_failure())?,
+            })
+        })
+        .collect()
+}
+
+fn copy_tree_filtered(
+    source: &Path,
+    destination: &Path,
+    relative: &Path,
+    exclusions: &[PathBuf],
+    budget: &mut ProjectionBudget,
+) -> Result<(), TrialEngineFailure> {
+    if exclusions.iter().any(|value| value == relative) {
+        return Ok(());
+    }
+    let metadata = fs::symlink_metadata(source).map_err(|_| material_failure())?;
+    if metadata.file_type().is_symlink() {
+        return Err(material_failure());
+    }
+    if metadata.file_type().is_dir() {
+        budget.charge(0)?;
+        create_private_directory(destination)?;
+        let mut children: BTreeMap<_, _> = BTreeMap::new();
+        for entry in fs::read_dir(source).map_err(|_| material_failure())? {
+            let entry = entry.map_err(|_| material_failure())?;
+            children.insert(entry.file_name(), entry.path());
+        }
+        for (name, path) in children {
+            if !safe_component(&name) {
+                return Err(material_failure());
+            }
+            copy_tree_filtered(
+                &path,
+                &destination.join(&name),
+                &relative.join(name),
+                exclusions,
+                budget,
+            )?;
+        }
+    } else if metadata.file_type().is_file() {
+        budget.charge(metadata.len())?;
+        copy_regular(
+            source,
+            destination,
+            metadata.permissions().mode() & 0o111 != 0,
+        )?;
+    } else {
+        return Err(material_failure());
+    }
+    Ok(())
+}
+
+fn copy_projection(
+    source: &Path,
+    destination_root: &Path,
+    destination_relative: &str,
+    budget: &mut ProjectionBudget,
+) -> Result<(), TrialEngineFailure> {
+    if destination_relative != "." {
+        return copy_tree(source, &destination_root.join(destination_relative), budget);
+    }
+    let metadata = fs::symlink_metadata(source).map_err(|_| material_failure())?;
+    if !metadata.file_type().is_dir() || metadata.file_type().is_symlink() {
+        return Err(material_failure());
+    }
+    let mut children: BTreeMap<_, _> = BTreeMap::new();
+    for entry in fs::read_dir(source).map_err(|_| material_failure())? {
+        let entry = entry.map_err(|_| material_failure())?;
+        children.insert(entry.file_name(), entry.path());
+    }
+    for (name, path) in children {
+        if !safe_component(&name) {
+            return Err(material_failure());
+        }
+        copy_tree(&path, &destination_root.join(name), budget)?;
+    }
+    Ok(())
+}
+
+fn operation_outcome_name(outcome: TrialOperationOutcome) -> &'static str {
+    match outcome {
+        TrialOperationOutcome::Succeeded => "succeeded",
+        TrialOperationOutcome::ExitNonzero => "exit_nonzero",
+        TrialOperationOutcome::Signalled => "signalled",
+        TrialOperationOutcome::DeadlineExceeded => "deadline_exceeded",
+        TrialOperationOutcome::CpuExceeded => "cpu_exceeded",
+        TrialOperationOutcome::MemoryExceeded => "memory_exceeded",
+        TrialOperationOutcome::PidExceeded => "pid_exceeded",
+        TrialOperationOutcome::DiskExceeded => "disk_exceeded",
+        TrialOperationOutcome::OutputExceeded => "output_exceeded",
+        TrialOperationOutcome::DependencySkipped => "dependency_skipped",
     }
 }
 

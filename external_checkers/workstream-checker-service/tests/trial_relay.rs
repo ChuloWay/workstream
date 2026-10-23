@@ -148,12 +148,33 @@ fn profile() -> TrialProfile {
         builder_image_digest: digest('9'),
         offline_cache_digest: digest('a'),
         approved_base_digests: vec![digest('b')],
+        source_material_roles: vec!["submission_archive".into()],
+        material_projections: vec![
+            TrialMaterialProjectionProfile {
+                role: "source".into(),
+                source_role: "submission_archive".into(),
+                projection_kind: "build_context".into(),
+                source_relative: ".".into(),
+                destination_relative: ".".into(),
+                exclusions: Vec::new(),
+            },
+            TrialMaterialProjectionProfile {
+                role: "checks".into(),
+                source_role: "submission_archive".into(),
+                projection_kind: "state_overlay".into(),
+                source_relative: "checks".into(),
+                destination_relative: "checks".into(),
+                exclusions: Vec::new(),
+            },
+        ],
         build_context_roles: vec!["source".into()],
         allowed_material_roles: vec!["source".into(), "checks".into()],
         required_slots: vec![TrialSlotProfile {
             slot_id: "slot_a".into(),
-            visible_roles: vec!["source".into()],
+            seed_roles: Vec::new(),
+            visible_roles: vec!["checks".into()],
             fresh_workspace: true,
+            retain_state_after: vec!["succeeded".into()],
         }],
         maximum_frame_bytes: 32 * 1024,
         maximum_response_bytes: 4 * 1024,
@@ -197,7 +218,7 @@ fn plan() -> Value {
         "build_timeout_ms": 1500,
         "steps": [{
             "slot_id": "slot_a", "operation": "run", "state_source": "fresh",
-            "visible_roles": ["source"],
+            "visible_roles": ["checks"],
             "command": ["/candidate/bin/check", "--case", "a"],
             "working_directory": ".", "timeout_ms": 800
         }]
@@ -244,8 +265,8 @@ fn execution(cleanup_confirmed: bool) -> TrialExecution {
             operation_order: 1,
             workspace_identity: "workspace_a".into(),
             visible_role_inventory_digests: vec![RoleInventoryDigest {
-                role: "source".into(),
-                digest: digest('c'),
+                role: "checks".into(),
+                digest: digest('d'),
             }],
             outcome: TrialOperationOutcome::Succeeded,
             exit_code: Some(0),
@@ -473,7 +494,7 @@ fn completed_plan_publishes_runner_facts_only_after_confirmed_cleanup() {
 fn host_runtime_fields_and_profile_slot_substitution_are_rejected_before_engine() {
     assert_plan_rejected(|value| value["network_mode"] = json!("host"));
     assert_plan_rejected(|value| value["steps"][0]["slot_id"] = json!("foreign_slot"));
-    assert_plan_rejected(|value| value["steps"][0]["visible_roles"] = json!(["checks"]));
+    assert_plan_rejected(|value| value["steps"][0]["visible_roles"] = json!(["source"]));
     assert_plan_rejected(|value| value["steps"][0]["working_directory"] = json!("../host"));
     assert_plan_rejected(|value| value["resources"]["pids"] = json!(33));
     assert_plan_rejected(|value| value["environment"]["platform"] = json!("linux/arm64"));

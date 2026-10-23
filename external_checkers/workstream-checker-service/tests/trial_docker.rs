@@ -271,7 +271,11 @@ fn backend_emits_offline_bounded_builder_and_socketless_candidate_specs() {
                 slot_id: "slot_a".into(),
                 candidate_image_digest: digest('a'),
                 workspace_root: workspace,
-                visible_roles: vec![("source".into(), source)],
+                visible_roles: vec![ProjectedRoleMount {
+                    role: "source".into(),
+                    path: source,
+                    destination_relative: "source".into(),
+                }],
                 visible_role_inventory_digests: vec![RoleInventoryDigest {
                     role: "source".into(),
                     digest: digest('c'),
@@ -324,8 +328,9 @@ fn backend_emits_offline_bounded_builder_and_socketless_candidate_specs() {
     assert_eq!(creates[1].mounts[0].class, OwnedMountClass::TrialState);
     assert_eq!(
         creates[1].mounts[1].class,
-        OwnedMountClass::VerifiedMaterial
+        OwnedMountClass::TrialStateOverlay
     );
+    assert_eq!(creates[1].mounts[1].destination, "/work/state/source");
     assert!(!creates[1].mounts[0].readonly);
     assert!(creates[1].mounts[1].readonly);
     drop(creates);
@@ -503,7 +508,11 @@ pub fn concrete_runtime_builds_and_runs_offline_under_runsc() {
                 slot_id: "generic_offline_probe".into(),
                 candidate_image_digest: candidate,
                 workspace_root: workspace,
-                visible_roles: vec![("source".into(), source)],
+                visible_roles: vec![ProjectedRoleMount {
+                    role: "source".into(),
+                    path: source,
+                    destination_relative: "source".into(),
+                }],
                 visible_role_inventory_digests: vec![RoleInventoryDigest {
                     role: "source".into(),
                     digest: digest('c'),
@@ -539,7 +548,11 @@ pub fn concrete_runtime_builds_and_runs_offline_under_runsc() {
                 slot_id: "generic_deadline_probe".into(),
                 candidate_image_digest: build.observation.candidate_image_digest.clone().unwrap(),
                 workspace_root: deadline_workspace,
-                visible_roles: vec![("source".into(), run.join("source"))],
+                visible_roles: vec![ProjectedRoleMount {
+                    role: "source".into(),
+                    path: run.join("source"),
+                    destination_relative: "source".into(),
+                }],
                 visible_role_inventory_digests: vec![RoleInventoryDigest {
                     role: "source".into(),
                     digest: digest('c'),

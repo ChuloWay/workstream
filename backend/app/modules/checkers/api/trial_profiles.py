@@ -216,6 +216,8 @@ class TrialMaterialProjection:
             or self.projection_kind not in {"build_context", "state_seed", "state_overlay"}
             or not _safe_relative(self.source_relative, allow_dot=True)
             or not _safe_relative(self.destination_relative, allow_dot=True)
+            or self.projection_kind == "state_overlay"
+            and self.destination_relative == "."
             or tuple(sorted(set(self.exclusions))) != self.exclusions
             or any(not _safe_relative(value, allow_dot=False) for value in self.exclusions)
             or _paths_overlap(self.exclusions)

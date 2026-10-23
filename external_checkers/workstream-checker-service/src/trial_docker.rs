@@ -47,7 +47,7 @@ pub(crate) enum OwnedMountClass {
     OfflineCache,
     CandidateOutput,
     TrialState,
-    VerifiedMaterial,
+    TrialStateOverlay,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -1331,18 +1331,31 @@ fn validate_owned_mount(mount: &OwnedBindMount) -> Result<(), RuntimeControlFail
         OwnedMountClass::OfflineCache => mount.readonly && mount.destination == "/cache",
         OwnedMountClass::CandidateOutput => !mount.readonly && mount.destination == "/out",
         OwnedMountClass::TrialState => !mount.readonly && mount.destination == "/work/state",
-        OwnedMountClass::VerifiedMaterial => {
+        OwnedMountClass::TrialStateOverlay => {
             mount.readonly
                 && mount
                     .destination
-                    .strip_prefix("/work/input/")
-                    .is_some_and(valid_relative_label)
+                    .strip_prefix("/work/state/")
+                    .is_some_and(valid_container_relative_path)
         }
     };
     if !accepted {
         return Err(RuntimeControlFailure::InvalidConfiguration);
     }
     Ok(())
+}
+
+fn valid_container_relative_path(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 4096
+        && !value.contains('\\')
+        && value.split('/').all(|part| {
+            !part.is_empty()
+                && part != "."
+                && part != ".."
+                && !part.contains(':')
+                && !part.bytes().any(|byte| byte.is_ascii_control())
+        })
 }
 
 fn valid_relative_label(value: &str) -> bool {
@@ -2123,12 +2136,12 @@ impl<C: RuntimeControl> TrialSandboxBackend for DockerTrialBackend<C> {
             false,
             OwnedMountClass::TrialState,
         )?];
-        for (role, path) in &request.visible_roles {
+        for role in &request.visible_roles {
             mounts.push(owned_mount(
-                path,
-                &format!("/work/input/{role}"),
+                &role.path,
+                &format!("/work/state/{}", role.destination_relative),
                 true,
-                OwnedMountClass::VerifiedMaterial,
+                OwnedMountClass::TrialStateOverlay,
             )?);
         }
         arguments.extend([

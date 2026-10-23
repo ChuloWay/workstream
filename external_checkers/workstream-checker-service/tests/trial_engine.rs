@@ -1,4 +1,5 @@
 use sha2::{Digest, Sha256};
+use std::collections::VecDeque;
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
@@ -53,6 +54,7 @@ struct FakeBackend {
     cleanups: AtomicUsize,
     build_requests: Mutex<Vec<SandboxBuildRequest>>,
     step_requests: Mutex<Vec<SandboxStepRequest>>,
+    outcomes: Mutex<VecDeque<TrialOperationOutcome>>,
 }
 
 impl TrialSandboxBackend for Arc<FakeBackend> {
@@ -99,8 +101,29 @@ impl TrialSandboxBackend for Arc<FakeBackend> {
     ) -> Result<SandboxStepResult, SandboxFailure> {
         self.steps.fetch_add(1, Ordering::Relaxed);
         assert_eq!(request.visible_roles.len(), 1);
-        assert_eq!(request.visible_roles[0].0, "source");
+        assert_eq!(request.visible_roles[0].role, "protected");
+        assert_eq!(request.visible_roles[0].destination_relative, "protected");
+        assert!(request
+            .workspace_root
+            .join("workspace/initial.txt")
+            .is_file());
         assert_eq!(request.command, ["/candidate/check", "case-a"]);
+        let outcome = self
+            .outcomes
+            .lock()
+            .unwrap()
+            .pop_front()
+            .unwrap_or(TrialOperationOutcome::Succeeded);
+        if outcome == TrialOperationOutcome::ExitNonzero {
+            fs::write(
+                request.workspace_root.join("interrupted.state"),
+                b"retained\n",
+            )
+            .unwrap();
+        }
+        if request.slot_id == "slot_b" {
+            assert!(request.workspace_root.join("interrupted.state").is_file());
+        }
         self.step_requests.lock().unwrap().push(request.clone());
         Ok(SandboxStepResult {
             observation: TrialStepObservation {
@@ -108,8 +131,12 @@ impl TrialSandboxBackend for Arc<FakeBackend> {
                 operation_order,
                 workspace_identity: "workspace_a".into(),
                 visible_role_inventory_digests: request.visible_role_inventory_digests.clone(),
-                outcome: TrialOperationOutcome::Succeeded,
-                exit_code: Some(0),
+                outcome,
+                exit_code: Some(if outcome == TrialOperationOutcome::Succeeded {
+                    0
+                } else {
+                    17
+                }),
                 signal: None,
                 stdout: "ok\n".into(),
                 stdout_sha256: hash(b"ok\n"),
@@ -161,12 +188,41 @@ fn profile() -> TrialProfile {
         builder_image_digest: digest('7'),
         offline_cache_digest: digest('8'),
         approved_base_digests: vec![digest('9')],
+        source_material_roles: vec!["submission_archive".into()],
+        material_projections: vec![
+            TrialMaterialProjectionProfile {
+                role: "source".into(),
+                source_role: "submission_archive".into(),
+                projection_kind: "build_context".into(),
+                source_relative: ".".into(),
+                destination_relative: ".".into(),
+                exclusions: vec!["protected".into()],
+            },
+            TrialMaterialProjectionProfile {
+                role: "protected".into(),
+                source_role: "submission_archive".into(),
+                projection_kind: "state_overlay".into(),
+                source_relative: "protected".into(),
+                destination_relative: "protected".into(),
+                exclusions: Vec::new(),
+            },
+            TrialMaterialProjectionProfile {
+                role: "workspace_seed".into(),
+                source_role: "submission_archive".into(),
+                projection_kind: "state_seed".into(),
+                source_relative: "workspace".into(),
+                destination_relative: "workspace".into(),
+                exclusions: Vec::new(),
+            },
+        ],
         build_context_roles: vec!["source".into()],
-        allowed_material_roles: vec!["source".into(), "protected".into()],
+        allowed_material_roles: vec!["source".into(), "protected".into(), "workspace_seed".into()],
         required_slots: vec![TrialSlotProfile {
             slot_id: "slot_a".into(),
-            visible_roles: vec!["source".into()],
+            seed_roles: vec!["workspace_seed".into()],
+            visible_roles: vec!["protected".into()],
             fresh_workspace: true,
+            retain_state_after: vec!["succeeded".into()],
         }],
         maximum_frame_bytes: 64 * 1024,
         maximum_response_bytes: 16 * 1024,
@@ -216,7 +272,7 @@ fn plan() -> TrialPlan {
             slot_id: "slot_a".into(),
             operation: "run".into(),
             state_source: "fresh".into(),
-            visible_roles: vec!["source".into()],
+            visible_roles: vec!["protected".into()],
             command: vec!["/candidate/check".into(), "case-a".into()],
             working_directory: ".".into(),
             timeout_ms: 500,
@@ -247,13 +303,18 @@ fn build_observation() -> TrialBuildObservation {
 
 fn context(root: &Root) -> TrialEngineContext {
     let material = root.child("material");
-    let source = material.join("source");
-    let protected = material.join("protected");
+    let submission = material.join("submission_archive");
+    fs::create_dir(&submission).unwrap();
+    let source = submission.join("source");
+    let protected = submission.join("protected");
+    let workspace = submission.join("workspace");
     fs::create_dir(&source).unwrap();
     fs::create_dir(&protected).unwrap();
+    fs::create_dir(&workspace).unwrap();
     fs::write(source.join("main.txt"), b"source\n").unwrap();
     fs::write(source.join("Containerfile"), b"FROM scratch\n").unwrap();
     fs::write(protected.join("canary.txt"), b"secret\n").unwrap();
+    fs::write(workspace.join("initial.txt"), b"initial\n").unwrap();
     TrialEngineContext {
         identity: TrialRequestIdentity {
             request_digest: digest('1'),
@@ -301,7 +362,7 @@ fn engine_projects_only_authorized_roles_runs_exact_plan_and_cleans_owned_scratc
     assert_eq!(backend.builds.load(Ordering::Relaxed), 1);
     assert_eq!(backend.steps.load(Ordering::Relaxed), 1);
     assert_eq!(backend.cleanups.load(Ordering::Relaxed), 1);
-    assert_eq!(execution.material_inventory_digests.len(), 2);
+    assert_eq!(execution.material_inventory_digests.len(), 3);
     assert!(fs::read_dir(&context.trial_scratch_root)
         .unwrap()
         .next()
@@ -313,8 +374,12 @@ fn symlinked_material_is_infrastructure_and_never_reaches_backend() {
     let root = Root::new();
     let context = context(&root);
     std::os::unix::fs::symlink(
-        context.verified_material_root.join("protected/canary.txt"),
-        context.verified_material_root.join("source/escape"),
+        context
+            .verified_material_root
+            .join("submission_archive/protected/canary.txt"),
+        context
+            .verified_material_root
+            .join("submission_archive/source/escape"),
     )
     .unwrap();
     let backend = Arc::new(FakeBackend::default());
@@ -330,4 +395,89 @@ fn symlinked_material_is_infrastructure_and_never_reaches_backend() {
     assert_eq!(failure.code, TrialRelayFailure::MaterialUnavailable);
     assert_eq!(backend.builds.load(Ordering::Relaxed), 0);
     assert_eq!(backend.cleanups.load(Ordering::Relaxed), 1);
+}
+
+fn continuation_context_and_plan(root: &Root) -> (TrialEngineContext, TrialPlan) {
+    let mut context = context(root);
+    context.profile.maximum_steps = 2;
+    context.profile.required_slots = vec![
+        TrialSlotProfile {
+            slot_id: "slot_a".into(),
+            seed_roles: vec!["workspace_seed".into()],
+            visible_roles: vec!["protected".into()],
+            fresh_workspace: true,
+            retain_state_after: vec!["exit_nonzero".into()],
+        },
+        TrialSlotProfile {
+            slot_id: "slot_b".into(),
+            seed_roles: Vec::new(),
+            visible_roles: vec!["protected".into()],
+            fresh_workspace: false,
+            retain_state_after: vec!["succeeded".into()],
+        },
+    ];
+    let mut plan = plan();
+    plan.steps.push(TrialStep {
+        slot_id: "slot_b".into(),
+        operation: "run".into(),
+        state_source: "slot_a".into(),
+        visible_roles: vec!["protected".into()],
+        command: vec!["/candidate/check".into(), "case-a".into()],
+        working_directory: ".".into(),
+        timeout_ms: 500,
+    });
+    (context, plan)
+}
+
+#[test]
+fn deliberate_work_failure_can_retain_state_but_resource_failure_cannot() {
+    let root = Root::new();
+    let (context, plan) = continuation_context_and_plan(&root);
+    let backend = Arc::new(FakeBackend::default());
+    backend.outcomes.lock().unwrap().extend([
+        TrialOperationOutcome::ExitNonzero,
+        TrialOperationOutcome::Succeeded,
+    ]);
+    let execution = GenericTrialEngine::new(backend.clone())
+        .execute(
+            &context,
+            &plan,
+            Instant::now() + Duration::from_secs(2),
+            &AtomicBool::new(false),
+            &AtomicBool::new(false),
+        )
+        .unwrap();
+    assert_eq!(
+        execution.steps[0].outcome,
+        TrialOperationOutcome::ExitNonzero
+    );
+    assert_eq!(execution.steps[1].outcome, TrialOperationOutcome::Succeeded);
+    assert_eq!(backend.steps.load(Ordering::Relaxed), 2);
+
+    let root = Root::new();
+    let (context, plan) = continuation_context_and_plan(&root);
+    let backend = Arc::new(FakeBackend::default());
+    backend
+        .outcomes
+        .lock()
+        .unwrap()
+        .push_back(TrialOperationOutcome::DeadlineExceeded);
+    let execution = GenericTrialEngine::new(backend.clone())
+        .execute(
+            &context,
+            &plan,
+            Instant::now() + Duration::from_secs(2),
+            &AtomicBool::new(false),
+            &AtomicBool::new(false),
+        )
+        .unwrap();
+    assert_eq!(
+        execution.steps[0].outcome,
+        TrialOperationOutcome::DeadlineExceeded
+    );
+    assert_eq!(
+        execution.steps[1].outcome,
+        TrialOperationOutcome::DependencySkipped
+    );
+    assert_eq!(backend.steps.load(Ordering::Relaxed), 1);
 }

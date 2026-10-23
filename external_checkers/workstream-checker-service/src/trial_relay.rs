@@ -83,6 +83,8 @@ pub(crate) struct TrialProfile {
     pub(crate) builder_image_digest: String,
     pub(crate) offline_cache_digest: String,
     pub(crate) approved_base_digests: Vec<String>,
+    pub(crate) source_material_roles: Vec<String>,
+    pub(crate) material_projections: Vec<TrialMaterialProjectionProfile>,
     pub(crate) build_context_roles: Vec<String>,
     pub(crate) allowed_material_roles: Vec<String>,
     pub(crate) required_slots: Vec<TrialSlotProfile>,
@@ -111,8 +113,20 @@ pub(crate) struct TrialProfile {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct TrialSlotProfile {
     pub(crate) slot_id: String,
+    pub(crate) seed_roles: Vec<String>,
     pub(crate) visible_roles: Vec<String>,
     pub(crate) fresh_workspace: bool,
+    pub(crate) retain_state_after: Vec<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct TrialMaterialProjectionProfile {
+    pub(crate) role: String,
+    pub(crate) source_role: String,
+    pub(crate) projection_kind: String,
+    pub(crate) source_relative: String,
+    pub(crate) destination_relative: String,
+    pub(crate) exclusions: Vec<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -691,7 +705,13 @@ pub(crate) fn valid_trial_grant(grant: &TrialGrant, request_digest: &str) -> boo
 }
 
 fn valid_profile(profile: &TrialProfile) -> bool {
+    let source_roles: HashSet<_> = profile.source_material_roles.iter().collect();
     let allowed_roles: HashSet<_> = profile.allowed_material_roles.iter().collect();
+    let projection_roles: HashSet<_> = profile
+        .material_projections
+        .iter()
+        .map(|item| &item.role)
+        .collect();
     let build_roles: HashSet<_> = profile.build_context_roles.iter().collect();
     let base_digests: HashSet<_> = profile.approved_base_digests.iter().collect();
     let slot_ids: HashSet<_> = profile
@@ -720,29 +740,82 @@ fn valid_profile(profile: &TrialProfile) -> bool {
             .approved_base_digests
             .iter()
             .all(|value| valid_sha256(value))
+        && !source_roles.is_empty()
+        && source_roles.len() == profile.source_material_roles.len()
+        && profile
+            .source_material_roles
+            .iter()
+            .all(|value| valid_identifier(value))
         && !allowed_roles.is_empty()
         && allowed_roles.len() == profile.allowed_material_roles.len()
+        && projection_roles == allowed_roles
+        && profile
+            .material_projections
+            .iter()
+            .all(|item| valid_material_projection(item, &source_roles))
+        && ["build_context", "state_seed", "state_overlay"]
+            .iter()
+            .all(|kind| {
+                !projection_destinations_overlap(
+                    profile
+                        .material_projections
+                        .iter()
+                        .filter(|item| item.projection_kind == *kind)
+                        .map(|item| item.destination_relative.as_str()),
+                )
+            })
         && profile
             .allowed_material_roles
             .iter()
             .all(|value| valid_identifier(value))
         && !profile.build_context_roles.is_empty()
         && build_roles.len() == profile.build_context_roles.len()
-        && profile
-            .build_context_roles
-            .iter()
-            .all(|value| allowed_roles.contains(value))
+        && profile.build_context_roles.iter().all(|value| {
+            allowed_roles.contains(value)
+                && profile
+                    .material_projections
+                    .iter()
+                    .any(|item| item.role == *value && item.projection_kind == "build_context")
+        })
         && !profile.required_slots.is_empty()
         && slot_ids.len() == profile.required_slots.len()
         && profile.required_slots.iter().all(|slot| {
             let visible_roles: HashSet<_> = slot.visible_roles.iter().collect();
+            let seed_roles: HashSet<_> = slot.seed_roles.iter().collect();
             valid_identifier(&slot.slot_id)
-                && !slot.visible_roles.is_empty()
+                && seed_roles.len() == slot.seed_roles.len()
                 && visible_roles.len() == slot.visible_roles.len()
-                && slot
-                    .visible_roles
-                    .iter()
-                    .all(|value| allowed_roles.contains(value))
+                && slot.seed_roles.iter().all(|value| {
+                    allowed_roles.contains(value)
+                        && profile
+                            .material_projections
+                            .iter()
+                            .any(|item| item.role == *value && item.projection_kind == "state_seed")
+                })
+                && slot.visible_roles.iter().all(|value| {
+                    allowed_roles.contains(value)
+                        && profile.material_projections.iter().any(|item| {
+                            item.role == *value && item.projection_kind == "state_overlay"
+                        })
+                })
+                && !slot.retain_state_after.is_empty()
+                && slot.retain_state_after.len()
+                    == slot.retain_state_after.iter().collect::<HashSet<_>>().len()
+                && slot.retain_state_after.iter().all(|value| {
+                    matches!(value.as_str(), "succeeded" | "exit_nonzero" | "signalled")
+                })
+                && !projection_destinations_overlap(
+                    slot.seed_roles
+                        .iter()
+                        .chain(&slot.visible_roles)
+                        .filter_map(|role| {
+                            profile
+                                .material_projections
+                                .iter()
+                                .find(|item| item.role == **role)
+                                .map(|item| item.destination_relative.as_str())
+                        }),
+                )
         })
         && (1..=ABSOLUTE_MAXIMUM_FRAME_BYTES).contains(&profile.maximum_frame_bytes)
         && (1..=ABSOLUTE_MAXIMUM_FRAME_BYTES).contains(&profile.maximum_response_bytes)
@@ -768,6 +841,48 @@ fn valid_profile(profile: &TrialProfile) -> bool {
         && profile.maximum_pids > 0
         && profile.maximum_pids_overrun > 0
         && !profile.platform.is_empty()
+}
+
+fn valid_material_projection(
+    projection: &TrialMaterialProjectionProfile,
+    source_roles: &HashSet<&String>,
+) -> bool {
+    valid_identifier(&projection.role)
+        && source_roles.contains(&projection.source_role)
+        && matches!(
+            projection.projection_kind.as_str(),
+            "build_context" | "state_seed" | "state_overlay"
+        )
+        && safe_relative_path(&projection.source_relative, true)
+        && safe_relative_path(&projection.destination_relative, true)
+        && !(projection.projection_kind == "state_overlay"
+            && projection.destination_relative == ".")
+        && projection
+            .exclusions
+            .iter()
+            .all(|value| safe_relative_path(value, false))
+        && projection
+            .exclusions
+            .windows(2)
+            .all(|items| items[0] < items[1])
+        && !projection_destinations_overlap(projection.exclusions.iter().map(String::as_str))
+}
+
+fn projection_destinations_overlap<'a>(values: impl Iterator<Item = &'a str>) -> bool {
+    let values = values.collect::<Vec<_>>();
+    values.iter().enumerate().any(|(index, left)| {
+        values[index + 1..].iter().any(|right| {
+            left == right
+                || *left == "."
+                || *right == "."
+                || left
+                    .strip_prefix(*right)
+                    .is_some_and(|suffix| suffix.starts_with('/'))
+                || right
+                    .strip_prefix(*left)
+                    .is_some_and(|suffix| suffix.starts_with('/'))
+        })
+    })
 }
 
 fn valid_identity(identity: &TrialRequestIdentity) -> bool {
@@ -1180,10 +1295,16 @@ fn validate_execution(
     }) {
         return Err(TrialRelayFailure::ImplementationUnavailable);
     }
-    let mut successful_slots = HashSet::new();
-    for (index, (observation, step)) in execution.steps.iter().zip(&plan.steps).enumerate() {
+    let mut retained_slots = HashSet::new();
+    for (index, ((observation, step), slot_profile)) in execution
+        .steps
+        .iter()
+        .zip(&plan.steps)
+        .zip(&profile.required_slots)
+        .enumerate()
+    {
         let dependency_succeeded =
-            step.state_source == "fresh" || successful_slots.contains(step.state_source.as_str());
+            step.state_source == "fresh" || retained_slots.contains(step.state_source.as_str());
         let must_skip = !build_succeeded || !dependency_succeeded;
         if observation.slot_id != step.slot_id
             || observation.operation_order != (index + 1) as u32
@@ -1238,11 +1359,30 @@ fn validate_execution(
         {
             return Err(TrialRelayFailure::ImplementationUnavailable);
         }
-        if observation.outcome == TrialOperationOutcome::Succeeded {
-            successful_slots.insert(observation.slot_id.as_str());
+        if slot_profile
+            .retain_state_after
+            .iter()
+            .any(|value| value == trial_outcome_name(observation.outcome))
+        {
+            retained_slots.insert(observation.slot_id.as_str());
         }
     }
     Ok(())
+}
+
+fn trial_outcome_name(outcome: TrialOperationOutcome) -> &'static str {
+    match outcome {
+        TrialOperationOutcome::Succeeded => "succeeded",
+        TrialOperationOutcome::ExitNonzero => "exit_nonzero",
+        TrialOperationOutcome::Signalled => "signalled",
+        TrialOperationOutcome::DeadlineExceeded => "deadline_exceeded",
+        TrialOperationOutcome::CpuExceeded => "cpu_exceeded",
+        TrialOperationOutcome::MemoryExceeded => "memory_exceeded",
+        TrialOperationOutcome::PidExceeded => "pid_exceeded",
+        TrialOperationOutcome::DiskExceeded => "disk_exceeded",
+        TrialOperationOutcome::OutputExceeded => "output_exceeded",
+        TrialOperationOutcome::DependencySkipped => "dependency_skipped",
+    }
 }
 
 fn valid_build_observation(
