@@ -45,7 +45,7 @@ def _upgrade_setup_runtime_configuration_guard() -> None:
     )
     validation_anchor = "     OR jsonb_typeof(config->'adapter_profile') IS DISTINCT FROM 'string'"
     profile_validation = r"""
-     OR NOT (
+     OR (
        ((NOT config ? 'model_profile_id' OR config->'model_profile_id'='null'::jsonb)
         AND (NOT config ? 'model_profile_version' OR
              config->'model_profile_version'='null'::jsonb)
@@ -59,7 +59,7 @@ def _upgrade_setup_runtime_configuration_guard() -> None:
           config,'model_profile_version',1,2147483647) IS TRUE
         AND jsonb_typeof(config->'model_profile_digest')='string'
         AND config->>'model_profile_digest' ~ '^sha256:[0-9a-f]{64}$')
-     )
+     ) IS NOT TRUE
 """
     if (
         definition.count(allowed_anchor) != 1
