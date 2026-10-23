@@ -41,3 +41,7 @@ for current product capability.
 Git history is authoritative if this durable index conflicts with a merged
 change; inspect GitHub for transient work. Update an affected row when its
 durable disposition or next usable boundary changes.
+
+## Guide runtime portability
+
+- [WS-AGENT-001](initiatives/WS-AGENT-001/OVERVIEW.md) — Planned: remove OpenAI-specific document custody, then qualify OpenAI Agents SDK and OmniCoreAgent with OpenRouter against the same core contract.

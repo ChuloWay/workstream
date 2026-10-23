@@ -1,16 +1,16 @@
-# Replaceable guide-agent runtimes and OpenRouter inference
+# WS-AGENT-001-01 — Neutral guide tools and OpenRouter inference
 
-- Initiative: None
+- Initiative: WS-AGENT-001
 - Durable disposition: Planned
-- Intended merge outcome: Execute the same governed guide-compilation operation through OpenAI Agents SDK or OmniCoreAgent with OpenRouter, without making PROJECTS depend on either runtime's file-storage conventions.
+- Intended merge outcome: Remove provider-specific document custody from the core and run the existing OpenAI Agents SDK through OpenRouter using trusted bounded document tools.
 
 ## Intent
 
 The user requires independently replaceable agent runtimes and model providers.
 A live OpenRouter credential/model probe succeeded, but the existing runtime
 cannot switch: PROJECTS requires OpenAI Responses and OpenAI file attachments.
-Add OmniCoreAgent as a real second adapter and exercise both SDKs against the
-same document tools and result contract. This is a repair to the current hosted
+The companion `WS-AGENT-001-02` adds OmniCoreAgent and qualifies both actual SDKs
+against this same document-tool/result contract. This is a repair to the current hosted
 guide journey, not a general agent platform or an additional product lifecycle.
 
 ## Current behavior
@@ -36,7 +36,7 @@ obligation before claiming the hosted journey recovered.
   tool port: runtime-independent execution configuration, tool budgets and results.
 - `backend/app/adapters/project_agents/`, `backend/app/core/project_agents.py`,
   `backend/app/core/project_guide_instructions.py`, `backend/app/core/config.py`:
-  two real SDK adapters, trusted provider selection, common result validation and
+  the current SDK adapter, trusted provider selection, common result validation and
   the same bounded document-tool capability; preserve manager-authored behavior.
 - PROJECTS `api/guide_documents.py` and `guide_compilation/` affected models,
   custody, composition and validation; ART `guide_document_access.py` and its
@@ -47,7 +47,8 @@ obligation before claiming the hosted journey recovered.
 - One linear Alembic migration and affected schema baseline/fingerprints:
   runtime-independent configuration/access invariants and retained-data proof.
 - `backend/pyproject.toml`, `backend/uv.lock`, applicable dependency installation
-  declarations: pinned published OmniCoreAgent and fixed parser dependencies.
+  declarations: fixed parser dependencies; reserve the second SDK installation for
+  the companion change.
 - `docker/backend/`, `deploy/hosted/`, canonical environment example and focused
   deployment tests: worker-only provider credentials and secret-free parser role.
 - Focused affected tests, ownership/lane inventories, and current guide/runtime,
@@ -68,8 +69,9 @@ obligation before claiming the hosted journey recovered.
 
 ## Design and decisions
 
-1. Keep `ProjectGuideAgentRuntime` and its typed factory. Register
-   `openai_agents_sdk` and `omnicore_agent` independently of `model_provider`.
+1. Keep `ProjectGuideAgentRuntime` and its typed factory. Keep
+   `openai_agents_sdk` independently selectable from `model_provider`; the
+   companion change registers `omnicore_agent` without changing core or schema.
    Use OpenRouter with the already-probed `openai/gpt-5.6-terra` for the concrete
    two-runtime qualification. Credentials and provider endpoints stay in trusted
    composition, outside persisted model instructions and result bodies.
@@ -77,9 +79,21 @@ obligation before claiming the hosted journey recovered.
    trusted document-access facts. Its rule is that the authorized owner verified
    and exposed that original during that attempt, not that OpenAI attached it.
    Separate "no inference" from "no remotely hosted document resources".
-   Preserve all historical access/allocation facts and their hashes; never invent
-   a successful parse receipt for an earlier upload. Identify retained cleanup
-   dependencies explicitly; no selectable obsolete execution path.
+   Preserve historical access/allocation facts and hashes; never invent a parsed
+   result for an earlier upload. Retain only an exact-ID OpenAI cleanup reader for
+   outstanding recorded resources, selected from immutable resource facts rather
+   than the current inference factory. It has no dispatch/inference capability and
+   cannot clear unknown allocations. Stop new remote-allocation writes; remove the
+   former hosted execution path. Historical document-access rows remain facts of
+   their recorded ART verification/staging; new writes use trusted neutral reads.
+   Upgrade must refuse unresolved old pre-dispatch or partially persisted work
+   requiring the replaced runtime until supported old-image recovery completes;
+   retained uncertain terminal work is not replayed or discarded.
+   The SDK capability contains only the opaque-handle document tool port. It has
+   no resource allocator or document-evidence mutation method. The trusted tool
+   owner alone invokes ART, validates the parser reply against request/source
+   hashes, persists exact attempt/manifest access evidence and returns text. Its
+   attempt/runtime authority comes from fenced composition, never model input.
 3. Both SDKs receive the same opaque-handle read/search tools. ART rechecks exact
    authority, manifest, checksum and byte count on each source access. Read/search
    results have bounded text, locators, pagination/truncation and exact identity.
@@ -89,26 +103,44 @@ obligation before claiming the hosted journey recovered.
    fixed secret-free, networkless service, nonroot/read-only with bounded
    memory/CPU/PIDs and per-call deadlines. Stream verified bytes over a private
    Unix socket; no shared source paths or durable extracted-content storage.
+   Use a dedicated socket volume mounted only by parser (read-write) and guide
+   worker (read-only), with directory owner/parser UID 10002, worker group 10001,
+   directory mode 0750, socket mode 0660. API, Beat, migrations and checker receive
+   no socket mount. Parser alone creates/removes its own socket; reject symlinks
+   or foreign owners, and remove a stale owned socket only after proving no live
+   listener. Cap simultaneous parser work, request bytes and output; abort partial
+   frames and enforce a hard per-call child deadline inside the secret-free parser
+   container. No child inherits worker secrets or network. Parser tmpfs is bounded.
    Use closed operations and bounded framing/output; enforce OOXML archive/XML
    limits and malformed/encrypted/oversized PDF denial. No arbitrary execution.
-5. Adapters own their native loops, tool wrappers, parsing of model output and
-   cleanup. Preserve Workstream turn/tool/time bounds, sanitized errors and
-   retry/circuit semantics. Disable SDK autonomous filesystem tools, persistent
-   sessions, telemetry capture/export, skills, subagents and remote tools. Verify
-   actual offered tools. SDK incompatibility must fail before dispatch where
-   detectable; never silently ignore configuration.
-6. Pin the published `omnicoreagent==0.6.0` distribution (MIT; Python >=3.12,
-   <3.15), not the stale local development checkout. Resolve its Python/dependency
-   intersection and inspect its actual API/retry behavior before implementation.
-   The current release image uses Python 3.12. No SDK monkeypatch or global
-   credential rewriting to implement per-run selection.
+5. Adapters own native loops, model-request retry/timeout mechanics and parsing
+   of output. The core records a bounded immutable effective adapter profile and
+   enforces the whole-run deadline, source/tool/output budgets and final validity.
+   Vendor-specific settings are not universal fields; unsupported options are
+   rejected, never silently ignored. OpenAI can record its controlled request
+   timeout/retries. OmniCore's companion adapter records SDK-owned behavior and
+   must not claim knobs the release lacks. Do not stack retry loops. Cancellation
+   must terminate/await native tasks; retain uncertainty for remote outcomes.
+   Runtime identity/provider/model/protocol and the effective profile are frozen
+   before dispatch, with installation/configuration validation in composition.
+6. Keep secrets in the worker-only trusted provider configuration. No request can
+   choose credentials or endpoints. Disable native filesystem tools, offload,
+   persistent sessions, telemetry capture/export, skills, subagents and remote
+   tools. Capture real SDK requests to verify origin, tool inventory, absence of
+   file/container/session calls and actual retention parameters. Do not infer
+   provider retention from an unsupported setting or from a synthetic success.
+7. Both real adapters remain the overall initiative outcome. First land this
+   complete OpenAI SDK/OpenRouter path; the companion adds OmniCore with its own
+   dependency environment. Resolver evidence shows published OmniCore 0.6.0 /
+   LiteLLM requires `openai<3`, incompatible with the current `openai==3.11.0`.
+   Do not force coinstallation, downgrade unrelated packages or bypass the lock.
+   Isolated SDK environments share the exact same Workstream source/contracts.
 
 ## Acceptance criteria
 
-- The two actual SDKs run the same synthetic tool conversation and original-guide
-  live qualification through OpenRouter, changing runtime configuration only.
-  They need not produce identical prose; both must pass identical Workstream
-  schema, source-evidence, capability and policy validation.
+- The actual OpenAI Agents SDK completes synthetic tool and original-guide
+  qualification through OpenRouter and the neutral tools. The companion applies
+  the same contract suite to OmniCoreAgent; this change does not claim it runs.
 - Runtime substitution needs no provider-specific branching in PROJECTS/ART
   business logic or a schema change. Installed-adapter validation remains explicit.
 - An unknown/foreign document handle, stale grant, altered bytes, unopened citation,
@@ -120,6 +152,12 @@ obligation before claiming the hosted journey recovered.
 - PostgreSQL tests preserve retained facts and reject false source lineage; old
   unresolved work is not redispatched. Remove tests for obsolete OpenAI-only
   implementation requirements while retaining their actual safety guarantees.
+- A hostile fake runtime cannot record a document read or cite a document without
+  calling its tool. Grant denial, parser hash mismatch/timeout and custody failure
+  return no text and leave no successful access receipt. A valid control records
+  the exact read. Removing the trusted wrapper must fail the intended assertions.
+- Historical cleanup tests prove current provider selection cannot redirect or
+  erase retained OpenAI cleanup obligations. No former runtime execution is kept.
 - Hosted settings expose the current model/provider/runtime and required key
   clearly. No production provider switch or full-journey completion is claimed
   until the reviewed images and actual durable workers pass the hosted drill.
@@ -151,5 +189,5 @@ obligation before claiming the hosted journey recovered.
   Preserve/reconcile its outcome; do not overwrite that work or call it merged.
 - Next usable boundary: real two-runtime guide qualification, then the existing
   project-owned checker and contribution journey drill.
-- Remaining risks: no implementation decision may silently weaken SDK retry,
+- Remaining risks: no implementation decision may silently weaken SDK behavior,
   privacy or source-evidence controls to make the second runtime pass.
