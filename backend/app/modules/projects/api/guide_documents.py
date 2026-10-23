@@ -12,13 +12,8 @@ import hashlib
 from pydantic import BaseModel, ConfigDict, Field, StrictInt, model_validator
 
 from app.core.hashing import canonical_json_hash
-
-GuideDocumentMediaType = Literal[
-    "application/pdf",
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-    "text/markdown",
-]
+from app.interfaces.external_services import ExternalServiceAdapter
+from app.interfaces.guide_document_tools import GuideDocumentMediaType, GuideDocumentToolPort
 DOCUMENT_EXTENSIONS: dict[str, str] = {
     "application/pdf": "pdf",
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
@@ -90,7 +85,9 @@ class GuideDocumentManifest(BaseModel):
         """Mint an opaque selector meaningful only inside this run's exact grant."""
         if document not in self.documents:
             raise ValueError("document is not assigned to this manifest")
-        return str(guide_document_handle(self.setup_run_id, document.source_item_id, document.ingest_id))
+        return str(
+            guide_document_handle(self.setup_run_id, document.source_item_id, document.ingest_id)
+        )
 
     def agent_projection(self) -> dict[str, object]:
         """Expose version references and handles, excluding server storage identities."""
@@ -177,51 +174,63 @@ class GuideRuntimeCleanupCustody(Protocol):
     async def record_cleanup_failed(self, allocation_id: UUID) -> None: ...
 
 
-class GuideRuntimeResourceCustody(GuideRuntimeCleanupCustody, Protocol):
-    """Attempt-owned allocation and exact-ID cleanup authority, without ORM coupling."""
+GUIDE_RUNTIME_RESOURCE_CLEANUP_CAPABILITY_KEY = "project_guide_resource_cleanup"
 
-    async def begin_allocation(
-        self,
-        *,
-        kind: ProviderResourceKind,
-        document_handle: str | None,
-        parent_provider_id: str | None,
-        expires_at: datetime,
-        source_file_allocation_id: UUID | None = None,
-        container_allocation_id: UUID | None = None,
-    ) -> UUID: ...
 
-    async def record_allocated(self, allocation_id: UUID, provider_id: str) -> None: ...
+class GuideRuntimeResourceCleanupAdapter(ExternalServiceAdapter, Protocol):
+    """Cleanup-only external capability over exact retained provider IDs."""
 
-    async def record_uncertain(self, allocation_id: UUID) -> None: ...
-
-    async def record_document_open(self, handle: str) -> None: ...
-
-    async def record_direct_document_open(self, handle: str) -> None:
-        """Record a provider-free runtime's read of one granted original.
-
-        No provider resource exists, so the evidence has no attachment
-        allocation. Custody refuses it for any attempt that names a provider.
-        """
+    async def cleanup(self, custody: GuideRuntimeCleanupCustody) -> bool:
+        """Attempt deletion of only the resources exposed by retained custody."""
         ...
+
+
+@dataclass(frozen=True, slots=True)
+class GuideDocumentAccessReceipt:
+    """Exact successful fixed-parser evidence, without source text."""
+
+    handle: str
+    source_item_id: UUID
+    document_version_id: UUID
+    sha256: str
+    operation: Literal["read", "search"]
+    parser_request_hash: str
+    parser_response_hash: str
+    parser_build_digest: str
+
+
+class GuideDocumentAccessCustody(Protocol):
+    """PROJECTS-owned successful-access writer hidden from agent runtimes."""
+
+    async def record_success(self, receipt: GuideDocumentAccessReceipt) -> None: ...
 
     async def opened_handles(self) -> frozenset[str]: ...
 
 
-
 @dataclass(frozen=True, slots=True)
 class GuideRuntimeCapabilities:
-    """Non-serializable execution capabilities issued only after the dispatch fence."""
+    """The sole non-serializable capability issued to an agent runtime."""
 
-    documents: GuideDocumentGrant
-    resources: GuideRuntimeResourceCustody
+    tools: GuideDocumentToolPort
 
 
 class GuideDocumentAccessFactory(Protocol):
     """ART composition opens an exact fenced grant with owned scratch lifecycle."""
 
-    def __call__(self, attempt_id: UUID, manifest: GuideDocumentManifest,
-                 configuration) -> AbstractAsyncContextManager[GuideDocumentGrant]: ...
+    def __call__(
+        self, attempt_id: UUID, manifest: GuideDocumentManifest, configuration
+    ) -> AbstractAsyncContextManager[GuideDocumentGrant]: ...
+
+
+class GuideDocumentToolsFactory(Protocol):
+    """Trusted composition returns only the bounded tool capability to runtimes."""
+
+    def __call__(
+        self,
+        attempt_id: UUID,
+        manifest: GuideDocumentManifest,
+        configuration,
+    ) -> AbstractAsyncContextManager[GuideDocumentToolPort]: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -272,11 +281,17 @@ class ProjectGuideDocumentLineage:
 class ProjectGuideDocumentScopePort(Protocol):
     """PROJECTS scope locks live until the composition-owned transaction ends."""
 
-    async def lock_manifest_source(self, request: GuideDocumentManifestRequest) -> ProjectGuideDocumentLineage: ...
+    async def lock_manifest_source(
+        self, request: GuideDocumentManifestRequest
+    ) -> ProjectGuideDocumentLineage: ...
 
-    async def lock_access_attempt(self, attempt_id: UUID, manifest: GuideDocumentManifest) -> None: ...
+    async def lock_access_attempt(
+        self, attempt_id: UUID, manifest: GuideDocumentManifest
+    ) -> None: ...
 
-    async def lock_task_originals(self, request: LockedGuideOriginalsRequest) -> tuple[LabeledGuideOriginal, ...]: ...
+    async def lock_task_originals(
+        self, request: LockedGuideOriginalsRequest
+    ) -> tuple[LabeledGuideOriginal, ...]: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -294,6 +309,11 @@ class GuideDocumentUploadTargetPort(Protocol):
     """Resolve exact creation membership within the caller's AUTH/ART transaction."""
 
     async def resolve(
-        self, project_id: UUID, guide_id: UUID, document_id: UUID, *, for_update: bool,
+        self,
+        project_id: UUID,
+        guide_id: UUID,
+        document_id: UUID,
+        *,
+        for_update: bool,
     ) -> GuideDocumentUploadTarget | None:
         """Return current membership, optionally locking the owning aggregate."""

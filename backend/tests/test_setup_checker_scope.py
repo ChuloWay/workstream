@@ -34,7 +34,6 @@ from tests.test_agent_runtime import (
     _provider_payload,
     _sdk_result,
     model_credentials,  # noqa: F401
-    scripted_workspace,  # noqa: F401
 )
 
 
@@ -124,7 +123,7 @@ def test_inference_cannot_return_management_classifications_but_retained_reads_s
     require_complete_generated_specifications(manager, retained)
 
 
-@pytest.mark.usefixtures("model_credentials", "scripted_workspace")
+@pytest.mark.usefixtures("model_credentials")
 @pytest.mark.parametrize("phase", ["draft", "review"])
 @pytest.mark.parametrize(
     "fault",
@@ -186,7 +185,7 @@ async def test_rejected_output_gets_error_feedback_then_complete_revalidation(
     assert len(calls) == 3
 
 
-@pytest.mark.usefixtures("model_credentials", "scripted_workspace")
+@pytest.mark.usefixtures("model_credentials")
 @pytest.mark.parametrize("phase", ["draft", "review"])
 async def test_output_correction_exhaustion_never_returns_a_proposal(monkeypatch, phase):
     from agents import Runner
@@ -206,7 +205,7 @@ async def test_output_correction_exhaustion_never_returns_a_proposal(monkeypatch
     assert len(calls) == (3 if phase == "draft" else 4)
 
 
-@pytest.mark.usefixtures("model_credentials", "scripted_workspace")
+@pytest.mark.usefixtures("model_credentials")
 async def test_draft_and_review_share_two_corrections(monkeypatch):
     """A draft repair cannot grant the review a new correction allowance."""
     from agents import Runner
@@ -228,7 +227,7 @@ async def test_draft_and_review_share_two_corrections(monkeypatch):
     assert calls[2]["phase"] == calls[3]["phase"] == "coverage_review"
 
 
-@pytest.mark.usefixtures("model_credentials", "scripted_workspace")
+@pytest.mark.usefixtures("model_credentials")
 async def test_corrections_cannot_reset_model_turn_budget(monkeypatch):
     """Count actual model-boundary calls, including a rejected completed output."""
     from agents import OpenAIResponsesModel, Runner
@@ -265,7 +264,7 @@ async def test_corrections_cannot_reset_model_turn_budget(monkeypatch):
     assert phases == [2]
 
 
-@pytest.mark.usefixtures("model_credentials", "scripted_workspace")
+@pytest.mark.usefixtures("model_credentials")
 @pytest.mark.parametrize("phase", ["draft", "review"])
 @pytest.mark.parametrize("corrected", [True, False])
 async def test_blocked_proposal_must_open_all_originals_even_during_correction(
@@ -322,7 +321,7 @@ async def test_blocked_proposal_must_open_all_originals_even_during_correction(
         assert len(calls) == (3 if phase == "draft" else 4)
 
 
-@pytest.mark.usefixtures("model_credentials", "scripted_workspace")
+@pytest.mark.usefixtures("model_credentials")
 async def test_real_sdk_runner_corrects_invalid_json_then_performs_fresh_review(monkeypatch):
     """Exercise SDK tool dispatch and parser-exception propagation without model I/O."""
     from agents import OpenAIResponsesModel
@@ -347,7 +346,7 @@ async def test_real_sdk_runner_corrects_invalid_json_then_performs_fresh_review(
             item = ResponseFunctionToolCall(
                 id=f"fc_{index}",
                 call_id=f"call_{index}",
-                name="open_guide_document",
+                name="read_document",
                 type="function_call",
                 arguments=json.dumps({"handle": handle}),
                 status="completed",

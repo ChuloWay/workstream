@@ -145,6 +145,7 @@ async def create_compiled_guide(
     pre_submit_registry_entry=None,
     post_submit_registry_entry=None,
     compilation_outcome=None,
+    configuration=None,
 ):
     """Create declarations with real AUTH, then execute/project/finalize scripted findings."""
     snapshot_id = await _create_guide_source(factory, values, actor, version)
@@ -176,6 +177,7 @@ async def create_compiled_guide(
         values,
         guide_version=version,
         checker_capabilities=checker_capabilities,
+        configuration=configuration,
     ).model_copy(update={"material": manifest})
     outcome = compilation_outcome or generated_result()
     if artifact_proposal is not None:
@@ -225,6 +227,7 @@ async def source_case(
     pre_submit_registry_spec=None,
     post_submit_registry_spec=None,
     compilation_outcome=None,
+    configuration=None,
 ):
     """An authorized draft Project plus a genuinely created complete guide source."""
     engine = create_async_engine(url)
@@ -286,6 +289,7 @@ async def source_case(
             pre_submit_registry_entry=pre_registry_entry,
             post_submit_registry_entry=post_registry_entry,
             compilation_outcome=compilation_outcome,
+            configuration=configuration,
         )
         yield values, factory, finalization, actor, grant
     finally:

@@ -12,7 +12,6 @@ x-backend-runtime: &backend-runtime
   init: true
   user: "${LOCAL_UID:-1000}:${LOCAL_GID:-1000}"
   environment: &backend-environment
-    OPENAI_API_KEY: ${OPENAI_API_KEY:-}
     WORKSTREAM_API_RATE_LIMIT_KEY_SECRET: ${WORKSTREAM_API_RATE_LIMIT_KEY_SECRET:?set WORKSTREAM_API_RATE_LIMIT_KEY_SECRET in .env}
     WORKSTREAM_ARTIFACT_ADMISSION_DEPLOYMENT_MAXIMUM_BYTES: "4294967296"
     WORKSTREAM_ARTIFACT_ADMISSION_PRODUCER_MAXIMUM_BYTES: "268435456"
@@ -38,7 +37,11 @@ x-backend-runtime: &backend-runtime
     WORKSTREAM_FLOW_AUTH_ISSUER: ${WORKSTREAM_FLOW_AUTH_ISSUER:-https://flow.local/pilot}
     WORKSTREAM_FLOW_AUTH_LOCAL_HMAC_SECRET: ${WORKSTREAM_FLOW_AUTH_LOCAL_HMAC_SECRET:?set WORKSTREAM_FLOW_AUTH_LOCAL_HMAC_SECRET in .env}
     WORKSTREAM_PAGINATION_CURSOR_HMAC_SECRET: ${WORKSTREAM_PAGINATION_CURSOR_HMAC_SECRET:?set WORKSTREAM_PAGINATION_CURSOR_HMAC_SECRET in .env}
-    WORKSTREAM_PROJECT_AGENT_MODEL: ${WORKSTREAM_PROJECT_AGENT_MODEL:-gpt-5.6-terra}
+    WORKSTREAM_PROJECT_AGENT_RUNTIME: ${WORKSTREAM_PROJECT_AGENT_RUNTIME:-openai_agents_sdk}
+    WORKSTREAM_PROJECT_AGENT_MODEL_PROVIDER: ${WORKSTREAM_PROJECT_AGENT_MODEL_PROVIDER:-openrouter}
+    WORKSTREAM_PROJECT_AGENT_MODEL_API: ${WORKSTREAM_PROJECT_AGENT_MODEL_API:-chat_completions}
+    WORKSTREAM_PROJECT_AGENT_MODEL: ${WORKSTREAM_PROJECT_AGENT_MODEL:-openai/gpt-5.6-terra}
+    WORKSTREAM_PROJECT_AGENT_RUNTIME_OPTIONS: ${WORKSTREAM_PROJECT_AGENT_RUNTIME_OPTIONS:?set WORKSTREAM_PROJECT_AGENT_RUNTIME_OPTIONS to a JSON object}
   volumes:
     - ./backend:/workspace/backend
     - workstream_scratch_data:/workspace/scratch
@@ -78,6 +81,16 @@ services:
 
   worker:
     <<: *backend-runtime
+    group_add: ["10001"]
+    environment:
+      <<: *backend-environment
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      WORKSTREAM_GUIDE_DOCUMENT_PARSER_SOCKET: /var/lib/workstream/guide-runtime/guide.sock
+    volumes:
+      - ./backend:/workspace/backend
+      - workstream_scratch_data:/workspace/scratch
+      - guide_parser_socket:/var/lib/workstream/guide-runtime:ro
     command:
       - python
       - -m
@@ -91,6 +104,8 @@ services:
       - --pidfile=/tmp/celery-worker.pid
       - --loglevel=INFO
     depends_on:
+      guide-document-parser:
+        condition: service_healthy
       backend:
         condition: service_healthy
       redis:
@@ -133,6 +148,38 @@ services:
       timeout: 5s
       retries: 12
       start_period: 15s
+
+  guide-document-parser:
+    profiles: ["backend"]
+    image: ${COMPOSE_PROJECT_NAME}-backend:local
+    pull_policy: never
+    init: true
+    user: "0:0"
+    network_mode: none
+    read_only: true
+    cap_drop: [ALL]
+    cap_add: [KILL, SETGID, SETUID]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 32
+    mem_limit: 512m
+    cpus: 1.0
+    tmpfs:
+      - /tmp:mode=0700,uid=10002,gid=10001,size=64m,noexec,nosuid,nodev
+    volumes:
+      - guide_parser_socket:/var/lib/workstream/guide-runtime
+    command:
+      - python
+      - -m
+      - app.adapters.guide_document_tools.service
+      - --socket
+      - /var/lib/workstream/guide-runtime/guide.sock
+    healthcheck:
+      test: [CMD, python, -m, app.adapters.guide_document_tools.service, --socket, /var/lib/workstream/guide-runtime/guide.sock, --healthcheck]
+      interval: 5s
+      timeout: 4s
+      retries: 12
+      start_period: 15s
+    stop_grace_period: 15s
 
   postgres:
     image: public.ecr.aws/docker/library/postgres:16@sha256:33f923b05f64ca54ac4401c01126a6b92afe839a0aa0a52bc5aeb5cc958e5f20
@@ -185,6 +232,7 @@ services:
       - workstream_minio_data:/data
 
 volumes:
+  guide_parser_socket:
   workstream_postgres_uuid7_data:
   workstream_redis_uuid7_data:
   workstream_minio_data:

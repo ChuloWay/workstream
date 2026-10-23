@@ -62,7 +62,7 @@ review remain required before readiness.
 
 ## Reconciliation
 
-- Current-source reconciliation: Main `09c18e77d` includes the project PRE image (#656) and ART CLI completion (#662); both are retained. The roadmap distinguishes implemented PRE intake from the historical proposal requiring fresh correction. Open #659 replaces the hosted document runtime and overlaps the adapter. Keep this change focused and reconcile the adapter before readiness if that PR lands.
+- Current-source reconciliation: Main `bb39ac10a` includes the project PRE image (#656), ART CLI completion (#662), neutral document runtime (#659) and MCP policy drafts (#657). Reconciliation preserves the provider-neutral bounded read/search tools and model profiles while enforcing the restricted output schema, correction budget and fresh source access in each inference phase. The roadmap retains the original runtime qualification and distinguishes it from the fresh PRE/POST-only proposal still required.
 - Next usable boundary: Real project proposal regeneration after human merge; model runtime work remains separate.
 - Remaining risks: Generated prose still requires PM review; schemas cannot prove every statement is semantically within scope.
 
@@ -122,3 +122,10 @@ The real CLI approval regression copied a generated proposal through retained
 serialization, inadvertently making the removed empty notes field explicit. Its
 inference fixture now omits that field; production rejection and all existing
 public approval, replay and fresh-authority assertions remain unchanged.
+
+Main reconciliation retained neutral read/search tools, provider profiles and shared
+result validation. Source evidence is reset for each draft, review and correction.
+Failed hosted fixtures were still emitting removed notes or generating human-policy
+requirements. Growth proposals now use the strict inference fixture. Human-review
+activation proofs explicitly select the manager-authored runtime, preserving real
+request identity, persisted configuration, activation refusal and SQL backstops.

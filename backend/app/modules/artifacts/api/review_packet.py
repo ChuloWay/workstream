@@ -7,7 +7,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, StrictInt, field_validator, model_validator
 
-from app.modules.projects.api.guide_documents import GuideDocumentMediaType
+from app.interfaces.guide_document_tools import GuideDocumentMediaType
 
 
 class ReviewPacketMembershipUnavailable(RuntimeError):

@@ -80,12 +80,20 @@ async def test_correction_is_refused_for_a_manager_authored_proposal(monkeypatch
     from app.modules.authorization.api.guide_proposal_review import PreparedGuideProposalOperation
     from app.modules.projects.api.guide_proposals import GuideProposalError
     from app.modules.projects.guide_compilation import proposal_correction
+    from tests.projects.guide_compilation.helpers import manager_runtime_configuration
 
     target = GuideProposalTarget(**target_values())
     command = GuideProposalCorrection(
         target=target, idempotency_key=uuid4(), reason="Require a test report.")
-    locked = SimpleNamespace(target=target, current=True, view=SimpleNamespace(
-        attempt=SimpleNamespace(runtime_configuration={"model_provider": "none"})))
+    locked = SimpleNamespace(
+        target=target,
+        current=True,
+        view=SimpleNamespace(
+            attempt=SimpleNamespace(
+                runtime_configuration=manager_runtime_configuration().model_dump(mode="json")
+            )
+        ),
+    )
 
     class Repository:
         def __init__(self, _session):

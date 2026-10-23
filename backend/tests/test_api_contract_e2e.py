@@ -3,10 +3,18 @@ from __future__ import annotations
 import importlib
 from pathlib import Path
 import sys
+from types import SimpleNamespace
 
 import pytest
 
 from app.core.config import Settings
+from app.adapters.guide_document_tools import (
+    GUIDE_DOCUMENT_PARSER_PROVIDER_KEY,
+    GuideDocumentParserRequest,
+)
+from app.interfaces.guide_document_tools import GuideDocumentToolResult
+from app.modules.projects.api.guide_documents import GuideRuntimeCapabilities
+from tests.projects.guide_compilation.helpers import context, ids, runtime_configuration
 
 SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 sys.path.insert(0, str(SCRIPTS))
@@ -29,6 +37,78 @@ def test_scripted_guide_broker_acknowledgement_binds_exact_delivery() -> None:
         acknowledge(args=args, task_id=str(uuid4()))
     with pytest.raises(ValueError):
         acknowledge(args=args[:4], task_id=task_id)
+
+
+@pytest.mark.asyncio
+async def test_scripted_guide_runtime_reads_neutral_tools_before_citing_originals() -> None:
+    """The API drill runtime proves access through tools, without hosted-resource facts."""
+    guide_runtime = importlib.import_module("guide_compilation_e2e")
+    compilation_context = context(ids())
+    document = compilation_context.material.documents[0]
+    handle = compilation_context.material.handle_for(document)
+    reads: list[tuple[str, int, int]] = []
+    opened: set[str] = set()
+
+    async def read_document(value: str, *, offset: int = 0, limit: int = 16000):
+        reads.append((value, offset, limit))
+        opened.add(value)
+        return GuideDocumentToolResult(
+            handle=value,
+            source_item_id=document.source_item_id,
+            document_version_id=document.ingest_id,
+            sha256=document.sha256,
+            operation="read",
+            text="Guide fixture",
+            locators=(),
+            next_offset=None,
+            total_characters=13,
+        )
+
+    async def opened_handles():
+        return frozenset(opened)
+
+    tools = SimpleNamespace(
+        read_document=read_document,
+        opened_handles=opened_handles,
+    )
+    runtime = guide_runtime.E2EProjectGuideRuntime(runtime_configuration())
+
+    result = await runtime.compile_project_guide(
+        compilation_context, GuideRuntimeCapabilities(tools=tools)
+    )
+
+    assert reads == [(handle, 0, 16000)]
+    assert runtime.calls == 1
+    assert result.findings[0].evidence_refs == result.requirements[0].evidence_refs
+    assert result.findings[0].evidence_refs[0].source_item_id == document.source_item_id
+
+
+@pytest.mark.asyncio
+async def test_scripted_parser_preserves_source_bindings_without_a_socket() -> None:
+    """The API contract drill stubs parsing only after receiving exact ART bytes."""
+    from hashlib import sha256
+    from uuid import uuid4
+
+    guide_runtime = importlib.import_module("guide_compilation_e2e")
+    source = b"%PDF-1.7\ncontract fixture\n%%EOF"
+    request = GuideDocumentParserRequest(
+        request_id=uuid4(),
+        source_sha256="sha256:" + sha256(source).hexdigest(),
+        source_byte_count=len(source),
+        media_type="application/pdf",
+        operation="read",
+        offset=0,
+        limit=16000,
+    )
+    parser = guide_runtime.scripted_guide_document_parser_factory(
+        socket_path=Path("/unused"), timeout_seconds=30.0
+    ).create(GUIDE_DOCUMENT_PARSER_PROVIDER_KEY)
+
+    result = await parser.parse(request, source)
+
+    result.validate_against(request)
+    with pytest.raises(AssertionError):
+        await parser.parse(request, source + b"changed")
 
 
 @pytest.mark.parametrize("module", MODULES)

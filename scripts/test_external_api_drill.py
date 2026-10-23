@@ -73,9 +73,31 @@ class ContractTests(unittest.TestCase):
         self.assertNotIn("content_markdown", expected["exact_fields"])
         self.assertEqual(set(expected["exact_fields"]), {"id", "project_id", "version", "status",
             "change_summary", "task_examples", "task_examples_hash", "approved_by", "effective_at",
-            "superseded_at", "created_by", "created_at", "updated_at", "documents", "setup"})
+            "superseded_at", "created_by", "created_at", "updated_at", "documents", "setup",
+            "activation_operation_id", "contribution_policy_id", "contribution_policy_version_id"})
         wrong = dict(expected["values"], created_by="foreign")
         self.assertFalse(drill.strict_equal(wrong, expected["values"]))
+
+    def test_new_guide_oracle_accepts_null_activation_and_rejects_fabricated_lineage(self):
+        from uuid import uuid4
+        body = drill.guide_payload("initial")
+        oracle = drill.guide_expectations(body, "project", "manager")
+        response = dict(oracle["values"], id=str(uuid4()),
+            created_at="2026-01-01T00:00:00+00:00", updated_at="2026-01-01T00:00:00+00:00",
+            documents=[dict(body["documents"][0], document_id=str(uuid4()), order=0)],
+            setup={"id": str(uuid4()), "status": "awaiting_documents"},
+            activation_operation_id=None, contribution_policy_id=None,
+            contribution_policy_version_id=None)
+        def verify(value):
+            return drill.verify_response(httpx.Response(201, json=value), 201,
+                oracle["values"], oracle["checks"], oracle["exact_fields"])
+        self.assertEqual(verify(response), response)
+        for field in ("activation_operation_id", "contribution_policy_id", "contribution_policy_version_id"):
+            with self.subTest(field=field):
+                with self.assertRaisesRegex(drill.ProbeFailure, "response_value_mismatch"):
+                    verify(response | {field: str(uuid4())})
+                with self.assertRaisesRegex(drill.ProbeFailure, "response_shape_mismatch"):
+                    verify({key: value for key, value in response.items() if key != field})
 
     def test_guide_declaration_oracle_rejects_wrong_or_leaked_fields(self):
         from uuid import uuid4
@@ -174,8 +196,10 @@ class ContractTests(unittest.TestCase):
 
     def test_catalogue_oracle_rejects_nested_changes_and_duplicates(self):
         expected = drill.catalogue_expectations()
-        self.assertEqual(len(drill.EXPECTED_PERMISSIONS), 73)
-        self.assertEqual(len(set(drill.EXPECTED_PERMISSIONS)), 73)
+        self.assertEqual(len(drill.EXPECTED_PERMISSIONS), 75)
+        self.assertEqual(len(set(drill.EXPECTED_PERMISSIONS)), 75)
+        self.assertIn("outbox.dispatch", drill.EXPECTED_PERMISSIONS)
+        self.assertIn("task.assignment.authority_reconcile", drill.EXPECTED_PERMISSIONS)
         for name, body in expected.items():
             drill.verify_response(httpx.Response(200, json=body), 200, body, exact_fields=body.keys())
             variants = []
@@ -198,7 +222,7 @@ class ContractTests(unittest.TestCase):
                 with self.subTest(name=name, mutant=mutant), self.assertRaises(drill.ProbeFailure):
                     drill.verify_response(httpx.Response(200, json=mutant), 200, body, exact_fields=body.keys())
         expected["permissions"]["items"].clear()
-        self.assertEqual(len(drill.catalogue_expectations()["permissions"]["items"]), 73)
+        self.assertEqual(len(drill.catalogue_expectations()["permissions"]["items"]), 75)
 
     def test_validation_retryability_is_strict(self):
         expected = {"error.code": "invalid_request", "error.retryable": False}

@@ -392,8 +392,9 @@ The rules can come from a person, a deterministic generator or any AI tool
 outside Workstream. Workstream treats them exactly like model output.
 The rules document is an ordinary guide original, so every reader of the
 locked guide, including contributors, can open it; keep internal notes out of
-it. The hosted release configuration still requires its OpenAI key file
-regardless of the selected runtime.
+it. The hosted release guide describes the provider-key file requirement;
+manager-authored compilation itself makes no inference call. All document reads
+use the same isolated parser and exact source-access custody.
 
 The runtime identifies the rules document by content, because guide manifests
 carry no source filenames and JSON is not an admitted guide media type:

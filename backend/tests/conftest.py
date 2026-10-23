@@ -23,7 +23,7 @@ from scripts.run_isolated_tests import LOOPBACK, NAME_RE, ROLE_RE
 DDL_LOCK_DIRECTORY = Path("/tmp")
 # Match the PostgreSQL 16 engine used by Backend CI. Catalog identity rendering
 # differs across major versions; regenerate only after comparing actual objects.
-EXPECTED_PUBLIC_SCHEMA_SHA256 = "a6b6381144f041b1a1ab9aaee30731dc1a2eada85d030fd0ba8d6d6ccfdc5787"
+EXPECTED_PUBLIC_SCHEMA_SHA256 = "9226eaef1140b8e4733cea32ac95a2ae12de63eb66663be821c78a6c252be8e4"
 PROTECTED_TEST_TABLES = (
     "actor_profile_migration_state",
     "alembic_version",
@@ -443,10 +443,12 @@ async def _reset_test_database_state(
         async with connection.transaction():
             # Keep every statement and the transaction, but avoid a network round
             # trip per table. asyncpg execute without parameters accepts a batch.
-            await connection.execute("; ".join(
-                f"alter table {tables[name]} disable trigger user"
-                for name in TRUNCATE_GUARDED_TABLES
-            ))
+            await connection.execute(
+                "; ".join(
+                    f"alter table {tables[name]} disable trigger user"
+                    for name in TRUNCATE_GUARDED_TABLES
+                )
+            )
             lifecycle_genesis = await connection.fetchrow(
                 "select id,created_at from public.joint_lifecycle_release_control"
             )
@@ -460,7 +462,8 @@ async def _reset_test_database_state(
             await connection.execute(
                 "insert into public.joint_lifecycle_release_control"
                 "(id,singleton,phase,generation,created_at) values($1,true,'disabled',0,$2)",
-                lifecycle_genesis["id"], lifecycle_genesis["created_at"],
+                lifecycle_genesis["id"],
+                lifecycle_genesis["created_at"],
             )
             await connection.execute(
                 "insert into authority_control"
@@ -468,10 +471,12 @@ async def _reset_test_database_state(
                 "values (1, false, null, 0)"
             )
             await connection.execute("SET CONSTRAINTS ALL IMMEDIATE")
-            await connection.execute("; ".join(
-                f"alter table {tables[name]} enable trigger user"
-                for name in TRUNCATE_GUARDED_TABLES
-            ))
+            await connection.execute(
+                "; ".join(
+                    f"alter table {tables[name]} enable trigger user"
+                    for name in TRUNCATE_GUARDED_TABLES
+                )
+            )
     finally:
         await connection.close()
 

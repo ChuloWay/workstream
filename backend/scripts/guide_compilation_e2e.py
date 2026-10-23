@@ -1,14 +1,25 @@
-"""Deterministic external runtime and canonical guide owners for the isolated API drill."""
+"""Scripted inference/parser contracts with real ART reads and access custody."""
 
+from functools import partial
+from hashlib import sha256
+from pathlib import Path
 from unittest.mock import patch
-from datetime import datetime, timedelta, timezone
-from uuid import uuid4
-import hashlib
 
 
+from app.adapters.guide_document_tools import (
+    GUIDE_DOCUMENT_PARSER_CAPABILITY_KEY,
+    GUIDE_DOCUMENT_PARSER_PROVIDER_KEY,
+    GuideDocumentParserAdapter,
+    GuideDocumentParserRequest,
+    GuideDocumentParserResponse,
+)
+from app.adapters.project_agents import build_project_guide_adapter_profile
 from app.core.config import get_settings
 from app.core.project_agents import project_guide_runtime_configuration
-from app.interfaces.external_services import ExternalServiceAdapterFactory
+from app.interfaces.external_services import (
+    ExternalServiceAdapterFactory,
+    ExternalServiceAdapterIdentity,
+)
 from app.interfaces.project_agents import (
     AtomicGuideRequirement,
     ProjectGuideAgentRuntime,
@@ -21,7 +32,6 @@ from app.interfaces.project_agents import (
 from app.modules.projects.api.guide_compilation import (
     ProjectGuideCompilationDelivery,
 )
-from app.workers import project_setup as worker
 
 
 class E2EProjectGuideRuntime:
@@ -38,38 +48,28 @@ class E2EProjectGuideRuntime:
         """No external client survives this scripted execution."""
 
     async def compile_project_guide(self, context, capabilities):
-        """Read real ART grants; record explicitly scripted provider resource custody."""
+        """Read every assigned original through the production neutral tool boundary."""
         self.calls += 1
-        custody = capabilities.resources
-        expires = datetime.now(timezone.utc) + timedelta(minutes=20)
-        container_id = "cntr_scripted_" + uuid4().hex
-        allocations = []
-        async def allocate(kind, handle=None, parent=None, source_file=None, container=None):
-            identifier = await custody.begin_allocation(
-                kind=kind, document_handle=handle, parent_provider_id=parent, expires_at=expires,
-                source_file_allocation_id=source_file,
-                container_allocation_id=container,
-            )
-            await custody.record_allocated(identifier, container_id if kind == "container" else {"file": "file-", "attachment": "cfile_"}[kind] + "scripted_" + uuid4().hex)
-            allocations.append(identifier)
-            return identifier
-        container_allocation = await allocate("container")
         refs = []
-        try:
-            for document in context.material.documents:
-                handle = context.material.handle_for(document)
-                async with capabilities.documents.open(handle) as opened:
-                    body = opened.reader.read()
-                    assert len(body) == document.byte_count
-                    assert "sha256:" + hashlib.sha256(body).hexdigest() == document.sha256
-                file_allocation = await allocate("file", handle)
-                await allocate("attachment", handle, container_id, file_allocation, container_allocation)
-                await custody.record_document_open(handle)
-                refs.append(GuideEvidenceRef(source_item_id=document.source_item_id,
-                    document_version_id=document.ingest_id, sha256=document.sha256))
-        finally:
-            for identifier in allocations:
-                await custody.record_deleted(identifier)
+        expected_handles = set()
+        for document in context.material.documents:
+            handle = context.material.handle_for(document)
+            expected_handles.add(handle)
+            offset = 0
+            while True:
+                result = await capabilities.tools.read_document(handle, offset=offset)
+                assert result.handle == handle
+                assert result.source_item_id == document.source_item_id
+                assert result.document_version_id == document.ingest_id
+                assert result.sha256 == document.sha256
+                assert result.operation == "read"
+                if result.next_offset is None:
+                    break
+                assert result.next_offset > offset
+                offset = result.next_offset
+            refs.append(GuideEvidenceRef(source_item_id=document.source_item_id,
+                document_version_id=document.ingest_id, sha256=document.sha256))
+        assert expected_handles <= await capabilities.tools.opened_handles()
         return ProjectGuideCompilationResult(
             status="draft_ready",
             findings=(CompilationFinding(severity="info", code="guide.ready", message="Assigned documents are available for this scripted contract test.", evidence_refs=tuple(refs)),),
@@ -99,6 +99,48 @@ class E2EProjectGuideRuntime:
         )
 
 
+class ScriptedGuideDocumentParser:
+    """Model the parser contract while real ART reads and receipt custody remain active."""
+
+    identity = ExternalServiceAdapterIdentity(
+        GUIDE_DOCUMENT_PARSER_CAPABILITY_KEY,
+        GUIDE_DOCUMENT_PARSER_PROVIDER_KEY,
+    )
+
+    async def parse(
+        self, request: GuideDocumentParserRequest, source: bytes
+    ) -> GuideDocumentParserResponse:
+        """Return source-bound text without claiming parser implementation evidence."""
+        assert type(source) is bytes
+        assert len(source) == request.source_byte_count
+        assert "sha256:" + sha256(source).hexdigest() == request.source_sha256
+        assert request.operation == "read"
+        full_text = "Scripted contract parser verified the exact assigned original."
+        text = full_text[request.offset : request.offset + request.limit]
+        consumed_to = request.offset + len(text)
+        next_offset = consumed_to if consumed_to < len(full_text) else None
+        return GuideDocumentParserResponse.create(
+            request=request,
+            text=text,
+            locators=(),
+            next_offset=next_offset,
+            total_characters=len(full_text),
+        )
+
+
+def scripted_guide_document_parser_factory(
+    *, socket_path: Path, timeout_seconds: float
+):
+    """Inject the isolated drill parser at the existing typed factory boundary."""
+    assert socket_path.is_absolute()
+    assert timeout_seconds > 0
+    factory = ExternalServiceAdapterFactory[GuideDocumentParserAdapter](
+        GUIDE_DOCUMENT_PARSER_CAPABILITY_KEY
+    )
+    factory.register(GUIDE_DOCUMENT_PARSER_PROVIDER_KEY, ScriptedGuideDocumentParser)
+    return factory
+
+
 def runtime_factory(runtime):
     """Register the isolated external test adapter through the shared typed factory."""
 
@@ -114,8 +156,21 @@ def runtime_factory(runtime):
 
 async def compile_live_guide(delivery: ProjectGuideCompilationDelivery) -> dict:
     """Drive the sole worker delivery and prove its finalization replays without inference."""
-    runtime = E2EProjectGuideRuntime(project_guide_runtime_configuration(get_settings()))
-    with patch.object(worker, "create_project_guide_runtime", runtime_factory(runtime)):
+    from app.workers import project_setup as worker
+
+    settings = get_settings()
+    configuration = project_guide_runtime_configuration(
+        settings,
+        adapter_profile_builder=partial(
+            build_project_guide_adapter_profile, settings.project_agent_runtime
+        ),
+    )
+    runtime = E2EProjectGuideRuntime(configuration)
+    with patch.object(
+        worker, "create_project_guide_runtime", runtime_factory(runtime)
+    ), patch.object(
+        worker, "guide_document_parser_factory", scripted_guide_document_parser_factory
+    ):
         first = await worker._run_project_guide_compilation(delivery)
         replay = await worker._run_project_guide_compilation(delivery)
     assert first == replay, "live finalization replay changed the receipt"

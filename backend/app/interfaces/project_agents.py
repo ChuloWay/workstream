@@ -47,7 +47,6 @@ from app.interfaces.external_services import (
 )
 from app.interfaces.project_guide_runtime import ProjectGuideRuntimeConfiguration
 from app.modules.projects.api.guide_documents import (
-    GuideRuntimeCleanupCustody,
     GuideDocumentManifest,
     GuideRuntimeCapabilities,
 )
@@ -917,7 +916,7 @@ def require_complete_generated_specifications(
     result: ProjectGuideCompilationResult,
 ) -> None:
     """Require an actionable typed handoff on newly generated requirements."""
-    if (not context.runtime_configuration.provider_free
+    if (context.runtime_configuration.uses_inference
             and "setup_notes" in result.model_fields_set):
         raise ValueError("generated setup notes are outside checker specification scope")
 
@@ -932,7 +931,7 @@ def require_complete_generated_specifications(
         RequirementDisposition.SUPPORTED_POST_SUBMIT,
     }
     for requirement in result.requirements:
-        if (not context.runtime_configuration.provider_free
+        if (context.runtime_configuration.uses_inference
                 and requirement.disposition not in GENERATED_REQUIREMENT_DISPOSITIONS):
             raise ValueError("generated requirement is outside PRE and POST checker scope")
         if requirement.classification_rationale is None:
@@ -1324,10 +1323,6 @@ class ProjectGuideAgentRuntime(ExternalServiceAdapter, Protocol):
 
     def admit_execution(self) -> None:
         """Acquire provider availability admission before the durable execution fence."""
-        ...
-
-    async def cleanup_resources(self, custody: GuideRuntimeCleanupCustody) -> bool:
-        """Reconcile exact owned resources without admitting or executing inference."""
         ...
 
     async def aclose(self) -> None:

@@ -14,7 +14,7 @@ from app.interfaces.project_agents import (
     ProjectGuideCompilationResult,
     validate_project_guide_compilation_result,
 )
-from .helpers import context, ids, result, valid_specification
+from .helpers import context, ids, result, generated_result, valid_specification
 from tests.checkers.external.support import capability_projection, registry_entry
 
 
@@ -31,7 +31,8 @@ def _context():
 def growth_report(*, gaps=True):
     """Use current selectable definitions and distinct missing checks in both stages."""
     source = _context()
-    refs = result().findings[0].evidence_refs
+    base = generated_result()
+    refs = base.findings[0].evidence_refs
     requirements, suggestions, pre, post = [], [], [], []
     for stage in ("pre_submit", "post_submit"):
         specification = valid_specification().model_copy(
@@ -102,10 +103,10 @@ def growth_report(*, gaps=True):
                     evidence_refs=refs,
                 )
             )
-    return result().model_copy(
+    return base.model_copy(
         update={
             "status": "draft_ready_with_warnings" if gaps else "draft_ready",
-            "submission_artifact_policy": result().submission_artifact_policy,
+            "submission_artifact_policy": base.submission_artifact_policy,
             "findings": (
                 CompilationFinding(
                     severity="warning" if gaps else "info",

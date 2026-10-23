@@ -1,5 +1,7 @@
 """Invalid activation selections preserve the complete prior state."""
 
+from tests.projects.guide_compilation.helpers import manager_runtime_configuration
+
 from uuid import uuid4
 from dataclasses import replace
 
@@ -175,7 +177,7 @@ async def test_false_mode_rejects_approved_human_requirement_in_python_and_sql(
     outcome = outcome.model_copy(update={"requirements": (requirement,)})
     async with activation_case(
         clean_postgres_database, human_review_required=False,
-        compilation_outcome=outcome,
+        compilation_outcome=outcome, configuration=manager_runtime_configuration(),
     ) as (factory, command, actor, _, _, _):
         with pytest.raises(GuideProposalError, match="approval_blocked"):
             await activate(factory, actor, command)
