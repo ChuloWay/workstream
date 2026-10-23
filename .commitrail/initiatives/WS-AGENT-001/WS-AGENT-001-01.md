@@ -13,7 +13,7 @@ The companion `WS-AGENT-001-02` adds OmniCoreAgent and qualifies both actual SDK
 against this same document-tool/result contract. This is a repair to the current hosted
 guide journey, not a general agent platform or an additional product lifecycle.
 
-## Current behavior
+## Behavior before this change
 
 `interfaces/project_guide_runtime.py` couples provider-backed execution to
 `openai/responses`. `adapters/project_agents/openai_agent_sdk.py` uses OpenAI
@@ -209,17 +209,21 @@ obligation before claiming the hosted journey recovered.
 
 | Claim | Command or proof | Result | Remaining uncertainty |
 |---|---|---|---|
-| Current OpenRouter key/model is usable | Private authenticated model catalogue and one synthetic Responses request | HTTP 200; `openai/gpt-5.6-terra` completed | Does not prove tool loops or document processing |
-| Current core is provider-coupled | Runtime configuration, resource custody and SQL inspection | OpenAI-only pairing and attachment requirement confirmed | Correction not implemented |
-| OmniCoreAgent API identified | Published 0.6.0 wheel metadata/source and official release page | Async tool registry/run API exists | Retry/privacy controls and dependency installation need qualification |
-| Shared behavior | Planned actual-SDK contract suite and PostgreSQL negative/control cases | Not run | New tests must fail on the reproduced coupling/invalid-access cases |
-| Deployment and live substitution | Planned secret-free parser isolation and one live guide run per SDK | Not run | No full hosted journey claim |
+| OpenRouter can run the native SDK tool loop | Production OpenAI Agents SDK adapter with an invented guide and in-memory typed document tools | Four reads, private draft, separate coverage review and validated result at `254fd6cfe` using `openai/gpt-5.6-terra` | Does not prove S3 custody, a durable worker run or another model |
+| Document ownership no longer depends on provider attachments | Neutral capability, trusted tool wrapper, SQL access receipts and removal of hosted execution | Implemented; retained cleanup has no dispatch capability | Final migration, isolation and negative-proof corrections require exact-head verification |
+| OmniCoreAgent is a separate runtime integration | Published 0.6.0 SDK qualification in companion change 02 | Companion owns its SDK environment, native behavior and registration | This change does not claim OmniCore deployment |
+| Retained data and bounded archive behavior survive | Isolated PostgreSQL cleanup plus archive tests at `254fd6cfe` | 50 passed, isolated database and role cleanup confirmed | Subsequent profile guard and proof changes require replay |
+| Runtime configuration, source custody and retained-data migration | Isolated PostgreSQL batch at `96b657e5f` | 94 passed; database and role cleanup confirmed | Parser privilege separation has its own Docker proof |
+| Canonical profile and conflicting receipt guards discriminate invalid input | Remove each guard independently on `96b657e5f` | Both named regressions fail at their expected rejection assertion | No claim about unrelated guards |
+| Unread-source rejection has independent service and database protection | Disable the service check on `96b657e5f` and trace the actual acceptance path | Valid result reaches acceptance; PostgreSQL rejects missing original-document access | The service-specific assertion is added separately so database protection cannot mask its removal |
+| Parser container boundary needs privilege separation | Initial real-container proof plus independent compromised-child inspection | Ordinary parsing/isolation proof passed; same-UID broker/child design was insufficient | Amended broker/child identities and committed Docker regression must pass before readiness |
 
 ## Reconciliation
 
-- Current-source reconciliation: incorporates main `3ff69e3a8`, including merged
+- Current-source reconciliation: incorporates main `6fa9a9b55`, including merged
   PR #651 setup output specifications, bounded draft review and correction inputs,
-  and #655 guide metadata tools. Preserve those behaviors across both adapters;
+  and #655 guide metadata tools, plus #650 artifact Operator authorization.
+  Preserve those behaviors across both adapters;
   runtime substitution changes document access, not proposal requirements.
 - Next usable boundary: real two-runtime guide qualification, then the existing
   project-owned checker and contribution journey drill.

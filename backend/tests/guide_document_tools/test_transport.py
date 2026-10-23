@@ -35,6 +35,31 @@ from app.interfaces.external_services import (
 )
 
 
+@pytest.fixture(autouse=True)
+def _unprivileged_service_seam(monkeypatch: pytest.MonkeyPatch):
+    """Keep unit transport proof unprivileged without a production identity fallback."""
+    monkeypatch.setattr(
+        service_module,
+        "_FIXED_CHILD_COMMAND",
+        (
+            sys.executable,
+            "-c",
+            "from app.adapters.guide_document_tools.child import _run_protocol;"
+            "raise SystemExit(_run_protocol())",
+        ),
+    )
+    monkeypatch.setattr(
+        service_module,
+        "_service_socket_identity",
+        lambda: (os.geteuid(), os.getegid()),
+    )
+    monkeypatch.setattr(
+        service_module,
+        "_prepare_child_process",
+        lambda _identity: None,
+    )
+
+
 def _request(source: bytes, *, offset: int = 0) -> GuideDocumentParserRequest:
     return GuideDocumentParserRequest(
         request_id=uuid4(),
@@ -67,8 +92,6 @@ def _service(
         socket_path=path,
         child_timeout_seconds=child_timeout,
         request_read_timeout_seconds=read_timeout,
-        expected_uid=os.geteuid(),
-        expected_gid=os.getegid(),
     )
 
 
@@ -123,6 +146,21 @@ def test_child_environment_is_fixed_and_contains_no_parent_secrets() -> None:
         "PYTHONHASHSEED": "0",
         "PYTHONIOENCODING": "utf-8",
     }
+    first, second = service_module.CHILD_IDENTITIES
+    assert service_module._child_environment(first) == {
+        **service_module._CHILD_ENVIRONMENT,
+        "WORKSTREAM_GUIDE_PARSER_CHILD_UID": "10003",
+        "WORKSTREAM_GUIDE_PARSER_CHILD_GID": "10003",
+    }
+    assert (second.uid, second.gid) == (10004, 10004)
+
+
+def test_service_rejects_more_concurrency_than_closed_child_slots(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="configuration"):
+        GuideDocumentParserService(
+            socket_path=tmp_path / "guide.sock",
+            maximum_concurrency=3,
+        )
 
 
 @pytest.mark.asyncio
@@ -232,8 +270,6 @@ async def test_admission_limit_closes_excess_connections(tmp_path: Path) -> None
         maximum_admitted_connections=1,
         request_read_timeout_seconds=1.0,
         child_timeout_seconds=1.0,
-        expected_uid=os.geteuid(),
-        expected_gid=os.getegid(),
     )
     await service.start()
     first_reader, first_writer = await asyncio.open_unix_connection(path)

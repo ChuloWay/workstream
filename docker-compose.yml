@@ -39,7 +39,7 @@ x-backend-runtime: &backend-runtime
     WORKSTREAM_PAGINATION_CURSOR_HMAC_SECRET: ${WORKSTREAM_PAGINATION_CURSOR_HMAC_SECRET:?set WORKSTREAM_PAGINATION_CURSOR_HMAC_SECRET in .env}
     WORKSTREAM_PROJECT_AGENT_RUNTIME: ${WORKSTREAM_PROJECT_AGENT_RUNTIME:-openai_agents_sdk}
     WORKSTREAM_PROJECT_AGENT_MODEL_PROVIDER: ${WORKSTREAM_PROJECT_AGENT_MODEL_PROVIDER:-openrouter}
-    WORKSTREAM_PROJECT_AGENT_MODEL_API: ${WORKSTREAM_PROJECT_AGENT_MODEL_API:-responses}
+    WORKSTREAM_PROJECT_AGENT_MODEL_API: ${WORKSTREAM_PROJECT_AGENT_MODEL_API:-chat_completions}
     WORKSTREAM_PROJECT_AGENT_MODEL: ${WORKSTREAM_PROJECT_AGENT_MODEL:-openai/gpt-5.6-terra}
     WORKSTREAM_PROJECT_AGENT_RUNTIME_OPTIONS: ${WORKSTREAM_PROJECT_AGENT_RUNTIME_OPTIONS:?set WORKSTREAM_PROJECT_AGENT_RUNTIME_OPTIONS to a JSON object}
   volumes:
@@ -154,10 +154,11 @@ services:
     image: ${COMPOSE_PROJECT_NAME}-backend:local
     pull_policy: never
     init: true
-    user: "10002:10001"
+    user: "0:0"
     network_mode: none
     read_only: true
     cap_drop: [ALL]
+    cap_add: [KILL, SETGID, SETUID]
     security_opt: [no-new-privileges:true]
     pids_limit: 32
     mem_limit: 512m

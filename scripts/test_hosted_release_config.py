@@ -236,7 +236,9 @@ class HostedReleaseConfigTests(unittest.TestCase):
         self.assertNotIn("secrets", services["checker-service"])
         parser = services["guide-document-parser"]
         self.assertEqual(parser["image"], services["api"]["image"])
-        self.assertEqual(parser["user"], "10002:10001")
+        self.assertEqual(parser["user"], "0:0")
+        self.assertEqual(parser["cap_drop"], ["ALL"])
+        self.assertEqual(parser["cap_add"], ["KILL", "SETGID", "SETUID"])
         self.assertEqual(parser["network_mode"], "none")
         self.assertNotIn("secrets", parser)
         self.assertEqual(
@@ -996,11 +998,20 @@ class HostedReleaseConfigTests(unittest.TestCase):
         privileged_parser = copy.deepcopy(rendered)
         privileged_parser["services"]["guide-document-parser"]["privileged"] = True
         cases.append(("privileged guide parser", privileged_parser))
-        parser_capability = copy.deepcopy(rendered)
-        parser_capability["services"]["guide-document-parser"]["cap_add"] = [
-            "SYS_ADMIN"
+        missing_parser_capability = copy.deepcopy(rendered)
+        missing_parser_capability["services"]["guide-document-parser"]["cap_add"] = [
+            "KILL",
+            "SETGID",
         ]
-        cases.append(("guide parser added capability", parser_capability))
+        cases.append(("guide parser missing required capability", missing_parser_capability))
+        extra_parser_capability = copy.deepcopy(rendered)
+        extra_parser_capability["services"]["guide-document-parser"]["cap_add"].append(
+            "SYS_ADMIN"
+        )
+        cases.append(("guide parser added capability", extra_parser_capability))
+        missing_parser_cap_drop = copy.deepcopy(rendered)
+        missing_parser_cap_drop["services"]["guide-document-parser"]["cap_drop"] = []
+        cases.append(("guide parser did not drop default capabilities", missing_parser_cap_drop))
         parser_device = copy.deepcopy(rendered)
         parser_device["services"]["guide-document-parser"]["devices"] = [
             "/dev/null:/dev/foreign"

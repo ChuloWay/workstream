@@ -6,19 +6,30 @@ import json
 import struct
 import sys
 
-from pydantic import ValidationError
-
-from .contracts import (
-    GUIDE_DOCUMENT_PARSER_PROTOCOL,
-    GuideDocumentParserRequest,
-    MAXIMUM_REQUEST_METADATA_BYTES,
-    MAXIMUM_RESPONSE_BYTES,
-)
-from .parsing import ParserDocumentRejected, parse_document
+from .identity import child_identity_from_environment
 
 
 def main() -> int:
+    """Verify isolation before importing parsers or reading one framed source."""
+    try:
+        child_identity_from_environment()
+    except RuntimeError:
+        return 2
+    return _run_protocol()
+
+
+def _run_protocol() -> int:
     """Read exactly one framed source and emit one bounded framed result."""
+    from pydantic import ValidationError
+
+    from .contracts import (
+        GUIDE_DOCUMENT_PARSER_PROTOCOL,
+        GuideDocumentParserRequest,
+        MAXIMUM_REQUEST_METADATA_BYTES,
+        MAXIMUM_RESPONSE_BYTES,
+    )
+    from .parsing import ParserDocumentRejected, parse_document
+
     try:
         header = _read_exact(4)
         metadata_size = struct.unpack(">I", header)[0]
@@ -78,3 +89,6 @@ def _json_bytes(value: object) -> bytes:
 
 if __name__ == "__main__":  # pragma: no cover - exercised through the service subprocess
     raise SystemExit(main())
+
+
+__all__ = ("main",)

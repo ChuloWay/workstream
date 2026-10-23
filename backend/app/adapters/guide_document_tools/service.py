@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import errno
+from functools import partial
 from hashlib import sha256
 import json
 import os
@@ -27,6 +28,14 @@ from .contracts import (
     GuideDocumentParserResponse,
     MAXIMUM_REQUEST_METADATA_BYTES,
     MAXIMUM_RESPONSE_BYTES,
+)
+from .identity import (
+    CHILD_IDENTITIES,
+    ChildIdentity,
+    bootstrap_broker_identity,
+    drop_healthcheck_identity,
+    prepare_child_identity,
+    verify_broker_identity,
 )
 
 
@@ -53,32 +62,30 @@ class GuideDocumentParserService:
         maximum_admitted_connections: int = 8,
         request_read_timeout_seconds: float = 5.0,
         child_timeout_seconds: float = 8.0,
-        expected_uid: int = PARSER_SOCKET_UID,
-        expected_gid: int = PARSER_SOCKET_GID,
     ) -> None:
         if (
             not socket_path.is_absolute()
             or type(maximum_concurrency) is not int
-            or not 1 <= maximum_concurrency <= 8
+            or not 1 <= maximum_concurrency <= len(CHILD_IDENTITIES)
             or type(maximum_admitted_connections) is not int
             or not maximum_concurrency <= maximum_admitted_connections <= 32
             or type(request_read_timeout_seconds) is not float
             or not 0.1 <= request_read_timeout_seconds <= 30.0
             or type(child_timeout_seconds) is not float
             or not 0.1 <= child_timeout_seconds <= 30.0
-            or type(expected_uid) is not int
-            or type(expected_gid) is not int
-            or expected_uid < 0
-            or expected_gid < 0
         ):
             raise ValueError("guide parser service configuration is invalid")
         self._socket_path = socket_path
         self._maximum_admitted = maximum_admitted_connections
         self._request_timeout = request_read_timeout_seconds
         self._child_timeout = child_timeout_seconds
-        self._expected_uid = expected_uid
-        self._expected_gid = expected_gid
-        self._semaphore = asyncio.Semaphore(maximum_concurrency)
+        self._expected_uid = PARSER_SOCKET_UID
+        self._expected_gid = PARSER_SOCKET_GID
+        self._available_identities: asyncio.Queue[ChildIdentity] = asyncio.Queue(
+            maxsize=maximum_concurrency
+        )
+        for identity in CHILD_IDENTITIES[:maximum_concurrency]:
+            self._available_identities.put_nowait(identity)
         self._admitted = 0
         self._server: asyncio.AbstractServer | None = None
         self._socket_inode: tuple[int, int] | None = None
@@ -88,7 +95,8 @@ class GuideDocumentParserService:
         """Validate socket custody, remove only proven stale state, and bind."""
         if self._server is not None:
             raise RuntimeError("guide parser service is already started")
-        self._validate_process_and_directory()
+        self._expected_uid, self._expected_gid = _service_socket_identity()
+        self._validate_directory()
         _remove_owned_stale_socket(
             self._socket_path,
             expected_uid=self._expected_uid,
@@ -141,14 +149,11 @@ class GuideDocumentParserService:
             await asyncio.gather(*tasks, return_exceptions=True)
         self._remove_own_socket()
 
-    def _validate_process_and_directory(self) -> None:
+    def _validate_directory(self) -> None:
         parent = self._socket_path.parent
         info = os.lstat(parent)
-        allowed_groups = {os.getegid(), *os.getgroups()}
         if (
-            os.geteuid() != self._expected_uid
-            or self._expected_gid not in allowed_groups
-            or not stat.S_ISDIR(info.st_mode)
+            not stat.S_ISDIR(info.st_mode)
             or info.st_uid != self._expected_uid
             or info.st_gid != self._expected_gid
             or stat.S_IMODE(info.st_mode) != PARSER_SOCKET_DIRECTORY_MODE
@@ -201,13 +206,12 @@ class GuideDocumentParserService:
                         raise ValueError("guide parser source identity is invalid")
             if request is not None:
                 assert source is not None
-                async with self._semaphore:
-                    response = await self._run_child(
-                        metadata_raw=metadata_raw,
-                        source=source,
-                        request=request,
-                        disconnect_reader=reader,
-                    )
+                response = await self._run_child(
+                    metadata_raw=metadata_raw,
+                    source=source,
+                    request=request,
+                    disconnect_reader=reader,
+                )
             await _write_frame(writer, _json_bytes(response))
         except asyncio.CancelledError:
             raise
@@ -241,19 +245,23 @@ class GuideDocumentParserService:
         request: GuideDocumentParserRequest,
         disconnect_reader: asyncio.StreamReader,
     ) -> dict[str, object]:
-        process = await asyncio.create_subprocess_exec(
-            *_FIXED_CHILD_COMMAND,
-            stdin=asyncio.subprocess.PIPE,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.DEVNULL,
-            env=_CHILD_ENVIRONMENT,
-            start_new_session=True,
-            preexec_fn=_apply_child_limits,
-        )
-        frame = struct.pack(">I", len(metadata_raw)) + metadata_raw + source
-        child = asyncio.create_task(process.communicate(frame))
-        disconnected = asyncio.create_task(disconnect_reader.read(1))
+        identity = await self._available_identities.get()
+        process: asyncio.subprocess.Process | None = None
+        child: asyncio.Task[tuple[bytes, bytes]] | None = None
+        disconnected: asyncio.Task[bytes] | None = None
         try:
+            process = await asyncio.create_subprocess_exec(
+                *_FIXED_CHILD_COMMAND,
+                stdin=asyncio.subprocess.PIPE,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.DEVNULL,
+                env=_child_environment(identity),
+                start_new_session=True,
+                preexec_fn=partial(_prepare_child_process, identity),
+            )
+            frame = struct.pack(">I", len(metadata_raw)) + metadata_raw + source
+            child = asyncio.create_task(process.communicate(frame))
+            disconnected = asyncio.create_task(disconnect_reader.read(1))
             done, _ = await asyncio.wait(
                 {child, disconnected},
                 timeout=self._child_timeout,
@@ -266,16 +274,24 @@ class GuideDocumentParserService:
                 # forbidden trailing request data. Both cases stop the child.
                 raise ConnectionError("guide parser caller disconnected")
             stdout, _ = child.result()
+            await process.wait()
+            if process.returncode != 0:
+                raise OSError("guide parser child failed")
         except BaseException:
-            child.cancel()
-            await _stop_child(process)
-            await asyncio.gather(child, return_exceptions=True)
+            if child is not None:
+                child.cancel()
+            if process is not None:
+                await _stop_child(process)
+            if child is not None:
+                await asyncio.gather(child, return_exceptions=True)
             raise
         finally:
-            disconnected.cancel()
-            await asyncio.gather(disconnected, return_exceptions=True)
-        if process.returncode != 0:
-            raise OSError("guide parser child failed")
+            if disconnected is not None:
+                disconnected.cancel()
+                await asyncio.gather(disconnected, return_exceptions=True)
+            if process is None or process.returncode is not None:
+                self._available_identities.put_nowait(identity)
+        assert process is not None
         raw = _decode_single_frame(stdout, maximum=MAXIMUM_RESPONSE_BYTES)
         body = json.loads(raw)
         if type(body) is not dict or body.get("protocol_version") != GUIDE_DOCUMENT_PARSER_PROTOCOL:
@@ -310,6 +326,24 @@ class GuideDocumentParserService:
             pass
         finally:
             self._socket_inode = None
+
+
+def _service_socket_identity() -> tuple[int, int]:
+    """Verify the production broker before granting socket custody."""
+    verify_broker_identity()
+    return PARSER_SOCKET_UID, PARSER_SOCKET_GID
+
+
+def _child_environment(identity: ChildIdentity) -> dict[str, str]:
+    return _CHILD_ENVIRONMENT | {
+        "WORKSTREAM_GUIDE_PARSER_CHILD_UID": str(identity.uid),
+        "WORKSTREAM_GUIDE_PARSER_CHILD_GID": str(identity.gid),
+    }
+
+
+def _prepare_child_process(identity: ChildIdentity) -> None:
+    prepare_child_identity(identity)
+    _apply_child_limits()
 
 
 def _apply_child_limits() -> None:
@@ -440,7 +474,9 @@ def main() -> int:
     parser.add_argument("--healthcheck", action="store_true")
     arguments = parser.parse_args()
     if arguments.healthcheck:
+        drop_healthcheck_identity()
         return asyncio.run(_healthcheck(arguments.socket))
+    bootstrap_broker_identity()
     service = GuideDocumentParserService(socket_path=arguments.socket)
     try:
         asyncio.run(service.serve_forever())

@@ -66,6 +66,10 @@
     },
     {
       "group": "shared",
+      "target": "backend/app/adapters/guide_document_tools/identity.py"
+    },
+    {
+      "group": "shared",
       "target": "backend/app/adapters/guide_document_tools/parsing.py"
     },
     {
@@ -2333,7 +2337,7 @@
       "target": "backend/scripts/validate_test_lane_evidence.py"
     }
   ],
-  "authority_digest": "89f7b7c9195a5b5500f07152c97e82cb6275762d38913307e99eb735f7d3a162",
+  "authority_digest": "1f3e5fec236b7957a43e0323728a640b05059e7f42e9a1ec179bce7649487559",
   "protected_base_commit": "7676ce4347db0c9694962a9b587a20765e16eac6",
   "schema": "workstream.behavior-ownership-partition.v1"
 }

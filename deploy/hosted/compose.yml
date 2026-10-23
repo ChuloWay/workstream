@@ -103,7 +103,7 @@ services:
     image: ${WORKSTREAM_BACKEND_IMAGE:?set a digest-qualified backend image}
     pull_policy: always
     init: true
-    user: "10002:10001"
+    user: "0:0"
     environment:
       WORKSTREAM_RELEASE_ROLE: parser
       WORKSTREAM_GUIDE_DOCUMENT_PARSER_SOCKET: /var/lib/workstream/guide-runtime/guide.sock
@@ -116,6 +116,7 @@ services:
     network_mode: none
     read_only: true
     cap_drop: [ALL]
+    cap_add: [KILL, SETGID, SETUID]
     security_opt: [no-new-privileges:true]
     mem_limit: 512m
     memswap_limit: 512m
