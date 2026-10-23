@@ -17,7 +17,7 @@ use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 use workstream_checker_sdk::canonical_hash;
@@ -178,6 +178,74 @@ pub(crate) trait RuntimeControl: Send + Sync + 'static {
     ) -> Result<(), RuntimeControlFailure>;
 }
 
+impl<C: RuntimeControl> RuntimeControl for Arc<C> {
+    fn require_image(
+        &self,
+        config_image_id: &str,
+        identity: &SandboxBackendIdentity,
+        runtime_key: &str,
+        deadline: Instant,
+    ) -> Result<(), RuntimeControlFailure> {
+        (**self).require_image(config_image_id, identity, runtime_key, deadline)
+    }
+
+    fn require_offline_cache(
+        &self,
+        root: &std::path::Path,
+        inventory_digest: &str,
+    ) -> Result<(), RuntimeControlFailure> {
+        (**self).require_offline_cache(root, inventory_digest)
+    }
+
+    fn create_owned_container(
+        &self,
+        request: OwnedContainerCreate,
+        deadline: Instant,
+        invocation_cancelled: &AtomicBool,
+        relay_cancelled: &AtomicBool,
+    ) -> Result<(), RuntimeControlFailure> {
+        (**self).create_owned_container(request, deadline, invocation_cancelled, relay_cancelled)
+    }
+
+    fn run_owned_container(
+        &self,
+        owner: &RuntimeOwner,
+        name: &str,
+        writable_roots: &[PathBuf],
+        limits: &ContainerExecutionLimits,
+        invocation_cancelled: &AtomicBool,
+        relay_cancelled: &AtomicBool,
+    ) -> Result<ObservedContainerExit, RuntimeControlFailure> {
+        (**self).run_owned_container(
+            owner,
+            name,
+            writable_roots,
+            limits,
+            invocation_cancelled,
+            relay_cancelled,
+        )
+    }
+
+    fn load_single_owned_image(
+        &self,
+        owner: &RuntimeOwner,
+        archive: &std::path::Path,
+        expected_tag: &str,
+        maximum_bytes: u64,
+        deadline: Instant,
+    ) -> Result<LoadedOwnedImage, RuntimeControlFailure> {
+        (**self).load_single_owned_image(owner, archive, expected_tag, maximum_bytes, deadline)
+    }
+
+    fn cleanup_owner(
+        &self,
+        owner: &RuntimeOwner,
+        deadline: Instant,
+    ) -> Result<(), RuntimeControlFailure> {
+        (**self).cleanup_owner(owner, deadline)
+    }
+}
+
 #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 struct OwnedRuntimeResources {
@@ -194,6 +262,7 @@ struct RuntimeJournal {
 }
 
 /// Concrete Docker CLI + cgroup-v2 control used on a dedicated runsc node.
+#[derive(Debug)]
 pub(crate) struct DockerRuntimeControl {
     docker_binary: PathBuf,
     runtime_root: PathBuf,

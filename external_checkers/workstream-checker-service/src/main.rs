@@ -2,6 +2,8 @@
 
 mod model_relay;
 mod proxy_transport;
+mod trial_docker;
+mod trial_engine;
 mod trial_evidence_proxy;
 mod trial_profiles;
 mod trial_relay;
@@ -21,8 +23,10 @@ use std::os::unix::fs::{MetadataExt, OpenOptionsExt, PermissionsExt};
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::{Component, Path, PathBuf};
 use std::process::{Child, Command, ExitStatus, Stdio};
+use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use trial_docker::DockerRuntimeControl;
 use trial_profiles::TrialProfileCatalog;
 use workstream_checker_sdk::{
     canonical_hash, infrastructure_result, parse_request, validate_result, ValidatedRequest,
@@ -58,6 +62,10 @@ struct ServiceConfig {
     trial_authority_manifest_digest: Option<String>,
     #[serde(skip)]
     trial_profiles: Option<TrialProfileCatalog>,
+    #[serde(default)]
+    trial_runtime: Option<TrialRuntimeConfiguration>,
+    #[serde(skip)]
+    trial_control: Option<Arc<DockerRuntimeControl>>,
     material_root: PathBuf,
     docker_binary: PathBuf,
     runtime: String,
@@ -67,6 +75,23 @@ struct ServiceConfig {
     sandbox_uid: u32,
     sandbox_gid: u32,
     cache: Vec<CacheEntry>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct TrialRuntimeConfiguration {
+    relay_root: PathBuf,
+    scratch_root: PathBuf,
+    runtime_root: PathBuf,
+    runtime_configuration: PathBuf,
+    outer_runtime_config_digest: String,
+    offline_cache_root: PathBuf,
+    deployment_owner: String,
+    runtime_key: String,
+    builder_image_id: String,
+    maximum_candidate_archive_bytes: u64,
+    candidate_uid: u32,
+    candidate_gid: u32,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -447,8 +472,39 @@ fn run() -> Result<(), String> {
     let mut config: ServiceConfig =
         serde_json::from_slice(&bytes).map_err(|_| "configuration invalid")?;
     load_trial_profiles(&mut config)?;
+    load_trial_runtime(&mut config)?;
     let listener = prepare_listener(&mut config)?;
     serve_connections(&config, listener.incoming(), SOCKET_IO_TIMEOUT)
+}
+
+fn load_trial_runtime(config: &mut ServiceConfig) -> Result<(), String> {
+    match (&config.trial_profiles, &config.trial_runtime) {
+        (None, None) => Ok(()),
+        (Some(_), Some(runtime)) => {
+            if runtime.candidate_uid == 0
+                || runtime.candidate_gid == 0
+                || runtime.maximum_candidate_archive_bytes == 0
+                || !valid_digest(&runtime.outer_runtime_config_digest)
+                || config.runtime != "runsc"
+                || config.isolation_mode != "gvisor"
+                || config.model_proxy_socket.is_none()
+            {
+                return Err("trial runtime configuration invalid".into());
+            }
+            let control = DockerRuntimeControl::new(
+                config.docker_binary.clone(),
+                runtime.runtime_root.clone(),
+                runtime.runtime_configuration.clone(),
+            )
+            .map_err(|_| "trial runtime configuration invalid")?;
+            control
+                .recover_deployment(&runtime.deployment_owner, Instant::now() + CLEANUP_TIMEOUT)
+                .map_err(|_| UNSETTLED_RESOURCE_ERROR.to_owned())?;
+            config.trial_control = Some(Arc::new(control));
+            Ok(())
+        }
+        _ => Err("trial authority/runtime configuration incomplete".into()),
+    }
 }
 
 fn load_trial_profiles(config: &mut ServiceConfig) -> Result<(), String> {
@@ -2596,6 +2652,8 @@ mod tests {
             trial_authority_manifest_path: None,
             trial_authority_manifest_digest: None,
             trial_profiles: None,
+            trial_runtime: None,
+            trial_control: None,
             material_root,
             docker_binary: docker,
             runtime: "runc".into(),
