@@ -104,3 +104,58 @@ normal versioned registration, proposal and approval process. A retained image
 that returns a private plan now produces an invalid-output infrastructure failure,
 not a continuation or a contributor-work failure. Do not blindly retry it as if
 the capability still exists.
+
+## Smol microVM engine
+
+The node also accepts the deployment pair `smolvm` / `smol-microvm`. Python still
+uses the single `external_checker_execution/unix_socket` provider; neither a
+project policy nor a checker request can choose the engine. Each execution gets
+a fresh VM and the same verified ART grant and JSON result contract. The native
+bootstrap has no Python or shell dependency in a project image.
+
+Use Linux x86-64 with `/dev/kvm`, cgroup v2 and Smol 1.31.4. The
+[systemd unit](deploy/workstream-checker.service) delegates cpu/memory/pids and
+places the controller in its own subgroup; `DelegateSubgroup` requires systemd
+254 or later ([systemd documentation](https://www.freedesktop.org/software/systemd/man/latest/systemd.resource-control.html#DelegateSubgroup=)).
+Set `smol.cgroup_root` to that unit's delegated root, not the controller subgroup.
+The service refuses startup outside its delegation. Use the ART grant issuer's
+Unix identity and a separate private socket directory, Smol HOME and image cache
+for each node. The sample unit's CPU, memory and task ceilings are deployment
+capacity; individual registered checker limits remain unchanged.
+
+For this engine omit `docker_binary`, and configure `smol` with absolute `binary`,
+`home`, `guest_binary`, `cgroup_root` paths; `binary_sha256` and `guest_sha256`;
+and `maximum_parallel`. Install the verified Smol release bundle together and
+keep it operator-controlled. Build `workstream-checker-guest` for
+`x86_64-unknown-linux-musl`; the node and bootstrap must come from the same source.
+Each existing cache entry additionally has `smol.archive`,
+`smol.archive_sha256` and `smol.image_config`. The
+[cache preparation command](tools/smol_cache.py) checks an already local
+Docker-save archive against its platform manifest, config and rootfs identities.
+It emits cache configuration; it neither registers the image nor activates a
+policy. Runtime execution needs no Docker daemon, registry credentials or image
+pull. Smol retains private hard links to imported archives; link count alone is
+not an image-integrity check.
+
+The node reserves aggregate memory and concurrent slots before launch. A guest
+supervisor applies the exact requested CPU and memory controls, a bounded PID
+limit, non-root IDs, no capabilities, read-only root/material, a 16 MiB `/tmp`,
+and denied management syscalls and network access. Submitted material is staged
+on bounded VM disk, separate from checker heap. The host bounds VMM resources
+and charges virtualization overhead separately. Results are returned only after
+VM and cgroup removal is confirmed. Unknown cleanup closes admission and requires
+startup reconciliation. Independent lease guardians survive controller death;
+`KillMode=process` preserves that cleanup lifetime. Preserve the private owner
+file and lease directory across restarts. Never clone them between running nodes.
+
+The opt-in [runtime matrix](workstream-checker-service/tests/smol_runtime.py)
+uses synthetic grants and separately built Python/native fixture images. It
+covers the node contract; it is not public upload, admission, durable POST or
+FinalAcceptance evidence. The [recovery proof](workstream-checker-service/tests/smol_recovery.py)
+requires an isolated test unit: it kills the controller and injects a deletion
+failure while checking foreign VM/cgroup survival, bounded cleanup and closed
+readiness. Never run it against a shared production node.
+Same-request upload preparation and trusted guest ZIP/
+default processing are the next boundary in
+[WS-EXEC-001](../.commitrail/initiatives/WS-EXEC-001/OVERVIEW.md). Existing hosted
+Docker/runsc release composition remains a distinct deployment configuration.

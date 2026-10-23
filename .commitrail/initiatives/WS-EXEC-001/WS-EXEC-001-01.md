@@ -103,7 +103,8 @@ asserted by a project checker. No production host ZIP/default fallback remains.
 
 ## Acceptance and executable proof map
 
-Names below identify required future tests/fixture cases, not completed proof.
+The table records the acceptance map. Boundary 2 rows remain future proof;
+executed node evidence and its limits are described below.
 
 | Boundary | Required observable proof |
 |---|---|
@@ -119,28 +120,58 @@ Names below identify required future tests/fixture cases, not completed proof.
 
 ## Evidence
 
-Live feasibility only: on the authorized EC2 host, Smol 1.31.4's guest exposes
-cgroup-v2 cpu/memory/pids controllers; a root bootstrap could create a child and
-write/read `cpu.max=50000 100000`, `memory.max=134217728`, `pids.max=128`.
-This does not prove adversarial enforcement. Full live proof must bind built
-service/guest hashes, cache image identities, adapter requests, observed outcomes
-and VM/cgroup absence to the reviewed source.
+Executed on the authorized isolated EC2 node with Smol 1.31.4 and real KVM:
+`smol_runtime.py` passes Python and native PRE/POST requests, non-root/capability,
+read-only input/root and image-device denial, CPU, memory, PID, scratch disk,
+output and deadline enforcement. `smol_recovery.py` observes concurrent running
+VMs at capacity, rejected overflow, disconnect cleanup, controller SIGKILL,
+foreign VM/cgroup survival, failed deletion closing readiness, and restart
+reconciliation. Cleanup checks exact VM records, lease files, VM disk paths and
+cgroups. Python adapter execution also validates the returned runtime receipt.
+These are synthetic ART grants, not public API/transaction/worker evidence.
+
+The clean EC2 Rust workspace test and optimized build run as the non-root grant
+issuer in an isolated build container. Python adapter and cache verification
+suites cover existing transports and image substitution. PR evidence binds the
+review candidate, commands, binary and image hashes and retained live outputs;
+local compiler crashes are not reported as passing proof. Existing hosted
+Docker configuration is unchanged and no gVisor deployment is claimed.
 
 ## Risk and review routing
 
 - Risk class: L1
-- Required reviewers: architecture, security, qa, test_delta, documentation; CI integrity if workflows change.
+- Required reviewers: architecture, security, qa, test_delta, documentation, reuse_dedup; CI integrity if workflows change.
 - Human review focus: isolation enforcement, lease/ownership/restart races and exact image/material identity.
 
 ## Review findings
 
 Plan corrections address WS-EXEC-PLAN-ARCH-001..004: two-phase ART custody,
 separate typed capabilities, bounded preparation states, sole transport provider,
-closed deployment engine values and atomic future proof cases. Await clean-target
-review; feasibility is not completed production proof.
+closed deployment engine values and atomic future proof cases. Architecture plan
+review passed on `7a52412a2`; implementation review remains required.
+
+## Implementation observations
+
+The existing bounded subprocess collector is shared by Docker and Smol. Smol
+runs under a delegated systemd controller subgroup; attempting to move children
+from an unrelated SSH scope correctly fails. The node now refuses that topology
+at startup. Guest swap is disabled in the qualified kernel (no swap-limit file);
+bootstrap requires explicit zero SwapTotal when that interface is absent.
+
+Smol hard-links imported archives into its private cache. An initial single-link
+check rejected restart after a successful import; the regression now permits
+read-only aliases while still checking every pinned byte and platform identity.
+A trusted guest supervisor remains outside the workload cgroup to distinguish
+OOM from checker failure before Smol tears down its execution namespace. Project
+exit codes cannot forge that supervisor classification. These are observed
+integration repairs, not claims that the complete initiative is delivered.
+An optimized-build startup failure exposed an omitted KVM ioctl argument;
+explicit zero now makes readiness reliable. Recursive `nodev` protects against
+image-owned device files, with a narrow exception for the trusted `/dev` whitelist;
+the live adversarial image includes a device file to exercise that denial.
 
 ## Reconciliation
 
-- Current-source reconciliation: `a64ebf425` includes merged OmniCore/worker test repairs; no runtime-owner changes since qualification.
+- Current-source reconciliation: `733c752f7` adds the merged audit restore-path repair without changing these runtime owners.
 - Next usable boundary: typed same-request preparation and canonical guest ART processing.
-- Remaining risks: resource and crash-race enforcement require live proof; independently owned model gateway integration remains separate until its stable boundary is available.
+- Remaining scope: upload-overlapped trusted intake and public durable-worker proof remain boundaries 2 and 3. Independently owned model gateway integration remains separate until its stable boundary is available.

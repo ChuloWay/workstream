@@ -259,8 +259,14 @@ callback; the service independently verifies its sealed file/directory manifest
 and exact private-root location before a read-only mount. The service accepts
 only an administrator-cached OCI platform manifest whose repository, platform
 and config image ID all match, and owns no-network, non-root, capability-free,
-read-only sandbox launch, bounded output/deadline handling and cleanup. Hosted
-readiness requires `runsc`; local `runc` is reported as `docker-dev`.
+read-only sandbox launch, bounded output/deadline handling and cleanup. The
+closed deployment pairs are `runsc/gvisor`, `runc/docker-dev`, and
+`smolvm/smol-microvm`; project requests cannot select an engine. Smol uses a fresh
+KVM VM, a static trusted bootstrap, workload and host resource limits, bounded
+concurrency and independent exact-lease cleanup guardians. Its node requires
+Linux amd64, KVM and delegated cgroup v2. The existing hosted Docker composition
+still requires `runsc`; Smol deployment and guest ZIP/default integration are
+separate boundaries. See the [node contract](../external_checkers/README.md#smol-microvm-engine).
 
 Project-specific requirements are implemented by registered external images.
 The shared service accepts the normalized result contract; it does not interpret

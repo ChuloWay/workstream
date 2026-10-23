@@ -130,9 +130,6 @@ class UnixSocketExternalCheckerAdapter:
             )
             if isolation is not None and (
                 isolation.platform_manifest_digest != checked.registry.image_digest
-                or isolation.isolation_mode not in {"gvisor", "docker-dev"}
-                or isolation.runtime not in {"runsc", "runc"}
-                or (isolation.isolation_mode == "gvisor") != (isolation.runtime == "runsc")
             ):
                 raise ValueError("external checker isolation receipt is invalid")
             if result.outcome == "completed" and isolation is None:
@@ -142,7 +139,7 @@ class UnixSocketExternalCheckerAdapter:
             raise ExternalServiceProtocolError(self._identity) from exc
 
     async def health(self) -> ExternalCheckerServiceHealth:
-        """Require the service to recheck Docker/runsc and report exact readiness."""
+        """Require the service to recheck its configured engine and report readiness."""
         payload = json.dumps(
             {"protocol_version": _PROTOCOL, "operation": "health"},
             separators=(",", ":"),
