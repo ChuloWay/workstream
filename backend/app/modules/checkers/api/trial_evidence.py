@@ -7,7 +7,10 @@ from typing import Annotated, Literal, Protocol
 from pydantic import AwareDatetime, Field, StrictInt, model_validator
 
 from app.modules.checkers.api.canonical_values import (
-    CheckerValue, ResourceId, Sha256, VersionNumber,
+    CheckerValue,
+    ResourceId,
+    Sha256,
+    VersionNumber,
 )
 from app.modules.checkers.api.external import Identifier, external_checker_json_hash
 
@@ -37,9 +40,12 @@ class TrialEvidenceStableSubject(CheckerValue):
     @property
     def address_digest(self) -> str:
         """A changed plan cannot allocate a second row for the same trial slot."""
-        return external_checker_json_hash(self.model_dump(
-            mode="json", exclude={"plan_sha256", "input_digest", "materials_digest"},
-        ))
+        return external_checker_json_hash(
+            self.model_dump(
+                mode="json",
+                exclude={"plan_sha256", "input_digest", "materials_digest"},
+            )
+        )
 
 
 class TrialEvidenceOrigin(CheckerValue):
@@ -86,11 +92,13 @@ class TrialEvidenceReservation(CheckerValue):
     @property
     def owner_digest(self) -> str:
         """Bind immutable content and bounds without a transient worker lease."""
-        return external_checker_json_hash({
-            "subject": self.subject.model_dump(mode="json"),
-            "slot": self.slot.model_dump(mode="json"),
-            "content_sha256": self.selector.content_sha256,
-        })
+        return external_checker_json_hash(
+            {
+                "subject": self.subject.model_dump(mode="json"),
+                "slot": self.slot.model_dump(mode="json"),
+                "content_sha256": self.selector.content_sha256,
+            }
+        )
 
     def select(self, selector: TrialEvidenceSelector) -> TrialEvidenceSlot:
         """Reject changed content or a different owner evidence record."""
@@ -105,6 +113,9 @@ class TrialEvidenceReservationPort(Protocol):
 
     async def resolve(self, selector: TrialEvidenceSelector) -> TrialEvidenceReservation:
         """Return exact facts only under fresh trusted invocation authority."""
+
+    async def pin_content(self, selector: TrialEvidenceSelector) -> TrialEvidenceReservation:
+        """Pin first content in the same caller transaction as its ART put intent."""
 
 
 class TrialEvidenceTicket(CheckerValue):
@@ -153,6 +164,7 @@ class TrialEvidenceBindingPort(Protocol):
     """Publish trial evidence inside the caller-owned transaction."""
 
     async def bind_trial_evidence(
-        self, request: TrialEvidenceBindingRequest,
+        self,
+        request: TrialEvidenceBindingRequest,
     ) -> TrialEvidenceCustodyAck:
         """Bind exact verified content without committing the caller transaction."""

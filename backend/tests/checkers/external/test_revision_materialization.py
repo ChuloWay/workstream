@@ -76,6 +76,22 @@ class InspectingExecution(ControlledSelectedExecution):
         return await super().execute(request, grant)
 
 
+class DiagnosticMaterialization:
+    """Retain the internal denial cause when this positive journey unexpectedly fails."""
+
+    def __init__(self, service):
+        self.service = service
+
+    async def materialize(self, facts, consumer):
+        try:
+            return await self.service.materialize(facts, consumer)
+        except Exception as error:
+            cause = error
+            while cause.__cause__ is not None or cause.__context__ is not None:
+                cause = cause.__cause__ or cause.__context__
+            raise AssertionError("expected successful revision materialization") from cause
+
+
 @pytest.mark.parametrize("roles", [
     ("predecessor_findings",),
     ("predecessor_submission_archive",),
@@ -102,11 +118,12 @@ async def test_revision_reads_exact_previous_material_with_per_binding_visibilit
                 submission_id=created.submission_id, request_id=created.evaluation_request_id,
             )
         h.request = envelope.request
+        h.service = DiagnosticMaterialization(h.service)
         adapter = InspectingExecution(h.scratch)
         executor = live_executor(h, selected_execution=adapter)
         h.store.opens.clear()
         completed = await executor.evaluate_post_submission(h.request)
-        assert completed.outcome == "completed"
+        assert completed.outcome == "completed", completed.model_dump_json()
         assert len(h.store.opens) == 1 + int("predecessor_submission_archive" in roles)
         assert len(adapter.requests) == 2
         scoped, current_only = adapter.requests

@@ -12,7 +12,6 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from app.core.config import Settings
 from app.core.api_controls import request_ids
 from app.api.deps.authorization import get_authorization_actor_identity
-from app.adapters.checkers import checker_output_reservations
 from app.adapters.projects import project_locked_policy_context_port
 from app.adapters.tasks import task_submission_context_port
 from app.db.session import get_db_session, get_session_factory
@@ -683,7 +682,7 @@ def worker_post_submission_materialization(*, sessions) -> PostSubmissionMateria
 
 
 def checker_output_storage(
-    *, sessions, store, namespace, preparation, settings
+    *, sessions, store, namespace, preparation, settings, reservations
 ) -> CheckerArtifactOutputPort:
     """Compose private call evidence through canonical admission and verification."""
     from app.adapters.auth import checker_output_write_authorization
@@ -705,7 +704,7 @@ def checker_output_storage(
         namespace=namespace,
         preparation=preparation,
         settings=settings,
-        reservations=checker_output_reservations,
+        reservations=reservations,
         authority=checker_output_write_authorization,
         internal_authority=lambda session: authority(
             session, ServiceIdentity.ARTIFACT_PUT_RESOLVER
@@ -716,7 +715,7 @@ def checker_output_storage(
     )
 
 
-def checker_output_binding(session, *, namespace) -> CheckerOutputBindingPort:
+def checker_output_binding(session, *, namespace, reservations) -> CheckerOutputBindingPort:
     """Bind one exact private call effect to independently verified ART bytes."""
     from app.adapters.auth import checker_output_binding_authorization
     from app.modules.artifacts.checker_output_bindings import CheckerOutputBindingService
@@ -724,7 +723,7 @@ def checker_output_binding(session, *, namespace) -> CheckerOutputBindingPort:
     return CheckerOutputBindingService(
         session,
         namespace_fingerprint=namespace.namespace_fingerprint,
-        reservations=checker_output_reservations(session),
+        reservations=reservations,
         authority=checker_output_binding_authorization(session),
     )
 

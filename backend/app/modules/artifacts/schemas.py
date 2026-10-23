@@ -7,11 +7,9 @@ from enum import StrEnum
 from typing import Protocol, TypeAlias, final
 from uuid import UUID
 
-from app.core.hashing import canonical_json_hash
 from app.modules.artifacts.sources import CommittedArtifactSource
 from app.modules.checkers.api.output_custody import (
-    CheckerOutputReservation,
-    CheckerOutputSlot,
+    GeneratedOutputReservation,
 )
 from app.modules.authorization.catalogue import ActionId
 from app.modules.actors.api import ServiceIdentity
@@ -47,41 +45,11 @@ class GuideArtifactAdmissionRequest:
 @final
 @dataclass(frozen=True, slots=True)
 class CheckerOutputArtifactAdmissionRequest:
-    """One prepared model transcript admitted under its exact durable call effect."""
+    """One prepared model or trial output admitted under its exact durable owner."""
 
-    reservation: CheckerOutputReservation
+    reservation: GeneratedOutputReservation
     slot_key: str
     source: CommittedArtifactSource
-
-
-def checker_output_operation_identity(*, model_call_attempt_id: UUID, slot_key: str) -> str:
-    """Keep one transcript identity across checker generations and lease changes."""
-    return canonical_json_hash(
-        {
-            "request_type": "checker_output",
-            "model_call_attempt_id": str(model_call_attempt_id),
-            "logical_role": slot_key,
-        }
-    )
-
-
-def checker_output_request_digest_facts(
-    *,
-    reservation: CheckerOutputReservation,
-    slot: CheckerOutputSlot,
-) -> dict[str, object]:
-    """Return stable owner facts shared by checker admission and binding."""
-    selector = reservation.selector
-    return {
-        "model_call_slot_id": str(selector.model_call_slot_id),
-        "model_call_attempt_id": str(selector.model_call_attempt_id),
-        "paid_slot": selector.paid_slot.model_dump(mode="json"),
-        "task_id": str(selector.task_id),
-        "content_sha256": selector.content_sha256,
-        "slot_key": slot.key,
-        "media_type": slot.media_type,
-        "maximum_bytes": slot.maximum_bytes,
-    }
 
 
 @final

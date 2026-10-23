@@ -5,7 +5,10 @@ from dataclasses import dataclass
 from typing import Annotated, Literal, Protocol, Self
 from uuid import UUID
 
-from pydantic import Field, StrictInt, model_validator
+from pydantic import Field, StrictInt, TypeAdapter, model_validator
+
+from app.core.hashing import canonical_json_hash
+from app.modules.checkers.api.trial_evidence import TrialEvidenceReservation, TrialEvidenceSelector
 
 from app.modules.model_usage.api import (
     ModelCallExecutionFacts,
@@ -165,3 +168,86 @@ class CheckerArtifactOutputPort(Protocol):
         evidence: ModelCallEvidence,
     ) -> bytes:
         """Read one authorized private response with exact byte/hash verification."""
+
+
+GeneratedOutputSelector = CheckerOutputSelector | TrialEvidenceSelector
+GeneratedOutputReservation = CheckerOutputReservation | TrialEvidenceReservation
+GENERATED_OUTPUT_SELECTOR = TypeAdapter(GeneratedOutputSelector)
+GENERATED_OUTPUT_RESERVATION = TypeAdapter(GeneratedOutputReservation)
+
+
+@dataclass(frozen=True, slots=True)
+class GeneratedOutputSubject:
+    """Closed native lineage for the shared ART generated-output pipeline."""
+
+    project_id: UUID
+    task_id: UUID
+    submission_id: UUID
+    submission_version: int
+    resource_type: Literal["checker_model_call", "checker_trial_evidence"]
+    resource_id: UUID
+    logical_role: str
+    model_call_attempt_id: UUID | None
+    checker_trial_evidence_id: UUID | None
+    operation_identity: str
+    request_digest_facts: dict[str, object]
+
+
+def generated_output_subject(reservation: GeneratedOutputReservation) -> GeneratedOutputSubject:
+    """Preserve model identities and add exactly one independent trial subject."""
+    reservation = GENERATED_OUTPUT_RESERVATION.validate_python(reservation)
+    selector, slot = reservation.selector, reservation.slot
+    if isinstance(reservation, TrialEvidenceReservation):
+        subject = reservation.subject
+        return GeneratedOutputSubject(
+            subject.project_id,
+            subject.task_id,
+            subject.submission_id,
+            subject.submission_version,
+            "checker_trial_evidence",
+            selector.trial_evidence_id,
+            slot.key,
+            None,
+            selector.trial_evidence_id,
+            canonical_json_hash(
+                {
+                    "request_type": "checker_trial_evidence",
+                    "trial_evidence_id": str(selector.trial_evidence_id),
+                    "logical_role": slot.key,
+                }
+            ),
+            {
+                "subject": subject.model_dump(mode="json"),
+                "slot": slot.model_dump(mode="json"),
+                "content_sha256": selector.content_sha256,
+            },
+        )
+    paid = selector.paid_slot
+    return GeneratedOutputSubject(
+        paid.project_id,
+        selector.task_id,
+        paid.submission_id,
+        paid.submission_version,
+        "checker_model_call",
+        selector.model_call_attempt_id,
+        slot.key,
+        selector.model_call_attempt_id,
+        None,
+        canonical_json_hash(
+            {
+                "request_type": "checker_output",
+                "model_call_attempt_id": str(selector.model_call_attempt_id),
+                "logical_role": slot.key,
+            }
+        ),
+        {
+            "model_call_slot_id": str(selector.model_call_slot_id),
+            "model_call_attempt_id": str(selector.model_call_attempt_id),
+            "paid_slot": paid.model_dump(mode="json"),
+            "task_id": str(selector.task_id),
+            "content_sha256": selector.content_sha256,
+            "slot_key": slot.key,
+            "media_type": slot.media_type,
+            "maximum_bytes": slot.maximum_bytes,
+        },
+    )

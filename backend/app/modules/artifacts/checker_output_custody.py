@@ -15,13 +15,10 @@ from app.modules.artifacts.models import (
     ArtifactVerificationJob,
     ArtifactVerificationReceipt,
 )
-from app.modules.artifacts.schemas import (
-    checker_output_operation_identity,
-    checker_output_request_digest_facts,
-)
 from app.modules.checkers.api.output_custody import (
-    CheckerOutputReservation,
-    CheckerOutputSelector,
+    GeneratedOutputReservation,
+    GeneratedOutputSelector,
+    generated_output_subject,
     CheckerOutputUnavailable,
 )
 
@@ -29,8 +26,8 @@ from app.modules.checkers.api.output_custody import (
 async def select_checker_output(
     session: AsyncSession,
     *,
-    selector: CheckerOutputSelector,
-    reservation: CheckerOutputReservation,
+    selector: GeneratedOutputSelector,
+    reservation: GeneratedOutputReservation,
     namespace_fingerprint: str,
     put_attempt_id: UUID | None = None,
     verification_receipt_id: UUID | None = None,
@@ -38,24 +35,17 @@ async def select_checker_output(
 ) -> CheckerOutputStoredFacts | None:
     """Match immutable request and verified ancestry; never read foreign owners."""
     slot = reservation.select(selector)
-    expected_digest = canonical_json_hash(
-        checker_output_request_digest_facts(
-            reservation=reservation,
-            slot=slot,
-        )
-    )
+    owner = generated_output_subject(reservation)
+    expected_digest = canonical_json_hash(owner.request_digest_facts)
     attempt = await session.scalar(
         select(ArtifactPutAttempt)
         .where(
-            ArtifactPutAttempt.operation_identity == checker_output_operation_identity(
-                model_call_attempt_id=selector.model_call_attempt_id, slot_key=selector.slot_key
-            ),
+            ArtifactPutAttempt.operation_identity == owner.operation_identity,
         )
         .execution_options(populate_existing=True)
     )
     if attempt is None:
         return None
-    paid_slot = selector.paid_slot
     if (
         (
             attempt.producer_request_type,
@@ -64,6 +54,7 @@ async def select_checker_output(
             attempt.submission_id,
             attempt.submission_version,
             attempt.model_call_attempt_id,
+            attempt.checker_trial_evidence_id,
             attempt.logical_role,
             attempt.checker_request_digest,
             attempt.media_type,
@@ -71,11 +62,12 @@ async def select_checker_output(
         )
         != (
             "checker_output",
-            str(paid_slot.project_id),
-            str(selector.task_id),
-            str(paid_slot.submission_id),
-            paid_slot.submission_version,
-            str(selector.model_call_attempt_id),
+            str(owner.project_id),
+            str(owner.task_id),
+            str(owner.submission_id),
+            owner.submission_version,
+            str(owner.model_call_attempt_id) if owner.model_call_attempt_id else None,
+            str(owner.checker_trial_evidence_id) if owner.checker_trial_evidence_id else None,
             slot.key,
             expected_digest,
             slot.media_type,

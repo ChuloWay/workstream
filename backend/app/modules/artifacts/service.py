@@ -87,6 +87,7 @@ from app.modules.artifacts.authorization import (
     guide_ingest_prepared_request_digest,
 )
 from app.modules.artifacts.preparation import ArtifactPreparationService
+from app.modules.checkers.api.trial_evidence import TrialEvidenceReservation
 from app.modules.artifacts.schemas import (
     VERIFICATION_PRODUCERS,
     TaskImportSourceAdmissionRequest,
@@ -109,8 +110,6 @@ from app.modules.artifacts.schemas import (
     GuideArtifactIngestAuthorityFacts,
     SubmissionBundleArtifactAdmissionRequest,
     SubmissionBundleDurableIntentAuthorityFacts,
-    checker_output_operation_identity,
-    checker_output_request_digest_facts,
 )
 from app.modules.artifacts.submission_authorization import (
     SubmissionBundlePreparedAuthorization,
@@ -118,6 +117,8 @@ from app.modules.artifacts.submission_authorization import (
 from app.modules.artifacts.sources import CommittedArtifactSource, PreparedArtifact
 from app.modules.checkers.api.output_custody import (
     CheckerOutputReservation,
+    GENERATED_OUTPUT_RESERVATION,
+    generated_output_subject,
     CheckerOutputUnavailable,
 )
 from app.modules.authorization.runtime import (
@@ -204,6 +205,7 @@ class _AdmissionFacts:
     task_import_source_id: str | None = None
     selected_pre_submit_run_id: str | None = None
     model_call_attempt_id: str | None = None
+    checker_trial_evidence_id: str | None = None
 
 
 def artifact_storage_namespace_spec(
@@ -1072,6 +1074,7 @@ class ArtifactStorageOrchestrator:
                         guide_source_item_id=attempt.guide_source_item_id,
                         checker_run_id=attempt.checker_run_id,
                         model_call_attempt_id=attempt.model_call_attempt_id,
+                        checker_trial_evidence_id=attempt.checker_trial_evidence_id,
                         logical_role=attempt.logical_role,
                         replica_id=replica.id,
                         operation="put",
@@ -2408,6 +2411,8 @@ class ArtifactAdmissionService:
                             "submission_version": facts.submission_version,
                             "checker_output_request": facts.checker_request_digest_facts,
                             "model_call_attempt_id": facts.model_call_attempt_id,
+                            **({"checker_trial_evidence_id": facts.checker_trial_evidence_id}
+                               if facts.checker_trial_evidence_id is not None else {}),
                         }
                         if facts.request_type == "checker_output"
                         else {}
@@ -2477,6 +2482,7 @@ class ArtifactAdmissionService:
                 guide_source_item_id=facts.guide_source_item_id,
                 checker_run_id=facts.checker_run_id,
                 model_call_attempt_id=facts.model_call_attempt_id,
+                checker_trial_evidence_id=facts.checker_trial_evidence_id,
                 logical_role=facts.logical_role,
                 submission_id=facts.submission_id,
                 submission_version=facts.submission_version,
@@ -2558,11 +2564,11 @@ class ArtifactAdmissionService:
         if type(request.source) is not CommittedArtifactSource:
             raise TypeError("invalid artifact admission source")
         if type(request) is CheckerOutputArtifactAdmissionRequest:
-            if type(request.reservation) is not CheckerOutputReservation:
+            if type(request.reservation) not in {CheckerOutputReservation, TrialEvidenceReservation}:
                 raise TypeError("invalid checker output reservation")
             try:
                 request.reservation.select(request.reservation.selector)
-                if request.slot_key != request.reservation.selector.slot_key:
+                if request.slot_key != request.reservation.slot.key:
                     raise CheckerOutputUnavailable("checker_output_slot_unavailable")
             except (CheckerOutputUnavailable, ValueError) as exc:
                 raise ArtifactAdmissionRelationshipError(
@@ -2631,7 +2637,7 @@ class ArtifactAdmissionService:
         self, request: CheckerOutputArtifactAdmissionRequest
     ) -> _AdmissionFacts:
         """Bind committed transcript bytes to one durable call effect and role."""
-        reservation = CheckerOutputReservation.model_validate(request.reservation)
+        reservation = GENERATED_OUTPUT_RESERVATION.validate_python(request.reservation)
         selector = reservation.selector
         try:
             slot = reservation.select(selector)
@@ -2650,29 +2656,26 @@ class ArtifactAdmissionService:
             raise ArtifactAdmissionRelationshipError(
                 "checker output does not match reserved slot"
             )
-        paid_slot = selector.paid_slot
+        owner = generated_output_subject(reservation)
         logical_role = slot.key
-        operation_identity = checker_output_operation_identity(
-            model_call_attempt_id=selector.model_call_attempt_id, slot_key=logical_role
-        )
-        digest_facts = checker_output_request_digest_facts(
-            reservation=reservation,
-            slot=slot,
-        )
+        operation_identity = owner.operation_identity
+        digest_facts = owner.request_digest_facts
         return _AdmissionFacts(
             request_type="checker_output",
             producer_type="service_identity",
             producer_ref=ServiceIdentity.ARTIFACT_CHECKER_OUTPUT.value,
-            project_id=str(paid_slot.project_id),
+            project_id=str(owner.project_id),
             guide_id=None,
-            task_id=str(selector.task_id),
+            task_id=str(owner.task_id),
             guide_source_item_id=None,
             guide_source_snapshot_id=None,
             checker_run_id=None,
-            model_call_attempt_id=str(selector.model_call_attempt_id),
+            model_call_attempt_id=str(owner.model_call_attempt_id) if owner.model_call_attempt_id else None,
+            checker_trial_evidence_id=(str(owner.checker_trial_evidence_id)
+                                       if owner.checker_trial_evidence_id else None),
             logical_role=logical_role,
-            submission_id=str(paid_slot.submission_id),
-            submission_version=paid_slot.submission_version,
+            submission_id=str(owner.submission_id),
+            submission_version=owner.submission_version,
             checker_request_digest=canonical_json_hash(digest_facts),
             checker_request_digest_facts=digest_facts,
             pre_submit_evidence_set_id=None,

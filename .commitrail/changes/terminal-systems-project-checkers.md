@@ -362,8 +362,8 @@ Exact owner scope: `backend/app/modules/checkers/api/trial_evidence.py`,
 `backend/app/modules/checkers/trial_evidence.py`,
 `backend/app/modules/checkers/models.py`, and
 `backend/tests/checkers/external/test_trial_evidence.py`. The shared ART and AUTH
-branches are coordinated in PILOT-05; additive owner migration 0062 is scoped
-after 0061 freezes. Verify current TASK-before-CHECKERS custody, distinct
+trial branches belong to this change; additive owner migration 0062 follows
+0061. Verify current TASK-before-CHECKERS custody, distinct
 contributor isolation, concurrent reservation/first-content pinning, mutation
 denial, rollback and loss/recovery of the publication response on PostgreSQL
 and MinIO. No trial handle may authorize model spend without verified bytes.
@@ -388,3 +388,32 @@ exact new table reset/deletion inventories). The same migration adds only the
 shared ART trial-subject foreign keys agreed with PILOT-05. Retain one linear
 chain after 0061, preserve historical model-output rows, and verify supported
 intermediate upgrades and immutable terminal evidence without baseline edits.
+
+The trial-specific ART extension belongs to this change after migration 0062,
+so the prerequisite model-runtime PR remains independently deployable. Extend
+the existing pipeline through the two closed model/trial subject cases in:
+`backend/app/modules/checkers/api/output_custody.py`,
+`backend/app/modules/artifacts/api/checker_output_authority.py`,
+`backend/app/modules/artifacts/schemas.py`,
+`backend/app/modules/artifacts/models.py`,
+`backend/app/modules/artifacts/service.py`,
+`backend/app/modules/artifacts/checker_output_custody.py`,
+`backend/app/modules/artifacts/checker_outputs.py`,
+`backend/app/modules/artifacts/checker_output_bindings.py`,
+`backend/app/modules/authorization/domain/checker_outputs.py`,
+`backend/app/modules/authorization/domain/audit.py`,
+`backend/app/modules/authorization/checker_output_authorization.py`,
+`backend/app/adapters/artifacts/__init__.py`,
+`backend/app/adapters/checkers/__init__.py`,
+`backend/app/adapters/checkers/model_runtime.py`,
+`backend/app/adapters/checkers/model_proxy_transport.py`, and
+`backend/app/core/config.py` (the paired trusted manifest path/digest only).
+Keep existing model request/response identities and evidence unchanged. First
+trial content is pinned only in the same transaction as ART put admission; the
+preparation/probe transaction must not leave an orphan content commitment.
+
+Generated-output composition also updates the existing model caller in
+`backend/tests/checkers_model_calls/test_composed_execution.py` to supply its
+model owner explicitly. Trial integration proof extends
+`backend/tests/checkers/external/test_trial_evidence.py`; both use the same
+ART services and independent verification worker.

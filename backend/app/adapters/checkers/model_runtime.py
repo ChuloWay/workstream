@@ -1,5 +1,7 @@
 """Compose the private model listener with the existing AUTH, CHECKERS and ART owners."""
 
+from app.adapters.checkers import checker_output_reservations
+
 from contextlib import asynccontextmanager
 import os
 
@@ -77,6 +79,7 @@ async def configured_model_proxy_runtime(settings, sessions):
         namespace = configured_artifact_storage_namespace(settings, bootstrap)
         manager = create_artifact_scratch_manager(settings)
         outputs = checker_output_storage(
+            reservations=checker_output_reservations,
             sessions=sessions,
             store=store,
             namespace=namespace,
@@ -90,7 +93,7 @@ async def configured_model_proxy_runtime(settings, sessions):
             calls=model_call_service,
             profiles=model_profile_reader,
             outputs=outputs,
-            bindings=lambda session: checker_output_binding(session, namespace=namespace),
+            bindings=lambda session: checker_output_binding(session, namespace=namespace, reservations=checker_output_reservations(session)),
             provider=configured_model_provider,
         )
         async with ModelProxyTransport(

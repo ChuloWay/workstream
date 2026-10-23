@@ -10,6 +10,7 @@ from app.interfaces.checker_trial_proxy import (
     TrialPublishRequest, TrialReserveRequest,
 )
 from app.modules.checkers.api.external import external_checker_json_hash
+from app.modules.checkers.api.output_custody import CheckerOutputUnavailable
 from app.modules.checkers.api.trial_evidence import (
     TrialEvidenceArtifactRequest, TrialEvidenceBindingRequest, TrialEvidenceSelector,
     TrialEvidenceStableSubject, TrialEvidenceUnavailable,
@@ -160,7 +161,7 @@ class CheckerTrialProxy:
             return await self._publish(request)
         except (ValidationError, ValueError, TypeError, KeyError):
             return self._unavailable(operation, "trial_request_invalid")
-        except (TrialEvidenceUnavailable, TrialProfileError):
+        except (TrialEvidenceUnavailable, TrialProfileError, CheckerOutputUnavailable):
             return self._unavailable(operation, "trial_evidence_unavailable")
         except TimeoutError:
             return self._unavailable(operation, "trial_deadline")

@@ -163,7 +163,7 @@ class TrialEvidenceReservations:
             return self._ticket(row, replayed=False)
 
     async def resolve(self, selector: TrialEvidenceSelector) -> TrialEvidenceReservation:
-        """Pin first content only after fresh ART authority and current owner locks."""
+        """Qualify exact content without mutating the pre-admission reservation."""
         selector = TrialEvidenceSelector.model_validate(selector)
         facts = await self._request_facts()
         if selector.project_id != facts.request.project_id:
@@ -183,15 +183,21 @@ class TrialEvidenceReservations:
         subject = _value(TrialEvidenceStableSubject, row.subject)
         slot = self._slot(subject)
         self._match(row, subject, slot)
-        if row.content_sha256 is None:
-            row.content_sha256 = selector.content_sha256
-            await self._session.flush()
-        elif row.content_sha256 != selector.content_sha256:
+        if row.content_sha256 not in {None, selector.content_sha256}:
             raise TrialEvidenceUnavailable("trial_content_conflict")
         return TrialEvidenceReservation(
             selector=selector, subject=subject, slot=slot,
             origin=_value(TrialEvidenceOrigin, row.origin),
         )
+
+    async def pin_content(self, selector: TrialEvidenceSelector) -> TrialEvidenceReservation:
+        """Retain the first hash atomically with the matching ART put admission."""
+        resolved = await self.resolve(selector)
+        row = await self._session.get(CheckerTrialEvidence, str(selector.trial_evidence_id))
+        if row.content_sha256 is None:
+            row.content_sha256 = selector.content_sha256
+            await self._session.flush()
+        return resolved
 
     @staticmethod
     def _check_evidence(evidence, facts) -> None:

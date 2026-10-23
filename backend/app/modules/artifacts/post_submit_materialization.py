@@ -486,8 +486,9 @@ class PostSubmissionMaterializer:
         except (
             ArtifactObjectMissingError, ArtifactInputMismatchError, ArtifactIntegrityError,
             ArtifactLimitExceededError, ArtifactStoreUnavailableError, SubmissionArchiveRejectedError,
-        ):
+        ) as error:
             failure = PostSubmissionMaterializationFailure("post_submit_material_unavailable")
+            failure.__cause__ = error
         await self._select(facts, original=selected, evidence_id=evidence_id)
         if failure is not None:
             raise failure

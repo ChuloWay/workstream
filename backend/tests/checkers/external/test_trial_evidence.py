@@ -1,6 +1,7 @@
 """Trial identity, real current execution custody, atomic reservation and replay."""
 
 import asyncio
+import json
 
 import pytest
 from sqlalchemy import func, select, text
@@ -73,6 +74,39 @@ def _trial_fixture():
     return spec, parameters, projected, PinnedTrialExecutionCatalog(((selected, projected),))
 
 
+async def _reject_raw_subject_substitution(factory, ticket):
+    """A malformed owner insert must fail its guard, not just its unique key."""
+    async with factory() as session:
+        original = await session.scalar(text(
+            "SELECT to_jsonb(e) FROM checker_trial_evidence e WHERE id=:id"
+        ), {"id": ticket.trial_evidence_id})
+    for key, value, remove in (
+        ("input_digest", None, False), ("input_digest", None, True),
+        ("trial_kind", None, False), ("trial_kind", None, True),
+        ("materials_digest", None, False), ("plan_sha256", None, True),
+        ("slot_index", 1, False),
+    ):
+        candidate = dict(original)
+        candidate["id"] = str(new_record_id())
+        subject = dict(original["subject"])
+        if remove:
+            subject.pop(key)
+        else:
+            subject[key] = value
+        candidate["subject"] = subject
+        candidate["address_digest"] = external_checker_json_hash({
+            name: item for name, item in subject.items()
+            if name not in {"plan_sha256", "input_digest", "materials_digest"}
+        })
+        with pytest.raises(IntegrityError) as denied:
+            async with factory() as session, session.begin():
+                await session.execute(text(
+                    "INSERT INTO checker_trial_evidence SELECT * FROM "
+                    "jsonb_populate_record(NULL::checker_trial_evidence,CAST(:payload AS jsonb))"
+                ), {"payload": json.dumps(candidate)})
+        assert denied.value.orig.sqlstate == "23514"
+
+
 class ReservingExecution(ControlledSelectedExecution):
     def __init__(self, factory, catalog, projected):
         super().__init__()
@@ -108,6 +142,7 @@ class ReservingExecution(ControlledSelectedExecution):
                     await _owner(session, request, self.catalog).reserve(
                         subject.model_copy(update={field: value}),
                     )
+        await _reject_raw_subject_substitution(self.factory, ticket)
         return await super().execute(request, grant)
 
 
