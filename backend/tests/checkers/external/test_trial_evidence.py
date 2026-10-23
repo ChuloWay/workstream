@@ -21,6 +21,7 @@ from app.modules.checkers.trial_evidence import TrialEvidenceReservations
 from tests.checkers.execution.support import ControlledSelectedExecution, live_executor, reserve
 from tests.checkers.external.support import post_registry_spec
 from tests.checkers.external.test_trial_profiles import configuration, digest, profile, projection
+from tests.checkers.external.test_revision_materialization import DiagnosticMaterialization
 from tests.post_submit_materialization_helpers import material_fixture
 
 
@@ -155,9 +156,11 @@ async def test_trial_reservation_is_current_exact_immutable_and_replayed(
         post_submit_binding_setup=parameters,
     ) as h:
         await reserve(h)
+        h.service = DiagnosticMaterialization(h.service)
         adapter = ReservingExecution(h.factory, catalog, projected)
         completed = await live_executor(h, selected_execution=adapter).evaluate_post_submission(h.request)
-        assert completed.outcome == "completed" and len(adapter.tickets) == 1
+        assert completed.outcome == "completed", completed.model_dump_json()
+        assert len(adapter.tickets) == 1
         ticket = adapter.tickets[0]
         async with h.factory() as session:
             assert await session.scalar(select(func.count()).select_from(CheckerTrialEvidence)) == 1
@@ -230,6 +233,7 @@ async def test_concurrent_trial_reservation_waits_then_recovers_complete_rollbac
         post_submit_binding_setup=parameters,
     ) as h:
         await reserve(h)
+        h.service = DiagnosticMaterialization(h.service)
         adapter = RollbackExecution(h.factory, catalog, projected)
         completed = await live_executor(h, selected_execution=adapter).evaluate_post_submission(h.request)
-        assert completed.outcome == "completed"
+        assert completed.outcome == "completed", completed.model_dump_json()
