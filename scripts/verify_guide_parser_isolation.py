@@ -693,7 +693,7 @@ def _prove_sigterm_socket_cleanup(image: str, owner: str) -> None:
         time.sleep(0.1)
     else:
         raise ValueError("guide parser SIGTERM service did not become healthy")
-    stopped = checked(["docker", "stop", "--time", "30", container], timeout=60)
+    stopped = checked(["docker", "stop", "--timeout", "30", container], timeout=60)
     require(stopped.decode().strip() == container, "guide parser SIGTERM stop differs")
     exit_code = checked(
         ["docker", "inspect", "--format", "{{.State.ExitCode}}", container]
