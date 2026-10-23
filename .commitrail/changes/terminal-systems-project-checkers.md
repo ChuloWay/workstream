@@ -391,7 +391,7 @@ intermediate upgrades and immutable terminal evidence without baseline edits.
 
 The trial-specific ART extension belongs to this change after migration 0063,
 so the prerequisite model-runtime PR remains independently deployable. Extend
-the existing pipeline through the two closed model/trial subject cases in:
+the existing pipeline through explicit checker-model, setup-model and trial subject cases in:
 `backend/app/modules/checkers/api/output_custody.py`,
 `backend/app/modules/artifacts/api/checker_output_authority.py`,
 `backend/app/modules/artifacts/schemas.py`,
