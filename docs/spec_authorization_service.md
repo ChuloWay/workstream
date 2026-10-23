@@ -141,6 +141,19 @@ response. Each decision digest binds the caller, resource, normalized filters,
 limit, order and a hash of any presented cursor; signed cursors bind the same
 query.
 
+WS-CLI-001-46 adds a separate `project.catalogue.list` action for
+`GET /api/v1/projects`, mapped to existing `project.read`. An active human
+must hold a current *system-scoped* Project Manager, Operator, Finance
+Authority, or Audit Authority grant; the evaluator locks the actor and
+matched grant and records that exact authority. An Access Administrator
+alone, a project-scoped grant, and a contributor grant do not enumerate.
+Each 1–100-row page contains only project ID, name and status, ordered by
+`(created_at, id)`. The signed cursor binds actor, action and page limit;
+every continuation rechecks current authority before cursor decoding and
+shares one response transaction with the bounded PROJECTS read. This does
+not widen `actor.project.list` or disclose a guide, grant, task or Finance
+binding through the catalogue.
+
 PILOT-READ-3 activates ten project-wide reads through one closed evaluator.
 `project.guide.list`, `project.guide.read`,
 `project.guide.activation_readiness.read` and `project.guide.document.read`

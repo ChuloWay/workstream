@@ -32,6 +32,7 @@ acknowledgements; neither approves policy nor activates a guide.
 | `workstream contributions [--project UUID]` | `GET /api/v1/actors/me/contributions` |
 | `workstream project contributions PROJECT_ID` | `GET /api/v1/projects/PROJECT_ID/contributions/export` |
 | `workstream project access PROJECT_ID` | `GET /api/v1/actors/me/authorization-context?project_id=PROJECT_ID` |
+| `workstream project list [--limit N] [--cursor TOKEN]` | `GET /api/v1/projects` |
 | `workstream project show PROJECT_ID` | `GET /api/v1/projects/PROJECT_ID` |
 | `workstream project create --name TEXT --slug TEXT --idempotency-key UUID` | `POST /api/v1/projects` |
 | `workstream project guide create PROJECT_ID --input FILE --idempotency-key UUID` | `POST /api/v1/projects/PROJECT_ID/guides` |
@@ -146,6 +147,33 @@ Workstream verifies the caller's Flow bearer and owns identity resolution,
 authorization and lifecycle decisions. Reading a profile can admit a first-time
 caller and update server-owned last-seen/audit data. Project access is a current
 snapshot; each later API operation must independently authorize the caller.
+
+## Read the system-covered project catalogue
+
+```sh
+workstream project list
+workstream project list --limit 10 --output json
+workstream project list --limit 10 --cursor PREVIOUS_NEXT_CURSOR --output json
+```
+
+This separate catalogue requires a current system-wide Project Manager,
+Operator, Finance Authority, or Audit Authority grant. Access Administrator
+alone, exact-project grants, and contributor grants do not authorize it.
+The backend checks current authority on every page; the CLI does not infer
+authority from a role, cached result, or cursor.
+
+Each invocation requests one page with `--limit` 1–100 (default 50) and never
+follows continuation automatically. JSON preserves the validated public
+`{"items":[{"project_id":"…","name":"…","status":"draft"}],"next_cursor":null}`
+shape. Rows contain no roles, guide, task, or payment details. Text prints
+Project, Name, and Status for each row, then Next cursor; terminal controls
+are escaped. Pass the opaque cursor unchanged with the same limit; null ends
+continuation. Invalid, substituted, or stale-authority continuations fail
+through the existing structured error output, without partial stdout.
+
+`workstream me projects` still lists exact-grant projects and is not global
+discovery. `project show` and `project access` remain exact-project reads.
+Catalogue visibility is an observation, not permission for a later operation.
 
 ## Read and export contribution evidence
 

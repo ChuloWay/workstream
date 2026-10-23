@@ -25,9 +25,27 @@ class ProjectSummaryFacts:
     active_guide: ActiveGuideIdentity | None
 
 
+@dataclass(frozen=True, slots=True)
+class ProjectCatalogueFacts:
+    """Only project identity, lifecycle status and private page position."""
+
+    project_id: UUID
+    name: str
+    status: ProjectStatus
+    created_at: datetime
+
+
 class ProjectSummaryReadPort(Protocol):
     """Page a bounded selected project set by ``(created_at, id)``."""
 
     async def read_project_summaries(
         self, project_ids: frozenset[UUID], *, after: tuple[datetime, UUID] | None, limit: int,
     ) -> tuple[tuple[ProjectSummaryFacts, ...], bool]: ...
+
+
+class ProjectCatalogueReadPort(Protocol):
+    """Page all project identities after AUTH locks a system reader grant."""
+
+    async def read_project_catalogue(
+        self, *, after: tuple[datetime, UUID] | None, limit: int,
+    ) -> tuple[tuple[ProjectCatalogueFacts, ...], bool]: ...

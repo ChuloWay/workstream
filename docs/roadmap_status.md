@@ -201,7 +201,11 @@ authority. ARCH-03C5 adds exact-authorized Contributor/Manager
 detail and requirements. ARCH-03C6 adds
 separate exact-authorized locked-context reads. ARCH-03C7 adds bounded public
 Audit Authority history access. WS-CLI-001-34 adds explicit CLI consumption of
-those two audit reads without changing their authority. PILOT-02A provides project-bound canonical JSON
+those two audit reads without changing their authority. WS-CLI-001-46 adds
+`GET /api/v1/projects` and `workstream project list` for a minimal ID/name/status
+page under current system Project Manager, Operator, Finance or Audit project-read
+authority. It leaves exact-grant contributor discovery unchanged and supplies
+no TUI runtime. PILOT-02A provides project-bound canonical JSON
 source declaration, upload, status and verified download using ART custody and
 current PM authority, with public-route PostgreSQL/MinIO custody, replay,
 rollback and recovery proof. PILOT-02B adds public atomic JSON-to-DRAFT import
@@ -376,9 +380,10 @@ acknowledge eligible warnings under fresh Project Manager authority and caller-
 owned replay keys. They do not produce an authoritative setup result, approve a
 policy or activate a guide; the separate CLI manual artifact-policy writes only
 append retained drafts after authoritative setup and never authorize activation.
-No public project-list
-route is invented; `GET /actors/me/projects` lists only the caller's own
-exact-grant projects.
+The separate public `GET /api/v1/projects` and `workstream project list` return
+only bounded ID/name/status pages for the four current system project-reader
+roles. `GET /actors/me/projects` still lists only the caller's exact-grant
+projects; neither route discloses guide content by catalogue authority alone.
 The CLI also exposes the eight existing administrative actor, identity-link,
 fixed-service provision and grant POSTs as deliberate keyed commands under the
 single `admin` root. Backend authorization and lifecycle guards remain decisive;
@@ -500,6 +505,7 @@ cannot be reused as post-submission review-gate evidence. See the
 | --- | --- | --- | --- |
 | Identity and actor resolution | **Live foundation** | Flow-token verification; canonical ActorProfile and ActorIdentityLink; human/service separation; lifecycle controls; canonical `/actors/me` self-read with duplicate `/auth/me` removed; suspension denies both self-read and self-update; CLI privileged exact-actor/profile and identity-link reads and explicit separate profile/link lifecycle writes remain distinct from self-service and backend guards | Final end-to-end operational and conformance proof |
 | Authorization kernel | **Live foundation** | Closed action/permission catalogues; deny-by-default evaluation; grants; exact-project, privacy-safe candidate read now consumed by the CLI; fixed services; rate controls; opaque transaction-bound PREP; atomic decision evidence; CLI scope-filtered administrative grant/catalogue reads and explicit keyed grant issue/revoke consume existing public APIs without local authority decisions | Activate only the remaining owner-proven TASK, checker, REV, and CON boundaries; remove obsolete authority after replacement paths are live |
+| System project catalogue | **Bounded public API and CLI read** | WS-CLI-001-46 adds `GET /api/v1/projects` and `workstream project list` for current system Project Manager, Operator, Finance or Audit `project.read` grants; each signed page exposes only ID, name and status. `me projects` retains exact-grant membership semantics. | TUI runtime, deployed CLI and hosted conformance remain separate |
 | Project Guide source custody | **Live foundation** | Guide creation declares documents and task examples; public document upload; immutable internal metadata snapshots; draft guide and review/revision policy writes with fresh-authorized exact replay of original receipts; exact run-scoped setup reads and assigned-task locked-original reads; S3-backed originals and isolated agent document inspection; exact document generation through separate manager approvals and public exact-authorized CP07 activation; Project Manager guide list, guide detail, activation readiness dry run and verified original read-back (PILOT-READ-3); the CLI exposes existing administrative active-chain and retained sufficiency/artifact-policy reads, keyed human sufficiency writes, and separate manual artifact-policy draft create/update with backend-owned policy decisions | Public original upload, task examples, Celery setup and separate approvals are connected locally with recorded inference; prove configured live inference and readers in the intended environment; manual drafts are not compiled activation proposals; deployed CLI remains separate |
 | Unified Project Guide compilation | **Live setup and manager proposal operations** | Committed original-document readiness dispatches one immutable attempt through Celery; complete result and crash/recovery custody; distinct pre/post proposals; typed per-requirement classification and checker specifications; deterministic sufficiency and submission-artifact-policy projections; immutable authorized setup finalization; public exact manager review, pre-submit approval and manual correction dispatch; automatic deterministic post-policy derivation, public complete policy read, separate approval and shared correction custody; provider-free `manager_authored` runtime compiles a manager-uploaded rules document with no inference or provider resources ([change record](../.commitrail/changes/manager-authored-guide-runtime.md)). Capability gaps preserve a warning-ready review package but block activation; retained pre-specification results keep exact hashes and reads. | One corrected real-guide handoff is qualified; its two PRE rules now have a project-owned image with local rule/container proof. Implement the eight POST rules and runtime dependencies, register the images, obtain approved bindings and qualify the full journey. Hosted operation remains separate |
 | Contribution policy administration | **Public Finance policy workflow; binding administration internal** | Internal Finance Authority adapter-binding lifecycle; public ContributionPolicy discovery/read/create/update/publish/retire with exact Finance Authority and recoverable draft selectors, and a Finance list of every version (PILOT-READ-3); immutable operation and event history; internal exact selected-version validation; CP07 binding with live exact-project manager authority of the selected published version to the active guide generation | The bounded local public drill passed; policy publication alone does not create a contribution, and hosted operation remains unproven |
@@ -646,6 +652,9 @@ cannot be reused as post-submission review-gate evidence. See the
   [CLI project inspection](../.commitrail/initiatives/WS-CLI-001/WS-CLI-001-03.md)
   adds the existing public project read, preserving server-selected full/minimal
   fields and concealed foreign/revoked/suspended denials.
+  [CLI system project catalogue](../.commitrail/initiatives/WS-CLI-001/WS-CLI-001-46.md)
+  adds a separate bounded ID/name/status page for the four current system
+  project-reader roles; exact-grant contributor discovery is unchanged.
   [CLI administrative inspection](../.commitrail/initiatives/WS-CLI-001/WS-CLI-001-28.md)
   adds six explicit public privileged reads: exact actor/profile and one
   identity link, system/project-scoped grant pages, and permission/role
@@ -844,7 +853,10 @@ cannot be reused as post-submission review-gate evidence. See the
   contributor-visible change summary. Live human decision composition remains later work.
   Built-binary HTTP
   integration and isolated real-API proof accompany
-  the package. Further public commands, optional TUI and binary distribution
+  the package. [WS-CLI-001-46](../.commitrail/initiatives/WS-CLI-001/WS-CLI-001-46.md)
+  adds minimal system project-reader discovery through one public API page and
+  `project list`, without changing exact-grant `me projects`. Further public
+  commands, optional TUI and binary distribution
   remain planned; CLI reads do not complete unfinished product lifecycle work.
   The public-client drill targets currently usable APIs only; hidden and
   unfinished lifecycle routes are not completion targets. Draft-guide policy
@@ -1265,6 +1277,7 @@ Delivered foundations (bounded local journey proven; no deployment claim)
   public manager activation context + exact guide activation/binding
   WS-CLI-001-38 keyed human guide sufficiency diagnostic + warning acknowledgement
   WS-CLI-001-41 keyed manual artifact-policy draft create + hash-guarded successor
+  WS-CLI-001-46 current system project-reader catalogue -> CLI project list (TUI separate)
   task/assignment/Submission lineage + public ZIP intake/admission-backed creation
   ARCH-03D exact approved historical guide through durable intake handoff
   ARCH-04B hidden verified Submission input
