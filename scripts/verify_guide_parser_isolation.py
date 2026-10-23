@@ -31,6 +31,44 @@ DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 PPTX = "application/vnd.openxmlformats-officedocument.presentationml.presentation"
 ATTACK_SOURCE = b"WORKSTREAM-ATTACK-PROBE\n"
 HANG_SOURCE = b"WORKSTREAM-HANG-PROBE\n"
+BROKER_PHASE_PREFIX = "guide parser isolation phase:"
+BROKER_PHASES = (
+    "formats",
+    "attacks",
+    "timeout",
+    "timeout_reuse",
+    "cancel",
+    "cancel_reuse",
+    "complete",
+)
+HOST_PHASES = (
+    "preflight",
+    "negative_controls",
+    "broker_launch",
+    "healthcheck",
+    "worker_control",
+    "broker_run",
+    "cleanup",
+    "evidence",
+)
+_HOST_PHASE = "preflight"
+
+
+class ProofFailure(ValueError):
+    """One closed diagnostic code safe to expose from synthetic proof work."""
+
+    def __init__(self, code: str) -> None:
+        require(
+            code
+            in {
+                "broker_startup",
+                *(f"broker_{phase}" for phase in BROKER_PHASES),
+                *(f"host_{phase}" for phase in HOST_PHASES),
+            },
+            "guide parser proof failure code differs",
+        )
+        self.code = code
+        super().__init__(code)
 
 
 def require(condition: bool, message: str) -> None:
@@ -403,6 +441,7 @@ async def broker_main() -> int:
             "guide parser host control marker identity differs",
         )
         PROOF_GO_PATH.unlink()
+        print(f"{BROKER_PHASE_PREFIX}formats", flush=True)
         formats = (
             (b"# Markdown Guide\n", "text/markdown", "Markdown Guide"),
             (_docx(), DOCX, "DOCX Guide"),
@@ -414,6 +453,7 @@ async def broker_main() -> int:
         )
         for result, (_source, _media_type, expected) in zip(results, formats, strict=True):
             require(expected in result.text, "guide parser format proof differs")
+        print(f"{BROKER_PHASE_PREFIX}attacks", flush=True)
         attacks = await asyncio.gather(_parse(ATTACK_SOURCE), _parse(ATTACK_SOURCE))
         require(
             all(result.text == ATTACK_SOURCE.decode() for result in attacks),
@@ -430,23 +470,28 @@ async def broker_main() -> int:
     )
     await service.start()
     try:
+        print(f"{BROKER_PHASE_PREFIX}timeout", flush=True)
         try:
             await _parse(HANG_SOURCE)
         except ExternalServiceUnavailableError:
             pass
         else:
             raise ValueError("guide parser timeout proof did not fail closed")
+        print(f"{BROKER_PHASE_PREFIX}timeout_reuse", flush=True)
         require(
             (await _parse(b"timeout slot reused\n")).text == "timeout slot reused\n",
             "guide parser timeout slot was not safely reused",
         )
+        print(f"{BROKER_PHASE_PREFIX}cancel", flush=True)
         await _cancel_in_flight_request()
+        print(f"{BROKER_PHASE_PREFIX}cancel_reuse", flush=True)
         require(
             (await _parse(b"cancel slot reused\n")).text == "cancel slot reused\n",
             "guide parser cancelled slot was not safely reused",
         )
     finally:
         await service.close()
+    print(f"{BROKER_PHASE_PREFIX}complete", flush=True)
     print("guide parser isolation proof passed", flush=True)
     return 0
 
@@ -552,6 +597,12 @@ def _validate_owner(owner: str) -> None:
     )
 
 
+def _set_host_phase(phase: str) -> None:
+    global _HOST_PHASE
+    require(phase in HOST_PHASES, "guide parser host phase differs")
+    _HOST_PHASE = phase
+
+
 def _write_evidence(path: Path, evidence: dict[str, object]) -> None:
     payload = json.dumps(evidence, sort_keys=True).encode() + b"\n"
     require(len(payload) <= 4096, "guide parser proof evidence exceeds its limit")
@@ -564,6 +615,16 @@ def _write_evidence(path: Path, evidence: dict[str, object]) -> None:
         stream.write(payload)
 
 
+def _broker_failure(logs: bytes) -> ProofFailure:
+    phase = "startup"
+    for raw_line in logs.decode("ascii", errors="ignore").splitlines():
+        if raw_line.startswith(BROKER_PHASE_PREFIX):
+            candidate = raw_line.removeprefix(BROKER_PHASE_PREFIX)
+            if candidate in BROKER_PHASES:
+                phase = candidate
+    return ProofFailure(f"broker_{phase}")
+
+
 def host_main(
     image: str,
     owner: str,
@@ -571,6 +632,7 @@ def host_main(
     expected_head: str | None = None,
     evidence_path: Path | None = None,
 ) -> int:
+    _set_host_phase("preflight")
     _validate_owner(owner)
     source_sha = checked(["git", "rev-parse", "HEAD"]).decode().strip()
     if expected_head is not None:
@@ -588,6 +650,7 @@ def host_main(
     )
     base = _container_base(image, owner)
     try:
+        _set_host_phase("negative_controls")
         # The test must discriminate exact capabilities, an omitted transition,
         # and the rejected former shared-UID design.
         missing = run(
@@ -649,6 +712,7 @@ def host_main(
         require(shared.returncode != 0, "shared broker-child identity was accepted")
 
         name = "workstream-guide-parser-proof-" + uuid.uuid4().hex
+        _set_host_phase("broker_launch")
         broker = _with_container_options(
             base,
             [
@@ -682,6 +746,7 @@ def host_main(
             "--socket",
             str(SOCKET_PATH),
         ]
+        _set_host_phase("healthcheck")
         deadline = time.monotonic() + 120
         while time.monotonic() < deadline:
             try:
@@ -692,6 +757,7 @@ def host_main(
             time.sleep(0.1)
         else:
             raise ValueError("guide parser healthcheck identity proof failed")
+        _set_host_phase("worker_control")
         worker = run(
             [
                 "docker",
@@ -707,6 +773,7 @@ def host_main(
             timeout=120,
         )
         require(worker.returncode == 0, "guide parser worker control failed")
+        _set_host_phase("broker_run")
         checked(
             [
                 "docker",
@@ -719,16 +786,30 @@ def host_main(
             ]
         )
         status = checked(["docker", "wait", container], timeout=120).decode().strip()
-        require(status == "0", "guide parser broker proof failed")
-        logs = checked(["docker", "logs", container]).decode()
+        logs_result = run(["docker", "logs", container])
+        require(logs_result.returncode == 0, "guide parser broker logs unavailable")
+        if status != "0":
+            raise _broker_failure(logs_result.stdout)
+        logs = logs_result.stdout.decode()
         require(
             logs
             == "guide parser isolation proof ready\n"
+            "guide parser isolation phase:formats\n"
+            "guide parser isolation phase:attacks\n"
+            "guide parser isolation phase:timeout\n"
+            "guide parser isolation phase:timeout_reuse\n"
+            "guide parser isolation phase:cancel\n"
+            "guide parser isolation phase:cancel_reuse\n"
+            "guide parser isolation phase:complete\n"
             "guide parser isolation proof passed\n",
             "guide parser broker proof output differs",
         )
     finally:
-        _cleanup(owner)
+        try:
+            _cleanup(owner)
+        except (OSError, subprocess.SubprocessError, ValueError) as exc:
+            raise ProofFailure("host_cleanup") from exc
+    _set_host_phase("evidence")
     evidence = {
         "backend_image_id": image_id,
         "cases": [
@@ -786,17 +867,25 @@ def main() -> int:
         bool(arguments.backend_image) and bool(arguments.container_owner),
         "guide parser proof image and owner are required",
     )
-    return host_main(
-        arguments.backend_image,
-        arguments.container_owner,
-        expected_head=arguments.expected_head,
-        evidence_path=arguments.evidence,
-    )
+    try:
+        return host_main(
+            arguments.backend_image,
+            arguments.container_owner,
+            expected_head=arguments.expected_head,
+            evidence_path=arguments.evidence,
+        )
+    except ProofFailure:
+        raise
+    except (OSError, subprocess.SubprocessError, ValueError) as exc:
+        raise ProofFailure(f"host_{_HOST_PHASE}") from exc
 
 
 if __name__ == "__main__":
     try:
         raise SystemExit(main())
+    except ProofFailure as exc:
+        print(f"guide parser isolation proof failed: {exc.code}", file=sys.stderr)
+        raise SystemExit(1) from None
     except (OSError, subprocess.SubprocessError, ValueError):
         print("guide parser isolation proof failed", file=sys.stderr)
         raise SystemExit(1) from None
