@@ -24,8 +24,9 @@ Allowed: the new adapter and static registration in
 test environments, focused actual-SDK contract tests and synthetic loopback proof;
 the existing project-setup Celery task's hard process limit and focused prefork
 termination proof, its runtime-aware prefork topology guard, and the public guide
-API drill's worker pool; the existing backend Dockerfiles and entrypoint; local and
-hosted composition, preflight, shutdown bounds and release examples;
+API drill's worker pool; the shared Celery Redis visibility configuration and
+startup check; the existing backend Dockerfiles and entrypoint; local and hosted
+composition, preflight, shutdown bounds and release examples;
 backend/CLI/MCP/release-image
 workflows and their test-lane/evidence owners; release-image verification and
 focused tests; and this record. The current initiative overview/index and
@@ -152,6 +153,19 @@ OUTBOX queue. Hosted worker `stop_grace_period` and the shutdown wrapper timeout
 become 7,320 seconds, leaving a fixed 60-second parent drain/reap margin after the
 hard task limit. Release tests bind these values so operator shutdown cannot bypass
 the hard-timeout acknowledgement path and turn it into worker-loss redelivery.
+Set one immutable 7,380-second Celery visibility timeout, leaving another fixed
+60-second margin above hosted drain. Apply it to the shared app's
+`broker_transport_options`, `result_backend_transport_options` and app-level
+`visibility_timeout`, so workers, Beat and every publisher sharing the Redis broker
+advertise the same value; no environment override may shorten it. Project-setup
+startup/task validation and hosted preflight inspect the effective value and reject
+independent drift. The required ordering is
+`Redis visibility 7,380 > hosted drain 7,320 > task hard limit 7,260 > ordinary
+attempt deadline`. A time-scaled real Redis/prefork late-ack probe must first show a
+short visibility value redelivers before the task boundary, then show the supported
+ordering keeps one delivery through hard-timeout acknowledgement and child
+replacement. This covers Celery's shortest-visibility-wins rule for every
+Workstream participant using that broker.
 A hanging probe must cover the case where upstream consumes the complete body and
 never responds. A fake upstream is injectable only by trusted test composition,
 must be loopback-only, and is never accepted from product configuration.
@@ -304,6 +318,10 @@ image claim; synthetic CI does not replace it.
   the public guide drill and hosted worker use validated prefork, hosted drain is
   exactly 60 seconds longer than the 7,260-second hard limit, and tests reject
   either timeout drifting independently.
+- The effective Redis broker, result-backend and app visibility values all equal
+  7,380 seconds across worker, Beat and publishers. Startup/preflight rejects a
+  shorter participant, and a real time-scaled Redis/prefork proof distinguishes
+  early redelivery from the supported single-delivery hard-timeout path.
 - Static registration makes `omnicore_agent` selectable through the same typed
   factory and effective-profile path. The release marker rejects a mismatched SDK
   image before role startup, preserves `manager_authored` in either image and never
