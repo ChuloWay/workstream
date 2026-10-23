@@ -177,6 +177,7 @@ func Run(args []string, stdout, stderr io.Writer, getenv environment, version st
 	root.AddCommand(operations)
 	addContributorTasks(root, client, &output, stdout)
 	addContributorReads(root, client, &output, stdout)
+	addTUI(root, client, &output, stdout, getenv)
 
 	err := root.ExecuteContext(context.Background())
 	if err == nil {
