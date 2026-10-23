@@ -7,9 +7,12 @@ from hashlib import sha256
 import json
 import os
 from pathlib import Path
+import signal
 import socket
 import struct
+import subprocess
 import sys
+import time
 from uuid import uuid4
 
 import pytest
@@ -240,6 +243,48 @@ async def test_service_parses_concurrent_sources_without_cross_request_state(
     finally:
         await service.close()
     assert not path.exists()
+
+
+def test_sigterm_closes_service_and_removes_owned_socket(tmp_path: Path) -> None:
+    path = tmp_path / "runtime" / "guide.sock"
+    path.parent.mkdir()
+    path.parent.chmod(0o750)
+    program = """
+import os
+import sys
+from app.adapters.guide_document_tools import service
+
+service.bootstrap_broker_identity = lambda: None
+service._service_socket_identity = lambda: (os.geteuid(), os.getegid())
+sys.argv = ["guide-parser-sigterm-test", "--socket", sys.argv[1]]
+raise SystemExit(service.main())
+"""
+    process = subprocess.Popen(
+        [sys.executable, "-c", program, str(path)],
+        cwd=Path(service_module.__file__).resolve().parents[3],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    try:
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline and not path.is_socket():
+            if process.poll() is not None:
+                break
+            time.sleep(0.01)
+        assert process.poll() is None
+        assert path.is_socket()
+
+        process.send_signal(signal.SIGTERM)
+        stdout, stderr = process.communicate(timeout=5)
+
+        assert process.returncode == 0, (stdout, stderr)
+        assert not path.exists()
+    finally:
+        if process.poll() is None:
+            process.kill()
+            process.wait(timeout=5)
+        if path.exists() or path.is_symlink():
+            path.unlink()
 
 
 @pytest.mark.asyncio

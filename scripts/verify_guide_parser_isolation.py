@@ -48,6 +48,7 @@ HOST_PHASES = (
     "healthcheck",
     "worker_control",
     "broker_run",
+    "sigterm_cleanup",
     "cleanup",
     "evidence",
 )
@@ -587,6 +588,179 @@ def _cleanup(owner: str) -> None:
         )
         checked(["docker", "rm", "--force", container])
     require(not checked(command).strip(), "guide parser proof containers remain")
+    volume_command = [
+        "docker",
+        "volume",
+        "ls",
+        "--quiet",
+        "--filter",
+        f"label=workstream.guide-parser-proof={owner}",
+    ]
+    volumes = checked(volume_command).decode().splitlines()
+    for volume in volumes:
+        require(
+            volume.startswith("workstream-guide-parser-proof-")
+            and all(character.isalnum() or character in "-_" for character in volume),
+            "guide parser proof volume identity differs",
+        )
+        checked(["docker", "volume", "rm", volume])
+    require(not checked(volume_command).strip(), "guide parser proof volumes remain")
+
+
+def _prove_sigterm_socket_cleanup(image: str, owner: str) -> None:
+    """Stop the production parser container and require its socket to be gone."""
+
+    label = f"workstream.guide-parser-proof={owner}"
+    suffix = uuid.uuid4().hex
+    volume = f"workstream-guide-parser-proof-{suffix}"
+    name = f"workstream-guide-parser-sigterm-{suffix}"
+    created = checked(
+        ["docker", "volume", "create", "--label", label, volume]
+    ).decode().strip()
+    require(created == volume, "guide parser proof volume creation differs")
+    directory = str(SOCKET_PATH.parent)
+    checked(
+        [
+            "docker",
+            "run",
+            "--rm",
+            "--label",
+            label,
+            "--user",
+            "0:0",
+            "--network",
+            "none",
+            "--read-only",
+            "--cap-drop",
+            "ALL",
+            "--cap-add",
+            "CHOWN",
+            "--security-opt",
+            "no-new-privileges",
+            "--mount",
+            f"type=volume,source={volume},target={directory}",
+            "--entrypoint",
+            "python",
+            image,
+            "-B",
+            "-c",
+            (
+                "import os; path='/var/lib/workstream/guide-runtime'; "
+                "os.chown(path,10002,10001); os.chmod(path,0o750)"
+            ),
+        ]
+    )
+    container = checked(
+        [
+            "docker",
+            "run",
+            "--detach",
+            "--name",
+            name,
+            "--label",
+            label,
+            "--init",
+            "--user",
+            "0:0",
+            "--network",
+            "none",
+            "--read-only",
+            "--cap-drop",
+            "ALL",
+            "--cap-add",
+            "KILL",
+            "--cap-add",
+            "SETGID",
+            "--cap-add",
+            "SETUID",
+            "--security-opt",
+            "no-new-privileges",
+            "--pids-limit",
+            "64",
+            "--memory",
+            "512m",
+            "--memory-swap",
+            "512m",
+            "--cpus",
+            "1",
+            "--stop-timeout",
+            "30",
+            "--tmpfs",
+            "/tmp:rw,noexec,nosuid,nodev,mode=0700,uid=10002,gid=10001,size=64m",
+            "--mount",
+            f"type=volume,source={volume},target={directory}",
+            "--env",
+            "WORKSTREAM_RELEASE_ROLE=parser",
+            "--env",
+            f"WORKSTREAM_GUIDE_DOCUMENT_PARSER_SOCKET={SOCKET_PATH}",
+            image,
+            "python",
+            "-m",
+            "app.adapters.guide_document_tools.service",
+            "--socket",
+            str(SOCKET_PATH),
+        ]
+    ).decode().strip()
+    require(
+        len(container) == 64
+        and all(character in "0123456789abcdef" for character in container),
+        "guide parser SIGTERM container identity differs",
+    )
+    health = [
+        "docker",
+        "exec",
+        container,
+        "python",
+        "-m",
+        "app.adapters.guide_document_tools.service",
+        "--healthcheck",
+        "--socket",
+        str(SOCKET_PATH),
+    ]
+    deadline = time.monotonic() + 120
+    while time.monotonic() < deadline:
+        if run(health, timeout=30).returncode == 0:
+            break
+        time.sleep(0.1)
+    else:
+        raise ValueError("guide parser SIGTERM service did not become healthy")
+    stopped = checked(["docker", "stop", "--time", "30", container], timeout=60)
+    require(stopped.decode().strip() == container, "guide parser SIGTERM stop differs")
+    exit_code = checked(
+        ["docker", "inspect", "--format", "{{.State.ExitCode}}", container]
+    ).decode().strip()
+    require(exit_code == "0", "guide parser SIGTERM exit code differs")
+    absent = run(
+        [
+            "docker",
+            "run",
+            "--rm",
+            "--label",
+            label,
+            "--user",
+            "10001:10001",
+            "--network",
+            "none",
+            "--read-only",
+            "--cap-drop",
+            "ALL",
+            "--security-opt",
+            "no-new-privileges",
+            "--mount",
+            f"type=volume,source={volume},target={directory},readonly",
+            "--entrypoint",
+            "python",
+            image,
+            "-B",
+            "-c",
+            (
+                "import os; path='/var/lib/workstream/guide-runtime/guide.sock'; "
+                "raise SystemExit(1 if os.path.lexists(path) else 0)"
+            ),
+        ]
+    )
+    require(absent.returncode == 0, "guide parser SIGTERM left its socket")
+    checked(["docker", "rm", container])
 
 
 def _validate_owner(owner: str) -> None:
@@ -812,6 +986,8 @@ def host_main(
             "guide parser isolation proof passed\n",
             "guide parser broker proof output differs",
         )
+        _set_host_phase("sigterm_cleanup")
+        _prove_sigterm_socket_cleanup(image, owner)
     finally:
         try:
             _cleanup(owner)
@@ -831,6 +1007,7 @@ def host_main(
             "timeout_cancel_reap_slot_reuse",
             "missing_extra_caps_and_wrong_child_state_denied",
             "omitted_transition_and_shared_uid_detected",
+            "sigterm_removes_owned_socket",
         ],
         "container_owner": owner,
         "proof": "guide_parser_identity_isolation_v1",

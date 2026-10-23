@@ -498,6 +498,34 @@ async def _healthcheck(path: Path) -> int:
         return 1
 
 
+async def _serve_until_sigterm(service: GuideDocumentParserService) -> None:
+    """Cancel the broker task on SIGTERM so its existing close path can finish."""
+
+    loop = asyncio.get_running_loop()
+    terminated = asyncio.Event()
+    loop.add_signal_handler(signal.SIGTERM, terminated.set)
+    service_task = asyncio.create_task(service.serve_forever())
+    termination_task = asyncio.create_task(terminated.wait())
+    try:
+        done, _pending = await asyncio.wait(
+            (service_task, termination_task), return_when=asyncio.FIRST_COMPLETED
+        )
+        if service_task in done:
+            await service_task
+            return
+        service_task.cancel()
+        try:
+            await service_task
+        except asyncio.CancelledError:
+            pass
+    finally:
+        loop.remove_signal_handler(signal.SIGTERM)
+        for task in (service_task, termination_task):
+            if not task.done():
+                task.cancel()
+        await asyncio.gather(service_task, termination_task, return_exceptions=True)
+
+
 def main() -> int:
     """Run either the capability-free healthcheck or the hardened parser broker."""
 
@@ -511,7 +539,7 @@ def main() -> int:
     bootstrap_broker_identity()
     service = GuideDocumentParserService(socket_path=arguments.socket)
     try:
-        asyncio.run(service.serve_forever())
+        asyncio.run(_serve_until_sigterm(service))
     except KeyboardInterrupt:
         return 0
     return 0
