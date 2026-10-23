@@ -482,7 +482,7 @@ GUIDE_INPUT_SCHEMAS: dict[str, dict[str, Any]] = {
 _POLICY_SELECTOR_INPUT = {
     "type": "string",
     "minLength": 1,
-    "pattern": r"^[\u0020-\u007e]+$",
+    "pattern": r"^[\u0020-\u007e]+(?![\s\S])",
 }
 POLICY_INPUT_SCHEMAS: dict[str, dict[str, Any]] = {
     "review_policy_put": {

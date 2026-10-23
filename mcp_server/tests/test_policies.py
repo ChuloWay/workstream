@@ -188,6 +188,10 @@ def test_review_mode_omission_accepts_backend_inherited_false_value(
             {**_arguments("review_policy_put"), "if_match": '"bad\nvalue"'},
         ),
         (
+            "workstream_review_policy_put",
+            {**_arguments("review_policy_put"), "if_match": f"{INITIAL}\n"},
+        ),
+        (
             "workstream_revision_policy_put",
             {
                 **_arguments("revision_policy_put"),
