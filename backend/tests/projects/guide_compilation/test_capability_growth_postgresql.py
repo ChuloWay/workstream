@@ -12,11 +12,14 @@ from tests.projects.client_fixtures import (
     project_client as project_client, project_database_env as project_database_env,
 )
 from .test_automatic_request import automatic_source as automatic_source
-from .runtime_fixtures import ScriptedGuideRuntime, scripted_runtime_configuration
+from .runtime_fixtures import (
+    ScriptedGuideRuntime,
+    scripted_model_profile,  # noqa: F401 - registered pytest fixture
+    scripted_runtime_configuration,
+)
 from .test_live_cutover_postgresql import (
     _delivery,
     scripted_document_port as scripted_document_port,
-    scripted_model_profile as scripted_model_profile,
 )
 from .test_capability_growth import growth_report
 from .test_compilation_storage_limit import boundary_reports

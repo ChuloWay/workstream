@@ -3,19 +3,13 @@
 from uuid import UUID, uuid4
 
 import pytest
-from sqlalchemy import select, text
+from sqlalchemy import text
 
-from app.core.config import get_settings
 from app.modules.projects.api.guide_compilation import ProjectGuideCompilationDelivery
 from app.modules.projects.api.setup_identity import project_guide_compilation_task_id
 from app.modules.projects.api.guide_compilation import ProjectGuideCompilationDeliveryError
-from app.modules.model_usage.api import ProjectModelProfileSpec
-from app.modules.projects.models import ProjectSetupRun
-from tests.actors.support import set_dev_actor
-from tests.checkers_model_calls.test_model_call_contract import profile_spec
 from tests.committed_guide_fixtures import create_committed_document_fixture
 from tests.projects.client_fixtures import (
-    auth_headers,
     project_client as project_client,
     project_database_env as project_database_env,
 )
@@ -25,6 +19,7 @@ from .runtime_fixtures import (
     ScriptedGuideRuntime,
     scripted_document_access_runtime,
     scripted_guide_document_parser_factory,
+    scripted_model_profile,  # noqa: F401 - registered pytest fixture
     scripted_runtime_configuration,
 )
 
@@ -42,80 +37,6 @@ def scripted_document_port(monkeypatch):
     monkeypatch.setattr(
         worker, "guide_document_parser_factory", scripted_guide_document_parser_factory
     )
-
-
-@pytest.fixture
-async def scripted_model_profile(automatic_source, project_client, monkeypatch):
-    """Publish the exact inference profile selected by these live coordinator tests."""
-    factory, _actor, setup_id, _snapshot = automatic_source
-    async with factory() as session:
-        project_id = await session.scalar(
-            select(ProjectSetupRun.project_id).where(ProjectSetupRun.id == str(setup_id))
-        )
-        assert project_id is not None
-
-    set_dev_actor(
-        monkeypatch,
-        roles="viewer",
-        subject="scripted-model-operator",
-        issuer="flow-test",
-        token="project-token",
-    )
-    admitted = await project_client.get("/api/v1/actors/me", headers=auth_headers())
-    assert admitted.status_code == 200, admitted.text
-    operator_id = admitted.json()["actor_profile_id"]
-    set_dev_actor(
-        monkeypatch,
-        roles="project_manager",
-        subject="project-manager-subject",
-        issuer="flow-test",
-        token="project-token",
-    )
-    grant = await project_client.post(
-        "/api/v1/admin-role-grants",
-        headers=auth_headers(),
-        json={
-            "target_actor_profile_id": operator_id,
-            "role": "operator",
-            "scope_type": "system",
-            "scope_project_id": None,
-            "reason": "Exercise profile-selected project guide compilation",
-        },
-    )
-    assert grant.status_code == 201, grant.text
-    set_dev_actor(
-        monkeypatch,
-        roles="viewer",
-        subject="scripted-model-operator",
-        issuer="flow-test",
-        token="project-token",
-    )
-    configuration = scripted_runtime_configuration(
-        get_settings(), adapter_profile_builder=lambda value: value
-    )
-    source = profile_spec().model_dump(mode="python")
-    source.update(
-        project_id=project_id,
-        profile_version=1,
-        provider=configuration.model_provider,
-        api=configuration.model_api,
-        model_snapshot=configuration.model,
-    )
-    spec = ProjectModelProfileSpec.model_validate(source)
-    published = await project_client.post(
-        f"/api/v1/operations/projects/{project_id}/model-profiles",
-        headers=auth_headers(),
-        json=spec.model_dump(mode="json"),
-    )
-    assert published.status_code == 201, published.text
-    set_dev_actor(
-        monkeypatch,
-        roles="project_manager",
-        subject="project-manager-subject",
-        issuer="flow-test",
-        token="project-token",
-    )
-    yield
 
 
 async def _delivery(factory, setup_id):
