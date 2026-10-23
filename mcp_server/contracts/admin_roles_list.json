@@ -1,5 +1,5 @@
 {
-  "canonical_sha256": "c202da7ee0b8bbbeddf16471fcd0e82e29c75464bb65c8387780f5d9ff9bab7c",
+  "canonical_sha256": "e73bd0a8756d4d39a68cb132ab491691f160115a237b17d097efb7dfe877c2c4",
   "components": {
     "schemas": {
       "AdminRole": {
@@ -162,6 +162,10 @@
           "checker.model_call.observe",
           "checker.model_call.complete",
           "checker.model_call.grant",
+          "project.guide_compilation.model.prepare",
+          "project.guide_compilation.model.dispatch",
+          "project.guide_compilation.model.observe",
+          "project.guide_compilation.model.complete",
           "project.model_profile.manage",
           "project.model_budget.manage",
           "project.model_call.recovery_child.authorize",

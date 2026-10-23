@@ -59,3 +59,76 @@ def test_project_role_database_accepts_only_current_role_audit_facts(
         "adjudicator" not in definition
         for definition in asyncio.run(_definitions(isolated_database_env))
     )
+
+
+@pytest.mark.parametrize("search_path", ("", "pg_temp,public,pg_catalog"))
+@pytest.mark.parametrize("event_name", ("ActorProfileProvisioned", "ProjectRoleGrantIssued"))
+def test_audit_facts_restore_with_safe_helpers(
+    isolated_database_env: str, search_path: str, event_name: str
+) -> None:
+    """COPY validates both audit helper paths under restore and caller namespaces."""
+    import json
+
+    project = str(new_record_id()) if event_name == "ProjectRoleGrantIssued" else None
+    valid = (
+        {
+            "status": "active",
+            "subject_kind": "human",
+            "provisioning_method": "automatic_first_access",
+        }
+        if project is None
+        else {
+            "status": "active",
+            "role": "submitter",
+            "scope_type": "project",
+            "scope_id": project,
+            "effective": True,
+        }
+    )
+    invalid = {**valid, "private_material": "must not persist"}
+    if project is not None:
+        invalid = {**valid, "role": "unregistered_role"}
+
+    async def copy_facts() -> None:
+        connection = await asyncpg.connect(isolated_database_env.replace("+asyncpg", ""))
+        try:
+            # Use the actual audit fact predicate, without unrelated audit parent setup.
+            await connection.execute(
+                "CREATE TEMP TABLE restore_audit_facts (event_name text, before_facts json, "
+                "after_facts json, project_id text, CONSTRAINT restore_fact_bounds CHECK ("
+                "public.authority_event_facts_are_safe(event_name,before_facts,after_facts,project_id)))"
+            )
+            await connection.execute(
+                "CREATE FUNCTION pg_temp.authority_facts_are_safe(json) RETURNS boolean "
+                "LANGUAGE sql AS 'SELECT true'; "
+                "CREATE FUNCTION pg_temp.authority_grant_facts_are_safe(json,text[],text,boolean,text) "
+                "RETURNS boolean LANGUAGE sql AS 'SELECT true'"
+            )
+            await connection.execute(
+                "SELECT pg_catalog.set_config('search_path',$1,false)", search_path
+            )
+            if project is not None:
+                # The grant helper is also a callable contract, independently of the event wrapper.
+                statement = (
+                    "SELECT public.authority_grant_facts_are_safe("
+                    "$1::json,ARRAY['submitter','reviewer'],'active',true,$2::text)"
+                )
+                assert await connection.fetchval(statement, json.dumps(valid), project) is True
+                assert await connection.fetchval(statement, json.dumps(invalid), project) is False
+            await connection.copy_records_to_table(
+                "restore_audit_facts",
+                schema_name="pg_temp",
+                records=[(event_name, None, json.dumps(valid), project)],
+            )
+            with pytest.raises(asyncpg.CheckViolationError, match="restore_fact_bounds"):
+                await connection.copy_records_to_table(
+                    "restore_audit_facts",
+                    schema_name="pg_temp",
+                    records=[(event_name, None, json.dumps(invalid), project)],
+                )
+            rows = await connection.fetch("SELECT after_facts FROM pg_temp.restore_audit_facts")
+            assert [json.loads(row["after_facts"]) for row in rows] == [valid]
+        finally:
+            await connection.close()
+
+    asyncio.run(copy_facts())

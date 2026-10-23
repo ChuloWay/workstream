@@ -1,5 +1,5 @@
 {
-  "canonical_sha256": "4ebd90f7658f1d67b402a4818d718d71cb4b3ab68042466a5844b345869de20c",
+  "canonical_sha256": "a72e8ae2d0139701a2cb3a2be6e3b0a9888c023e2ff21fbcbb97498e0db8a366",
   "components": {
     "schemas": {
       "ApiError": {
@@ -87,7 +87,7 @@
             "type": "array"
           },
           "total": {
-            "const": 91,
+            "const": 95,
             "title": "Total",
             "type": "integer"
           }
@@ -125,6 +125,10 @@
           "checker.model_call.observe",
           "checker.model_call.complete",
           "checker.model_call.grant",
+          "project.guide_compilation.model.prepare",
+          "project.guide_compilation.model.dispatch",
+          "project.guide_compilation.model.observe",
+          "project.guide_compilation.model.complete",
           "project.model_profile.manage",
           "project.model_budget.manage",
           "project.model_call.recovery_child.authorize",

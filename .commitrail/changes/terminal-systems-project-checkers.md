@@ -15,7 +15,7 @@ proposal remain the sources to reconcile. This is a real guide-driven project,
 not a fixed task-name fixture. Shared model access now covers both POST agents
 and setup under #492's one project account; this change consumes that contract
 without owning its shared ledger or provider credentials. CHECKERS input/trial
-custody adds linear migrations 0061 and 0062 after that dependency.
+custody adds linear migrations 0062 and 0063 after that dependency.
 
 ## Bounded change
 
@@ -67,7 +67,7 @@ Generic isolated build/trial support owns the new
 `external_checkers/workstream-checker-service/src/trial_relay.rs` module after
 coordination with the model-runtime owner. Shared model transport remains in
 `model_relay.rs`; this change owns coordinated `main.rs` assembly of the independent trial capability. Model ledger/profile
-changes remain in 0060; this change owns only 0061/0062.
+changes remain in 0061; this change owns only 0062/0063.
 `external_checkers/workstream-checker-service/tests/trial_relay.rs` compiles
 that otherwise unconnected module and exercises its fake-engine protocol,
 identity, bounds, cancellation and cleanup contracts before shared composition.
@@ -319,13 +319,13 @@ different preparation, assignment, predecessor or feedback source.
 
 This extension owns `backend/app/modules/checkers/models.py`,
 `backend/app/modules/checkers/api/execution.py`,
-`backend/alembic/versions/0061_checker_revision_input.py`,
+`backend/alembic/versions/0062_checker_revision_input.py`,
 `backend/alembic/env.py`, `backend/tests/test_alembic.py`,
 `backend/scripts/schema_baseline_manifest.py`,
 `backend/tests/conftest.py` (expected public-schema fingerprint only),
 `backend/alembic/baseline/v01_baseline_manifest.json`,
 `backend/tests/checkers/external/test_revision_materialization.py` and affected
-schema fingerprints. Migration 0061 follows PILOT-05's shared model owner 0060;
+schema fingerprints. Migration 0062 follows PILOT-05's shared model owner 0061;
 integrate the committed dependency before migration qualification. No competing
 head or rewritten retained data is allowed. Prove exact SQL/Python digest
 agreement, current-only retained data, selected initial/revised inputs,
@@ -362,8 +362,8 @@ Exact owner scope: `backend/app/modules/checkers/api/trial_evidence.py`,
 `backend/app/modules/checkers/trial_evidence.py`,
 `backend/app/modules/checkers/models.py`, and
 `backend/tests/checkers/external/test_trial_evidence.py`. The shared ART and AUTH
-trial branches belong to this change; additive owner migration 0062 follows
-0061. Verify current TASK-before-CHECKERS custody, distinct
+trial branches belong to this change; additive owner migration 0063 follows
+0062. Verify current TASK-before-CHECKERS custody, distinct
 contributor isolation, concurrent reservation/first-content pinning, mutation
 denial, rollback and loss/recovery of the publication response on PostgreSQL
 and MinIO. No trial handle may authorize model spend without verified bytes.
@@ -382,14 +382,14 @@ composition is coordinated with PILOT-05. No provider call or network access is
 introduced by the trial protocol itself.
 
 Trial owner persistence owns additive
-`backend/alembic/versions/0062_checker_trial_evidence.py`, existing migration
+`backend/alembic/versions/0063_checker_trial_evidence.py`, existing migration
 preflight/graph tests, and `backend/tests/conftest.py` (head fingerprint and
 exact new table reset/deletion inventories). The same migration adds only the
 shared ART trial-subject foreign keys agreed with PILOT-05. Retain one linear
-chain after 0061, preserve historical model-output rows, and verify supported
+chain after 0062, preserve historical model-output rows, and verify supported
 intermediate upgrades and immutable terminal evidence without baseline edits.
 
-The trial-specific ART extension belongs to this change after migration 0062,
+The trial-specific ART extension belongs to this change after migration 0063,
 so the prerequisite model-runtime PR remains independently deployable. Extend
 the existing pipeline through the two closed model/trial subject cases in:
 `backend/app/modules/checkers/api/output_custody.py`,
