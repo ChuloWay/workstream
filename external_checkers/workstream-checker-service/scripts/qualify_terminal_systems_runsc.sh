@@ -145,7 +145,7 @@ readonly PREPARED_IMAGE="$(docker inspect --format '{{.Config.Image}}' "${PREPAR
 remove_composition_root
 (
   cd "${REPOSITORY_ROOT}/backend"
-  PYTHONPATH=.:tests .venv/bin/pytest --collect-only -q \
+  PYTHONPATH=.:tests .venv/bin/pytest -c pyproject.toml --collect-only -q \
     -p conftest -p tests.checkers.external.conftest \
     ../external_checkers/workstream-checker-service/tests/terminal_systems_runsc_composition.py \
     | grep -Fx \
@@ -447,7 +447,7 @@ echo "qualification stage=postgresql_minio_runsc_composition"
 set +e
 .venv/bin/python scripts/run_isolated_tests.py \
   --metadata-json "${METADATA}" --timeout-seconds 900 --lane trial_composition -- \
-  env PYTHONPATH=.:tests .venv/bin/pytest -vv -x \
+  env PYTHONPATH=.:tests .venv/bin/pytest -c pyproject.toml -vv -x \
   -p conftest -p tests.checkers.external.conftest -o faulthandler_timeout=120 \
   ../external_checkers/workstream-checker-service/tests/terminal_systems_runsc_composition.py \
   >"${RESULT_LOG}" 2>&1
