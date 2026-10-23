@@ -571,6 +571,41 @@ def test_proposal_accepts_backend_canonical_paths(cli):
             )
 
 
+def test_proposal_matches_backend_prose_bounds(cli):
+    from pydantic import ValidationError
+
+    from app.modules.projects.api.guide_proposal_package import (
+        GuideProposalReviewPackage,
+    )
+
+    with http_fixture() as (origin, response, _):
+        for text in (" ", "\t\n", "結" * 1000):
+            value = proposal()
+            value["result"]["requirements"][0]["check_specification"][
+                "stage_rationale"
+            ] = text
+            validated = GuideProposalReviewPackage.model_validate(value)
+            response["body"] = validated.model_dump_json().encode()
+            result = invoke(cli, origin)
+            assert result.returncode == 0
+            assert (
+                json.loads(result.stdout)["result"]["requirements"][0][
+                    "check_specification"
+                ]["stage_rationale"]
+                == text
+            )
+
+        for text in ("", "結" * 1001):
+            value = proposal()
+            value["result"]["requirements"][0]["check_specification"][
+                "stage_rationale"
+            ] = text
+            with pytest.raises(ValidationError):
+                GuideProposalReviewPackage.model_validate(value)
+            response["body"] = json.dumps(value).encode()
+            assert_failure(invoke(cli, origin), "invalid_api_response")
+
+
 def test_proposal_rejects_backend_invalid_unicode_paths(cli):
     from pydantic import ValidationError
 

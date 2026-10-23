@@ -650,7 +650,7 @@ func validateProposalStringList(raw json.RawMessage, minimum, maximum int) error
 
 func proposalProse(value string) bool {
 	length := utf8.RuneCountInString(value)
-	return utf8.ValidString(value) && strings.TrimSpace(value) != "" && length >= 1 && length <= 1000
+	return utf8.ValidString(value) && length >= 1 && length <= 1000
 }
 
 func proposalInfraCode(value string) bool {

@@ -776,3 +776,11 @@ finalization replay and all public-API assertions. This is a contract-drill
 fixture, not a claim of source-analysis quality. Rerun the complete API drill
 against isolated PostgreSQL and MinIO before the final push, retaining its
 pre-fix rejection and post-fix cleanup evidence.
+
+Align CLI specification prose admission with the backend's ModelProse contract:
+whitespace-only nonempty text is valid backend data and must remain inspectable.
+Remove only the CLI's additional trimming condition; preserve valid UTF-8 and
+the one-to-1,000-character bounds. Add backend-validated process coverage for
+whitespace and length boundaries, prove the accepted-response regression fails
+against the previous binary, and replay focused QA on the bounded CLI change.
+This does not change setup generation instructions or approve proposal content.
