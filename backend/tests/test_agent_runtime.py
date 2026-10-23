@@ -1041,6 +1041,8 @@ def test_default_instructions_advertise_contextual_output_constraints():
         "Reopen the assigned originals",
         "Leave unspecified project",
         "source_item_id, document_version_id and sha256",
+        "model_evaluation requires model_service",
+        "registered project image and its exact approved profile",
     ):
         assert rule in instructions
     assert "setup_notes" not in instructions

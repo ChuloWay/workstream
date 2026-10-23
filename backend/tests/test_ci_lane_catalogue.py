@@ -65,6 +65,17 @@ def test_architecture_inspections_share_capacity_without_losing_nodes() -> None:
 
 def test_checker_delivery_and_routing_preparation_partition_every_node_once() -> None:
     delivery = {
+        "tests/checkers_model_calls/test_composed_execution.py",
+        "tests/checkers_model_calls/test_model_call_contract.py",
+        "tests/checkers_model_calls/test_model_call_transactions_postgresql.py",
+        "tests/checkers_model_calls/test_model_invocation_grants_postgresql.py",
+        "tests/checkers_model_calls/test_model_runtime.py",
+        "tests/checkers_model_calls/test_proxy_orchestration.py",
+        "tests/checkers_model_calls/test_public_api.py",
+        "tests/checkers/model_provider/test_openai_responses.py",
+        "tests/checkers/external/test_model_transport.py",
+        "tests/checkers/external/test_model_proxy_transport.py",
+        "tests/authorization/checker_models/test_contracts.py",
         "tests/checkers/default/test_contract.py",
         "tests/checkers/default/test_execution.py",
         "tests/checkers/external/test_contracts.py",
@@ -267,12 +278,12 @@ def test_semantic_family_membership_has_an_independent_fingerprint() -> None:
     """A catalogue-internal move across semantic families must fail this contract."""
     expected = {
         "shared": (
-            258,
-            "6dac9695511a0cafc5aa32daa590857c84e38a6410630546e8ce02b4e5263324",
+            259,
+            "c8a0538c251f77fc1893ed8aa76feff8fa2134cf8e9b5a049f32fbabd5226277",
         ),
         "project": (
-            212,
-            "11225020885fa570a1faf96c0cf37a604a0f9ec17e799794fa52a1b189f87283",
+            223,
+            "db9b895b02e5fd38e271a4f8873cdbfb39d78a54a1807885071bd51cef8a715f",
         ),
         "task": (
             95,
@@ -344,9 +355,9 @@ def test_project_lane_ownership_has_an_independent_fingerprint() -> None:
         )
         + "\n"
     )
-    assert len(catalogue.PROJECT_PARTITIONED_MODULES) == 212
+    assert len(catalogue.PROJECT_PARTITIONED_MODULES) == 223
     assert hashlib.sha256(canonical.encode()).hexdigest() == (
-        "ef5d13776cc1686b98538ee01b496f420391c9c4574f0e6017b9bd395a2da32f"
+        "3510a1e0d4ddee134fb03aa258c835b4b06ee75044e06322c8b344ede1a6b7c9"
     )
 
 

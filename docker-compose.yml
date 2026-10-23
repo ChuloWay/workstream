@@ -122,6 +122,19 @@ services:
       retries: 12
       start_period: 20s
 
+  model-proxy:
+    <<: *backend-runtime
+    profiles: ["model-proxy"]
+    command: [python, -m, app.workers.checker_model_proxy]
+    stop_grace_period: 125m
+    depends_on:
+      backend:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+
   beat:
     <<: *backend-runtime
     command:

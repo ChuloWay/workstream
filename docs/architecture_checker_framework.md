@@ -467,11 +467,15 @@ atomically persists complete closed member results and a completion event; it
 does not activate automatic request delivery. ARCH-04B supplies the hidden ART input port: exact consumed
 Submission bytes, rebuilt manifest, async scoped file access and cleanup, followed
 by a fresh material-selection check. ARCH-04D2 supplies fresh fixed-service materialization authority before and after I/O.
-ARCH-04B2 now supplies hidden typed output storage, byte-free recovery and
-flush-only verified binding. The CHECKERS reservation reader now verifies the
-exact current request/run/lease and returns zero slots; ART authority remains
-deny-only. Controlled nonempty slots prove ART mechanics only. ARCH-04C supports
-that exact empty output set and owns durable execution. ARCH-04D2 supplies input,
+The existing ART output storage, byte-free recovery and flush-only verified
+binding now retain private model-call request/response evidence. CHECKERS
+reserves exactly those bounded slots against the stable paid attempt. Request
+writes require current execution; response writes may complete an already-paid
+effect after its original lease ends. Fresh current authority still gates image
+access. The corresponding fixed ART writer/binding actions are active. This
+private evidence is separate from the run's normalized member findings; ordinary
+images do not acquire model-call authority. ARCH-04C owns durable execution.
+ARCH-04D2 supplies input,
 execute and finalize authority; ARCH-04E/B8 supply the hidden routing operation
 and completion handler, and 04F2 supplies its remediation branch. Production
 request/completion registration is supplied by PILOT-04. A returned evaluation value is not a stored current
@@ -556,12 +560,21 @@ coded work findings, positive and negative cases, runtime dependencies and
 infrastructure failures. File and directory inputs use canonical relative paths.
 Capacity, deadline, unavailable material or implementation, and invalid output
 remain infrastructure outcomes rather than contributor work findings. Model
-evaluation requires an explicit model-service dependency; task or guide context
+evaluation requires a `model_service` dependency provisioned by the credential-
+isolated `model_proxy`; task or guide context
 and external prepared images or caches require explicit material dependencies.
 `prepared_material` remains a runtime gap with `material_unavailable` handling;
-it is not received package content and its absence is not a work failure. The ordinary image runner remains
-offline and receives only its trusted request contract, so a desired dependency
-must not be presented as available runtime capability.
+it is not received package content and its absence is not a work failure. The
+ordinary image runner remains networkless. Model access is available only to a
+registered POST image through its exact approved project model profile; a missing
+image or profile remains an unbound capability suggestion that blocks activation.
+The paid-call slot excludes retry generation and execution lease. Workstream
+reserves the maximum configured charge before create, retains that reservation
+on ambiguous delivery, and retrieves only a known provider ID during recovery.
+The image owns prompt interpretation and verdict; the proxy cannot accept work
+or spend a revision. Public Operator profile/budget controls and narrowly
+authorized terminal-call recovery are described in
+[model runtime operations](operations_checker_models.md).
 
 The trusted compiler resolves each supported project check to an immutable
 Operator-registered image, validates bounded typed configuration against that

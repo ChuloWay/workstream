@@ -115,6 +115,33 @@ AUTH_ART_OPERATOR_TARGETS = frozenset({
     "backend/app/modules/authorization/artifact_operator_authorization.py",
     "backend/app/modules/authorization/domain/artifact_operator.py",
 })
+CHECKER_MODEL_RUNTIME_TARGETS = frozenset({
+    "backend/app/adapters/checkers/model_execution.py",
+    "backend/app/adapters/checkers/model_provider.py",
+    "backend/app/adapters/checkers/model_proxy_transport.py",
+    "backend/app/adapters/checkers/model_runtime.py",
+    "backend/app/api/deps/checker_models.py",
+    "backend/app/interfaces/checker_model_provider.py",
+    "backend/app/interfaces/checker_model_proxy.py",
+    "backend/app/modules/artifacts/api/checker_output_authority.py",
+    "backend/app/modules/artifacts/checker_model_evidence.py",
+    "backend/app/modules/authorization/checker_model_authorization.py",
+    "backend/app/modules/authorization/checker_output_authorization.py",
+    "backend/app/modules/authorization/domain/checker_models.py",
+    "backend/app/modules/authorization/domain/checker_outputs.py",
+    "backend/app/modules/authorization/domain/prepared_checker_runtime.py",
+    "backend/app/modules/checkers/api/model_calls.py",
+    "backend/app/modules/checkers/api/model_grants.py",
+    "backend/app/modules/checkers/api/model_profiles.py",
+    "backend/app/modules/checkers/model_calls/custody.py",
+    "backend/app/modules/checkers/model_calls/grants.py",
+    "backend/app/modules/checkers/model_calls/models.py",
+    "backend/app/modules/checkers/model_calls/profiles.py",
+    "backend/app/modules/checkers/model_calls/proxy.py",
+    "backend/app/modules/checkers/model_calls/repository.py",
+    "backend/app/modules/checkers/model_calls/service.py",
+    "backend/app/workers/checker_model_proxy.py",
+})
 PILOT_READ_1_TARGETS = frozenset({
     "backend/app/modules/tasks/submission_attempts.py",
 })
@@ -1042,6 +1069,7 @@ def _validate_additive_partition_transition(
         | PILOT_READ_1_TARGETS
         | AWS_ARTIFACT_ACTIVATION_TARGETS
         | AUTH_ART_OPERATOR_TARGETS
+        | CHECKER_MODEL_RUNTIME_TARGETS
         | CHECKER_IMAGE_PUBLISH_TARGETS
         | PILOT_READ_2_TARGETS
         | PILOT_READ_3_TARGETS

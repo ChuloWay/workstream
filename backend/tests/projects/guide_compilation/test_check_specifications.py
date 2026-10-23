@@ -238,7 +238,7 @@ def test_model_evaluation_requires_post_even_with_a_short_duration(stage: str) -
             {
                 "dependency_id": "model_judge",
                 "kind": "model_service",
-                "provisioning": "runtime_gap",
+                "provisioning": "model_proxy",
                 "purpose": "Evaluate the report against the rubric.",
                 "unavailable_code": "implementation_unavailable",
             }
@@ -275,6 +275,51 @@ def test_model_evaluation_requires_post_even_with_a_short_duration(stage: str) -
             require_complete_generated_specifications(compilation_context, proposal)
     else:
         require_complete_generated_specifications(compilation_context, proposal)
+
+
+def test_new_generation_rejects_legacy_model_runtime_gap() -> None:
+    specification = _specification(
+        evaluation_method="model_evaluation",
+        execution_mode="background",
+        runtime_dependencies=[
+            {
+                "dependency_id": "model_judge",
+                "kind": "model_service",
+                "provisioning": "runtime_gap",
+                "purpose": "Evaluate the report against the rubric.",
+                "unavailable_code": "implementation_unavailable",
+            }
+        ],
+        infrastructure_failures=[
+            {
+                "code": "implementation_unavailable",
+                "condition": "The model service is unavailable.",
+            }
+        ],
+    )
+    requirement = _requirement(
+        disposition="post_submit_capability_gap",
+        check_specification=specification.model_dump(mode="json"),
+    )
+    proposal = _with_requirement(requirement).model_copy(
+        update={
+            "status": "draft_ready_with_warnings",
+            "capability_suggestions": (
+                CapabilitySuggestion(
+                    requirement_id=requirement.requirement_id,
+                    stage="post_submit",
+                    title="Report evaluation",
+                    rationale="The project image or exact model profile is unavailable.",
+                    evidence_refs=requirement.evidence_refs,
+                ),
+            ),
+        }
+    )
+
+    # Immutable older results remain decodable, but cannot pass new generation admission.
+    ProjectGuideCompilationResult.model_validate(proposal.model_dump(mode="json"))
+    with pytest.raises(ValueError, match="model service requires model proxy"):
+        require_complete_generated_specifications(context(ids()), proposal)
 
 
 def test_pre_submit_binding_must_fit_the_stage_budget() -> None:

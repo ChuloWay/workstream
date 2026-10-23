@@ -1750,6 +1750,39 @@ request, run, lease, result, material and original execution receipt. Unprovable
 retained receipts cause an atomic upgrade refusal; queued work is preserved.
 Production uses real action-specific AUTH/PREP with fresh live identity checks.
 
+## Checker model calls
+
+Model-enabled external POST images select one immutable profile through the
+locked policy configuration. These records track paid provider effects separately
+from `CheckerRun`: losing a execution lease or retrying a checker does not create
+another paid effect.
+
+| Table | Custody |
+|---|---|
+| `model_usage_profiles` | Immutable project/image/provider/model/bounds/pricing specification and Operator authorization receipt |
+| `model_usage_budget_configurations` | Immutable versions of the finite project lifetime ceiling |
+| `model_usage_budget_accounts` | Current configuration and serialized lifetime reserved/settled integer USD nanodollars; configuration changes never reset spend |
+| `checker_model_usage_slots` | Stable project, assignment, Submission/version, requirement, registry digest, configuration hash, exact profile and call-slot identity; excludes retry generation and execution lease |
+| `model_usage_effects` | Immutable first request hash, dispatch intent, reservation, provider identity, private ART request/response references, usage and once-only terminal settlement |
+| `checker_model_usage_recoveries` | Fresh current-run attachment to an existing attempt; cannot authorize a new provider create |
+| `checker_model_invocation_grants` | Hashed short-lived capability, exact execution and binding, PostgreSQL expiry and one consumption into the selected attempt/request |
+
+An attempt progresses from `prepared` to `dispatching`, with uncertain delivery
+retaining its full reservation. Authenticated output and complete usage settle
+once as `completed` or `known_failed`; proven no-effect becomes `known_no_effect`
+and releases the reservation. Only explicit Operator recovery from a terminal
+no-effect or fully settled failure may create a child attempt. Unknown delivery
+or incomplete usage never permits another create. Late completion may retain
+evidence after the originating run ends; fresh current execution is still
+required to release that output to an image.
+
+Migration `0060_model_usage` extends existing ART put/receipt custody
+with `model_call_attempt_id` and exact private request/response slots. Transcript
+bytes stay in ART, never these ledger rows or outbox payloads. Existing historical
+run-bound ART rows remain retained; new model evidence uses the paid attempt.
+The call ledger's private evidence is separate from normalized public checker
+findings. See [model runtime operations](operations_checker_models.md).
+
 ## CheckerResult
 
 A result is one ordered, selected structural member of its exact owning run.

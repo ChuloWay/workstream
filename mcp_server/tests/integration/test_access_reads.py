@@ -202,7 +202,7 @@ async def _exercise_access_reads(
             if allowed and "items" in body:
                 assert body["items"] and body["total"] >= len(body["items"])
             if allowed and name == "workstream_permissions_list":
-                assert body["total"] == len(body["items"]) == 82
+                assert body["total"] == len(body["items"]) == 91
                 assert {"task.revision.expire", "task.revision.recover"} <= {
                     item["permission_id"] for item in body["items"]
                 }

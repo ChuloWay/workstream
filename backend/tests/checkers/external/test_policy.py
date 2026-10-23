@@ -9,6 +9,9 @@ from app.core.identifiers import new_record_id
 from app.interfaces.project_agents import (
     AtomicGuideRequirement,
     CapabilityParameter,
+    CheckInfrastructureFailure,
+    CheckRuntimeDependency,
+    CheckSpecification,
     CompilationStage,
     PostSubmissionBindingProposal,
     PreSubmissionBindingProposal,
@@ -29,10 +32,16 @@ from app.modules.checkers.api.external_policy import (
     selected_post_submit_execution_budget_ms,
     selected_pre_submit_execution_budget_ms,
 )
+from app.modules.model_usage.api import (
+    ModelGenerationSettings,
+    ModelPricing,
+    ProjectModelProfile,
+    ProjectModelProfileSpec,
+)
 from app.modules.checkers.api.external import EXTERNAL_CHECKER_EXECUTION_CLEANUP_MARGIN_MS
 from app.modules.artifacts.preparation import ArtifactPreparationLimits
 from tests.checkers.external.support import registry_spec
-from tests.projects.guide_compilation.helpers import result
+from tests.projects.guide_compilation.helpers import result, valid_specification
 
 
 def _entry(
@@ -86,6 +95,83 @@ class _Registry:
             ) from exc
 
 
+class _Profiles:
+    def __init__(self, profile):
+        self.profile = profile
+        self.calls = []
+
+    async def read_exact(self, selector, **scope):
+        self.calls.append((selector, scope))
+        return self.profile
+
+
+def _model_configuration_schema() -> ExternalCheckerSchema:
+    document = {
+        "type": "object",
+        "properties": {
+            "model_profile_id": {"type": "string"},
+            "model_profile_version": {"type": "integer"},
+            "model_profile_digest": {"type": "string"},
+        },
+        "required": [
+            "model_profile_id",
+            "model_profile_version",
+            "model_profile_digest",
+        ],
+        "additionalProperties": False,
+    }
+    return ExternalCheckerSchema(
+        schema_id="acme.model.configuration",
+        schema_version="v1",
+        document=document,
+        schema_sha256=external_checker_json_hash(document),
+    )
+
+
+def _model_profile(project_id, entry) -> ProjectModelProfile:
+    profile_id = new_record_id()
+    pricing = ModelPricing(
+        pricing_policy_id=new_record_id(),
+        pricing_policy_version=1,
+        pricing_policy_digest=external_checker_json_hash({"pricing": "fixed"}),
+        uncached_input_nanodollars_per_token=3,
+        cached_input_nanodollars_per_token=1,
+        output_nanodollars_per_token=7,
+    )
+    spec = ProjectModelProfileSpec(
+        project_id=project_id,
+        profile_version=1,
+        provider="openai_responses",
+        api="responses.v1",
+        model_snapshot="gpt-example-2026-10-01",
+        settings=ModelGenerationSettings(reasoning_effort="medium", text_verbosity="low"),
+        maximum_request_bytes=10_000,
+        maximum_output_bytes=4_000,
+        maximum_response_bytes=30_000,
+        maximum_input_tokens=100,
+        maximum_output_tokens=50,
+        maximum_calls=1,
+        maximum_total_request_bytes=10_000,
+        maximum_total_response_bytes=30_000,
+        maximum_total_input_tokens=100,
+        maximum_total_output_tokens=50,
+        allowed_tools=(),
+        maximum_tool_calls=0,
+        maximum_tool_output_bytes=0,
+        deadline_ms=30_000,
+        pricing=pricing,
+    )
+    return ProjectModelProfile(
+        operation_id=uuid4(),
+        actor_profile_id=uuid4(),
+        spec=spec,
+        profile_digest=external_checker_json_hash(spec.model_dump(mode="json")),
+        profile_id=profile_id,
+        authorization_evidence_id=uuid4(),
+        created_at=datetime.now(UTC),
+    )
+
+
 def _proposal():
     pre = AtomicGuideRequirement(
         requirement_id="safe_archive",
@@ -120,6 +206,36 @@ def _proposal():
     )
 
 
+def _model_proposal():
+    proposal = _proposal()
+    model_specification = CheckSpecification.model_validate(
+        valid_specification().model_dump(mode="json")
+        | {
+            "evaluation_method": "model_evaluation",
+            "execution_mode": "background",
+            "stage_rationale": "Model review runs after immutable submission creation.",
+            "runtime_dependencies": (
+                CheckRuntimeDependency(
+                    dependency_id="model_runtime",
+                    kind="model_service",
+                    provisioning="model_proxy",
+                    purpose="Bounded trusted model access for the project image.",
+                    unavailable_code="implementation_unavailable",
+                ),
+            ),
+            "infrastructure_failures": (
+                *valid_specification().infrastructure_failures,
+                CheckInfrastructureFailure(
+                    code="implementation_unavailable",
+                    condition="The trusted model service is unavailable.",
+                ),
+            ),
+        }
+    )
+    post = proposal.requirements[1].model_copy(update={"check_specification": model_specification})
+    return proposal.model_copy(update={"requirements": (proposal.requirements[0], post)})
+
+
 @pytest.mark.asyncio
 async def test_compilation_locks_exact_phase_registry_entries_and_default():
     entries = (
@@ -140,6 +256,109 @@ async def test_compilation_locks_exact_phase_registry_entries_and_default():
     assert pre.entries[0].configuration == {}
     assert post.entries[0].configuration == {}
     assert [call["phase"] for call in registry.calls] == ["pre_submit", "post_submit"]
+
+
+@pytest.mark.asyncio
+async def test_model_configuration_requires_exact_post_profile_scope():
+    project_id = new_record_id()
+    pre = _entry("acme.safe_archive", "pre_submit")
+    post = _entry(
+        "acme.quality_review",
+        "post_submit",
+        _model_configuration_schema(),
+    )
+    profile = _model_profile(project_id, post)
+    profiles = _Profiles(profile)
+    proposal = _model_proposal()
+    binding = proposal.post_submit_bindings[0].model_copy(
+        update={
+            "parameters": (
+                CapabilityParameter(name="model_profile_id", value=str(profile.profile_id)),
+                CapabilityParameter(name="model_profile_version", value=1),
+                CapabilityParameter(name="model_profile_digest", value=profile.profile_digest),
+            )
+        }
+    )
+
+    _, policy = await compile_external_checker_policies(
+        proposal.model_copy(update={"post_submit_bindings": (binding,)}),
+        _Registry((pre, post)),
+        project_id=project_id,
+        profiles=profiles,
+    )
+
+    assert policy.entries[0].configuration == {
+        "model_profile_id": str(profile.profile_id),
+        "model_profile_version": 1,
+        "model_profile_digest": profile.profile_digest,
+    }
+    selector, scope = profiles.calls[0]
+    assert selector == profile.selector
+    assert scope == {
+        "project_id": project_id,
+    }
+
+
+@pytest.mark.asyncio
+async def test_model_configuration_rejects_partial_pre_and_substituted_profile():
+    project_id = new_record_id()
+    pre = _entry(
+        "acme.safe_archive",
+        "pre_submit",
+        _model_configuration_schema(),
+    )
+    ordinary_pre = _entry("acme.safe_archive", "pre_submit")
+    post = _entry(
+        "acme.quality_review",
+        "post_submit",
+        _model_configuration_schema(),
+    )
+    profile = _model_profile(project_id, post)
+    parameters = (
+        CapabilityParameter(name="model_profile_id", value=str(profile.profile_id)),
+        CapabilityParameter(name="model_profile_version", value=1),
+        CapabilityParameter(name="model_profile_digest", value=profile.profile_digest),
+    )
+    proposal = _model_proposal()
+    with pytest.raises(ValueError, match="model evaluation profile"):
+        await compile_external_checker_policies(
+            proposal,
+            _Registry(
+                (
+                    ordinary_pre,
+                    _entry("acme.quality_review", "post_submit"),
+                )
+            ),
+            project_id=project_id,
+            profiles=_Profiles(profile),
+        )
+    post_binding = proposal.post_submit_bindings[0].model_copy(update={"parameters": parameters})
+    partial = post_binding.model_copy(update={"parameters": parameters[:1]})
+    with pytest.raises(ValueError, match="configuration"):
+        await compile_external_checker_policies(
+            proposal.model_copy(update={"post_submit_bindings": (partial,)}),
+            _Registry((ordinary_pre, post)),
+            project_id=project_id,
+            profiles=_Profiles(profile),
+        )
+
+    pre_binding = proposal.pre_submit_bindings[0].model_copy(update={"parameters": parameters})
+    with pytest.raises(ValueError, match="configuration"):
+        await compile_external_checker_policies(
+            proposal.model_copy(update={"pre_submit_bindings": (pre_binding,)}),
+            _Registry((pre, post)),
+            project_id=project_id,
+            profiles=_Profiles(profile),
+        )
+
+    substituted = _model_profile(new_record_id(), post)
+    with pytest.raises(ValueError, match="unavailable"):
+        await compile_external_checker_policies(
+            proposal.model_copy(update={"post_submit_bindings": (post_binding,)}),
+            _Registry((ordinary_pre, post)),
+            project_id=project_id,
+            profiles=_Profiles(substituted),
+        )
 
 
 @pytest.mark.asyncio
@@ -240,10 +459,13 @@ async def test_selected_post_maximum_fits_default_art_custody_and_rejects_overru
     )
     limits = ArtifactPreparationLimits()
 
-    assert selected_post_submit_execution_budget_ms(
-        policy,
-        artifact_deadline_ms=int(limits.total_deadline_seconds * 1000),
-    ) == MAXIMUM_SELECTED_POST_EXECUTION_BUDGET_MS
+    assert (
+        selected_post_submit_execution_budget_ms(
+            policy,
+            artifact_deadline_ms=int(limits.total_deadline_seconds * 1000),
+        )
+        == MAXIMUM_SELECTED_POST_EXECUTION_BUDGET_MS
+    )
     assert (
         limits.total_deadline_seconds + limits.cleanup_margin_seconds
         < limits.reservation_ttl_seconds
@@ -285,13 +507,17 @@ async def test_pre_configuration_is_schema_checked_and_locked_as_json():
         "additionalProperties": False,
     }
     schema = ExternalCheckerSchema(
-        schema_id="acme.pre.configuration", schema_version="v1", document=document,
+        schema_id="acme.pre.configuration",
+        schema_version="v1",
+        document=document,
         schema_sha256=external_checker_json_hash(document),
     )
-    registry = _Registry((
-        _entry("acme.safe_archive", "pre_submit", schema),
-        _entry("acme.quality_review", "post_submit"),
-    ))
+    registry = _Registry(
+        (
+            _entry("acme.safe_archive", "pre_submit", schema),
+            _entry("acme.quality_review", "post_submit"),
+        )
+    )
     proposal = _proposal()
     parameters = (
         CapabilityParameter(name="threshold", value=3),
@@ -308,21 +534,26 @@ async def test_pre_configuration_is_schema_checked_and_locked_as_json():
         wrong = binding.model_copy(update={"parameters": invalid})
         with pytest.raises(ValueError):
             await compile_external_checker_policies(
-                proposal.model_copy(update={"pre_submit_bindings": (wrong,)}), registry,
+                proposal.model_copy(update={"pre_submit_bindings": (wrong,)}),
+                registry,
             )
 
 
 def test_pre_configuration_preserves_retained_empty_binding_and_rejects_duplicates():
     binding = _proposal().pre_submit_bindings[0]
     retained = {
-        "requirement_id": "safe_archive", "capability_id": "acme.safe_archive",
-        "capability_version": "v1.2.3", "stage": "pre_submit",
+        "requirement_id": "safe_archive",
+        "capability_id": "acme.safe_archive",
+        "capability_version": "v1.2.3",
+        "stage": "pre_submit",
     }
     assert binding.model_dump(mode="json") == retained
     assert PreSubmissionBindingProposal.model_validate(retained).model_dump(mode="json") == retained
     duplicate = CapabilityParameter(name="threshold", value=3)
     with pytest.raises(ValueError, match="unique"):
-        PreSubmissionBindingProposal.model_validate(retained | {"parameters": (duplicate, duplicate)})
+        PreSubmissionBindingProposal.model_validate(
+            retained | {"parameters": (duplicate, duplicate)}
+        )
 
 
 @pytest.mark.asyncio
@@ -333,24 +564,29 @@ async def test_policy_compilation_refuses_unrunnable_post_images(aggregate: bool
     if aggregate:
         binding = proposal.post_submit_bindings[0]
         requirement = next(
-            item for item in proposal.requirements
-            if item.requirement_id == binding.requirement_id
+            item for item in proposal.requirements if item.requirement_id == binding.requirement_id
         )
-        proposal = proposal.model_copy(update={
-            "requirements": proposal.requirements + (
-                requirement.model_copy(update={"requirement_id": "secondary_review"}),
-            ),
-            "post_submit_bindings": proposal.post_submit_bindings + (
-                binding.model_copy(update={
-                    "requirement_id": "secondary_review",
-                    "capability_id": "acme.secondary_review",
-                }),
-            ),
-        })
-        entries.extend([
-            _entry("acme.quality_review", "post_submit", deadline_ms=1_700_000),
-            _entry("acme.secondary_review", "post_submit", deadline_ms=1_700_000),
-        ])
+        proposal = proposal.model_copy(
+            update={
+                "requirements": proposal.requirements
+                + (requirement.model_copy(update={"requirement_id": "secondary_review"}),),
+                "post_submit_bindings": proposal.post_submit_bindings
+                + (
+                    binding.model_copy(
+                        update={
+                            "requirement_id": "secondary_review",
+                            "capability_id": "acme.secondary_review",
+                        }
+                    ),
+                ),
+            }
+        )
+        entries.extend(
+            [
+                _entry("acme.quality_review", "post_submit", deadline_ms=1_700_000),
+                _entry("acme.secondary_review", "post_submit", deadline_ms=1_700_000),
+            ]
+        )
     else:
         entries.append(_entry("acme.quality_review", "post_submit", deadline_ms=3_600_000))
     with pytest.raises(ValueError, match="durable worker deadline"):
@@ -362,17 +598,21 @@ async def test_policy_compilation_refuses_pre_images_exceeding_platform_custody(
     proposal = _proposal()
     binding = proposal.pre_submit_bindings[0]
     requirement = proposal.requirements[0]
-    proposal = proposal.model_copy(update={
-        "requirements": proposal.requirements + (
-            requirement.model_copy(update={"requirement_id": "secondary_archive"}),
-        ),
-        "pre_submit_bindings": proposal.pre_submit_bindings + (
-            binding.model_copy(update={
-                "requirement_id": "secondary_archive",
-                "capability_id": "acme.secondary_archive",
-            }),
-        ),
-    })
+    proposal = proposal.model_copy(
+        update={
+            "requirements": proposal.requirements
+            + (requirement.model_copy(update={"requirement_id": "secondary_archive"}),),
+            "pre_submit_bindings": proposal.pre_submit_bindings
+            + (
+                binding.model_copy(
+                    update={
+                        "requirement_id": "secondary_archive",
+                        "capability_id": "acme.secondary_archive",
+                    }
+                ),
+            ),
+        }
+    )
     entries = [
         _entry("acme.safe_archive", "pre_submit", deadline_ms=3_600_000),
         _entry("acme.secondary_archive", "pre_submit", deadline_ms=3_600_000),

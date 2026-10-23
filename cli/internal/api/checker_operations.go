@@ -239,12 +239,13 @@ type CheckerRetrySuccessor struct {
 }
 
 type CheckerRetrySourceItem struct {
-	Source         CheckerRetrySource     `json:"source"`
-	RecoveryState  string                 `json:"recovery_state"`
-	CreatedAt      string                 `json:"created_at"`
-	CompletedAt    string                 `json:"completed_at"`
-	RetryReceiptID *string                `json:"retry_receipt_id"`
-	Successor      *CheckerRetrySuccessor `json:"successor"`
+	Source                  CheckerRetrySource              `json:"source"`
+	RecoveryState           string                          `json:"recovery_state"`
+	CreatedAt               string                          `json:"created_at"`
+	CompletedAt             string                          `json:"completed_at"`
+	RetryReceiptID          *string                         `json:"retry_receipt_id"`
+	Successor               *CheckerRetrySuccessor          `json:"successor"`
+	ModelRecoveryCandidates []CheckerModelRecoveryCandidate `json:"model_recovery_candidates"`
 }
 
 type CheckerRetrySourcePage struct {
@@ -340,11 +341,14 @@ func (c *Client) CheckerRetrySources(ctx context.Context, project string, limit 
 	seen := map[[16]byte]bool{}
 	for i, item := range page.Items {
 		var wire CheckerRetrySourceItem
-		parts, err := contextObject(itemRaw[i], &wire, []string{"source", "recovery_state", "created_at", "completed_at"}, nil)
+		parts, err := contextObject(itemRaw[i], &wire, []string{"source", "recovery_state", "created_at", "completed_at", "model_recovery_candidates"}, nil)
 		if err != nil || !requiredNullable(parts, "retry_receipt_id", "successor") ||
 			!validCheckerSource(parts["source"], &item.Source, project, "") || !validTime(item.CreatedAt) || !validTime(item.CompletedAt) ||
 			(item.RecoveryState != "eligible" && item.RecoveryState != "retried" && item.RecoveryState != "not_current") ||
 			(item.RetryReceiptID == nil) != (item.Successor == nil) || (item.RecoveryState == "retried") != (item.RetryReceiptID != nil) {
+			return result, &Failure{Code: "invalid_api_response"}
+		}
+		if !validCheckerModelRecoveryCandidates(parts["model_recovery_candidates"], &item) {
 			return result, &Failure{Code: "invalid_api_response"}
 		}
 		if item.RetryReceiptID != nil {

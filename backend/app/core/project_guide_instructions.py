@@ -319,7 +319,11 @@ capacity, deadline, provider failure and invalid output cannot consume revision 
 DEPENDENCIES
 Specifications grant no access. Current images receive verified package material,
 manifest, approved configuration and normalized request metadata, not task/guide
-prose, hosted models or nested environments. Declare unavailable needs explicitly;
+prose, provider credentials or nested environments. A model-enabled POST image
+receives only its invocation-local proxy; model_evaluation requires model_service,
+model_proxy and implementation_unavailable plus a registered project image and its
+exact approved profile. If either is missing, keep an unbound blocking implementation
+suggestion. Declare unavailable needs explicitly;
 a supported binding cannot depend on runtime_gap. current_runner isolates the
 checker image only; it supplies no container engine, second sandbox or host socket.
 Follow the schema's exact dependency kind/provisioning/unavailable_code pairs.

@@ -424,9 +424,9 @@ class ArtifactBinding(Base):
             name="scope_version_predecessor",
         ),
         CheckConstraint(
-            "(resource_type = 'checker_run' and scope_version = 1 "
+            "(resource_type in ('checker_run','checker_model_call') and scope_version = 1 "
             "and put_attempt_id is not null and verification_receipt_id is not null) or "
-            "(resource_type <> 'checker_run' and put_attempt_id is null "
+            "(resource_type not in ('checker_run','checker_model_call') and put_attempt_id is null "
             "and verification_receipt_id is null)",
             name="checker_output_lineage",
         ),
@@ -1405,19 +1405,21 @@ class ArtifactPutAttempt(Base):
         ),
         CheckConstraint(
             "(producer_request_type = 'guide' and task_import_source_id is null and guide_source_item_id is not null "
-            "and checker_run_id is null and task_id is null and submission_id is null "
+            "and checker_run_id is null and model_call_attempt_id is null and task_id is null and submission_id is null "
             "and submission_version is null "
             "and logical_role is null) or "
             "(producer_request_type = 'checker_output' and task_import_source_id is null and guide_source_item_id is null "
-            "and checker_run_id is not null and task_id is not null "
+            "and ((checker_run_id is not null and model_call_attempt_id is null) or "
+            "(checker_run_id is null and model_call_attempt_id is not null "
+            "and logical_role in ('model_request','model_response'))) and task_id is not null "
             "and submission_id is not null and submission_version is not null "
             "and octet_length(logical_role) between 1 and 100) or "
             "(producer_request_type = 'submission_bundle' and task_import_source_id is null "
-            "and guide_source_item_id is null and checker_run_id is null "
+            "and guide_source_item_id is null and checker_run_id is null and model_call_attempt_id is null "
             "and task_id is not null and submission_id is null "
             "and submission_version is null and logical_role is null) or "
             "(producer_request_type = 'task_import_source' and task_import_source_id is not null "
-            "and guide_source_item_id is null and checker_run_id is null and task_id is null "
+            "and guide_source_item_id is null and checker_run_id is null and model_call_attempt_id is null and task_id is null "
             "and submission_id is null and submission_version is null "
             "and logical_role is not distinct from 'task_import_source')",
             name="producer_reference",
@@ -1440,6 +1442,9 @@ class ArtifactPutAttempt(Base):
     )
     checker_run_id: Mapped[str | None] = mapped_column(
         ForeignKey("checker_runs.id", ondelete="RESTRICT"), index=True
+    )
+    model_call_attempt_id: Mapped[str | None] = mapped_column(
+        Uuid(as_uuid=False), ForeignKey("model_usage_effects.id", ondelete="RESTRICT"), index=True
     )
     submission_id: Mapped[str | None] = mapped_column(Uuid(as_uuid=False), index=True)
     submission_version: Mapped[int | None] = mapped_column(Integer)
@@ -1849,12 +1854,14 @@ class ArtifactOperationReceipt(Base):
         CheckConstraint("attempt_number > 0", name="attempt_positive"),
         CheckConstraint(
             "contract_version = 2 and put_attempt_id is not null and "
-            "((guide_source_item_id is not null and checker_run_id is null "
+            "((guide_source_item_id is not null and checker_run_id is null and model_call_attempt_id is null "
             "and logical_role is null) or "
-            "(guide_source_item_id is null and checker_run_id is not null "
+            "(guide_source_item_id is null and checker_run_id is not null and model_call_attempt_id is null "
             "and octet_length(logical_role) between 1 and 100) or "
-            "(guide_source_item_id is null and checker_run_id is null "
-            "and (logical_role is null or logical_role='task_import_source')))",
+            "(guide_source_item_id is null and checker_run_id is null and model_call_attempt_id is null "
+            "and (logical_role is null or logical_role='task_import_source')) or "
+            "(guide_source_item_id is null and checker_run_id is null and model_call_attempt_id is not null "
+            "and logical_role in ('model_request','model_response')))",
             name="contract_producer_reference",
         ),
     )
@@ -1869,6 +1876,9 @@ class ArtifactOperationReceipt(Base):
     )
     checker_run_id: Mapped[str | None] = mapped_column(
         ForeignKey("checker_runs.id", ondelete="RESTRICT"), index=True
+    )
+    model_call_attempt_id: Mapped[str | None] = mapped_column(
+        Uuid(as_uuid=False), ForeignKey("model_usage_effects.id", ondelete="RESTRICT"), index=True
     )
     logical_role: Mapped[str | None] = mapped_column(String(100))
     replica_id: Mapped[str] = mapped_column(

@@ -1,12 +1,12 @@
 """Exact ART-owned output selection shared by storage recovery and binding."""
 
-from dataclasses import dataclass
 from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.hashing import canonical_json_hash
+from app.modules.artifacts.api.checker_output_authority import CheckerOutputStoredFacts
 from app.modules.artifacts.models import (
     ArtifactContent,
     ArtifactPutAttempt,
@@ -24,22 +24,6 @@ from app.modules.checkers.api.output_custody import (
     CheckerOutputSelector,
     CheckerOutputUnavailable,
 )
-
-
-@dataclass(frozen=True, slots=True)
-class CheckerOutputStoredFacts:
-    """Exact storage facts consumed by fresh output action authority."""
-
-    put_attempt_id: UUID
-    checker_request_digest: str
-    sha256: str
-    byte_count: int
-    media_type: str
-    status: str
-    content_id: UUID | None
-    replica_id: UUID | None
-    verification_receipt_id: UUID | None
-
 
 
 async def select_checker_output(
@@ -64,14 +48,14 @@ async def select_checker_output(
         select(ArtifactPutAttempt)
         .where(
             ArtifactPutAttempt.operation_identity == checker_output_operation_identity(
-                checker_run_id=selector.checker_run_id, slot_key=selector.slot_key
+                model_call_attempt_id=selector.model_call_attempt_id, slot_key=selector.slot_key
             ),
         )
         .execution_options(populate_existing=True)
     )
     if attempt is None:
         return None
-    evaluation = selector.evaluation
+    paid_slot = selector.paid_slot
     if (
         (
             attempt.producer_request_type,
@@ -79,7 +63,7 @@ async def select_checker_output(
             attempt.task_id,
             attempt.submission_id,
             attempt.submission_version,
-            attempt.checker_run_id,
+            attempt.model_call_attempt_id,
             attempt.logical_role,
             attempt.checker_request_digest,
             attempt.media_type,
@@ -87,17 +71,19 @@ async def select_checker_output(
         )
         != (
             "checker_output",
-            str(evaluation.project_id),
-            str(evaluation.task_id),
-            str(evaluation.submission_id),
-            evaluation.submission_version,
-            str(selector.checker_run_id),
+            str(paid_slot.project_id),
+            str(selector.task_id),
+            str(paid_slot.submission_id),
+            paid_slot.submission_version,
+            str(selector.model_call_attempt_id),
             slot.key,
             expected_digest,
             slot.media_type,
             namespace_fingerprint,
         )
         or attempt.byte_count > slot.maximum_bytes
+        or attempt.checker_run_id is not None
+        or attempt.sha256 != selector.content_sha256
         or (put_attempt_id is not None and attempt.id != str(put_attempt_id))
     ):
         raise CheckerOutputUnavailable("checker_output_identity_mismatch")

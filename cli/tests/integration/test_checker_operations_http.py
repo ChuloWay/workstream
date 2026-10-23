@@ -364,6 +364,7 @@ def test_retry_lineage_rejects_relational_substitutions_on_receipts_and_history(
                 "completed_at": "2026-10-18T10:01:00Z",
                 "retry_receipt_id": EVIDENCE,
                 "successor": successor(),
+                "model_recovery_candidates": [],
             }
         ],
         "next_cursor": None,
@@ -414,6 +415,7 @@ def test_retry_source_page_and_exact_reason_bound_receipt(cli):
         "completed_at": "2026-10-18T10:01:00Z",
         "retry_receipt_id": None,
         "successor": None,
+        "model_recovery_candidates": [],
     }
     page = {"project_id": PROJECT, "items": [item], "next_cursor": "opaque+/="}
     with http_fixture() as (origin, response, requests):
@@ -431,6 +433,53 @@ def test_retry_source_page_and_exact_reason_bound_receipt(cli):
         )
         assert parse_qs(request.query) == {"limit": ["1"], "cursor": ["a+/="]}
         assert requests[-1][0] == "GET"
+
+        candidate = {
+            "parent_attempt_id": EVIDENCE,
+            "registry_entry_id": ENTRY,
+            "terminal_digest": SHA,
+            "request_sha256": SHA,
+            "slot": {
+                "project_id": PROJECT,
+                "assignment_id": ACTOR,
+                "submission_id": SUBMISSION,
+                "submission_version": 1,
+                "requirement_id": "project.evidence",
+                "registry_entry_digest": SHA,
+                "configuration_sha256": SHA,
+                "profile_id": ENTRY,
+                "profile_version": 1,
+                "profile_digest": SHA,
+                "slot_index": 0,
+            },
+        }
+        model_page = deepcopy(page)
+        model_page["items"][0]["model_recovery_candidates"] = [candidate]
+        response["body"] = json.dumps(model_page).encode()
+        result = invoke(cli, origin, "retry-sources", PROJECT)
+        assert result.returncode == 0, result.stderr
+        assert json.loads(result.stdout) == model_page
+        invalid_candidates = [
+            None,
+            [candidate, candidate],
+            [candidate | {"provider_response_id": "private-coordinate"}],
+            [candidate | {"terminal_digest": "not-a-digest"}],
+        ]
+        for key, value in (
+            ("project_id", ACTOR),
+            ("submission_id", ACTOR),
+            ("submission_version", 2),
+            ("profile_version", None),
+            ("slot_index", 1),
+            ("slot_index", True),
+            ("requirement_id", "invalid space"),
+        ):
+            invalid_candidates.append([candidate | {"slot": candidate["slot"] | {key: value}}])
+        for candidates in invalid_candidates:
+            invalid_page = deepcopy(model_page)
+            invalid_page["items"][0]["model_recovery_candidates"] = candidates
+            response["body"] = json.dumps(invalid_page).encode()
+            assert_failure(invoke(cli, origin, "retry-sources", PROJECT), "invalid_api_response")
 
         response.update(status=201, body=json.dumps(receipt()).encode())
         for _ in range(2):
@@ -458,7 +507,7 @@ def test_retry_source_page_and_exact_reason_bound_receipt(cli):
                 [KEY],
                 {"reason": "Fixed runtime é"},
             )
-        assert len(requests) == 3
+        assert len(requests) == 4 + len(invalid_candidates)
 
 
 def test_retry_refuses_invalid_inputs_foreign_pages_and_unknown_writes(cli):
@@ -493,6 +542,7 @@ def test_retry_refuses_invalid_inputs_foreign_pages_and_unknown_writes(cli):
                     "completed_at": "2026-10-18T10:01:00Z",
                     "retry_receipt_id": None,
                     "successor": None,
+                    "model_recovery_candidates": [],
                 }
             ],
             "next_cursor": None,

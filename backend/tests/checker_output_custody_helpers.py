@@ -5,12 +5,15 @@ from __future__ import annotations
 from tests.checker_output_admission_helpers import seed_checker_output_relationships
 
 import asyncio
+import hashlib
+import json
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -22,6 +25,7 @@ from app.modules.checkers.api.output_custody import (
     CheckerOutputArtifactResult,
     CheckerOutputBindingRequest,
     CheckerOutputBindingResult,
+    CheckerOutputSlot,
 )
 from app.interfaces.artifacts import (
     ArtifactByteRange,
@@ -33,29 +37,48 @@ from app.modules.actors.models import ActorIdentityLink, ActorProfile
 from app.modules.artifacts.checker_output_bindings import (
     CheckerOutputBindingService,
 )
-from app.modules.artifacts.checker_output_custody import CheckerOutputStoredFacts
+from app.modules.artifacts.api.checker_output_authority import (
+    CheckerOutputCommitmentAuthorityFacts,
+    CheckerOutputStoredFacts,
+)
 from app.modules.artifacts.checker_outputs import CheckerArtifactOutputService
+from app.modules.artifacts.checker_model_evidence import CheckerModelEvidence
 from app.modules.artifacts.models import ArtifactBinding
 from app.modules.artifacts.preparation import (
     ArtifactPreparationService,
     ArtifactScratchManager,
 )
-from app.modules.artifacts.schemas import CheckerOutputArtifactAdmissionRequest
 from app.modules.artifacts.service import artifact_storage_namespace_spec
 from app.modules.checkers.api.output_custody import (
     CheckerOutputReservation,
     CheckerOutputSelector,
     CheckerOutputUnavailable,
 )
-from app.modules.checkers.models import CheckerRun
+from app.modules.model_usage.api import (
+    ModelCallEvidence,
+    ModelCallExecutionFacts,
+    ModelPaidSlotKey,
+    ProjectModelProfile,
+)
+from app.modules.checkers.execution_repository import stored_request
+from app.modules.checkers.models import CheckerRun, ExternalCheckerRegistryEntryRecord
+from app.modules.model_usage.service import ModelCallService
+from app.adapters.auth import checker_model_service_authorization
+from app.modules.authorization.checker_output_authorization import (
+    PreparedCheckerOutputBindingAuthorization,
+    PreparedCheckerOutputWriteAuthorization,
+)
+from app.modules.model_usage.models import ModelUsageEffect
 from tests.artifact_store_helpers import (
     artifact_admission_limit_settings,
     artifact_preparation_limits,
 )
-from tests.checker_output_admission_helpers import (
-    ControlledCheckerOutputAdmissionAuthority,
-    make_checker_output_reservation,
+from tests.checkers_model_calls.test_model_call_transactions_postgresql import (
+    BoundaryPorts,
 )
+from tests.checkers_model_calls.test_public_api import profile_spec
+from tests.checkers.execution.support import provision_post_submit_service
+from tests.checkers.external.support import post_registry_spec
 from tests.projects.unified_policy_fixtures import create_standalone_unified_policy
 from tests.test_artifact_admission import (
     _AllowArtifactAuthority,
@@ -65,15 +88,8 @@ from tests.test_artifact_admission import (
 
 
 def selector_for(reservation: CheckerOutputReservation) -> CheckerOutputSelector:
-    """Select the sole controlled output slot under the reservation's current lease."""
-    assert len(reservation.slots) == 1
-    return CheckerOutputSelector(
-        evaluation=reservation.evaluation,
-        checker_run_id=reservation.checker_run_id,
-        worker_lease_id=reservation.worker_lease_id,
-        worker_lease_generation=reservation.worker_lease_generation,
-        slot_key=reservation.slots[0].key,
-    )
+    """Select the exact call-stable effect role issued by CHECKERS."""
+    return reservation.selector
 
 
 async def byte_stream(*chunks: bytes, observed: list[bytes] | None = None) -> AsyncIterator[bytes]:
@@ -93,7 +109,7 @@ class ControlledReservationState:
     revoked: bool = False
     preflights: list[CheckerOutputSelector] = field(default_factory=list)
     prepares: list[CheckerOutputSelector] = field(default_factory=list)
-    admissions: list[CheckerOutputArtifactAdmissionRequest] = field(default_factory=list)
+    admissions: list[CheckerOutputCommitmentAuthorityFacts] = field(default_factory=list)
     recoveries: list[tuple[CheckerOutputReservation, CheckerOutputStoredFacts]] = field(
         default_factory=list
     )
@@ -108,56 +124,56 @@ class ControlledReservationState:
 
 
 class ControlledReservationPort:
-    """Lock a real run, then return controlled detached CHECKERS owner facts."""
+    """Lock a real call effect, then return controlled detached owner facts."""
 
     def __init__(self, session: AsyncSession, state: ControlledReservationState) -> None:
         self._session = session
         self._state = state
 
     async def resolve(self, selector: CheckerOutputSelector) -> CheckerOutputReservation:
-        """Fence the selected real run before ART acquires any artifact row lock."""
-        checker_run = await self._session.scalar(
-            select(CheckerRun)
-            .where(CheckerRun.id == str(selector.checker_run_id))
+        """Fence the selected call attempt before ART acquires any artifact row lock."""
+        attempt = await self._session.scalar(
+            select(ModelUsageEffect)
+            .where(
+                ModelUsageEffect.id == str(selector.model_call_attempt_id),
+                ModelUsageEffect.checker_slot_id == str(selector.model_call_slot_id),
+            )
             .with_for_update()
             .execution_options(populate_existing=True)
         )
-        if checker_run is None:
+        if attempt is None:
             raise CheckerOutputUnavailable("checker_output_reservation_unavailable")
         self._state.resolved.append(selector)
+        self._state.reservation.select(selector)
         return self._state.reservation
 
 
 class ControlledWriteAuthority:
-    """Test-only exact action authority plus real fixed-service admission proof."""
+    """Record test controls around production prepared fixed-service authority."""
 
     def __init__(
         self,
         session: AsyncSession,
         state: ControlledReservationState,
-        actor_id: UUID,
-        identity_link_id: UUID,
     ) -> None:
         self._state = state
-        self._admission = ControlledCheckerOutputAdmissionAuthority(
-            session,
-            actor_id,
-            identity_link_id,
-        )
+        self._authority = PreparedCheckerOutputWriteAuthorization(session)
 
     async def preflight(self, selector: CheckerOutputSelector) -> None:
         self._state.require_authority()
         self._state.preflights.append(selector)
+        await self._authority.preflight(selector)
 
     async def prepare(self, selector: CheckerOutputSelector) -> None:
         self._state.require_authority()
         self._state.prepares.append(selector)
+        await self._authority.prepare(selector)
 
-    async def consume(self, request: CheckerOutputArtifactAdmissionRequest) -> None:
+    async def consume(self, facts: CheckerOutputCommitmentAuthorityFacts) -> None:
         self._state.require_authority()
-        assert request.reservation == self._state.reservation
-        await self._admission.consume(request)
-        self._state.admissions.append(request)
+        assert facts.reservation == self._state.reservation
+        await self._authority.consume(facts)
+        self._state.admissions.append(facts)
 
     async def consume_existing(
         self,
@@ -166,25 +182,30 @@ class ControlledWriteAuthority:
     ) -> None:
         self._state.require_authority()
         assert reservation == self._state.reservation
+        await self._authority.consume_existing(reservation, facts)
         self._state.recoveries.append((reservation, facts))
 
     def discard(self) -> None:
-        """The controlled seam retains no prepared capability."""
+        """Dispose the production prepared capability."""
+        self._authority.discard()
 
 
 class ControlledBindingAuthority:
-    """Test-only binding authority that records exact verified custody."""
+    """Record test controls around production binding authority."""
 
-    def __init__(self, state: ControlledReservationState) -> None:
+    def __init__(self, session: AsyncSession, state: ControlledReservationState) -> None:
         self._state = state
+        self._authority = PreparedCheckerOutputBindingAuthorization(session)
 
     async def preflight(self, selector: CheckerOutputSelector) -> None:
         self._state.require_authority()
         self._state.preflights.append(selector)
+        await self._authority.preflight(selector)
 
     async def prepare(self, selector: CheckerOutputSelector) -> None:
         self._state.require_authority()
         self._state.prepares.append(selector)
+        await self._authority.prepare(selector)
 
     async def consume(
         self,
@@ -193,10 +214,12 @@ class ControlledBindingAuthority:
     ) -> None:
         self._state.require_authority()
         assert reservation == self._state.reservation
+        await self._authority.consume(reservation, facts)
         self._state.bindings.append((reservation, facts))
 
     def discard(self) -> None:
-        """The controlled seam retains no prepared capability."""
+        """Dispose the production prepared capability."""
+        self._authority.discard()
 
 
 class ObservedStore:
@@ -237,6 +260,11 @@ class ObservedStore:
     async def head(self, provider_object_ref: str, **_kwargs):
         return await self.wrapped.head(provider_object_ref)
 
+    def reset_observations(self) -> None:
+        """Start the response-custody observation window after request evidence setup."""
+        self.puts = 0
+        self.opens = 0
+
 
 @dataclass(slots=True)
 class OutputCustodyHarness:
@@ -255,6 +283,8 @@ class OutputCustodyHarness:
     actor_id: UUID
     identity_link_id: UUID
     policy_bundle: Any
+    model_profile: Any
+    model_ports: BoundaryPorts
 
     @property
     def selector(self) -> CheckerOutputSelector:
@@ -266,6 +296,16 @@ class OutputCustodyHarness:
         selector: CheckerOutputSelector | None = None,
         observed: list[bytes] | None = None,
     ) -> CheckerOutputArtifactRequest:
+        if selector is None and not self.state.preflights:
+            content_sha256 = "sha256:" + hashlib.sha256(b"".join(chunks)).hexdigest()
+            current = self.state.reservation
+            self.state.reservation = current.model_copy(
+                update={
+                    "selector": current.selector.model_copy(
+                        update={"content_sha256": content_sha256}
+                    )
+                }
+            )
         return CheckerOutputArtifactRequest(
             selector=selector or self.selector,
             byte_source=byte_stream(*chunks, observed=observed),
@@ -275,7 +315,7 @@ class OutputCustodyHarness:
         return CheckerOutputBindingService(
             session,
             reservations=ControlledReservationPort(session, self.state),
-            authority=ControlledBindingAuthority(self.state),
+            authority=ControlledBindingAuthority(session, self.state),
             namespace_fingerprint=self.namespace.namespace_fingerprint,
         )
 
@@ -306,7 +346,12 @@ class OutputCustodyHarness:
                     ArtifactBinding.resource_id,
                     ArtifactBinding.put_attempt_id,
                     ArtifactBinding.verification_receipt_id,
-                ).where(ArtifactBinding.resource_type == "checker_run").order_by(ArtifactBinding.id)
+                )
+                .where(
+                    ArtifactBinding.resource_type == "checker_model_call",
+                    ArtifactBinding.logical_role == "model_response",
+                )
+                .order_by(ArtifactBinding.id)
             )
             return [tuple(row) for row in rows]
 
@@ -314,8 +359,10 @@ class OutputCustodyHarness:
         self,
         *,
         maximum_bytes: int = 1024,
+        content_sha256: str | None = None,
     ) -> CheckerOutputReservation:
         """Create a second coherent lineage without changing the active test reservation."""
+        provider_counts = self.store.puts, self.store.opens
         async with self.factory() as session:
             _, _, checker_run_id = await seed_checker_output_relationships(
                 session,
@@ -325,10 +372,272 @@ class OutputCustodyHarness:
             reservation = await make_checker_output_reservation(
                 session,
                 checker_run_id,
+                factory=self.factory,
+                preparation=self.preparation,
+                store=self.store,
+                namespace=self.namespace,
+                settings=self.settings,
+                model_profile=self.model_profile,
+                model_ports=self.model_ports,
                 maximum_bytes=maximum_bytes,
+                content_sha256=content_sha256,
             )
+            await session.commit()
+        self.store.puts, self.store.opens = provider_counts
+        return reservation
+
+
+async def _model_execution(session, checker_run_id: str):
+    run = await session.get(CheckerRun, checker_run_id)
+    assert run is not None
+    request = stored_request(run)
+    return run, request
+
+
+async def _prepare_model_attempt(
+    session: AsyncSession,
+    checker_run_id: str,
+    request_sha256: str,
+    *,
+    model_profile,
+    model_ports: BoundaryPorts,
+):
+    run, request = await _model_execution(session, checker_run_id)
+    registry = await session.scalar(select(ExternalCheckerRegistryEntryRecord).limit(1))
+    assert registry is not None
+    slot = ModelPaidSlotKey(
+        project_id=request.project_id,
+        assignment_id=request.assignment_id,
+        submission_id=request.submission_id,
+        submission_version=request.submission_version,
+        requirement_id="model_evidence",
+        registry_entry_digest=registry.entry_digest,
+        configuration_sha256="sha256:" + hashlib.sha256(b"controlled-configuration").hexdigest(),
+        profile_id=model_profile.profile_id,
+        profile_version=model_profile.spec.profile_version,
+        profile_digest=model_profile.profile_digest,
+    )
+    execution = ModelCallExecutionFacts(
+        project_id=request.project_id,
+        task_id=request.task_id,
+        assignment_id=request.assignment_id,
+        submission_id=request.submission_id,
+        submission_version=request.submission_version,
+        evaluation_request_id=request.evaluation_request_id,
+        evaluation_generation=request.evaluation_generation,
+        checker_run_id=UUID(run.id),
+        worker_lease_id=new_record_id(),
+        worker_lease_generation=1,
+        worker_lease_expires_at=datetime.now(UTC) + timedelta(minutes=5),
+    )
+    authority = await checker_model_service_authorization(session, execution.evaluation_request_id)
+    owner = ModelCallService(
+        session,
+        authority=authority,
+        current_execution=model_ports,
+        evidence=CheckerModelEvidence(session),
+    )
+    attempt = await owner.prepare_attempt(
+        execution,
+        slot,
+        registry_entry_id=UUID(str(registry.id)),
+        request_sha256=request_sha256,
+    )
+    return execution, attempt, owner
+
+
+async def _store_model_request_evidence(
+    *,
+    factory,
+    preparation,
+    store,
+    namespace,
+    settings,
+    reservation: CheckerOutputReservation,
+    request_bytes: bytes,
+) -> ModelCallEvidence:
+    """Store and bind exact model-request evidence through production ART custody."""
+    state = ControlledReservationState(reservation)
+    service = CheckerArtifactOutputService(
+        sessions=factory,
+        reservations=lambda value: ControlledReservationPort(value, state),
+        authority=lambda value: ControlledWriteAuthority(value, state),
+        internal_authority=lambda value: _AllowArtifactAuthority(),
+        verification_authority=lambda value: _AllowArtifactAuthority(),
+        preparation=preparation,
+        store=store,
+        namespace=namespace,
+        settings=settings,
+    )
+    stored = await service.store(
+        CheckerOutputArtifactRequest(reservation.selector, byte_stream(request_bytes))
+    )
+    assert stored.content_id is not None and stored.verification_receipt_id is not None
+    async with factory() as session, session.begin():
+        bound = await CheckerOutputBindingService(
+            session,
+            reservations=ControlledReservationPort(session, state),
+            authority=ControlledBindingAuthority(session, state),
+            namespace_fingerprint=namespace.namespace_fingerprint,
+        ).bind_checker_output(
+            CheckerOutputBindingRequest(
+                reservation.selector,
+                stored.put_attempt_id,
+                stored.verification_receipt_id,
+            )
+        )
+    return ModelCallEvidence(
+        binding_id=bound.binding_id,
+        content_id=bound.content_id,
+        put_attempt_id=bound.put_attempt_id,
+        verification_receipt_id=bound.verification_receipt_id,
+        content_sha256=reservation.selector.content_sha256,
+        byte_count=len(request_bytes),
+    )
+
+
+async def make_checker_output_reservation(
+    session: AsyncSession,
+    checker_run_id: str,
+    *,
+    factory,
+    preparation,
+    store,
+    namespace,
+    settings,
+    model_profile,
+    model_ports: BoundaryPorts,
+    maximum_bytes: int,
+    content_sha256: str | None = None,
+) -> CheckerOutputReservation:
+    """Create a dispatch-reserved call through real request ART custody."""
+    request_bytes = b'{"prompt":"controlled output-custody evidence"}'
+    request_sha256 = "sha256:" + hashlib.sha256(request_bytes).hexdigest()
+    execution, attempt, _ = await _prepare_model_attempt(
+        session,
+        checker_run_id,
+        request_sha256,
+        model_profile=model_profile,
+        model_ports=model_ports,
+    )
+    await session.commit()
+    request_reservation = CheckerOutputReservation(
+        selector=CheckerOutputSelector(
+            paid_slot=attempt.slot_key,
+            task_id=execution.task_id,
+            model_call_slot_id=attempt.slot_id,
+            model_call_attempt_id=attempt.attempt_id,
+            slot_key="model_request",
+            content_sha256=request_sha256,
+            execution=execution,
+        ),
+        slot=CheckerOutputSlot(
+            key="model_request",
+            media_type="application/json",
+            maximum_bytes=model_profile.spec.maximum_request_bytes,
+        ),
+    )
+    evidence = await _store_model_request_evidence(
+        factory=factory,
+        preparation=preparation,
+        store=store,
+        namespace=namespace,
+        settings=settings,
+        reservation=request_reservation,
+        request_bytes=request_bytes,
+    )
+    async with factory() as dispatch_session, dispatch_session.begin():
+        authority = await checker_model_service_authorization(
+            dispatch_session, execution.evaluation_request_id
+        )
+        await ModelCallService(
+            dispatch_session,
+            authority=authority,
+            current_execution=model_ports,
+            evidence=CheckerModelEvidence(dispatch_session),
+        ).reserve_dispatch(execution, attempt, evidence)
+    digest = (
+        content_sha256
+        or "sha256:" + hashlib.sha256(f"{attempt.attempt_id}:model_response".encode()).hexdigest()
+    )
+    return CheckerOutputReservation(
+        selector=CheckerOutputSelector(
+            paid_slot=attempt.slot_key,
+            task_id=execution.task_id,
+            model_call_slot_id=attempt.slot_id,
+            model_call_attempt_id=attempt.attempt_id,
+            slot_key="model_response",
+            content_sha256=digest,
+        ),
+        slot=CheckerOutputSlot(
+            key="model_response",
+            media_type="application/json",
+            maximum_bytes=maximum_bytes,
+        ),
+    )
+
+
+async def _provision_model_policy(factory, namespace, admin_access):
+    """Publish one ordinary policy plus its exact trusted model controls."""
+    await admin_access.signed.grant(admin_access.admin, admin_access.target, role="operator")
+    policy_bundle = await create_standalone_unified_policy(
+        factory,
+        namespace,
+        post_submit_registry_spec=post_registry_spec(),
+    )
+    async with factory() as session:
+        registry = await session.scalar(select(ExternalCheckerRegistryEntryRecord).limit(1))
+        assert registry is not None
+    project_id = policy_bundle[0]["project"]
+    spec = profile_spec(project_id).model_copy(
+        update={"maximum_request_bytes": 1024, "maximum_total_request_bytes": 1024}
+    )
+    response = await admin_access.signed.client.post(
+        f"/api/v1/operations/projects/{project_id}/model-profiles",
+        headers=admin_access.target.headers | {"Idempotency-Key": str(uuid4())},
+        json=spec.model_dump(mode="json"),
+    )
+    assert response.status_code == 201, response.text
+    budget = await admin_access.signed.client.post(
+        f"/api/v1/operations/projects/{project_id}/model-budget-configurations",
+        headers=admin_access.target.headers | {"Idempotency-Key": str(uuid4())},
+        json={
+            "project_id": str(project_id),
+            "configuration_version": 1,
+            "authorized_total_nanodollars": 10_000_000_000,
+            "externally_reconciled_prior_spend_nanodollars": 0,
+            "lifetime_limit_nanodollars": 10_000_000_000,
+        },
+    )
+    assert budget.status_code == 201, budget.text
+    await provision_post_submit_service(factory, ServiceIdentity.CHECKER_POST_SUBMIT)
+    return policy_bundle, ProjectModelProfile.model_validate_json(json.dumps(response.json()))
+
+
+async def _ensure_output_actor(factory):
+    """Reuse the canonical output service actor, creating it only when absent."""
+    async with factory() as session:
+        existing = (
+            await session.execute(
+                select(ActorProfile.id, ActorIdentityLink.id)
+                .join(ActorIdentityLink, ActorIdentityLink.actor_profile_id == ActorProfile.id)
+                .where(
+                    ActorProfile.service_identity == ServiceIdentity.ARTIFACT_CHECKER_OUTPUT.value
+                )
+            )
+        ).one_or_none()
+        if existing is not None:
             await session.rollback()
-            return reservation
+            return tuple(UUID(value) for value in existing)
+        actor_id, identity_link_id = new_record_id(), new_record_id()
+        _add_checker_output_actor(
+            session,
+            actor_id,
+            identity_link_id,
+            subject=f"checker-output-{actor_id}",
+        )
+        await session.commit()
+        return actor_id, identity_link_id
 
 
 @asynccontextmanager
@@ -336,6 +645,7 @@ async def output_custody_harness(
     tmp_path: Path,
     database_url: str,
     *,
+    admin_access,
     provider: str = "local",
     maximum_bytes: int = 1024,
 ) -> AsyncIterator[OutputCustodyHarness]:
@@ -370,52 +680,39 @@ async def output_custody_harness(
     )
     preparation = ArtifactPreparationService(manager)
     try:
-        policy_bundle = await create_standalone_unified_policy(factory, namespace)
+        policy_bundle, model_profile = await _provision_model_policy(
+            factory, namespace, admin_access
+        )
         async with factory() as session:
             _, _, checker_run_id = await seed_checker_output_relationships(
                 session,
                 namespace,
                 policy_bundle=policy_bundle,
             )
-            existing = (
-                await session.execute(
-                    select(ActorProfile.id, ActorIdentityLink.id)
-                    .join(ActorIdentityLink, ActorIdentityLink.actor_profile_id == ActorProfile.id)
-                    .where(
-                        ActorProfile.service_identity
-                        == ServiceIdentity.ARTIFACT_CHECKER_OUTPUT.value
-                    )
-                )
-            ).one_or_none()
-            if existing is None:
-                actor_id, identity_link_id = new_record_id(), new_record_id()
-                _add_checker_output_actor(
-                    session,
-                    actor_id,
-                    identity_link_id,
-                    subject=f"checker-output-{actor_id}",
-                )
-                await session.commit()
-            else:
-                actor_id, identity_link_id = (UUID(value) for value in existing)
-                await session.rollback()
+        actor_id, identity_link_id = await _ensure_output_actor(factory)
+        model_ports = BoundaryPorts()
+        async with factory() as session:
             reservation = await make_checker_output_reservation(
                 session,
                 checker_run_id,
+                factory=factory,
+                preparation=preparation,
+                store=store,
+                namespace=namespace,
+                settings=settings,
+                model_profile=model_profile,
+                model_ports=model_ports,
                 maximum_bytes=maximum_bytes,
             )
-            await session.rollback()
+            await session.commit()
+        store.reset_observations()
         state = ControlledReservationState(reservation)
         service = CheckerArtifactOutputService(
             sessions=factory,
             reservations=lambda session: ControlledReservationPort(session, state),
-            authority=lambda session: ControlledWriteAuthority(
-                session,
-                state,
-                actor_id,
-                identity_link_id,
-            ),
+            authority=lambda session: ControlledWriteAuthority(session, state),
             internal_authority=lambda session: _AllowArtifactAuthority(),
+            verification_authority=lambda session: _AllowArtifactAuthority(),
             preparation=preparation,
             store=store,
             namespace=namespace,
@@ -435,6 +732,8 @@ async def output_custody_harness(
             actor_id=actor_id,
             identity_link_id=identity_link_id,
             policy_bundle=policy_bundle,
+            model_profile=model_profile,
+            model_ports=model_ports,
         )
     finally:
         manager.close()

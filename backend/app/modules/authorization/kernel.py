@@ -24,7 +24,7 @@ from app.modules.authorization.catalogue import (
     PermissionId,
 )
 from app.modules.authorization.domain.guide_manager_resources import guide_manager_resource_denial
-from app.modules.authorization.domain import adapter_bindings, artifact_operator, checker_registry, checker_retry, contribution_policies, guide_compilation as compilation, post_submit_deliveries
+from app.modules.authorization.domain import adapter_bindings, artifact_operator, model_usage as checker_models, checker_registry, checker_retry, contribution_policies, guide_compilation as compilation, post_submit_deliveries
 from app.modules.authorization.domain.action_groups import (
     GUIDE_BOUND_PROJECT_MANAGER_ACTIONS as _GUIDE_BOUND_PROJECT_MANAGER_ACTIONS,
     CONTEXT_DIGEST_ACTIONS,
@@ -152,7 +152,7 @@ _ADMIN_ACTIONS = frozenset(
         ActionId.PROJECT_PRE_SUBMIT_CHECKER_POLICY_READ,
         ActionId.PROJECT_ACTIVE_GUIDE_READ,
     }
-) | adapter_bindings.ADAPTER_BINDING_READ_ACTIONS | contribution_policies.CONTRIBUTION_POLICY_READ_ACTIONS | checker_registry.CHECKER_REGISTRY_ACTIONS | checker_retry.CHECKER_RETRY_ACTIONS | post_submit_deliveries.POST_SUBMIT_DELIVERY_MUTATION_ACTIONS | artifact_operator.ARTIFACT_OPERATOR_ACTIONS
+) | adapter_bindings.ADAPTER_BINDING_READ_ACTIONS | contribution_policies.CONTRIBUTION_POLICY_READ_ACTIONS | checker_registry.CHECKER_REGISTRY_ACTIONS | checker_models.MODEL_ADMIN_ACTIONS | checker_retry.CHECKER_RETRY_ACTIONS | post_submit_deliveries.POST_SUBMIT_DELIVERY_MUTATION_ACTIONS | artifact_operator.ARTIFACT_OPERATOR_ACTIONS
 _SERIALIZED_ADMIN_READS = frozenset(
     {
         ActionId.ACTOR_PROFILE_READ,
@@ -178,7 +178,7 @@ _ADMIN_MUTATIONS = frozenset(
         ActionId.ACTOR_IDENTITY_LINK_REVOKE,
         ActionId.ACTOR_IDENTITY_LINK_REACTIVATE,
     }
-) | PROJECT_SCOPED_ADMIN_MUTATIONS | checker_registry.CHECKER_REGISTRY_MUTATION_ACTIONS | checker_retry.CHECKER_RETRY_ACTIONS | post_submit_deliveries.POST_SUBMIT_DELIVERY_MUTATION_ACTIONS | {ActionId.ARTIFACT_VERIFICATION_JOB_RETRY}
+) | PROJECT_SCOPED_ADMIN_MUTATIONS | checker_registry.CHECKER_REGISTRY_MUTATION_ACTIONS | checker_models.MODEL_ADMIN_ACTIONS | checker_retry.CHECKER_RETRY_ACTIONS | post_submit_deliveries.POST_SUBMIT_DELIVERY_MUTATION_ACTIONS | {ActionId.ARTIFACT_VERIFICATION_JOB_RETRY}
 
 def _prepared_admin_role_locker(action_id):
     """Select the only supported prepared admin-role authority locker."""
@@ -201,14 +201,8 @@ async def prelock_serialized_admin_read_actor(
         )
 
 _ARTIFACT_INTERNAL_RESOURCES = {
-    ActionId.ARTIFACT_GUIDE_SOURCE_READ: (
-        "guide_source_read",
-        GuideSourceReadResourceContext,
-    ),
-    ActionId.ARTIFACT_PRE_SUBMIT_CHECKER_INPUT_MATERIALIZE: (
-        "pre_submit_checker_input",
-        PreSubmitCheckerInputResourceContext,
-    ),
+    ActionId.ARTIFACT_GUIDE_SOURCE_READ: ("guide_source_read", GuideSourceReadResourceContext),
+    ActionId.ARTIFACT_PRE_SUBMIT_CHECKER_INPUT_MATERIALIZE: ("pre_submit_checker_input", PreSubmitCheckerInputResourceContext),
     ActionId.ARTIFACT_SUBMISSION_BINDING_CREATE: ("submission_binding", SubmissionBindingResourceContext),
     ActionId.ARTIFACT_PUT_ATTEMPT_RESOLVE: (
         "artifact_put_attempt",
@@ -253,14 +247,14 @@ _ADMIN_EXPECTED_RESOURCES = MappingProxyType(
         ActionId.PROJECT_GUIDE_SUFFICIENCY_REPORT_READ: ProjectDiagnosticReadResourceContext,
         ActionId.PROJECT_SUBMISSION_ARTIFACT_POLICY_LIST: ProjectDiagnosticReadResourceContext,
         ActionId.PROJECT_SUBMISSION_ARTIFACT_POLICY_READ: ProjectDiagnosticReadResourceContext,
-        ActionId.PROJECT_EFFECTIVE_SUBMISSION_ARTIFACT_POLICY_READ: (
-            ProjectPolicyReadResourceContext
-        ),
+        ActionId.PROJECT_EFFECTIVE_SUBMISSION_ARTIFACT_POLICY_READ: ProjectPolicyReadResourceContext,
         ActionId.PROJECT_PRE_SUBMIT_CHECKER_POLICY_READ: ProjectPolicyReadResourceContext,
         ActionId.PROJECT_ACTIVE_GUIDE_READ: ProjectActiveGuideReadResourceContext,
         **adapter_bindings.ADAPTER_BINDING_RESOURCE_BY_ACTION,
         **contribution_policies.CONTRIBUTION_POLICY_RESOURCE_BY_ACTION, **checker_registry.CHECKER_REGISTRY_RESOURCE_BY_ACTION,
-        ActionId.OPERATIONS_CHECKER_RETRY: checker_retry.CheckerRetryResourceContext, **post_submit_deliveries.POST_SUBMIT_DELIVERY_RESOURCE_BY_ACTION, **artifact_operator.ARTIFACT_OPERATOR_RESOURCE_BY_ACTION,
+        **checker_models.MODEL_ADMIN_RESOURCE_BY_ACTION,
+        ActionId.OPERATIONS_CHECKER_RETRY: checker_retry.CheckerRetryResourceContext, **post_submit_deliveries.POST_SUBMIT_DELIVERY_RESOURCE_BY_ACTION,
+        **artifact_operator.ARTIFACT_OPERATOR_RESOURCE_BY_ACTION,
         **PROJECT_MUTATION_RESOURCE_BY_ACTION,
         **GUIDE_PROPOSAL_RESOURCE_BY_ACTION,
     }
@@ -956,7 +950,7 @@ class AuthorizationService:
                 adapter_bindings.finance_authority_grant_filters(action.action_id)
             )
         grant_filters.update({**contribution_policies.policy_finance_grant_filters(action.action_id), **checker_registry.checker_registry_grant_filters(action.action_id)})
-        if action.action_id in checker_retry.CHECKER_RETRY_ACTIONS | post_submit_deliveries.POST_SUBMIT_DELIVERY_MUTATION_ACTIONS | artifact_operator.ARTIFACT_OPERATOR_ACTIONS:
+        if action.action_id in checker_retry.CHECKER_RETRY_ACTIONS | post_submit_deliveries.POST_SUBMIT_DELIVERY_MUTATION_ACTIONS | checker_models.MODEL_ADMIN_ACTIONS | artifact_operator.ARTIFACT_OPERATOR_ACTIONS:
             grant_filters["allowed_roles"] = (AdminRole.OPERATOR,)
         matched = await self._admin.find_effective_grant(
             context.actor_profile_id,
@@ -1042,6 +1036,11 @@ class AuthorizationService:
                 return AuthorizationDenialCode.RESOURCE_NOT_FOUND
         elif type(resource) is post_submit_deliveries.PostSubmitDeliveryResourceContext and not await self._admin.project_exists(resource.scope_project_id, for_update=True):
             return AuthorizationDenialCode.RESOURCE_NOT_FOUND
+        elif type(resource) is checker_models.ProjectModelAdministrationResourceContext:
+            if resource.actor_profile_id != context.actor_profile_id:
+                return AuthorizationDenialCode.RESOURCE_GUARD_DENIED
+            if not await self._admin.project_exists(resource.project_id, for_update=True):
+                return AuthorizationDenialCode.RESOURCE_NOT_FOUND
         elif isinstance(
             resource,
             (AdminRoleGrantCollectionResourceContext, ActorAdminRoleGrantHistoryResourceContext),

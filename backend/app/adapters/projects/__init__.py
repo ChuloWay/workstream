@@ -195,10 +195,15 @@ def project_guide_proposal_service(
     ExternalCheckerCapabilityProjection,
 ]:
     """Compose the sole proposal owner with explicit authority."""
-    from app.adapters.checkers import external_checker_registry_reader
+    from app.adapters.checkers import external_checker_registry_reader, model_profile_reader
     from app.modules.projects.guide_compilation.proposal_service import GuideProposalService
 
-    return GuideProposalService(session, authorization, external_checker_registry_reader(session))
+    return GuideProposalService(
+        session,
+        authorization,
+        external_checker_registry_reader(session),
+        model_profile_reader(session),
+    )
 
 
 def project_guide_correction_dispatch(
@@ -270,7 +275,7 @@ def project_guide_activation_port(
     authorization: GuideActivationAuthorizationPort | None = None,
 ) -> GuideActivationPort[ActorIdentityFacts]:
     """Compose canonical activation with explicit CON validation and authority."""
-    from app.adapters.checkers import external_checker_registry_reader
+    from app.adapters.checkers import external_checker_registry_reader, model_profile_reader
     from app.modules.projects.guide_activation.service import GuideActivationService
 
     return GuideActivationService(
@@ -278,6 +283,7 @@ def project_guide_activation_port(
         contribution=contribution,
         authorization=authorization,
         registry=external_checker_registry_reader(session),
+        profiles=model_profile_reader(session),
     )
 
 
@@ -287,13 +293,14 @@ def project_guide_activation_readiness_port(
     contribution: GuideContributionPolicyPort,
 ) -> GuideActivationReadinessPort:
     """Compose activation's own conditions for a dry run; no activation authority is bound."""
-    from app.adapters.checkers import external_checker_registry_reader
+    from app.adapters.checkers import external_checker_registry_reader, model_profile_reader
     from app.modules.projects.guide_activation.service import GuideActivationService
 
     return GuideActivationService(
         session,
         contribution=contribution,
         registry=external_checker_registry_reader(session),
+        profiles=model_profile_reader(session),
     )
 
 

@@ -30,6 +30,19 @@ class PermissionId(StrEnum):
     CHECKER_PRE_SUBMIT_FINALIZE = "checker.pre_submit.finalize"
     CHECKER_POST_SUBMIT_EXECUTE = "checker.post_submit.execute"
     CHECKER_POST_SUBMIT_FINALIZE = "checker.post_submit.finalize"
+    CHECKER_MODEL_CALL_PREPARE = "checker.model_call.prepare"
+    CHECKER_MODEL_CALL_DISPATCH = "checker.model_call.dispatch"
+    CHECKER_MODEL_CALL_RECOVER = "checker.model_call.recover"
+    CHECKER_MODEL_CALL_OBSERVE = "checker.model_call.observe"
+    CHECKER_MODEL_CALL_COMPLETE = "checker.model_call.complete"
+    CHECKER_MODEL_CALL_GRANT = "checker.model_call.grant"
+    PROJECT_GUIDE_COMPILATION_MODEL_PREPARE = "project.guide_compilation.model.prepare"
+    PROJECT_GUIDE_COMPILATION_MODEL_DISPATCH = "project.guide_compilation.model.dispatch"
+    PROJECT_GUIDE_COMPILATION_MODEL_OBSERVE = "project.guide_compilation.model.observe"
+    PROJECT_GUIDE_COMPILATION_MODEL_COMPLETE = "project.guide_compilation.model.complete"
+    PROJECT_MODEL_PROFILE_MANAGE = "project.model_profile.manage"
+    PROJECT_MODEL_BUDGET_MANAGE = "project.model_budget.manage"
+    PROJECT_MODEL_CALL_RECOVERY_CHILD_AUTHORIZE = "project.model_call.recovery_child.authorize"
     OUTBOX_DISPATCH = "outbox.dispatch"
     ACTOR_SERVICE_PROVISION = "actor.service.provision"
     ADMIN_ROLE_READ = "admin_role.read"
@@ -156,6 +169,19 @@ class ActionId(StrEnum):
     CHECKER_PRE_SUBMIT_FINALIZE = "checker.pre_submit.finalize"
     CHECKER_POST_SUBMIT_EXECUTE = "checker.post_submit.execute"
     CHECKER_POST_SUBMIT_FINALIZE = "checker.post_submit.finalize"
+    CHECKER_MODEL_CALL_PREPARE = "checker.model_call.prepare"
+    CHECKER_MODEL_CALL_DISPATCH = "checker.model_call.dispatch"
+    CHECKER_MODEL_CALL_RECOVER = "checker.model_call.recover"
+    CHECKER_MODEL_CALL_OBSERVE = "checker.model_call.observe"
+    CHECKER_MODEL_CALL_COMPLETE = "checker.model_call.complete"
+    CHECKER_MODEL_CALL_GRANT = "checker.model_call.grant"
+    PROJECT_GUIDE_COMPILATION_MODEL_PREPARE = "project.guide_compilation.model.prepare"
+    PROJECT_GUIDE_COMPILATION_MODEL_DISPATCH = "project.guide_compilation.model.dispatch"
+    PROJECT_GUIDE_COMPILATION_MODEL_OBSERVE = "project.guide_compilation.model.observe"
+    PROJECT_GUIDE_COMPILATION_MODEL_COMPLETE = "project.guide_compilation.model.complete"
+    PROJECT_MODEL_PROFILE_PROVISION = "project.model_profile.provision"
+    PROJECT_MODEL_BUDGET_CONFIGURE = "project.model_budget.configure"
+    PROJECT_MODEL_CALL_RECOVERY_CHILD_AUTHORIZE = "project.model_call.recovery_child.authorize"
     OUTBOX_DISPATCH = "outbox.dispatch"
     ACTOR_SERVICE_PROVISION = "actor.service.provision"
     PROJECT_CONTRIBUTOR_CANDIDATE_LIST = "project.contributor_candidate.list"
@@ -288,46 +314,75 @@ class ActionId(StrEnum):
     PROJECT_SUBMISSION_BUNDLE_PREPARATION_LIST = "project.submission_bundle_preparation.list"
     CONTRIBUTION_POLICY_LIST = "contribution.policy.list"
 
-CONTRIBUTION_READ_ACTIONS = frozenset({ActionId.CONTRIBUTION_READ_SELF, ActionId.CONTRIBUTION_READ_PROJECT})
+
+CONTRIBUTION_READ_ACTIONS = frozenset(
+    {ActionId.CONTRIBUTION_READ_SELF, ActionId.CONTRIBUTION_READ_PROJECT}
+)
 # Own-work reads under a current exact-project Submitter grant.
-CONTRIBUTOR_WORK_READ_ACTIONS = frozenset({
-    ActionId.ACTOR_ASSIGNMENT_LIST,
-    ActionId.ACTOR_SUBMISSION_LIST,
-    ActionId.ACTOR_WORK_SUMMARY_READ,
-    ActionId.TASK_SUBMISSION_BUNDLE_PREPARATION_LIST,
-    ActionId.TASK_SUBMISSION_BUNDLE_PREPARATION_READ,
-})
+CONTRIBUTOR_WORK_READ_ACTIONS = frozenset(
+    {
+        ActionId.ACTOR_ASSIGNMENT_LIST,
+        ActionId.ACTOR_SUBMISSION_LIST,
+        ActionId.ACTOR_WORK_SUMMARY_READ,
+        ActionId.TASK_SUBMISSION_BUNDLE_PREPARATION_LIST,
+        ActionId.TASK_SUBMISSION_BUNDLE_PREPARATION_READ,
+    }
+)
 CONTRIBUTOR_READ_ACTIONS = CONTRIBUTOR_WORK_READ_ACTIONS | {ActionId.ACTOR_PROJECT_LIST}
 # Project-wide Project Manager reads; the Finance policy version list shares their evaluator.
-PROJECT_GUIDE_READ_ACTIONS = frozenset({ActionId.PROJECT_GUIDE_LIST, ActionId.PROJECT_GUIDE_READ,
-    ActionId.PROJECT_GUIDE_ACTIVATION_READINESS_READ, ActionId.PROJECT_GUIDE_DOCUMENT_READ})
-PROJECT_WORK_READ_ACTIONS = frozenset({ActionId.PROJECT_SUBMISSION_LIST, ActionId.PROJECT_ASSIGNMENT_LIST,
-    ActionId.PROJECT_SUMMARY_READ, ActionId.PROJECT_TASK_IMPORT_BATCH_LIST,
-    ActionId.PROJECT_SUBMISSION_BUNDLE_PREPARATION_LIST})
-PROJECT_MANAGEMENT_READ_ACTIONS = PROJECT_GUIDE_READ_ACTIONS | PROJECT_WORK_READ_ACTIONS | {ActionId.CONTRIBUTION_POLICY_LIST}
+PROJECT_GUIDE_READ_ACTIONS = frozenset(
+    {
+        ActionId.PROJECT_GUIDE_LIST,
+        ActionId.PROJECT_GUIDE_READ,
+        ActionId.PROJECT_GUIDE_ACTIVATION_READINESS_READ,
+        ActionId.PROJECT_GUIDE_DOCUMENT_READ,
+    }
+)
+PROJECT_WORK_READ_ACTIONS = frozenset(
+    {
+        ActionId.PROJECT_SUBMISSION_LIST,
+        ActionId.PROJECT_ASSIGNMENT_LIST,
+        ActionId.PROJECT_SUMMARY_READ,
+        ActionId.PROJECT_TASK_IMPORT_BATCH_LIST,
+        ActionId.PROJECT_SUBMISSION_BUNDLE_PREPARATION_LIST,
+    }
+)
+PROJECT_MANAGEMENT_READ_ACTIONS = (
+    PROJECT_GUIDE_READ_ACTIONS | PROJECT_WORK_READ_ACTIONS | {ActionId.CONTRIBUTION_POLICY_LIST}
+)
 
-HISTORY_READ_ACTIONS = frozenset({
-    ActionId.TASK_SUBMISSION_LIST,
-    ActionId.SUBMISSION_READ,
-    ActionId.SUBMISSION_CHECKER_RUN_LIST,
-    ActionId.CHECKER_RUN_READ,
-    ActionId.PROJECT_TASK_SUBMISSION_LIST,
-    ActionId.PROJECT_SUBMISSION_READ,
-    ActionId.PROJECT_SUBMISSION_CHECKER_RUN_LIST,
-    ActionId.PROJECT_CHECKER_RUN_READ,
-})
+HISTORY_READ_ACTIONS = frozenset(
+    {
+        ActionId.TASK_SUBMISSION_LIST,
+        ActionId.SUBMISSION_READ,
+        ActionId.SUBMISSION_CHECKER_RUN_LIST,
+        ActionId.CHECKER_RUN_READ,
+        ActionId.PROJECT_TASK_SUBMISSION_LIST,
+        ActionId.PROJECT_SUBMISSION_READ,
+        ActionId.PROJECT_SUBMISSION_CHECKER_RUN_LIST,
+        ActionId.PROJECT_CHECKER_RUN_READ,
+    }
+)
 
-TASK_LOCKED_CONTEXT_READ_ACTIONS = frozenset({
-    ActionId.PROJECT_TASK_LOCKED_CONTEXT_READ, ActionId.OPERATIONS_TASK_LOCKED_CONTEXT_READ,
-    ActionId.AUDIT_TASK_LOCKED_CONTEXT_READ,
-})
-TASK_CONCEALED_READ_ACTIONS = TASK_LOCKED_CONTEXT_READ_ACTIONS | frozenset({
-    ActionId.TASK_GUIDE_READ,
-    ActionId.TASK_WORK_CONTEXT_READ,
-    ActionId.AUDIT_TASK_EVIDENCE_READ,
-    ActionId.TASK_READ, ActionId.TASK_SUBMISSION_REQUIREMENTS_READ,
-    ActionId.PROJECT_TASK_READ, ActionId.PROJECT_TASK_SUBMISSION_REQUIREMENTS_READ,
-})
+TASK_LOCKED_CONTEXT_READ_ACTIONS = frozenset(
+    {
+        ActionId.PROJECT_TASK_LOCKED_CONTEXT_READ,
+        ActionId.OPERATIONS_TASK_LOCKED_CONTEXT_READ,
+        ActionId.AUDIT_TASK_LOCKED_CONTEXT_READ,
+    }
+)
+TASK_CONCEALED_READ_ACTIONS = TASK_LOCKED_CONTEXT_READ_ACTIONS | frozenset(
+    {
+        ActionId.TASK_GUIDE_READ,
+        ActionId.TASK_WORK_CONTEXT_READ,
+        ActionId.AUDIT_TASK_EVIDENCE_READ,
+        ActionId.TASK_READ,
+        ActionId.TASK_SUBMISSION_REQUIREMENTS_READ,
+        ActionId.PROJECT_TASK_READ,
+        ActionId.PROJECT_TASK_SUBMISSION_REQUIREMENTS_READ,
+    }
+)
+
 
 @unique
 class ActionOwner(StrEnum):
@@ -339,6 +394,7 @@ class ActionOwner(StrEnum):
     PILOT_02A = "PILOT-02A"
     PILOT_02B = "PILOT-02B"
     PILOT_04 = "PILOT-04"
+    PILOT_05 = "PILOT-05"
     PILOT_08 = "PILOT-08"
     PILOT_10 = "PILOT-10"
     PILOT_READ_2 = "PILOT-READ-2"
@@ -444,52 +500,140 @@ _CONTRIBUTION_POLICY_ACTION_IDS = (
 
 
 ACTION_DEFINITIONS = (
-    _active(ActionId.ACTOR_PROJECT_LIST, PermissionId.ACTOR_PROFILE_READ_SELF, ActionOwner.PILOT_READ_2),
+    _active(
+        ActionId.ACTOR_PROJECT_LIST, PermissionId.ACTOR_PROFILE_READ_SELF, ActionOwner.PILOT_READ_2
+    ),
     *(
         _active(action, PermissionId.SUBMISSION_READ_OWN, ActionOwner.PILOT_READ_2)
         for action in sorted(CONTRIBUTOR_WORK_READ_ACTIONS)
     ),
-    *(_active(a, PermissionId.PROJECT_GUIDE_MANAGE, ActionOwner.PILOT_READ_3) for a in sorted(PROJECT_GUIDE_READ_ACTIONS)),
-    *(_active(a, PermissionId.PROJECT_TASK_MANAGE, ActionOwner.PILOT_READ_3) for a in sorted(PROJECT_WORK_READ_ACTIONS)),
-    _active(ActionId.CONTRIBUTION_POLICY_LIST, PermissionId.COMPENSATION_POLICY_MANAGE, ActionOwner.PILOT_READ_3),
-    _active(ActionId.CONTRIBUTION_READ_SELF, PermissionId.CONTRIBUTION_READ_SELF, ActionOwner.PILOT_10),
-    _active(ActionId.CONTRIBUTION_READ_PROJECT, PermissionId.CONTRIBUTION_READ_PROJECT, ActionOwner.PILOT_10),
-    _active(ActionId.TASK_POST_SUBMIT_ROUTE, PermissionId.TASK_POST_SUBMIT_ROUTE, ActionOwner.ARCH_04E2),
-    _active(ActionId.TASK_ASSIGNMENT_AUTHORITY_RECONCILE, PermissionId.TASK_ASSIGNMENT_AUTHORITY_RECONCILE, ActionOwner.ARCH_03C1),
+    *(
+        _active(a, PermissionId.PROJECT_GUIDE_MANAGE, ActionOwner.PILOT_READ_3)
+        for a in sorted(PROJECT_GUIDE_READ_ACTIONS)
+    ),
+    *(
+        _active(a, PermissionId.PROJECT_TASK_MANAGE, ActionOwner.PILOT_READ_3)
+        for a in sorted(PROJECT_WORK_READ_ACTIONS)
+    ),
+    _active(
+        ActionId.CONTRIBUTION_POLICY_LIST,
+        PermissionId.COMPENSATION_POLICY_MANAGE,
+        ActionOwner.PILOT_READ_3,
+    ),
+    _active(
+        ActionId.CONTRIBUTION_READ_SELF, PermissionId.CONTRIBUTION_READ_SELF, ActionOwner.PILOT_10
+    ),
+    _active(
+        ActionId.CONTRIBUTION_READ_PROJECT,
+        PermissionId.CONTRIBUTION_READ_PROJECT,
+        ActionOwner.PILOT_10,
+    ),
+    _active(
+        ActionId.TASK_POST_SUBMIT_ROUTE, PermissionId.TASK_POST_SUBMIT_ROUTE, ActionOwner.ARCH_04E2
+    ),
+    _active(
+        ActionId.TASK_ASSIGNMENT_AUTHORITY_RECONCILE,
+        PermissionId.TASK_ASSIGNMENT_AUTHORITY_RECONCILE,
+        ActionOwner.ARCH_03C1,
+    ),
     _active(ActionId.TASK_REVISION_EXPIRE, PermissionId.TASK_REVISION_EXPIRE, ActionOwner.PILOT_08),
-    _active(ActionId.TASK_REVISION_RECOVER, PermissionId.TASK_REVISION_RECOVER, ActionOwner.PILOT_08),
+    _active(
+        ActionId.TASK_REVISION_RECOVER, PermissionId.TASK_REVISION_RECOVER, ActionOwner.PILOT_08
+    ),
     _active(ActionId.OUTBOX_DISPATCH, PermissionId.OUTBOX_DISPATCH, ActionOwner.AUTH_OUTBOX_01),
     _active(
         ActionId.ACTOR_PROFILE_READ_SELF, PermissionId.ACTOR_PROFILE_READ_SELF, ActionOwner.AUTH_07B
     ),
-    _active(ActionId.ACTOR_PROFILE_UPDATE_SELF, PermissionId.ACTOR_PROFILE_UPDATE_SELF, ActionOwner.AUTH_07B),
-    _active(ActionId.AUTHORIZATION_PERMISSION_CATALOGUE_READ, PermissionId.ADMIN_ROLE_READ, ActionOwner.AUTH_08),
-    _active(ActionId.AUTHORIZATION_ADMIN_ROLE_DEFINITIONS_READ, PermissionId.ADMIN_ROLE_READ, ActionOwner.AUTH_08),
+    _active(
+        ActionId.ACTOR_PROFILE_UPDATE_SELF,
+        PermissionId.ACTOR_PROFILE_UPDATE_SELF,
+        ActionOwner.AUTH_07B,
+    ),
+    _active(
+        ActionId.AUTHORIZATION_PERMISSION_CATALOGUE_READ,
+        PermissionId.ADMIN_ROLE_READ,
+        ActionOwner.AUTH_08,
+    ),
+    _active(
+        ActionId.AUTHORIZATION_ADMIN_ROLE_DEFINITIONS_READ,
+        PermissionId.ADMIN_ROLE_READ,
+        ActionOwner.AUTH_08,
+    ),
     _active(ActionId.ADMIN_ROLE_GRANT_LIST, PermissionId.ADMIN_ROLE_READ, ActionOwner.AUTH_08),
-    _active(ActionId.ACTOR_ADMIN_ROLE_GRANT_HISTORY_READ, PermissionId.ADMIN_ROLE_READ, ActionOwner.AUTH_08),
+    _active(
+        ActionId.ACTOR_ADMIN_ROLE_GRANT_HISTORY_READ,
+        PermissionId.ADMIN_ROLE_READ,
+        ActionOwner.AUTH_08,
+    ),
     _active(ActionId.ADMIN_ROLE_GRANT_ISSUE, PermissionId.ADMIN_ROLE_GRANT, ActionOwner.AUTH_08),
     _active(ActionId.ADMIN_ROLE_GRANT_REVOKE, PermissionId.ADMIN_ROLE_REVOKE, ActionOwner.AUTH_08),
-    _active(ActionId.ADMIN_ROLE_GRANT_BOOTSTRAP, PermissionId.ADMIN_ROLE_GRANT, ActionOwner.AUTH_08),
+    _active(
+        ActionId.ADMIN_ROLE_GRANT_BOOTSTRAP, PermissionId.ADMIN_ROLE_GRANT, ActionOwner.AUTH_08
+    ),
     _active(ActionId.ACTOR_PROFILE_READ, PermissionId.ACTOR_PROFILE_READ_ANY, ActionOwner.AUTH_09C),
-    _active(ActionId.ACTOR_PROFILE_SUSPEND, PermissionId.ACTOR_PROFILE_SUSPEND, ActionOwner.AUTH_09D_A),
-    _active(ActionId.ACTOR_PROFILE_REACTIVATE, PermissionId.ACTOR_PROFILE_REACTIVATE, ActionOwner.AUTH_09D_A),
-    _active(ActionId.ACTOR_PROFILE_DEACTIVATE, PermissionId.ACTOR_PROFILE_DEACTIVATE, ActionOwner.AUTH_09D_A),
-    _active(ActionId.ACTOR_IDENTITY_LINK_READ, PermissionId.ACTOR_IDENTITY_LINK_READ, ActionOwner.AUTH_09C),
-    _active(ActionId.ACTOR_IDENTITY_LINK_REVOKE, PermissionId.ACTOR_IDENTITY_LINK_REVOKE, ActionOwner.AUTH_09D_B),
+    _active(
+        ActionId.ACTOR_PROFILE_SUSPEND, PermissionId.ACTOR_PROFILE_SUSPEND, ActionOwner.AUTH_09D_A
+    ),
+    _active(
+        ActionId.ACTOR_PROFILE_REACTIVATE,
+        PermissionId.ACTOR_PROFILE_REACTIVATE,
+        ActionOwner.AUTH_09D_A,
+    ),
+    _active(
+        ActionId.ACTOR_PROFILE_DEACTIVATE,
+        PermissionId.ACTOR_PROFILE_DEACTIVATE,
+        ActionOwner.AUTH_09D_A,
+    ),
+    _active(
+        ActionId.ACTOR_IDENTITY_LINK_READ,
+        PermissionId.ACTOR_IDENTITY_LINK_READ,
+        ActionOwner.AUTH_09C,
+    ),
+    _active(
+        ActionId.ACTOR_IDENTITY_LINK_REVOKE,
+        PermissionId.ACTOR_IDENTITY_LINK_REVOKE,
+        ActionOwner.AUTH_09D_B,
+    ),
     _active(
         ActionId.ACTOR_IDENTITY_LINK_REACTIVATE,
         PermissionId.ACTOR_IDENTITY_LINK_REACTIVATE,
         ActionOwner.AUTH_09D_B,
     ),
-    _active(ActionId.ACTOR_SERVICE_PROVISION, PermissionId.ACTOR_SERVICE_PROVISION, ActionOwner.AUTH_09B),
-    _active(ActionId.PROJECT_CONTRIBUTOR_CANDIDATE_LIST, PermissionId.PROJECT_ROLE_GRANT_MANAGE, ActionOwner.AUTH_10B),
-    _active(ActionId.PROJECT_ROLE_GRANT_LIST, PermissionId.PROJECT_ROLE_GRANT_READ, ActionOwner.AUTH_10B),
-    _active(ActionId.PROJECT_ROLE_GRANT_READ, PermissionId.PROJECT_ROLE_GRANT_READ, ActionOwner.AUTH_10B),
-    _active(ActionId.PROJECT_ROLE_GRANT_ISSUE, PermissionId.PROJECT_ROLE_GRANT_MANAGE, ActionOwner.AUTH_10C),
-    _active(ActionId.PROJECT_ROLE_GRANT_REVOKE, PermissionId.PROJECT_ROLE_GRANT_MANAGE, ActionOwner.AUTH_10C),
+    _active(
+        ActionId.ACTOR_SERVICE_PROVISION, PermissionId.ACTOR_SERVICE_PROVISION, ActionOwner.AUTH_09B
+    ),
+    _active(
+        ActionId.PROJECT_CONTRIBUTOR_CANDIDATE_LIST,
+        PermissionId.PROJECT_ROLE_GRANT_MANAGE,
+        ActionOwner.AUTH_10B,
+    ),
+    _active(
+        ActionId.PROJECT_ROLE_GRANT_LIST, PermissionId.PROJECT_ROLE_GRANT_READ, ActionOwner.AUTH_10B
+    ),
+    _active(
+        ActionId.PROJECT_ROLE_GRANT_READ, PermissionId.PROJECT_ROLE_GRANT_READ, ActionOwner.AUTH_10B
+    ),
+    _active(
+        ActionId.PROJECT_ROLE_GRANT_ISSUE,
+        PermissionId.PROJECT_ROLE_GRANT_MANAGE,
+        ActionOwner.AUTH_10C,
+    ),
+    _active(
+        ActionId.PROJECT_ROLE_GRANT_REVOKE,
+        PermissionId.PROJECT_ROLE_GRANT_MANAGE,
+        ActionOwner.AUTH_10C,
+    ),
     _active(ActionId.PROJECT_READ, PermissionId.PROJECT_READ, ActionOwner.AUTH_11B),
-    _active(ActionId.ACTOR_AUTHORIZATION_CONTEXT_READ, PermissionId.ACTOR_PROFILE_READ_SELF, ActionOwner.AUTH_11B),
-    _active(ActionId.PROJECT_SETUP_RUN_READ, PermissionId.PROJECT_SETUP_DIAGNOSTIC_READ, ActionOwner.AUTH_11C1),
+    _active(
+        ActionId.ACTOR_AUTHORIZATION_CONTEXT_READ,
+        PermissionId.ACTOR_PROFILE_READ_SELF,
+        ActionOwner.AUTH_11B,
+    ),
+    _active(
+        ActionId.PROJECT_SETUP_RUN_READ,
+        PermissionId.PROJECT_SETUP_DIAGNOSTIC_READ,
+        ActionOwner.AUTH_11C1,
+    ),
     _active(
         ActionId.PROJECT_GUIDE_SUFFICIENCY_REPORT_LIST,
         PermissionId.PROJECT_SETUP_DIAGNOSTIC_READ,
@@ -524,7 +668,11 @@ ACTION_DEFINITIONS = (
     _active(ActionId.PROJECT_CREATE, PermissionId.PROJECT_CREATE, ActionOwner.AUTH_12C),
     _active(ActionId.PROJECT_GUIDE_CREATE, PermissionId.PROJECT_GUIDE_MANAGE, ActionOwner.AUTH_12D),
     _active(ActionId.PROJECT_GUIDE_UPDATE, PermissionId.PROJECT_GUIDE_MANAGE, ActionOwner.AUTH_12D),
-    _active(ActionId.PROJECT_GUIDE_SOURCE_SNAPSHOT_CREATE, PermissionId.PROJECT_GUIDE_MANAGE, ActionOwner.AUTH_12D),
+    _active(
+        ActionId.PROJECT_GUIDE_SOURCE_SNAPSHOT_CREATE,
+        PermissionId.PROJECT_GUIDE_MANAGE,
+        ActionOwner.AUTH_12D,
+    ),
     _active(
         ActionId.PROJECT_GUIDE_COMPILATION_REQUEST,
         PermissionId.PROJECT_GUIDE_COMPILATION_REQUEST,
@@ -540,14 +688,26 @@ ACTION_DEFINITIONS = (
         PermissionId.PROJECT_GUIDE_COMPILATION_EXECUTE,
         ActionOwner.AUTH_12I,
     ),
-    _active(ActionId.PROJECT_REVIEW_POLICY_UPDATE, PermissionId.PROJECT_REVIEW_POLICY_MANAGE, ActionOwner.XINT_003_02B),
+    _active(
+        ActionId.PROJECT_REVIEW_POLICY_UPDATE,
+        PermissionId.PROJECT_REVIEW_POLICY_MANAGE,
+        ActionOwner.XINT_003_02B,
+    ),
     _active(
         ActionId.PROJECT_REVISION_POLICY_UPDATE,
         PermissionId.PROJECT_REVIEW_POLICY_MANAGE,
         ActionOwner.XINT_003_02B,
     ),
-    _active(ActionId.PROJECT_GUIDE_SUFFICIENCY_REPORT_CREATE, PermissionId.PROJECT_GUIDE_MANAGE, ActionOwner.AUTH_12E),
-    _active(ActionId.PROJECT_GUIDE_SUFFICIENCY_RUN, PermissionId.PROJECT_GUIDE_MANAGE, ActionOwner.AUTH_12E),
+    _active(
+        ActionId.PROJECT_GUIDE_SUFFICIENCY_REPORT_CREATE,
+        PermissionId.PROJECT_GUIDE_MANAGE,
+        ActionOwner.AUTH_12E,
+    ),
+    _active(
+        ActionId.PROJECT_GUIDE_SUFFICIENCY_RUN,
+        PermissionId.PROJECT_GUIDE_MANAGE,
+        ActionOwner.AUTH_12E,
+    ),
     _active(
         ActionId.PROJECT_GUIDE_SUFFICIENCY_WARNINGS_ACKNOWLEDGE,
         PermissionId.PROJECT_GUIDE_MANAGE,
@@ -598,41 +758,127 @@ ACTION_DEFINITIONS = (
         PermissionId.PROJECT_EFFECTIVE_POLICY_MANAGE,
         ActionOwner.AUTH_12G,
     ),
-    _active(ActionId.PROJECT_SETUP_RUN_UPDATE, PermissionId.PROJECT_GUIDE_MANAGE, ActionOwner.AUTH_12B2),
-    _active(ActionId.PROJECT_GUIDE_ACTIVATE, PermissionId.PROJECT_GUIDE_MANAGE, ActionOwner.AUTH_12H),
-    _active(ActionId.TASK_SUBMISSION_LIST, PermissionId.SUBMISSION_READ_OWN, ActionOwner.TASK_CHECKER_CLEANUP),
-    _active(ActionId.SUBMISSION_READ, PermissionId.SUBMISSION_READ_OWN, ActionOwner.TASK_CHECKER_CLEANUP),
-    _active(ActionId.SUBMISSION_CHECKER_RUN_LIST, PermissionId.SUBMISSION_READ_OWN, ActionOwner.TASK_CHECKER_CLEANUP),
-    _active(ActionId.CHECKER_RUN_READ, PermissionId.SUBMISSION_READ_OWN, ActionOwner.TASK_CHECKER_CLEANUP),
-    _active(ActionId.PROJECT_TASK_SUBMISSION_LIST, PermissionId.PROJECT_TASK_MANAGE, ActionOwner.TASK_CHECKER_CLEANUP),
-    _active(ActionId.PROJECT_SUBMISSION_READ, PermissionId.PROJECT_TASK_MANAGE, ActionOwner.TASK_CHECKER_CLEANUP),
-    _active(ActionId.PROJECT_SUBMISSION_CHECKER_RUN_LIST, PermissionId.PROJECT_TASK_MANAGE, ActionOwner.TASK_CHECKER_CLEANUP),
-    _active(ActionId.PROJECT_CHECKER_RUN_READ, PermissionId.PROJECT_TASK_MANAGE, ActionOwner.TASK_CHECKER_CLEANUP),
+    _active(
+        ActionId.PROJECT_SETUP_RUN_UPDATE, PermissionId.PROJECT_GUIDE_MANAGE, ActionOwner.AUTH_12B2
+    ),
+    _active(
+        ActionId.PROJECT_GUIDE_ACTIVATE, PermissionId.PROJECT_GUIDE_MANAGE, ActionOwner.AUTH_12H
+    ),
+    _active(
+        ActionId.TASK_SUBMISSION_LIST,
+        PermissionId.SUBMISSION_READ_OWN,
+        ActionOwner.TASK_CHECKER_CLEANUP,
+    ),
+    _active(
+        ActionId.SUBMISSION_READ, PermissionId.SUBMISSION_READ_OWN, ActionOwner.TASK_CHECKER_CLEANUP
+    ),
+    _active(
+        ActionId.SUBMISSION_CHECKER_RUN_LIST,
+        PermissionId.SUBMISSION_READ_OWN,
+        ActionOwner.TASK_CHECKER_CLEANUP,
+    ),
+    _active(
+        ActionId.CHECKER_RUN_READ,
+        PermissionId.SUBMISSION_READ_OWN,
+        ActionOwner.TASK_CHECKER_CLEANUP,
+    ),
+    _active(
+        ActionId.PROJECT_TASK_SUBMISSION_LIST,
+        PermissionId.PROJECT_TASK_MANAGE,
+        ActionOwner.TASK_CHECKER_CLEANUP,
+    ),
+    _active(
+        ActionId.PROJECT_SUBMISSION_READ,
+        PermissionId.PROJECT_TASK_MANAGE,
+        ActionOwner.TASK_CHECKER_CLEANUP,
+    ),
+    _active(
+        ActionId.PROJECT_SUBMISSION_CHECKER_RUN_LIST,
+        PermissionId.PROJECT_TASK_MANAGE,
+        ActionOwner.TASK_CHECKER_CLEANUP,
+    ),
+    _active(
+        ActionId.PROJECT_CHECKER_RUN_READ,
+        PermissionId.PROJECT_TASK_MANAGE,
+        ActionOwner.TASK_CHECKER_CLEANUP,
+    ),
     _active(ActionId.TASK_CLAIM, PermissionId.TASK_CLAIM, ActionOwner.TASK_PROJECT_GRANT),
     _active(ActionId.TASK_START, PermissionId.TASK_CLAIM, ActionOwner.TASK_PROJECT_GRANT),
-    _active(ActionId.TASK_WORK_CONTEXT_READ, PermissionId.TASK_QUEUE_READ, ActionOwner.TASK_PROJECT_GRANT),
+    _active(
+        ActionId.TASK_WORK_CONTEXT_READ,
+        PermissionId.TASK_QUEUE_READ,
+        ActionOwner.TASK_PROJECT_GRANT,
+    ),
     _active(ActionId.TASK_GUIDE_READ, PermissionId.TASK_QUEUE_READ, ActionOwner.PILOT_13),
     _active(ActionId.TASK_READ, PermissionId.TASK_QUEUE_READ, ActionOwner.ARCH_03C5),
-    _active(ActionId.TASK_SUBMISSION_REQUIREMENTS_READ, PermissionId.TASK_QUEUE_READ, ActionOwner.ARCH_03C5),
+    _active(
+        ActionId.TASK_SUBMISSION_REQUIREMENTS_READ,
+        PermissionId.TASK_QUEUE_READ,
+        ActionOwner.ARCH_03C5,
+    ),
     _active(ActionId.PROJECT_TASK_READ, PermissionId.PROJECT_TASK_MANAGE, ActionOwner.ARCH_03C5),
-    _active(ActionId.PROJECT_TASK_LOCKED_CONTEXT_READ, PermissionId.PROJECT_TASK_MANAGE, ActionOwner.ARCH_03C6),
-    _active(ActionId.OPERATIONS_TASK_LOCKED_CONTEXT_READ, PermissionId.OPERATIONS_STATUS_READ, ActionOwner.ARCH_03C6),
-    _active(ActionId.AUDIT_TASK_LOCKED_CONTEXT_READ, PermissionId.AUDIT_READ, ActionOwner.ARCH_03C6),
+    _active(
+        ActionId.PROJECT_TASK_LOCKED_CONTEXT_READ,
+        PermissionId.PROJECT_TASK_MANAGE,
+        ActionOwner.ARCH_03C6,
+    ),
+    _active(
+        ActionId.OPERATIONS_TASK_LOCKED_CONTEXT_READ,
+        PermissionId.OPERATIONS_STATUS_READ,
+        ActionOwner.ARCH_03C6,
+    ),
+    _active(
+        ActionId.AUDIT_TASK_LOCKED_CONTEXT_READ, PermissionId.AUDIT_READ, ActionOwner.ARCH_03C6
+    ),
     _active(ActionId.AUDIT_TASK_EVIDENCE_READ, PermissionId.AUDIT_READ, ActionOwner.ARCH_03C7),
-    _active(ActionId.PROJECT_TASK_SUBMISSION_REQUIREMENTS_READ, PermissionId.PROJECT_TASK_MANAGE, ActionOwner.ARCH_03C5),
+    _active(
+        ActionId.PROJECT_TASK_SUBMISSION_REQUIREMENTS_READ,
+        PermissionId.PROJECT_TASK_MANAGE,
+        ActionOwner.ARCH_03C5,
+    ),
     _active(ActionId.TASK_QUEUE_READ, PermissionId.TASK_QUEUE_READ, ActionOwner.ARCH_03C4),
-    _active(ActionId.PROJECT_TASK_QUEUE_READ, PermissionId.PROJECT_TASK_MANAGE, ActionOwner.ARCH_03C4),
-    _active(ActionId.OPERATIONS_TASK_QUEUE_READ, PermissionId.OPERATIONS_STATUS_READ, ActionOwner.ARCH_03C4),
+    _active(
+        ActionId.PROJECT_TASK_QUEUE_READ, PermissionId.PROJECT_TASK_MANAGE, ActionOwner.ARCH_03C4
+    ),
+    _active(
+        ActionId.OPERATIONS_TASK_QUEUE_READ,
+        PermissionId.OPERATIONS_STATUS_READ,
+        ActionOwner.ARCH_03C4,
+    ),
     _active(ActionId.PROJECT_TASK_CREATE, PermissionId.PROJECT_TASK_MANAGE, ActionOwner.ARCH_03C3),
     _active(ActionId.PROJECT_TASK_IMPORT, PermissionId.PROJECT_TASK_MANAGE, ActionOwner.PILOT_02B),
-    _active(ActionId.PROJECT_TASK_IMPORT_BATCH_READ, PermissionId.PROJECT_TASK_MANAGE, ActionOwner.PILOT_02B),
-    _active(ActionId.ARTIFACT_TASK_IMPORT_SOURCE_DECLARE, PermissionId.PROJECT_TASK_MANAGE, ActionOwner.PILOT_02A),
-    _active(ActionId.ARTIFACT_TASK_IMPORT_SOURCE_UPLOAD, PermissionId.PROJECT_TASK_MANAGE, ActionOwner.PILOT_02A),
-    _active(ActionId.ARTIFACT_TASK_IMPORT_SOURCE_READ, PermissionId.PROJECT_TASK_MANAGE, ActionOwner.PILOT_02A),
+    _active(
+        ActionId.PROJECT_TASK_IMPORT_BATCH_READ,
+        PermissionId.PROJECT_TASK_MANAGE,
+        ActionOwner.PILOT_02B,
+    ),
+    _active(
+        ActionId.ARTIFACT_TASK_IMPORT_SOURCE_DECLARE,
+        PermissionId.PROJECT_TASK_MANAGE,
+        ActionOwner.PILOT_02A,
+    ),
+    _active(
+        ActionId.ARTIFACT_TASK_IMPORT_SOURCE_UPLOAD,
+        PermissionId.PROJECT_TASK_MANAGE,
+        ActionOwner.PILOT_02A,
+    ),
+    _active(
+        ActionId.ARTIFACT_TASK_IMPORT_SOURCE_READ,
+        PermissionId.PROJECT_TASK_MANAGE,
+        ActionOwner.PILOT_02A,
+    ),
     _active(ActionId.PROJECT_TASK_SCREEN, PermissionId.PROJECT_TASK_MANAGE, ActionOwner.ARCH_03C3),
     _active(ActionId.PROJECT_TASK_RELEASE, PermissionId.PROJECT_TASK_MANAGE, ActionOwner.ARCH_03C3),
-    _active(ActionId.PROJECT_TASK_REVISION_REPAIR, PermissionId.PROJECT_TASK_MANAGE, ActionOwner.PILOT_08),
-    _active(ActionId.PROJECT_TASK_WORK_CONTEXT_READ, PermissionId.PROJECT_TASK_MANAGE, ActionOwner.TASK_PROJECT_GRANT),
+    _active(
+        ActionId.PROJECT_TASK_REVISION_REPAIR,
+        PermissionId.PROJECT_TASK_MANAGE,
+        ActionOwner.PILOT_08,
+    ),
+    _active(
+        ActionId.PROJECT_TASK_WORK_CONTEXT_READ,
+        PermissionId.PROJECT_TASK_MANAGE,
+        ActionOwner.TASK_PROJECT_GRANT,
+    ),
     _active(
         ActionId.OPERATIONS_TASK_START_OVERRIDE,
         PermissionId.OPERATIONS_TASK_START_OVERRIDE,
@@ -643,64 +889,180 @@ ACTION_DEFINITIONS = (
         PermissionId.OPERATIONS_SUBMISSION_GATE_REPAIR,
         ActionOwner.AUTH_14,
     ),
-    _active(ActionId.OPERATIONS_CHECKER_RETRY, PermissionId.OPERATIONS_CHECKER_RETRY, ActionOwner.AUTH_14),
-    _active(ActionId.OPERATIONS_CHECKER_RETRY_SOURCE_LIST, PermissionId.OPERATIONS_STATUS_READ, ActionOwner.AUTH_14),
-    _active(ActionId.OPERATIONS_POST_SUBMIT_DELIVERY_LIST, PermissionId.OPERATIONS_STATUS_READ, ActionOwner.AUTH_14),
-    _active(ActionId.OPERATIONS_POST_SUBMIT_DELIVERY_RECONCILE, PermissionId.OPERATIONS_RECONCILE_RUN, ActionOwner.AUTH_14),
-    _active(ActionId.CHECKER_REGISTRY_READ, PermissionId.OPERATIONS_STATUS_READ, ActionOwner.PILOT_04),
-    _active(ActionId.CHECKER_REGISTRY_REGISTER, PermissionId.OPERATIONS_RECONCILE_RUN, ActionOwner.PILOT_04),
+    _active(
+        ActionId.OPERATIONS_CHECKER_RETRY,
+        PermissionId.OPERATIONS_CHECKER_RETRY,
+        ActionOwner.AUTH_14,
+    ),
+    _active(
+        ActionId.OPERATIONS_CHECKER_RETRY_SOURCE_LIST,
+        PermissionId.OPERATIONS_STATUS_READ,
+        ActionOwner.AUTH_14,
+    ),
+    _active(
+        ActionId.OPERATIONS_POST_SUBMIT_DELIVERY_LIST,
+        PermissionId.OPERATIONS_STATUS_READ,
+        ActionOwner.AUTH_14,
+    ),
+    _active(
+        ActionId.OPERATIONS_POST_SUBMIT_DELIVERY_RECONCILE,
+        PermissionId.OPERATIONS_RECONCILE_RUN,
+        ActionOwner.AUTH_14,
+    ),
+    _active(
+        ActionId.CHECKER_REGISTRY_READ, PermissionId.OPERATIONS_STATUS_READ, ActionOwner.PILOT_04
+    ),
+    _active(
+        ActionId.CHECKER_REGISTRY_REGISTER,
+        PermissionId.OPERATIONS_RECONCILE_RUN,
+        ActionOwner.PILOT_04,
+    ),
     _active(ActionId.SUBMISSION_CREATE, PermissionId.SUBMISSION_CREATE, ActionOwner.AUTH_14),
     _planned(ActionId.REVIEW_QUEUE_READ, PermissionId.REVIEW_QUEUE_READ, ActionOwner.AUTH_REV_05),
-    _planned(ActionId.REVIEW_QUEUE_INSPECT, PermissionId.REVIEW_QUEUE_INSPECT, ActionOwner.AUTH_REV_05),
+    _planned(
+        ActionId.REVIEW_QUEUE_INSPECT, PermissionId.REVIEW_QUEUE_INSPECT, ActionOwner.AUTH_REV_05
+    ),
     _planned(ActionId.REVIEW_CLAIM, PermissionId.REVIEW_CLAIM, ActionOwner.AUTH_REV_06),
     _planned(ActionId.REVIEW_RELEASE, PermissionId.REVIEW_RELEASE, ActionOwner.AUTH_REV_06),
-    _planned(ActionId.REVIEW_DECLINE_PREFERENCE, PermissionId.REVIEW_DECLINE_PREFERENCE, ActionOwner.AUTH_REV_06),
-    _planned(ActionId.REVIEW_PREFERENCE_EXPIRY_RUN, PermissionId.OPERATIONS_TIMER_RUN, ActionOwner.AUTH_REV_06),
-    _planned(ActionId.REVIEW_LEASE_EXPIRY_RUN, PermissionId.OPERATIONS_TIMER_RUN, ActionOwner.AUTH_REV_06),
-    _planned(ActionId.REVIEW_CONTEXT_READ, PermissionId.SUBMISSION_READ_FOR_REVIEW, ActionOwner.AUTH_REV_07),
+    _planned(
+        ActionId.REVIEW_DECLINE_PREFERENCE,
+        PermissionId.REVIEW_DECLINE_PREFERENCE,
+        ActionOwner.AUTH_REV_06,
+    ),
+    _planned(
+        ActionId.REVIEW_PREFERENCE_EXPIRY_RUN,
+        PermissionId.OPERATIONS_TIMER_RUN,
+        ActionOwner.AUTH_REV_06,
+    ),
+    _planned(
+        ActionId.REVIEW_LEASE_EXPIRY_RUN, PermissionId.OPERATIONS_TIMER_RUN, ActionOwner.AUTH_REV_06
+    ),
+    _planned(
+        ActionId.REVIEW_CONTEXT_READ,
+        PermissionId.SUBMISSION_READ_FOR_REVIEW,
+        ActionOwner.AUTH_REV_07,
+    ),
     _planned(ActionId.REVIEW_CHAIN_READ, PermissionId.REVIEW_CHAIN_READ, ActionOwner.AUTH_REV_07),
-    _planned(ActionId.REVIEW_FINDING_EVIDENCE_INGEST, PermissionId.REVIEW_DECISION, ActionOwner.AUTH_REV_07),
+    _planned(
+        ActionId.REVIEW_FINDING_EVIDENCE_INGEST,
+        PermissionId.REVIEW_DECISION,
+        ActionOwner.AUTH_REV_07,
+    ),
     _planned(ActionId.REVIEW_DECISION, PermissionId.REVIEW_DECISION, ActionOwner.AUTH_REV_08),
     _planned(
         ActionId.REVIEW_FINDING_RESPONSE_EVIDENCE_INGEST,
         PermissionId.SUBMISSION_CREATE,
         ActionOwner.AUTH_REV_09A,
     ),
-    _planned(ActionId.REVIEW_LEASE_FORCE_RELEASE, PermissionId.REVIEW_LEASE_FORCE_RELEASE, ActionOwner.AUTH_REV_11),
-    _planned(ActionId.REVIEW_QUEUE_ROUTING_OVERRIDE, PermissionId.REVIEW_QUEUE_OVERRIDE, ActionOwner.AUTH_REV_11),
-    _planned(ActionId.REVIEW_QUEUE_ROUTING_CORRECT, PermissionId.REVIEW_QUEUE_OVERRIDE, ActionOwner.AUTH_REV_11),
-    _planned(ActionId.REVIEW_QUEUE_CLOSE, PermissionId.REVIEW_QUEUE_OVERRIDE, ActionOwner.AUTH_REV_11),
-    _planned(ActionId.REVIEW_RECONCILE_RUN, PermissionId.OPERATIONS_RECONCILE_RUN, ActionOwner.AUTH_REV_11),
+    _planned(
+        ActionId.REVIEW_LEASE_FORCE_RELEASE,
+        PermissionId.REVIEW_LEASE_FORCE_RELEASE,
+        ActionOwner.AUTH_REV_11,
+    ),
+    _planned(
+        ActionId.REVIEW_QUEUE_ROUTING_OVERRIDE,
+        PermissionId.REVIEW_QUEUE_OVERRIDE,
+        ActionOwner.AUTH_REV_11,
+    ),
+    _planned(
+        ActionId.REVIEW_QUEUE_ROUTING_CORRECT,
+        PermissionId.REVIEW_QUEUE_OVERRIDE,
+        ActionOwner.AUTH_REV_11,
+    ),
+    _planned(
+        ActionId.REVIEW_QUEUE_CLOSE, PermissionId.REVIEW_QUEUE_OVERRIDE, ActionOwner.AUTH_REV_11
+    ),
+    _planned(
+        ActionId.REVIEW_RECONCILE_RUN,
+        PermissionId.OPERATIONS_RECONCILE_RUN,
+        ActionOwner.AUTH_REV_11,
+    ),
     _planned(
         ActionId.REVIEW_ARTIFACT_REFERENCE_RECONCILE,
         PermissionId.OPERATIONS_RECONCILE_RUN,
         ActionOwner.AUTH_REV_12,
     ),
-    _planned(ActionId.REVIEW_PROJECTION_REBUILD, PermissionId.OPERATIONS_PROJECTION_REBUILD, ActionOwner.AUTH_REV_12),
-    _planned(ActionId.REVIEW_REVISION_CONTEXT_REPAIR, PermissionId.PROJECT_TASK_MANAGE, ActionOwner.XINT_003_08A),
+    _planned(
+        ActionId.REVIEW_PROJECTION_REBUILD,
+        PermissionId.OPERATIONS_PROJECTION_REBUILD,
+        ActionOwner.AUTH_REV_12,
+    ),
+    _planned(
+        ActionId.REVIEW_REVISION_CONTEXT_REPAIR,
+        PermissionId.PROJECT_TASK_MANAGE,
+        ActionOwner.XINT_003_08A,
+    ),
     _planned(
         ActionId.REVIEW_REVISION_CONTEXT_LEGACY_CLOSE,
         PermissionId.OPERATIONS_RECONCILE_RUN,
         ActionOwner.XINT_003_08A,
     ),
-    _active(ActionId.REVIEW_LIFECYCLE_ACTIVATION_MANAGE, PermissionId.OPERATIONS_RECONCILE_RUN, ActionOwner.XINT_003_08B),
-    _active(ActionId.ARTIFACT_BINDING_READ, PermissionId.ARTIFACT_BINDING_READ, ActionOwner.AUTH_ART_02D_OPERATOR),
-    _active(ActionId.ARTIFACT_REPLICA_READ, PermissionId.ARTIFACT_REPLICA_READ, ActionOwner.AUTH_ART_02D_OPERATOR),
-    _active(ActionId.ARTIFACT_RECEIPT_READ, PermissionId.ARTIFACT_RECEIPT_READ, ActionOwner.AUTH_ART_02D_OPERATOR),
-    _active(ActionId.ARTIFACT_VERIFICATION_JOB_READ,
-            PermissionId.ARTIFACT_VERIFICATION_JOB_READ, ActionOwner.AUTH_ART_02D_OPERATOR),
-    _active(ActionId.ARTIFACT_VERIFICATION_JOB_RETRY,
-            PermissionId.ARTIFACT_VERIFICATION_JOB_RETRY, ActionOwner.AUTH_ART_02D_OPERATOR),
-    _active(ActionId.ARTIFACT_RECOVERY_ATTEMPT_READ,
-            PermissionId.ARTIFACT_RECOVERY_ATTEMPT_READ, ActionOwner.AUTH_ART_02D_OPERATOR),
-    _active(ActionId.ARTIFACT_AUDIT_READ, PermissionId.ARTIFACT_AUDIT_READ, ActionOwner.AUTH_ART_02D_OPERATOR),
-    _active(ActionId.OPERATIONS_ARTIFACT_STORAGE_ADMISSION_READ,
-            PermissionId.OPERATIONS_STATUS_READ, ActionOwner.AUTH_ART_02D_OPERATOR),
-    _active(ActionId.ARTIFACT_GUIDE_SOURCE_INGEST, PermissionId.ARTIFACT_GUIDE_SOURCE_INGEST, ActionOwner.XINT_002_04A),
-    _active(ActionId.ARTIFACT_GUIDE_SOURCE_READ, PermissionId.ARTIFACT_GUIDE_SOURCE_READ, ActionOwner.XINT_002_04B),
-    _active(ActionId.ARTIFACT_SUBMISSION_BUNDLE_PREPARE, PermissionId.SUBMISSION_CREATE, ActionOwner.XINT_002_05A),
-    _active(ActionId.ARTIFACT_SUBMISSION_BINDING_CREATE, PermissionId.ARTIFACT_BINDING_CREATE, ActionOwner.AUTH_ART_05),
-    _planned(
+    _active(
+        ActionId.REVIEW_LIFECYCLE_ACTIVATION_MANAGE,
+        PermissionId.OPERATIONS_RECONCILE_RUN,
+        ActionOwner.XINT_003_08B,
+    ),
+    _active(
+        ActionId.ARTIFACT_BINDING_READ,
+        PermissionId.ARTIFACT_BINDING_READ,
+        ActionOwner.AUTH_ART_02D_OPERATOR,
+    ),
+    _active(
+        ActionId.ARTIFACT_REPLICA_READ,
+        PermissionId.ARTIFACT_REPLICA_READ,
+        ActionOwner.AUTH_ART_02D_OPERATOR,
+    ),
+    _active(
+        ActionId.ARTIFACT_RECEIPT_READ,
+        PermissionId.ARTIFACT_RECEIPT_READ,
+        ActionOwner.AUTH_ART_02D_OPERATOR,
+    ),
+    _active(
+        ActionId.ARTIFACT_VERIFICATION_JOB_READ,
+        PermissionId.ARTIFACT_VERIFICATION_JOB_READ,
+        ActionOwner.AUTH_ART_02D_OPERATOR,
+    ),
+    _active(
+        ActionId.ARTIFACT_VERIFICATION_JOB_RETRY,
+        PermissionId.ARTIFACT_VERIFICATION_JOB_RETRY,
+        ActionOwner.AUTH_ART_02D_OPERATOR,
+    ),
+    _active(
+        ActionId.ARTIFACT_RECOVERY_ATTEMPT_READ,
+        PermissionId.ARTIFACT_RECOVERY_ATTEMPT_READ,
+        ActionOwner.AUTH_ART_02D_OPERATOR,
+    ),
+    _active(
+        ActionId.ARTIFACT_AUDIT_READ,
+        PermissionId.ARTIFACT_AUDIT_READ,
+        ActionOwner.AUTH_ART_02D_OPERATOR,
+    ),
+    _active(
+        ActionId.OPERATIONS_ARTIFACT_STORAGE_ADMISSION_READ,
+        PermissionId.OPERATIONS_STATUS_READ,
+        ActionOwner.AUTH_ART_02D_OPERATOR,
+    ),
+    _active(
+        ActionId.ARTIFACT_GUIDE_SOURCE_INGEST,
+        PermissionId.ARTIFACT_GUIDE_SOURCE_INGEST,
+        ActionOwner.XINT_002_04A,
+    ),
+    _active(
+        ActionId.ARTIFACT_GUIDE_SOURCE_READ,
+        PermissionId.ARTIFACT_GUIDE_SOURCE_READ,
+        ActionOwner.XINT_002_04B,
+    ),
+    _active(
+        ActionId.ARTIFACT_SUBMISSION_BUNDLE_PREPARE,
+        PermissionId.SUBMISSION_CREATE,
+        ActionOwner.XINT_002_05A,
+    ),
+    _active(
+        ActionId.ARTIFACT_SUBMISSION_BINDING_CREATE,
+        PermissionId.ARTIFACT_BINDING_CREATE,
+        ActionOwner.AUTH_ART_05,
+    ),
+    _active(
         ActionId.ARTIFACT_CHECKER_OUTPUT_BINDING_CREATE,
         PermissionId.ARTIFACT_BINDING_CREATE,
         ActionOwner.AUTH_ART_06B,
@@ -720,10 +1082,91 @@ ACTION_DEFINITIONS = (
         PermissionId.ARTIFACT_PUT_ATTEMPT_RESOLVE,
         ActionOwner.AUTH_ART_02D_INTERNAL,
     ),
-    _active(ActionId.CHECKER_PRE_SUBMIT_EXECUTE, PermissionId.CHECKER_PRE_SUBMIT_EXECUTE, ActionOwner.PILOT_04),
-    _active(ActionId.CHECKER_PRE_SUBMIT_FINALIZE, PermissionId.CHECKER_PRE_SUBMIT_FINALIZE, ActionOwner.PILOT_04),
-    _active(ActionId.CHECKER_POST_SUBMIT_EXECUTE, PermissionId.CHECKER_POST_SUBMIT_EXECUTE, ActionOwner.ARCH_04D2),
-    _active(ActionId.CHECKER_POST_SUBMIT_FINALIZE, PermissionId.CHECKER_POST_SUBMIT_FINALIZE, ActionOwner.ARCH_04D2),
+    _active(
+        ActionId.CHECKER_PRE_SUBMIT_EXECUTE,
+        PermissionId.CHECKER_PRE_SUBMIT_EXECUTE,
+        ActionOwner.PILOT_04,
+    ),
+    _active(
+        ActionId.CHECKER_PRE_SUBMIT_FINALIZE,
+        PermissionId.CHECKER_PRE_SUBMIT_FINALIZE,
+        ActionOwner.PILOT_04,
+    ),
+    _active(
+        ActionId.CHECKER_POST_SUBMIT_EXECUTE,
+        PermissionId.CHECKER_POST_SUBMIT_EXECUTE,
+        ActionOwner.ARCH_04D2,
+    ),
+    _active(
+        ActionId.CHECKER_POST_SUBMIT_FINALIZE,
+        PermissionId.CHECKER_POST_SUBMIT_FINALIZE,
+        ActionOwner.ARCH_04D2,
+    ),
+    _active(
+        ActionId.CHECKER_MODEL_CALL_PREPARE,
+        PermissionId.CHECKER_MODEL_CALL_PREPARE,
+        ActionOwner.PILOT_05,
+    ),
+    _active(
+        ActionId.CHECKER_MODEL_CALL_DISPATCH,
+        PermissionId.CHECKER_MODEL_CALL_DISPATCH,
+        ActionOwner.PILOT_05,
+    ),
+    _active(
+        ActionId.CHECKER_MODEL_CALL_RECOVER,
+        PermissionId.CHECKER_MODEL_CALL_RECOVER,
+        ActionOwner.PILOT_05,
+    ),
+    _active(
+        ActionId.CHECKER_MODEL_CALL_OBSERVE,
+        PermissionId.CHECKER_MODEL_CALL_OBSERVE,
+        ActionOwner.PILOT_05,
+    ),
+    _active(
+        ActionId.CHECKER_MODEL_CALL_COMPLETE,
+        PermissionId.CHECKER_MODEL_CALL_COMPLETE,
+        ActionOwner.PILOT_05,
+    ),
+    _active(
+        ActionId.CHECKER_MODEL_CALL_GRANT,
+        PermissionId.CHECKER_MODEL_CALL_GRANT,
+        ActionOwner.PILOT_05,
+    ),
+    _active(
+        ActionId.PROJECT_GUIDE_COMPILATION_MODEL_PREPARE,
+        PermissionId.PROJECT_GUIDE_COMPILATION_MODEL_PREPARE,
+        ActionOwner.PILOT_05,
+    ),
+    _active(
+        ActionId.PROJECT_GUIDE_COMPILATION_MODEL_DISPATCH,
+        PermissionId.PROJECT_GUIDE_COMPILATION_MODEL_DISPATCH,
+        ActionOwner.PILOT_05,
+    ),
+    _active(
+        ActionId.PROJECT_GUIDE_COMPILATION_MODEL_OBSERVE,
+        PermissionId.PROJECT_GUIDE_COMPILATION_MODEL_OBSERVE,
+        ActionOwner.PILOT_05,
+    ),
+    _active(
+        ActionId.PROJECT_GUIDE_COMPILATION_MODEL_COMPLETE,
+        PermissionId.PROJECT_GUIDE_COMPILATION_MODEL_COMPLETE,
+        ActionOwner.PILOT_05,
+    ),
+    _active(
+        ActionId.PROJECT_MODEL_PROFILE_PROVISION,
+        PermissionId.PROJECT_MODEL_PROFILE_MANAGE,
+        ActionOwner.PILOT_05,
+    ),
+    _active(
+        ActionId.PROJECT_MODEL_BUDGET_CONFIGURE,
+        PermissionId.PROJECT_MODEL_BUDGET_MANAGE,
+        ActionOwner.PILOT_05,
+    ),
+    _active(
+        ActionId.PROJECT_MODEL_CALL_RECOVERY_CHILD_AUTHORIZE,
+        PermissionId.PROJECT_MODEL_CALL_RECOVERY_CHILD_AUTHORIZE,
+        ActionOwner.PILOT_05,
+    ),
     _active(
         ActionId.ARTIFACT_PRE_SUBMIT_CHECKER_INPUT_MATERIALIZE,
         PermissionId.ARTIFACT_CHECKER_INPUT_MATERIALIZE,
@@ -734,7 +1177,7 @@ ACTION_DEFINITIONS = (
         PermissionId.ARTIFACT_CHECKER_INPUT_MATERIALIZE,
         ActionOwner.AUTH_ART_06A,
     ),
-    _planned(
+    _active(
         ActionId.ARTIFACT_CHECKER_OUTPUT_WRITE,
         PermissionId.ARTIFACT_CHECKER_OUTPUT_WRITE,
         ActionOwner.AUTH_ART_06B,
@@ -781,6 +1224,19 @@ NEW_PERMISSION_IDS = frozenset(
     {
         PermissionId.CHECKER_POST_SUBMIT_EXECUTE,
         PermissionId.CHECKER_POST_SUBMIT_FINALIZE,
+        PermissionId.CHECKER_MODEL_CALL_PREPARE,
+        PermissionId.CHECKER_MODEL_CALL_DISPATCH,
+        PermissionId.CHECKER_MODEL_CALL_RECOVER,
+        PermissionId.CHECKER_MODEL_CALL_OBSERVE,
+        PermissionId.CHECKER_MODEL_CALL_COMPLETE,
+        PermissionId.CHECKER_MODEL_CALL_GRANT,
+        PermissionId.PROJECT_GUIDE_COMPILATION_MODEL_PREPARE,
+        PermissionId.PROJECT_GUIDE_COMPILATION_MODEL_DISPATCH,
+        PermissionId.PROJECT_GUIDE_COMPILATION_MODEL_OBSERVE,
+        PermissionId.PROJECT_GUIDE_COMPILATION_MODEL_COMPLETE,
+        PermissionId.PROJECT_MODEL_PROFILE_MANAGE,
+        PermissionId.PROJECT_MODEL_BUDGET_MANAGE,
+        PermissionId.PROJECT_MODEL_CALL_RECOVERY_CHILD_AUTHORIZE,
         PermissionId.CHECKER_PRE_SUBMIT_EXECUTE,
         PermissionId.CHECKER_PRE_SUBMIT_FINALIZE,
         PermissionId.TASK_ASSIGNMENT_AUTHORITY_RECONCILE,
@@ -816,28 +1272,37 @@ NEW_PERMISSION_IDS = frozenset(
 )
 HISTORICAL_PERMISSION_IDS = PERMISSION_IDS - NEW_PERMISSION_IDS
 
+
 def _require_catalogue_counts() -> None:
     """Keep the closed action inventory and permission boundary exact."""
-    if len(PERMISSION_IDS) != 82 or len(ACTION_IDS) != 177:
+    if len(PERMISSION_IDS) != 95 or len(ACTION_IDS) != 190:
         raise RuntimeError("authorization catalogue count mismatch")
-    if len(HISTORICAL_PERMISSION_IDS) != 49 or len(NEW_PERMISSION_IDS) != 33:
+    if len(HISTORICAL_PERMISSION_IDS) != 49 or len(NEW_PERMISSION_IDS) != 46:
         raise RuntimeError("authorization permission boundary mismatch")
 
 
-POST_POLICY_MUTATION_ACTION_IDS = frozenset({
-    ActionId.PROJECT_POST_SUBMIT_CHECKER_POLICY_APPROVE,
-    ActionId.PROJECT_POST_SUBMIT_CHECKER_POLICY_CORRECTION_REQUEST,
-    ActionId.PROJECT_POST_SUBMIT_CHECKER_POLICY_DERIVE,
-})
-POST_POLICY_ACTION_IDS = POST_POLICY_MUTATION_ACTION_IDS | {ActionId.PROJECT_GUIDE_COMPILATION_REVIEW_PACKAGE_READ}
-POST_POLICY_HUMAN_ACTION_IDS = POST_POLICY_ACTION_IDS - {ActionId.PROJECT_POST_SUBMIT_CHECKER_POLICY_DERIVE}
+POST_POLICY_MUTATION_ACTION_IDS = frozenset(
+    {
+        ActionId.PROJECT_POST_SUBMIT_CHECKER_POLICY_APPROVE,
+        ActionId.PROJECT_POST_SUBMIT_CHECKER_POLICY_CORRECTION_REQUEST,
+        ActionId.PROJECT_POST_SUBMIT_CHECKER_POLICY_DERIVE,
+    }
+)
+POST_POLICY_ACTION_IDS = POST_POLICY_MUTATION_ACTION_IDS | {
+    ActionId.PROJECT_GUIDE_COMPILATION_REVIEW_PACKAGE_READ
+}
+POST_POLICY_HUMAN_ACTION_IDS = POST_POLICY_ACTION_IDS - {
+    ActionId.PROJECT_POST_SUBMIT_CHECKER_POLICY_DERIVE
+}
 
 
-GUIDE_PROPOSAL_ACTION_IDS = frozenset({
-    ActionId.PROJECT_GUIDE_COMPILATION_REVIEW_PACKAGE_READ,
-    ActionId.PROJECT_GUIDE_COMPILATION_CORRECTION_REQUEST,
-    ActionId.PROJECT_SUBMISSION_ARTIFACT_POLICY_APPROVE,
-})
+GUIDE_PROPOSAL_ACTION_IDS = frozenset(
+    {
+        ActionId.PROJECT_GUIDE_COMPILATION_REVIEW_PACKAGE_READ,
+        ActionId.PROJECT_GUIDE_COMPILATION_CORRECTION_REQUEST,
+        ActionId.PROJECT_SUBMISSION_ARTIFACT_POLICY_APPROVE,
+    }
+)
 
 
 def _validate_action_definition_rows(definitions: tuple[ActionDefinition, ...]) -> None:
@@ -867,95 +1332,117 @@ def _validate_action_definitions(definitions: tuple[ActionDefinition, ...]) -> N
         raise RuntimeError("authorization action owner catalogue is incomplete")
 
 
-_ACTIVE_ACTION_BOUNDARY = frozenset({
-    ActionId.TASK_POST_SUBMIT_ROUTE,
-    ActionId.TASK_ASSIGNMENT_AUTHORITY_RECONCILE,
-    ActionId.TASK_REVISION_EXPIRE,
-    ActionId.TASK_REVISION_RECOVER,
-    ActionId.OUTBOX_DISPATCH,
-    ActionId.PROJECT_GUIDE_ACTIVATE,
-    *_CONTRIBUTION_POLICY_ACTION_IDS,
-    ActionId.CONTRIBUTION_COMPENSATION_UNIT_CREATE,
-    ActionId.REVIEW_LIFECYCLE_ACTIVATION_MANAGE,
-    *GUIDE_PROPOSAL_ACTION_IDS,
-    *POST_POLICY_MUTATION_ACTION_IDS,
-    ActionId.ACTOR_PROFILE_READ_SELF,
-    ActionId.ACTOR_PROFILE_UPDATE_SELF,
-    ActionId.AUTHORIZATION_PERMISSION_CATALOGUE_READ,
-    ActionId.AUTHORIZATION_ADMIN_ROLE_DEFINITIONS_READ,
-    ActionId.ADMIN_ROLE_GRANT_LIST,
-    ActionId.ACTOR_ADMIN_ROLE_GRANT_HISTORY_READ,
-    ActionId.ADMIN_ROLE_GRANT_ISSUE,
-    ActionId.ADMIN_ROLE_GRANT_REVOKE,
-    ActionId.ADMIN_ROLE_GRANT_BOOTSTRAP,
-    ActionId.ACTOR_PROFILE_READ,
-    ActionId.ACTOR_IDENTITY_LINK_READ,
-    ActionId.ACTOR_SERVICE_PROVISION,
-    ActionId.ACTOR_PROFILE_SUSPEND,
-    ActionId.ACTOR_PROFILE_REACTIVATE,
-    ActionId.ACTOR_PROFILE_DEACTIVATE,
-    ActionId.ACTOR_IDENTITY_LINK_REVOKE,
-    ActionId.ACTOR_IDENTITY_LINK_REACTIVATE,
-    ActionId.CHECKER_REGISTRY_READ,
-    ActionId.CHECKER_REGISTRY_REGISTER,
-    ActionId.PROJECT_CONTRIBUTOR_CANDIDATE_LIST,
-    ActionId.PROJECT_ROLE_GRANT_LIST,
-    ActionId.PROJECT_ROLE_GRANT_READ,
-    ActionId.PROJECT_ROLE_GRANT_ISSUE,
-    ActionId.PROJECT_ROLE_GRANT_REVOKE,
-    ActionId.PROJECT_CREATE, ActionId.PROJECT_GUIDE_CREATE,
-    ActionId.PROJECT_GUIDE_UPDATE,
-    ActionId.PROJECT_GUIDE_SOURCE_SNAPSHOT_CREATE,
-    ActionId.PROJECT_GUIDE_COMPILATION_REQUEST,
-    ActionId.PROJECT_GUIDE_COMPILATION_REQUEST_AUTOMATIC,
-    ActionId.PROJECT_GUIDE_COMPILATION_EXECUTE,
-    ActionId.PROJECT_SETUP_RUN_UPDATE,
-    ActionId.PROJECT_REVIEW_POLICY_UPDATE,
-    ActionId.PROJECT_REVISION_POLICY_UPDATE,
-    ActionId.PROJECT_GUIDE_SUFFICIENCY_REPORT_CREATE,
-    ActionId.PROJECT_GUIDE_SUFFICIENCY_RUN,
-    ActionId.PROJECT_GUIDE_SUFFICIENCY_WARNINGS_ACKNOWLEDGE,
-    ActionId.PROJECT_SUBMISSION_ARTIFACT_POLICY_CREATE,
-    ActionId.PROJECT_SUBMISSION_ARTIFACT_POLICY_DERIVE,
-    ActionId.PROJECT_SUBMISSION_ARTIFACT_POLICY_UPDATE,
-    ActionId.PROJECT_READ,
-    ActionId.ACTOR_AUTHORIZATION_CONTEXT_READ,
-    ActionId.PROJECT_SETUP_RUN_READ,
-    ActionId.PROJECT_GUIDE_SUFFICIENCY_REPORT_LIST,
-    ActionId.PROJECT_GUIDE_SUFFICIENCY_REPORT_READ,
-    ActionId.PROJECT_SUBMISSION_ARTIFACT_POLICY_LIST,
-    ActionId.PROJECT_SUBMISSION_ARTIFACT_POLICY_READ,
-    ActionId.PROJECT_EFFECTIVE_SUBMISSION_ARTIFACT_POLICY_READ,
-    ActionId.PROJECT_PRE_SUBMIT_CHECKER_POLICY_READ,
-    ActionId.PROJECT_ACTIVE_GUIDE_READ,
-    ActionId.ARTIFACT_BINDING_READ,
-    ActionId.ARTIFACT_REPLICA_READ,
-    ActionId.ARTIFACT_RECEIPT_READ,
-    ActionId.ARTIFACT_VERIFICATION_JOB_READ,
-    ActionId.ARTIFACT_VERIFICATION_JOB_RETRY,
-    ActionId.ARTIFACT_RECOVERY_ATTEMPT_READ,
-    ActionId.ARTIFACT_AUDIT_READ,
-    ActionId.OPERATIONS_ARTIFACT_STORAGE_ADMISSION_READ,
-    ActionId.ARTIFACT_GUIDE_SOURCE_INGEST,
-    ActionId.ARTIFACT_GUIDE_SOURCE_READ,
-    ActionId.ARTIFACT_SUBMISSION_BUNDLE_PREPARE,
-    ActionId.SUBMISSION_CREATE,
-    ActionId.ARTIFACT_SUBMISSION_BINDING_CREATE,
-    ActionId.ARTIFACT_VERIFICATION_EXECUTE,
-    ActionId.ARTIFACT_PENDING_WORK_SCAN,
-    ActionId.ARTIFACT_PUT_ATTEMPT_RESOLVE,
-    ActionId.ARTIFACT_PRE_SUBMIT_CHECKER_INPUT_MATERIALIZE,
-    ActionId.ARTIFACT_POST_SUBMIT_CHECKER_INPUT_MATERIALIZE,
-    ActionId.CHECKER_POST_SUBMIT_EXECUTE, ActionId.CHECKER_POST_SUBMIT_FINALIZE,
-    ActionId.CHECKER_PRE_SUBMIT_EXECUTE, ActionId.CHECKER_PRE_SUBMIT_FINALIZE,
-    ActionId.COMPENSATION_ADAPTER_BINDING_READ,
-    ActionId.COMPENSATION_ADAPTER_BINDING_CREATE,
-    ActionId.COMPENSATION_ADAPTER_BINDING_SUSPEND,
-    ActionId.COMPENSATION_ADAPTER_BINDING_RESUME,
-})
+_ACTIVE_ACTION_BOUNDARY = frozenset(
+    {
+        ActionId.TASK_POST_SUBMIT_ROUTE,
+        ActionId.TASK_ASSIGNMENT_AUTHORITY_RECONCILE,
+        ActionId.TASK_REVISION_EXPIRE,
+        ActionId.TASK_REVISION_RECOVER,
+        ActionId.OUTBOX_DISPATCH,
+        ActionId.PROJECT_GUIDE_ACTIVATE,
+        *_CONTRIBUTION_POLICY_ACTION_IDS,
+        ActionId.CONTRIBUTION_COMPENSATION_UNIT_CREATE,
+        ActionId.REVIEW_LIFECYCLE_ACTIVATION_MANAGE,
+        *GUIDE_PROPOSAL_ACTION_IDS,
+        *POST_POLICY_MUTATION_ACTION_IDS,
+        ActionId.ACTOR_PROFILE_READ_SELF,
+        ActionId.ACTOR_PROFILE_UPDATE_SELF,
+        ActionId.AUTHORIZATION_PERMISSION_CATALOGUE_READ,
+        ActionId.AUTHORIZATION_ADMIN_ROLE_DEFINITIONS_READ,
+        ActionId.ADMIN_ROLE_GRANT_LIST,
+        ActionId.ACTOR_ADMIN_ROLE_GRANT_HISTORY_READ,
+        ActionId.ADMIN_ROLE_GRANT_ISSUE,
+        ActionId.ADMIN_ROLE_GRANT_REVOKE,
+        ActionId.ADMIN_ROLE_GRANT_BOOTSTRAP,
+        ActionId.ACTOR_PROFILE_READ,
+        ActionId.ACTOR_IDENTITY_LINK_READ,
+        ActionId.ACTOR_SERVICE_PROVISION,
+        ActionId.ACTOR_PROFILE_SUSPEND,
+        ActionId.ACTOR_PROFILE_REACTIVATE,
+        ActionId.ACTOR_PROFILE_DEACTIVATE,
+        ActionId.ACTOR_IDENTITY_LINK_REVOKE,
+        ActionId.ACTOR_IDENTITY_LINK_REACTIVATE,
+        ActionId.CHECKER_REGISTRY_READ,
+        ActionId.CHECKER_REGISTRY_REGISTER,
+        ActionId.PROJECT_CONTRIBUTOR_CANDIDATE_LIST,
+        ActionId.PROJECT_ROLE_GRANT_LIST,
+        ActionId.PROJECT_ROLE_GRANT_READ,
+        ActionId.PROJECT_ROLE_GRANT_ISSUE,
+        ActionId.PROJECT_ROLE_GRANT_REVOKE,
+        ActionId.PROJECT_CREATE,
+        ActionId.PROJECT_GUIDE_CREATE,
+        ActionId.PROJECT_GUIDE_UPDATE,
+        ActionId.PROJECT_GUIDE_SOURCE_SNAPSHOT_CREATE,
+        ActionId.PROJECT_GUIDE_COMPILATION_REQUEST,
+        ActionId.PROJECT_GUIDE_COMPILATION_REQUEST_AUTOMATIC,
+        ActionId.PROJECT_GUIDE_COMPILATION_EXECUTE,
+        ActionId.PROJECT_SETUP_RUN_UPDATE,
+        ActionId.PROJECT_REVIEW_POLICY_UPDATE,
+        ActionId.PROJECT_REVISION_POLICY_UPDATE,
+        ActionId.PROJECT_GUIDE_SUFFICIENCY_REPORT_CREATE,
+        ActionId.PROJECT_GUIDE_SUFFICIENCY_RUN,
+        ActionId.PROJECT_GUIDE_SUFFICIENCY_WARNINGS_ACKNOWLEDGE,
+        ActionId.PROJECT_SUBMISSION_ARTIFACT_POLICY_CREATE,
+        ActionId.PROJECT_SUBMISSION_ARTIFACT_POLICY_DERIVE,
+        ActionId.PROJECT_SUBMISSION_ARTIFACT_POLICY_UPDATE,
+        ActionId.PROJECT_READ,
+        ActionId.ACTOR_AUTHORIZATION_CONTEXT_READ,
+        ActionId.PROJECT_SETUP_RUN_READ,
+        ActionId.PROJECT_GUIDE_SUFFICIENCY_REPORT_LIST,
+        ActionId.PROJECT_GUIDE_SUFFICIENCY_REPORT_READ,
+        ActionId.PROJECT_SUBMISSION_ARTIFACT_POLICY_LIST,
+        ActionId.PROJECT_SUBMISSION_ARTIFACT_POLICY_READ,
+        ActionId.PROJECT_EFFECTIVE_SUBMISSION_ARTIFACT_POLICY_READ,
+        ActionId.PROJECT_PRE_SUBMIT_CHECKER_POLICY_READ,
+        ActionId.PROJECT_ACTIVE_GUIDE_READ,
+        ActionId.ARTIFACT_BINDING_READ,
+        ActionId.ARTIFACT_REPLICA_READ,
+        ActionId.ARTIFACT_RECEIPT_READ,
+        ActionId.ARTIFACT_VERIFICATION_JOB_READ,
+        ActionId.ARTIFACT_VERIFICATION_JOB_RETRY,
+        ActionId.ARTIFACT_RECOVERY_ATTEMPT_READ,
+        ActionId.ARTIFACT_AUDIT_READ,
+        ActionId.OPERATIONS_ARTIFACT_STORAGE_ADMISSION_READ,
+        ActionId.ARTIFACT_GUIDE_SOURCE_INGEST,
+        ActionId.ARTIFACT_GUIDE_SOURCE_READ,
+        ActionId.ARTIFACT_SUBMISSION_BUNDLE_PREPARE,
+        ActionId.SUBMISSION_CREATE,
+        ActionId.ARTIFACT_SUBMISSION_BINDING_CREATE,
+        ActionId.ARTIFACT_CHECKER_OUTPUT_BINDING_CREATE,
+        ActionId.ARTIFACT_VERIFICATION_EXECUTE,
+        ActionId.ARTIFACT_PENDING_WORK_SCAN,
+        ActionId.ARTIFACT_PUT_ATTEMPT_RESOLVE,
+        ActionId.ARTIFACT_PRE_SUBMIT_CHECKER_INPUT_MATERIALIZE,
+        ActionId.ARTIFACT_POST_SUBMIT_CHECKER_INPUT_MATERIALIZE,
+        ActionId.ARTIFACT_CHECKER_OUTPUT_WRITE,
+        ActionId.CHECKER_POST_SUBMIT_EXECUTE,
+        ActionId.CHECKER_POST_SUBMIT_FINALIZE,
+        ActionId.CHECKER_MODEL_CALL_PREPARE,
+        ActionId.CHECKER_MODEL_CALL_DISPATCH,
+        ActionId.CHECKER_MODEL_CALL_RECOVER,
+        ActionId.CHECKER_MODEL_CALL_OBSERVE,
+        ActionId.CHECKER_MODEL_CALL_COMPLETE,
+        ActionId.CHECKER_MODEL_CALL_GRANT,
+        ActionId.PROJECT_GUIDE_COMPILATION_MODEL_PREPARE,
+        ActionId.PROJECT_GUIDE_COMPILATION_MODEL_DISPATCH,
+        ActionId.PROJECT_GUIDE_COMPILATION_MODEL_OBSERVE,
+        ActionId.PROJECT_GUIDE_COMPILATION_MODEL_COMPLETE,
+        ActionId.PROJECT_MODEL_PROFILE_PROVISION,
+        ActionId.PROJECT_MODEL_BUDGET_CONFIGURE,
+        ActionId.PROJECT_MODEL_CALL_RECOVERY_CHILD_AUTHORIZE,
+        ActionId.CHECKER_PRE_SUBMIT_EXECUTE,
+        ActionId.CHECKER_PRE_SUBMIT_FINALIZE,
+        ActionId.COMPENSATION_ADAPTER_BINDING_READ,
+        ActionId.COMPENSATION_ADAPTER_BINDING_CREATE,
+        ActionId.COMPENSATION_ADAPTER_BINDING_SUSPEND,
+        ActionId.COMPENSATION_ADAPTER_BINDING_RESUME,
+    }
+)
 
 
-def _index_actions(definitions: tuple[ActionDefinition, ...]) -> MappingProxyType[ActionId, ActionDefinition]:
+def _index_actions(
+    definitions: tuple[ActionDefinition, ...],
+) -> MappingProxyType[ActionId, ActionDefinition]:
     _validate_action_definition_rows(definitions)
     indexed = {definition.action_id: definition for definition in definitions}
     _require_catalogue_counts()
@@ -966,17 +1453,30 @@ def _index_actions(definitions: tuple[ActionDefinition, ...]) -> MappingProxyTyp
         for definition in definitions
         if definition.availability is ActionAvailability.ACTIVE
     } != _ACTIVE_ACTION_BOUNDARY | CONTRIBUTION_READ_ACTIONS | CONTRIBUTOR_READ_ACTIONS | {
-        ActionId.TASK_CLAIM, ActionId.TASK_START, ActionId.TASK_WORK_CONTEXT_READ, ActionId.TASK_GUIDE_READ,
-        ActionId.PROJECT_TASK_WORK_CONTEXT_READ, ActionId.OPERATIONS_TASK_START_OVERRIDE,
-        ActionId.PROJECT_TASK_CREATE, ActionId.PROJECT_TASK_SCREEN, ActionId.PROJECT_TASK_RELEASE,
+        ActionId.TASK_CLAIM,
+        ActionId.TASK_START,
+        ActionId.TASK_WORK_CONTEXT_READ,
+        ActionId.TASK_GUIDE_READ,
+        ActionId.PROJECT_TASK_WORK_CONTEXT_READ,
+        ActionId.OPERATIONS_TASK_START_OVERRIDE,
+        ActionId.PROJECT_TASK_CREATE,
+        ActionId.PROJECT_TASK_SCREEN,
+        ActionId.PROJECT_TASK_RELEASE,
         ActionId.PROJECT_TASK_REVISION_REPAIR,
-        ActionId.PROJECT_TASK_IMPORT, ActionId.PROJECT_TASK_IMPORT_BATCH_READ,
-        ActionId.ARTIFACT_TASK_IMPORT_SOURCE_DECLARE, ActionId.ARTIFACT_TASK_IMPORT_SOURCE_UPLOAD,
+        ActionId.PROJECT_TASK_IMPORT,
+        ActionId.PROJECT_TASK_IMPORT_BATCH_READ,
+        ActionId.ARTIFACT_TASK_IMPORT_SOURCE_DECLARE,
+        ActionId.ARTIFACT_TASK_IMPORT_SOURCE_UPLOAD,
         ActionId.ARTIFACT_TASK_IMPORT_SOURCE_READ,
-        ActionId.TASK_QUEUE_READ, ActionId.PROJECT_TASK_QUEUE_READ, ActionId.OPERATIONS_TASK_QUEUE_READ,
-        ActionId.TASK_READ, ActionId.TASK_SUBMISSION_REQUIREMENTS_READ,
-        ActionId.PROJECT_TASK_READ, ActionId.PROJECT_TASK_SUBMISSION_REQUIREMENTS_READ,
-        ActionId.AUDIT_TASK_EVIDENCE_READ, ActionId.OPERATIONS_CHECKER_RETRY,
+        ActionId.TASK_QUEUE_READ,
+        ActionId.PROJECT_TASK_QUEUE_READ,
+        ActionId.OPERATIONS_TASK_QUEUE_READ,
+        ActionId.TASK_READ,
+        ActionId.TASK_SUBMISSION_REQUIREMENTS_READ,
+        ActionId.PROJECT_TASK_READ,
+        ActionId.PROJECT_TASK_SUBMISSION_REQUIREMENTS_READ,
+        ActionId.AUDIT_TASK_EVIDENCE_READ,
+        ActionId.OPERATIONS_CHECKER_RETRY,
         ActionId.OPERATIONS_CHECKER_RETRY_SOURCE_LIST,
         ActionId.OPERATIONS_POST_SUBMIT_DELIVERY_LIST,
         ActionId.OPERATIONS_POST_SUBMIT_DELIVERY_RECONCILE,
@@ -991,12 +1491,30 @@ ACTION_BY_ID = _index_actions(ACTION_DEFINITIONS)
 
 _SERVICE_ACTIONS = {
     ServiceIdentity.TASK_POST_SUBMIT_ROUTER: frozenset({ActionId.TASK_POST_SUBMIT_ROUTE}),
-    ServiceIdentity.CHECKER_PRE_SUBMIT: frozenset({ActionId.CHECKER_PRE_SUBMIT_EXECUTE, ActionId.CHECKER_PRE_SUBMIT_FINALIZE}),
-    ServiceIdentity.CHECKER_POST_SUBMIT: frozenset({ActionId.CHECKER_POST_SUBMIT_EXECUTE, ActionId.CHECKER_POST_SUBMIT_FINALIZE}),
-    ServiceIdentity.TASK_ASSIGNMENT_RECONCILER: frozenset({ActionId.TASK_ASSIGNMENT_AUTHORITY_RECONCILE}),
-    ServiceIdentity.TASK_REVISION_EXPIRER: frozenset({
-        ActionId.TASK_REVISION_EXPIRE, ActionId.TASK_REVISION_RECOVER,
-    }),
+    ServiceIdentity.CHECKER_PRE_SUBMIT: frozenset(
+        {ActionId.CHECKER_PRE_SUBMIT_EXECUTE, ActionId.CHECKER_PRE_SUBMIT_FINALIZE}
+    ),
+    ServiceIdentity.CHECKER_POST_SUBMIT: frozenset(
+        {
+            ActionId.CHECKER_POST_SUBMIT_EXECUTE,
+            ActionId.CHECKER_POST_SUBMIT_FINALIZE,
+            ActionId.CHECKER_MODEL_CALL_PREPARE,
+            ActionId.CHECKER_MODEL_CALL_DISPATCH,
+            ActionId.CHECKER_MODEL_CALL_RECOVER,
+            ActionId.CHECKER_MODEL_CALL_OBSERVE,
+            ActionId.CHECKER_MODEL_CALL_COMPLETE,
+            ActionId.CHECKER_MODEL_CALL_GRANT,
+        }
+    ),
+    ServiceIdentity.TASK_ASSIGNMENT_RECONCILER: frozenset(
+        {ActionId.TASK_ASSIGNMENT_AUTHORITY_RECONCILE}
+    ),
+    ServiceIdentity.TASK_REVISION_EXPIRER: frozenset(
+        {
+            ActionId.TASK_REVISION_EXPIRE,
+            ActionId.TASK_REVISION_RECOVER,
+        }
+    ),
     ServiceIdentity.OUTBOX_DISPATCHER: frozenset({ActionId.OUTBOX_DISPATCH}),
     ServiceIdentity.ARTIFACT_VERIFIER: frozenset({ActionId.ARTIFACT_VERIFICATION_EXECUTE}),
     ServiceIdentity.ARTIFACT_PUT_RESOLVER: frozenset({ActionId.ARTIFACT_PUT_ATTEMPT_RESOLVE}),
@@ -1025,6 +1543,10 @@ _SERVICE_ACTIONS = {
             ActionId.PROJECT_SUBMISSION_ARTIFACT_POLICY_DERIVE,
             ActionId.PROJECT_POST_SUBMIT_CHECKER_POLICY_DERIVE,
             ActionId.PROJECT_SETUP_RUN_UPDATE,
+            ActionId.PROJECT_GUIDE_COMPILATION_MODEL_PREPARE,
+            ActionId.PROJECT_GUIDE_COMPILATION_MODEL_DISPATCH,
+            ActionId.PROJECT_GUIDE_COMPILATION_MODEL_OBSERVE,
+            ActionId.PROJECT_GUIDE_COMPILATION_MODEL_COMPLETE,
         }
     ),
     ServiceIdentity.REVIEW_PREFERENCE_EXPIRY: frozenset({ActionId.REVIEW_PREFERENCE_EXPIRY_RUN}),
@@ -1039,9 +1561,7 @@ _SERVICE_ACTIONS = {
     ServiceIdentity.REVIEW_PROJECTION: frozenset({ActionId.REVIEW_PROJECTION_REBUILD}),
 }
 
-ACTION_BEARING_SERVICE_IDENTITIES = SERVICE_IDENTITIES - {
-    ServiceIdentity.COMPENSATION_ADAPTER
-}
+ACTION_BEARING_SERVICE_IDENTITIES = SERVICE_IDENTITIES - {ServiceIdentity.COMPENSATION_ADAPTER}
 
 _EXPECTED_SERVICE_ACTION_MEMBERSHIPS = frozenset(
     (identity, action)
@@ -1051,6 +1571,12 @@ _EXPECTED_SERVICE_ACTION_MEMBERSHIPS = frozenset(
         (ServiceIdentity.CHECKER_PRE_SUBMIT, ActionId.CHECKER_PRE_SUBMIT_FINALIZE),
         (ServiceIdentity.CHECKER_POST_SUBMIT, ActionId.CHECKER_POST_SUBMIT_EXECUTE),
         (ServiceIdentity.CHECKER_POST_SUBMIT, ActionId.CHECKER_POST_SUBMIT_FINALIZE),
+        (ServiceIdentity.CHECKER_POST_SUBMIT, ActionId.CHECKER_MODEL_CALL_PREPARE),
+        (ServiceIdentity.CHECKER_POST_SUBMIT, ActionId.CHECKER_MODEL_CALL_DISPATCH),
+        (ServiceIdentity.CHECKER_POST_SUBMIT, ActionId.CHECKER_MODEL_CALL_RECOVER),
+        (ServiceIdentity.CHECKER_POST_SUBMIT, ActionId.CHECKER_MODEL_CALL_OBSERVE),
+        (ServiceIdentity.CHECKER_POST_SUBMIT, ActionId.CHECKER_MODEL_CALL_COMPLETE),
+        (ServiceIdentity.CHECKER_POST_SUBMIT, ActionId.CHECKER_MODEL_CALL_GRANT),
         (ServiceIdentity.TASK_ASSIGNMENT_RECONCILER, ActionId.TASK_ASSIGNMENT_AUTHORITY_RECONCILE),
         (ServiceIdentity.TASK_REVISION_EXPIRER, ActionId.TASK_REVISION_EXPIRE),
         (ServiceIdentity.TASK_REVISION_EXPIRER, ActionId.TASK_REVISION_RECOVER),
@@ -1078,6 +1604,10 @@ _EXPECTED_SERVICE_ACTION_MEMBERSHIPS = frozenset(
         (ServiceIdentity.PROJECT_SETUP, ActionId.PROJECT_SUBMISSION_ARTIFACT_POLICY_DERIVE),
         (ServiceIdentity.PROJECT_SETUP, ActionId.PROJECT_POST_SUBMIT_CHECKER_POLICY_DERIVE),
         (ServiceIdentity.PROJECT_SETUP, ActionId.PROJECT_SETUP_RUN_UPDATE),
+        (ServiceIdentity.PROJECT_SETUP, ActionId.PROJECT_GUIDE_COMPILATION_MODEL_PREPARE),
+        (ServiceIdentity.PROJECT_SETUP, ActionId.PROJECT_GUIDE_COMPILATION_MODEL_DISPATCH),
+        (ServiceIdentity.PROJECT_SETUP, ActionId.PROJECT_GUIDE_COMPILATION_MODEL_OBSERVE),
+        (ServiceIdentity.PROJECT_SETUP, ActionId.PROJECT_GUIDE_COMPILATION_MODEL_COMPLETE),
         (ServiceIdentity.REVIEW_PREFERENCE_EXPIRY, ActionId.REVIEW_PREFERENCE_EXPIRY_RUN),
         (ServiceIdentity.REVIEW_LEASE_EXPIRY, ActionId.REVIEW_LEASE_EXPIRY_RUN),
         (
@@ -1100,6 +1630,16 @@ _ACTIVE_SERVICE_ACTIONS = {
     ActionId.TASK_POST_SUBMIT_ROUTE,
     ActionId.CHECKER_POST_SUBMIT_EXECUTE,
     ActionId.CHECKER_POST_SUBMIT_FINALIZE,
+    ActionId.CHECKER_MODEL_CALL_PREPARE,
+    ActionId.CHECKER_MODEL_CALL_DISPATCH,
+    ActionId.CHECKER_MODEL_CALL_RECOVER,
+    ActionId.CHECKER_MODEL_CALL_OBSERVE,
+    ActionId.CHECKER_MODEL_CALL_COMPLETE,
+    ActionId.CHECKER_MODEL_CALL_GRANT,
+    ActionId.PROJECT_GUIDE_COMPILATION_MODEL_PREPARE,
+    ActionId.PROJECT_GUIDE_COMPILATION_MODEL_DISPATCH,
+    ActionId.PROJECT_GUIDE_COMPILATION_MODEL_OBSERVE,
+    ActionId.PROJECT_GUIDE_COMPILATION_MODEL_COMPLETE,
     ActionId.ARTIFACT_POST_SUBMIT_CHECKER_INPUT_MATERIALIZE,
     ActionId.TASK_ASSIGNMENT_AUTHORITY_RECONCILE,
     ActionId.TASK_REVISION_EXPIRE,
@@ -1111,8 +1651,10 @@ _ACTIVE_SERVICE_ACTIONS = {
     ActionId.ARTIFACT_PUT_ATTEMPT_RESOLVE,
     ActionId.ARTIFACT_PENDING_WORK_SCAN,
     ActionId.ARTIFACT_SUBMISSION_BINDING_CREATE,
+    ActionId.ARTIFACT_CHECKER_OUTPUT_BINDING_CREATE,
     ActionId.ARTIFACT_GUIDE_SOURCE_READ,
     ActionId.ARTIFACT_PRE_SUBMIT_CHECKER_INPUT_MATERIALIZE,
+    ActionId.ARTIFACT_CHECKER_OUTPUT_WRITE,
     ActionId.PROJECT_GUIDE_SUFFICIENCY_RUN,
     ActionId.PROJECT_GUIDE_COMPILATION_EXECUTE,
     ActionId.PROJECT_GUIDE_COMPILATION_REQUEST_AUTOMATIC,
@@ -1124,43 +1666,170 @@ def _index_service_actions(
     rows: dict[ServiceIdentity, frozenset[ActionId]],
 ) -> MappingProxyType[ServiceIdentity, frozenset[ActionId]]:
     expected_metadata = {
-        ActionId.TASK_POST_SUBMIT_ROUTE: (PermissionId.TASK_POST_SUBMIT_ROUTE, ActionOwner.ARCH_04E2),
-        ActionId.CHECKER_PRE_SUBMIT_EXECUTE: (PermissionId.CHECKER_PRE_SUBMIT_EXECUTE, ActionOwner.PILOT_04),
-        ActionId.CHECKER_PRE_SUBMIT_FINALIZE: (PermissionId.CHECKER_PRE_SUBMIT_FINALIZE, ActionOwner.PILOT_04),
-        ActionId.CHECKER_POST_SUBMIT_EXECUTE: (PermissionId.CHECKER_POST_SUBMIT_EXECUTE, ActionOwner.ARCH_04D2),
-        ActionId.CHECKER_POST_SUBMIT_FINALIZE: (PermissionId.CHECKER_POST_SUBMIT_FINALIZE, ActionOwner.ARCH_04D2),
-        ActionId.TASK_ASSIGNMENT_AUTHORITY_RECONCILE: (PermissionId.TASK_ASSIGNMENT_AUTHORITY_RECONCILE, ActionOwner.ARCH_03C1),
+        ActionId.TASK_POST_SUBMIT_ROUTE: (
+            PermissionId.TASK_POST_SUBMIT_ROUTE,
+            ActionOwner.ARCH_04E2,
+        ),
+        ActionId.CHECKER_PRE_SUBMIT_EXECUTE: (
+            PermissionId.CHECKER_PRE_SUBMIT_EXECUTE,
+            ActionOwner.PILOT_04,
+        ),
+        ActionId.CHECKER_PRE_SUBMIT_FINALIZE: (
+            PermissionId.CHECKER_PRE_SUBMIT_FINALIZE,
+            ActionOwner.PILOT_04,
+        ),
+        ActionId.CHECKER_POST_SUBMIT_EXECUTE: (
+            PermissionId.CHECKER_POST_SUBMIT_EXECUTE,
+            ActionOwner.ARCH_04D2,
+        ),
+        ActionId.CHECKER_POST_SUBMIT_FINALIZE: (
+            PermissionId.CHECKER_POST_SUBMIT_FINALIZE,
+            ActionOwner.ARCH_04D2,
+        ),
+        ActionId.CHECKER_MODEL_CALL_PREPARE: (
+            PermissionId.CHECKER_MODEL_CALL_PREPARE,
+            ActionOwner.PILOT_05,
+        ),
+        ActionId.CHECKER_MODEL_CALL_DISPATCH: (
+            PermissionId.CHECKER_MODEL_CALL_DISPATCH,
+            ActionOwner.PILOT_05,
+        ),
+        ActionId.CHECKER_MODEL_CALL_RECOVER: (
+            PermissionId.CHECKER_MODEL_CALL_RECOVER,
+            ActionOwner.PILOT_05,
+        ),
+        ActionId.CHECKER_MODEL_CALL_OBSERVE: (
+            PermissionId.CHECKER_MODEL_CALL_OBSERVE,
+            ActionOwner.PILOT_05,
+        ),
+        ActionId.CHECKER_MODEL_CALL_COMPLETE: (
+            PermissionId.CHECKER_MODEL_CALL_COMPLETE,
+            ActionOwner.PILOT_05,
+        ),
+        ActionId.CHECKER_MODEL_CALL_GRANT: (
+            PermissionId.CHECKER_MODEL_CALL_GRANT,
+            ActionOwner.PILOT_05,
+        ),
+        ActionId.PROJECT_GUIDE_COMPILATION_MODEL_PREPARE: (
+            PermissionId.PROJECT_GUIDE_COMPILATION_MODEL_PREPARE,
+            ActionOwner.PILOT_05,
+        ),
+        ActionId.PROJECT_GUIDE_COMPILATION_MODEL_DISPATCH: (
+            PermissionId.PROJECT_GUIDE_COMPILATION_MODEL_DISPATCH,
+            ActionOwner.PILOT_05,
+        ),
+        ActionId.PROJECT_GUIDE_COMPILATION_MODEL_OBSERVE: (
+            PermissionId.PROJECT_GUIDE_COMPILATION_MODEL_OBSERVE,
+            ActionOwner.PILOT_05,
+        ),
+        ActionId.PROJECT_GUIDE_COMPILATION_MODEL_COMPLETE: (
+            PermissionId.PROJECT_GUIDE_COMPILATION_MODEL_COMPLETE,
+            ActionOwner.PILOT_05,
+        ),
+        ActionId.TASK_ASSIGNMENT_AUTHORITY_RECONCILE: (
+            PermissionId.TASK_ASSIGNMENT_AUTHORITY_RECONCILE,
+            ActionOwner.ARCH_03C1,
+        ),
         ActionId.TASK_REVISION_EXPIRE: (PermissionId.TASK_REVISION_EXPIRE, ActionOwner.PILOT_08),
         ActionId.TASK_REVISION_RECOVER: (PermissionId.TASK_REVISION_RECOVER, ActionOwner.PILOT_08),
         ActionId.OUTBOX_DISPATCH: (PermissionId.OUTBOX_DISPATCH, ActionOwner.AUTH_OUTBOX_01),
-        ActionId.ARTIFACT_VERIFICATION_EXECUTE: (PermissionId.ARTIFACT_VERIFICATION_EXECUTE, ActionOwner.AUTH_ART_02D_INTERNAL),
-        ActionId.ARTIFACT_PUT_ATTEMPT_RESOLVE: (PermissionId.ARTIFACT_PUT_ATTEMPT_RESOLVE, ActionOwner.AUTH_ART_02D_INTERNAL),
-        ActionId.ARTIFACT_PENDING_WORK_SCAN: (PermissionId.ARTIFACT_PENDING_WORK_SCAN, ActionOwner.AUTH_ART_02D_INTERNAL),
-        ActionId.ARTIFACT_SUBMISSION_BINDING_CREATE: (PermissionId.ARTIFACT_BINDING_CREATE, ActionOwner.AUTH_ART_05),
-        ActionId.ARTIFACT_CHECKER_OUTPUT_BINDING_CREATE: (PermissionId.ARTIFACT_BINDING_CREATE, ActionOwner.AUTH_ART_06B),
-        ActionId.ARTIFACT_GUIDE_SOURCE_READ: (PermissionId.ARTIFACT_GUIDE_SOURCE_READ, ActionOwner.XINT_002_04B),
-        ActionId.ARTIFACT_PRE_SUBMIT_CHECKER_INPUT_MATERIALIZE: (PermissionId.ARTIFACT_CHECKER_INPUT_MATERIALIZE, ActionOwner.XINT_002_06A),
-        ActionId.ARTIFACT_POST_SUBMIT_CHECKER_INPUT_MATERIALIZE: (PermissionId.ARTIFACT_CHECKER_INPUT_MATERIALIZE, ActionOwner.AUTH_ART_06A),
-        ActionId.ARTIFACT_CHECKER_OUTPUT_WRITE: (PermissionId.ARTIFACT_CHECKER_OUTPUT_WRITE, ActionOwner.AUTH_ART_06B),
-        ActionId.ARTIFACT_REVIEW_PACKET_MATERIALIZE: (PermissionId.ARTIFACT_REVIEW_PACKET_MATERIALIZE, ActionOwner.XINT_002_07),
-        ActionId.ARTIFACT_REVIEW_EVIDENCE_BINDING_CREATE: (PermissionId.ARTIFACT_BINDING_CREATE, ActionOwner.XINT_002_07),
-        ActionId.PROJECT_GUIDE_SUFFICIENCY_RUN: (PermissionId.PROJECT_GUIDE_MANAGE, ActionOwner.AUTH_12E),
-        ActionId.PROJECT_GUIDE_COMPILATION_REQUEST_AUTOMATIC: (PermissionId.PROJECT_GUIDE_COMPILATION_EXECUTE, ActionOwner.AUTH_12I),
-        ActionId.PROJECT_GUIDE_COMPILATION_EXECUTE: (PermissionId.PROJECT_GUIDE_COMPILATION_EXECUTE, ActionOwner.AUTH_12I),
-        ActionId.PROJECT_SUBMISSION_ARTIFACT_POLICY_DERIVE: (PermissionId.PROJECT_EFFECTIVE_POLICY_MANAGE, ActionOwner.AUTH_12F3),
-        ActionId.PROJECT_POST_SUBMIT_CHECKER_POLICY_DERIVE: (PermissionId.PROJECT_EFFECTIVE_POLICY_MANAGE, ActionOwner.AUTH_12G),
-        ActionId.PROJECT_SETUP_RUN_UPDATE: (PermissionId.PROJECT_GUIDE_MANAGE, ActionOwner.AUTH_12B2),
-        ActionId.REVIEW_PREFERENCE_EXPIRY_RUN: (PermissionId.OPERATIONS_TIMER_RUN, ActionOwner.AUTH_REV_06),
-        ActionId.REVIEW_LEASE_EXPIRY_RUN: (PermissionId.OPERATIONS_TIMER_RUN, ActionOwner.AUTH_REV_06),
-        ActionId.REVIEW_RECONCILE_RUN: (PermissionId.OPERATIONS_RECONCILE_RUN, ActionOwner.AUTH_REV_11),
-        ActionId.REVIEW_ARTIFACT_REFERENCE_RECONCILE: (PermissionId.OPERATIONS_RECONCILE_RUN, ActionOwner.AUTH_REV_12),
-        ActionId.REVIEW_PROJECTION_REBUILD: (PermissionId.OPERATIONS_PROJECTION_REBUILD, ActionOwner.AUTH_REV_12),
+        ActionId.ARTIFACT_VERIFICATION_EXECUTE: (
+            PermissionId.ARTIFACT_VERIFICATION_EXECUTE,
+            ActionOwner.AUTH_ART_02D_INTERNAL,
+        ),
+        ActionId.ARTIFACT_PUT_ATTEMPT_RESOLVE: (
+            PermissionId.ARTIFACT_PUT_ATTEMPT_RESOLVE,
+            ActionOwner.AUTH_ART_02D_INTERNAL,
+        ),
+        ActionId.ARTIFACT_PENDING_WORK_SCAN: (
+            PermissionId.ARTIFACT_PENDING_WORK_SCAN,
+            ActionOwner.AUTH_ART_02D_INTERNAL,
+        ),
+        ActionId.ARTIFACT_SUBMISSION_BINDING_CREATE: (
+            PermissionId.ARTIFACT_BINDING_CREATE,
+            ActionOwner.AUTH_ART_05,
+        ),
+        ActionId.ARTIFACT_CHECKER_OUTPUT_BINDING_CREATE: (
+            PermissionId.ARTIFACT_BINDING_CREATE,
+            ActionOwner.AUTH_ART_06B,
+        ),
+        ActionId.ARTIFACT_GUIDE_SOURCE_READ: (
+            PermissionId.ARTIFACT_GUIDE_SOURCE_READ,
+            ActionOwner.XINT_002_04B,
+        ),
+        ActionId.ARTIFACT_PRE_SUBMIT_CHECKER_INPUT_MATERIALIZE: (
+            PermissionId.ARTIFACT_CHECKER_INPUT_MATERIALIZE,
+            ActionOwner.XINT_002_06A,
+        ),
+        ActionId.ARTIFACT_POST_SUBMIT_CHECKER_INPUT_MATERIALIZE: (
+            PermissionId.ARTIFACT_CHECKER_INPUT_MATERIALIZE,
+            ActionOwner.AUTH_ART_06A,
+        ),
+        ActionId.ARTIFACT_CHECKER_OUTPUT_WRITE: (
+            PermissionId.ARTIFACT_CHECKER_OUTPUT_WRITE,
+            ActionOwner.AUTH_ART_06B,
+        ),
+        ActionId.ARTIFACT_REVIEW_PACKET_MATERIALIZE: (
+            PermissionId.ARTIFACT_REVIEW_PACKET_MATERIALIZE,
+            ActionOwner.XINT_002_07,
+        ),
+        ActionId.ARTIFACT_REVIEW_EVIDENCE_BINDING_CREATE: (
+            PermissionId.ARTIFACT_BINDING_CREATE,
+            ActionOwner.XINT_002_07,
+        ),
+        ActionId.PROJECT_GUIDE_SUFFICIENCY_RUN: (
+            PermissionId.PROJECT_GUIDE_MANAGE,
+            ActionOwner.AUTH_12E,
+        ),
+        ActionId.PROJECT_GUIDE_COMPILATION_REQUEST_AUTOMATIC: (
+            PermissionId.PROJECT_GUIDE_COMPILATION_EXECUTE,
+            ActionOwner.AUTH_12I,
+        ),
+        ActionId.PROJECT_GUIDE_COMPILATION_EXECUTE: (
+            PermissionId.PROJECT_GUIDE_COMPILATION_EXECUTE,
+            ActionOwner.AUTH_12I,
+        ),
+        ActionId.PROJECT_SUBMISSION_ARTIFACT_POLICY_DERIVE: (
+            PermissionId.PROJECT_EFFECTIVE_POLICY_MANAGE,
+            ActionOwner.AUTH_12F3,
+        ),
+        ActionId.PROJECT_POST_SUBMIT_CHECKER_POLICY_DERIVE: (
+            PermissionId.PROJECT_EFFECTIVE_POLICY_MANAGE,
+            ActionOwner.AUTH_12G,
+        ),
+        ActionId.PROJECT_SETUP_RUN_UPDATE: (
+            PermissionId.PROJECT_GUIDE_MANAGE,
+            ActionOwner.AUTH_12B2,
+        ),
+        ActionId.REVIEW_PREFERENCE_EXPIRY_RUN: (
+            PermissionId.OPERATIONS_TIMER_RUN,
+            ActionOwner.AUTH_REV_06,
+        ),
+        ActionId.REVIEW_LEASE_EXPIRY_RUN: (
+            PermissionId.OPERATIONS_TIMER_RUN,
+            ActionOwner.AUTH_REV_06,
+        ),
+        ActionId.REVIEW_RECONCILE_RUN: (
+            PermissionId.OPERATIONS_RECONCILE_RUN,
+            ActionOwner.AUTH_REV_11,
+        ),
+        ActionId.REVIEW_ARTIFACT_REFERENCE_RECONCILE: (
+            PermissionId.OPERATIONS_RECONCILE_RUN,
+            ActionOwner.AUTH_REV_12,
+        ),
+        ActionId.REVIEW_PROJECTION_REBUILD: (
+            PermissionId.OPERATIONS_PROJECTION_REBUILD,
+            ActionOwner.AUTH_REV_12,
+        ),
     }
     if set(rows) != ACTION_BEARING_SERVICE_IDENTITIES:
         raise RuntimeError("service action matrix identity mismatch")
     if any(not actions for actions in rows.values()):
         raise RuntimeError("service action matrix row mismatch")
-    if frozenset((i, a) for i, actions in rows.items() for a in actions) != _EXPECTED_SERVICE_ACTION_MEMBERSHIPS:
+    if (
+        frozenset((i, a) for i, actions in rows.items() for a in actions)
+        != _EXPECTED_SERVICE_ACTION_MEMBERSHIPS
+    ):
         raise RuntimeError("service action matrix row mismatch")
     if not FUTURE_INTENT_REQUIRED_ACTIONS.isdisjoint(
         action for actions in rows.values() for action in actions

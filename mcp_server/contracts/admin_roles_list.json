@@ -1,5 +1,5 @@
 {
-  "canonical_sha256": "17732f8c534e37651c1dfa36625e171f67aa482a6739570e17d3341b1cf44192",
+  "canonical_sha256": "c202da7ee0b8bbbeddf16471fcd0e82e29c75464bb65c8387780f5d9ff9bab7c",
   "components": {
     "schemas": {
       "AdminRole": {
@@ -156,6 +156,15 @@
           "checker.pre_submit.finalize",
           "checker.post_submit.execute",
           "checker.post_submit.finalize",
+          "checker.model_call.prepare",
+          "checker.model_call.dispatch",
+          "checker.model_call.recover",
+          "checker.model_call.observe",
+          "checker.model_call.complete",
+          "checker.model_call.grant",
+          "project.model_profile.manage",
+          "project.model_budget.manage",
+          "project.model_call.recovery_child.authorize",
           "outbox.dispatch",
           "actor.service.provision",
           "admin_role.read",
@@ -430,7 +439,7 @@
   "schema_version": 1,
   "source": {
     "action_id": "authorization.admin_role_definitions.read",
-    "backend_git_sha": "7326dc95e59f59fc9f6dee438857091e73c370aa",
+    "backend_git_sha": "3a1d2b53062c534d199f7d7087832b66d2c0b72a",
     "method": "GET",
     "openapi_version": "3.1.0",
     "path": "/api/v1/authorization/admin-role-definitions"

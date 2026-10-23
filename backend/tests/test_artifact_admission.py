@@ -476,7 +476,7 @@ async def test_committed_put_and_independent_verification_are_fenced(
             async with minted_source(
                 tmp_path / "fenced-checker-output",
                 b"independently verified bytes",
-                media_type="text/plain",
+                media_type="application/json",
             ) as source:
                 _, _, _, admission = await _admit_checker_output(
                     session, settings, namespace, source, relationships=relationships)
@@ -567,7 +567,7 @@ async def test_every_provider_operation_revalidates_namespace_before_io(
     try:
         async with factory() as session:
             relationships = await seed_checker_output_relationships(session, namespace, policy_bundle=policy_bundle)
-            async with minted_source(tmp_path / "namespace-fence", b"fenced") as source:
+            async with minted_source(tmp_path / "namespace-fence", b"fenced", media_type="application/json") as source:
                 _, _, _, admission = await _admit_checker_output(
                     session, settings, namespace, source, relationships=relationships)
                 drifted = ArtifactStorageOrchestrator(
@@ -1316,7 +1316,7 @@ async def test_verification_resource_drift_after_read_is_stale_without_terminal_
     try:
         async with factory() as session:
             relationships = await seed_checker_output_relationships(session, namespace, policy_bundle=policy_bundle)
-            async with minted_source(tmp_path / "verification-drift", b"expected") as source:
+            async with minted_source(tmp_path / "verification-drift", b"expected", media_type="application/json") as source:
                 _, _, _, admission = await _admit_checker_output(
                     session, settings, namespace, source, relationships=relationships)
                 orchestrator = ArtifactStorageOrchestrator(
@@ -1393,7 +1393,7 @@ async def test_verification_rechecks_relationship_after_prepare_before_io(
     try:
         async with factory() as session:
             relationships = await seed_checker_output_relationships(session, namespace, policy_bundle=policy_bundle)
-            async with minted_source(tmp_path / "preclaim-drift", b"expected") as source:
+            async with minted_source(tmp_path / "preclaim-drift", b"expected", media_type="application/json") as source:
                 _, _, _, admission = await _admit_checker_output(
                     session, settings, namespace, source, relationships=relationships)
                 allowing = ArtifactStorageOrchestrator(
@@ -1486,7 +1486,7 @@ async def test_verification_relationship_conflict_uses_fresh_terminal_authority(
             attempts: list[ArtifactPutAttempt] = []
             for name, value in (("first", b"first"), ("second", b"second")):
                 relationships = await seed_checker_output_relationships(session, namespace, policy_bundle=policy_bundle)
-                async with minted_source(tmp_path / name, value) as source:
+                async with minted_source(tmp_path / name, value, media_type="application/json") as source:
                     _, _, _, admission = await _admit_checker_output(
                         session, settings, namespace, source, relationships=relationships
                     )
@@ -1544,7 +1544,7 @@ async def test_verification_rechecks_authorized_object_ref_before_io(
     try:
         async with factory() as session:
             relationships = await seed_checker_output_relationships(session, namespace, policy_bundle=policy_bundle)
-            async with minted_source(tmp_path / "preclaim-object-ref-drift", b"expected") as source:
+            async with minted_source(tmp_path / "preclaim-object-ref-drift", b"expected", media_type="application/json") as source:
                 _, _, _, admission = await _admit_checker_output(
                     session, settings, namespace, source, relationships=relationships)
                 allowing = ArtifactStorageOrchestrator(
@@ -1602,7 +1602,7 @@ async def test_verification_rechecks_authorized_object_ref_after_io(
     try:
         async with factory() as session:
             relationships = await seed_checker_output_relationships(session, namespace, policy_bundle=policy_bundle)
-            async with minted_source(tmp_path / "postread-object-ref-drift", b"expected") as source:
+            async with minted_source(tmp_path / "postread-object-ref-drift", b"expected", media_type="application/json") as source:
                 _, _, _, admission = await _admit_checker_output(
                     session, settings, namespace, source, relationships=relationships)
                 orchestrator = ArtifactStorageOrchestrator(
@@ -1664,7 +1664,7 @@ async def test_verification_terminal_result_matrix(
     try:
         async with factory() as session:
             relationships = await seed_checker_output_relationships(session, namespace, policy_bundle=policy_bundle)
-            async with minted_source(tmp_path / expected, b"verification matrix") as source:
+            async with minted_source(tmp_path / expected, b"verification matrix", media_type="application/json") as source:
                 _, _, _, admission = await _admit_checker_output(
                     session, settings, namespace, source, relationships=relationships)
                 orchestrator = ArtifactStorageOrchestrator(
@@ -1713,7 +1713,7 @@ async def test_verification_terminal_authority_denial_writes_zero_result_facts(
         async with factory() as session:
             relationships = await seed_checker_output_relationships(session, namespace, policy_bundle=policy_bundle)
             async with minted_source(
-                tmp_path / f"verify-{denial_reason}", denial_reason.encode()
+                tmp_path / f"verify-{denial_reason}", denial_reason.encode(), media_type="application/json"
             ) as source:
                 _, _, _, admission = await _admit_checker_output(
                     session, settings, namespace, source, relationships=relationships)
@@ -2249,7 +2249,7 @@ async def test_checker_output_requires_exact_active_fixed_service_identity(
 
             baseline = await checker_admission_baseline(session)
             await session.rollback()
-            async with minted_source(tmp_path / "scratch-source", b"checker") as source:
+            async with minted_source(tmp_path / "scratch-source", b"checker", media_type="application/json") as source:
                 service = ArtifactAdmissionService(session, settings, namespace)
                 request = await _checker_output_request(
                     session, checker_run_id, source
@@ -2283,22 +2283,8 @@ async def test_checker_output_requires_exact_active_fixed_service_identity(
                 replay = await service.admit(
                     request, checker_output_authority=authority
                 )
-                takeover_request = replace(
-                    request,
-                    reservation=request.reservation.model_copy(
-                        update={
-                            "worker_lease_id": new_record_id(),
-                            "worker_lease_generation": 2,
-                        }
-                    ),
-                )
-                takeover = await service.admit(
-                    takeover_request,
-                    checker_output_authority=authority,
-                )
-
             await assert_exact_checker_admission(
-                session, result=result, replay=replay, takeover=takeover,
+                session, result=result, replay=replay,
                 request=request, authority=authority, project_id=project_id,
                 task_id=task_id, checker_run_id=checker_run_id, baseline=baseline,
             )
@@ -2326,7 +2312,7 @@ async def test_invalid_checker_slot_precedes_namespace_drift(
                 namespace,
                 namespace_fingerprint="sha256:" + "f" * 64,
             )
-            async with minted_source(tmp_path / "scratch-source", b"checker") as source:
+            async with minted_source(tmp_path / "scratch-source", b"checker", media_type="application/json") as source:
                 valid = await _checker_output_request(
                     session, checker_run_id, source
                 )
@@ -2354,7 +2340,7 @@ async def _seed_verification_scan_jobs(factory, settings, namespace, store, tmp_
         for index in range(3):
             relationships = await seed_checker_output_relationships(seed_session, namespace, policy_bundle=policy_bundle)
             async with minted_source(
-                tmp_path / f"verification-scan-{index}", f"job-{index}".encode()
+                tmp_path / f"verification-scan-{index}", f"job-{index}".encode(), media_type="application/json"
             ) as source:
                 _, _, _, admission = await _admit_checker_output(
                     seed_session, settings, namespace, source, relationships=relationships

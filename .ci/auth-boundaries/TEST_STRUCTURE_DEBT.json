@@ -2,11 +2,11 @@
   "entries": [
     {
       "capability": "oversized_authorization_structure",
-      "content_sha256": "52925f333aa6dec0a6355e76c8352fbf7f7fff4d6de898a98834b4d13f15c393",
-      "end_line": 1270,
+      "content_sha256": "9bd965c903b2b2586248f127f9b1e991bb5871659d624b5f69f3b4a2b2499329",
+      "end_line": 1269,
       "hard_limit": 1200,
       "kind": "production_file",
-      "observed_lines": 1270,
+      "observed_lines": 1269,
       "path": "backend/app/modules/authorization/kernel.py",
       "qualified_symbol": null,
       "removal_chunk": "WS-AUTH-003-CLOSE",
@@ -27,26 +27,26 @@
     {
       "capability": "oversized_authorization_structure",
       "content_sha256": "75bcb2639cd1f099597c8b07efa9b6d78d334ea3f092a1bf89ef638417b5856f",
-      "end_line": 494,
+      "end_line": 488,
       "hard_limit": 100,
       "kind": "production_function",
       "observed_lines": 101,
       "path": "backend/app/modules/authorization/kernel.py",
       "qualified_symbol": "AuthorizationService._prepare_prelocked",
       "removal_chunk": "WS-AUTH-003-CLOSE",
-      "start_line": 394
+      "start_line": 388
     },
     {
       "capability": "oversized_authorization_structure",
       "content_sha256": "a2bcc3b6fbfb59e65e5c606b777378451733f5fd11c9aeccf9f2e05773b2361f",
-      "end_line": 818,
+      "end_line": 812,
       "hard_limit": 100,
       "kind": "production_function",
       "observed_lines": 106,
       "path": "backend/app/modules/authorization/kernel.py",
       "qualified_symbol": "AuthorizationService._require_prelocked",
       "removal_chunk": "WS-AUTH-003-CLOSE",
-      "start_line": 713
+      "start_line": 707
     },
     {
       "capability": "oversized_authorization_structure",
@@ -86,11 +86,11 @@
     },
     {
       "capability": "oversized_authorization_structure",
-      "content_sha256": "c20ff97f3860c899f5395fb3341123e7ec5302468ea7cef63e5f87672791e419",
-      "end_line": 2467,
+      "content_sha256": "367dcecc045d7db91ffe36e4164052e479d484cd26cb7b424a96155d8e7f529b",
+      "end_line": 2453,
       "hard_limit": 1200,
       "kind": "test_file",
-      "observed_lines": 2467,
+      "observed_lines": 2453,
       "path": "backend/tests/test_artifact_admission.py",
       "qualified_symbol": null,
       "removal_chunk": "WS-AUTH-003-CLOSE",
