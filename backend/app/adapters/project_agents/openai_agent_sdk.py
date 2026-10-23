@@ -416,7 +416,7 @@ class OpenAIAgentSdkProjectGuideRuntime:
 
 
 def _require_opened_sources(context, result, opened):
-    """Require this phase to access every cited original and all originals when ready."""
+    """Require this phase to access every assigned original and every cited original."""
     if not opened:
         raise ValueError("compilation has no opened document evidence")
     document_handles = {

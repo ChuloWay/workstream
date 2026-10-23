@@ -81,3 +81,11 @@ correction, exact displayed JSON, both enum sites and the absent notes field.
 Hosted preflight also found the added example module outside the tracked behavior
 partition. The static example now lives with its existing instruction owner; no
 partition rule or CI gate changed.
+
+Independent architecture, product/operations, security, QA and test-delta replays
+confirmed those repairs. Discriminating regressions reject incomplete source
+access, a widened enum, the invalid example wrapper, missing correction handling
+and retained source-open evidence across phases. The remaining documentation
+finding was a stale helper docstring; it now states the implemented all-originals
+requirement. These reviews qualify offline service and SDK composition, not live
+provider or deployment behavior. Hosted full-suite verification remains required.
