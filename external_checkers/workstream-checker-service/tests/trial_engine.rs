@@ -233,6 +233,7 @@ fn profile() -> TrialProfile {
         maximum_frame_bytes: 64 * 1024,
         maximum_response_bytes: 16 * 1024,
         maximum_steps: 1,
+        maximum_total_timeout_ms: 5_000,
         maximum_build_timeout_ms: 2_000,
         maximum_step_timeout_ms: 1_000,
         maximum_step_output_bytes: 4_096,

@@ -202,6 +202,7 @@ impl TrialAuthorityEntry {
             maximum_frame_bytes: limits.maximum_frame_bytes,
             maximum_response_bytes: limits.maximum_response_bytes,
             maximum_steps: limits.maximum_steps,
+            maximum_total_timeout_ms: limits.maximum_total_timeout_ms,
             maximum_build_timeout_ms: limits.maximum_build_timeout_ms,
             maximum_step_timeout_ms: limits.maximum_step_timeout_ms,
             maximum_step_output_bytes: limits.maximum_step_output_bytes,

@@ -252,6 +252,7 @@ fn profile() -> TrialProfile {
         maximum_frame_bytes: 32 * 1024,
         maximum_response_bytes: 4 * 1024,
         maximum_steps: 2,
+        maximum_total_timeout_ms: 5_000,
         maximum_build_timeout_ms: 2_000,
         maximum_step_timeout_ms: 1_000,
         maximum_step_output_bytes: 4_096,
@@ -566,6 +567,22 @@ fn host_runtime_fields_and_profile_slot_substitution_are_rejected_before_engine(
         let trailing = value["steps"][0].clone();
         value["steps"].as_array_mut().unwrap().push(trailing);
     });
+}
+
+#[test]
+fn profile_whole_run_timeout_rejects_aggregate_plan_before_engine() {
+    let mut selected = profile();
+    selected.maximum_total_timeout_ms = 2_000;
+    let started = start_with_profile(true, selected);
+    let response = exchange(started.relay.socket_path(), &request(plan()));
+    assert_eq!(response["outcome"], "unavailable");
+    assert_eq!(response["failure_code"], "invalid_request");
+    assert_eq!(started.engine.calls.load(Ordering::Relaxed), 0);
+    assert!(started.publisher.0.lock().unwrap().is_empty());
+    assert_eq!(
+        started.relay.finish().failure,
+        Some(TrialRelayFailure::InvalidRequest)
+    );
 }
 
 #[test]

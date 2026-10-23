@@ -83,6 +83,7 @@ pub(crate) struct TrialProfile {
     pub(crate) maximum_frame_bytes: usize,
     pub(crate) maximum_response_bytes: usize,
     pub(crate) maximum_steps: usize,
+    pub(crate) maximum_total_timeout_ms: u64,
     pub(crate) maximum_build_timeout_ms: u64,
     pub(crate) maximum_step_timeout_ms: u64,
     pub(crate) maximum_step_output_bytes: usize,
@@ -549,6 +550,13 @@ impl TrialRelay {
             sandbox_uid,
             sandbox_gid,
         )?;
+        let profile_deadline = Instant::now()
+            .checked_add(Duration::from_millis(profile.maximum_total_timeout_ms))
+            .ok_or(TrialRelayStartFailure {
+                code: TrialRelayFailure::InvalidRequest,
+                cleanup_unsettled: false,
+            })?;
+        let deadline = deadline.min(profile_deadline);
         let directory = create_invocation_directory(relay_root)?;
         let socket = directory.join("execution.sock");
         let listener = UnixListener::bind(&socket).map_err(|_| {
@@ -856,7 +864,10 @@ pub(crate) fn valid_profile(profile: &TrialProfile) -> bool {
             })
             .is_some_and(|total| total <= profile.maximum_steps)
         && profile.maximum_build_timeout_ms > 0
+        && profile.maximum_total_timeout_ms > 0
+        && profile.maximum_build_timeout_ms <= profile.maximum_total_timeout_ms
         && profile.maximum_step_timeout_ms > 0
+        && profile.maximum_step_timeout_ms <= profile.maximum_total_timeout_ms
         && profile.maximum_step_output_bytes > 0
         && profile.maximum_step_output_bytes <= ABSOLUTE_MAXIMUM_FRAME_BYTES
         && profile.maximum_observation_bytes > 0
@@ -955,12 +966,20 @@ fn valid_identity(identity: &TrialRequestIdentity) -> bool {
 }
 
 fn validate_plan(plan: &TrialPlan, profile: &TrialProfile) -> Result<(), TrialRelayFailure> {
+    let planned_timeout_ms = plan
+        .steps
+        .iter()
+        .try_fold(plan.build_timeout_ms, |total, step| {
+            total.checked_add(step.timeout_ms)
+        })
+        .ok_or(TrialRelayFailure::InvalidRequest)?;
     if plan.schema_version != TRIAL_PLAN_SCHEMA
         || !safe_relative_path(&plan.environment.dockerfile, false)
         || !safe_relative_path(&plan.environment.context, true)
         || plan.environment.platform != profile.platform
         || plan.build_timeout_ms == 0
         || plan.build_timeout_ms > profile.maximum_build_timeout_ms
+        || planned_timeout_ms > profile.maximum_total_timeout_ms
         || plan.steps.is_empty()
         || plan.steps.len() > profile.maximum_steps
         || plan.resources.cpu_quota_millis == 0
