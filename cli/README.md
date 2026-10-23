@@ -132,6 +132,15 @@ acknowledgements; neither approves policy nor activates a guide.
 | `workstream task context TASK_ID` | `GET /api/v1/tasks/TASK_ID/work-context` |
 | `workstream task guide TASK_ID [--download DIR]` | Work context, then assigned-task `GET /api/v1/tasks/TASK_ID/guide/documents/DOCUMENT_ID/content` for downloads |
 | `workstream task requirements TASK_ID` | `GET /api/v1/tasks/TASK_ID/submission-requirements` |
+| `workstream operations artifact bindings RESOURCE_TYPE RESOURCE_ID` | `GET /api/v1/operator/artifacts/bindings` |
+| `workstream operations artifact replicas CONTENT_ID` | `GET /api/v1/operator/artifacts/contents/CONTENT_ID/replicas` |
+| `workstream operations artifact receipts REPLICA_ID` | `GET /api/v1/operator/artifacts/replicas/REPLICA_ID/receipts` |
+| `workstream operations artifact verification-job JOB_ID` | `GET /api/v1/operator/artifacts/verification-jobs/JOB_ID` |
+| `workstream operations artifact recovery-attempt ATTEMPT_ID` | `GET /api/v1/operator/artifacts/recovery-attempts/ATTEMPT_ID` |
+| `workstream operations artifact audit-events RESOURCE_TYPE RESOURCE_ID` | `GET /api/v1/operator/artifacts/audit-events` |
+| `workstream operations artifact admission-usage PROJECT_ID` | `GET /api/v1/operator/artifacts/admission-usage` |
+| `workstream operations artifact readiness` | `GET /api/v1/operator/artifacts/readiness` |
+| `workstream operations artifact retry JOB_ID` (explicit scope, reason, key and CAS) | `POST /api/v1/operator/artifacts/verification-jobs/JOB_ID/retry` |
 
 Workstream verifies the caller's Flow bearer and owns identity resolution,
 authorization and lifecycle decisions. Reading a profile can admit a first-time
@@ -1824,7 +1833,57 @@ key. An existing child can later be active, acknowledged or held on exact
 replay. This is distinct from `operations checker retry`, which selects a
 known-terminal infrastructure-failed checker run.
 
+## Inspect artifact custody and explicitly retry verification
+
+`operations artifact` uses the existing public `/api/v1/operator/artifacts`
+routes. It requires current system-Operator authority; observations do not
+authorize a later mutation, reveal provider coordinates or establish readiness
+locally.
+
+```sh
+workstream operations artifact bindings submission SUBMISSION_ID -o json
+workstream operations artifact replicas CONTENT_ID -o json
+workstream operations artifact receipts REPLICA_ID -o json
+workstream operations artifact verification-job JOB_ID -o json
+workstream operations artifact recovery-attempt ATTEMPT_ID -o json
+workstream operations artifact audit-events artifact_binding BINDING_ID -o json
+workstream operations artifact admission-usage PROJECT_ID --task-id TASK_ID -o json
+workstream operations artifact readiness -o json
+workstream operations artifact retry JOB_ID --project-id PROJECT_ID --task-id TASK_ID --submission-id SUBMISSION_ID --reason 'Provider availability restored' --idempotency-key UUID --expected-source-job-cas-version 3 -o json
+```
+
+Bindings, replicas, receipts, audit events and admission usage return one bounded page. Continue
+explicitly with `--cursor` and the same selectors and `--limit` (1..100, default
+50). The backend determines which resource types and facts the caller may read.
+Retry uses the exact source job and current CAS version, project, task, optional
+submission, reason and caller-owned key. It sends one POST; it does not retry
+automatically or infer eligibility from a successful read. An uncertain outcome
+must be reconciled by manually replaying those unchanged inputs. Fresh authority
+is required even for replay. A successful upload is not a failed verification
+job and should not be retried through this operation.
+
 ## Verification
+
+### Public API handoff for MCP and other clients
+
+The command-to-operation table above is a navigation aid for the existing
+public API, not a second contract. Use the running API's `/docs` and
+`/openapi.json` for exact request/response fields, required headers and error
+schemas. Compare against the same backend commit: later API changes can make a
+static inventory stale.
+
+For each operation, the corresponding files in `internal/api/` show the CLI's
+wire mapping and response checks. The built-process tests in `tests/integration/`
+show valid input, malformed responses, denial and replay cases; files ending
+`_public_api.py` exercise the real backend with isolated prerequisites. These
+focused tests do not all establish a connected user journey; the separate
+journey below does that for its stated policy branch.
+
+An MCP tool should call that same public REST operation directly, forwarding
+the caller's bearer. Do not invoke the CLI binary, import backend internals,
+copy authorization decisions or infer permission from a previous read. Keep
+opaque pagination and explicit unchanged-payload mutation replay. The CLI is
+an implementation and test reference, not an additional service dependency.
 
 Behavior tests invoke the built executable from outside the repository, with
 no import of Go internals. One suite uses a controlled HTTP server to exercise
@@ -1902,3 +1961,65 @@ complete [hosted check](../.github/workflows/cli.yml).
 That reusable check runs in parallel with Backend lanes; its failure also fails
 the existing required Backend `test` result. No separate optional PR workflow
 or extra branch-protection setting is needed.
+
+### Connected local journey
+
+`tests/journey/bootstrap.py` exercises the built CLI against a fresh migrated
+PostgreSQL database, real MinIO, a private Redis broker, prefork Celery workers
+and the real external checker service. It creates product prerequisites through
+public CLI operations. The documented local administrator bootstrap and lifecycle
+deployment transition are explicit deployment prerequisites, not fixture-created
+project, submission or acceptance records.
+
+This drill currently targets a Linux Docker host whose daemon can bind-mount the
+same local scratch paths. Install the backend environment, Go, Rust, Docker and
+`redis-server`. Use the local PostgreSQL/MinIO prerequisites and proof-checker
+publication instructions in the [local agent loop](../docs/engineering/local-agent-loop.md)
+to generate `.local-agent-loop/checker-service.json`, `registry-pre.json` and
+`registry-post.json`. The drill starts its own native API, worker and checker
+processes; it does not use an already-running application database or broker.
+
+From the repository root:
+
+```sh
+(cd cli && go build -trimpath -o ../.local-agent-loop/workstream ./cmd/workstream)
+cargo build --manifest-path external_checkers/Cargo.toml --locked --release \
+  -p workstream-checker-service --jobs 2
+export WORKSTREAM_CLI_EXECUTABLE="$PWD/.local-agent-loop/workstream"
+export WORKSTREAM_CLI_JOURNEY_SETUP=1
+export WORKSTREAM_CLI_JOURNEY_TASKS=1
+export WORKSTREAM_CLI_JOURNEY_SUBMIT=1
+# Optional private raw CLI receipts for independent review; keep outside git.
+export WORKSTREAM_CLI_JOURNEY_EVIDENCE="$(mktemp -d /tmp/workstream-journey-evidence.XXXXXX)"
+# Supply a disposable local PostgreSQL admin URL and the local MinIO endpoint
+# through WORKSTREAM_TEST_ADMIN_DATABASE_URL and WORKSTREAM_TEST_MINIO_ENDPOINT.
+cd backend
+.venv/bin/python scripts/run_isolated_tests.py \
+  --metadata-json /tmp/workstream-cli-journey-isolation.json \
+  --lane cli_full_journey --timeout-seconds 900 -- \
+  .venv/bin/python ../cli/tests/journey/bootstrap.py
+```
+
+Use the isolated runner's fixed local test MinIO credentials, never production
+credentials. Each run owns a unique database/role and bucket/prefix. Require its
+cleanup metadata as well as exit zero; neither a completed migration nor a
+successful intermediate stage proves the remaining journey. Do not bypass a
+failed prerequisite or substitute a synthetic checker result.
+The optional evidence directory retains command arguments, exit codes and raw
+stdout/stderr after checking for bearer disclosure. It contains local project
+data: keep it private and do not commit it. Use a fresh directory for each run.
+Setup-enabled runs also retain private runtime logs after stopping their owned
+processes. These logs are diagnostic evidence, not proof that a failed stage
+succeeded. To verify an explicitly reviewed checker repair before merge, set
+`WORKSTREAM_CLI_JOURNEY_CHECKER_EXECUTABLE` to its built binary and record that
+binary's SHA-256 and source commit; this is cross-branch integration evidence.
+
+The scope is manager-authored setup, an explicitly unpaid policy and the locked
+no-human-review acceptance branch. The example checker validates declared proof
+fields, not the truth of remote GitHub work. This is not hosted deployment,
+external Flow issuer, live model inference, human review/revision or compensation
+fulfillment certification. The connected proof also reads the exact submission's
+artifact binding, replica and verification evidence through the Operator CLI,
+and checks non-Operator concealment. The separate signed API test exercises
+retry only on a genuinely exhausted verification job. A successful upload is
+never used as an eligible retry fixture.
