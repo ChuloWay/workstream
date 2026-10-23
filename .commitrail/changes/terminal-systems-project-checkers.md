@@ -156,6 +156,9 @@ specifications remain readable, but do not become supported bindings. Project
 execution specifications can also declare model assistance under #492's existing
 model-service dependency. Focused contract tests must exercise these admission
 boundaries before the live-project owner generates or approves a fresh proposal.
+The matching proposal-reader dependency vocabulary in
+`cli/internal/api/guide_proposal.go` and its existing process tests must accept
+these exact declarations without relaxing unknown-field or supported-gap rejection.
 
 - PRE layout checks required regular files and directories at the package root,
   accepting arbitrary task subjects and additional useful directories.

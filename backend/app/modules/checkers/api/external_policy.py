@@ -366,9 +366,16 @@ async def _resolve(
             parameter.name: parameter.model_dump(mode="json")["value"]
             for parameter in binding.parameters
         }
+        trial_selector = validated_trial_configuration(configuration, entry)
+        specification = requirement.check_specification
+        trial_required = specification is not None and any(
+            dependency.provisioning == "trial_proxy"
+            for dependency in specification.runtime_dependencies
+        )
+        if trial_required != (trial_selector is not None):
+            raise ExternalCheckerPolicyError("trial dependency profile configuration is invalid")
         try:
             selector = configured_model_profile_selector(configuration, stage=phase)
-            specification = requirement.check_specification
             model_required = specification is not None and any(
                 dependency.kind == "model_service"
                 for dependency in specification.runtime_dependencies

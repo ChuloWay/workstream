@@ -589,10 +589,14 @@ infrastructure failures. File and directory inputs use canonical relative paths.
 Capacity, deadline, unavailable material or implementation, and invalid output
 remain infrastructure outcomes rather than contributor work findings. Model
 evaluation requires a `model_service` dependency provisioned by the credential-
-isolated `model_proxy`; task or guide context
-and external prepared images or caches require explicit material dependencies.
-`prepared_material` remains a runtime gap with `material_unavailable` handling;
-it is not received package content and its absence is not a work failure. The
+isolated `model_proxy`. An isolated execution check may declare the same dependency
+for model-assisted planning or assessment. Nested builds and trials declare
+`nested_sandbox` through `trial_proxy`, with exact profile and projection selectors
+declared by the registered image's configuration schema. This capability is POST-only.
+Its approved offline cache is `prepared_material` through the same trial tool,
+with `material_unavailable` handling; it is not received package content. Other
+external material and unavailable task/guide context remain explicit runtime gaps.
+An unavailable cache or runtime is an infrastructure failure. The
 ordinary image runner remains networkless. Model access is available only to a
 registered POST image through its exact approved project model profile; a missing
 image or profile remains an unbound capability suggestion that blocks activation.
@@ -655,8 +659,8 @@ The unified output is a constrained proposal. Workstream's trusted compiler owns
 canonical `PostSubmitCheckerPolicy.policy_body`, hash and ordered external
 bindings. Workstream defaults belong to PRE, not a duplicated POST list. Runtime checker execution loads the locked compiled
 policy; it does not call the setup derivation agent to judge a contributor
-submission. A model-based runtime evaluator would be a separate supported,
-registered checker, not an automatic consequence of this setup flow.
+submission. Model-based runtime evaluation uses a separately registered checker
+and approved model profile; setup inference alone grants no runtime access.
 
 The compiled project `PostSubmitCheckerPolicy` is persisted with exact setup
 provenance: guide id, source snapshot id/hash, effective project policy id/hash,
@@ -694,7 +698,7 @@ Examples:
 `PostSubmitCheckerPolicy` is produced by Workstream's trusted post-submit
 compiler by projecting the exact approved external POST policy. The compiler owns the canonical
 runtime body and hash. Setup agents may propose registered checker names and
-routing classifications, but they do not produce executable runtime code and
+PRE/POST classifications, but they do not produce executable runtime code and
 they do not decide submission outcomes at runtime.
 
 Stored pre-cutover bodies preserve their original ordered entries and hashes
