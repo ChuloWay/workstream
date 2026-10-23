@@ -22,6 +22,10 @@ from app.adapters.project_agents.omnicore_agent import (
 from app.adapters.project_agents.omnicore_profile import (
     build_omnicore_agent_adapter_profile,
 )
+from app.adapters.project_agents.openai_workspace import (
+    OpenAIGuideRuntimeCleanupAdapter,
+    RETAINED_OPENAI_GUIDE_RUNTIME_KEY,
+)
 from app.interfaces.external_services import ExternalServiceAdapterFactory
 from app.interfaces.project_agents import (
     ProjectAgentRuntimeConfigurationError,
@@ -30,6 +34,10 @@ from app.interfaces.project_agents import (
 from app.interfaces.project_guide_runtime import (
     AdapterProfileValue,
     ProjectGuideRuntimeConfiguration,
+)
+from app.modules.projects.api.guide_documents import (
+    GUIDE_RUNTIME_RESOURCE_CLEANUP_CAPABILITY_KEY,
+    GuideRuntimeResourceCleanupAdapter,
 )
 
 
@@ -98,7 +106,20 @@ def create_project_guide_runtime(
     return factory.create(configuration.runtime_key)
 
 
+def create_guide_runtime_cleanup_factory() -> ExternalServiceAdapterFactory[
+    GuideRuntimeResourceCleanupAdapter
+]:
+    """Register exact retained-resource cleanup independently of inference."""
+    factory = ExternalServiceAdapterFactory[GuideRuntimeResourceCleanupAdapter](
+        GUIDE_RUNTIME_RESOURCE_CLEANUP_CAPABILITY_KEY
+    )
+    factory.register(RETAINED_OPENAI_GUIDE_RUNTIME_KEY, OpenAIGuideRuntimeCleanupAdapter)
+    return factory
+
+
 __all__ = (
+    "RETAINED_OPENAI_GUIDE_RUNTIME_KEY",
     "build_project_guide_adapter_profile",
+    "create_guide_runtime_cleanup_factory",
     "create_project_guide_runtime",
 )

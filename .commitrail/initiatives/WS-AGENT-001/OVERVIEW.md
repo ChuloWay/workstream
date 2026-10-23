@@ -7,17 +7,19 @@ PROJECTS/ART business logic or source-evidence schema. The user explicitly asked
 for OpenRouter and a second real OmniCoreAgent adapter to prove that boundary.
 The first hosted contribution journey remains the delivery objective.
 
-The implementation replaces the former OpenAI-hosted file/attachment coupling
-with trusted on-demand document tools, a fixed isolated parser and the existing
+Neutral on-demand document tools and a fixed isolated parser replace the
+OpenAI-hosted file/attachment execution path while preserving the existing
 compilation/result contract. Each adapter owns its SDK mechanics; the core owns
 exact source access, immutable attempt evidence and overall run bounds.
 
-1. [Neutral tools and OpenRouter](WS-AGENT-001-01.md): replace the current hosted
-   document path, preserve historical facts/cleanup, qualify OpenAI Agents SDK.
-2. [OmniCoreAgent qualification](WS-AGENT-001-02.md): register the real second
-   runtime, contain its native mechanics in an isolated dependency image and run
-   the shared contract plus exact image/worker qualification. Live provider and
-   original-guide evidence remain explicit hosted prerequisites.
+1. [Neutral tools and OpenRouter](WS-AGENT-001-01.md): delivered neutral source
+   access with historical facts/cleanup preserved. The OpenAI Agents SDK with
+   OpenRouter passed an original-guide public API, Celery, real-parser and MinIO
+   qualification through the manager draft read; no policy activation is claimed.
+2. [OmniCoreAgent qualification](WS-AGENT-001-02.md): registers the real second
+   runtime and contains its native mechanics in an isolated dependency image. Its
+   actual SDK and synthetic production-factory loops pass; the same original-guide
+   and exact image/worker qualification remain the next companion proof.
 
 SDK environments may differ; product contracts and core behavior must not.
 No speculative Claude adapter, generic plugin platform, runtime-generated shell

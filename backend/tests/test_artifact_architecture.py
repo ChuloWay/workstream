@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+from collections import Counter
 from importlib.util import resolve_name
 from pathlib import Path
 
@@ -348,14 +349,14 @@ def _assert_concrete_adapter_composition(
             for name in calls
             if name in {"OTLPMetricExporter", "OTLPSpanExporter", "PeriodicExportingMetricReader"}
         )
-    assert set(factory_calls) == {
-        COMPOSITION_ROOT,
-        CHECKER_COMPOSITION_ROOT,
-        AGENT_COMPOSITION_ROOT,
-        OBSERVABILITY_COMPOSITION_ROOT,
-        GUIDE_PARSER_COMPOSITION_ROOT,
+    assert Counter(factory_calls) == {
+        COMPOSITION_ROOT: 1,
+        CHECKER_COMPOSITION_ROOT: 1,
+        # Inference and retained-resource cleanup are distinct typed capabilities.
+        AGENT_COMPOSITION_ROOT: 2,
+        OBSERVABILITY_COMPOSITION_ROOT: 1,
+        GUIDE_PARSER_COMPOSITION_ROOT: 1,
     }
-    assert len(factory_calls) == 5
     assert adapter_calls == [COMPOSITION_ROOT, S3_ADAPTER_MODULE, CHECKER_COMPOSITION_ROOT]
     assert set(concrete_imports) == {
         COMPOSITION_ROOT,
