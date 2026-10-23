@@ -1697,6 +1697,27 @@ def test_partition_accepts_only_exact_task_project_authority_targets() -> None:
         )
 
 
+def test_partition_accepts_only_exact_project_catalogue_targets() -> None:
+    expected = frozenset({
+        "backend/app/api/deps/project_catalogue.py",
+        "backend/app/api/routes/project_catalogue.py",
+        "backend/app/modules/authorization/api/project_catalogue.py",
+        "backend/app/modules/authorization/domain/project_catalogue.py",
+        "backend/app/modules/authorization/project_catalogue.py",
+    })
+    assert ownership.PROJECT_CATALOGUE_TARGETS == expected
+    retained = "backend/app/core/config.py"
+    trusted = _partition([retained])
+    ownership._validate_additive_partition_transition(
+        _partition(sorted({retained, *expected})), trusted
+    )
+    with pytest.raises(ownership.BehaviorOwnershipError, match="untrusted_partition_change"):
+        ownership._validate_additive_partition_transition(
+            _partition(sorted({retained, *expected, "backend/app/api/routes/project_catalogue_admin.py"})),
+            trusted,
+        )
+
+
 def test_partition_accepts_only_exact_cp05_authorization_targets() -> None:
     """CP05 registers five named targets without admitting another AUTH owner."""
     expected = frozenset({
