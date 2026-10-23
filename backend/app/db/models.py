@@ -123,3 +123,9 @@ from app.modules.compensation.awards.models import CompensationAward  # noqa: F4
 from app.modules.reviews.lifecycle.models import JointLifecycleReleaseControl  # noqa: F401
 
 from app.modules.tasks.revision.models import TaskRevisionPreparation, TaskRevisionExpiration, TaskRevisionExhaustion  # noqa: F401
+
+from app.modules.checkers.model_calls.models import (  # noqa: F401
+    CheckerModelProfile, CheckerModelBudgetAccount, CheckerModelBudgetConfiguration,
+    CheckerModelCallSlot, CheckerModelCallAttempt, CheckerModelCallRecovery,
+)
+from app.modules.checkers.model_calls.grants import CheckerModelInvocationGrant  # noqa: F401

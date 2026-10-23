@@ -46,7 +46,7 @@ No provider credential or global proxy socket in project images; no contributor
 billing, setup-agent billing, alternate checker implementation kind, project
 rules in Rust, unrestricted provider/model selection, automatic paid retries
 after ambiguous delivery, task/revision spending on infrastructure failures,
-or live model spend before the user supplies the rehearsal cap. No merge or
+or live model spend beyond the user-confirmed US$10 total rehearsal cap. No merge or
 hosted deployment is authorized. Execution trials and prior-revision material
 remain separately necessary before the entire project can activate.
 
@@ -60,6 +60,9 @@ PM-approved image configuration. A typed exact profile reader checks project,
 registry and profile identity during policy compilation, readiness/activation and
 runtime. Partial selectors fail; the existing POST policy hash retains this
 custody without a new checker kind or TASK lineage column.
+The user authorized US$10 total for the Terminal Systems rehearsal; configure
+10,000,000,000 USD nanodollars and preserve all reservations and settled spend
+across retries and configuration versions. No live call may precede enforcement.
 An Operator sets a finite project budget; profiles do not
 allow images to change that budget or choose a different model. Monetary amounts
 use integer USD nanodollars with explicit immutable pricing provenance.
@@ -76,8 +79,10 @@ requirement, registry_digest, configuration_hash, profile_version, slot_index)`.
 Neither worker lease nor checker retry generation belongs in this key. The first
 provider request hash is immutable: a later changed prompt conflicts. Successor
 checker runs reuse the same cached or recoverable call. An authorized child
-attempt is possible only after a proven no-effect outcome, with a new atomic
-reservation; the image cannot select its attempt number.
+attempt is possible only after a proven no-effect outcome or an authenticated
+terminal provider failure with no usable output and fully settled usage. It
+requires explicit Operator recovery authority and a new atomic reservation;
+the image cannot select its attempt number.
 
 Create or attach the stable slot and verify its request evidence first. Reserve
 the worst-case allowed input/output charge just before first dispatch, after
@@ -96,8 +101,10 @@ when its model response is unavailable, while the independent paid call remains
 `dispatching` or `uncertain`. Operator retry attaches the same slot; it may only
 recover that effect, never create again because a generation changed. A late
 response may complete the original call after its run terminalized, allowing the
-next current run to consume its cached evidence. Only a proven no-effect child
-attempt receives fresh dispatch authority.
+next current run to consume its cached evidence. Only an explicitly authorized
+child of a proven no-effect or fully settled terminal failure receives fresh
+dispatch authority. An uncertain effect or terminal failure with missing usage
+remains ineligible.
 
 Extend the existing ART generated-output custody with a paid-call-stable
 reservation for two bounded canonical JSON slots: request before dispatch and
@@ -108,14 +115,28 @@ authority to finish/recover those exact evidence slots independently of the
 original worker lease. It cannot start a new effect under that authority. Fresh
 current-run authority links verified call evidence to each consuming run; stale
 images cannot spend or gain read access to another invocation. This extends the
-same ART put/verify/bind lifecycle, not a parallel artifact store.
+same ART put/verify/bind lifecycle, not a parallel artifact store. The unused
+run-only write selector and deny-only producer composition are replaced; retained
+historical rows keep their immutable ancestry. Private call bindings remain
+retained independently of the original checker run.
+
+The local relay root must be mounted at the same Docker-daemon-visible path,
+with private same-UID socket custody. gVisor requires the administrator-provided
+`host-uds=open` configuration for this mounted socket; Docker development proof
+does not qualify gVisor behavior.
 
 Explicit service actions separate `checker.model_call.dispatch`,
 `checker.model_call.recover` and `checker.model_call.complete` under existing
 AUTH grants. Dispatch takes exact current execution facts; recover can only
 inspect the existing effect; complete takes immutable call-attempt/effect facts
 and may retain late evidence. Operator project budget/profile provisioning and
-covered-PM cost reads receive their own exact resource/action contracts.
+return exact configuration and lifetime budget counters. Broader PM cost-read
+surfaces remain in PILOT-05; this bounded runtime exposes Operator controls.
+
+A dedicated singleton backend process owns the private model listener, rather
+than binding it in every API lifespan. Local compose opts into the `model-proxy`
+profile. Its graceful drain includes margin beyond the maximum provider deadline;
+abrupt termination still retains the original dispatch intent and reservation.
 
 Implementation order: provider-free profile/slot/budget contracts and PostgreSQL
 proof; AUTH and profile approval/readiness; ART evidence custody with MinIO crash
@@ -168,7 +189,7 @@ unchanged.
 ## Reconciliation
 
 The earlier PILOT-05 hold is lifted only for this required runtime scope. The
-pending rehearsal spend cap blocks live paid POST calls, not implementation or
-offline tests. Review current main and open migrations before allocating a
+user approved a hard US$10 aggregate rehearsal cap; enforce it before live calls.
+Review current main and open migrations before allocating a
 revision number. Required execution trials and authenticated prior-work context
 must still be supplied before final guide activation.

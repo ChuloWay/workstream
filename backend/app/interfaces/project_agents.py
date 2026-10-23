@@ -327,7 +327,9 @@ CheckerDependencyKind = Literal[
     "execution_capacity",
     "prepared_material",
 ]
-DependencyProvisioning = Literal["current_runner", "checker_implementation", "runtime_gap"]
+DependencyProvisioning = Literal[
+    "current_runner", "checker_implementation", "model_proxy", "runtime_gap"
+]
 InfrastructureFailureCode = Literal[
     "capacity_exceeded",
     "deadline_exceeded",
@@ -441,10 +443,24 @@ class CheckRuntimeDependency(BaseModel):
             "task_context": ("runtime_gap", "material_unavailable"),
             "guide_context": ("runtime_gap", "material_unavailable"),
             "prepared_material": ("runtime_gap", "material_unavailable"),
-            "model_service": ("runtime_gap", "implementation_unavailable"),
+            # runtime_gap remains readable for immutable retained compilations. New
+            # generation admission below requires the precise model_proxy owner.
+            "model_service": (
+                {"model_proxy", "runtime_gap"},
+                "implementation_unavailable",
+            ),
             "execution_capacity": ("runtime_gap", "capacity_exceeded"),
         }[self.kind]
-        if (self.provisioning, self.unavailable_code) != expected:
+        expected_provisioning, expected_code = expected
+        if (
+            self.provisioning
+            not in (
+                expected_provisioning
+                if isinstance(expected_provisioning, set)
+                else {expected_provisioning}
+            )
+            or self.unavailable_code != expected_code
+        ):
             raise ValueError("check dependency availability is invalid")
         return self
 
@@ -947,6 +963,12 @@ def require_complete_generated_specifications(
             for dependency in specification.runtime_dependencies
         ):
             raise ValueError("supported check depends on unavailable runtime support")
+        if any(
+            dependency.kind == "model_service"
+            and dependency.provisioning != "model_proxy"
+            for dependency in specification.runtime_dependencies
+        ):
+            raise ValueError("model service requires model proxy provisioning")
 
     definitions = {
         (definition.phase, definition.capability_id, definition.capability_version): definition

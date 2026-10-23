@@ -3,7 +3,13 @@ from app.modules.authorization.catalogue import GUIDE_PROPOSAL_ACTION_IDS, POST_
 
 from app.modules.authorization.domain.task_authority import TASK_IMPORT_BATCH_ACTIONS, TaskImportBatchResourceContext
 from app.modules.authorization.catalogue import ActionId
-from app.modules.authorization.domain import adapter_bindings, checker_registry, contribution_policies
+from app.modules.authorization.domain import (
+    adapter_bindings,
+    checker_models,
+    checker_outputs,
+    checker_registry,
+    contribution_policies,
+)
 from app.modules.authorization.runtime import PROJECT_SUBMISSION_POLICY_TARGET_KIND_BY_ACTION
 
 GUIDE_BOUND_PROJECT_MANAGER_ACTIONS = frozenset(
@@ -22,6 +28,7 @@ GUIDE_BOUND_PROJECT_MANAGER_ACTIONS = frozenset(
         ActionId.PROJECT_SUBMISSION_ARTIFACT_POLICY_UPDATE,
     }
 )
+SYSTEM_OPERATOR_MODEL_MUTATIONS = checker_models.MODEL_ADMIN_ACTIONS
 GUIDE_BOUND_PROJECT_MANAGER_ACTIONS |= GUIDE_PROPOSAL_ACTION_IDS | POST_POLICY_HUMAN_ACTION_IDS
 EXACT_PROJECT_MANAGER_SCOPE_ACTIONS = frozenset({
     ActionId.PROJECT_GUIDE_COMPILATION_REQUEST, ActionId.PROJECT_GUIDE_ACTIVATE,
@@ -55,6 +62,8 @@ CONTEXT_DIGEST_ACTIONS = frozenset(
         *POST_POLICY_MUTATION_ACTION_IDS,
         *adapter_bindings.ADAPTER_BINDING_ACTIONS,
         *contribution_policies.CONTRIBUTION_POLICY_ACTIONS,
+        *checker_models.CHECKER_MODEL_ACTIONS,
+        *checker_outputs.CHECKER_OUTPUT_ACTIONS,
     }
 )
 
@@ -72,6 +81,17 @@ def supports_prepared_denial(action_id: ActionId, resource_context: object) -> b
         ProjectPolicyMutationPrepareDenialResourceContext, ProjectSubmissionArtifactPolicyMutationResourceContext,
     )
     return (
+        (
+            action_id in checker_outputs.CHECKER_OUTPUT_ACTIONS
+            and type(resource_context) is checker_outputs.CheckerOutputResourceContext
+        )
+        or
+        (
+            action_id in checker_models.CHECKER_MODEL_ACTIONS
+            and type(resource_context)
+            is checker_models.CHECKER_MODEL_RESOURCE_BY_ACTION[action_id]
+        )
+        or
         (
             action_id in checker_registry.CHECKER_REGISTRY_MUTATION_ACTIONS
             and type(resource_context)

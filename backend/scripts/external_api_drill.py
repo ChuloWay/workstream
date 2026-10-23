@@ -97,6 +97,11 @@ project.update project.archive project.guide.manage project.guide_compilation.re
 project.guide_compilation.execute project.effective_policy.manage project.task.manage
 project.review_policy.manage project.role_grant.read project.role_grant.manage
 task.queue.read task.claim submission.create submission.read_own submission.read_for_review
+task.post_submit.route task.revision.expire task.revision.recover
+checker.pre_submit.execute checker.pre_submit.finalize
+checker.post_submit.execute checker.post_submit.finalize
+checker.model_call.prepare checker.model_call.dispatch checker.model_call.recover
+checker.model_call.observe checker.model_call.complete checker.model_call.grant
 review.queue.read review.queue.inspect review.claim review.release review.decline_preference
 review.decision review.lease.force_release review.chain.read review.queue.override
 contribution.read_self contribution.read_project compensation.policy.manage
@@ -109,6 +114,7 @@ artifact.verification_job.read artifact.verification_job.retry artifact.recovery
 artifact.audit.read artifact.guide_source.ingest artifact.binding.create artifact.verification.execute
 artifact.pending_work.scan artifact.put_attempt.resolve artifact.guide_source.read
 artifact.checker_input.materialize artifact.checker_output.write artifact.review_packet.materialize
+project.model_profile.manage project.model_budget.manage project.model_call.recovery_child.authorize
 audit.read audit.export
 """.split()))
 EXPECTED_ROLE_CONTRACT = (
@@ -119,6 +125,7 @@ admin_role.read admin_role.grant admin_role.revoke audit.read audit.export"""),
 review.lease.force_release contribution.read_project operations.status.read
 operations.timer.run operations.reconcile.run operations.outbox.retry operations.projection.rebuild
 operations.task.start_override operations.submission_gate.repair operations.checker.retry
+project.model_profile.manage project.model_budget.manage project.model_call.recovery_child.authorize
 artifact.binding.read artifact.replica.read artifact.receipt.read artifact.verification_job.read
 artifact.verification_job.retry artifact.recovery_attempt.read artifact.audit.read audit.read"""),
     ("project_manager", ("system", "project"), """project.create project.read project.setup_diagnostic.read project.effective_policy.read project.update
@@ -136,7 +143,7 @@ contribution.read_project compensation.award.read audit.read audit.export"""),
 def catalogue_expectations():
     """Fresh expected JSON objects; callers cannot mutate the frozen oracle."""
     return {
-        "permissions": {"items": [{"permission_id": value} for value in EXPECTED_PERMISSIONS], "total": 75},
+        "permissions": {"items": [{"permission_id": value} for value in EXPECTED_PERMISSIONS], "total": 91},
         "admin-role-definitions": {"items": [
             {"role": role, "allowed_scopes": list(scopes), "permission_ids": permissions.split()}
             for role, scopes, permissions in EXPECTED_ROLE_CONTRACT], "total": 5},

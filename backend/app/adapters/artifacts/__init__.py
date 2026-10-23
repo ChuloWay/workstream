@@ -626,22 +626,39 @@ def worker_post_submission_materialization(*, sessions) -> PostSubmissionMateria
 def checker_output_storage(
     *, sessions, store, namespace, preparation, settings
 ) -> CheckerArtifactOutputPort:
-    """Compose hidden output custody; live producer and write authority remain absent."""
-    from app.modules.artifacts.checker_outputs import CheckerArtifactOutputService, DenyCheckerOutputWriteAuthority
-    from app.modules.artifacts.schemas import DenyArtifactInternalAuthority
+    """Compose private call evidence through canonical admission and verification."""
+    from app.adapters.auth import checker_output_write_authorization
+    from app.modules.artifacts.checker_outputs import CheckerArtifactOutputService
+    from uuid import uuid4
+
+    def authority(session, identity):
+        request_id = uuid4()
+        return PreparedArtifactInternalAuthority(
+            session, service_identity=identity, request_id=request_id, correlation_id=request_id,
+        )
+
     return CheckerArtifactOutputService(
         sessions=sessions, store=store, namespace=namespace, preparation=preparation, settings=settings,
         reservations=checker_output_reservations,
-        authority=lambda session: DenyCheckerOutputWriteAuthority(),
-        internal_authority=lambda session: DenyArtifactInternalAuthority(),
+        authority=checker_output_write_authorization,
+        internal_authority=lambda session: authority(session, ServiceIdentity.ARTIFACT_PUT_RESOLVER),
+        verification_authority=lambda session: authority(session, ServiceIdentity.ARTIFACT_VERIFIER),
     )
 
 
 def checker_output_binding(session, *, namespace) -> CheckerOutputBindingPort:
-    """Compose a deny-only caller-transaction binding participant."""
-    from app.modules.artifacts.checker_output_bindings import CheckerOutputBindingService, DenyCheckerOutputBindingAuthority
+    """Bind one exact private call effect to independently verified ART bytes."""
+    from app.adapters.auth import checker_output_binding_authorization
+    from app.modules.artifacts.checker_output_bindings import CheckerOutputBindingService
     return CheckerOutputBindingService(session, namespace_fingerprint=namespace.namespace_fingerprint,
-        reservations=checker_output_reservations(session), authority=DenyCheckerOutputBindingAuthority())
+        reservations=checker_output_reservations(session), authority=checker_output_binding_authorization(session))
+
+
+def checker_model_evidence(session):
+    """Expose verified call binding facts to CHECKERS without transcript bytes."""
+    from app.modules.artifacts.checker_model_evidence import CheckerModelEvidence
+
+    return CheckerModelEvidence(session)
 
 
 async def get_task_import_source_commands(

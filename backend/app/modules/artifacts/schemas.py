@@ -48,19 +48,19 @@ class GuideArtifactAdmissionRequest:
 @final
 @dataclass(frozen=True, slots=True)
 class CheckerOutputArtifactAdmissionRequest:
-    """One prepared checker output admitted under its exact checker run."""
+    """One prepared model transcript admitted under its exact durable call effect."""
 
     reservation: CheckerOutputReservation
     slot_key: str
     source: CommittedArtifactSource
 
 
-def checker_output_operation_identity(*, checker_run_id: UUID, slot_key: str) -> str:
-    """Keep one logical output identity across worker-lease replacement."""
+def checker_output_operation_identity(*, model_call_attempt_id: UUID, slot_key: str) -> str:
+    """Keep one transcript identity across checker generations and lease changes."""
     return canonical_json_hash(
         {
             "request_type": "checker_output",
-            "checker_run_id": str(checker_run_id),
+            "model_call_attempt_id": str(model_call_attempt_id),
             "logical_role": slot_key,
         }
     )
@@ -72,16 +72,13 @@ def checker_output_request_digest_facts(
     slot: CheckerOutputSlot,
 ) -> dict[str, object]:
     """Return stable owner facts shared by checker admission and binding."""
-    evaluation = reservation.evaluation
+    selector = reservation.selector
     return {
-        "evaluation_request_id": str(evaluation.evaluation_request_id),
-        "evaluation_request_sha256": evaluation.request_sha256,
-        "evaluation_generation": evaluation.evaluation_generation,
-        "checker_run_id": str(reservation.checker_run_id),
-        "project_id": str(evaluation.project_id),
-        "task_id": str(evaluation.task_id),
-        "submission_id": str(evaluation.submission_id),
-        "submission_version": evaluation.submission_version,
+        "model_call_slot_id": str(selector.model_call_slot_id),
+        "model_call_attempt_id": str(selector.model_call_attempt_id),
+        "paid_slot": selector.paid_slot.model_dump(mode="json"),
+        "task_id": str(selector.task_id),
+        "content_sha256": selector.content_sha256,
         "slot_key": slot.key,
         "media_type": slot.media_type,
         "maximum_bytes": slot.maximum_bytes,

@@ -31,11 +31,6 @@ from app.modules.checkers.api.delivery_reconciliation import (
 from app.modules.checkers.api.selected_post_submit import (
     SelectedPostSubmitCurrentResultReference,
 )
-from app.modules.checkers.api.output_custody import (
-    CheckerOutputReservation,
-    CheckerOutputSelector,
-    CheckerOutputUnavailable,
-)
 from app.modules.checkers.execution_repository import (
     ExecutionRepository,
     require_transaction,
@@ -411,36 +406,3 @@ class CurrentExecution:
             raise CheckerExecutionUnavailable("checker_current_execution_unavailable")
         execution_authority_digest(facts)
         await ExecutionRepository(self._session).require_lease(facts.request, facts.lease)
-
-
-class CheckerOutputReservations:
-    """Selected evidence-only checker executions have no artifact output slots."""
-
-    def __init__(self, session: AsyncSession):
-        """Resolve output custody within the supplied CHECKERS session."""
-        self._session = session
-
-    async def resolve(self, selector: CheckerOutputSelector) -> CheckerOutputReservation:
-        """Require exact current lease custody and return the supported zero-output contract."""
-        from app.modules.checkers.api.execution import CheckerExecutionUnavailable
-
-        try:
-            repo = ExecutionRepository(self._session)
-            run = await repo.lock_current(selector.evaluation)
-            if (
-                run.status != "running"
-                or run.id != str(selector.checker_run_id)
-                or run.worker_lease_id != str(selector.worker_lease_id)
-                or run.worker_lease_generation != selector.worker_lease_generation
-                or run.worker_lease_expires_at <= await repo.now()
-            ):
-                raise CheckerOutputUnavailable("checker_output_reservation_unavailable")
-            return CheckerOutputReservation(
-                evaluation=selector.evaluation,
-                checker_run_id=UUID(run.id),
-                worker_lease_id=UUID(run.worker_lease_id),
-                worker_lease_generation=run.worker_lease_generation,
-                slots=(),
-            )
-        except CheckerExecutionUnavailable:
-            raise CheckerOutputUnavailable("checker_output_reservation_unavailable") from None

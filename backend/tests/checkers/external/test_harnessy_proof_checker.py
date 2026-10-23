@@ -169,6 +169,8 @@ def test_published_service_paths_match_the_compose_overlay() -> None:
     assert config["material_root"] == environment["WORKSTREAM_EXTERNAL_CHECKER_MATERIAL_ROOT"]
     assert config["material_root"] == environment["WORKSTREAM_ARTIFACT_SCRATCH_ROOT"]
     assert config["socket_path"] == environment["WORKSTREAM_EXTERNAL_CHECKER_SERVICE_SOCKET"]
+    assert "model_proxy_socket" not in config
+    assert "model_relay_root" not in config
     assert len(config["socket_path"].encode()) <= 107
     for name in ("backend", "worker", "beat", "checker", "checker-volumes-init"):
         socket_mounts = [
@@ -179,3 +181,45 @@ def test_published_service_paths_match_the_compose_overlay() -> None:
         ]
         mode = ":ro" if name in ("backend", "worker", "beat") else ""
         assert socket_mounts == [f"checker_socket:/run/ws-checker{mode}"], name
+
+    model_config = publish_local.service_config(
+        {"operating_system": "linux", "architecture": "arm64"},
+        compose_project="${COMPOSE_PROJECT_NAME}",
+        sandbox_uid=501,
+        sandbox_gid=20,
+        enable_model_proxy=True,
+    )
+    relay_root = "/var/lib/docker/volumes/${COMPOSE_PROJECT_NAME}-checker-relay/_data"
+    assert model_config["model_proxy_socket"] == "/run/ws-model-proxy/model-proxy.sock"
+    assert model_config["model_relay_root"] == relay_root
+    assert len(f"{relay_root}/.model-{'0' * 16}/model.sock".encode()) < 108
+    assert "checker_model_proxy:/run/ws-model-proxy" in overlay["services"]["backend"]["volumes"]
+    for name in ("backend", "worker", "beat"):
+        assert all(
+            "/var/run/docker.sock" not in str(mount)
+            for mount in overlay["services"][name]["volumes"]
+        )
+    for name in ("worker", "beat"):
+        assert all(
+            "checker_model_proxy" not in str(mount)
+            for mount in overlay["services"][name]["volumes"]
+        )
+    assert "checker_model_proxy:/run/ws-model-proxy:ro" in overlay["services"]["checker"]["volumes"]
+    assert (
+        "checker_model_relay:"
+        "/var/lib/docker/volumes/${COMPOSE_PROJECT_NAME}-checker-relay/_data"
+        in overlay["services"]["checker"]["volumes"]
+    )
+    for volume in ("checker_model_proxy", "checker_model_relay"):
+        assert any(
+            isinstance(mount, str) and mount.startswith(f"{volume}:")
+            for mount in overlay["services"]["checker-volumes-init"]["volumes"]
+        )
+    with pytest.raises(ValueError, match="relay socket path too long"):
+        publish_local.service_config(
+            {"operating_system": "linux", "architecture": "arm64"},
+            compose_project="x" * 80,
+            sandbox_uid=501,
+            sandbox_gid=20,
+            enable_model_proxy=True,
+        )

@@ -5,6 +5,7 @@ from __future__ import annotations
 from tests.checker_output_admission_helpers import seed_checker_output_relationships
 
 import asyncio
+import hashlib
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
@@ -47,15 +48,16 @@ from app.modules.checkers.api.output_custody import (
     CheckerOutputSelector,
     CheckerOutputUnavailable,
 )
-from app.modules.checkers.models import CheckerRun
+from app.modules.authorization.checker_output_authorization import (
+    PreparedCheckerOutputBindingAuthorization,
+    PreparedCheckerOutputWriteAuthorization,
+)
+from app.modules.checkers.model_calls.models import CheckerModelCallAttempt
 from tests.artifact_store_helpers import (
     artifact_admission_limit_settings,
     artifact_preparation_limits,
 )
-from tests.checker_output_admission_helpers import (
-    ControlledCheckerOutputAdmissionAuthority,
-    make_checker_output_reservation,
-)
+from tests.checker_output_admission_helpers import make_checker_output_reservation
 from tests.projects.unified_policy_fixtures import create_standalone_unified_policy
 from tests.test_artifact_admission import (
     _AllowArtifactAuthority,
@@ -65,15 +67,8 @@ from tests.test_artifact_admission import (
 
 
 def selector_for(reservation: CheckerOutputReservation) -> CheckerOutputSelector:
-    """Select the sole controlled output slot under the reservation's current lease."""
-    assert len(reservation.slots) == 1
-    return CheckerOutputSelector(
-        evaluation=reservation.evaluation,
-        checker_run_id=reservation.checker_run_id,
-        worker_lease_id=reservation.worker_lease_id,
-        worker_lease_generation=reservation.worker_lease_generation,
-        slot_key=reservation.slots[0].key,
-    )
+    """Select the exact call-stable effect role issued by CHECKERS."""
+    return reservation.selector
 
 
 async def byte_stream(*chunks: bytes, observed: list[bytes] | None = None) -> AsyncIterator[bytes]:
@@ -108,55 +103,55 @@ class ControlledReservationState:
 
 
 class ControlledReservationPort:
-    """Lock a real run, then return controlled detached CHECKERS owner facts."""
+    """Lock a real call effect, then return controlled detached owner facts."""
 
     def __init__(self, session: AsyncSession, state: ControlledReservationState) -> None:
         self._session = session
         self._state = state
 
     async def resolve(self, selector: CheckerOutputSelector) -> CheckerOutputReservation:
-        """Fence the selected real run before ART acquires any artifact row lock."""
-        checker_run = await self._session.scalar(
-            select(CheckerRun)
-            .where(CheckerRun.id == str(selector.checker_run_id))
+        """Fence the selected call attempt before ART acquires any artifact row lock."""
+        attempt = await self._session.scalar(
+            select(CheckerModelCallAttempt)
+            .where(
+                CheckerModelCallAttempt.id == str(selector.model_call_attempt_id),
+                CheckerModelCallAttempt.slot_id == str(selector.model_call_slot_id),
+            )
             .with_for_update()
             .execution_options(populate_existing=True)
         )
-        if checker_run is None:
+        if attempt is None:
             raise CheckerOutputUnavailable("checker_output_reservation_unavailable")
         self._state.resolved.append(selector)
+        self._state.reservation.select(selector)
         return self._state.reservation
 
 
 class ControlledWriteAuthority:
-    """Test-only exact action authority plus real fixed-service admission proof."""
+    """Record test controls around production prepared fixed-service authority."""
 
     def __init__(
         self,
         session: AsyncSession,
         state: ControlledReservationState,
-        actor_id: UUID,
-        identity_link_id: UUID,
     ) -> None:
         self._state = state
-        self._admission = ControlledCheckerOutputAdmissionAuthority(
-            session,
-            actor_id,
-            identity_link_id,
-        )
+        self._authority = PreparedCheckerOutputWriteAuthorization(session)
 
     async def preflight(self, selector: CheckerOutputSelector) -> None:
         self._state.require_authority()
         self._state.preflights.append(selector)
+        await self._authority.preflight(selector)
 
     async def prepare(self, selector: CheckerOutputSelector) -> None:
         self._state.require_authority()
         self._state.prepares.append(selector)
+        await self._authority.prepare(selector)
 
     async def consume(self, request: CheckerOutputArtifactAdmissionRequest) -> None:
         self._state.require_authority()
         assert request.reservation == self._state.reservation
-        await self._admission.consume(request)
+        await self._authority.consume(request)
         self._state.admissions.append(request)
 
     async def consume_existing(
@@ -166,25 +161,30 @@ class ControlledWriteAuthority:
     ) -> None:
         self._state.require_authority()
         assert reservation == self._state.reservation
+        await self._authority.consume_existing(reservation, facts)
         self._state.recoveries.append((reservation, facts))
 
     def discard(self) -> None:
-        """The controlled seam retains no prepared capability."""
+        """Dispose the production prepared capability."""
+        self._authority.discard()
 
 
 class ControlledBindingAuthority:
-    """Test-only binding authority that records exact verified custody."""
+    """Record test controls around production binding authority."""
 
-    def __init__(self, state: ControlledReservationState) -> None:
+    def __init__(self, session: AsyncSession, state: ControlledReservationState) -> None:
         self._state = state
+        self._authority = PreparedCheckerOutputBindingAuthorization(session)
 
     async def preflight(self, selector: CheckerOutputSelector) -> None:
         self._state.require_authority()
         self._state.preflights.append(selector)
+        await self._authority.preflight(selector)
 
     async def prepare(self, selector: CheckerOutputSelector) -> None:
         self._state.require_authority()
         self._state.prepares.append(selector)
+        await self._authority.prepare(selector)
 
     async def consume(
         self,
@@ -193,10 +193,12 @@ class ControlledBindingAuthority:
     ) -> None:
         self._state.require_authority()
         assert reservation == self._state.reservation
+        await self._authority.consume(reservation, facts)
         self._state.bindings.append((reservation, facts))
 
     def discard(self) -> None:
-        """The controlled seam retains no prepared capability."""
+        """Dispose the production prepared capability."""
+        self._authority.discard()
 
 
 class ObservedStore:
@@ -266,6 +268,16 @@ class OutputCustodyHarness:
         selector: CheckerOutputSelector | None = None,
         observed: list[bytes] | None = None,
     ) -> CheckerOutputArtifactRequest:
+        if selector is None and not self.state.preflights:
+            content_sha256 = "sha256:" + hashlib.sha256(b"".join(chunks)).hexdigest()
+            current = self.state.reservation
+            self.state.reservation = current.model_copy(
+                update={
+                    "selector": current.selector.model_copy(
+                        update={"content_sha256": content_sha256}
+                    )
+                }
+            )
         return CheckerOutputArtifactRequest(
             selector=selector or self.selector,
             byte_source=byte_stream(*chunks, observed=observed),
@@ -275,7 +287,7 @@ class OutputCustodyHarness:
         return CheckerOutputBindingService(
             session,
             reservations=ControlledReservationPort(session, self.state),
-            authority=ControlledBindingAuthority(self.state),
+            authority=ControlledBindingAuthority(session, self.state),
             namespace_fingerprint=self.namespace.namespace_fingerprint,
         )
 
@@ -306,7 +318,9 @@ class OutputCustodyHarness:
                     ArtifactBinding.resource_id,
                     ArtifactBinding.put_attempt_id,
                     ArtifactBinding.verification_receipt_id,
-                ).where(ArtifactBinding.resource_type == "checker_run").order_by(ArtifactBinding.id)
+                )
+                .where(ArtifactBinding.resource_type == "checker_model_call")
+                .order_by(ArtifactBinding.id)
             )
             return [tuple(row) for row in rows]
 
@@ -314,6 +328,7 @@ class OutputCustodyHarness:
         self,
         *,
         maximum_bytes: int = 1024,
+        content_sha256: str | None = None,
     ) -> CheckerOutputReservation:
         """Create a second coherent lineage without changing the active test reservation."""
         async with self.factory() as session:
@@ -326,8 +341,9 @@ class OutputCustodyHarness:
                 session,
                 checker_run_id,
                 maximum_bytes=maximum_bytes,
+                content_sha256=content_sha256,
             )
-            await session.rollback()
+            await session.commit()
             return reservation
 
 
@@ -404,18 +420,14 @@ async def output_custody_harness(
                 checker_run_id,
                 maximum_bytes=maximum_bytes,
             )
-            await session.rollback()
+            await session.commit()
         state = ControlledReservationState(reservation)
         service = CheckerArtifactOutputService(
             sessions=factory,
             reservations=lambda session: ControlledReservationPort(session, state),
-            authority=lambda session: ControlledWriteAuthority(
-                session,
-                state,
-                actor_id,
-                identity_link_id,
-            ),
+            authority=lambda session: ControlledWriteAuthority(session, state),
             internal_authority=lambda session: _AllowArtifactAuthority(),
+            verification_authority=lambda session: _AllowArtifactAuthority(),
             preparation=preparation,
             store=store,
             namespace=namespace,

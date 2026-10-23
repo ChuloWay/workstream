@@ -4,6 +4,7 @@ from app.modules.authorization.artifact_project_authority import lock_project_ro
 from app.modules.authorization.catalogue import ActionAvailability, ActionId, PermissionId
 from app.modules.authorization.domain import (
     adapter_bindings,
+    checker_models,
     checker_registry,
     contribution_policies,
 )
@@ -50,9 +51,16 @@ async def lock_admin_mutation_authority(repository, context, scope, action_id, p
         scope_project_id=scope.project_id,
         system_scope_only=scope.project_id is None,
         for_update=True,
-        **({"allowed_roles": (AdminRole.OPERATOR,)} if action_id in {
-            ActionId.REVIEW_LIFECYCLE_ACTIVATION_MANAGE, ActionId.OPERATIONS_CHECKER_RETRY,
-        } else {}),
+        **(
+            {"allowed_roles": (AdminRole.OPERATOR,)}
+            if action_id
+            in {
+                ActionId.REVIEW_LIFECYCLE_ACTIVATION_MANAGE,
+                ActionId.OPERATIONS_CHECKER_RETRY,
+                *checker_models.MODEL_ADMIN_ACTIONS,
+            }
+            else {}
+        ),
         **adapter_bindings.finance_authority_grant_filters(action_id),
         **checker_registry.checker_registry_grant_filters(action_id),
         **contribution_policies.policy_finance_grant_filters(action_id),

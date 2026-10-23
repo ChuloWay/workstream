@@ -27,7 +27,7 @@ from app.modules.authorization.domain.adapter_bindings import AdapterBindingMuta
 from app.modules.authorization.domain.project_create import ProjectCreateResourceContext
 from app.modules.authorization.domain import (
     checker_registry, checker_retry, checker_retry_reads, contribution_reads,
-    contributor_reads, management_reads, submission_history, task_authority, task_queues,
+    checker_models, checker_outputs, contributor_reads, management_reads, submission_history, task_authority, task_queues,
     post_submit_deliveries,
 )
 from app.modules.authorization.domain.guide_mutations import (
@@ -1058,6 +1058,9 @@ class PreSubmitCheckerInputResourceContext(PreSubmitCheckerInputPreparationConte
 
 AuthorizationResourceContext = (
     ReviewLifecycleActivationContract | contribution_reads.ContributionSelfReadResourceContext | contribution_reads.ContributionProjectReadResourceContext
+    | checker_models.CheckerModelCallResourceContext
+    | checker_models.ProjectModelAdministrationResourceContext
+    | checker_outputs.CheckerOutputResourceContext
     | contributor_reads.ActorProjectListResourceContext | contributor_reads.ContributorWorkReadResourceContext
     | management_reads.ProjectManagementReadResourceContext |
     submission_history.HistoryReadResourceContext | task_queues.QueueReadResourceContext

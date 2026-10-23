@@ -631,7 +631,7 @@ def test_checker_output_contract_has_one_canonical_consumer_owner() -> None:
 
     expected_methods = {
         "CheckerOutputBindingPort": {"bind_checker_output"},
-        "CheckerArtifactOutputPort": {"store", "recover"},
+        "CheckerArtifactOutputPort": {"store", "recover", "read_response"},
     }
     for name, methods in expected_methods.items():
         assert {
@@ -709,7 +709,11 @@ def _assert_checker_custody_consumers(
             "app/modules/artifacts/checker_outputs.py",
             "app/modules/artifacts/schemas.py",
             "app/modules/artifacts/service.py",
-            "app/modules/checkers/execution_coordination.py",
+            "app/modules/authorization/checker_output_authorization.py",
+            "app/modules/authorization/domain/checker_outputs.py",
+            "app/modules/checkers/model_calls/custody.py",
+            "app/modules/checkers/model_calls/proxy.py",
+            "app/modules/tasks/post_submit_routing/evaluation_guard.py",
         },
         "app.modules.checkers.api.materialization": {
             "app/modules/authorization/domain/post_submit.py",

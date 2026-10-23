@@ -30,6 +30,17 @@ class PermissionId(StrEnum):
     CHECKER_PRE_SUBMIT_FINALIZE = "checker.pre_submit.finalize"
     CHECKER_POST_SUBMIT_EXECUTE = "checker.post_submit.execute"
     CHECKER_POST_SUBMIT_FINALIZE = "checker.post_submit.finalize"
+    CHECKER_MODEL_CALL_PREPARE = "checker.model_call.prepare"
+    CHECKER_MODEL_CALL_DISPATCH = "checker.model_call.dispatch"
+    CHECKER_MODEL_CALL_RECOVER = "checker.model_call.recover"
+    CHECKER_MODEL_CALL_OBSERVE = "checker.model_call.observe"
+    CHECKER_MODEL_CALL_COMPLETE = "checker.model_call.complete"
+    CHECKER_MODEL_CALL_GRANT = "checker.model_call.grant"
+    PROJECT_MODEL_PROFILE_MANAGE = "project.model_profile.manage"
+    PROJECT_MODEL_BUDGET_MANAGE = "project.model_budget.manage"
+    PROJECT_MODEL_CALL_RECOVERY_CHILD_AUTHORIZE = (
+        "project.model_call.recovery_child.authorize"
+    )
     OUTBOX_DISPATCH = "outbox.dispatch"
     ACTOR_SERVICE_PROVISION = "actor.service.provision"
     ADMIN_ROLE_READ = "admin_role.read"
@@ -156,6 +167,17 @@ class ActionId(StrEnum):
     CHECKER_PRE_SUBMIT_FINALIZE = "checker.pre_submit.finalize"
     CHECKER_POST_SUBMIT_EXECUTE = "checker.post_submit.execute"
     CHECKER_POST_SUBMIT_FINALIZE = "checker.post_submit.finalize"
+    CHECKER_MODEL_CALL_PREPARE = "checker.model_call.prepare"
+    CHECKER_MODEL_CALL_DISPATCH = "checker.model_call.dispatch"
+    CHECKER_MODEL_CALL_RECOVER = "checker.model_call.recover"
+    CHECKER_MODEL_CALL_OBSERVE = "checker.model_call.observe"
+    CHECKER_MODEL_CALL_COMPLETE = "checker.model_call.complete"
+    CHECKER_MODEL_CALL_GRANT = "checker.model_call.grant"
+    PROJECT_MODEL_PROFILE_PROVISION = "project.model_profile.provision"
+    PROJECT_MODEL_BUDGET_CONFIGURE = "project.model_budget.configure"
+    PROJECT_MODEL_CALL_RECOVERY_CHILD_AUTHORIZE = (
+        "project.model_call.recovery_child.authorize"
+    )
     OUTBOX_DISPATCH = "outbox.dispatch"
     ACTOR_SERVICE_PROVISION = "actor.service.provision"
     PROJECT_CONTRIBUTOR_CANDIDATE_LIST = "project.contributor_candidate.list"
@@ -339,6 +361,7 @@ class ActionOwner(StrEnum):
     PILOT_02A = "PILOT-02A"
     PILOT_02B = "PILOT-02B"
     PILOT_04 = "PILOT-04"
+    PILOT_05 = "PILOT-05"
     PILOT_08 = "PILOT-08"
     PILOT_10 = "PILOT-10"
     PILOT_READ_2 = "PILOT-READ-2"
@@ -712,7 +735,7 @@ ACTION_DEFINITIONS = (
     _active(ActionId.ARTIFACT_GUIDE_SOURCE_READ, PermissionId.ARTIFACT_GUIDE_SOURCE_READ, ActionOwner.XINT_002_04B),
     _active(ActionId.ARTIFACT_SUBMISSION_BUNDLE_PREPARE, PermissionId.SUBMISSION_CREATE, ActionOwner.XINT_002_05A),
     _active(ActionId.ARTIFACT_SUBMISSION_BINDING_CREATE, PermissionId.ARTIFACT_BINDING_CREATE, ActionOwner.AUTH_ART_05),
-    _planned(
+    _active(
         ActionId.ARTIFACT_CHECKER_OUTPUT_BINDING_CREATE,
         PermissionId.ARTIFACT_BINDING_CREATE,
         ActionOwner.AUTH_ART_06B,
@@ -737,6 +760,51 @@ ACTION_DEFINITIONS = (
     _active(ActionId.CHECKER_POST_SUBMIT_EXECUTE, PermissionId.CHECKER_POST_SUBMIT_EXECUTE, ActionOwner.ARCH_04D2),
     _active(ActionId.CHECKER_POST_SUBMIT_FINALIZE, PermissionId.CHECKER_POST_SUBMIT_FINALIZE, ActionOwner.ARCH_04D2),
     _active(
+        ActionId.CHECKER_MODEL_CALL_PREPARE,
+        PermissionId.CHECKER_MODEL_CALL_PREPARE,
+        ActionOwner.PILOT_05,
+    ),
+    _active(
+        ActionId.CHECKER_MODEL_CALL_DISPATCH,
+        PermissionId.CHECKER_MODEL_CALL_DISPATCH,
+        ActionOwner.PILOT_05,
+    ),
+    _active(
+        ActionId.CHECKER_MODEL_CALL_RECOVER,
+        PermissionId.CHECKER_MODEL_CALL_RECOVER,
+        ActionOwner.PILOT_05,
+    ),
+    _active(
+        ActionId.CHECKER_MODEL_CALL_OBSERVE,
+        PermissionId.CHECKER_MODEL_CALL_OBSERVE,
+        ActionOwner.PILOT_05,
+    ),
+    _active(
+        ActionId.CHECKER_MODEL_CALL_COMPLETE,
+        PermissionId.CHECKER_MODEL_CALL_COMPLETE,
+        ActionOwner.PILOT_05,
+    ),
+    _active(
+        ActionId.CHECKER_MODEL_CALL_GRANT,
+        PermissionId.CHECKER_MODEL_CALL_GRANT,
+        ActionOwner.PILOT_05,
+    ),
+    _active(
+        ActionId.PROJECT_MODEL_PROFILE_PROVISION,
+        PermissionId.PROJECT_MODEL_PROFILE_MANAGE,
+        ActionOwner.PILOT_05,
+    ),
+    _active(
+        ActionId.PROJECT_MODEL_BUDGET_CONFIGURE,
+        PermissionId.PROJECT_MODEL_BUDGET_MANAGE,
+        ActionOwner.PILOT_05,
+    ),
+    _active(
+        ActionId.PROJECT_MODEL_CALL_RECOVERY_CHILD_AUTHORIZE,
+        PermissionId.PROJECT_MODEL_CALL_RECOVERY_CHILD_AUTHORIZE,
+        ActionOwner.PILOT_05,
+    ),
+    _active(
         ActionId.ARTIFACT_PRE_SUBMIT_CHECKER_INPUT_MATERIALIZE,
         PermissionId.ARTIFACT_CHECKER_INPUT_MATERIALIZE,
         ActionOwner.XINT_002_06A,
@@ -746,7 +814,7 @@ ACTION_DEFINITIONS = (
         PermissionId.ARTIFACT_CHECKER_INPUT_MATERIALIZE,
         ActionOwner.AUTH_ART_06A,
     ),
-    _planned(
+    _active(
         ActionId.ARTIFACT_CHECKER_OUTPUT_WRITE,
         PermissionId.ARTIFACT_CHECKER_OUTPUT_WRITE,
         ActionOwner.AUTH_ART_06B,
@@ -793,6 +861,15 @@ NEW_PERMISSION_IDS = frozenset(
     {
         PermissionId.CHECKER_POST_SUBMIT_EXECUTE,
         PermissionId.CHECKER_POST_SUBMIT_FINALIZE,
+        PermissionId.CHECKER_MODEL_CALL_PREPARE,
+        PermissionId.CHECKER_MODEL_CALL_DISPATCH,
+        PermissionId.CHECKER_MODEL_CALL_RECOVER,
+        PermissionId.CHECKER_MODEL_CALL_OBSERVE,
+        PermissionId.CHECKER_MODEL_CALL_COMPLETE,
+        PermissionId.CHECKER_MODEL_CALL_GRANT,
+        PermissionId.PROJECT_MODEL_PROFILE_MANAGE,
+        PermissionId.PROJECT_MODEL_BUDGET_MANAGE,
+        PermissionId.PROJECT_MODEL_CALL_RECOVERY_CHILD_AUTHORIZE,
         PermissionId.CHECKER_PRE_SUBMIT_EXECUTE,
         PermissionId.CHECKER_PRE_SUBMIT_FINALIZE,
         PermissionId.TASK_ASSIGNMENT_AUTHORITY_RECONCILE,
@@ -830,9 +907,9 @@ HISTORICAL_PERMISSION_IDS = PERMISSION_IDS - NEW_PERMISSION_IDS
 
 def _require_catalogue_counts() -> None:
     """Keep the closed action inventory and permission boundary exact."""
-    if len(PERMISSION_IDS) != 82 or len(ACTION_IDS) != 177:
+    if len(PERMISSION_IDS) != 91 or len(ACTION_IDS) != 186:
         raise RuntimeError("authorization catalogue count mismatch")
-    if len(HISTORICAL_PERMISSION_IDS) != 49 or len(NEW_PERMISSION_IDS) != 33:
+    if len(HISTORICAL_PERMISSION_IDS) != 49 or len(NEW_PERMISSION_IDS) != 42:
         raise RuntimeError("authorization permission boundary mismatch")
 
 
@@ -945,12 +1022,23 @@ _ACTIVE_ACTION_BOUNDARY = frozenset({
     ActionId.ARTIFACT_SUBMISSION_BUNDLE_PREPARE,
     ActionId.SUBMISSION_CREATE,
     ActionId.ARTIFACT_SUBMISSION_BINDING_CREATE,
+    ActionId.ARTIFACT_CHECKER_OUTPUT_BINDING_CREATE,
     ActionId.ARTIFACT_VERIFICATION_EXECUTE,
     ActionId.ARTIFACT_PENDING_WORK_SCAN,
     ActionId.ARTIFACT_PUT_ATTEMPT_RESOLVE,
     ActionId.ARTIFACT_PRE_SUBMIT_CHECKER_INPUT_MATERIALIZE,
     ActionId.ARTIFACT_POST_SUBMIT_CHECKER_INPUT_MATERIALIZE,
+    ActionId.ARTIFACT_CHECKER_OUTPUT_WRITE,
     ActionId.CHECKER_POST_SUBMIT_EXECUTE, ActionId.CHECKER_POST_SUBMIT_FINALIZE,
+    ActionId.CHECKER_MODEL_CALL_PREPARE,
+    ActionId.CHECKER_MODEL_CALL_DISPATCH,
+    ActionId.CHECKER_MODEL_CALL_RECOVER,
+    ActionId.CHECKER_MODEL_CALL_OBSERVE,
+    ActionId.CHECKER_MODEL_CALL_COMPLETE,
+    ActionId.CHECKER_MODEL_CALL_GRANT,
+    ActionId.PROJECT_MODEL_PROFILE_PROVISION,
+    ActionId.PROJECT_MODEL_BUDGET_CONFIGURE,
+    ActionId.PROJECT_MODEL_CALL_RECOVERY_CHILD_AUTHORIZE,
     ActionId.CHECKER_PRE_SUBMIT_EXECUTE, ActionId.CHECKER_PRE_SUBMIT_FINALIZE,
     ActionId.COMPENSATION_ADAPTER_BINDING_READ,
     ActionId.COMPENSATION_ADAPTER_BINDING_CREATE,
@@ -996,7 +1084,18 @@ ACTION_BY_ID = _index_actions(ACTION_DEFINITIONS)
 _SERVICE_ACTIONS = {
     ServiceIdentity.TASK_POST_SUBMIT_ROUTER: frozenset({ActionId.TASK_POST_SUBMIT_ROUTE}),
     ServiceIdentity.CHECKER_PRE_SUBMIT: frozenset({ActionId.CHECKER_PRE_SUBMIT_EXECUTE, ActionId.CHECKER_PRE_SUBMIT_FINALIZE}),
-    ServiceIdentity.CHECKER_POST_SUBMIT: frozenset({ActionId.CHECKER_POST_SUBMIT_EXECUTE, ActionId.CHECKER_POST_SUBMIT_FINALIZE}),
+    ServiceIdentity.CHECKER_POST_SUBMIT: frozenset(
+        {
+            ActionId.CHECKER_POST_SUBMIT_EXECUTE,
+            ActionId.CHECKER_POST_SUBMIT_FINALIZE,
+            ActionId.CHECKER_MODEL_CALL_PREPARE,
+            ActionId.CHECKER_MODEL_CALL_DISPATCH,
+            ActionId.CHECKER_MODEL_CALL_RECOVER,
+            ActionId.CHECKER_MODEL_CALL_OBSERVE,
+            ActionId.CHECKER_MODEL_CALL_COMPLETE,
+            ActionId.CHECKER_MODEL_CALL_GRANT,
+        }
+    ),
     ServiceIdentity.TASK_ASSIGNMENT_RECONCILER: frozenset({ActionId.TASK_ASSIGNMENT_AUTHORITY_RECONCILE}),
     ServiceIdentity.TASK_REVISION_EXPIRER: frozenset({
         ActionId.TASK_REVISION_EXPIRE, ActionId.TASK_REVISION_RECOVER,
@@ -1055,6 +1154,12 @@ _EXPECTED_SERVICE_ACTION_MEMBERSHIPS = frozenset(
         (ServiceIdentity.CHECKER_PRE_SUBMIT, ActionId.CHECKER_PRE_SUBMIT_FINALIZE),
         (ServiceIdentity.CHECKER_POST_SUBMIT, ActionId.CHECKER_POST_SUBMIT_EXECUTE),
         (ServiceIdentity.CHECKER_POST_SUBMIT, ActionId.CHECKER_POST_SUBMIT_FINALIZE),
+        (ServiceIdentity.CHECKER_POST_SUBMIT, ActionId.CHECKER_MODEL_CALL_PREPARE),
+        (ServiceIdentity.CHECKER_POST_SUBMIT, ActionId.CHECKER_MODEL_CALL_DISPATCH),
+        (ServiceIdentity.CHECKER_POST_SUBMIT, ActionId.CHECKER_MODEL_CALL_RECOVER),
+        (ServiceIdentity.CHECKER_POST_SUBMIT, ActionId.CHECKER_MODEL_CALL_OBSERVE),
+        (ServiceIdentity.CHECKER_POST_SUBMIT, ActionId.CHECKER_MODEL_CALL_COMPLETE),
+        (ServiceIdentity.CHECKER_POST_SUBMIT, ActionId.CHECKER_MODEL_CALL_GRANT),
         (ServiceIdentity.TASK_ASSIGNMENT_RECONCILER, ActionId.TASK_ASSIGNMENT_AUTHORITY_RECONCILE),
         (ServiceIdentity.TASK_REVISION_EXPIRER, ActionId.TASK_REVISION_EXPIRE),
         (ServiceIdentity.TASK_REVISION_EXPIRER, ActionId.TASK_REVISION_RECOVER),
@@ -1104,6 +1209,12 @@ _ACTIVE_SERVICE_ACTIONS = {
     ActionId.TASK_POST_SUBMIT_ROUTE,
     ActionId.CHECKER_POST_SUBMIT_EXECUTE,
     ActionId.CHECKER_POST_SUBMIT_FINALIZE,
+    ActionId.CHECKER_MODEL_CALL_PREPARE,
+    ActionId.CHECKER_MODEL_CALL_DISPATCH,
+    ActionId.CHECKER_MODEL_CALL_RECOVER,
+    ActionId.CHECKER_MODEL_CALL_OBSERVE,
+    ActionId.CHECKER_MODEL_CALL_COMPLETE,
+    ActionId.CHECKER_MODEL_CALL_GRANT,
     ActionId.ARTIFACT_POST_SUBMIT_CHECKER_INPUT_MATERIALIZE,
     ActionId.TASK_ASSIGNMENT_AUTHORITY_RECONCILE,
     ActionId.TASK_REVISION_EXPIRE,
@@ -1115,8 +1226,10 @@ _ACTIVE_SERVICE_ACTIONS = {
     ActionId.ARTIFACT_PUT_ATTEMPT_RESOLVE,
     ActionId.ARTIFACT_PENDING_WORK_SCAN,
     ActionId.ARTIFACT_SUBMISSION_BINDING_CREATE,
+    ActionId.ARTIFACT_CHECKER_OUTPUT_BINDING_CREATE,
     ActionId.ARTIFACT_GUIDE_SOURCE_READ,
     ActionId.ARTIFACT_PRE_SUBMIT_CHECKER_INPUT_MATERIALIZE,
+    ActionId.ARTIFACT_CHECKER_OUTPUT_WRITE,
     ActionId.PROJECT_GUIDE_SUFFICIENCY_RUN,
     ActionId.PROJECT_GUIDE_COMPILATION_EXECUTE,
     ActionId.PROJECT_GUIDE_COMPILATION_REQUEST_AUTOMATIC,
@@ -1133,6 +1246,30 @@ def _index_service_actions(
         ActionId.CHECKER_PRE_SUBMIT_FINALIZE: (PermissionId.CHECKER_PRE_SUBMIT_FINALIZE, ActionOwner.PILOT_04),
         ActionId.CHECKER_POST_SUBMIT_EXECUTE: (PermissionId.CHECKER_POST_SUBMIT_EXECUTE, ActionOwner.ARCH_04D2),
         ActionId.CHECKER_POST_SUBMIT_FINALIZE: (PermissionId.CHECKER_POST_SUBMIT_FINALIZE, ActionOwner.ARCH_04D2),
+        ActionId.CHECKER_MODEL_CALL_PREPARE: (
+            PermissionId.CHECKER_MODEL_CALL_PREPARE,
+            ActionOwner.PILOT_05,
+        ),
+        ActionId.CHECKER_MODEL_CALL_DISPATCH: (
+            PermissionId.CHECKER_MODEL_CALL_DISPATCH,
+            ActionOwner.PILOT_05,
+        ),
+        ActionId.CHECKER_MODEL_CALL_RECOVER: (
+            PermissionId.CHECKER_MODEL_CALL_RECOVER,
+            ActionOwner.PILOT_05,
+        ),
+        ActionId.CHECKER_MODEL_CALL_OBSERVE: (
+            PermissionId.CHECKER_MODEL_CALL_OBSERVE,
+            ActionOwner.PILOT_05,
+        ),
+        ActionId.CHECKER_MODEL_CALL_COMPLETE: (
+            PermissionId.CHECKER_MODEL_CALL_COMPLETE,
+            ActionOwner.PILOT_05,
+        ),
+        ActionId.CHECKER_MODEL_CALL_GRANT: (
+            PermissionId.CHECKER_MODEL_CALL_GRANT,
+            ActionOwner.PILOT_05,
+        ),
         ActionId.TASK_ASSIGNMENT_AUTHORITY_RECONCILE: (PermissionId.TASK_ASSIGNMENT_AUTHORITY_RECONCILE, ActionOwner.ARCH_03C1),
         ActionId.TASK_REVISION_EXPIRE: (PermissionId.TASK_REVISION_EXPIRE, ActionOwner.PILOT_08),
         ActionId.TASK_REVISION_RECOVER: (PermissionId.TASK_REVISION_RECOVER, ActionOwner.PILOT_08),

@@ -16,6 +16,7 @@ async def approved_selected_policy_fixture(
     max_revision_rounds=2,
     pre_submit_registry_spec=None,
     post_submit_registry_spec=None,
+    post_submit_binding_setup=None,
 ):
     """Build an activated guide backed only by immutable external policy custody."""
     from app.interfaces.project_agents import SubmissionArtifactPolicyProposal
@@ -38,6 +39,7 @@ async def approved_selected_policy_fixture(
         ),
         pre_submit_registry_spec=pre_submit_registry_spec,
         post_submit_registry_spec=post_submit_registry_spec,
+        post_submit_binding_setup=post_submit_binding_setup,
     )
     async with factory() as session:
         guide = await session.get(ProjectGuide, str(values["guide"]))

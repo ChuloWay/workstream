@@ -23,7 +23,7 @@ from scripts.run_isolated_tests import LOOPBACK, NAME_RE, ROLE_RE
 DDL_LOCK_DIRECTORY = Path("/tmp")
 # Match the PostgreSQL 16 engine used by Backend CI. Catalog identity rendering
 # differs across major versions; regenerate only after comparing actual objects.
-EXPECTED_PUBLIC_SCHEMA_SHA256 = "a6b6381144f041b1a1ab9aaee30731dc1a2eada85d030fd0ba8d6d6ccfdc5787"
+EXPECTED_PUBLIC_SCHEMA_SHA256 = "c06129a0f05f8062678f7d76016b2ec75cb457c088d54be07c7ad73924e976ee"
 PROTECTED_TEST_TABLES = (
     "actor_profile_migration_state",
     "alembic_version",
@@ -56,6 +56,13 @@ RESETTABLE_TEST_TABLES = (
     "authority_control",
     "authority_idempotency_records",
     "checker_policies",
+    "checker_model_invocation_grants",
+    "checker_model_profiles",
+    "checker_model_budget_accounts",
+    "checker_model_budget_configurations",
+    "checker_model_call_slots",
+    "checker_model_call_attempts",
+    "checker_model_call_recoveries",
     "external_checker_registry_entries",
     "checker_retry_receipts",
     "checker_result_findings",
@@ -176,6 +183,13 @@ TRUNCATE_GUARDED_TABLES = (
     "task_post_submit_routing_manifests",
     "task_post_submit_routing_requests",
     "checker_policies",
+    "checker_model_invocation_grants",
+    "checker_model_profiles",
+    "checker_model_budget_accounts",
+    "checker_model_budget_configurations",
+    "checker_model_call_slots",
+    "checker_model_call_attempts",
+    "checker_model_call_recoveries",
     "admin_role_grants",
     "audit_events",
     "authority_control",

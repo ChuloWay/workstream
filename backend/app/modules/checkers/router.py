@@ -25,6 +25,13 @@ from app.api.deps.checker_recovery import (
     get_post_submit_delivery_commands, get_post_submit_delivery_reads,
     require_post_submit_delivery_human,
 )
+from app.api.deps.checker_models import (
+    MODEL_ADMIN_IDEMPOTENCY_PARAMETER,
+    CheckerModelAdminCommands,
+    get_checker_model_admin_commands,
+    require_model_admin_human,
+    require_model_admin_key,
+)
 
 from app.api.deps.history import HistoryReadOperation, get_history_reads
 
@@ -48,9 +55,96 @@ from app.modules.checkers.api.delivery_reconciliation import (
     PostSubmitDeliveryRequest,
     PostSubmitDeliveryResult,
 )
+from app.modules.checkers.api.model_calls import (
+    ModelRecoveryChildRequest,
+    PreparedModelCallAttempt,
+    ProjectModelBudgetConfiguration,
+    ProjectModelBudgetConfigurationSpec,
+    ProjectModelProfile,
+    ProjectModelProfileSpec,
+)
 
 
 router = APIRouter(tags=["checkers"])
+
+
+@router.post(
+    "/operations/projects/{project_id}/model-profiles",
+    response_model=ProjectModelProfile,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[
+        Depends(enforce_admin_mutation_rate_limit),
+        Depends(require_model_admin_human),
+        Depends(require_model_admin_key),
+    ],
+    responses={code: {"model": ApiErrorResponse} for code in (404, 409, 422, 503)},
+    openapi_extra={
+        "x-workstream-action-id": "project.model_profile.provision",
+        "parameters": [MODEL_ADMIN_IDEMPOTENCY_PARAMETER],
+    },
+)
+async def provision_project_model_profile(
+    project_id: UUID,
+    payload: ProjectModelProfileSpec,
+    commands: Annotated[
+        CheckerModelAdminCommands, Depends(get_checker_model_admin_commands)
+    ],
+) -> ProjectModelProfile:
+    """Publish or exactly replay one immutable approved project model profile."""
+    return await commands.provision_profile(project_id, payload)
+
+
+@router.post(
+    "/operations/projects/{project_id}/model-budget-configurations",
+    response_model=ProjectModelBudgetConfiguration,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[
+        Depends(enforce_admin_mutation_rate_limit),
+        Depends(require_model_admin_human),
+        Depends(require_model_admin_key),
+    ],
+    responses={code: {"model": ApiErrorResponse} for code in (404, 409, 422, 503)},
+    openapi_extra={
+        "x-workstream-action-id": "project.model_budget.configure",
+        "parameters": [MODEL_ADMIN_IDEMPOTENCY_PARAMETER],
+    },
+)
+async def configure_project_model_budget(
+    project_id: UUID,
+    payload: ProjectModelBudgetConfigurationSpec,
+    commands: Annotated[
+        CheckerModelAdminCommands, Depends(get_checker_model_admin_commands)
+    ],
+) -> ProjectModelBudgetConfiguration:
+    """Create or replay one immutable lifetime project model budget version."""
+    return await commands.configure_budget(project_id, payload)
+
+
+@router.post(
+    "/operations/projects/{project_id}/model-call-attempts/{parent_attempt_id}/recovery-children",
+    response_model=PreparedModelCallAttempt,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[
+        Depends(enforce_admin_mutation_rate_limit),
+        Depends(require_model_admin_human),
+        Depends(require_model_admin_key),
+    ],
+    responses={code: {"model": ApiErrorResponse} for code in (404, 409, 422, 503)},
+    openapi_extra={
+        "x-workstream-action-id": "project.model_call.recovery_child.authorize",
+        "parameters": [MODEL_ADMIN_IDEMPOTENCY_PARAMETER],
+    },
+)
+async def prepare_project_model_recovery_child(
+    project_id: UUID,
+    parent_attempt_id: UUID,
+    payload: ModelRecoveryChildRequest,
+    commands: Annotated[
+        CheckerModelAdminCommands, Depends(get_checker_model_admin_commands)
+    ],
+) -> PreparedModelCallAttempt:
+    """Create or replay a child only for one exact known terminal paid effect."""
+    return await commands.prepare_recovery_child(project_id, parent_attempt_id, payload)
 
 
 @router.post(

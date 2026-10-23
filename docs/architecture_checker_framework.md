@@ -467,12 +467,14 @@ coded work findings, positive and negative cases, runtime dependencies and
 infrastructure failures. File and directory inputs use canonical relative paths.
 Capacity, deadline, unavailable material or implementation, and invalid output
 remain infrastructure outcomes rather than contributor work findings. Model
-evaluation requires an explicit model-service dependency; task or guide context
+evaluation requires a `model_service` dependency provisioned by the credential-
+isolated `model_proxy`; task or guide context
 and external prepared images or caches require explicit material dependencies.
 `prepared_material` remains a runtime gap with `material_unavailable` handling;
-it is not received package content and its absence is not a work failure. The ordinary image runner remains
-offline and receives only its trusted request contract, so a desired dependency
-must not be presented as available runtime capability.
+it is not received package content and its absence is not a work failure. The
+ordinary image runner remains networkless. Model access is available only to a
+registered POST image through its exact approved project model profile; a missing
+image or profile remains an unbound capability suggestion that blocks activation.
 
 The trusted compiler resolves each supported project check to an immutable
 Operator-registered image, validates bounded typed configuration against that

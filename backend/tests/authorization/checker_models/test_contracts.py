@@ -1,0 +1,280 @@
+"""Discriminating pure contracts for checker model and output authority."""
+
+from __future__ import annotations
+
+from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
+
+import pytest
+from pydantic import ValidationError
+
+from app.core.hashing import canonical_json_hash
+from app.core.identifiers import new_record_id
+from app.modules.actors.api import ServiceIdentity
+from app.modules.authorization.catalogue import ActionId, PermissionId
+from app.modules.authorization.checker_model_authorization import CheckerModelAuthorization
+from app.modules.authorization.domain.checker_models import (
+    GRANT,
+    RECOVER,
+    ModelCallGrantAuthorityFacts,
+    ModelCallRecoverAuthorityFacts,
+    checker_model_call_resource,
+)
+from app.modules.authorization.domain.checker_outputs import (
+    BIND,
+    WRITE,
+    checker_output_prepare_matches,
+    checker_output_prepare_resource,
+    checker_output_stored_resource,
+)
+from app.modules.authorization.prepared import PreparedAuthorizationHandle
+from app.modules.authorization.runtime import (
+    ActorKind,
+    ActorStatus,
+    AuthorizationDecision,
+    IdentityLinkStatus,
+    MatchedAuthorityKind,
+    ServiceAuthorizationContext,
+)
+from app.modules.checkers.api.model_calls import (
+    ModelCallEffectAuthorityFacts,
+    ModelCallExecutionFacts,
+    ModelCallUnavailable,
+    ModelPaidSlotKey,
+)
+from app.modules.checkers.api.output_custody import (
+    CheckerOutputReservation,
+    CheckerOutputSelector,
+    CheckerOutputSlot,
+)
+
+
+def sha(label: str) -> str:
+    return canonical_json_hash({"label": label})
+
+
+def execution(*, project_id=None, task_id=None) -> ModelCallExecutionFacts:
+    return ModelCallExecutionFacts(
+        project_id=project_id or new_record_id(),
+        task_id=task_id or new_record_id(),
+        assignment_id=new_record_id(),
+        submission_id=new_record_id(),
+        submission_version=1,
+        evaluation_request_id=new_record_id(),
+        evaluation_generation=1,
+        checker_run_id=new_record_id(),
+        worker_lease_id=new_record_id(),
+        worker_lease_generation=1,
+        worker_lease_expires_at=datetime.now(UTC) + timedelta(minutes=5),
+    )
+
+
+def paid_slot(current: ModelCallExecutionFacts) -> ModelPaidSlotKey:
+    return ModelPaidSlotKey(
+        project_id=current.project_id,
+        assignment_id=current.assignment_id,
+        submission_id=current.submission_id,
+        submission_version=current.submission_version,
+        requirement_id="model_quality",
+        registry_entry_digest=sha("registry"),
+        configuration_sha256=sha("configuration"),
+        profile_id=new_record_id(),
+        profile_version=1,
+        profile_digest=sha("profile"),
+    )
+
+
+def effect(current: ModelCallExecutionFacts, slot: ModelPaidSlotKey):
+    return ModelCallEffectAuthorityFacts(
+        project_id=current.project_id,
+        task_id=current.task_id,
+        slot_id=new_record_id(),
+        slot_key=slot,
+        attempt_id=new_record_id(),
+        internal_call_request_id=new_record_id(),
+    )
+
+
+def selector(current: ModelCallExecutionFacts, slot: ModelPaidSlotKey, *, role="model_request"):
+    return CheckerOutputSelector(
+        paid_slot=slot,
+        task_id=current.task_id,
+        model_call_slot_id=new_record_id(),
+        model_call_attempt_id=new_record_id(),
+        slot_key=role,
+        content_sha256=sha(role),
+        execution=current if role == "model_request" else None,
+    )
+
+
+def test_recovery_resource_rejects_substituted_effect_scope() -> None:
+    current = execution()
+    slot = paid_slot(current)
+    altered = effect(current, slot).model_copy(update={"task_id": new_record_id()})
+
+    with pytest.raises(ValueError, match="recovery effect mismatch"):
+        checker_model_call_resource(
+            RECOVER,
+            ModelCallRecoverAuthorityFacts(execution=current, effect=altered),
+        )
+
+
+def test_grant_resource_binds_opaque_digests_and_exact_slot() -> None:
+    current = execution()
+    slot = paid_slot(current)
+    facts = ModelCallGrantAuthorityFacts(
+        execution=current,
+        slot=slot,
+        external_request_digest=sha("external request"),
+        token_hash=sha("opaque token"),
+    )
+    resource = checker_model_call_resource(GRANT, facts)
+
+    assert resource.scope_project_id == current.project_id
+    assert resource.resource_id == current.evaluation_request_id
+    assert "token" not in resource.model_dump(mode="json")["facts"]
+    assert resource.facts.token_hash == sha("opaque token")
+
+
+def test_output_final_facts_cannot_substitute_selector_or_unverified_binding() -> None:
+    current = execution()
+    slot = paid_slot(current)
+    selected = selector(current, slot)
+    reservation = CheckerOutputReservation(
+        selector=selected,
+        slot=CheckerOutputSlot(key="model_request", maximum_bytes=1024),
+    )
+    request_digest = canonical_json_hash(
+        {
+            "model_call_slot_id": str(selected.model_call_slot_id),
+            "model_call_attempt_id": str(selected.model_call_attempt_id),
+            "paid_slot": selected.paid_slot.model_dump(mode="json"),
+            "task_id": str(selected.task_id),
+            "content_sha256": selected.content_sha256,
+            "slot_key": "model_request",
+            "media_type": "application/json",
+            "maximum_bytes": 1024,
+        }
+    )
+    stored = SimpleNamespace(
+        put_attempt_id=new_record_id(),
+        checker_request_digest=request_digest,
+        sha256=selected.content_sha256,
+        byte_count=100,
+        media_type="application/json",
+        status="verified",
+        content_id=new_record_id(),
+        replica_id=new_record_id(),
+        verification_receipt_id=new_record_id(),
+    )
+    prepared = checker_output_prepare_resource(BIND, selected)
+    final = checker_output_stored_resource(BIND, selected, reservation, stored)
+
+    assert checker_output_prepare_matches(prepared, final)
+    substituted = selected.model_copy(update={"model_call_attempt_id": new_record_id()})
+    assert not checker_output_prepare_matches(
+        prepared,
+        final.model_copy(
+            update={
+                "resource_id": substituted.model_call_attempt_id,
+                "selector": substituted,
+            }
+        ),
+    )
+    unverified = SimpleNamespace(
+        **{
+            **stored.__dict__,
+            "status": "object_confirmed",
+            "content_id": None,
+            "replica_id": None,
+            "verification_receipt_id": None,
+        }
+    )
+    assert checker_output_prepare_matches(
+        checker_output_prepare_resource(WRITE, selected),
+        checker_output_stored_resource(WRITE, selected, reservation, unverified),
+    )
+    with pytest.raises(ValidationError, match="binding requires verified ancestry"):
+        checker_output_stored_resource(
+            BIND,
+            selected,
+            reservation,
+            unverified,
+        )
+
+
+class _Prepared:
+    def __init__(self, authorization) -> None:
+        self._authorization = authorization
+        self._context = authorization._context
+        self.resource = None
+
+    async def prepare(self, action, caller_input, scope):
+        self.action, self.input, self.scope = action, caller_input, scope
+        return object.__new__(PreparedAuthorizationHandle)
+
+    async def consume(self, handle, action, caller_input, resource):
+        self.resource = resource
+        return AuthorizationDecision(
+            decision_id=new_record_id(),
+            allowed=True,
+            action_id=action,
+            permission_id=PermissionId.CHECKER_MODEL_CALL_GRANT,
+            resource_type=resource.resource_type,
+            resource_id=resource.resource_id,
+            resource_context_digest=sha("decision resource"),
+            matched_authority_kind=MatchedAuthorityKind.FIXED_SERVICE,
+            matched_grant_id=None,
+            matched_scope_project_id=None,
+            request_id=self._context.request_id,
+            correlation_id=self._context.correlation_id,
+            revalidated=True,
+            denial_code=None,
+        )
+
+
+class _Authorization:
+    def __init__(self, context) -> None:
+        self._context = context
+
+
+@pytest.mark.asyncio
+async def test_grant_adapter_emits_exact_resource_and_rejects_wrong_service() -> None:
+    current = execution()
+    slot = paid_slot(current)
+    context = ServiceAuthorizationContext(
+        actor_profile_id=new_record_id(),
+        actor_kind=ActorKind.SERVICE,
+        actor_status=ActorStatus.ACTIVE,
+        identity_link_id=new_record_id(),
+        identity_link_status=IdentityLinkStatus.ACTIVE,
+        service_identity=ServiceIdentity.CHECKER_POST_SUBMIT,
+        request_id=new_record_id(),
+        correlation_id=new_record_id(),
+    )
+    authorization = _Authorization(context)
+    prepared = _Prepared(authorization)
+    adapter = CheckerModelAuthorization(authorization, prepared)
+
+    evidence = await adapter.authorize_grant(
+        current, slot, sha("external request"), sha("opaque token")
+    )
+
+    assert prepared.action is ActionId.CHECKER_MODEL_CALL_GRANT
+    assert prepared.resource.facts.execution == current
+    assert prepared.resource.facts.slot == slot
+    assert evidence.facts_digest == canonical_json_hash(
+        {
+            "action": "grant",
+            "facts": prepared.resource.facts.model_dump(mode="json"),
+        }
+    )
+
+    wrong_context = context.model_copy(
+        update={"service_identity": ServiceIdentity.ARTIFACT_CHECKER_OUTPUT}
+    )
+    wrong_authorization = _Authorization(wrong_context)
+    with pytest.raises(ModelCallUnavailable, match="authority_unavailable"):
+        await CheckerModelAuthorization(
+            wrong_authorization, _Prepared(wrong_authorization)
+        ).authorize_grant(current, slot, sha("external request"), sha("opaque token"))

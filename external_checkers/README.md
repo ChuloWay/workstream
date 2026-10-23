@@ -52,6 +52,52 @@ supported isolation and resource contract. Unsupported runtime needs must be
 resolved explicitly before approving that capability; they are not permission
 to add a named-project exception or expose the host Docker socket.
 
+## Optional model socket
+
+An entitled post-submit invocation may receive one invocation-local Unix socket
+at `/work/model.sock`. The image opens one connection and sends exactly
+`{"prompt":"<string>"}` as UTF-8 JSON, prefixed by a four-byte unsigned
+big-endian body length. The JSON body must be non-empty and no larger than 1 MiB.
+The image then reads one frame in the same format. Its body is one closed
+`workstream.checker_model_proxy.v1` result object:
+
+- A completed result has `outcome: "completed"`, a non-empty string `output`, a
+  lowercase `sha256:` `receipt_digest` and a null `failure_code`.
+- An unavailable result has `outcome: "unavailable"`, null `output` and
+  `receipt_digest`, and a bounded lowercase-identifier `failure_code`.
+
+Both results also contain the exact `protocol_version`; extra or missing fields
+are invalid. This image-facing protocol is project-agnostic. The image needs no
+Workstream project code, provider SDK, provider credential, model coordinate or
+access to the global proxy endpoint. The service wraps the prompt with the
+invocation's private grant and request digest. It offers one call slot and keeps
+the checker container on `--network none`.
+
+The dedicated singleton model-proxy worker is optional. Its `model-proxy`
+Compose profile sets
+`WORKSTREAM_CHECKER_MODEL_PROXY_SOCKET=/run/ws-model-proxy/model-proxy.sock` and
+binds the listener; the ordinary API, task worker and beat processes do not own
+or mount that socket. An empty value outside the model-proxy process leaves the
+listener disabled. The Rust service configuration must set both
+`model_proxy_socket` to that same mounted path and `model_relay_root` to a
+daemon-visible private relay directory. The local configuration generator's
+`--enable-model-proxy` switch emits that pair, using
+`/var/lib/docker/volumes/<compose-project>-checker-relay/_data` for the relay
+root. Enabling only one side does not activate model calls.
+
+The proxy and relay roots must be canonical mode-`0700` directories owned by the
+shared service UID and GID. The global proxy socket and each invocation socket
+are mode `0600`. The backend has read-write access to the proxy volume, the Rust
+service connects through its read-only volume mount and creates invocation
+sockets in the relay volume, and a checker receives only its individual socket
+file. A different service/sandbox identity is rejected because this path does
+not rely on privileged ownership changes.
+
+Docker development proves only the ordinary runtime path. A gVisor `runsc`
+deployment must separately enable `host-uds=open` before a mounted host Unix
+socket can work. This repository does not claim that the model relay has been
+qualified under gVisor.
+
 ## From guide to an active project
 
 Use the real guide and task examples as setup input. Inspect the resulting

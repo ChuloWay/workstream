@@ -121,10 +121,9 @@ Every mandatory condition needs an error finding. Disclosure of noncompliance is
 not a pass unless the guide explicitly makes disclosure sufficient. Warnings apply
 only to nonblocking guidance or platform warnings.
 
-Specifications grant no access. Current offline checker images receive verified
-package bytes, manifest, approved configuration and normalized request metadata,
-not task or guide prose. Task and guide context, hosted models and nested sandboxes
-are unavailable runtime_gap dependencies. A supported binding cannot claim them.
+Offline checker images receive verified package bytes, manifest, configuration
+and request metadata, not task or guide prose. Task and guide context and nested
+sandboxes are unavailable runtime_gap dependencies. A supported binding cannot claim them.
 current_runner means isolation of the checker image itself. It does not supply a
 container engine, task-defined environment, image cache or a second sandbox.
 Building and running a submitted container environment or independently isolated
@@ -134,10 +133,10 @@ tooling explicitly; neither an image digest nor ordinary isolation supplies them
 Declare runtime_dependencies explicitly, including dependencies implied by the
 evaluation method. evaluation_method isolated_execution requires an entry with
 kind isolated_execution, provisioning current_runner, and unavailable_code
-implementation_unavailable. evaluation_method model_evaluation requires an entry
-with kind model_service, provisioning runtime_gap, and unavailable_code
-implementation_unavailable; model evaluation always belongs to POST background
-work even if a proposed duration is below 60 seconds.
+implementation_unavailable. model_evaluation requires model_service, model_proxy
+and implementation_unavailable and always belongs to POST background work. Model
+access requires a registered project image plus its exact approved profile; if
+either is missing, keep an unbound blocking implementation suggestion.
 
 checker_tool uses checker_implementation and implementation_unavailable;
 nested_sandbox uses runtime_gap and implementation_unavailable. task_context,

@@ -1,5 +1,6 @@
 """Current guide creation and compilation prerequisites; no lifecycle guards disabled."""
 
+from collections.abc import Awaitable, Callable
 from contextlib import asynccontextmanager
 from uuid import UUID, uuid4
 
@@ -22,6 +23,8 @@ from app.modules.projects.guide_mutation_service import GuideMutationService
 from app.modules.projects.schemas import ProjectGuideCreate
 from app.modules.projects.models import ProjectSetupRun
 from app.interfaces.project_agents import GuideEvidenceRef
+from app.interfaces.project_agents import CapabilityParameter
+from app.modules.checkers.api.external import ExternalCheckerRegistryEntry
 from tests.committed_guide_fixtures import (
     create_committed_document_fixture,
     seed_setup_service_for_compiled_fixture,
@@ -72,7 +75,21 @@ async def _create_guide_source(factory, values, actor, version):
         return setup.source_snapshot_id
 
 
-def _external_compilation_outcome(outcome, registry_entries, pre_entry, post_entry, refs):
+PostSubmitBindingSetup = Callable[
+    [async_sessionmaker, UUID, ExternalCheckerRegistryEntry],
+    Awaitable[tuple[CapabilityParameter, ...]],
+]
+
+
+def _external_compilation_outcome(
+    outcome,
+    registry_entries,
+    pre_entry,
+    post_entry,
+    refs,
+    *,
+    post_submit_parameters=(),
+):
     if not registry_entries:
         return outcome
     from app.interfaces.project_agents import (
@@ -123,7 +140,7 @@ def _external_compilation_outcome(outcome, registry_entries, pre_entry, post_ent
                 capability_id=post_entry.capability_id,
                 capability_version=post_entry.capability_version,
                 stage="post_submit",
-                parameters=(),
+                parameters=post_submit_parameters,
             )
         )
     return outcome.model_copy(
@@ -144,6 +161,7 @@ async def create_compiled_guide(
     artifact_proposal=None,
     pre_submit_registry_entry=None,
     post_submit_registry_entry=None,
+    post_submit_parameters=(),
     compilation_outcome=None,
 ):
     """Create declarations with real AUTH, then execute/project/finalize scripted findings."""
@@ -202,6 +220,7 @@ async def create_compiled_guide(
         pre_submit_registry_entry,
         post_submit_registry_entry,
         refs,
+        post_submit_parameters=post_submit_parameters,
     )
     url = factory.kw["bind"].url.render_as_string(hide_password=False)
     finalization = await compilation_and_projections(
@@ -224,6 +243,7 @@ async def source_case(
     artifact_proposal=None,
     pre_submit_registry_spec=None,
     post_submit_registry_spec=None,
+    post_submit_binding_setup: PostSubmitBindingSetup | None = None,
     compilation_outcome=None,
 ):
     """An authorized draft Project plus a genuinely created complete guide source."""
@@ -277,6 +297,11 @@ async def source_case(
             if post_submit_registry_spec is not None
             else None
         )
+        post_submit_parameters = (
+            await post_submit_binding_setup(factory, values["project"], post_registry_entry)
+            if post_registry_entry is not None and post_submit_binding_setup is not None
+            else ()
+        )
         values, finalization = await create_compiled_guide(
             factory,
             values,
@@ -285,6 +310,7 @@ async def source_case(
             artifact_proposal=artifact_proposal,
             pre_submit_registry_entry=pre_registry_entry,
             post_submit_registry_entry=post_registry_entry,
+            post_submit_parameters=post_submit_parameters,
             compilation_outcome=compilation_outcome,
         )
         yield values, factory, finalization, actor, grant

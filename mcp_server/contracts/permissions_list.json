@@ -1,5 +1,5 @@
 {
-  "canonical_sha256": "ce2d08c29f50493ccdb80798db1f65c9690dcd614304c8bdbef80a12c2268e37",
+  "canonical_sha256": "4ebd90f7658f1d67b402a4818d718d71cb4b3ab68042466a5844b345869de20c",
   "components": {
     "schemas": {
       "ApiError": {
@@ -87,7 +87,7 @@
             "type": "array"
           },
           "total": {
-            "const": 82,
+            "const": 91,
             "title": "Total",
             "type": "integer"
           }
@@ -119,6 +119,15 @@
           "checker.pre_submit.finalize",
           "checker.post_submit.execute",
           "checker.post_submit.finalize",
+          "checker.model_call.prepare",
+          "checker.model_call.dispatch",
+          "checker.model_call.recover",
+          "checker.model_call.observe",
+          "checker.model_call.complete",
+          "checker.model_call.grant",
+          "project.model_profile.manage",
+          "project.model_budget.manage",
+          "project.model_call.recovery_child.authorize",
           "outbox.dispatch",
           "actor.service.provision",
           "admin_role.read",

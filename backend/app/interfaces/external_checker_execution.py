@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import re
 from typing import Protocol
 
@@ -35,6 +35,24 @@ class ExternalCheckerMaterialGrant:
             or re.fullmatch(r"sha256:[0-9a-f]{64}", self.binding_digest) is None
         ):
             raise ValueError("external checker material grant is invalid")
+
+
+@dataclass(frozen=True, slots=True)
+class ExternalCheckerModelGrant:
+    """Opaque invocation relay selector, never sufficient authority to spend."""
+
+    grant_id: str = field(repr=False)
+    binding_digest: Sha256
+
+    def __post_init__(self) -> None:
+        """Keep the private relay identity closed and bound to one request."""
+        if (
+            type(self.grant_id) is not str
+            or re.fullmatch(r"model_[0-9a-f]{32}", self.grant_id) is None
+            or type(self.binding_digest) is not str
+            or re.fullmatch(r"sha256:[0-9a-f]{64}", self.binding_digest) is None
+        ):
+            raise ValueError("external checker model grant is invalid")
 
 
 @dataclass(frozen=True, slots=True)
@@ -124,6 +142,8 @@ class ExternalCheckerExecutionAdapter(ExternalServiceAdapter, Protocol):
         self,
         request: ExternalCheckerExecutionRequest,
         grant: ExternalCheckerMaterialGrant,
+        *,
+        model_grant: ExternalCheckerModelGrant | None = None,
     ) -> ExternalCheckerExecutionResponse:
         """Return a request-bound result or a sanitized transport failure."""
 
@@ -136,5 +156,6 @@ __all__ = (
     "ExternalCheckerExecutionResponse",
     "ExternalCheckerIsolationReceipt",
     "ExternalCheckerMaterialGrant",
+    "ExternalCheckerModelGrant",
     "ExternalCheckerServiceHealth",
 )

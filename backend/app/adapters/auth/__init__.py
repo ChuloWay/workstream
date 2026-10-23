@@ -44,7 +44,7 @@ from app.modules.authorization.project_setup_finalization import SetupFinalizati
 from app.modules.authorization.kernel import AuthorizationService
 from app.modules.authorization.prepared import PreparedAuthorizationService
 from app.modules.authorization.repository import AdminAuthorizationRepository
-from app.modules.authorization.runtime import AuthorizationContext
+from app.modules.authorization.runtime import AuthorizationContext, ServiceAuthorizationContext
 from app.modules.authorization.task_authorization import PreparedTaskAuthorization
 from app.modules.authorization.task_import_sources import PreparedTaskImportSourceAuthorization
 from app.modules.authorization.guide_compilation_projections import (
@@ -112,6 +112,47 @@ def checker_registry_authorization(
     kernel = AuthorizationService(session, context, admin_repository=repository)
     prepared = PreparedAuthorizationService(session, context, kernel, repository)
     return ExternalCheckerRegistryAuthorizationAdapter(kernel, prepared)
+
+
+def checker_model_authorization(session: AsyncSession, context: AuthorizationContext):
+    """Compose exact project-model authority using the existing AUTH/PREP graph."""
+    from app.modules.authorization.checker_model_authorization import CheckerModelAuthorization
+
+    repository = AdminAuthorizationRepository(session)
+    revalidate = None
+    if isinstance(context, ServiceAuthorizationContext):
+        from app.modules.authorization.prepared import fixed_service_context_revalidator
+
+        revalidate = fixed_service_context_revalidator(repository, ServiceIdentity.CHECKER_POST_SUBMIT)
+    kernel = AuthorizationService(
+        session, context, admin_repository=repository, revalidate_service=revalidate,
+    )
+    prepared = PreparedAuthorizationService(session, context, kernel, repository)
+    return CheckerModelAuthorization(kernel, prepared)
+
+
+async def checker_model_service_authorization(session: AsyncSession, request_id: UUID):
+    """Resolve the fixed POST checker principal within the caller's transaction."""
+    from app.modules.authorization.prepared import fixed_service_authorization_context
+
+    context = await fixed_service_authorization_context(
+        session, ServiceIdentity.CHECKER_POST_SUBMIT, request_id, request_id,
+    )
+    return checker_model_authorization(session, context)
+
+
+def checker_output_write_authorization(session: AsyncSession):
+    """Compose private model-evidence admission and recovery authority."""
+    from app.modules.authorization.checker_output_authorization import PreparedCheckerOutputWriteAuthorization
+
+    return PreparedCheckerOutputWriteAuthorization(session)
+
+
+def checker_output_binding_authorization(session: AsyncSession):
+    """Compose verified call-evidence publication authority."""
+    from app.modules.authorization.checker_output_authorization import PreparedCheckerOutputBindingAuthorization
+
+    return PreparedCheckerOutputBindingAuthorization(session)
 
 
 def guide_sufficiency_projection_authorization(

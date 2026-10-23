@@ -248,6 +248,7 @@ async def _material_fixture(
     max_revision_rounds=2,
     pre_submit_registry_spec=None,
     post_submit_registry_spec=None,
+    post_submit_binding_setup=None,
     post_scratch_root=None,
 ):
     engine = create_async_engine(database_url)
@@ -265,6 +266,7 @@ async def _material_fixture(
             max_revision_rounds=max_revision_rounds,
             pre_submit_registry_spec=pre_submit_registry_spec,
             post_submit_registry_spec=post_submit_registry_spec,
+            post_submit_binding_setup=post_submit_binding_setup,
         )
         (
             context,

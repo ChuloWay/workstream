@@ -9,6 +9,7 @@ from app.interfaces.external_checker_execution import (
     ExternalCheckerExecutionAdapter,
     ExternalCheckerExecutionResponse,
     ExternalCheckerMaterialGrant,
+    ExternalCheckerModelGrant,
     ExternalCheckerServiceHealth,
 )
 from app.interfaces.external_services import (
@@ -106,9 +107,11 @@ class _ConfiguredExternalCheckerExecution:
         self,
         request: ExternalCheckerExecutionRequest,
         grant: ExternalCheckerMaterialGrant,
+        *,
+        model_grant: ExternalCheckerModelGrant | None = None,
     ) -> ExternalCheckerExecutionResponse:
         """Resolve and invoke the sole provider for one selected binding."""
-        return await self._resolve().execute(request, grant)
+        return await self._resolve().execute(request, grant, model_grant=model_grant)
 
     async def health(self) -> ExternalCheckerServiceHealth:
         """Resolve the sole provider before checking runtime readiness."""
@@ -118,6 +121,15 @@ class _ConfiguredExternalCheckerExecution:
 def configured_external_checker_execution(settings) -> ExternalCheckerExecutionAdapter:
     """Create the lazy fixed-provider adapter for selected execution."""
     return _ConfiguredExternalCheckerExecution(settings)
+
+
+def configured_post_submit_external_execution(settings, *, sessions) -> ExternalCheckerExecutionAdapter:
+    """Add durable project model custody to the existing Rust image transport."""
+    from app.adapters.checkers.model_execution import ModelAwareExternalExecution
+
+    return ModelAwareExternalExecution(
+        execution=configured_external_checker_execution(settings), sessions=sessions,
+    )
 
 
 def selected_pre_submit_checker_execution(*, settings, archive_inspector):
@@ -133,6 +145,13 @@ def external_checker_registry_reader(session):
     from app.modules.checkers.external_registry import ExternalCheckerRegistryReader
 
     return ExternalCheckerRegistryReader(session)
+
+
+def model_profile_reader(session):
+    """Resolve exact immutable project model profiles without mutation authority."""
+    from app.modules.checkers.model_calls.profiles import ModelProfileReader
+
+    return ModelProfileReader(session)
 
 
 def external_checker_registry_service(session, authority):
@@ -232,9 +251,7 @@ class SelectedPreSubmitCheckerExecutionAdapter:
             or attempt_request_digest is None
             or grants is None
         ):
-            raise SelectedPreSubmitInfrastructureUnavailable(
-                "material_unavailable"
-            )
+            raise SelectedPreSubmitInfrastructureUnavailable("material_unavailable")
         identity = PreSubmitExternalCheckerIdentity(
             project_id=request.project_id,
             task_id=request.task_id,
@@ -285,7 +302,8 @@ def checker_retry_service(session, context, *, cursor_secret=None):
     """Compose supported Operator recovery from existing owner operations."""
     from app.adapters.audit import checker_retry_audit
     from app.adapters.auth import (
-        checker_retry_authorization, checker_retry_discovery_authorization,
+        checker_retry_authorization,
+        checker_retry_discovery_authorization,
     )
     from app.adapters.outbox import outbox_append
     from app.adapters.tasks import evaluation_task_guard
@@ -294,18 +312,27 @@ def checker_retry_service(session, context, *, cursor_secret=None):
 
     tasks = evaluation_task_guard(session)
     return CheckerRetryService(
-        session, actor_profile_id=context.actor_profile_id,
-        tasks=tasks, evaluations=EvaluationCoordinator(session, tasks=tasks),
+        session,
+        actor_profile_id=context.actor_profile_id,
+        tasks=tasks,
+        evaluations=EvaluationCoordinator(session, tasks=tasks),
         authorization=checker_retry_authorization(session, context),
         discovery=checker_retry_discovery_authorization(
-            session, context, cursor_secret,
+            session,
+            context,
+            cursor_secret,
         ),
-        events=outbox_append(session), audit=checker_retry_audit(session),
+        events=outbox_append(session),
+        audit=checker_retry_audit(session),
     )
 
 
 def post_submit_delivery_service(
-    session, sessions, context, *, cursor_secret=None,
+    session,
+    sessions,
+    context,
+    *,
+    cursor_secret=None,
 ):
     """Compose exact Operator inspection and one-child reconciliation."""
     from app.adapters.auth import (
@@ -328,9 +355,7 @@ def post_submit_delivery_service(
             return await classify_post_submit_delivery(
                 delivery,
                 evaluations=evaluations,
-                requests=evaluation_delivery_request_reader(
-                    source_session, evaluations
-                ),
+                requests=evaluation_delivery_request_reader(source_session, evaluations),
                 outcomes=post_submit_delivery_outcome(source_session, sessions),
             )
 
@@ -340,16 +365,18 @@ def post_submit_delivery_service(
         deliveries=finalized_unknown_deliveries(session),
         events=outbox_append(session),
         evaluations=evaluation_coordinator(session),
-        requests=evaluation_delivery_request_reader(
-            session, evaluation_coordinator(session)
-        ),
+        requests=evaluation_delivery_request_reader(session, evaluation_coordinator(session)),
         outcomes=post_submit_delivery_outcome(session, sessions),
         read_authority=post_submit_delivery_read_authorization(
-            session, context, cursor_secret,
+            session,
+            context,
+            cursor_secret,
         ),
         authorization=post_submit_delivery_authorization(session, context),
         detached_classify=detached_classify,
     )
+
+
 def post_submission_executor(*, sessions, materialization):
     """Compose the sole executor with exact fixed-service AUTH at both phases."""
     from app.adapters.outbox import outbox_append
@@ -369,10 +396,47 @@ def post_submission_executor(*, sessions, materialization):
 
 
 def checker_output_reservations(session):
-    """Resolve exact active run/lease custody for artifact output reservations."""
-    from app.modules.checkers.execution_coordination import CheckerOutputReservations
+    """Resolve exact call custody with TASK-before-CHECKERS request locking."""
+    from app.adapters.tasks import evaluation_task_guard
+    from app.modules.checkers.model_calls.custody import (
+        CheckerOutputReservations,
+        ModelCallCurrentExecution,
+    )
 
-    return CheckerOutputReservations(session)
+    tasks = evaluation_task_guard(session)
+    return CheckerOutputReservations(
+        session,
+        current=ModelCallCurrentExecution(session, tasks=tasks),
+        tasks=tasks,
+    )
+
+
+def model_call_service(session, authority):
+    """Compose durable model spending with exact TASK and ART owner ports."""
+    from app.adapters.tasks import evaluation_task_guard
+    from app.adapters.artifacts import checker_model_evidence
+    from app.modules.checkers.model_calls.custody import ModelCallCurrentExecution
+    from app.modules.checkers.model_calls.service import ModelCallService
+
+    return ModelCallService(
+        session,
+        authority=authority,
+        current_execution=ModelCallCurrentExecution(session, tasks=evaluation_task_guard(session)),
+        evidence=checker_model_evidence(session),
+    )
+
+
+def model_invocation_grants(session, authority):
+    """Compose short-lived image capabilities without creating provider effects."""
+    from app.adapters.tasks import evaluation_task_guard
+    from app.modules.checkers.model_calls.custody import ModelCallCurrentExecution
+    from app.modules.checkers.model_calls.grants import ModelInvocationGrants
+
+    return ModelInvocationGrants(
+        session,
+        authority=authority,
+        current=ModelCallCurrentExecution(session, tasks=evaluation_task_guard(session)),
+    )
 
 
 def current_post_submit_execution(session):
@@ -527,7 +591,7 @@ def post_submit_delivery_reconciliation_handler(*, sessions, materialization):
             original=original,
             payload=payload,
             request=request,
-            selected_execution=configured_external_checker_execution(get_settings()),
+            selected_execution=configured_post_submit_external_execution(get_settings(), sessions=sessions),
         )
 
     return PostSubmitDeliveryReconciliationHandler(

@@ -1,0 +1,608 @@
+"""Typed contracts for project-image model calls and lifetime project spend."""
+
+from __future__ import annotations
+
+from typing import Annotated, Literal, Protocol, Self
+from uuid import RFC_4122, UUID
+
+from pydantic import (
+    AwareDatetime,
+    BaseModel,
+    ConfigDict,
+    Field,
+    StrictInt,
+    StrictStr,
+    model_validator,
+)
+
+from app.core.hashing import canonical_json_hash
+
+
+Sha256 = Annotated[StrictStr, Field(pattern=r"^sha256:[0-9a-f]{64}$")]
+Identifier = Annotated[
+    StrictStr, Field(min_length=1, max_length=100, pattern=r"^[a-z][a-z0-9_.-]*$")
+]
+ProviderIdentifier = Annotated[
+    StrictStr,
+    Field(min_length=1, max_length=160, pattern=r"^[A-Za-z0-9][A-Za-z0-9._:/-]*$"),
+]
+ProviderResponseIdentifier = Annotated[
+    StrictStr,
+    Field(min_length=1, max_length=256, pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]*$"),
+]
+Nanodollars = Annotated[StrictInt, Field(ge=0, le=9_000_000_000_000_000_000)]
+
+
+class ModelCallUnavailable(RuntimeError):
+    """Conceal unavailable, foreign, stale or unauthorized model-call state."""
+
+
+class ModelCallConflict(ModelCallUnavailable):
+    """Reject immutable identity or replay substitution."""
+
+
+class ModelCallBudgetUnavailable(ModelCallUnavailable):
+    """Report a finite project budget that cannot cover the next dispatch."""
+
+
+class ModelCallValue(BaseModel):
+    """Strict immutable values shared across model-call owner boundaries."""
+
+    model_config = ConfigDict(
+        extra="forbid", frozen=True, strict=True, revalidate_instances="always"
+    )
+
+
+def _require_uuid7(value: UUID, name: str) -> UUID:
+    if value.version != 7 or value.variant != RFC_4122:
+        raise ValueError(f"{name} must be UUIDv7")
+    return value
+
+
+class ModelProfileSelector(ModelCallValue):
+    """Exact immutable profile identity retained in approved checker configuration."""
+
+    profile_id: UUID
+    profile_version: StrictInt = Field(ge=1)
+    profile_digest: Sha256
+
+    @model_validator(mode="after")
+    def canonical_id(self) -> Self:
+        _require_uuid7(self.profile_id, "model profile ID")
+        return self
+
+
+class ModelGenerationSettings(ModelCallValue):
+    """Closed provider-neutral settings; prompts never belong to a profile."""
+
+    reasoning_effort: Literal["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+    text_verbosity: Literal["low", "medium", "high"]
+
+
+class ModelPricing(ModelCallValue):
+    """Exact integer nano-USD rates with no floating-point rounding."""
+
+    pricing_policy_id: UUID
+    pricing_policy_version: StrictInt = Field(ge=1)
+    pricing_policy_digest: Sha256
+    uncached_input_nanodollars_per_token: Nanodollars
+    cached_input_nanodollars_per_token: Nanodollars
+    output_nanodollars_per_token: Nanodollars
+
+    @model_validator(mode="after")
+    def nonzero_and_canonical(self) -> Self:
+        _require_uuid7(self.pricing_policy_id, "model pricing policy ID")
+        rates = (
+            self.uncached_input_nanodollars_per_token,
+            self.cached_input_nanodollars_per_token,
+            self.output_nanodollars_per_token,
+        )
+        if max(rates) <= 0:
+            raise ValueError("model pricing rates cannot all be zero")
+        return self
+
+
+class ProjectModelProfileSpec(ModelCallValue):
+    """Operator-owned provider profile bound to one project and registry entry."""
+
+    project_id: UUID
+    profile_version: StrictInt = Field(ge=1)
+    registry_entry_id: UUID
+    registry_entry_digest: Sha256
+    provider: ProviderIdentifier
+    api: ProviderIdentifier
+    model_snapshot: ProviderIdentifier
+    settings: ModelGenerationSettings
+    maximum_request_bytes: StrictInt = Field(ge=1, le=1_048_576)
+    maximum_output_bytes: StrictInt = Field(ge=1, le=1_048_576)
+    maximum_response_bytes: StrictInt = Field(ge=1, le=1_048_576)
+    maximum_input_tokens: StrictInt = Field(ge=1, le=10_000_000)
+    maximum_output_tokens: StrictInt = Field(ge=1, le=10_000_000)
+    deadline_ms: StrictInt = Field(ge=100, le=3_600_000)
+    call_slots: Literal[1] = 1
+    pricing: ModelPricing
+
+    @model_validator(mode="after")
+    def canonical_ids(self) -> Self:
+        _require_uuid7(self.registry_entry_id, "external checker registry entry ID")
+        if (self.provider, self.api) != ("openai_responses", "responses.v1"):
+            raise ValueError("model provider and API are unsupported")
+        if self.maximum_response_bytes < 6 * self.maximum_output_bytes + 4096:
+            raise ValueError("model response evidence cannot preserve the maximum output")
+        return self
+
+    @property
+    def maximum_reservation_nanodollars(self) -> int:
+        """Reserve the maximum rate for each bounded input/output token class."""
+        input_rate = max(
+            self.pricing.uncached_input_nanodollars_per_token,
+            self.pricing.cached_input_nanodollars_per_token,
+        )
+        value = (
+            self.maximum_input_tokens * input_rate
+            + self.maximum_output_tokens * self.pricing.output_nanodollars_per_token
+        )
+        if value <= 0 or value > 9_000_000_000_000_000_000:
+            raise ValueError("model profile reservation is outside the supported range")
+        return value
+
+
+class ModelProfileProvisioningFacts(ModelCallValue):
+    """Complete immutable profile publication facts consumed by Operator authority."""
+
+    operation_id: UUID
+    actor_profile_id: UUID
+    spec: ProjectModelProfileSpec
+    profile_digest: Sha256
+
+    @model_validator(mode="after")
+    def exact_digest(self) -> Self:
+        if self.profile_digest != canonical_json_hash(self.spec.model_dump(mode="json")):
+            raise ValueError("model profile digest mismatch")
+        return self
+
+
+class ProjectModelProfile(ModelProfileProvisioningFacts):
+    """Published exact profile with its immutable authorization receipt."""
+
+    profile_id: UUID
+    authorization_evidence_id: UUID
+    created_at: AwareDatetime
+
+    @model_validator(mode="after")
+    def canonical_record_id(self) -> Self:
+        _require_uuid7(self.profile_id, "model profile ID")
+        return self
+
+    @property
+    def selector(self) -> ModelProfileSelector:
+        return ModelProfileSelector(
+            profile_id=self.profile_id,
+            profile_version=self.spec.profile_version,
+            profile_digest=self.profile_digest,
+        )
+
+
+class ProjectModelBudgetConfigurationSpec(ModelCallValue):
+    """One immutable lifetime-ceiling adjustment; versions never reset counters."""
+
+    project_id: UUID
+    configuration_version: StrictInt = Field(ge=1)
+    lifetime_limit_nanodollars: Nanodollars
+
+    @model_validator(mode="after")
+    def positive_limit(self) -> Self:
+        if self.lifetime_limit_nanodollars <= 0:
+            raise ValueError("model budget limit must be positive")
+        return self
+
+
+class ModelBudgetProvisioningFacts(ModelCallValue):
+    """Operator mutation facts for one immutable budget configuration version."""
+
+    operation_id: UUID
+    actor_profile_id: UUID
+    spec: ProjectModelBudgetConfigurationSpec
+    configuration_digest: Sha256
+
+    @model_validator(mode="after")
+    def exact_digest(self) -> Self:
+        if self.configuration_digest != canonical_json_hash(self.spec.model_dump(mode="json")):
+            raise ValueError("model budget configuration digest mismatch")
+        return self
+
+
+class ProjectModelBudgetConfiguration(ModelBudgetProvisioningFacts):
+    """Published budget version plus lifetime counters retained on its project account."""
+
+    configuration_id: UUID
+    authorization_evidence_id: UUID
+    created_at: AwareDatetime
+    lifetime_reserved_nanodollars: Nanodollars
+    lifetime_settled_nanodollars: Nanodollars
+
+    @model_validator(mode="after")
+    def canonical_record_id(self) -> Self:
+        _require_uuid7(self.configuration_id, "model budget configuration ID")
+        return self
+
+
+class ModelPaidSlotKey(ModelCallValue):
+    """Paid-effect identity stable across checker leases and retry generations."""
+
+    project_id: UUID
+    assignment_id: UUID
+    submission_id: UUID
+    submission_version: StrictInt = Field(ge=1)
+    requirement_id: Identifier
+    registry_entry_digest: Sha256
+    configuration_sha256: Sha256
+    profile_id: UUID
+    profile_version: StrictInt = Field(ge=1)
+    profile_digest: Sha256
+    slot_index: Literal[0] = 0
+
+    @model_validator(mode="after")
+    def canonical_profile(self) -> Self:
+        _require_uuid7(self.profile_id, "model profile ID")
+        return self
+
+    @property
+    def digest(self) -> str:
+        return canonical_json_hash(self.model_dump(mode="json"))
+
+
+class ModelCallExecutionFacts(ModelCallValue):
+    """Current run/lease facts used only for authority and currentness checks."""
+
+    project_id: UUID
+    task_id: UUID
+    assignment_id: UUID
+    submission_id: UUID
+    submission_version: StrictInt = Field(ge=1)
+    evaluation_request_id: UUID
+    evaluation_generation: StrictInt = Field(ge=1)
+    checker_run_id: UUID
+    worker_lease_id: UUID
+    worker_lease_generation: StrictInt = Field(ge=1)
+    worker_lease_expires_at: AwareDatetime
+
+
+class ModelRecoveryChildRequest(ModelCallValue):
+    """Public Operator request for one exact known-terminal paid-call child."""
+
+    execution: ModelCallExecutionFacts
+    slot: ModelPaidSlotKey
+    registry_entry_id: UUID
+    terminal_digest: Sha256
+    request_sha256: Sha256
+
+    @model_validator(mode="after")
+    def exact_execution(self) -> Self:
+        _require_uuid7(self.registry_entry_id, "external checker registry entry ID")
+        if (
+            self.execution.project_id,
+            self.execution.assignment_id,
+            self.execution.submission_id,
+            self.execution.submission_version,
+        ) != (
+            self.slot.project_id,
+            self.slot.assignment_id,
+            self.slot.submission_id,
+            self.slot.submission_version,
+        ):
+            raise ValueError("model recovery execution and slot do not match")
+        return self
+
+
+class ModelCallEvidence(ModelCallValue):
+    """Verified private ART identity; transcript bytes never cross this contract."""
+
+    binding_id: UUID
+    content_id: UUID
+    put_attempt_id: UUID
+    verification_receipt_id: UUID
+    content_sha256: Sha256
+    byte_count: StrictInt = Field(ge=1, le=1_048_576)
+    media_type: Literal["application/json"] = "application/json"
+
+
+class ModelCallEffectAuthorityFacts(ModelCallValue):
+    """Exact paid effect identity supplied to AUTH for lease-independent observations."""
+
+    project_id: UUID
+    task_id: UUID
+    slot_id: UUID
+    slot_key: ModelPaidSlotKey
+    attempt_id: UUID
+    internal_call_request_id: UUID
+
+
+class AttachedModelCallAttempt(ModelCallValue):
+    """Existing stable effect attached to a fresh checker invocation."""
+
+    slot_id: UUID
+    slot_key: ModelPaidSlotKey
+    attempt_id: UUID
+    attempt_number: StrictInt = Field(ge=1)
+    internal_call_request_id: UUID
+    request_sha256: Sha256
+    state: Literal[
+        "prepared", "dispatching", "uncertain", "completed", "known_failed", "known_no_effect"
+    ]
+    replayed: bool
+
+
+class PreparedModelCallAttempt(AttachedModelCallAttempt):
+    """Server-owned attempt identity created before ART request evidence exists."""
+
+    state: Literal["prepared"] = "prepared"
+
+
+class ModelCallUsage(ModelCallValue):
+    """Provider-observed token classes used for exact integer settlement."""
+
+    input_tokens: StrictInt = Field(ge=0)
+    cached_input_tokens: StrictInt = Field(ge=0)
+    output_tokens: StrictInt = Field(ge=0)
+    reasoning_tokens: StrictInt = Field(ge=0)
+
+    @model_validator(mode="after")
+    def nested_classes(self) -> Self:
+        if (
+            self.cached_input_tokens > self.input_tokens
+            or self.reasoning_tokens > self.output_tokens
+        ):
+            raise ValueError("model usage token classes are inconsistent")
+        return self
+
+
+class ModelDispatchReservation(ModelCallValue):
+    """Committed dispatch intent and lifetime project-budget reservation."""
+
+    slot_id: UUID
+    attempt_id: UUID
+    attempt_number: StrictInt = Field(ge=1)
+    internal_call_request_id: UUID
+    effect: ModelCallEffectAuthorityFacts
+    request_sha256: Sha256
+    request_evidence: ModelCallEvidence
+    budget_configuration_id: UUID
+    budget_configuration_version: StrictInt = Field(ge=1)
+    budget_configuration_digest: Sha256
+    reserved_nanodollars: Nanodollars
+    state: Literal["dispatching", "uncertain", "completed"]
+    provider_response_id: ProviderResponseIdentifier | None = None
+    response_evidence: ModelCallEvidence | None = None
+    replayed: bool
+
+
+class ModelCallRecoveryAttachment(ModelCallValue):
+    """Fresh authorized recovery access to one known provider effect."""
+
+    slot_id: UUID
+    attempt_id: UUID
+    attempt_number: StrictInt = Field(ge=1)
+    internal_call_request_id: UUID
+    provider_response_id: ProviderResponseIdentifier
+    state: Literal["dispatching", "uncertain"]
+    replayed: bool
+
+
+class CompletedModelCall(ModelCallValue):
+    """Exact immutable response evidence and once-settled project cost."""
+
+    slot_id: UUID
+    attempt_id: UUID
+    attempt_number: StrictInt = Field(ge=1)
+    internal_call_request_id: UUID
+    provider_response_id: ProviderResponseIdentifier
+    request_evidence: ModelCallEvidence
+    response_evidence: ModelCallEvidence
+    usage: ModelCallUsage
+    settled_nanodollars: Nanodollars
+    completed_at: AwareDatetime
+    replayed: bool
+
+
+class KnownFailedModelCall(ModelCallValue):
+    """Authenticated terminal provider effect without a usable model response."""
+
+    slot_id: UUID
+    attempt_id: UUID
+    attempt_number: StrictInt = Field(ge=1)
+    internal_call_request_id: UUID
+    provider_response_id: ProviderResponseIdentifier
+    request_evidence: ModelCallEvidence
+    response_evidence: ModelCallEvidence
+    usage: ModelCallUsage
+    settled_nanodollars: Nanodollars
+    completed_at: AwareDatetime
+    replayed: bool
+
+
+class KnownNoEffectProof(ModelCallValue):
+    """Exact provider proof that an attempted create caused no billable effect."""
+
+    proof_id: UUID
+    proof_digest: Sha256
+    observed_at: AwareDatetime
+
+
+def model_retry_terminal_digest(
+    terminal: KnownFailedModelCall | KnownNoEffectProof,
+) -> str:
+    """Commit the exact terminal facts that may authorize a paid child attempt."""
+    if isinstance(terminal, KnownNoEffectProof):
+        facts = {
+            "state": "known_no_effect",
+            "proof_id": str(terminal.proof_id),
+            "proof_digest": terminal.proof_digest,
+            "observed_at": terminal.observed_at.isoformat(),
+        }
+    else:
+        facts = {
+            "state": "known_failed",
+            "provider_response_id": terminal.provider_response_id,
+            "response_content_sha256": terminal.response_evidence.content_sha256,
+            "usage": terminal.usage.model_dump(mode="json"),
+            "settled_nanodollars": terminal.settled_nanodollars,
+        }
+    return canonical_json_hash(facts)
+
+
+class ModelActionEvidence(ModelCallValue):
+    """Opaque exact AUTH decision returned to the model-call owner."""
+
+    evidence_id: UUID
+    facts_digest: Sha256
+
+
+class ModelProfileReaderPort(Protocol):
+    """Read one immutable profile by complete identity."""
+
+    async def read_exact(
+        self,
+        selector: ModelProfileSelector,
+        *,
+        project_id: UUID,
+        registry_entry_id: UUID,
+        registry_entry_digest: str,
+    ) -> ProjectModelProfile: ...
+
+
+class ModelCallCurrentExecutionPort(Protocol):
+    """Require one current authorized checker execution without granting model effects."""
+
+    async def require_current(
+        self, facts: ModelCallExecutionFacts, slot: ModelPaidSlotKey
+    ) -> None: ...
+
+
+class ModelCallEvidencePort(Protocol):
+    """Verify ART evidence belongs to the exact call attempt and role."""
+
+    async def require_request(
+        self, attempt: PreparedModelCallAttempt, evidence: ModelCallEvidence
+    ) -> None: ...
+
+    async def require_response(self, attempt_id: UUID, evidence: ModelCallEvidence) -> None: ...
+
+
+class ModelCallAuthorityPort(Protocol):
+    """Action-specific authority; implementations must reject phase substitution."""
+
+    async def authorize_profile(
+        self, facts: ModelProfileProvisioningFacts
+    ) -> ModelActionEvidence: ...
+
+    async def authorize_budget(
+        self, facts: ModelBudgetProvisioningFacts
+    ) -> ModelActionEvidence: ...
+
+    async def authorize_prepare(
+        self,
+        execution: ModelCallExecutionFacts,
+        slot: ModelPaidSlotKey,
+        request_sha256: str,
+    ) -> ModelActionEvidence: ...
+
+    async def authorize_dispatch(
+        self,
+        execution: ModelCallExecutionFacts,
+        attempt: PreparedModelCallAttempt,
+        request_evidence: ModelCallEvidence,
+    ) -> ModelActionEvidence: ...
+
+    async def authorize_recover(
+        self,
+        execution: ModelCallExecutionFacts,
+        effect: ModelCallEffectAuthorityFacts,
+    ) -> ModelActionEvidence: ...
+
+    async def authorize_observe(
+        self,
+        effect: ModelCallEffectAuthorityFacts,
+        provider_response_id: str | None,
+        observation_digest: str,
+    ) -> ModelActionEvidence: ...
+
+    async def authorize_child(
+        self,
+        execution: ModelCallExecutionFacts,
+        parent_attempt_id: UUID,
+        terminal_digest: str,
+    ) -> ModelActionEvidence: ...
+
+    async def authorize_complete(
+        self,
+        effect: ModelCallEffectAuthorityFacts,
+        response_evidence: ModelCallEvidence | None,
+        terminal_digest: str,
+    ) -> ModelActionEvidence: ...
+
+
+def model_usage_cost(profile: ProjectModelProfileSpec, usage: ModelCallUsage) -> int:
+    """Price disjoint token classes using exact integer nano-USD arithmetic."""
+    usage = ModelCallUsage.model_validate(usage)
+    if (
+        usage.input_tokens > profile.maximum_input_tokens
+        or usage.output_tokens > profile.maximum_output_tokens
+    ):
+        raise ModelCallConflict("model usage exceeds the approved profile")
+    uncached = usage.input_tokens - usage.cached_input_tokens
+    pricing = profile.pricing
+    value = (
+        uncached * pricing.uncached_input_nanodollars_per_token
+        + usage.cached_input_tokens * pricing.cached_input_nanodollars_per_token
+        + usage.output_tokens * pricing.output_nanodollars_per_token
+    )
+    if value < 0 or value > profile.maximum_reservation_nanodollars:
+        raise ModelCallConflict("model usage cost exceeds the approved reservation")
+    return value
+
+
+def model_action_digest(action: str, facts: object) -> str:
+    """Commit one action name and its complete typed facts for AUTH evidence."""
+    if isinstance(facts, BaseModel):
+        value = facts.model_dump(mode="json")
+    else:
+        value = facts
+    return canonical_json_hash({"action": action, "facts": value})
+
+
+__all__ = (
+    "CompletedModelCall",
+    "AttachedModelCallAttempt",
+    "KnownNoEffectProof",
+    "KnownFailedModelCall",
+    "ModelActionEvidence",
+    "ModelBudgetProvisioningFacts",
+    "ModelCallAuthorityPort",
+    "ModelCallBudgetUnavailable",
+    "ModelCallConflict",
+    "ModelCallCurrentExecutionPort",
+    "ModelCallEvidence",
+    "ModelCallEffectAuthorityFacts",
+    "ModelCallEvidencePort",
+    "ModelCallExecutionFacts",
+    "ModelCallUnavailable",
+    "ModelCallUsage",
+    "ModelCallRecoveryAttachment",
+    "ModelDispatchReservation",
+    "ModelGenerationSettings",
+    "ModelPaidSlotKey",
+    "ModelPricing",
+    "ModelProfileProvisioningFacts",
+    "ModelRecoveryChildRequest",
+    "ModelProfileReaderPort",
+    "ModelProfileSelector",
+    "PreparedModelCallAttempt",
+    "ProjectModelBudgetConfiguration",
+    "ProjectModelBudgetConfigurationSpec",
+    "ProjectModelProfile",
+    "ProjectModelProfileSpec",
+    "model_usage_cost",
+    "model_action_digest",
+    "model_retry_terminal_digest",
+)

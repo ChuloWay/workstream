@@ -9,9 +9,12 @@ from app.core.identifiers import new_record_id
 from app.interfaces.project_agents import RequirementDisposition
 from app.modules.authorization.api import ActorKind
 from app.modules.checkers.api.external_policy import (
+    ExternalCheckerPolicyError,
+    require_locked_model_profiles,
     validate_stored_external_checker_policies,
 )
 from app.modules.checkers.api.external import ExternalCheckerRegistryPort
+from app.modules.checkers.api.model_calls import ModelProfileReaderPort
 from app.modules.projects.api.guide_activation import (
     GuideActivationCommand,
     GuideActivationCondition,
@@ -53,6 +56,7 @@ class GuideActivationService:
         contribution,
         authorization=None,
         registry: ExternalCheckerRegistryPort | None = None,
+        profiles: ModelProfileReaderPort | None = None,
     ):
         self.session = session
         self.authorization = authorization
@@ -61,6 +65,7 @@ class GuideActivationService:
         self.replay = GuideMutationRepository(session)
         self.post = PostPolicyRepository(session)
         self.registry = registry
+        self.profiles = profiles
 
     async def activate(
         self, command: GuideActivationCommand, *, actor, request_id: UUID
@@ -124,7 +129,11 @@ class GuideActivationService:
                         command.contribution_policy_version_id,
                     ),
                 )
-                guide, previous, contribution = checked.guide, checked.previous, checked.contribution
+                guide, previous, contribution = (
+                    checked.guide,
+                    checked.previous,
+                    checked.contribution,
+                )
                 operation_id = new_record_id()
                 receipt = GuideActivationReceipt(
                     operation_id=operation_id,
@@ -232,7 +241,10 @@ class GuideActivationService:
                     expected=None,
                     contribution_selection=None
                     if published is None
-                    else (published.contribution_policy_id, published.contribution_policy_version_id),
+                    else (
+                        published.contribution_policy_id,
+                        published.contribution_policy_version_id,
+                    ),
                 )
         except GuideProposalError as exc:
             if exc.code not in _PRODUCT_REFUSALS:
@@ -277,8 +289,12 @@ class GuideActivationService:
             # The lock admits only a draft guide; name that cause with the
             # lock's own refusal code, which activation raises unchanged.
             guide = await self.projects.get_guide(str(selection.guide_id))
-            conditions.fail(exc.code, "guide_not_draft" if guide is not None and guide.status != "draft"
-                            else "post_policy_unavailable")
+            conditions.fail(
+                exc.code,
+                "guide_not_draft"
+                if guide is not None and guide.status != "draft"
+                else "post_policy_unavailable",
+            )
             return None
         try:
             await self.post.require_current_upstream(locked)
@@ -364,6 +380,14 @@ class GuideActivationService:
         )
         if policies.pre_submit.model_dump(mode="json") != approval.pre.compiled_bundle:
             conditions.fail("approval_blocked", "checker_policy_mismatch")
+        try:
+            await require_locked_model_profiles(
+                policies,
+                project_id=UUID(locked.view.guide.project_id),
+                profiles=self.profiles,
+            )
+        except ExternalCheckerPolicyError:
+            conditions.fail("approval_blocked", "checker_model_profile_unavailable")
         for binding in (*policies.pre_submit.entries, *policies.post_submit.entries):
             current = await self.registry.read_exact(
                 binding.registry.registry_entry_id,

@@ -18,6 +18,7 @@ from app.modules.authorization.api.guide_proposal_review import (
 from app.modules.checkers.api.policy_custody import CompiledPreSubmitCheckerPolicy
 from app.modules.checkers.api.external import ExternalCheckerRegistryPort
 from app.modules.checkers.api.external import ExternalCheckerCapabilityProjection
+from app.modules.checkers.api.model_calls import ModelProfileReaderPort
 from app.modules.checkers.api.external_policy import (
     LockedExternalCheckerPolicies,
     compile_external_checker_policy_bundle,
@@ -64,6 +65,7 @@ async def approve_proposal(
     material,
     capabilities: ExternalCheckerCapabilityProjection,
     registry: ExternalCheckerRegistryPort,
+    profiles: ModelProfileReaderPort | None = None,
 ) -> GuideProposalApprovalReceipt:
     """Compile and persist in the caller transaction after exact authority closes."""
     target = command.target
@@ -110,6 +112,7 @@ async def approve_proposal(
             material,
             capabilities,
             registry,
+            profiles,
         )
         receipt = outputs.receipt
         facts = _facts(locator, target, request_digest, receipt, command)
@@ -207,6 +210,7 @@ async def _compile_approval(
     material,
     capabilities,
     registry,
+    profiles,
 ) -> _CompiledApproval:
     target = command.target
     inputs = CompilationRequestInputs(
@@ -220,7 +224,12 @@ async def _compile_approval(
         locked.view.policy.policy_body,
     )
     effective_hash = canonical_json_hash(effective_body)
-    policies = await compile_external_checker_policy_bundle(locked.result, registry)
+    policies = await compile_external_checker_policy_bundle(
+        locked.result,
+        registry,
+        project_id=target.project_id,
+        profiles=profiles,
+    )
     external_pre = policies.pre_submit
     compiled = CompiledPreSubmitCheckerPolicy(
         compiler_version="external_checker_policy.v1",

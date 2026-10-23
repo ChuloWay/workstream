@@ -6,6 +6,14 @@ from uuid import UUID
 
 from app.core.hashing import canonical_json_hash
 from app.modules.authorization.catalogue import ActionId
+from app.modules.authorization.domain.checker_models import (
+    CHECKER_MODEL_CALL_ACTIONS,
+    CheckerModelCallResourceContext,
+)
+from app.modules.authorization.domain.checker_outputs import (
+    CHECKER_OUTPUT_ACTIONS,
+    CheckerOutputResourceContext,
+)
 from app.modules.authorization.domain.post_submit_routing import ROUTE, PostSubmitRoutingResourceContext, parse_post_submit_routing_prepare
 from app.modules.authorization.domain.post_submit import (
     POST_SUBMIT_ACTIONS, PostSubmitResourceContext, parse_post_submit_prepare,
@@ -115,7 +123,12 @@ def fixed_service_scope_project(action_id, scope, artifact_resource):
                            ActionId.TASK_REVISION_EXPIRE, ActionId.TASK_REVISION_RECOVER}
               and scope.kind is PreparedAuthorityScopeKind.PROJECT and scope.project_id is not None)
     if is_project_setup_scope(action_id, scope) or outbox or (
-        action_id in PRE_SUBMIT_ACTIONS | POST_SUBMIT_ACTIONS | {ROUTE}
+        action_id
+        in PRE_SUBMIT_ACTIONS
+        | POST_SUBMIT_ACTIONS
+        | CHECKER_MODEL_CALL_ACTIONS
+        | CHECKER_OUTPUT_ACTIONS
+        | {ROUTE}
         and scope.kind is PreparedAuthorityScopeKind.PROJECT
         and scope.project_id is not None
     ):
@@ -134,6 +147,18 @@ def fixed_service_resource_matches(action_id, resource, project_id, artifact_typ
     if action_id in POST_SUBMIT_ACTIONS:
         return (type(resource) is PostSubmitResourceContext and resource.action_id is action_id
                 and resource.scope_project_id == project_id)
+    if action_id in CHECKER_MODEL_CALL_ACTIONS:
+        return (
+            type(resource) is CheckerModelCallResourceContext
+            and resource.action_id is action_id
+            and resource.scope_project_id == project_id
+        )
+    if action_id in CHECKER_OUTPUT_ACTIONS:
+        return (
+            type(resource) is CheckerOutputResourceContext
+            and resource.action_id is action_id
+            and resource.scope_project_id == project_id
+        )
     if action_id in PRE_SUBMIT_ACTIONS:
         return (
             type(resource) is PreSubmitResourceContext

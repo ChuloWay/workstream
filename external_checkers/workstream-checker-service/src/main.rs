@@ -1,5 +1,11 @@
 //! Trusted long-lived Unix-socket boundary for digest-pinned checker containers.
 
+mod model_relay;
+
+use model_relay::{
+    deserialize_required_model_grant, valid_model_grant, validate_proxy_socket,
+    validate_relay_root, InvocationRelay, ModelGrant, RequiredModelGrant,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
@@ -36,6 +42,8 @@ struct ServiceConfig {
     #[serde(skip)]
     container_owner: Option<String>,
     socket_path: PathBuf,
+    model_proxy_socket: Option<PathBuf>,
+    model_relay_root: Option<PathBuf>,
     material_root: PathBuf,
     docker_binary: PathBuf,
     runtime: String,
@@ -66,6 +74,8 @@ struct ExecuteEnvelope {
     operation: String,
     request: Value,
     grant: GrantReference,
+    #[serde(deserialize_with = "deserialize_required_model_grant")]
+    model_grant: RequiredModelGrant,
 }
 
 #[derive(Debug, Deserialize)]
@@ -588,6 +598,17 @@ fn validate_config(config: &ServiceConfig) -> Result<(), String> {
     {
         return Err("socket parent is not private".into());
     }
+    match (&config.model_proxy_socket, &config.model_relay_root) {
+        (Some(model_proxy_socket), Some(model_relay_root)) => {
+            validate_proxy_socket(model_proxy_socket)?;
+            validate_relay_root(model_relay_root)?;
+            if (config.sandbox_uid, config.sandbox_gid) != (effective_uid, effective_gid) {
+                return Err("model relay identity differs".into());
+            }
+        }
+        (None, None) => {}
+        _ => return Err("model relay configuration incomplete".into()),
+    }
     let docker =
         fs::symlink_metadata(&config.docker_binary).map_err(|_| "docker binary missing")?;
     if !docker.file_type().is_file()
@@ -665,6 +686,14 @@ fn handle_frame(
     }
     let request_bytes = serde_json::to_vec(&envelope.request).map_err(|_| "request invalid")?;
     let request = parse_request(&request_bytes).map_err(|_| "request contract invalid")?;
+    if let Some(model_grant) = envelope.model_grant.0.as_ref() {
+        if config.model_proxy_socket.is_none()
+            || config.model_relay_root.is_none()
+            || !valid_model_grant(model_grant, &request.request_digest, &request.phase)
+        {
+            return Err("model grant invalid".into());
+        }
+    }
     let Some(cache) = config
         .cache
         .iter()
@@ -698,6 +727,7 @@ fn handle_frame(
                 cache,
                 &request,
                 &grant.workspace,
+                envelope.model_grant.0.as_ref(),
                 stream,
                 &mut budget,
             ) {
@@ -1334,6 +1364,85 @@ fn execute_container(
     cache: &CacheEntry,
     request: &ValidatedRequest,
     workspace: &Path,
+    model_grant: Option<&ModelGrant>,
+    client: &UnixStream,
+    budget: &mut RequestExecutionBudget,
+) -> Result<ExecutedChecker, ExecutionFailure> {
+    container_owner(config)
+        .map_err(|_| ExecutionFailure::ordinary("implementation_unavailable", false))?;
+    inspect_workspace(workspace, config.sandbox_uid, config.sandbox_gid)
+        .map_err(|_| ExecutionFailure::ordinary("material_unavailable", false))?;
+    let relay = match model_grant {
+        Some(grant) => {
+            let Some(proxy_path) = config.model_proxy_socket.as_deref() else {
+                return Err(ExecutionFailure::ordinary(
+                    "implementation_unavailable",
+                    false,
+                ));
+            };
+            let Some(relay_root) = config.model_relay_root.as_deref() else {
+                return Err(ExecutionFailure::ordinary(
+                    "implementation_unavailable",
+                    false,
+                ));
+            };
+            Some(
+                InvocationRelay::start(
+                    relay_root,
+                    proxy_path,
+                    grant,
+                    &request.request_digest,
+                    config.sandbox_uid,
+                    config.sandbox_gid,
+                    budget.deadline,
+                )
+                .map_err(|failure| {
+                    if failure.cleanup_unsettled {
+                        ExecutionFailure::unsettled(false)
+                    } else {
+                        ExecutionFailure::ordinary("implementation_unavailable", false)
+                    }
+                })?,
+            )
+        }
+        None => None,
+    };
+    let model_mount = relay.as_ref().map(InvocationRelay::mount_spec);
+    let result = execute_container_inner(
+        config,
+        cache,
+        request,
+        workspace,
+        model_mount.as_deref(),
+        client,
+        budget,
+    );
+    let Some(relay) = relay else {
+        return result;
+    };
+    let relay_result = relay.finish();
+    let launched = match &result {
+        Ok(_) => true,
+        Err(failure) => failure.launched,
+    };
+    if relay_result.cleanup_unsettled {
+        return Err(ExecutionFailure::unsettled(launched));
+    }
+    if relay_result.failed {
+        return Err(ExecutionFailure::ordinary(
+            "implementation_unavailable",
+            launched,
+        ));
+    }
+    result
+}
+
+fn execute_container_inner(
+    config: &ServiceConfig,
+    cache: &CacheEntry,
+    request: &ValidatedRequest,
+    workspace: &Path,
+    model_mount: Option<&str>,
     client: &UnixStream,
     budget: &mut RequestExecutionBudget,
 ) -> Result<ExecutedChecker, ExecutionFailure> {
@@ -1358,43 +1467,23 @@ fn execute_container(
         "type=bind,src={},dst=/work/input,readonly",
         workspace.display()
     );
-    let create_arguments = [
-        "create",
-        "--name",
+    let create_arguments = container_create_arguments(
         &name,
-        "--label",
-        "workstream.external-checker=true",
-        "--label",
         &attempt_label,
-        "--label",
         &owner_label,
-        "--runtime",
         &config.runtime,
-        "--network",
-        "none",
-        "--read-only",
-        "--user",
         &sandbox_user,
-        "--cap-drop",
-        "ALL",
-        "--security-opt",
-        "no-new-privileges",
-        "--pids-limit",
         &pids,
-        "--memory",
         &memory,
-        "--cpus",
         &cpus,
-        "--tmpfs",
-        "/tmp:rw,noexec,nosuid,nodev,size=16777216",
-        "--mount",
         &mount,
-        "-i",
+        model_mount,
         &image,
-    ];
+    );
+    let create_argument_refs: Vec<_> = create_arguments.iter().map(String::as_str).collect();
     let created = match run_bounded_command_cancellable(
         &config.docker_binary,
-        &create_arguments,
+        &create_argument_refs,
         budget.deadline,
         budget.output.remaining,
         client,
@@ -1458,6 +1547,60 @@ fn execute_container(
         RemovalOutcome::Unsettled => return Err(ExecutionFailure::unsettled(true)),
     }
     result.map_err(|code| ExecutionFailure::ordinary(code, true))
+}
+
+#[allow(clippy::too_many_arguments)]
+fn container_create_arguments(
+    name: &str,
+    attempt_label: &str,
+    owner_label: &str,
+    runtime: &str,
+    sandbox_user: &str,
+    pids: &str,
+    memory: &str,
+    cpus: &str,
+    material_mount: &str,
+    model_mount: Option<&str>,
+    image: &str,
+) -> Vec<String> {
+    let mut arguments = vec![
+        "create".to_string(),
+        "--name".into(),
+        name.into(),
+        "--label".into(),
+        "workstream.external-checker=true".into(),
+        "--label".into(),
+        attempt_label.into(),
+        "--label".into(),
+        owner_label.into(),
+        "--runtime".into(),
+        runtime.into(),
+        "--network".into(),
+        "none".into(),
+        "--read-only".into(),
+        "--user".into(),
+        sandbox_user.into(),
+        "--cap-drop".into(),
+        "ALL".into(),
+        "--security-opt".into(),
+        "no-new-privileges".into(),
+        "--pids-limit".into(),
+        pids.into(),
+        "--memory".into(),
+        memory.into(),
+        "--cpus".into(),
+        cpus.into(),
+        "--tmpfs".into(),
+        "/tmp:rw,noexec,nosuid,nodev,size=16777216".into(),
+        "--mount".into(),
+        material_mount.into(),
+    ];
+    if let Some(model_mount) = model_mount {
+        arguments.push("--mount".into());
+        arguments.push(model_mount.into());
+    }
+    arguments.extend(["-i".into(), image.into()]);
+    arguments
 }
 
 fn remove_container_work(
@@ -2143,6 +2286,8 @@ mod tests {
                 load_container_owner(&File::open(&socket_root).unwrap()).unwrap(),
             ),
             socket_path: socket_root.join("checker.sock"),
+            model_proxy_socket: None,
+            model_relay_root: None,
             material_root,
             docker_binary: docker,
             runtime: "runc".into(),
@@ -2238,6 +2383,7 @@ mod tests {
                 "grant_id": grant_id,
                 "binding_digest": manifest.binding_digest,
             },
+            "model_grant": null,
         })
     }
 
@@ -2698,6 +2844,7 @@ exit 2
                 "grant_id": "extract_0123456789abcdef0123456789abcdef",
                 "binding_digest": format!("sha256:{}", "6".repeat(64)),
             },
+            "model_grant": null,
         });
         let (mut client, mut server) = UnixStream::pair().unwrap();
         write_frame(&mut client, &serde_json::to_vec(&envelope).unwrap()).unwrap();
@@ -2728,6 +2875,110 @@ exit 2
         assert!(serde_json::from_value::<ServiceConfig>(configuration.clone()).is_ok());
         configuration["terminal_benchmark"] = Value::Null;
         assert!(serde_json::from_value::<ServiceConfig>(configuration).is_err());
+    }
+
+    #[test]
+    fn execute_wire_requires_an_exact_model_grant_member() {
+        let (root, config) = test_config();
+        let envelope = pre_submit_envelope_with_grant(&config);
+        assert!(serde_json::from_value::<ExecuteEnvelope>(envelope.clone()).is_ok());
+
+        let mut missing = envelope.clone();
+        missing.as_object_mut().unwrap().remove("model_grant");
+        assert!(serde_json::from_value::<ExecuteEnvelope>(missing).is_err());
+
+        let mut extended = envelope;
+        extended["model_grant"] = serde_json::json!({
+            "grant_id": format!("model_{}", "1".repeat(32)),
+            "binding_digest": extended["request"]["request_digest"],
+            "extra": true,
+        });
+        assert!(serde_json::from_value::<ExecuteEnvelope>(extended).is_err());
+        let workspace = config
+            .material_root
+            .join("workspaces/extract_0123456789abcdef0123456789abcdef/workspace");
+        fs::set_permissions(workspace, fs::Permissions::from_mode(0o700)).unwrap();
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn model_grants_are_rejected_outside_the_bound_post_request() {
+        let (root, mut config) = test_config();
+        config.model_proxy_socket = Some(PathBuf::from("/unused/private/proxy.sock"));
+        config.model_relay_root = Some(PathBuf::from("/unused/private/relay"));
+        let mut envelope = pre_submit_envelope_with_grant(&config);
+        envelope["model_grant"] = serde_json::json!({
+            "grant_id": format!("model_{}", "1".repeat(32)),
+            "binding_digest": envelope["request"]["request_digest"],
+        });
+        let (_client, server) = UnixStream::pair().unwrap();
+        assert_eq!(
+            handle_frame(&config, &server, &serde_json::to_vec(&envelope).unwrap()),
+            Err("model grant invalid".into())
+        );
+
+        let workspace = config
+            .material_root
+            .join("workspaces/extract_0123456789abcdef0123456789abcdef/workspace");
+        fs::set_permissions(workspace, fs::Permissions::from_mode(0o700)).unwrap();
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn container_arguments_mount_only_the_invocation_model_socket() {
+        let material = "type=bind,src=/private/material,dst=/work/input,readonly";
+        let invocation =
+            "type=bind,src=/private/runtime/.model-123/model.sock,dst=/work/model.sock,readonly";
+        let arguments = container_create_arguments(
+            "candidate",
+            "workstream.external-checker-attempt=a",
+            "workstream.external-checker-owner=b",
+            "runc",
+            "65532:65532",
+            "16",
+            "16777216",
+            "1.000",
+            material,
+            Some(invocation),
+            "registry.example/checker@sha256:123",
+        );
+        assert!(arguments
+            .windows(2)
+            .any(|pair| pair == ["--network", "none"]));
+        let mounts: Vec<_> = arguments
+            .windows(2)
+            .filter(|pair| pair[0] == "--mount")
+            .map(|pair| pair[1].as_str())
+            .collect();
+        assert_eq!(mounts, [material, invocation]);
+        assert!(!arguments.iter().any(|value| {
+            value.contains("proxy.sock")
+                || value.contains("model_0123456789abcdef0123456789abcdef")
+                || value.contains("provider")
+                || value.contains("api_key")
+        }));
+
+        let without_model = container_create_arguments(
+            "candidate",
+            "workstream.external-checker-attempt=a",
+            "workstream.external-checker-owner=b",
+            "runc",
+            "65532:65532",
+            "16",
+            "16777216",
+            "1.000",
+            material,
+            None,
+            "registry.example/checker@sha256:123",
+        );
+        assert_eq!(
+            without_model
+                .windows(2)
+                .filter(|pair| pair[0] == "--mount")
+                .map(|pair| pair[1].as_str())
+                .collect::<Vec<_>>(),
+            [material]
+        );
     }
 
     #[test]
@@ -3073,6 +3324,7 @@ exit 2
                 &config.cache[0],
                 &request,
                 &workspace,
+                None,
                 &client,
                 &mut budget,
             ),
@@ -3201,6 +3453,7 @@ exit 2
                 &config.cache[0],
                 &request,
                 &workspace,
+                None,
                 &client,
                 &mut budget,
             ),
@@ -3236,6 +3489,7 @@ exit 2
                 &config.cache[0],
                 &request,
                 &workspace,
+                None,
                 &client,
                 &mut budget,
             ),

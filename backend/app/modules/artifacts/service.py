@@ -202,6 +202,7 @@ class _AdmissionFacts:
     operation_identity: str
     task_import_source_id: str | None = None
     selected_pre_submit_run_id: str | None = None
+    model_call_attempt_id: str | None = None
 
 
 def artifact_storage_namespace_spec(
@@ -1065,6 +1066,7 @@ class ArtifactStorageOrchestrator:
                         put_attempt_id=attempt.id,
                         guide_source_item_id=attempt.guide_source_item_id,
                         checker_run_id=attempt.checker_run_id,
+                        model_call_attempt_id=attempt.model_call_attempt_id,
                         logical_role=attempt.logical_role,
                         replica_id=replica.id,
                         operation="put",
@@ -2408,6 +2410,7 @@ class ArtifactAdmissionService:
                             "submission_id": facts.submission_id,
                             "submission_version": facts.submission_version,
                             "checker_output_request": facts.checker_request_digest_facts,
+                            "model_call_attempt_id": facts.model_call_attempt_id,
                         }
                         if facts.request_type == "checker_output"
                         else {}
@@ -2476,6 +2479,7 @@ class ArtifactAdmissionService:
                 task_import_source_id=facts.task_import_source_id,
                 guide_source_item_id=facts.guide_source_item_id,
                 checker_run_id=facts.checker_run_id,
+                model_call_attempt_id=facts.model_call_attempt_id,
                 logical_role=facts.logical_role,
                 submission_id=facts.submission_id,
                 submission_version=facts.submission_version,
@@ -2560,15 +2564,9 @@ class ArtifactAdmissionService:
             if type(request.reservation) is not CheckerOutputReservation:
                 raise TypeError("invalid checker output reservation")
             try:
-                request.reservation.select(
-                    CheckerOutputSelector(
-                        evaluation=request.reservation.evaluation,
-                        checker_run_id=request.reservation.checker_run_id,
-                        worker_lease_id=request.reservation.worker_lease_id,
-                        worker_lease_generation=request.reservation.worker_lease_generation,
-                        slot_key=request.slot_key,
-                    )
-                )
+                request.reservation.select(request.reservation.selector)
+                if request.slot_key != request.reservation.selector.slot_key:
+                    raise CheckerOutputUnavailable("checker_output_slot_unavailable")
             except (CheckerOutputUnavailable, ValueError) as exc:
                 raise ArtifactAdmissionRelationshipError(
                     "checker output reservation is unavailable"
@@ -2635,18 +2633,13 @@ class ArtifactAdmissionService:
     async def _checker_output_facts(
         self, request: CheckerOutputArtifactAdmissionRequest
     ) -> _AdmissionFacts:
-        """Bind committed bytes to one owner-issued run slot and fixed service."""
+        """Bind committed transcript bytes to one durable call effect and role."""
         reservation = CheckerOutputReservation.model_validate(request.reservation)
+        selector = reservation.selector
         try:
-            slot = reservation.select(
-                CheckerOutputSelector(
-                    evaluation=reservation.evaluation,
-                    checker_run_id=reservation.checker_run_id,
-                    worker_lease_id=reservation.worker_lease_id,
-                    worker_lease_generation=reservation.worker_lease_generation,
-                    slot_key=request.slot_key,
-                )
-            )
+            slot = reservation.select(selector)
+            if slot.key != request.slot_key:
+                raise CheckerOutputUnavailable("checker_output_slot_unavailable")
         except (CheckerOutputUnavailable, ValueError) as exc:
             raise ArtifactAdmissionRelationshipError(
                 "checker output reservation is unavailable"
@@ -2655,15 +2648,15 @@ class ArtifactAdmissionService:
         if (
             commitment.media_type != slot.media_type
             or commitment.byte_count > slot.maximum_bytes
+            or commitment.sha256 != selector.content_sha256
         ):
             raise ArtifactAdmissionRelationshipError(
                 "checker output does not match reserved slot"
             )
-        evaluation = reservation.evaluation
-        checker_run_id = str(reservation.checker_run_id)
+        paid_slot = selector.paid_slot
         logical_role = slot.key
         operation_identity = checker_output_operation_identity(
-            checker_run_id=reservation.checker_run_id, slot_key=logical_role
+            model_call_attempt_id=selector.model_call_attempt_id, slot_key=logical_role
         )
         digest_facts = checker_output_request_digest_facts(
             reservation=reservation,
@@ -2673,15 +2666,16 @@ class ArtifactAdmissionService:
             request_type="checker_output",
             producer_type="service_identity",
             producer_ref=ServiceIdentity.ARTIFACT_CHECKER_OUTPUT.value,
-            project_id=str(evaluation.project_id),
+            project_id=str(paid_slot.project_id),
             guide_id=None,
-            task_id=str(evaluation.task_id),
+            task_id=str(selector.task_id),
             guide_source_item_id=None,
             guide_source_snapshot_id=None,
-            checker_run_id=checker_run_id,
+            checker_run_id=None,
+            model_call_attempt_id=str(selector.model_call_attempt_id),
             logical_role=logical_role,
-            submission_id=str(evaluation.submission_id),
-            submission_version=evaluation.submission_version,
+            submission_id=str(paid_slot.submission_id),
+            submission_version=paid_slot.submission_version,
             checker_request_digest=canonical_json_hash(digest_facts),
             checker_request_digest_facts=digest_facts,
             pre_submit_evidence_set_id=None,
