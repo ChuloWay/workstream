@@ -6,6 +6,8 @@ from pathlib import Path
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.adapters.project_agents import (
+    RETAINED_OPENAI_GUIDE_RUNTIME_KEY,
+    create_guide_runtime_cleanup_factory,
     create_project_guide_runtime,
     build_project_guide_adapter_profile,
 )
@@ -34,11 +36,6 @@ from app.adapters.artifacts import guide_document_manifest_port, guide_document_
 from app.modules.projects.api.guide_compilation import (
     ProjectGuideCompilationDelivery,
     ProjectGuideCompilationDeliveryError,
-)
-from app.interfaces.external_services import ExternalServiceAdapterFactory
-from app.modules.projects.api.guide_documents import (
-    GUIDE_RUNTIME_RESOURCE_CLEANUP_CAPABILITY_KEY,
-    GuideRuntimeResourceCleanupAdapter,
 )
 from app.workers.async_runner import run_async_task
 from app.workers.celery_app import celery_app
@@ -138,18 +135,7 @@ def cleanup_guide_runtime_resources():
 async def _cleanup_guide_runtime_resources():
     """Keep SDK and PROJECTS internals behind their public composition boundaries."""
     from app.adapters.projects import cleanup_project_guide_runtime_resources
-    from app.adapters.project_agents.openai_workspace import (
-        OpenAIGuideRuntimeCleanupAdapter,
-        RETAINED_OPENAI_GUIDE_RUNTIME_KEY,
-    )
-
-    cleanup_adapters = ExternalServiceAdapterFactory[
-        GuideRuntimeResourceCleanupAdapter
-    ](GUIDE_RUNTIME_RESOURCE_CLEANUP_CAPABILITY_KEY)
-    cleanup_adapters.register(
-        RETAINED_OPENAI_GUIDE_RUNTIME_KEY,
-        OpenAIGuideRuntimeCleanupAdapter,
-    )
+    cleanup_adapters = create_guide_runtime_cleanup_factory()
     engine = create_async_engine(get_database_url(), pool_pre_ping=True)
     try:
         return await cleanup_project_guide_runtime_resources(

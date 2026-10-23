@@ -9,11 +9,13 @@ import httpx2
 from openai import NotFoundError
 import pytest
 
+from app.adapters.project_agents import create_guide_runtime_cleanup_factory
 from app.adapters.project_agents.openai_workspace import (
     OpenAIGuideRuntimeCleanupAdapter,
     RETAINED_OPENAI_GUIDE_RUNTIME_KEY,
     _cleanup_recorded_openai_guide_resources,
 )
+from app.interfaces.external_services import UnknownExternalServiceProviderError
 from app.modules.projects.api.guide_documents import (
     GUIDE_RUNTIME_RESOURCE_CLEANUP_CAPABILITY_KEY,
     GuideRuntimeResource,
@@ -143,7 +145,10 @@ async def test_retained_cleanup_requires_openai_key_and_never_uses_openrouter(
 ):
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     monkeypatch.setenv("OPENROUTER_API_KEY", "must-not-be-used")
-    adapter = OpenAIGuideRuntimeCleanupAdapter()
+    factory = create_guide_runtime_cleanup_factory()
+    with pytest.raises(UnknownExternalServiceProviderError):
+        factory.create("openrouter")
+    adapter = factory.create(RETAINED_OPENAI_GUIDE_RUNTIME_KEY)
     assert adapter.identity.capability_key == GUIDE_RUNTIME_RESOURCE_CLEANUP_CAPABILITY_KEY
     assert adapter.identity.provider_key == RETAINED_OPENAI_GUIDE_RUNTIME_KEY
     assert await adapter.cleanup(Custody(())) is False

@@ -1,7 +1,7 @@
 # WS-AGENT-001-01 — Neutral guide tools and OpenRouter inference
 
 - Initiative: WS-AGENT-001
-- Durable disposition: Planned
+- Durable disposition: Complete
 - Intended merge outcome: Remove provider-specific document custody from the core and run the existing OpenAI Agents SDK through OpenRouter using trusted bounded document tools.
 
 ## Intent
@@ -233,7 +233,7 @@ obligation before claiming the hosted journey recovered.
 | The public guide drill recognizes unapproved guide lineage | Shared external-client oracle at `c735327fb` | 37 script tests passed; the new valid-response regression rejects the preceding oracle at its exact shape assertion, and fabricated activation/policy IDs remain rejected | An oracle test is not a completed provider-backed guide run |
 | The release parser preserves isolation and cleans up on ordinary container stop | Exact clean-source release image and full Docker proof at `95e02e2d6` | All eleven cases passed, including `sigterm_removes_owned_socket`; image `sha256:ae1e91d6122e6d530f7af146338cd4e2fb7672a6e5793d1087cbafaf16eee5a1` | This synthetic parser proof does not establish a provider-backed guide compilation or the full contribution journey |
 | Historical TASK upgrades and recovery retain their original facts | Five focused PostgreSQL cases and 34 affected shared-restore cases on exact clean `43028e38a` | Both batches passed; metadata binds that source and migration 0059, with owned database/role cleanup confirmed. Snapshots come from `6fa9a9b55`; checksum-bound restore reuses the existing guarded test restore operation | Restoration is setup, not proof that current guide writers create old-schema data |
-| The uploaded terminal-project guide reaches manager review through real inference | Public API, durable Celery, real parser and MinIO run on clean `95e02e2d6`, OpenAI Agents SDK with OpenRouter `openai/gpt-5.6-terra` | `policy_draft_ready` / `draft_ready_with_warnings`; 11 requirements, 3 findings, 9 capability suggestions and 23 evidence references; exact-project manager read succeeds and outsider read is concealed; owned database/role/bucket cleanup confirmed | No approval, activation, selected external checker bindings or contribution effects; local test issuer and MinIO do not prove deployed Flow/AWS integration. This run retained validation summaries, not proposal prose |
+| The uploaded terminal-project guide reaches manager review through real inference | Public API, durable Celery, real parser and MinIO run on clean `462de62f0`, OpenAI Agents SDK with OpenRouter `openai/gpt-5.6-terra` | `policy_draft_ready` / `draft_ready_with_warnings`; exact-project manager read succeeds and outsider read is concealed; full manager proposal retained privately; owned database/role/bucket cleanup confirmed | No approval, activation, selected external checker bindings or contribution effects; local test issuer and MinIO do not prove deployed Flow/AWS integration. The full parser isolation proof also passed all eleven cases on that exact source/image |
 
 ## Review-driven correction
 
@@ -243,6 +243,13 @@ understated locator-heavy responses. Construct and reserve that complete result
 before committing successful access evidence or returning it. The regression uses
 the real fixed parser, admits an exact serialized limit and rejects the next
 result without another receipt; it fails against the preceding text-only guard.
+
+Cleanup adapter construction and registration belong to the existing
+`adapters/project_agents` composition root, not the Celery caller. Its exact
+retained-resource factory remains separate from inference selection; the existing
+architecture guard and unknown-provider denial protect that boundary. Test-owned
+MinIO configurations must close the process-wide ART runtime before and after
+each fixture so later tests cannot reuse an earlier namespace.
 
 ## Reconciliation
 
