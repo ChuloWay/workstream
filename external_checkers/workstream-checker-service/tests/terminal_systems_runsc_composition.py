@@ -742,6 +742,21 @@ async def test_production_service_executes_project_trial_under_runsc_with_real_c
                 assert retained[0].content_sha256 == external_checker_json_hash(receipt)
             for directory in ("trial-relay", "trial-scratch", "trial-runtime"):
                 assert list((root / directory).iterdir()) == []
+            checkers = subprocess.check_output(
+                [
+                    "docker",
+                    "exec",
+                    env["WORKSTREAM_TS_RUNSC_CONTAINER"],
+                    "docker",
+                    "container",
+                    "ls",
+                    "-aq",
+                    "--filter",
+                    "label=workstream.external-checker=true",
+                ],
+                text=True,
+            )
+            assert checkers.strip() == ""
             inventory = subprocess.check_output(
                 [
                     "docker",
