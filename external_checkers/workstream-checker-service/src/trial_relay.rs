@@ -3,7 +3,6 @@
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::HashSet;
-use std::fmt;
 use std::fs::{self, DirBuilder};
 use std::io::{Read, Write};
 use std::os::unix::ffi::OsStrExt;
@@ -23,22 +22,6 @@ const TRIAL_RECEIPT_SCHEMA: &str = "workstream.checker_trial_receipt.v1";
 const INVOCATION_DIRECTORY_PREFIX: &str = ".trial-";
 const ABSOLUTE_MAXIMUM_FRAME_BYTES: usize = 4 * 1024 * 1024;
 static INVOCATION_SEQUENCE: AtomicU64 = AtomicU64::new(0);
-
-#[derive(Clone, Deserialize, PartialEq, Eq)]
-#[serde(deny_unknown_fields)]
-pub(crate) struct TrialGrant {
-    pub(crate) grant_id: String,
-    pub(crate) binding_digest: String,
-    pub(crate) profile_id: String,
-    pub(crate) profile_version: u32,
-    pub(crate) profile_digest: String,
-}
-
-impl fmt::Debug for TrialGrant {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str("TrialGrant(<redacted>)")
-    }
-}
 
 #[derive(Clone, Debug, Serialize, PartialEq, Eq)]
 pub(crate) struct TrialRequestIdentity {
@@ -501,7 +484,6 @@ impl TrialRelay {
         relay_root: &Path,
         verified_material_root: &Path,
         trial_scratch_root: &Path,
-        grant: &TrialGrant,
         identity: &TrialRequestIdentity,
         profile: &TrialProfile,
         publisher: Arc<dyn TrialReceiptPublisher>,
@@ -515,7 +497,6 @@ impl TrialRelay {
             relay_root,
             verified_material_root,
             trial_scratch_root,
-            grant,
             identity,
             profile,
             sandbox_uid,
@@ -649,7 +630,6 @@ fn validate_start(
     relay_root: &Path,
     verified_material_root: &Path,
     trial_scratch_root: &Path,
-    grant: &TrialGrant,
     identity: &TrialRequestIdentity,
     profile: &TrialProfile,
     sandbox_uid: u32,
@@ -673,17 +653,7 @@ fn validate_start(
         }
     })?;
     if verified_material_root == trial_scratch_root
-        || !valid_trial_grant(grant, &identity.request_digest)
         || !valid_profile(profile)
-        || (
-            grant.profile_id.as_str(),
-            grant.profile_version,
-            grant.profile_digest.as_str(),
-        ) != (
-            profile.profile_id.as_str(),
-            profile.profile_version,
-            profile.profile_digest.as_str(),
-        )
         || identity.registry_entry_id != profile.registry_entry_id
         || identity.registry_entry_digest != profile.registry_entry_digest
         || identity.checker_image_digest != profile.checker_image_digest
@@ -701,16 +671,6 @@ fn validate_start(
         return Err(invalid());
     }
     Ok(())
-}
-
-pub(crate) fn valid_trial_grant(grant: &TrialGrant, request_digest: &str) -> bool {
-    grant.binding_digest == request_digest
-        && grant.grant_id.len() == 38
-        && grant.grant_id.starts_with("trial_")
-        && grant.grant_id[6..].bytes().all(lower_hex)
-        && valid_uuid(&grant.profile_id)
-        && grant.profile_version > 0
-        && valid_sha256(&grant.profile_digest)
 }
 
 pub(crate) fn valid_profile(profile: &TrialProfile) -> bool {

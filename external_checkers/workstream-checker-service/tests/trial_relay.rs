@@ -216,17 +216,6 @@ fn profile() -> TrialProfile {
     }
 }
 
-fn grant() -> TrialGrant {
-    let profile = profile();
-    TrialGrant {
-        grant_id: format!("trial_{}", "c".repeat(32)),
-        binding_digest: identity().request_digest,
-        profile_id: profile.profile_id,
-        profile_version: profile.profile_version,
-        profile_digest: profile.profile_digest,
-    }
-}
-
 fn plan() -> Value {
     json!({
         "schema_version": "workstream.checker_trial_plan.v1",
@@ -374,7 +363,6 @@ fn assert_observed_limit_is_published(observation: TrialExecution, expected: &st
         &relay_root,
         &material_root,
         &scratch_root,
-        &grant(),
         &identity(),
         &profile(),
         publisher.clone(),
@@ -420,7 +408,6 @@ fn start_with_profile(cleanup_confirmed: bool, profile: TrialProfile) -> Started
         &relay_root,
         &material_root,
         &scratch_root,
-        &grant(),
         &identity(),
         &profile,
         publisher.clone(),
@@ -608,7 +595,6 @@ fn mismatched_request_bound_profile_is_rejected_before_socket_creation() {
         &relay_root,
         &material_root,
         &scratch_root,
-        &grant(),
         &identity(),
         &foreign,
         Arc::new(FakePublisher::default()),
@@ -644,7 +630,6 @@ fn invocation_cancellation_closes_waiting_relay_without_receipt() {
         &relay_root,
         &material_root,
         &scratch_root,
-        &grant(),
         &identity(),
         &profile(),
         publisher.clone(),
@@ -675,7 +660,6 @@ fn observed_build_failure_publishes_work_evidence_and_skips_dependent_step() {
         &relay_root,
         &material_root,
         &scratch_root,
-        &grant(),
         &identity(),
         &profile(),
         publisher.clone(),
