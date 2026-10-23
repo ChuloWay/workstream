@@ -38,6 +38,53 @@ untrusted author claims, fixed answers, or manual reviewer findings. Setup-model
 spend integration is not implicitly included. No merge or hosted deployment is
 authorized by this record.
 
+### Resumed POST boundary
+
+The retained setup handoff is source-bound engineering input, not current
+approved policy. It identifies six model-evaluation and two isolated-execution
+POST suggestions from the unchanged guide, but it predates the PRE/POST-only
+setup restriction. Engineering preserves those source rules while project setup
+obtains a fresh correction; neither the count nor the retained proposal is made
+an activation authority by this change.
+
+The first safe POST slice is limited to
+`pilots/terminal_systems/checkers/post/**`, this checker README, the existing
+Terminal Systems checker workflow, this record, and affected Terminal Systems or
+current roadmap claims. It may define source-linked rubrics, bounded project
+material tools, strict model-output validation, project image behavior and
+offline test doubles. It must consume the generic invocation-local model proxy
+contract owned by the concurrent model-runtime change; it must not invent a
+second transport, a global bearer token, a provider SDK, provider credentials,
+budget storage or a paid-effect ledger. Exact proxy fields are not frozen here
+until that owner publishes the typed contract.
+
+Generic isolated build/trial support will use separately declared shared-runtime
+files after ownership coordination. Before any such edit this record will name
+the exact files and bridge contract. The bridge must keep Docker authority and
+prepared offline material outside the untrusted project image, expose only
+invocation-local bounded tools, and prove aggregate time, CPU, memory, PID and
+scratch-disk limits, cancellation, cleanup, no network or host socket in the
+nested workload, and trusted infrastructure-versus-work classification. It must
+produce authenticated trial evidence rather than accepting contributor-authored
+claims. Revision checks additionally require an owner-supplied typed first-versus-
+revision context, exact prior material identity and feedback. Missing owner ports
+remain explicit infrastructure gaps; project code does not read product tables.
+
+Prohibited changes are migrations, project-named rules in shared Rust, task-name
+allowlists, restoration of the removed private continuation, guide/policy
+approval or activation, task import, lifecycle outcome rehearsal, live model
+calls, image publication or registration, deployment, and work in the separate
+human review/revision initiative. The existing PRE image and its recorded
+publication evidence are reused without rebuilding merely to repeat proof.
+
+The intended verification for the first slice is exact handoff/rubric parity,
+focused project-rule tests, adversarial malformed or unsupported model-output
+tests, bounded material-tool tests, and offline composed tests against a fake
+proxy. Those tests are development evidence only. A completion claim requires
+real composed proxy/transport and isolated-sandbox trials with a controlled
+provider, while live spend and the project activation journey remain separately
+authorized phases.
+
 ## Acceptance criteria
 
 - PRE layout checks required regular files and directories at the package root,
