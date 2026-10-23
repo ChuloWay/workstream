@@ -73,12 +73,13 @@ Both Dockerfiles pin their base images. Each backend build requires one exact SD
 environment and installs only its committed `agents` or `omnicore` resolution,
 without the development extra. The image records that choice in a root-owned
 read-only marker. Select the worker image that matches the configured setup SDK.
-For every inference release, also publish the `agents` build separately as
+For every model-proxy-enabled release, also publish the `agents` build separately as
 `WORKSTREAM_MODEL_PROXY_IMAGE`: the dedicated trusted proxy uses its pinned
 OpenAI 3.x input-count and Responses dependencies for both setup SDKs and POST
 checkers. The proxy rejects any non-`agents` image before reading the provider
 credential. `manager_authored` is accepted in either worker image with the exact
-`none/none/none` model tuple and starts no proxy or credential surface. The backend image
+`none/none/none` setup tuple; `WORKSTREAM_MODEL_PROXY_ENABLED` independently
+decides whether approved POST images can use the proxy. The backend image
 also installs the official Roles Anywhere helper 1.8.5 at its fixed path, with
 architecture-specific hashes checked during the build and image proof. The
 checker-service build compiles the committed Rust lock and copies the pinned
@@ -140,21 +141,24 @@ development authentication are absent.
 Create each secret selected by the configured runtime as a one-value regular file at the configured path. Make it
 owned by the runtime UID/GID with mode `0400`. The explicit role loader gives the
 API only the database, broker, rate-limit and pagination secrets; the worker
-gets the database and broker. Inference runtimes additionally start one trusted
-model-proxy process. Only that process gets the database, the selected provider
-credential and the runtime ART identity. The setup worker receives a read-only
+gets the database and broker. `WORKSTREAM_MODEL_PROXY_ENABLED=true` starts one
+trusted model-proxy process independently of the setup runtime. Only that process
+gets the database, the two closed provider credentials and the runtime ART identity.
+The setup worker receives a read-only
 mount of `/var/lib/workstream/model-runtime` and the fixed socket selector; it
-receives no provider credential or endpoint override. `manager_authored` omits
-the proxy, selector, mount and secret definition. Beat
+receives no provider credential or endpoint override. A proxy-disabled
+`manager_authored` release omits both credential selectors, mounts and secret
+definitions; a proxy-enabled one can still run approved POST model checks. Beat
 gets the database and broker secrets because its startup guard verifies the
 current artifact-provider activation before scheduling jobs. An absent required selector or unknown role stops
 startup, and an unrelated secret is neither mounted nor loaded. The loader
 independently requires the running identity and mode `0400`, performs no shell
 evaluation and never prints a value. Do not put AWS static keys in these files.
-The provider selector is trusted release configuration. For `openrouter`, the
-entrypoint loads the proxy-only file as `OPENROUTER_API_KEY`; for `openai`, it
-loads the same selector as `OPENAI_API_KEY`. It clears both native variables
-before selecting one and never exports a neutral key variable. The endpoint is
+The two provider selectors are trusted release configuration. The proxy loads
+only its dedicated files as `OPENROUTER_API_KEY` and `OPENAI_API_KEY`; this is
+independent of the setup provider because approved POST and setup profiles may
+use different providers. It clears both native variables before loading them
+and never exports a neutral key variable. The endpoints are
 fixed by the registered adapter and cannot be supplied in the release file.
 The parser receives no database, broker, S3, Flow, model or provider credential.
 The release file also fixes the runtime, provider, model, model API, adapter
@@ -294,9 +298,9 @@ python3 deploy/hosted/compose.py --env-file /etc/workstream/release.env \
 python3 deploy/hosted/compose.py --env-file /etc/workstream/release.env ps
 ```
 
-The API applies forward migrations before serving. The guide parser and trusted
-model proxy must pass their protocol/socket health checks before an inference
-worker starts. Worker startup uses the existing prefork lifecycle. Beat runs the
+The API applies forward migrations before serving. The guide parser and an
+enabled trusted model proxy must pass their protocol/socket health checks before
+the worker starts. Worker startup uses the existing prefork lifecycle. Beat runs the
 existing recovery and cleanup
 schedules. The checker health check requires its private socket and Docker's
 registered runsc runtime. It does not attest cache identity; full preflight

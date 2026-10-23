@@ -104,24 +104,8 @@ case "$role" in
         ;;
     model-proxy)
         load_required_secret WORKSTREAM_DATABASE_URL "${WORKSTREAM_DATABASE_URL_FILE:-}"
-        case "$runtime" in
-            manager_authored)
-                echo "manager-authored releases do not run a model proxy" >&2
-                exit 1
-                ;;
-            *) case "$provider" in
-            openrouter)
-                load_required_secret OPENROUTER_API_KEY "${WORKSTREAM_PROJECT_AGENT_API_KEY_FILE:-}"
-                ;;
-            openai)
-                load_required_secret OPENAI_API_KEY "${WORKSTREAM_PROJECT_AGENT_API_KEY_FILE:-}"
-                ;;
-            *)
-                echo "trusted project agent model provider is unavailable or unsupported" >&2
-                exit 1
-                ;;
-            esac ;;
-        esac
+        load_required_secret OPENAI_API_KEY "${WORKSTREAM_MODEL_PROXY_OPENAI_API_KEY_FILE:-}"
+        load_required_secret OPENROUTER_API_KEY "${WORKSTREAM_MODEL_PROXY_OPENROUTER_API_KEY_FILE:-}"
         ;;
     beat)
         load_required_secret WORKSTREAM_DATABASE_URL "${WORKSTREAM_DATABASE_URL_FILE:-}"
@@ -144,7 +128,8 @@ unset WORKSTREAM_DATABASE_URL_FILE
 unset WORKSTREAM_CELERY_BROKER_URL_FILE
 unset WORKSTREAM_API_RATE_LIMIT_KEY_SECRET_FILE
 unset WORKSTREAM_PAGINATION_CURSOR_HMAC_SECRET_FILE
-unset WORKSTREAM_PROJECT_AGENT_API_KEY_FILE
+unset WORKSTREAM_MODEL_PROXY_OPENAI_API_KEY_FILE
+unset WORKSTREAM_MODEL_PROXY_OPENROUTER_API_KEY_FILE
 unset OPENAI_API_KEY_FILE
 unset AWS_SHARED_CREDENTIALS_FILE
 unset AWS_CONFIG_FILE
