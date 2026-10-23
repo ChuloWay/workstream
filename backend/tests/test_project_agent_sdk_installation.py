@@ -113,3 +113,10 @@ def test_omnicore_selection_retains_base_python_support_and_requires_python_312(
         "openai==2.54.0; python_version >= '3.12'",
     ]
     assert project["tool"]["uv"]["conflicts"] == [[{"extra": "agents"}, {"extra": "omnicore"}]]
+
+
+def test_shared_worker_dependency_supports_no_prefetch_control() -> None:
+    """Every SDK image must install a Celery release with no-prefetch support."""
+    with (BACKEND_ROOT / "pyproject.toml").open("rb") as source:
+        project = tomllib.load(source)
+    assert "celery[redis]>=5.6,<6.0" in project["project"]["dependencies"]

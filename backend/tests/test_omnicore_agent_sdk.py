@@ -67,6 +67,9 @@ class _SyntheticOpenRouter:
         always_status: int | None = None,
         error_message: str = "synthetic persistent provider failure",
         tool_calls_before_final: int = 1,
+        finish_reason_override: str | None = None,
+        response_content_type: str = "application/json",
+        response_padding_bytes: int = 0,
         hang: bool = False,
     ) -> None:
         self.handle = handle
@@ -75,6 +78,9 @@ class _SyntheticOpenRouter:
         self.always_status = always_status
         self.error_message = error_message
         self.tool_calls_before_final = tool_calls_before_final
+        self.finish_reason_override = finish_reason_override
+        self.response_content_type = response_content_type
+        self.response_padding_bytes = response_padding_bytes
         self.hang = hang
         self.requests: list[tuple[dict[str, str], dict[str, object]]] = []
         self.received = asyncio.Event()
@@ -128,6 +134,7 @@ class _SyntheticOpenRouter:
                     self.always_status,
                     {"error": {"message": self.error_message}},
                     extra_headers={"Retry-After": "0"},
+                    content_type=self.response_content_type,
                 )
                 return
             if len(self.requests) <= len(self.retry_statuses):
@@ -137,6 +144,7 @@ class _SyntheticOpenRouter:
                     status,
                     {"error": {"message": "synthetic retryable provider failure"}},
                     extra_headers={"Retry-After": "0"},
+                    content_type=self.response_content_type,
                 )
                 return
             successful_index = len(self.requests) - len(self.retry_statuses)
@@ -173,7 +181,7 @@ class _SyntheticOpenRouter:
                         {
                             "index": 0,
                             "message": message,
-                            "finish_reason": finish_reason,
+                            "finish_reason": self.finish_reason_override or finish_reason,
                         }
                     ],
                     "usage": {
@@ -181,7 +189,13 @@ class _SyntheticOpenRouter:
                         "completion_tokens": 1,
                         "total_tokens": 2,
                     },
+                    **(
+                        {"synthetic_padding": "x" * self.response_padding_bytes}
+                        if self.response_padding_bytes
+                        else {}
+                    ),
                 },
+                content_type=self.response_content_type,
             )
         finally:
             writer.close()
@@ -195,11 +209,12 @@ class _SyntheticOpenRouter:
         body: dict[str, object],
         *,
         extra_headers: dict[str, str] | None = None,
+        content_type: str = "application/json",
     ) -> None:
         payload = json.dumps(body, separators=(",", ":")).encode("utf-8")
         headers = [
             f"HTTP/1.1 {status} Synthetic",
-            "Content-Type: application/json",
+            f"Content-Type: {content_type}",
             f"Content-Length: {len(payload)}",
             "Connection: close",
         ]
@@ -601,7 +616,7 @@ async def test_transport_stops_oversized_provider_response():
         await guard.start()
         try:
             status_line = await _send_guard_request(guard.base_url)
-            assert status_line.startswith(b"HTTP/1.1 502")
+            assert status_line.startswith(b"HTTP/1.1 422")
         finally:
             await guard.close(5)
     assert len(provider.requests) == 1
@@ -910,7 +925,7 @@ async def test_exhausted_native_retries_open_shared_provider_circuit(monkeypatch
 
 @pytest.mark.parametrize(
     ("status", "expected_attempts"),
-    [(200, 4), (400, 1), (429, 4), (500, 4)],
+    [(200, 1), (400, 1), (429, 4), (500, 4)],
 )
 async def test_actual_sdk_provider_error_body_never_reaches_logs_or_exception(
     caplog,
@@ -947,6 +962,71 @@ async def test_actual_sdk_provider_error_body_never_reaches_logs_or_exception(
     assert len(provider.requests) == expected_attempts
     assert marker not in str(caught.value)
     assert all(marker not in record.getMessage() for record in caplog.records)
+
+
+async def test_actual_sdk_output_limit_is_not_retried_or_counted_by_circuit(monkeypatch):
+    from app.adapters.project_agents import provider_resilience
+
+    circuit = ProviderCircuit(1, 60)
+    monkeypatch.setattr(provider_resilience, "circuit_for", lambda *_: circuit)
+    compilation_context = _runtime_context()
+    capabilities, _reads, handle = _capabilities(compilation_context)
+    async with _SyntheticOpenRouter(
+        handle=handle,
+        final_output=_provider_output(),
+        finish_reason_override="length",
+    ) as provider:
+        runtime = OmniCoreAgentProjectGuideRuntime._for_test(
+            compilation_context.runtime_configuration,
+            upstream_url=provider.url,
+        )
+        runtime.admit_execution()
+        try:
+            with pytest.raises(ProjectAgentRuntimeError, match="run failed"):
+                await runtime.compile_project_guide(compilation_context, capabilities)
+        finally:
+            await runtime.aclose()
+    assert len(provider.requests) == 1
+
+    admitted = OmniCoreAgentProjectGuideRuntime._for_test(
+        compilation_context.runtime_configuration,
+        upstream_url="http://127.0.0.1:1/chat/completions",
+    )
+    admitted.admit_execution()
+    await admitted.aclose()
+
+
+@pytest.mark.parametrize("failure_kind", ["content_type", "response_size"])
+async def test_actual_sdk_deterministic_success_transport_rejection_is_not_retried(
+    monkeypatch,
+    failure_kind,
+):
+    from app.adapters.project_agents import omnicore_profile
+
+    provider_options: dict[str, object]
+    if failure_kind == "content_type":
+        provider_options = {"response_content_type": "text/plain"}
+    else:
+        monkeypatch.setattr(omnicore_profile, "OMNICORE_MAXIMUM_RESPONSE_BYTES", 1_024)
+        provider_options = {"response_padding_bytes": 2_048}
+    compilation_context = _runtime_context()
+    capabilities, _reads, handle = _capabilities(compilation_context)
+    async with _SyntheticOpenRouter(
+        handle=handle,
+        final_output=_provider_output(),
+        **provider_options,
+    ) as provider:
+        runtime = OmniCoreAgentProjectGuideRuntime._for_test(
+            compilation_context.runtime_configuration,
+            upstream_url=provider.url,
+        )
+        runtime.admit_execution()
+        try:
+            with pytest.raises(ProjectAgentRuntimeError):
+                await runtime.compile_project_guide(compilation_context, capabilities)
+        finally:
+            await runtime.aclose()
+    assert len(provider.requests) == 1
 
 
 async def test_native_cancellation_never_returns_while_sdk_task_remains_live():

@@ -34,7 +34,10 @@ tests, and `.ci/behavior-ownership/partition.v1.json` for the exact three new
 runtime/topology owner registrations; the existing public-dispatch, outbox-topology,
 Celery-observability and lane-timing regressions when required to preserve their
 owner boundaries under that topology; the existing external API drill operator
-documentation for the same worker-pool contract; and this record. The current initiative overview/index and
+documentation for the same worker-pool contract;
+`backend/scripts/run_isolated_tests.py` and
+`backend/tests/test_isolated_database_runner.py` when required to keep real S3
+traffic assigned to the canonical Omni lane; and this record. The current initiative overview/index and
 `docs/roadmap_status.md` may be reconciled only for the resulting durable
 capability and next boundary. The dependency change may touch only
 `backend/pyproject.toml` and `backend/uv.lock` plus the focused installation tests.
@@ -177,7 +180,8 @@ replacement. This covers Celery's shortest-visibility-wins rule for every
 Workstream participant using that broker.
 Because Redis visibility starts when a message is reserved rather than when a
 prefork child begins it, the shared app also pins
-`worker_disable_prefetch=true`. Inference project-setup startup/task validation
+`worker_disable_prefetch=true` and declares Celery 5.6 as its minimum supported
+version because that release introduced the setting. Inference project-setup startup/task validation
 requires the effective Redis transport and no-prefetch behavior; it rejects
 brokers where Celery ignores this control. This prevents a third long task from
 aging invisibly in the parent while both concurrency-two children are occupied,
@@ -208,6 +212,10 @@ health on success, and excludes cancellation and non-transient output/runtime
 failures. Every close path releases its lease. Prove an open circuit rejects before
 the fence and that the OpenAI adapter's existing retry/circuit behavior is
 unchanged.
+Provider HTTP, transport and timeout failures retain their explicit transient
+classification. A 2xx response that fails the closed success-envelope rebuild,
+including output-limit termination, returns a sanitized non-retryable response and
+must neither repeat provider spend nor count against provider health.
 Do not claim unsupported per-request timeout or provider-store settings. Capture
 outbound calls, telemetry behavior and exact tool inventory before real material.
 Use the worker's one configured provider credential; do not accept per-request

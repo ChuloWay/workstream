@@ -901,34 +901,43 @@ class _LoopbackOpenRouterGuard:
                 self._last_upstream_transient_failure = (
                     response.status_code in {408, 409, 429} or response.status_code >= 500
                 )
-                chunks: list[bytes] = []
-                size = 0
-                async for chunk in response.aiter_bytes():
-                    size += len(chunk)
-                    if size > self._profile.maximum_response_bytes:
-                        raise _GuardRejection(502)
-                    chunks.append(chunk)
-                content_type = response.headers.get("content-type", "")
-                if not content_type.lower().startswith("application/json"):
-                    raise _GuardRejection(502)
+                success = 200 <= response.status_code < 300
                 returned_headers = {
                     key: value
                     for key, value in response.headers.items()
                     if key.lower() in _RETRY_RESPONSE_HEADERS
                     and len(value.encode("ascii", errors="ignore")) <= 256
                 }
+                chunks: list[bytes] = []
+                size = 0
+                async for chunk in response.aiter_bytes():
+                    size += len(chunk)
+                    if size > self._profile.maximum_response_bytes:
+                        if success:
+                            self._last_upstream_transient_failure = False
+                            return 422, {}, _SANITIZED_PROVIDER_ERROR_BODY
+                        return (
+                            response.status_code,
+                            returned_headers,
+                            _SANITIZED_PROVIDER_ERROR_BODY,
+                        )
+                    chunks.append(chunk)
+                content_type = response.headers.get("content-type", "")
                 response_body = b"".join(chunks)
-                if not 200 <= response.status_code < 300:
+                if not success:
                     response_body = _SANITIZED_PROVIDER_ERROR_BODY
                 else:
+                    if not content_type.lower().startswith("application/json"):
+                        self._last_upstream_transient_failure = False
+                        return 422, {}, _SANITIZED_PROVIDER_ERROR_BODY
                     try:
                         response_body = _rebuild_provider_success_body(
                             response_body,
                             expected_model=self._model,
                         )
                     except (UnicodeDecodeError, ValueError, RecursionError, _GuardRejection):
-                        self._last_upstream_transient_failure = True
-                        return 502, {}, _SANITIZED_PROVIDER_ERROR_BODY
+                        self._last_upstream_transient_failure = False
+                        return 422, {}, _SANITIZED_PROVIDER_ERROR_BODY
                     self._admission.request_succeeded()
                     self._logical_request_active = False
                 return response.status_code, returned_headers, response_body
@@ -952,6 +961,7 @@ class _LoopbackOpenRouterGuard:
             401: "Unauthorized",
             404: "Not Found",
             413: "Payload Too Large",
+            422: "Unprocessable Content",
             429: "Too Many Requests",
             431: "Request Header Fields Too Large",
             500: "Internal Server Error",
