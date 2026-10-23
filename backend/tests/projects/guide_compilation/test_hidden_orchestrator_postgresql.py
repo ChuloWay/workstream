@@ -43,6 +43,7 @@ from app.modules.projects.guide_compilation.orchestrator import (
     SqlAlchemyGuideCompilationExecutionBackend,
     project_guide_compilation_execution_port,
 )
+from app.modules.projects.guide_compilation import runtime_resources
 from tests.checkers.external.support import capability_projection
 
 from .helpers import (
@@ -262,6 +263,20 @@ async def test_cited_result_without_tool_access_is_rejected_without_persistence(
     runtime = _CitingRuntimeWithoutToolAccess()
     command = ProjectGuideCompilationExecutionCommand(attempt_id=requested.attempt_id)
     try:
+        compilation_context = context(values)
+        # Prove the service guard directly because the orchestrator deliberately
+        # collapses it and the independent SQL evidence guard to one unresolved receipt.
+        async with factory() as session:
+            with pytest.raises(
+                ValueError, match="^compilation has no document access evidence$"
+            ):
+                await runtime_resources.require_compilation_document_access(
+                    session,
+                    requested.attempt_id,
+                    compilation_context.material,
+                    runtime.outcome,
+                )
+
         port = _port(factory, runtime)
         receipt = await port.execute(command)
         replay = await port.execute(command)
