@@ -14,10 +14,10 @@ An isolated diagnostic restored schema first, pinned those two functions to `pg_
 
 Allowed files:
 
-- One forward-only migration after the current merged predecessor to pin the two audit validation functions' search paths.
-- Alembic admitted-predecessor/fingerprint metadata and its existing tests when required by the migration contract.
-- Focused PostgreSQL migration/authorization tests proving valid audit facts, invalid facts, empty-path execution and safe namespace resolution.
-- This record and affected restore guidance/current roadmap claims.
+- `backend/alembic/versions/0060_audit_restore_path.py` and `backend/alembic/env.py`.
+- `backend/tests/conftest.py` schema fingerprint and `backend/tests/test_alembic.py` predecessor, function-custody and downgrade proofs.
+- `backend/tests/migrations/test_project_role_schema.py` focused PostgreSQL audit-helper/COPY proofs.
+- This record and `deploy/hosted/README.md` restore guidance.
 
 Prohibited changes:
 
@@ -53,3 +53,10 @@ Human focus: the repair changes name resolution only, preserves validation seman
 ## Roadmap impact
 
 This closes a discovered restore prerequisite under #582; it does not activate a new product capability or complete the hosted journey. Assess the current release-gate wording with the final candidate.
+
+## Verification in progress
+
+- Initial focused PostgreSQL run: seven passed, including four COPY cases, the existing role-vocabulary proof, single-head graph, and immediate-predecessor upgrade. Subsequent custody/downgrade refinements require a fresh run.
+- Isolated restore diagnostic: after correcting the two function paths, a fresh ordinary dump restored without schema interception. All 121 table row counts/digests matched. Owned containers were removed. This does not prove future task/submission/acceptance recovery; those records do not yet exist in this drill.
+- Canonical schema fingerprint regenerated from the migrated PostgreSQL schema; no test selection or CI workflow changed.
+- Roadmap assessment: #582 already retains restore as an outstanding release prerequisite. The repair changes no capability exposure, completion claim or next dependency, so no roadmap edit is needed. Full hosted journey evidence remains outstanding.
