@@ -337,6 +337,8 @@ def test_v01_graph_has_one_root_and_head() -> None:
 
     assert [revision.revision for revision in revisions] == [
         HEAD_REVISION,
+        "0060_model_usage",
+        "0059_neutral_guide_runtime",
         "0058_compensation_unit_create",
         "0057_roles_anywhere_custody",
         "0056_manager_authored_runtime",
@@ -549,6 +551,8 @@ def test_repeated_upgrade_head_preserves_current_database(
         "0056_manager_authored_runtime",
         "0057_roles_anywhere_custody",
         "0058_compensation_unit_create",
+        "0059_neutral_guide_runtime",
+        "0060_model_usage",
     ],
 )
 def test_preceding_head_upgrades_to_current_without_recreation(
@@ -590,6 +594,95 @@ def test_preceding_head_upgrades_to_current_without_recreation(
     assert after["versions"] == [HEAD_REVISION]
     assert after["reference_rows"] == before["reference_rows"]
     assert repeated == after
+
+
+def test_checker_revision_input_upgrade_preserves_null_digest_and_retained_schema(
+    isolated_database_env: str, migration_lock
+) -> None:
+    """0061 adds selected context without rewriting old result authority."""
+    config = _alembic_config()
+
+    async def probe() -> dict[str, object]:
+        connection = await asyncpg.connect(isolated_database_env.replace("+asyncpg", ""))
+        try:
+            column = await connection.fetchrow(
+                "select data_type,is_nullable from information_schema.columns "
+                "where table_schema='public' and table_name='checker_runs' "
+                "and column_name='input_context_custody'"
+            )
+            trigger = await connection.fetchrow(
+                "select tgdeferrable,tginitdeferred from pg_trigger "
+                "where tgrelid='public.checker_runs'::regclass "
+                "and tgname='checker_input_context_custody' and not tgisinternal"
+            )
+            return {
+                "revision": await connection.fetchval(
+                    "select version_num from public.alembic_version"
+                ),
+                "sentinel": await connection.fetchval(
+                    "select value from migration_revision_input_sentinel where id=1"
+                ),
+                "column": tuple(column.values()) if column else None,
+                "trigger": tuple(trigger.values()) if trigger else None,
+                "null_digest": await connection.fetchval(
+                    "select public.checker_post_submit_authority_digest("
+                    "pg_catalog.jsonb_populate_record(null::public.checker_runs,'{}'::jsonb),"
+                    "'finalize')"
+                ),
+                "context_digest": await connection.fetchval(
+                    "select public.checker_post_submit_authority_digest("
+                    "pg_catalog.jsonb_populate_record(null::public.checker_runs,"
+                    "'{\"input_context_custody\":{\"probe\":true}}'::jsonb),'finalize')"
+                ),
+                "validity_function": await connection.fetchval(
+                    "select to_regprocedure("
+                    "'public.checker_input_context_valid(public.checker_runs)') is not null"
+                ),
+            }
+        finally:
+            await connection.close()
+
+    async def pre_upgrade_digest() -> str:
+        connection = await asyncpg.connect(isolated_database_env.replace("+asyncpg", ""))
+        try:
+            return await connection.fetchval(
+                "select public.checker_post_submit_authority_digest("
+                "pg_catalog.jsonb_populate_record(null::public.checker_runs,'{}'::jsonb),"
+                "'finalize')"
+            )
+        finally:
+            await connection.close()
+
+    with migration_lock():
+        asyncio.run(
+            _execute(isolated_database_env, "drop schema public cascade; create schema public")
+        )
+        command.upgrade(config, "0060_model_usage")
+        before_digest = asyncio.run(pre_upgrade_digest())
+        asyncio.run(
+            _execute(
+                isolated_database_env,
+                "create table migration_revision_input_sentinel("
+                "id integer primary key,value text not null);"
+                "insert into migration_revision_input_sentinel values(1,'preserve-me')",
+            )
+        )
+        command.upgrade(config, HEAD_REVISION)
+        after = asyncio.run(probe())
+        asyncio.run(
+            _execute(
+                isolated_database_env,
+                "drop table migration_revision_input_sentinel",
+            )
+        )
+
+    assert after["revision"] == HEAD_REVISION
+    assert after["sentinel"] == "preserve-me"
+    assert after["column"] == ("jsonb", "YES")
+    assert after["trigger"] == (True, True)
+    assert after["null_digest"] == before_digest
+    assert after["validity_function"] is True
+    assert after["context_digest"] != before_digest
 
 
 def test_neutral_runtime_upgrade_preserves_retained_provider_facts(
