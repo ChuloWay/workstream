@@ -148,6 +148,19 @@ request/retry and durable-worker owners decide the next business attempt.
 | Canonical rules have one implementation | Existing corpus remains; source/composition negative checks reject production host inspector/default calls |
 | Existing policy branches remain | Required checks still feed existing true-policy review routing and false-policy shared acceptance; full public durable proof belongs to boundary 3 |
 
+## Live-drill repair: sequential material grants
+
+The public two-binding trial exposed that the canonical grant publisher moves
+exported files below `workspace/`, but revocation removed only its manifest.
+The second binding then inspected an extra directory level and failed before
+execution. Restore the sealed exported tree when revoking each exact grant,
+including submissions that themselves contain `workspace` or the manifest name.
+Keep one bounded scratch reservation and preserve per-request revalidation.
+Strengthen the existing ordered lifecycle test to use the real ART grant owner;
+verify it fails before the repair. Retain reserved-name/cleanup tests and rerun
+the real public two-binding case. This repair belongs to this boundary's existing
+ART preparation scope; it adds no policy or runtime path.
+
 ## Evidence
 
 Run relevant owner/adapter suites, canonical archive/default corpus, real
