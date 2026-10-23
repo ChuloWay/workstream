@@ -345,9 +345,9 @@ def test_project_lane_ownership_has_an_independent_fingerprint() -> None:
         )
         + "\n"
     )
-    assert len(catalogue.PROJECT_PARTITIONED_MODULES) == 212
+    assert len(catalogue.PROJECT_PARTITIONED_MODULES) == 213
     assert hashlib.sha256(canonical.encode()).hexdigest() == (
-        "ef5d13776cc1686b98538ee01b496f420391c9c4574f0e6017b9bd395a2da32f"
+        "b473f7f3df14aa872b3a2b63ea9fbf3f287b29824769bc1f926f37535129fd50"
     )
 
 
