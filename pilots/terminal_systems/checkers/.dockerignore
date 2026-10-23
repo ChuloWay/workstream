@@ -1,0 +1,9 @@
+*
+!setup-handoff.json
+!post/
+post/*
+!post/model/
+post/model/*
+!post/model/*.py
+!post/model/rubrics.json
+!post/model/Dockerfile

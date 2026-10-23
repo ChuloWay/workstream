@@ -15,7 +15,11 @@ from trial_transport import CompletedTrial
 
 
 RUNTIME_REQUIREMENT = "runtime_environment_and_verification_trials"
-HANDOFF_PATH = Path(__file__).parents[2] / "setup-handoff.json"
+_LOCAL_HANDOFF_PATH = Path(__file__).with_name("setup-handoff.json")
+_SOURCE_HANDOFF_PATH = Path(__file__).parents[2] / "setup-handoff.json"
+HANDOFF_PATH = (
+    _LOCAL_HANDOFF_PATH if _LOCAL_HANDOFF_PATH.is_file() else _SOURCE_HANDOFF_PATH
+)
 _CONDITION_FINDINGS = (
     frozenset({"offline_build_or_runtime_failure"}),
     frozenset({"author_only_material_exposed"}),
