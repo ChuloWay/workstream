@@ -108,7 +108,11 @@ mode `0600` and accessed relative to its retained directory descriptor. It insta
 records exact project launch attempts and preserves trusted-intake availability.
 It restores the original config and restarts that same unit on SIGTERM/exit.
 Keep its parent supervisor alive and always terminate/wait for it in a shell
-`trap` after the probe, including failures. Never target a shared production node.
+`trap` after the probe, including failures. Propagate a nonzero supervisor exit;
+require its `supervisor-cleanup.json` receipt, matching original config hash and
+empty owned-resource inventory. The receipt must also confirm the exact foreign
+fixture VM/disk/cgroup/process is gone. The fixture uses exact-name noninteractive
+`--force` deletion only after checking its label. Never target a shared production node.
 The operator supplies a private custody manifest from independently verified
 build/provisioning records. It contains `unit`, absolute `config`, `socket` and
 `executable`, the preserved `owner`, `config_sha256`, the complete original

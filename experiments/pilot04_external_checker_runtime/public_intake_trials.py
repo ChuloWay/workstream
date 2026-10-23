@@ -76,6 +76,11 @@ def _assert_project_invocations(row, trace, observer_start, node_root, runtime_s
     _require([event['session'] for event in starts] == expected
              and [event['session'] for event in ends] == expected,
              'project adapter invocations differ from retained ordered members')
+    order = [(event['event'], event['session']) for event in observed
+             if event['event'] in {'project_started', 'project_completed'}]
+    _require(order == [(kind, digest) for digest in expected
+                       for kind in ('project_started', 'project_completed')],
+             'project checker invocations overlap or run outside canonical order')
     machines = assert_launches(node_root, runtime_start, creates=len(expected),
                                executions=len(expected), shared_deadline=False)
     executions = [event for event in trace_events(node_root)[runtime_start:]

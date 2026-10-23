@@ -55,6 +55,13 @@ def assert_launches(root, start, *, creates, executions, project=True, shared_de
              'runtime retried an invoked guest or skipped expected execution')
     _trace_require(set(made) == {event['name'] for event in events if event['operation'] == 'delete'},
              'runtime retry lacks deletion of each exact machine')
+    expected = []
+    for index, name in enumerate(made):
+        operations = ['create', 'start'] + (['exec'] if index >= creates - executions else []) + ['delete']
+        expected.extend((name, operation) for operation in operations)
+    observed = [(event['name'], event['operation']) for event in events
+                if event['operation'] in {'create', 'start', 'exec', 'delete'}]
+    _trace_require(observed == expected, 'runtime retried after invocation or broke exact machine sequencing')
     created = [event for event in events if event['operation'] == 'create']
     _trace_require(all(event.get('lease') and event['lease']['name'] == event['name'] for event in created),
                    'created machine lacks exact lease evidence')
@@ -168,7 +175,13 @@ class ForeignControl:
             matching = [row for row in runtime(self.config, 'machine', 'ls', '--json') if row['name'] == self.name]
             if len(matching) != 1 or matching[0]['labels'].get('workstream.external-checker-owner') != 'foreign-control':
                 raise RuntimeError('foreign fixture identity changed before exact cleanup')
-            self.command('machine', 'delete', '--name', self.name)
+            self.command('machine', 'delete', '--name', self.name, '--force')
+        disk = Path(self.config['smol']['home']) / '.cache/smolvm/vms' / hashlib.sha256(self.name.encode()).hexdigest()[:16]
+        remaining = [row for row in runtime(self.config, 'machine', 'ls', '--json') if row['name'] == self.name]
+        if remaining or disk.exists() or self.group.exists() or (self.process is not None and self.process.poll() is None):
+            raise RuntimeError('foreign fixture cleanup is incomplete')
+        return {'name': self.name, 'machine_absent': True, 'disk_absent': True,
+                'cgroup_absent': True, 'process_reaped': True}
 
 def serve(config_path, root, unit, manifest_path):
     """Inject only project-start faults on a dedicated empty node and restore on exit."""
@@ -259,6 +272,8 @@ def serve(config_path, root, unit, manifest_path):
                     result['ok'] = False
                 control.write(response.name, result)
             time.sleep(.1)
+    except KeyboardInterrupt:
+        pass
     finally:
         try:
             config_path.write_bytes(original)
@@ -266,9 +281,18 @@ def serve(config_path, root, unit, manifest_path):
             if foreign.created and foreign.process is not None:
                 foreign.check()
         finally:
-            foreign.close()
-            (root / 'supervisor-ready').unlink(missing_ok=True)
-            control.close()
+            try:
+                foreign_cleanup = foreign.close()
+                resources = owned_resources(config, root)
+                if any(resources.values()) or config_path.read_bytes() != original:
+                    raise RuntimeError('supervisor restore or owned cleanup is incomplete')
+                control.write('supervisor-cleanup.json', {
+                    'config_sha256': 'sha256:' + hashlib.sha256(original).hexdigest(),
+                    'resources': resources, 'foreign': foreign_cleanup,
+                })
+                (root / 'supervisor-ready').unlink(missing_ok=True)
+            finally:
+                control.close()
 
 
 if __name__ == '__main__':

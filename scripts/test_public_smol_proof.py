@@ -66,6 +66,14 @@ class PrivateFaultControls(unittest.TestCase):
         write(rows + [{'operation': 'exec', 'name': 'hidden-second-checker', 'project': True, 'lease': lease}])
         with self.assertRaisesRegex(RuntimeError, 'retried an invoked guest'):
             faults.assert_launches(self.root, 0, creates=2, executions=1)
+        early_execution = [row for row in rows if row['operation'] != 'exec']
+        early_execution.insert(2, {'operation': 'exec', 'name': 'first', 'project': True, 'lease': dict(lease)})
+        write(early_execution)
+        with self.assertRaisesRegex(RuntimeError, 'retried after invocation'):
+            faults.assert_launches(self.root, 0, creates=2, executions=1)
+        write(rows + [rows[-1]])
+        with self.assertRaisesRegex(RuntimeError, 'exact machine sequencing'):
+            faults.assert_launches(self.root, 0, creates=2, executions=1)
         missing = [dict(row, lease=None) if row['name'] == 'second' else row for row in rows]
         write(missing)
         with self.assertRaisesRegex(RuntimeError, 'lacks exact lease evidence'):
@@ -74,6 +82,24 @@ class PrivateFaultControls(unittest.TestCase):
         write(rows)
         with self.assertRaisesRegex(RuntimeError, 'original lease epoch/deadline'):
             faults.assert_launches(self.root, 0, creates=2, executions=1)
+
+    def test_foreign_fixture_cleanup_is_exact_and_requires_disk_absence(self):
+        fixture = faults.ForeignControl.__new__(faults.ForeignControl)
+        fixture.name = 'owned-proof-sentinel'
+        fixture.config = {'smol': {'home': str(self.root)}}
+        fixture.process = None
+        fixture.group = self.root / 'group'
+        fixture.created = True
+        matching = [{'name': fixture.name, 'labels': {'workstream.external-checker-owner': 'foreign-control'}}]
+        with patch.object(fixture, 'command') as command, patch.object(faults, 'runtime', side_effect=[matching, []]):
+            receipt = fixture.close()
+            command.assert_called_once_with('machine', 'delete', '--name', fixture.name, '--force')
+            self.assertTrue(receipt['disk_absent'])
+        disk = self.root / '.cache/smolvm/vms' / hashlib.sha256(fixture.name.encode()).hexdigest()[:16]
+        disk.mkdir(parents=True)
+        with patch.object(fixture, 'command'), patch.object(faults, 'runtime', side_effect=[matching, []]):
+            with self.assertRaisesRegex(RuntimeError, 'cleanup is incomplete'):
+                fixture.close()
 
     def test_busy_node_refused_before_control_or_config_mutation(self):
         config_path = self.root / 'service.json'
