@@ -165,7 +165,7 @@ def admission_database_env(isolated_database_env: str) -> Iterator[str]:
 
 def _settings(tmp_path: Path, *, maximum_bytes: int = 1024) -> Settings:
     durable_root = tmp_path / "durable"
-    durable_root.mkdir(mode=0o700, parents=True)
+    durable_root.mkdir(mode=0o700, parents=True, exist_ok=True)
     return Settings(
         _env_file=None,
         **artifact_admission_limit_settings(maximum_bytes),

@@ -908,7 +908,9 @@ async def test_verification_claim_and_terminal_failures_roll_back_both_sides(
             session.add_all((*resolver, *verifier))
             await session.commit()
             relationships = await seed_checker_output_relationships(session, namespace)
-            async with minted_source(tmp_path / "atomic-verify", b"verified") as source:
+            async with minted_source(
+                tmp_path / "atomic-verify", b'{"verified":true}', media_type="application/json"
+            ) as source:
                 _, _, _, admission = await _admit_checker_output(
                     session, settings, namespace, source, relationships=relationships)
                 assert (

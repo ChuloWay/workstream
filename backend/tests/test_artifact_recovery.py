@@ -192,7 +192,8 @@ async def _exhausted_job(session, settings, tmp_path, context):
     )
     relationships = await seed_checker_output_relationships(session, namespace, policy_bundle=policy_bundle)
     async with minted_source(
-        tmp_path / "checker-output", b"recover checker output", limits=limits,
+        tmp_path / "checker-output", b'{"output":"recover checker output"}',
+        media_type="application/json", limits=limits,
     ) as source:
         project_id, task_id, _checker_run_id, admission = await _admit_checker_output(
             session, settings, namespace, source, relationships=relationships)
