@@ -1,0 +1,89 @@
+{
+  "project": "terminal-systems",
+  "capability_id": "terminal_systems.package_intake",
+  "capability_version": "v1",
+  "phase": "pre_submit",
+  "configuration_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "check": {
+        "type": "string",
+        "enum": [
+          "package_layout",
+          "metadata_contract"
+        ]
+      }
+    },
+    "required": [
+      "check"
+    ]
+  },
+  "input_schema": {
+    "type": "object"
+  },
+  "resources": {
+    "cpu_millis": 500,
+    "memory_bytes": 134217728,
+    "deadline_ms": 30000,
+    "maximum_output_bytes": 32768
+  },
+  "samples": [
+    {
+      "name": "layout-valid",
+      "directory": "samples/valid",
+      "expected": "passed",
+      "expected_codes": [],
+      "configuration": {
+        "check": "package_layout"
+      },
+      "input": {}
+    },
+    {
+      "name": "metadata-valid",
+      "directory": "samples/valid",
+      "expected": "passed",
+      "expected_codes": [],
+      "configuration": {
+        "check": "metadata_contract"
+      },
+      "input": {}
+    },
+    {
+      "name": "layout-missing-file",
+      "directory": "samples/missing-file",
+      "expected": "failed",
+      "expected_codes": [
+        "layout_missing_required_file"
+      ],
+      "configuration": {
+        "check": "package_layout"
+      },
+      "input": {}
+    },
+    {
+      "name": "layout-wrong-type",
+      "directory": "samples/wrong-type",
+      "expected": "failed",
+      "expected_codes": [
+        "layout_wrong_entry_type"
+      ],
+      "configuration": {
+        "check": "package_layout"
+      },
+      "input": {}
+    },
+    {
+      "name": "metadata-string-command",
+      "directory": "samples/string-command",
+      "expected": "failed",
+      "expected_codes": [
+        "metadata_invalid_argument_array"
+      ],
+      "configuration": {
+        "check": "metadata_contract"
+      },
+      "input": {}
+    }
+  ]
+}
