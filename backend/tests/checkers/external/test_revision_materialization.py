@@ -88,8 +88,13 @@ class DiagnosticMaterialization:
             return await self.service.materialize(facts, consumer)
         except Exception as error:
             cause = error
+            seen = {id(cause)}
             while cause.__cause__ is not None or cause.__context__ is not None:
-                cause = cause.__cause__ or cause.__context__
+                following = cause.__cause__ or cause.__context__
+                if id(following) in seen:
+                    break
+                seen.add(id(following))
+                cause = following
             raise AssertionError("expected successful revision materialization") from cause
 
 
