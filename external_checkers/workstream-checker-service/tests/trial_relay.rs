@@ -663,6 +663,37 @@ fn invocation_cancellation_closes_waiting_relay_without_receipt() {
 }
 
 #[test]
+fn selected_but_unused_trial_capability_finishes_cleanly() {
+    let root = TestRoot::new();
+    let relay_root = root.child("relay");
+    let material_root = root.child("material");
+    let scratch_root = root.child("scratch");
+    let metadata = fs::metadata(&root.0).unwrap();
+    let engine = Arc::new(FakeEngine {
+        calls: AtomicUsize::new(0),
+        cleanup_confirmed: true,
+    });
+    let relay = TrialRelay::start(
+        &relay_root,
+        &material_root,
+        &scratch_root,
+        &identity(),
+        &profile(),
+        Arc::new(FakePublisher::default()),
+        engine.clone(),
+        metadata.uid(),
+        metadata.gid(),
+        Instant::now() + Duration::from_secs(2),
+        Arc::new(AtomicBool::new(false)),
+    )
+    .unwrap();
+    let finish = relay.finish();
+    assert_eq!(finish.failure, None);
+    assert!(!finish.plan_started && !finish.plan_completed);
+    assert_eq!(engine.calls.load(Ordering::Relaxed), 0);
+}
+
+#[test]
 fn observed_build_failure_publishes_work_evidence_and_skips_dependent_step() {
     let root = TestRoot::new();
     let relay_root = root.child("relay");

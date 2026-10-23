@@ -2,6 +2,7 @@
 
 mod model_relay;
 mod proxy_transport;
+mod trial_evidence_proxy;
 mod trial_profiles;
 mod trial_relay;
 
@@ -22,6 +23,7 @@ use std::path::{Component, Path, PathBuf};
 use std::process::{Child, Command, ExitStatus, Stdio};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use trial_profiles::TrialProfileCatalog;
 use workstream_checker_sdk::{
     canonical_hash, infrastructure_result, parse_request, validate_result, ValidatedRequest,
     MAX_REQUEST_BYTES,
@@ -50,6 +52,12 @@ struct ServiceConfig {
     socket_path: PathBuf,
     model_proxy_socket: Option<PathBuf>,
     model_relay_root: Option<PathBuf>,
+    #[serde(default)]
+    trial_authority_manifest_path: Option<PathBuf>,
+    #[serde(default)]
+    trial_authority_manifest_digest: Option<String>,
+    #[serde(skip)]
+    trial_profiles: Option<TrialProfileCatalog>,
     material_root: PathBuf,
     docker_binary: PathBuf,
     runtime: String,
@@ -438,8 +446,46 @@ fn run() -> Result<(), String> {
     let bytes = fs::read(path).map_err(|_| "configuration unavailable")?;
     let mut config: ServiceConfig =
         serde_json::from_slice(&bytes).map_err(|_| "configuration invalid")?;
+    load_trial_profiles(&mut config)?;
     let listener = prepare_listener(&mut config)?;
     serve_connections(&config, listener.incoming(), SOCKET_IO_TIMEOUT)
+}
+
+fn load_trial_profiles(config: &mut ServiceConfig) -> Result<(), String> {
+    match (
+        config.trial_authority_manifest_path.as_deref(),
+        config.trial_authority_manifest_digest.as_deref(),
+    ) {
+        (None, None) => Ok(()),
+        (Some(path), Some(digest)) => {
+            if !path.is_absolute() {
+                return Err("trial authority manifest path invalid".into());
+            }
+            let metadata =
+                fs::symlink_metadata(path).map_err(|_| "trial authority manifest unavailable")?;
+            if !metadata.file_type().is_file()
+                || metadata.file_type().is_symlink()
+                || metadata.len() == 0
+                || metadata.len() > 4 * 1024 * 1024
+                || fs::canonicalize(path).map_err(|_| "trial authority manifest path invalid")?
+                    != path
+            {
+                return Err("trial authority manifest path invalid".into());
+            }
+            let mut bytes = Vec::with_capacity(metadata.len() as usize);
+            File::open(path)
+                .map_err(|_| "trial authority manifest unavailable")?
+                .take(4 * 1024 * 1024 + 1)
+                .read_to_end(&mut bytes)
+                .map_err(|_| "trial authority manifest unavailable")?;
+            config.trial_profiles = Some(
+                TrialProfileCatalog::from_bytes(&bytes, digest)
+                    .map_err(|error| error.to_owned())?,
+            );
+            Ok(())
+        }
+        _ => Err("trial authority manifest configuration incomplete".into()),
+    }
 }
 
 fn serve_connections<I>(
@@ -2547,6 +2593,9 @@ mod tests {
             socket_path: socket_root.join("checker.sock"),
             model_proxy_socket: None,
             model_relay_root: None,
+            trial_authority_manifest_path: None,
+            trial_authority_manifest_digest: None,
+            trial_profiles: None,
             material_root,
             docker_binary: docker,
             runtime: "runc".into(),

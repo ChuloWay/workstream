@@ -877,7 +877,19 @@ def validate_trial_configuration(
     configuration: object, *, revision: bool = False
 ) -> None:
     """Require a trusted profile selector and this exact flat project selector."""
-    if type(configuration) is not dict or "trial_execution" in configuration:
+    selector_keys = {
+        "trial_profile_id",
+        "trial_profile_version",
+        "trial_profile_digest",
+        "trial_projection_id",
+        "trial_projection_version",
+        "trial_projection_digest",
+    }
+    if type(configuration) is not dict or any(
+        type(key) is not str
+        or key.startswith("trial_") and key not in selector_keys
+        for key in configuration
+    ):
         raise TrialPlanError("invalid_trial_configuration")
     try:
         profile_id = configuration["trial_profile_id"]

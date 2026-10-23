@@ -50,7 +50,7 @@ pub(crate) struct TrialRequestIdentity {
     pub(crate) worker_lease_expires_at: String,
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct TrialProfile {
     pub(crate) profile_id: String,
@@ -100,7 +100,7 @@ pub(crate) struct TrialProfile {
     pub(crate) maximum_pids_overrun: u64,
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct TrialSlotProfile {
     pub(crate) slot_kind: String,
@@ -112,7 +112,7 @@ pub(crate) struct TrialSlotProfile {
     pub(crate) retain_state_after: Vec<String>,
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct TrialMaterialProjectionProfile {
     pub(crate) role: String,
@@ -299,7 +299,7 @@ pub(crate) struct TrialEngineContext {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct TrialReceiptPublication {
-    pub(crate) schema_version: &'static str,
+    pub(crate) schema_version: String,
     pub(crate) request_identity_digest: String,
     pub(crate) originating_identity: TrialRequestIdentity,
     pub(crate) material_binding_digest: String,
@@ -519,6 +519,7 @@ struct UnavailableImageTrialResponse {
 pub(crate) struct TrialRelay {
     paths: RelayPaths,
     local_cancelled: Arc<AtomicBool>,
+    invocation_cancelled: Arc<AtomicBool>,
     worker: Option<JoinHandle<WorkerOutcome>>,
 }
 
@@ -593,6 +594,7 @@ impl TrialRelay {
         };
         let local_cancelled = Arc::new(AtomicBool::new(false));
         let worker_local_cancelled = Arc::clone(&local_cancelled);
+        let worker_invocation_cancelled = Arc::clone(&invocation_cancelled);
         let worker = thread::Builder::new()
             .name("checker-trial-relay".into())
             .spawn(move || {
@@ -603,7 +605,7 @@ impl TrialRelay {
                     engine,
                     deadline,
                     &worker_local_cancelled,
-                    &invocation_cancelled,
+                    &worker_invocation_cancelled,
                 )
             })
             .map_err(|_| TrialRelayStartFailure {
@@ -613,6 +615,7 @@ impl TrialRelay {
         Ok(Self {
             paths,
             local_cancelled,
+            invocation_cancelled,
             worker: Some(worker),
         })
     }
@@ -630,6 +633,7 @@ impl TrialRelay {
     }
 
     pub(crate) fn finish(mut self) -> TrialRelayFinish {
+        let invocation_was_cancelled = self.invocation_cancelled.load(Ordering::Acquire);
         self.local_cancelled.store(true, Ordering::Release);
         let outcome = self
             .worker
@@ -644,8 +648,12 @@ impl TrialRelay {
                 receipt_digest: None,
             });
         let cleanup_unsettled = outcome.cleanup_unsettled || !cleanup_paths(&self.paths);
+        let unused = !invocation_was_cancelled
+            && !outcome.plan_started
+            && outcome.failure == Some(TrialRelayFailure::Cancelled);
         let failure = outcome
             .failure
+            .filter(|_| !unused)
             .or(cleanup_unsettled.then_some(TrialRelayFailure::CleanupUnsettled));
         let receipt_usable = failure.is_none() && outcome.plan_completed;
         TrialRelayFinish {
@@ -1338,7 +1346,7 @@ fn canonical_receipt(
         return Err(TrialRelayFailure::CapacityExceeded);
     }
     let facts = TrialReceiptPublication {
-        schema_version: TRIAL_RECEIPT_SCHEMA,
+        schema_version: TRIAL_RECEIPT_SCHEMA.into(),
         request_identity_digest: context.identity.request_digest.clone(),
         originating_identity: context.identity.clone(),
         material_binding_digest: context.identity.material_binding_digest.clone(),
@@ -1421,9 +1429,7 @@ fn validate_retained_receipt(
         || receipt.byte_count > context.profile.maximum_receipt_bytes
         || receipt.receipt_digest != expected_digest
         || receipt.facts.schema_version != TRIAL_RECEIPT_SCHEMA
-        || receipt.facts.request_identity_digest != context.identity.request_digest
-        || receipt.facts.originating_identity != context.identity
-        || receipt.facts.material_binding_digest != context.identity.material_binding_digest
+        || !same_stable_trial_identity(&receipt.facts.originating_identity, &context.identity)
         || receipt.facts.profile_id != context.profile.profile_id
         || receipt.facts.profile_version != context.profile.profile_version
         || receipt.facts.profile_digest != context.profile.profile_digest
@@ -1444,6 +1450,24 @@ fn validate_retained_receipt(
         return Err(TrialRelayFailure::ImplementationUnavailable);
     }
     validate_execution(&receipt.facts.execution, plan, &context.profile)
+}
+
+fn same_stable_trial_identity(
+    original: &TrialRequestIdentity,
+    current: &TrialRequestIdentity,
+) -> bool {
+    original.project_id == current.project_id
+        && original.task_id == current.task_id
+        && original.assignment_id == current.assignment_id
+        && original.submission_id == current.submission_id
+        && original.submission_version == current.submission_version
+        && original.requirement_id == current.requirement_id
+        && original.registry_entry_id == current.registry_entry_id
+        && original.registry_entry_digest == current.registry_entry_digest
+        && original.checker_image_digest == current.checker_image_digest
+        && original.configuration_sha256 == current.configuration_sha256
+        && original.input_digest == current.input_digest
+        && original.materials_digest == current.materials_digest
 }
 
 fn validate_execution(

@@ -353,6 +353,9 @@ class RuntimeCheckerTests(unittest.TestCase):
             lambda value: value["configuration"].update(
                 trial_execution={"material_projections": []}
             ),
+            lambda value: value["configuration"].update(
+                trial_future_authority="forbidden"
+            ),
         ):
             selected = deepcopy(request())
             mutate(selected)

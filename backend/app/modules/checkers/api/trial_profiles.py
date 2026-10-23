@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
-from pathlib import PurePosixPath
+import json
+from pathlib import Path, PurePosixPath
 import re
 from types import MappingProxyType
 from typing import Literal, Mapping
@@ -17,6 +18,8 @@ Identifier = str
 _DIGEST = re.compile(r"sha256:[0-9a-f]{64}")
 _IDENTIFIER = re.compile(r"[a-z][a-z0-9_.-]{0,99}")
 _RETAINABLE_OUTCOMES = frozenset({"succeeded", "exit_nonzero", "signalled"})
+_MANIFEST_PROTOCOL = "workstream.trial_authority_manifest.v1"
+_MAXIMUM_MANIFEST_BYTES = 4 * 1024 * 1024
 
 
 class TrialProfileError(ValueError):
@@ -426,6 +429,30 @@ class TrialExecutionSelector:
     projection: TrialProjectionSelector
 
 
+@dataclass(frozen=True, slots=True)
+class TrialAuthorityBinding:
+    """One operator-provisioned binding of runtime authority to locked policy."""
+
+    registry_entry_id: UUID
+    registry_entry_digest: Sha256
+    checker_image_digest: Sha256
+    configuration_sha256: Sha256
+    profile: TrialExecutionProfile
+    projection: TrialExecutionProjection
+
+    def __post_init__(self) -> None:
+        if type(self.registry_entry_id) is not UUID or any(
+            type(value) is not str or _DIGEST.fullmatch(value) is None
+            for value in (
+                self.registry_entry_digest,
+                self.checker_image_digest,
+                self.configuration_sha256,
+            )
+        ):
+            raise TrialProfileError("trial authority binding is invalid")
+        self.projection.validate_profile(self.profile)
+
+
 def trial_selector_from_configuration(
     configuration: Mapping[str, object],
 ) -> TrialExecutionSelector | None:
@@ -439,6 +466,13 @@ def trial_selector_from_configuration(
         "trial_projection_digest",
     }
     present = selector_keys & configuration.keys()
+    reserved = {
+        key
+        for key in configuration
+        if type(key) is str and key.startswith("trial_")
+    }
+    if reserved - selector_keys:
+        raise TrialProfileError("trial execution selector is invalid")
     if not present:
         return None
     if present != selector_keys or "trial_execution" in configuration:
@@ -557,12 +591,206 @@ class PinnedTrialExecutionCatalog:
         )
 
 
+def load_trial_authority_manifest(path: Path, expected_digest: str) -> PinnedTrialExecutionCatalog:
+    """Read one bounded immutable operator manifest with no fallback."""
+    if (
+        not isinstance(path, Path)
+        or not path.is_absolute()
+        or type(expected_digest) is not str
+        or _DIGEST.fullmatch(expected_digest) is None
+    ):
+        raise TrialProfileError("trial authority manifest configuration is invalid")
+    try:
+        metadata = path.lstat()
+        if (
+            not path.is_file()
+            or path.is_symlink()
+            or not (0 < metadata.st_size <= _MAXIMUM_MANIFEST_BYTES)
+        ):
+            raise TrialProfileError("trial authority manifest is invalid")
+        raw = path.read_bytes()
+    except OSError as exc:
+        raise TrialProfileError("trial authority manifest is unavailable") from exc
+    try:
+        value = json.loads(
+            raw.decode("utf-8"),
+            object_pairs_hook=_closed_manifest_object,
+            parse_constant=_invalid_manifest_constant,
+        )
+    except (UnicodeError, json.JSONDecodeError, TrialProfileError) as exc:
+        raise TrialProfileError("trial authority manifest is invalid") from exc
+    if (
+        type(value) is not dict
+        or set(value) != {"protocol_version", "entries"}
+        or value["protocol_version"] != _MANIFEST_PROTOCOL
+        or type(value["entries"]) is not list
+        or not value["entries"]
+        or external_checker_json_hash(value) != expected_digest
+    ):
+        raise TrialProfileError("trial authority manifest is invalid")
+    bindings = tuple(_parse_authority_binding(item) for item in value["entries"])
+    binding_keys = {
+        (
+            item.registry_entry_id,
+            item.registry_entry_digest,
+            item.checker_image_digest,
+            item.configuration_sha256,
+        )
+        for item in bindings
+    }
+    if len(binding_keys) != len(bindings):
+        raise TrialProfileError("trial authority binding is duplicated")
+    return PinnedTrialExecutionCatalog(tuple((item.profile, item.projection) for item in bindings))
+
+
+def _closed_manifest_object(pairs: list[tuple[str, object]]) -> dict[str, object]:
+    value: dict[str, object] = {}
+    for key, item in pairs:
+        if key in value:
+            raise TrialProfileError("trial authority manifest is invalid")
+        value[key] = item
+    return value
+
+
+def _invalid_manifest_constant(_value: str) -> object:
+    raise TrialProfileError("trial authority manifest is invalid")
+
+
+def _parse_authority_binding(value: object) -> TrialAuthorityBinding:
+    if type(value) is not dict or set(value) != {
+        "registry_entry_id",
+        "registry_entry_digest",
+        "checker_image_digest",
+        "configuration_sha256",
+        "profile",
+        "projection",
+    }:
+        raise TrialProfileError("trial authority binding is invalid")
+    try:
+        return TrialAuthorityBinding(
+            registry_entry_id=UUID(value["registry_entry_id"]),
+            registry_entry_digest=value["registry_entry_digest"],
+            checker_image_digest=value["checker_image_digest"],
+            configuration_sha256=value["configuration_sha256"],
+            profile=_parse_profile(value["profile"]),
+            projection=_parse_projection(value["projection"]),
+        )
+    except (KeyError, TypeError, ValueError) as exc:
+        if isinstance(exc, TrialProfileError):
+            raise
+        raise TrialProfileError("trial authority binding is invalid") from exc
+
+
+def _parse_profile(value: object) -> TrialExecutionProfile:
+    if type(value) is not dict or set(value) != set(TrialExecutionProfile.__dataclass_fields__):
+        raise TrialProfileError("trial execution profile is invalid")
+    selector = value["selector"]
+    limits = value["limits"]
+    if (
+        type(selector) is not dict
+        or set(selector)
+        != {
+            "profile_id",
+            "profile_version",
+            "profile_digest",
+        }
+        or type(limits) is not dict
+        or set(limits) != set(TrialResourceCeilings.__dataclass_fields__)
+    ):
+        raise TrialProfileError("trial execution profile is invalid")
+    fields = dict(value)
+    fields["selector"] = TrialProfileSelector(
+        UUID(selector["profile_id"]), selector["profile_version"], selector["profile_digest"]
+    )
+    fields["limits"] = TrialResourceCeilings(**limits)
+    for name in (
+        "approved_base_digests",
+        "permitted_source_roles",
+        "permitted_material_roles",
+        "permitted_operations",
+        "permitted_state_retention_outcomes",
+        "builder_capabilities",
+        "child_capabilities",
+    ):
+        fields[name] = _manifest_tuple(fields[name])
+    return TrialExecutionProfile(**fields)
+
+
+def _parse_projection(value: object) -> TrialExecutionProjection:
+    if type(value) is not dict or set(value) != set(TrialExecutionProjection.__dataclass_fields__):
+        raise TrialProfileError("trial execution projection is invalid")
+    selector = value["selector"]
+    materials = value["material_projections"]
+    slots = value["slot_templates"]
+    if (
+        type(selector) is not dict
+        or set(selector)
+        != {
+            "projection_id",
+            "projection_version",
+            "projection_digest",
+        }
+        or type(materials) is not list
+        or type(slots) is not list
+    ):
+        raise TrialProfileError("trial execution projection is invalid")
+    fields = dict(value)
+    fields["selector"] = TrialProjectionSelector(
+        UUID(selector["projection_id"]),
+        selector["projection_version"],
+        selector["projection_digest"],
+    )
+    fields["material_projections"] = tuple(
+        TrialMaterialProjection(
+            role=item["role"],
+            source_role=item["source_role"],
+            projection_kind=item["projection_kind"],
+            source_relative=item["source_relative"],
+            destination_relative=item["destination_relative"],
+            exclusions=_manifest_tuple(item["exclusions"]),
+        )
+        for item in materials
+        if _exact_manifest_item(item, TrialMaterialProjection)
+    )
+    if len(fields["material_projections"]) != len(materials):
+        raise TrialProfileError("trial material projection is invalid")
+    fields["slot_templates"] = tuple(
+        TrialSlotProjection(
+            slot_kind=item["slot_kind"],
+            minimum_occurrences=item["minimum_occurrences"],
+            maximum_occurrences=item["maximum_occurrences"],
+            seed_roles=_manifest_tuple(item["seed_roles"]),
+            visible_roles=_manifest_tuple(item["visible_roles"]),
+            fresh_workspace=item["fresh_workspace"],
+            retain_state_after=_manifest_tuple(item["retain_state_after"]),
+        )
+        for item in slots
+        if _exact_manifest_item(item, TrialSlotProjection)
+    )
+    if len(fields["slot_templates"]) != len(slots):
+        raise TrialProfileError("trial slot projection is invalid")
+    fields["allowed_material_roles"] = _manifest_tuple(fields["allowed_material_roles"])
+    fields["build_context_roles"] = _manifest_tuple(fields["build_context_roles"])
+    return TrialExecutionProjection(**fields)
+
+
+def _exact_manifest_item(value: object, cls: type[object]) -> bool:
+    return type(value) is dict and set(value) == set(cls.__dataclass_fields__)
+
+
+def _manifest_tuple(value: object) -> tuple:
+    if type(value) is not list:
+        raise TrialProfileError("trial authority manifest is invalid")
+    return tuple(value)
+
+
 __all__ = (
     "PinnedTrialProfileCatalog",
     "PinnedTrialExecutionCatalog",
     "TrialExecutionProfile",
     "TrialExecutionProjection",
     "TrialExecutionSelector",
+    "TrialAuthorityBinding",
     "TrialMaterialProjection",
     "TrialProfileError",
     "TrialProfileSelector",
@@ -571,6 +799,7 @@ __all__ = (
     "TrialSlotProjection",
     "make_trial_execution_profile",
     "make_trial_execution_projection",
+    "load_trial_authority_manifest",
     "profile_digest",
     "projection_digest",
     "trial_selector_from_configuration",

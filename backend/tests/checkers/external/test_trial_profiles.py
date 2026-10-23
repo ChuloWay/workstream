@@ -1,8 +1,10 @@
-from dataclasses import replace
+from dataclasses import asdict, replace
+import json
 from uuid import UUID
 
 import pytest
 
+from app.modules.checkers.api.external import external_checker_json_hash
 from app.modules.checkers.api.trial_profiles import (
     PinnedTrialExecutionCatalog,
     PinnedTrialProfileCatalog,
@@ -15,6 +17,7 @@ from app.modules.checkers.api.trial_profiles import (
     TrialSlotProjection,
     make_trial_execution_profile,
     make_trial_execution_projection,
+    load_trial_authority_manifest,
     trial_selector_from_configuration,
 )
 
@@ -171,6 +174,7 @@ def test_locked_configuration_parses_trial_and_model_selectors_independently():
     (
         lambda value: value.pop("trial_profile_digest"),
         lambda value: value.update(trial_execution={"network_mode": "host"}),
+        lambda value: value.update(trial_future_authority="forbidden"),
         lambda value: value.update(trial_projection_digest=["bad"]),
         lambda value: value.update(trial_profile_version=True),
     ),
@@ -243,3 +247,34 @@ def test_projection_rejects_escape_overlap_shadow_and_unsafe_state_retention():
 
     with pytest.raises(TrialProfileError, match="slot projection"):
         TrialSlotProjection("bad", 1, 1, (), (), True, ("deadline_exceeded",))
+
+
+def test_operator_manifest_loader_is_digest_bound_strict_and_shared(tmp_path):
+    selected = profile()
+    projected = projection(selected)
+    entry = {
+        "registry_entry_id": "018f6f49-66b8-7d2a-bf4d-0e2eeaa00003",
+        "registry_entry_digest": digest("a"),
+        "checker_image_digest": digest("b"),
+        "configuration_sha256": digest("c"),
+        "profile": asdict(selected),
+        "projection": asdict(projected),
+    }
+    value = {"protocol_version": "workstream.trial_authority_manifest.v1", "entries": [entry]}
+    value = json.loads(json.dumps(value, default=str))
+    path = tmp_path / "trial-authority.json"
+    path.write_text(json.dumps(value, default=str), encoding="utf-8")
+    catalog = load_trial_authority_manifest(path, external_checker_json_hash(value))
+    selector = trial_selector_from_configuration(configuration(selected, projected))
+    assert selector is not None
+    assert catalog.read(selector) == (selected, projected)
+
+    with pytest.raises(TrialProfileError, match="invalid"):
+        load_trial_authority_manifest(path, digest("f"))
+
+    path.write_text(
+        '{"protocol_version":"workstream.trial_authority_manifest.v1","entries":[],"entries":[]}',
+        encoding="utf-8",
+    )
+    with pytest.raises(TrialProfileError, match="invalid"):
+        load_trial_authority_manifest(path, digest("f"))
