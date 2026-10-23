@@ -53,6 +53,11 @@ OPERATIONS = {
         "/api/v1/projects/{project_id}/role-grants/{grant_id}/revoke",
         "post",
     ),
+    "guides_create": ("/api/v1/projects/{project_id}/guides", "post"),
+    "guides_update": (
+        "/api/v1/projects/{project_id}/guides/{guide_id}",
+        "patch",
+    ),
 }
 
 

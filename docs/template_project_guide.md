@@ -314,15 +314,24 @@ Each repeated issue becomes a guide update, checker update, review policy update
 revision policy update, contribution policy update, template update, or
 reviewer training note.
 
-## Catalogue Coverage And Engineering Handoff
+## Checker Coverage And Engineering Handoff
 
-Setup compares the guide and its task examples with both current checker
-catalogues. Each required unsupported automated check produces one suggestion
-with its requirement ID, pre-submit or post-submit stage, rationale and guide
-evidence. Supported matches remain exact catalogue references even in a blocked
-report; blocked setup creates no policy. Human review does not imply a missing
-automated checker, and a fully covered project needs no suggestions. Optional
-improvements may appear in setup notes.
+Describe required outcomes in the guide; the PM need not label checks PRE or POST
+or design their implementations. Setup infers testable checks from those outcomes
+and task examples, and compares them with registered checker capabilities. Static
+or reliably bounded checks within 60 seconds belong before Submission creation;
+longer execution and model evaluation belong in background post-submit checks.
+Each checker requirement has a classification rationale and a typed specification
+of inputs, steps, pass conditions, findings, tests and runtime dependencies.
+
+Each required unsupported check produces one staged capability suggestion linked
+to that specification and guide evidence. Missing implementations produce a draft
+with warnings and prevent activation until covered by approved bindings; they do
+not by themselves make the guide insufficient. Actual guide blockers produce a
+blocked report and no policy. Supported matches retain exact registered references
+even in blocked reports. Explicit human decisions retain their authority, while
+supporting testable checks are classified separately. A fully covered project
+needs no suggestions. Optional improvements may appear in setup notes.
 
 The canonical compilation stores this handoff. POL-05 owns its manager-facing
 review, correction and approval surface. A manager can request engineering work;

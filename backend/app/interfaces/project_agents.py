@@ -27,10 +27,18 @@ from pydantic import (
     model_validator,
 )
 
+from app.core.hashing import canonical_json_hash
 from app.modules.projects.api.task_examples import ProjectGuideTaskExamples
 from app.modules.checkers.api.external import (
+    EXTERNAL_CHECKER_EXECUTION_CLEANUP_MARGIN_MS,
     ExternalCheckerCapabilityDefinition,
     ExternalCheckerCapabilityProjection,
+)
+from app.modules.checkers.api.external_policy import (
+    MAXIMUM_SELECTED_POST_EXECUTION_BUDGET_MS,
+    MAXIMUM_SELECTED_PRE_EXECUTION_BUDGET_MS,
+    SELECTED_POST_MATERIALIZATION_BUDGET_MS,
+    WORKSTREAM_DEFAULT_EXECUTION_BUDGET_MS,
 )
 from app.interfaces.external_services import (
     ExternalServiceAdapter,
@@ -78,7 +86,9 @@ _MODEL_PROSE_SCHEMA = {
         "Plain prose only. No URLs, email addresses, credentials, filesystem paths, "
         "slash-separated words, code, or executable command names. Spell alternatives "
         "with words (for example, 'training and evaluation', not a slash expression). "
-        "Describe shell instructions and module loading without literal command tokens."
+        "Describe shell instructions and module loading without literal command tokens. "
+        "Source-defined field identifiers, types, numeric constraints and constants "
+        "may be described explicitly; put file and directory paths in typed relative_path inputs."
     ),
 }
 ModelProse = Annotated[str, Field(json_schema_extra=_MODEL_PROSE_SCHEMA)]
@@ -294,6 +304,304 @@ class PlatformCoverageRef(BaseModel):
     )
 
 
+CheckEvaluationMethod = Literal["static_inspection", "isolated_execution", "model_evaluation"]
+CheckExecutionMode = Literal["bounded_pre_submit", "background"]
+CheckInputKind = Literal[
+    "package",
+    "manifest",
+    "request_metadata",
+    "relative_file",
+    "relative_directory",
+    "task_context",
+    "guide_context",
+    "prepared_material",
+]
+CheckerDependencyKind = Literal[
+    "checker_tool",
+    "isolated_execution",
+    "nested_sandbox",
+    "task_context",
+    "guide_context",
+    "model_service",
+    "execution_capacity",
+    "prepared_material",
+]
+DependencyProvisioning = Literal["current_runner", "checker_implementation", "runtime_gap"]
+InfrastructureFailureCode = Literal[
+    "capacity_exceeded",
+    "deadline_exceeded",
+    "material_unavailable",
+    "implementation_unavailable",
+    "invalid_output",
+]
+_INFRASTRUCTURE_FAILURE_CODES = frozenset(
+    {
+        "capacity_exceeded",
+        "deadline_exceeded",
+        "material_unavailable",
+        "implementation_unavailable",
+        "invalid_output",
+    }
+)
+
+
+class CheckInput(BaseModel):
+    """One exact material or context input needed by a proposed check."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    input_id: PolicyIdentifier
+    kind: CheckInputKind
+    relative_path: (
+        Annotated[
+            str,
+            Field(
+                min_length=1,
+                max_length=500,
+                description="Canonical relative POSIX path inside the submitted package.",
+            ),
+        ]
+        | None
+    ) = Field(default=None, exclude_if=lambda value: value is None)
+    purpose: ModelProse
+
+    _input_id = field_validator("input_id")(_validated_identifier)
+    _purpose = field_validator("purpose")(_validated_safe_model_text)
+
+    @model_validator(mode="after")
+    def validate_relative_path(self) -> CheckInput:
+        """Require a safe path only for an exact file or directory input."""
+        path_required = self.kind in {"relative_file", "relative_directory"}
+        if path_required != (self.relative_path is not None):
+            raise ValueError("check input relative path does not match its kind")
+        if self.relative_path is not None and not is_canonical_relative_path(self.relative_path):
+            raise ValueError("check input relative path is invalid")
+        return self
+
+
+class CheckFailureFinding(BaseModel):
+    """One stable work finding an implementation must return when observed."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    code: PolicyIdentifier
+    level: Literal["warning", "error", "coverage_incomplete"]
+    condition: ModelProse
+    message: ModelProse
+
+    _code = field_validator("code")(_validated_identifier)
+    _condition = field_validator("condition")(_validated_safe_model_text)
+    _message = field_validator("message")(_validated_safe_model_text)
+
+
+class CheckNegativeTest(BaseModel):
+    """One representative non-happy path and its exact observable outcome."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    name: PolicyIdentifier
+    scenario: ModelProse
+    expected_verdict: Literal["passed", "failed"]
+    expected_finding_codes: tuple[PolicyIdentifier, ...] = Field(min_length=1, max_length=10)
+
+    _name = field_validator("name")(_validated_identifier)
+    _scenario = field_validator("scenario")(_validated_safe_model_text)
+
+    @field_validator("expected_finding_codes")
+    @classmethod
+    def validate_expected_finding_codes(cls, values: tuple[str, ...]) -> tuple[str, ...]:
+        """Keep the expected finding set stable, bounded and unambiguous."""
+        if len(values) != len(set(values)):
+            raise ValueError("negative test finding codes must be unique")
+        return tuple(_validated_identifier(value) for value in values)
+
+
+class CheckRuntimeDependency(BaseModel):
+    """One implementation or runner dependency and its availability owner."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    dependency_id: PolicyIdentifier
+    kind: CheckerDependencyKind
+    provisioning: DependencyProvisioning
+    purpose: ModelProse
+    unavailable_code: InfrastructureFailureCode
+
+    _dependency_id = field_validator("dependency_id")(_validated_identifier)
+    _purpose = field_validator("purpose")(_validated_safe_model_text)
+
+    @model_validator(mode="after")
+    def validate_provisioning(self) -> CheckRuntimeDependency:
+        """Describe current runner support without treating desired access as live."""
+        expected = {
+            "checker_tool": ("checker_implementation", "implementation_unavailable"),
+            "isolated_execution": ("current_runner", "implementation_unavailable"),
+            "nested_sandbox": ("runtime_gap", "implementation_unavailable"),
+            "task_context": ("runtime_gap", "material_unavailable"),
+            "guide_context": ("runtime_gap", "material_unavailable"),
+            "prepared_material": ("runtime_gap", "material_unavailable"),
+            "model_service": ("runtime_gap", "implementation_unavailable"),
+            "execution_capacity": ("runtime_gap", "capacity_exceeded"),
+        }[self.kind]
+        if (self.provisioning, self.unavailable_code) != expected:
+            raise ValueError("check dependency availability is invalid")
+        return self
+
+
+class CheckInfrastructureFailure(BaseModel):
+    """One non-work failure that must never become a failed work verdict."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    code: InfrastructureFailureCode
+    condition: ModelProse
+
+    _condition = field_validator("condition")(_validated_safe_model_text)
+
+
+class CheckSpecification(BaseModel):
+    """Bounded implementation and test handoff for one atomic requirement."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    evaluation_method: CheckEvaluationMethod = Field(
+        description=(
+            "isolated_execution requires a runtime dependency of kind isolated_execution; "
+            "model_evaluation requires model_service and belongs to POST background work. "
+            "Model review assesses content; proving runtime outcomes or built-environment "
+            "properties requires isolated_execution with actual trials and observations."
+        )
+    )
+    execution_mode: CheckExecutionMode
+    maximum_duration_seconds: StrictInt = Field(
+        ge=1,
+        le=3600,
+        description=(
+            "Proposed engineering budget for one check execution, not a measured runtime "
+            "promise. PRE checks must be at most 60 seconds; POST checks may use up to "
+            "3600 seconds in background execution."
+        ),
+    )
+    stage_rationale: ModelProse
+    inputs: tuple[CheckInput, ...] = Field(
+        min_length=1,
+        max_length=20,
+        description=(
+            "All materials needed to observe every pass condition and negative case. "
+            "Every task_context, guide_context or prepared_material runtime dependency "
+            "requires an input of that same kind, and vice versa."
+        ),
+    )
+    check_steps: tuple[ModelProse, ...] = Field(
+        min_length=1,
+        max_length=20,
+        description=(
+            "Implementable steps on the declared inputs. Static inspection needs explicit "
+            "syntax or deterministic predicates, including source-defined field identifiers, "
+            "types, values, ranges and exceptions rather than references to documented rules; "
+            "qualitative free-form comparison needs "
+            "model evaluation in POST. Never invent a document grammar absent from the guide."
+        ),
+    )
+    pass_conditions: tuple[ModelProse, ...] = Field(
+        min_length=1,
+        max_length=20,
+        description=(
+            "Observable outcomes proved by the declared method and inputs. A model's "
+            "review of claimed execution is not proof of actual execution; a static "
+            "predicate cannot interpret free-form explanations. Require mandatory content "
+            "to exist before judging its accuracy; absent required claims cannot pass vacuously."
+        ),
+    )
+    failure_findings: tuple[CheckFailureFinding, ...] = Field(min_length=1, max_length=20)
+    positive_tests: tuple[ModelProse, ...] = Field(min_length=1, max_length=10)
+    negative_tests: tuple[CheckNegativeTest, ...] = Field(min_length=1, max_length=10)
+    runtime_dependencies: tuple[CheckRuntimeDependency, ...] = Field(
+        max_length=10,
+        description=(
+            "Declare the evaluation method's required dependency and any task_context, "
+            "guide_context or prepared_material input dependency. Each of those three kinds "
+            "must occur in both inputs and runtime_dependencies, never just one. "
+            "Each unavailable_code must appear in "
+            "infrastructure_failures."
+        ),
+    )
+    infrastructure_failures: tuple[CheckInfrastructureFailure, ...] = Field(
+        min_length=1, max_length=5
+    )
+
+    _stage_rationale = field_validator("stage_rationale")(_validated_safe_model_text)
+
+    @field_validator("check_steps", "pass_conditions", "positive_tests")
+    @classmethod
+    def validate_prose_items(cls, values: tuple[str, ...]) -> tuple[str, ...]:
+        """Apply safe-prose validation to every collection member."""
+        return tuple(_validated_safe_model_text(value) for value in values)
+
+    @model_validator(mode="after")
+    def validate_linkage(self) -> CheckSpecification:
+        """Reject duplicate handoff identities and contradictory expected results."""
+        for values, message in (
+            ([item.input_id for item in self.inputs], "check inputs must be unique"),
+            (
+                [item.code for item in self.failure_findings],
+                "check failure findings must be unique",
+            ),
+            (
+                [item.name for item in self.negative_tests],
+                "check negative tests must be unique",
+            ),
+            (
+                [item.dependency_id for item in self.runtime_dependencies],
+                "check runtime dependencies must be unique",
+            ),
+            (
+                [item.code for item in self.infrastructure_failures],
+                "check infrastructure failures must be unique",
+            ),
+        ):
+            if len(values) != len(set(values)):
+                raise ValueError(message)
+
+        findings = {item.code: item for item in self.failure_findings}
+        if set(findings).intersection(_INFRASTRUCTURE_FAILURE_CODES):
+            raise ValueError("work and infrastructure finding codes must be distinct")
+        for test in self.negative_tests:
+            referenced = [findings.get(code) for code in test.expected_finding_codes]
+            if any(item is None for item in referenced):
+                raise ValueError("negative test references an unknown finding")
+            has_error = any(item.level == "error" for item in referenced if item is not None)
+            if (test.expected_verdict == "failed") != has_error:
+                raise ValueError("negative test verdict disagrees with its findings")
+
+        dependency_kinds = {item.kind for item in self.runtime_dependencies}
+        if self.evaluation_method == "model_evaluation" and "model_service" not in dependency_kinds:
+            raise ValueError("model evaluation requires a model service dependency")
+        if (
+            self.evaluation_method == "isolated_execution"
+            and "isolated_execution" not in dependency_kinds
+        ):
+            raise ValueError("isolated evaluation requires an execution dependency")
+        for item in self.inputs:
+            if (
+                item.kind in {"task_context", "guide_context", "prepared_material"}
+                and item.kind not in dependency_kinds
+            ):
+                raise ValueError("check context input requires a runtime dependency")
+        material_dependencies = dependency_kinds.intersection(
+            {"task_context", "guide_context", "prepared_material"}
+        )
+        if material_dependencies - {item.kind for item in self.inputs}:
+            raise ValueError("check material dependency requires a declared input")
+        available_failures = {item.code for item in self.infrastructure_failures}
+        if any(
+            dependency.unavailable_code not in available_failures
+            for dependency in self.runtime_dependencies
+        ):
+            raise ValueError("check dependency failure is not specified")
+        return self
+
+
 class AtomicGuideRequirement(BaseModel):
     """One evidence-linked guide requirement with one disposition."""
 
@@ -303,20 +611,45 @@ class AtomicGuideRequirement(BaseModel):
     statement: ModelProse
     disposition: RequirementDisposition = Field(
         description=(
-            "Use human_review for work assigned to an authorized human reviewer. "
-            "Use a capability gap only for required unsupported automated evaluation. "
-            "A guide_blocker requires guide_blocked and no artifact policy. Capability "
-            "gaps remain explicit activation blockers while the manager reviews the "
-            "available exact bindings in a warning-ready proposal."
+            "Infer checkable requirements from observable outcomes even when the guide "
+            "does not call them automated. Use supported_pre_submit for static or other "
+            "bounded checks that reliably complete within 60 seconds, and "
+            "supported_post_submit for longer background evaluation. Use the matching "
+            "capability gap when the required implementation is unavailable; a gap keeps "
+            "the proposal warning-ready but blocks activation. Use human_review only for "
+            "authorized human judgment, and project_lifecycle_policy for project operation "
+            "outside submission evaluation. Revision explanation, rerun evidence and objective "
+            "preservation remain separately checkable work requirements, not lifecycle. "
+            "A guide_blocker requires guide_blocked and no "
+            "artifact policy."
         )
     )
     platform_coverage: PlatformCoverageRef | None = None
+    classification_rationale: ModelProse | None = Field(
+        default=None,
+        exclude_if=lambda value: value is None,
+        description=(
+            "Explain the selected ownership and, for a staged check, why its work and "
+            "runtime fit PRE or POST."
+        ),
+    )
+    check_specification: CheckSpecification | None = Field(
+        default=None,
+        exclude_if=lambda value: value is None,
+        description=(
+            "Typed implementation and test handoff inferred from the required outcome for "
+            "every supported or capability-gap PRE or POST requirement."
+        ),
+    )
     evidence_refs: tuple[GuideEvidenceRef, ...] = Field(
         default=(), max_length=MAXIMUM_EVIDENCE_REFS
     )
 
     _requirement_id = field_validator("requirement_id")(_validated_identifier)
     _statement = field_validator("statement")(_validated_safe_model_text)
+    _classification_rationale = field_validator("classification_rationale")(
+        lambda value: _validated_safe_model_text(value) if value is not None else None
+    )
 
 
 class SubmissionArtifactPolicyProposal(BaseModel):
@@ -325,11 +658,17 @@ class SubmissionArtifactPolicyProposal(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     packaging: Literal["zip"] = "zip"
-    maximum_file_size_bytes: StrictInt = Field(gt=0, le=10 * 1024 * 1024 * 1024)
-    maximum_package_size_bytes: StrictInt = Field(
+    maximum_file_size_bytes: StrictInt | None = Field(
+        default=None,
         gt=0,
         le=10 * 1024 * 1024 * 1024,
-        description="Maximum total expanded bytes in the submitted ZIP, verified from actual contents; not compressed upload bytes.",
+        description="Project-specific maximum expanded bytes per submitted file. Null adds no project limit; platform safety limits always apply.",
+    )
+    maximum_package_size_bytes: StrictInt | None = Field(
+        default=None,
+        gt=0,
+        le=10 * 1024 * 1024 * 1024,
+        description="Project-specific maximum total expanded bytes in the submitted ZIP, verified from actual contents; not compressed upload bytes. Null adds no project limit; platform safety limits always apply.",
     )
     maximum_archive_size_bytes: StrictInt | None = Field(
         default=None,
@@ -345,7 +684,7 @@ class SubmissionArtifactPolicyProposal(BaseModel):
     required_artifacts: tuple[Annotated[str, Field(min_length=1, max_length=500)], ...] = Field(
         default=(),
         max_length=100,
-        description="Exact canonical relative POSIX paths inside the submitted ZIP. A bare path such as task.toml requires that file at the ZIP root; wrapper/task.toml does not satisfy it. Nested paths such as outputs/answer.md require that exact location. No traversal, storage references or secret files.",
+        description="Exact canonical relative POSIX regular-file paths inside the submitted ZIP. Required directories belong in checker specifications, never this hash-required file list. A bare path such as task.toml requires that file at the ZIP root; wrapper/task.toml does not satisfy it. Nested paths such as outputs/answer.md require that exact location. No trailing separators, duplicate paths, traversal, storage references or secret files.",
     )
     forbidden_artifacts: tuple[Annotated[str, Field(min_length=1, max_length=500)], ...] = Field(
         default=(),
@@ -386,7 +725,11 @@ class SubmissionArtifactPolicyProposal(BaseModel):
     @model_validator(mode="after")
     def validate_package_limit(self) -> SubmissionArtifactPolicyProposal:
         """Require coherent file/package limits and artifact sets."""
-        if self.maximum_file_size_bytes > self.maximum_package_size_bytes:
+        if (
+            self.maximum_file_size_bytes is not None
+            and self.maximum_package_size_bytes is not None
+            and self.maximum_file_size_bytes > self.maximum_package_size_bytes
+        ):
             raise ValueError("file limit exceeds package limit")
         if set(self.required_artifacts).intersection(self.forbidden_artifacts):
             raise ValueError("artifact policy requirements conflict")
@@ -409,84 +752,6 @@ class CapabilitySuggestion(BaseModel):
     _requirement_id = field_validator("requirement_id")(_validated_identifier)
     _title = field_validator("title")(_validated_safe_model_text)
     _rationale = field_validator("rationale")(_validated_safe_model_text)
-
-
-class ProjectGuideCorrectionFeedback(BaseModel):
-    """Bounded manager input tied to the exact result being reconsidered."""
-
-    model_config = ConfigDict(extra="forbid", frozen=True)
-    operation_id: UUID
-    predecessor_compilation_id: UUID
-    predecessor_result_hash: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
-    target_digest: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
-    reason: str = Field(min_length=1, max_length=4000)
-
-
-class ProjectGuideCompilationContext(BaseModel):
-    """Exact bounded input for one future unified compilation attempt."""
-
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-    material: GuideDocumentManifest
-    setup_run_id: UUID
-    setup_generation: StrictInt = Field(ge=1)
-    instruction_version: str = Field(max_length=100)
-    agent_identity: str = Field(max_length=100)
-    agent_version: str = Field(
-        max_length=100, json_schema_extra={"pattern": _SAFE_IDENTIFIER.pattern}
-    )
-    runtime_configuration: ProjectGuideRuntimeConfiguration
-    checker_capabilities: ExternalCheckerCapabilityProjection
-    task_examples: ProjectGuideTaskExamples
-    correction_feedback: ProjectGuideCorrectionFeedback | None = None
-
-    @model_validator(mode="after")
-    def validate_instruction_configuration(self) -> ProjectGuideCompilationContext:
-        """Bind the semantic instruction version to its exact execution snapshot."""
-        configuration = self.runtime_configuration
-        if (
-            self.material.setup_run_id != self.setup_run_id
-            or self.material.setup_generation != self.setup_generation
-            or len(self.material.documents) > configuration.maximum_documents
-            or any(
-                item.byte_count > configuration.maximum_document_bytes
-                for item in self.material.documents
-            )
-            or sum(item.byte_count for item in self.material.documents)
-            > configuration.maximum_total_document_bytes
-        ):
-            raise ValueError("compilation document manifest exceeds its execution boundary")
-        if self.instruction_version != self.runtime_configuration.instruction_version:
-            raise ValueError("compilation instruction configuration mismatch")
-        return self
-
-
-def canonical_project_guide_compilation_context_bytes(
-    context: ProjectGuideCompilationContext,
-) -> bytes:
-    """Serialize one context without double-encoding canonical guide JSON."""
-    body = context.model_dump(mode="json")
-    if context.correction_feedback is None:
-        # Absent optional input contributes no canonical field; a real
-        # correction is always included in the exact attempt identity.
-        del body["correction_feedback"]
-    return json.dumps(
-        body,
-        sort_keys=True,
-        separators=(",", ":"),
-        ensure_ascii=False,
-        allow_nan=False,
-    ).encode("utf-8")
-
-
-def project_guide_compilation_prompt_bytes(context: ProjectGuideCompilationContext) -> bytes:
-    """Serialize only source and capability input, excluding trusted runtime settings."""
-    body = json.loads(canonical_project_guide_compilation_context_bytes(context))
-    del body["runtime_configuration"]
-    body["material"] = context.material.agent_projection()
-    return json.dumps(
-        body, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False
-    ).encode("utf-8")
 
 
 class ProjectGuideCompilationResult(BaseModel):
@@ -529,6 +794,101 @@ class ProjectGuideCompilationResult(BaseModel):
     _agent_version = field_validator("agent_version")(_validated_identifier)
 
 
+class ProjectGuideCorrectionFeedback(BaseModel):
+    """Bounded manager input tied to the exact result being reconsidered."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    operation_id: UUID
+    predecessor_compilation_id: UUID
+    predecessor_result_hash: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
+    target_digest: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
+    reason: str = Field(min_length=1, max_length=4000)
+
+
+class ProjectGuideCompilationContext(BaseModel):
+    """Exact bounded input for one future unified compilation attempt."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    material: GuideDocumentManifest
+    setup_run_id: UUID
+    setup_generation: StrictInt = Field(ge=1)
+    instruction_version: str = Field(max_length=100)
+    agent_identity: str = Field(max_length=100)
+    agent_version: str = Field(
+        max_length=100, json_schema_extra={"pattern": _SAFE_IDENTIFIER.pattern}
+    )
+    runtime_configuration: ProjectGuideRuntimeConfiguration
+    checker_capabilities: ExternalCheckerCapabilityProjection
+    task_examples: ProjectGuideTaskExamples
+    correction_feedback: ProjectGuideCorrectionFeedback | None = None
+    correction_predecessor: ProjectGuideCompilationResult | None = None
+
+    @model_validator(mode="after")
+    def validate_instruction_configuration(self) -> ProjectGuideCompilationContext:
+        """Bind the semantic instruction version to its exact execution snapshot."""
+        self.require_correction_predecessor()
+        configuration = self.runtime_configuration
+        if (
+            self.material.setup_run_id != self.setup_run_id
+            or self.material.setup_generation != self.setup_generation
+            or len(self.material.documents) > configuration.maximum_documents
+            or any(
+                item.byte_count > configuration.maximum_document_bytes
+                for item in self.material.documents
+            )
+            or sum(item.byte_count for item in self.material.documents)
+            > configuration.maximum_total_document_bytes
+        ):
+            raise ValueError("compilation document manifest exceeds its execution boundary")
+        if self.instruction_version != self.runtime_configuration.instruction_version:
+            raise ValueError("compilation instruction configuration mismatch")
+        return self
+
+    def require_correction_predecessor(self) -> None:
+        """Authenticate derived correction material against its existing commitment."""
+        feedback = self.correction_feedback
+        predecessor = self.correction_predecessor
+        if (feedback is None) != (predecessor is None):
+            raise ValueError("correction feedback and predecessor must be paired")
+        if feedback is not None and canonical_json_hash(
+            predecessor.model_dump(mode="json")
+        ) != feedback.predecessor_result_hash:
+            raise ValueError("correction predecessor hash mismatch")
+
+
+def canonical_project_guide_compilation_context_bytes(
+    context: ProjectGuideCompilationContext,
+) -> bytes:
+    """Serialize one context without double-encoding canonical guide JSON."""
+    context.require_correction_predecessor()
+    # The immutable feedback hash already commits this exact derived body.
+    body = context.model_dump(mode="json", exclude={"correction_predecessor"})
+    if context.correction_feedback is None:
+        # Absent optional input contributes no canonical field; a real
+        # correction is always included in the exact attempt identity.
+        del body["correction_feedback"]
+    return json.dumps(
+        body,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+        allow_nan=False,
+    ).encode("utf-8")
+
+
+def project_guide_compilation_prompt_bytes(context: ProjectGuideCompilationContext) -> bytes:
+    """Serialize only source and capability input, excluding trusted runtime settings."""
+    body = json.loads(canonical_project_guide_compilation_context_bytes(context))
+    del body["runtime_configuration"]
+    body["material"] = context.material.agent_projection()
+    if context.correction_predecessor is not None:
+        body["correction_predecessor"] = context.correction_predecessor.model_dump(mode="json")
+    return json.dumps(
+        body, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False
+    ).encode("utf-8")
+
+
 _COMPLETE_COMPILATION_RESULT_FIELDS = frozenset(ProjectGuideCompilationResult.model_fields)
 
 
@@ -538,6 +898,120 @@ def require_complete_project_guide_compilation_result(
     """Reject provider output that omitted any member of the strict envelope."""
     if _COMPLETE_COMPILATION_RESULT_FIELDS - result.model_fields_set:
         raise ValueError("compilation result envelope is incomplete")
+
+
+def require_complete_generated_specifications(
+    context: ProjectGuideCompilationContext,
+    result: ProjectGuideCompilationResult,
+) -> None:
+    """Require an actionable typed handoff on newly generated requirements."""
+    if result.status != "guide_blocked" and not result.requirements:
+        raise ValueError("ready compilation requires a requirement inventory")
+
+    specification_stages = {
+        RequirementDisposition.SUPPORTED_PRE_SUBMIT: CompilationStage.PRE_SUBMIT,
+        RequirementDisposition.PRE_SUBMIT_CAPABILITY_GAP: CompilationStage.PRE_SUBMIT,
+        RequirementDisposition.SUPPORTED_POST_SUBMIT: CompilationStage.POST_SUBMIT,
+        RequirementDisposition.POST_SUBMIT_CAPABILITY_GAP: CompilationStage.POST_SUBMIT,
+    }
+    supported = {
+        RequirementDisposition.SUPPORTED_PRE_SUBMIT,
+        RequirementDisposition.SUPPORTED_POST_SUBMIT,
+    }
+    for requirement in result.requirements:
+        if requirement.classification_rationale is None:
+            raise ValueError("generated requirement lacks a classification rationale")
+        if not requirement.evidence_refs:
+            raise ValueError("generated requirement lacks source evidence")
+        expected_stage = specification_stages.get(requirement.disposition)
+        specification = requirement.check_specification
+        if expected_stage is None:
+            if specification is not None:
+                raise ValueError("non-check requirement cannot include a check specification")
+            continue
+        if specification is None:
+            raise ValueError("check requirement lacks a check specification")
+        if expected_stage is CompilationStage.PRE_SUBMIT:
+            if specification.evaluation_method == "model_evaluation":
+                raise ValueError("model evaluation requires post-submit background work")
+            if (
+                specification.execution_mode != "bounded_pre_submit"
+                or specification.maximum_duration_seconds > 60
+            ):
+                raise ValueError("pre-submit check specification is not bounded")
+        elif specification.execution_mode != "background":
+            raise ValueError("post-submit check specification is not background work")
+        if requirement.disposition in supported and any(
+            dependency.provisioning == "runtime_gap"
+            for dependency in specification.runtime_dependencies
+        ):
+            raise ValueError("supported check depends on unavailable runtime support")
+
+    definitions = {
+        (definition.phase, definition.capability_id, definition.capability_version): definition
+        for definition in context.checker_capabilities.definitions
+    }
+    requirements = {item.requirement_id: item for item in result.requirements}
+    supported_deadlines: dict[str, int] = {}
+    for binding in (*result.pre_submit_bindings, *result.post_submit_bindings):
+        definition = definitions.get(
+            (binding.stage.value, binding.capability_id, binding.capability_version)
+        )
+        requirement = requirements.get(binding.requirement_id)
+        specification = requirement.check_specification if requirement is not None else None
+        if definition is None or definition.registry_entry is None or specification is None:
+            continue
+        deadline_ms = definition.registry_entry.resources.deadline_ms
+        if binding.stage is CompilationStage.PRE_SUBMIT and deadline_ms > 60_000:
+            raise ValueError("pre-submit checker deadline exceeds the bounded stage")
+        if specification.maximum_duration_seconds * 1000 > deadline_ms:
+            raise ValueError("check specification exceeds the checker deadline")
+        supported_deadlines[binding.requirement_id] = deadline_ms
+
+    for stage, fixed_budget, maximum_budget in (
+        (
+            CompilationStage.PRE_SUBMIT,
+            WORKSTREAM_DEFAULT_EXECUTION_BUDGET_MS,
+            MAXIMUM_SELECTED_PRE_EXECUTION_BUDGET_MS,
+        ),
+        (
+            CompilationStage.POST_SUBMIT,
+            SELECTED_POST_MATERIALIZATION_BUDGET_MS,
+            MAXIMUM_SELECTED_POST_EXECUTION_BUDGET_MS,
+        ),
+    ):
+        staged_requirements = [
+            item
+            for item in result.requirements
+            if specification_stages.get(item.disposition) is stage
+        ]
+        supported_budget = fixed_budget + sum(
+            supported_deadlines[item.requirement_id] + EXTERNAL_CHECKER_EXECUTION_CLEANUP_MARGIN_MS
+            for item in staged_requirements
+            if item.requirement_id in supported_deadlines
+        )
+        stage_name = stage.value.replace("_", "-")
+        if supported_budget > maximum_budget:
+            raise ValueError(f"supported {stage_name} checks exceed the aggregate execution budget")
+        proposed_budget = fixed_budget + sum(
+            max(
+                item.check_specification.maximum_duration_seconds * 1000,
+                supported_deadlines.get(item.requirement_id, 0),
+            )
+            + EXTERNAL_CHECKER_EXECUTION_CLEANUP_MARGIN_MS
+            for item in staged_requirements
+        )
+        has_capacity_gap = any(
+            dependency.kind == "execution_capacity"
+            for item in staged_requirements
+            for dependency in item.check_specification.runtime_dependencies
+        )
+        if proposed_budget > maximum_budget and not has_capacity_gap:
+            raise ValueError(f"proposed {stage_name} checks require an execution capacity gap")
+        if proposed_budget <= maximum_budget and has_capacity_gap:
+            raise ValueError(
+                f"proposed {stage_name} checks do not require an execution capacity gap"
+            )
 
 
 def validate_project_guide_compilation_result(

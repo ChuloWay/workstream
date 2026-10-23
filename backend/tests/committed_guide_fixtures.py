@@ -17,7 +17,7 @@ from app.modules.artifacts.models import ArtifactContent, ArtifactReplica, Artif
 from app.modules.projects.models import GuideSourceSnapshot, GuideSourceSnapshotItem, GuideSourceArtifactIngest, ProjectSetupRun, GuideSufficiencyReport
 from app.adapters.artifacts import guide_document_manifest_port
 from app.modules.projects.api.guide_documents import DOCUMENT_EXTENSIONS, GuideDocumentManifestRequest
-from tests.projects.guide_compilation.helpers import SOURCE_BYTES, runtime_configuration, result
+from tests.projects.guide_compilation.helpers import SOURCE_BYTES, runtime_configuration, generated_result
 from tests.projects.guide_compilation.runtime_fixtures import document_access, record_scripted_document_access
 
 
@@ -165,7 +165,7 @@ async def create_compiled_report_fixture(
             compiled_findings = tuple(CompilationFinding(severity=item["severity"], code=item["code"], message=item["message"], evidence_refs=refs) for item in findings)
             if not compiled_findings:
                 compiled_findings = (CompilationFinding(severity="info", code="guide.ready", message="Guide complete.", evidence_refs=refs),)
-            patch = {"status": {"blocked": "guide_blocked", "passed": "draft_ready", "passed_with_warnings": "draft_ready_with_warnings"}[status], "findings": compiled_findings}
+            patch = {"status": {"blocked": "guide_blocked", "passed": "draft_ready", "passed_with_warnings": "draft_ready_with_warnings"}[status], "findings": compiled_findings, "requirements": tuple(item.model_copy(update={"evidence_refs": refs}) for item in generated_result().requirements)}
             if artifact_proposal is not None:
                 patch["submission_artifact_policy"] = artifact_proposal
             if status == "blocked":
@@ -173,7 +173,7 @@ async def create_compiled_report_fixture(
             from tests.projects.guide_activation.source_fixtures import _external_compilation_outcome
 
             return _external_compilation_outcome(
-                result().model_copy(update=patch),
+                generated_result().model_copy(update=patch),
                 (post_entry,) if post_entry is not None else (), None, post_entry, refs,
             )
 

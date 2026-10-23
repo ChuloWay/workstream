@@ -26,6 +26,12 @@ from app.modules.artifacts.models import (
 from app.modules.projects.models import GuideSourceArtifactIngest
 from app.modules.projects.api.guide_documents import GuideDocumentManifest, GuideDocumentVersion
 from app.interfaces.project_agents import (
+    AtomicGuideRequirement,
+    CheckFailureFinding,
+    CheckInfrastructureFailure,
+    CheckInput,
+    CheckNegativeTest,
+    CheckSpecification,
     CompilationFinding,
     GuideEvidenceRef,
     ProjectGuideCompilationContext,
@@ -188,6 +194,67 @@ def result() -> ProjectGuideCompilationResult:
         agent_version="v1",
         schema_version="project_guide_compilation_result.v1",
     )
+
+
+def valid_specification() -> CheckSpecification:
+    """Return one actionable static check that fits the bounded PRE stage."""
+    return CheckSpecification(
+        evaluation_method="static_inspection",
+        execution_mode="bounded_pre_submit",
+        maximum_duration_seconds=10,
+        stage_rationale="Static package inspection completes within the intake budget.",
+        inputs=(
+            CheckInput(
+                input_id="submitted_package",
+                kind="package",
+                purpose="Submitted work to inspect.",
+            ),
+        ),
+        check_steps=("Inspect the package manifest for the required item.",),
+        pass_conditions=("The required item is present.",),
+        failure_findings=(
+            CheckFailureFinding(
+                code="required_item_missing",
+                level="error",
+                condition="The required item is absent.",
+                message="The submitted work is missing a required item.",
+            ),
+        ),
+        positive_tests=("A package containing the required item passes.",),
+        negative_tests=(
+            CheckNegativeTest(
+                name="missing_required_item",
+                scenario="A package omits the required item.",
+                expected_verdict="failed",
+                expected_finding_codes=("required_item_missing",),
+            ),
+        ),
+        runtime_dependencies=(),
+        infrastructure_failures=(
+            CheckInfrastructureFailure(
+                code="invalid_output",
+                condition="The checker returns a malformed result.",
+            ),
+        ),
+    )
+
+
+def generated_result() -> ProjectGuideCompilationResult:
+    """Return a valid new-generation result without changing retained fixtures."""
+    requirement = AtomicGuideRequirement(
+        requirement_id="review_scope",
+        statement="The guide provides background for claim review.",
+        disposition="informational",
+        classification_rationale="This material explains the review scope.",
+        evidence_refs=(
+            GuideEvidenceRef(
+                source_item_id=SOURCE_ITEM_ID,
+                document_version_id=DOCUMENT_VERSION_ID,
+                sha256=SOURCE_SHA256,
+            ),
+        ),
+    )
+    return result().model_copy(update={"requirements": (requirement,)})
 
 
 def identity(

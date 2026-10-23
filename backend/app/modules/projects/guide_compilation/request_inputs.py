@@ -107,7 +107,7 @@ class CompilationRequestInputs:
 
     async def context_for_setup(self, session: AsyncSession, setup: ProjectSetupRun):
         """Use one document/context builder for automatic and correction requests."""
-        from .correction_feedback import load_correction_feedback
+        from .correction_feedback import load_correction_input
 
         if self.runtime_configuration is None:
             raise GuideCompilationIntegrityError("compilation runtime configuration unavailable")
@@ -133,7 +133,7 @@ class CompilationRequestInputs:
             setup_generation=setup.setup_generation,
             checker_capabilities=self.checker_capabilities,
             runtime_configuration=self.runtime_configuration,
-            correction_feedback=await load_correction_feedback(session, setup_run_id),
+            correction_input=await load_correction_input(session, setup_run_id),
         )
         return context
 

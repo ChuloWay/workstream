@@ -27,7 +27,7 @@ from tests.committed_guide_fixtures import (
     seed_setup_service_for_compiled_fixture,
 )
 from tests.project_create_fixtures import seed_authorized_project
-from tests.projects.guide_compilation.helpers import ids, context, result
+from tests.projects.guide_compilation.helpers import ids, context, generated_result, valid_specification
 from tests.projects.guide_compilation.finalization.pg_prerequisites import (
     compilation_and_projections,
 )
@@ -77,6 +77,7 @@ def _external_compilation_outcome(outcome, registry_entries, pre_entry, post_ent
         return outcome
     from app.interfaces.project_agents import (
         AtomicGuideRequirement,
+        CheckSpecification,
         PostSubmissionBindingProposal,
         PreSubmissionBindingProposal,
     )
@@ -89,6 +90,8 @@ def _external_compilation_outcome(outcome, registry_entries, pre_entry, post_ent
                 statement="Validate the submitted project archive rules.",
                 disposition="supported_pre_submit",
                 evidence_refs=refs,
+                classification_rationale="Bounded archive inspection fits before submission.",
+                check_specification=valid_specification(),
             )
         )
         pre_bindings.append(
@@ -106,6 +109,12 @@ def _external_compilation_outcome(outcome, registry_entries, pre_entry, post_ent
                 statement="Evaluate the submitted evidence package.",
                 disposition="supported_post_submit",
                 evidence_refs=refs,
+                classification_rationale="Evaluate the submitted work in the background.",
+                check_specification=CheckSpecification.model_validate({
+                    **valid_specification().model_dump(mode="json"),
+                    "execution_mode": "background",
+                    "stage_rationale": "The selected registry entry evaluates immutable submitted evidence.",
+                }),
             )
         )
         post_bindings.append(
@@ -168,7 +177,7 @@ async def create_compiled_guide(
         guide_version=version,
         checker_capabilities=checker_capabilities,
     ).model_copy(update={"material": manifest})
-    outcome = compilation_outcome or result()
+    outcome = compilation_outcome or generated_result()
     if artifact_proposal is not None:
         outcome = outcome.model_copy(update={"submission_artifact_policy": artifact_proposal})
     refs = tuple(

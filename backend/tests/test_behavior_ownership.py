@@ -2587,6 +2587,22 @@ def test_manager_authored_runtime_ownership_admits_only_its_adapter():
         )
 
 
+def test_partition_allows_only_exact_guide_compilation_draft_target():
+    targets = ownership.GUIDE_COMPILATION_DRAFT_TARGETS
+    assert targets == {"backend/app/adapters/project_agents/compilation_draft.py"}
+    retained = "backend/app/core/config.py"
+    trusted = _partition([retained])
+    ownership._validate_additive_partition_transition(
+        _partition(sorted({retained, *targets})), trusted,
+    )
+    with pytest.raises(ownership.BehaviorOwnershipError, match="untrusted_partition_change"):
+        ownership._validate_additive_partition_transition(
+            _partition(sorted({retained, *targets,
+                               "backend/app/adapters/project_agents/compilation_draft_neighbor.py"})),
+            trusted,
+        )
+
+
 def test_revision_ownership_does_not_allow_a_parallel_exhaustion_writer():
     retained = "backend/app/core/config.py"
     trusted = _partition([retained])

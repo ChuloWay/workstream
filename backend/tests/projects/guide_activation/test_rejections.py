@@ -162,13 +162,14 @@ async def test_false_mode_rejects_approved_human_requirement_in_python_and_sql(
     from app.interfaces.project_agents import AtomicGuideRequirement
     from app.modules.projects.guide_activation.service import GuideActivationService
     from tests.authorization.guide_activation.pg_support import activate
-    from tests.projects.guide_compilation.helpers import result
+    from tests.projects.guide_compilation.helpers import generated_result
 
-    outcome = result()
+    outcome = generated_result()
     requirement = AtomicGuideRequirement(
         requirement_id="human_quality",
         statement="An authorized reviewer must assess the final quality.",
         disposition="human_review",
+        classification_rationale="The guide requires an authorized human decision.",
         evidence_refs=outcome.findings[0].evidence_refs,
     )
     outcome = outcome.model_copy(update={"requirements": (requirement,)})

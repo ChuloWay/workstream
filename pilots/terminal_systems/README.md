@@ -23,6 +23,10 @@ included in `guide.md`, without depending on a repository-relative attachment.
 `task-example.md` is the queue-recovery brief, also embedded in the guide creation
 request. Keep these copies synchronized when editing the inputs.
 
+The guide does not repeat Workstream's platform upload limits. Setup leaves
+project size overrides null unless the guide explicitly adds a restriction;
+platform upload, archive-safety and storage-admission enforcement always applies.
+
 ## Initial work
 
 | Brief | Main behavior the author develops into a solver task |
@@ -43,12 +47,22 @@ normal task creation; no runtime change or checker allowlist is implied.
 1. The PM creates the project and guide with its example and uploads the declared
    document through the supported API or CLI. Committing the last declared
    document upload automatically queues setup; there is no separate start command.
-2. Setup reads those actual inputs and the available registered capabilities.
-   Inspect its source-backed requirement inventory, proposed PRE/POST bindings
-   and missing-capability suggestions. Do not substitute a prepared result.
+   The manager needs a role grant on this exact project for setup and proposal
+   reads; system-level project-creation authority alone is insufficient.
+2. Setup reads those actual inputs and the available registered capabilities,
+   drafts a candidate, then reviews it against the original sources in a fresh
+   model context. Both phases share one bounded attempt; a failed review does not
+   publish the unchecked candidate.
+   Inspect its source-backed requirement inventory, classification rationale,
+   per-check typed specifications, proposed PRE/POST bindings and
+   missing-capability suggestions. PRE is for static and other reliably bounded
+   checks that complete within 60 seconds before Submission creation; longer or
+   model-based work belongs to background POST. Automation alone does not choose
+   the stage. Do not substitute a prepared result.
 3. Engineering receives the uncovered requirements, intended stage, expected
-   findings and execution needs. Build and test the required external checker
-   images against the existing request/result contract. Project logic belongs
+   findings, positive/negative cases, material inputs, dependencies and
+   infrastructure outcomes. Build and test the required external checker images
+   against the existing request/result contract. Project logic belongs
    in those images, not in project-named branches of Workstream or its shared
    runner. Reuse a registered implementation only if it really covers the need.
    Use the merged [image command](../../docs/engineering/checker-images.md) for
@@ -81,6 +95,29 @@ normal task creation; no runtime change or checker allowlist is implied.
 
 ## Current boundary
 
+Real provider-backed local setup and explicit PM correction of the unchanged
+guide produced a reviewed engineering handoff: two static PRE specifications
+(layout and metadata), eight background POST specifications, and two lifecycle
+requirements. The ten proposed checks remain capability gaps, with no registered
+bindings. Both independent source-to-proposal reviews passed the final corrected
+generation; stored canonical/component hashes and the public CLI output match.
+
+All four project size/entry limits remain null. This proves nullable proposal
+output, not submission-intake enforcement. The runtime keeps a structurally
+checked draft private, reviews it against the original documents, and applies
+canonical validation only to the final result. PM correction supplies the exact,
+hash-verified predecessor alongside feedback. Earlier proposals remain immutable
+and unapproved; the handoff required human review and explicit corrections, so
+this is not a claim of automatic completeness for other guides.
+
+All 57 accumulated provider resources were deleted. No new checker image,
+approved policy, activated guide or contribution outcome is claimed. Engineering
+must implement the proposed checks and resolve their runtime/material gaps,
+register the exact images, and obtain corrected bindings and PM approval before
+activation and the contributor journey.
+See the [live setup record](../../.commitrail/changes/terminal-systems-live-setup.md)
+for the retained attempt sequence and qualification limits.
+
 For this guide-driven rehearsal, configure the inference setup runtime to derive
 requirements from the original guide and example. Main also supports an explicit
 [manager-authored rules runtime](../../docs/operations_project_operating_manual.md#manager-authored-guide-rules).
@@ -94,9 +131,13 @@ No checker is claimed to implement this guide yet. In particular, the previous
 fixed five-task sample is not an implementation of these requirements. Required
 semantic judgments, metadata tooling, environment support and execution needs
 must appear in setup's capability assessment; do not weaken the guide to hide a
-gap. A missing required capability blocks activation until engineering supplies
-it and the proposal is approved. Human-review requirements cannot be silently
-converted into automated acceptance.
+gap. A missing required capability remains visible in a warning-ready draft and
+blocks activation until engineering supplies it and a corrected proposal binds
+it. It does not make a sufficient guide blocked and cannot be hidden as a human
+fallback. Human-review requirements cannot be silently converted into automated
+acceptance. Workstream's four default checks cover ZIP safety, received-byte and
+manifest identity, high-confidence secret detection and unchanged work; the
+guide's required files, layout, metadata and quality rules need project checks.
 
 Before upload, confirm that this guide describes the desired project. The PM
 still chooses compensation, review mode, revision cap and revision window through
@@ -104,10 +145,11 @@ the separate governed policy operations. The input version label does not
 publish or replace any existing guide in a live project.
 Nor does it authorize live model spend, registry publication or deployment.
 
-For the first setup run, retain the actual requirements and capability suggestions
+For each setup run, retain the actual requirements and capability suggestions
 with their guide references. An engineering handoff should identify each uncovered
-requirement, proposed execution stage, inputs, expected findings, dependency needs
-and representative positive/negative cases. Do not handwrite that result in
+requirement, classification rationale, proposed execution stage and duration,
+inputs, ordered checks, pass conditions, expected findings, dependency needs,
+infrastructure failures and representative positive/negative cases. Do not handwrite that result in
 advance or classify a required semantic judgment as enforced merely because a
 file exists. Building submitted environments offline and checking reference/test
 quality need explicit implementations and proof. When the configured runtime

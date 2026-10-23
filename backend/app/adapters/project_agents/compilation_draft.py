@@ -62,6 +62,8 @@ class CompilationDraftParser:
             if not isinstance(candidate, dict):
                 return None
             self._validator.validate(candidate)
+            # Escaped lone surrogates and non-finite numeric overflow must not
+            # become serialization failures after the provider boundary.
             json.dumps(candidate, ensure_ascii=False, allow_nan=False).encode("utf-8")
         except (ValueError, RecursionError, UnicodeError, SchemaValidationError):
             return None

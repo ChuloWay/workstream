@@ -32,14 +32,16 @@ def _capability_outcome(*, supported):
         CapabilitySuggestion,
         PreSubmissionBindingProposal,
     )
-    from tests.projects.guide_compilation.helpers import result
+    from tests.projects.guide_compilation.helpers import generated_result, valid_specification
 
-    outcome = result()
+    outcome = generated_result()
     refs = outcome.findings[0].evidence_refs
     requirement = AtomicGuideRequirement(
         requirement_id="specialist_archive",
         statement="Inspect the specialist archive before admission.",
         disposition="supported_pre_submit" if supported else "pre_submit_capability_gap",
+        classification_rationale="Bounded archive inspection completes before admission.",
+        check_specification=valid_specification(),
         evidence_refs=refs,
     )
     return outcome.model_copy(

@@ -1,6 +1,6 @@
 {
-  "version": "terminal-systems-2",
-  "change_summary": "Clarify the original authoring requirements and metadata contract; expand the initial task briefs.",
+  "version": "terminal-systems-4",
+  "change_summary": "Re-evaluate the original guide with optional project size limits; project requirements are unchanged.",
   "task_examples": [
     {
       "title": "Author a restart-safe file-processing queue task",
