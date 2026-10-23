@@ -46,8 +46,6 @@ def provision(archive: Path, repository: str, manifest_digest: str, destination:
                 return source.read()
 
         raw_manifest = metadata("blobs/sha256/" + manifest_digest.removeprefix("sha256:"))
-        if "sha256:" + hashlib.sha256(raw_manifest).hexdigest() != manifest_digest:
-            raise ImageError("platform manifest digest differs")
         manifest = verify_platform_manifest(raw_manifest, manifest_digest)
         config_id = manifest["config"]["digest"]
         raw_config = metadata("blobs/sha256/" + config_id.removeprefix("sha256:"))
