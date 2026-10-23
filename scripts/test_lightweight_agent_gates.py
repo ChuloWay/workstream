@@ -149,6 +149,11 @@ class LightweightAgentGateTests(unittest.TestCase):
                 script,
             )
             self.assertNotIn("|| true", script)
+            if name == "Exercise existing guide HTTP contracts":
+                self.assertIn(
+                    "guide_files+=(../cli/tests/integration/test_task_guide_http.py)",
+                    script,
+                )
             scripts.append(script)
             for exit_code in (0, 1, 124):
                 with self.subTest(step=name, exit_code=exit_code):
@@ -182,6 +187,7 @@ class LightweightAgentGateTests(unittest.TestCase):
                 "--ignore-glob=../cli/tests/integration/*_public_api.py",
                 "--ignore-glob=../cli/tests/integration/test_guide*.py",
                 "--ignore=../cli/tests/integration/test_public_self_service.py",
+                "--ignore=../cli/tests/integration/test_task_guide_http.py",
                 "--ignore=../cli/tests/integration/test_tui_http.py",
                 "--ignore=../cli/tests/integration/test_tui_native_proof.py",
             ],

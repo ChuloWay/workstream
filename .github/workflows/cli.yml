@@ -132,6 +132,7 @@ jobs:
               '--ignore-glob=../cli/tests/integration/*_public_api.py' \
               '--ignore-glob=../cli/tests/integration/test_guide*.py' \
               --ignore=../cli/tests/integration/test_public_self_service.py \
+              --ignore=../cli/tests/integration/test_task_guide_http.py \
               --ignore=../cli/tests/integration/test_tui_http.py \
               --ignore=../cli/tests/integration/test_tui_native_proof.py
 
@@ -160,6 +161,7 @@ jobs:
           set -euo pipefail
           shopt -s nullglob
           guide_files=()
+          guide_files+=(../cli/tests/integration/test_task_guide_http.py)
           for test_path in ../cli/tests/integration/test_guide*.py; do
             if [[ "${test_path}" != *_public_api.py ]]; then
               guide_files+=("${test_path}")
