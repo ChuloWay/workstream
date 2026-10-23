@@ -6,6 +6,10 @@
 
 ## Intent
 
+Reduce contributor and agent waiting by preparing one clean, bounded VM during
+the authorized upload. Both PRE and POST must use the same trusted isolation
+boundary for ZIP handling so submitted bytes never select a host parsing path.
+
 ## Current behavior
 
 Boundary 1 supplies real Smol execution and recovery through CHECKERS' existing
@@ -67,11 +71,16 @@ managed service or edits to the independently owned model gateway work.
    bounds the whole intake session; preparation failure, upload failure,
    cancellation or disconnect aborts and drains its transport/VM cleanup.
 4. After sealed upload, preserve the existing relock and materialization AUTH
-   transaction ordering. Invoke only inspect/extract, not default evaluation,
+   transaction ordering. Send the sealed bytes through `PreparedArtifact.inspect`
+   with a trusted-session inspector and explicit cancellation hook. Do not call
+   `committed_source.stream()`: its one-shot `stream_claimed` flag would prohibit
+   the later workspace callback and external grants. Invoke only inspect/extract,
+   not default evaluation,
    under that authorization. Return the exact archive identity and canonical
    inventory. Bind the existing manifest, selected PRE reservation and authority
    exactly as today. No early VM action creates a Submission or CHECKERS result.
-5. Under the committed selected lease, ART opens its quota-owned scratch callback
+5. Under the committed selected lease, ART opens its existing
+   `_process_prepared_submission` quota-owned scratch callback
    and exports bounded raw files from the sealed intake session. ART independently
    checks normalized containment, inventory, size, executable mode and every hash;
    it alone creates scratch paths and issues existing external material grants.
@@ -96,8 +105,14 @@ lease nonce, trusted image/platform/config/default behavior identities, phase,
 policy hash, resources and one absolute deadline bind the prepared session. Later
 operations add sealed archive hash/size and manifest/reservation identity. The
 opaque Python handle cannot be serialized, replayed, substituted or used after
-close. The node connection owns it; EOF expires it. Only known pre-launch failures
-may retry within the original deadline after confirmed cleanup.
+close. The node connection owns it; EOF expires it. Preparation permits at most three attempts, with fixed 100 ms then 200 ms
+backoff charged to the original deadline. Only an explicit `runtime_unavailable`
+control-process launch/nonzero failure in VM create/start or trusted bootstrap
+installation is retryable, and only after confirmed cleanup. Image/config/digest,
+peer/custody, resource enforcement, protocol, capacity, cancellation and deadline
+failures are final. Guest readiness identity mismatch is final. There is no
+in-session retry after any archive byte is accepted, nor after inspect, export
+or default invocation. Unknown execution status is final.
 
 The static bootstrap gains a closed trusted-intake mode selected only by node
 configuration. The pinned Python worker has bounded writable private VM-disk
@@ -121,10 +136,12 @@ request/retry and durable-worker owners decide the next business attempt.
 | Unauthorized upload allocates no VM | AUTH denial fixture observes zero intake prepare calls and unchanged product rows |
 | Failed upload/cancel/expiry releases capacity | Real-node session plus upload failure fixture; exact lease, VM disk and cgroup absence; original deadline not reset |
 | Work ZIP failures remain bounded intake feedback | Canonical malformed/encrypted/collision/traversal/expansion corpus through guest; no Submission or project check |
+| Guest inspection preserves prepared custody | Real `PreparedArtifact.inspect` followed by `_process_prepared_submission` and an external grant on the same artifact; no one-shot committed-source read |
+| Smol-only ART readiness | Default-only PRE and POST fail on absent configuration, Docker/runsc runtime or mismatched image/config/default digest; valid split Smol-intake/Docker-project configuration works; poisoned host parser/default is never invoked |
 | Inventory and raw export stay authoritative | Alter receipt/archive/hash/path/length/epoch/phase/policy; host rejects before grant/consumer and removes quota scratch |
 | Default follows committed reservation | Separate observe-before/after-commit proof; replay/foreign reservation and second default rejected |
 | Default failure skips project execution | Exact default findings, no external grant execution and no Submission |
-| Successful default releases intake before ordered project PRE | Two bindings plus default-only policy, exact results/order, no capacity deadlock |
+| Successful default releases intake before ordered project PRE | Same Smol socket with `maximum_parallel=1`, default-only and two ordered bindings: observe intake cleanup confirmed, then capacity released, then first project connection; cancellation/uncertain cleanup never reports release |
 | POST uses the same guest intake | Real immutable input/lease fixture, exact manifest and late revalidation, no host ZIP invocation |
 | Canonical rules have one implementation | Existing corpus remains; source/composition negative checks reject production host inspector/default calls |
 | Existing policy branches remain | Required checks still feed existing true-policy review routing and false-policy shared acceptance; full public durable proof belongs to boundary 3 |
@@ -144,7 +161,9 @@ Celery journey remain blocking before the overall user goal is complete.
 
 ## Review findings
 
-Plan review has not yet run.
+Plan corrections address WS-EXEC-001-02-PLAN-01..04: safe inspect-then-workspace
+custody, distinct Smol readiness cases, discriminating single-slot ordering and
+closed preparation retry policy. Plan replay is required before implementation.
 
 ## Reconciliation
 
