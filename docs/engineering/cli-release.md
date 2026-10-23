@@ -15,6 +15,39 @@ The native loopback API fixture proves authenticated transport from each
 installed executable; it does not replace the existing Linux public-API
 integration suite or prove every deployed backend version.
 
+Each native job also builds the same source as a native executable and runs the
+complete socket/terminal suite, `cli/tests/integration/test_tui_http.py`, on a
+POSIX PTY (Linux/macOS) or real ConPTY (Windows). These interactive checks cover
+keyboard/help, resize, plain/NO_COLOR, quit/Ctrl+C/pending quit, signal teardown
+and denial/cache clearing; installation smoke alone is not terminal proof.
+Program-run/output failure cleanup is a separate Go test boundary in
+`cli/internal/command/tui_test.go`, included in the existing native `go test ./...`;
+signal teardown does not prove a program error.
+
+The terminal suite uses a fresh virtual environment and the complete exact
+wheel dependency closure in
+[`requirements-native.txt`](../../cli/tests/integration/requirements-native.txt).
+Installation uses isolated pip, required hashes and binary wheels only; a
+missing dependency, wheel or hash fails the job without an unpinned/source-build
+fallback. Only pytest and its closure are installed: the unrelated TLS/HTTP2
+fixture loads backend cryptography when invoked, not when shared HTTP fixtures
+are imported. Its existing real TLS/HTTP2 GOAWAY regression remains unchanged.
+Third-party pytest auto-loading and inherited selection options are
+disabled. The proof runner records raw collected node IDs, deselection and all
+setup/call/teardown reports, including xfail metadata. It requires nonempty,
+unique collection and exactly one successful phase sequence for every collected
+test. Deselection, skips, xfail/XPASS, collection errors, missing/duplicate reports,
+nonzero exit and interrupted execution cannot produce a completion receipt.
+Adversarial runner self-tests execute before the terminal suite on each target.
+
+`reports.json` and its hash-bound `completion.json` are uploaded separately as
+`cli-tui-evidence-SOURCE-PLATFORM-run-RUN_ID-attempt-ATTEMPT`. The binding names
+the checked-out source SHA, actual native target and workflow run/attempt.
+Assembly independently verifies all four receipts against that exact binding;
+missing, stale or altered evidence fails assembly. Test evidence is neither a
+release archive member nor a sixth release asset. Cancellation remains a failed
+or cancelled native job, never successful proof or authorization to publish.
+
 Before the first release, a repository administrator must configure the
 `cli-release` GitHub environment with required human reviewers and a deployment
 branch restriction to `main`, with self-review prevention enabled, then inspect
