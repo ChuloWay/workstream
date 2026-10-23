@@ -488,7 +488,7 @@ class _ObservedCalls:
             text(
                 "select jsonb_build_object("
                 "'binding',jsonb_build_array(binding.resource_type='setup_model_call',"
-                "binding.resource_id=:effect,binding.logical_role='model_request',"
+                "binding.resource_id::uuid=:effect,binding.logical_role='model_request',"
                 "binding.scope_version=1,binding.attribution_type='service_identity',"
                 "binding.actor_id='workstream.artifact.checker_output'),"
                 "'content',jsonb_build_array(binding.content_id=:content,"
