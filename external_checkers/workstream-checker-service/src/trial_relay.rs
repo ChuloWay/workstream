@@ -1,0 +1,1327 @@
+//! Invocation-local, profile-bounded isolated trial relay for checker agents.
+
+use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
+use std::collections::HashSet;
+use std::fmt;
+use std::fs::{self, DirBuilder};
+use std::io::{Read, Write};
+use std::os::unix::ffi::OsStrExt;
+use std::os::unix::fs::{DirBuilderExt, FileTypeExt, MetadataExt, PermissionsExt};
+use std::os::unix::net::{UnixListener, UnixStream};
+use std::path::{Component, Path, PathBuf};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::Arc;
+use std::thread::{self, JoinHandle};
+use std::time::{Duration, Instant};
+use workstream_checker_sdk::{canonical_hash, canonical_json};
+
+pub(crate) const CONTAINER_EXECUTION_SOCKET: &str = "/work/execution.sock";
+const TRIAL_PROTOCOL: &str = "workstream.checker_trial.v1";
+const TRIAL_PLAN_SCHEMA: &str = "workstream.checker_trial_plan.v1";
+const TRIAL_RECEIPT_SCHEMA: &str = "workstream.checker_trial_receipt.v1";
+const INVOCATION_DIRECTORY_PREFIX: &str = ".trial-";
+const ABSOLUTE_MAXIMUM_FRAME_BYTES: usize = 4 * 1024 * 1024;
+static INVOCATION_SEQUENCE: AtomicU64 = AtomicU64::new(0);
+
+#[derive(Clone, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct TrialGrant {
+    pub(crate) grant_id: String,
+    pub(crate) binding_digest: String,
+    pub(crate) profile_id: String,
+    pub(crate) profile_version: u32,
+    pub(crate) profile_digest: String,
+}
+
+impl fmt::Debug for TrialGrant {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("TrialGrant(<redacted>)")
+    }
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+pub(crate) struct TrialRequestIdentity {
+    pub(crate) request_digest: String,
+    pub(crate) material_binding_digest: String,
+    pub(crate) project_id: String,
+    pub(crate) task_id: String,
+    pub(crate) assignment_id: String,
+    pub(crate) submission_id: String,
+    pub(crate) submission_version: u64,
+    pub(crate) requirement_id: String,
+    pub(crate) registry_entry_id: String,
+    pub(crate) registry_entry_digest: String,
+    pub(crate) checker_image_digest: String,
+    pub(crate) configuration_sha256: String,
+    pub(crate) evaluation_request_id: String,
+    pub(crate) evaluation_generation: u64,
+    pub(crate) checker_run_id: String,
+    pub(crate) attempt_id: String,
+    pub(crate) result_id: String,
+    pub(crate) worker_lease_id: String,
+    pub(crate) worker_lease_generation: u64,
+    pub(crate) worker_lease_expires_at: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct TrialProfile {
+    pub(crate) profile_id: String,
+    pub(crate) profile_version: u32,
+    pub(crate) profile_digest: String,
+    pub(crate) trial_kind: String,
+    pub(crate) registry_entry_id: String,
+    pub(crate) registry_entry_digest: String,
+    pub(crate) checker_image_digest: String,
+    pub(crate) configuration_sha256: String,
+    pub(crate) engine_identity_digest: String,
+    pub(crate) platform: String,
+    pub(crate) platform_identity_digest: String,
+    pub(crate) builder_image_digest: String,
+    pub(crate) offline_cache_digest: String,
+    pub(crate) approved_base_digests: Vec<String>,
+    pub(crate) build_context_roles: Vec<String>,
+    pub(crate) allowed_material_roles: Vec<String>,
+    pub(crate) required_slots: Vec<TrialSlotProfile>,
+    pub(crate) maximum_frame_bytes: usize,
+    pub(crate) maximum_response_bytes: usize,
+    pub(crate) maximum_steps: usize,
+    pub(crate) maximum_build_timeout_ms: u64,
+    pub(crate) maximum_step_timeout_ms: u64,
+    pub(crate) maximum_step_output_bytes: usize,
+    pub(crate) maximum_observation_bytes: usize,
+    pub(crate) maximum_cpu_millis: u64,
+    pub(crate) maximum_memory_bytes: u64,
+    pub(crate) maximum_disk_bytes: u64,
+    pub(crate) maximum_entries: u64,
+    pub(crate) maximum_pids: u64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct TrialSlotProfile {
+    pub(crate) slot_id: String,
+    pub(crate) visible_roles: Vec<String>,
+    pub(crate) fresh_workspace: bool,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct TrialPlan {
+    schema_version: String,
+    environment: TrialEnvironment,
+    resources: TrialResources,
+    build_timeout_ms: u64,
+    steps: Vec<TrialStep>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+struct TrialEnvironment {
+    dockerfile: String,
+    context: String,
+    platform: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+struct TrialResources {
+    cpu_millis: u64,
+    memory_bytes: u64,
+    disk_bytes: u64,
+    maximum_entries: u64,
+    pids: u64,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+struct TrialStep {
+    slot_id: String,
+    operation: String,
+    state_source: String,
+    visible_roles: Vec<String>,
+    command: Vec<String>,
+    working_directory: String,
+    timeout_ms: u64,
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+pub(crate) struct TrialExecution {
+    pub(crate) platform_identity_digest: String,
+    pub(crate) builder_image_digest: String,
+    pub(crate) offline_cache_digest: String,
+    pub(crate) base_image_digests: Vec<String>,
+    pub(crate) material_inventory_digests: Vec<RoleInventoryDigest>,
+    pub(crate) build: TrialBuildObservation,
+    pub(crate) steps: Vec<TrialStepObservation>,
+    pub(crate) cleanup_confirmed: bool,
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+pub(crate) struct RoleInventoryDigest {
+    pub(crate) role: String,
+    pub(crate) digest: String,
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+pub(crate) struct TrialBuildObservation {
+    pub(crate) completion: String,
+    pub(crate) exit_code: Option<i32>,
+    pub(crate) signal: Option<i32>,
+    pub(crate) candidate_image_digest: Option<String>,
+    pub(crate) candidate_archive_digest: Option<String>,
+    pub(crate) elapsed_ms: u64,
+    pub(crate) cpu_millis: u64,
+    pub(crate) peak_memory_bytes: u64,
+    pub(crate) peak_pids: u64,
+    pub(crate) written_bytes: u64,
+    pub(crate) written_entries: u64,
+    pub(crate) measurement_method: String,
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+pub(crate) struct TrialStepObservation {
+    pub(crate) slot_id: String,
+    pub(crate) operation_order: u32,
+    pub(crate) workspace_identity: String,
+    pub(crate) visible_role_inventory_digests: Vec<RoleInventoryDigest>,
+    pub(crate) completion: String,
+    pub(crate) exit_code: Option<i32>,
+    pub(crate) signal: Option<i32>,
+    pub(crate) stdout: String,
+    pub(crate) stdout_sha256: String,
+    pub(crate) stderr: String,
+    pub(crate) stderr_sha256: String,
+    pub(crate) workspace_before_sha256: String,
+    pub(crate) workspace_after_sha256: String,
+    pub(crate) elapsed_ms: u64,
+    pub(crate) cpu_millis: u64,
+    pub(crate) peak_memory_bytes: u64,
+    pub(crate) peak_pids: u64,
+    pub(crate) written_bytes: u64,
+    pub(crate) written_entries: u64,
+    pub(crate) measurement_method: String,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum TrialRelayFailure {
+    InvalidRequest,
+    MaterialUnavailable,
+    ImplementationUnavailable,
+    CapacityExceeded,
+    DeadlineExceeded,
+    Cancelled,
+    CleanupUnsettled,
+}
+
+impl TrialRelayFailure {
+    fn wire_code(self) -> &'static str {
+        match self {
+            Self::InvalidRequest => "invalid_request",
+            Self::MaterialUnavailable => "material_unavailable",
+            Self::ImplementationUnavailable => "implementation_unavailable",
+            Self::CapacityExceeded => "capacity_exceeded",
+            Self::DeadlineExceeded => "deadline_exceeded",
+            Self::Cancelled => "cancelled",
+            Self::CleanupUnsettled => "cleanup_unsettled",
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct TrialEngineFailure {
+    pub(crate) code: TrialRelayFailure,
+    pub(crate) cleanup_unsettled: bool,
+}
+
+pub(crate) trait TrialEngine: Send + Sync + 'static {
+    fn execute(
+        &self,
+        context: &TrialEngineContext,
+        plan: &TrialPlan,
+        deadline: Instant,
+        invocation_cancelled: &AtomicBool,
+        relay_cancelled: &AtomicBool,
+    ) -> Result<TrialExecution, TrialEngineFailure>;
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct TrialEngineContext {
+    pub(crate) identity: TrialRequestIdentity,
+    pub(crate) profile: TrialProfile,
+    pub(crate) verified_material_root: PathBuf,
+    pub(crate) trial_scratch_root: PathBuf,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub(crate) struct TrialReceiptPublication {
+    pub(crate) schema_version: &'static str,
+    pub(crate) request_identity_digest: String,
+    pub(crate) material_binding_digest: String,
+    pub(crate) profile_id: String,
+    pub(crate) profile_version: u32,
+    pub(crate) profile_digest: String,
+    pub(crate) trial_kind: String,
+    pub(crate) engine_identity_digest: String,
+    pub(crate) plan_digest: String,
+    pub(crate) observation_digest: String,
+    pub(crate) observation_byte_count: usize,
+    pub(crate) slot_ids: Vec<String>,
+    pub(crate) plan_started: bool,
+    pub(crate) plan_completed: bool,
+    pub(crate) cleanup_confirmed: bool,
+    pub(crate) plan: TrialPlan,
+    pub(crate) execution: TrialExecution,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct PublishedTrialReceipt {
+    pub(crate) receipt_handle: String,
+    pub(crate) receipt_digest: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct TrialReceiptPublishFailure {
+    pub(crate) code: TrialRelayFailure,
+}
+
+pub(crate) trait TrialReceiptPublisher: Send + Sync + 'static {
+    fn publish_completed(
+        &self,
+        publication: TrialReceiptPublication,
+    ) -> Result<PublishedTrialReceipt, TrialReceiptPublishFailure>;
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) struct TrialRelayFinish {
+    pub(crate) failure: Option<TrialRelayFailure>,
+    pub(crate) cleanup_unsettled: bool,
+    pub(crate) plan_started: bool,
+    pub(crate) plan_completed: bool,
+    pub(crate) receipt_handle: Option<String>,
+    pub(crate) receipt_digest: Option<String>,
+}
+
+#[derive(Debug)]
+pub(crate) struct TrialRelayStartFailure {
+    pub(crate) code: TrialRelayFailure,
+    pub(crate) cleanup_unsettled: bool,
+}
+
+#[derive(Debug)]
+struct RelayPaths {
+    directory: PathBuf,
+    socket: PathBuf,
+    directory_device: u64,
+    directory_inode: u64,
+    socket_device: u64,
+    socket_inode: u64,
+    sandbox_uid: u32,
+    sandbox_gid: u32,
+}
+
+#[derive(Debug)]
+struct WorkerOutcome {
+    failure: Option<TrialRelayFailure>,
+    cleanup_unsettled: bool,
+    plan_started: bool,
+    plan_completed: bool,
+    receipt_handle: Option<String>,
+    receipt_digest: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ImageTrialRequest {
+    protocol_version: String,
+    operation: String,
+    plan: TrialPlan,
+}
+
+#[derive(Serialize)]
+#[serde(deny_unknown_fields)]
+struct CompletedImageTrialResponse<'a> {
+    protocol_version: &'static str,
+    outcome: &'static str,
+    receipt_handle: &'a str,
+    receipt_digest: &'a str,
+    failure_code: Option<&'static str>,
+}
+
+#[derive(Serialize)]
+#[serde(deny_unknown_fields)]
+struct UnavailableImageTrialResponse {
+    protocol_version: &'static str,
+    outcome: &'static str,
+    receipt_handle: Option<&'static str>,
+    receipt_digest: Option<&'static str>,
+    failure_code: &'static str,
+}
+
+pub(crate) struct TrialRelay {
+    paths: RelayPaths,
+    local_cancelled: Arc<AtomicBool>,
+    worker: Option<JoinHandle<WorkerOutcome>>,
+}
+
+impl TrialRelay {
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn start(
+        relay_root: &Path,
+        verified_material_root: &Path,
+        trial_scratch_root: &Path,
+        grant: &TrialGrant,
+        identity: &TrialRequestIdentity,
+        profile: &TrialProfile,
+        publisher: Arc<dyn TrialReceiptPublisher>,
+        engine: Arc<dyn TrialEngine>,
+        sandbox_uid: u32,
+        sandbox_gid: u32,
+        deadline: Instant,
+        invocation_cancelled: Arc<AtomicBool>,
+    ) -> Result<Self, TrialRelayStartFailure> {
+        validate_start(
+            relay_root,
+            verified_material_root,
+            trial_scratch_root,
+            grant,
+            identity,
+            profile,
+            sandbox_uid,
+            sandbox_gid,
+        )?;
+        let directory = create_invocation_directory(relay_root)?;
+        let socket = directory.join("execution.sock");
+        let listener = UnixListener::bind(&socket).map_err(|_| {
+            let cleanup_unsettled = fs::remove_dir(&directory).is_err();
+            TrialRelayStartFailure {
+                code: TrialRelayFailure::ImplementationUnavailable,
+                cleanup_unsettled,
+            }
+        })?;
+        if listener.set_nonblocking(true).is_err()
+            || fs::set_permissions(&socket, fs::Permissions::from_mode(0o600)).is_err()
+        {
+            drop(listener);
+            return Err(remove_created_paths(&directory, &socket));
+        }
+        let directory_metadata = fs::symlink_metadata(&directory)
+            .map_err(|_| remove_created_paths(&directory, &socket))?;
+        let socket_metadata =
+            fs::symlink_metadata(&socket).map_err(|_| remove_created_paths(&directory, &socket))?;
+        if !private_directory(&directory_metadata, sandbox_uid, sandbox_gid)
+            || socket_metadata.file_type().is_symlink()
+            || !socket_metadata.file_type().is_socket()
+            || socket_metadata.mode() & 0o777 != 0o600
+            || socket_metadata.uid() != sandbox_uid
+            || socket_metadata.gid() != sandbox_gid
+        {
+            drop(listener);
+            return Err(remove_created_paths(&directory, &socket));
+        }
+        let paths = RelayPaths {
+            directory,
+            socket,
+            directory_device: directory_metadata.dev(),
+            directory_inode: directory_metadata.ino(),
+            socket_device: socket_metadata.dev(),
+            socket_inode: socket_metadata.ino(),
+            sandbox_uid,
+            sandbox_gid,
+        };
+        let context = TrialEngineContext {
+            identity: identity.clone(),
+            profile: profile.clone(),
+            verified_material_root: verified_material_root.to_owned(),
+            trial_scratch_root: trial_scratch_root.to_owned(),
+        };
+        let local_cancelled = Arc::new(AtomicBool::new(false));
+        let worker_local_cancelled = Arc::clone(&local_cancelled);
+        let worker = thread::Builder::new()
+            .name("checker-trial-relay".into())
+            .spawn(move || {
+                relay_once(
+                    listener,
+                    &context,
+                    publisher,
+                    engine,
+                    deadline,
+                    &worker_local_cancelled,
+                    &invocation_cancelled,
+                )
+            })
+            .map_err(|_| TrialRelayStartFailure {
+                code: TrialRelayFailure::ImplementationUnavailable,
+                cleanup_unsettled: !cleanup_paths(&paths),
+            })?;
+        Ok(Self {
+            paths,
+            local_cancelled,
+            worker: Some(worker),
+        })
+    }
+
+    pub(crate) fn mount_spec(&self) -> String {
+        format!(
+            "type=bind,src={},dst={CONTAINER_EXECUTION_SOCKET},readonly",
+            self.paths.socket.display()
+        )
+    }
+
+    #[cfg(test)]
+    pub(crate) fn socket_path(&self) -> &Path {
+        &self.paths.socket
+    }
+
+    pub(crate) fn finish(mut self) -> TrialRelayFinish {
+        self.local_cancelled.store(true, Ordering::Release);
+        let outcome = self
+            .worker
+            .take()
+            .and_then(|worker| worker.join().ok())
+            .unwrap_or(WorkerOutcome {
+                failure: Some(TrialRelayFailure::ImplementationUnavailable),
+                cleanup_unsettled: false,
+                plan_started: false,
+                plan_completed: false,
+                receipt_handle: None,
+                receipt_digest: None,
+            });
+        let cleanup_unsettled = outcome.cleanup_unsettled || !cleanup_paths(&self.paths);
+        TrialRelayFinish {
+            failure: outcome
+                .failure
+                .or(cleanup_unsettled.then_some(TrialRelayFailure::CleanupUnsettled)),
+            cleanup_unsettled,
+            plan_started: outcome.plan_started,
+            plan_completed: outcome.plan_completed,
+            receipt_handle: outcome.receipt_handle,
+            receipt_digest: outcome.receipt_digest,
+        }
+    }
+}
+
+impl Drop for TrialRelay {
+    fn drop(&mut self) {
+        self.local_cancelled.store(true, Ordering::Release);
+        if let Some(worker) = self.worker.take() {
+            let _ = worker.join();
+        }
+        let _ = cleanup_paths(&self.paths);
+    }
+}
+
+fn validate_start(
+    relay_root: &Path,
+    verified_material_root: &Path,
+    trial_scratch_root: &Path,
+    grant: &TrialGrant,
+    identity: &TrialRequestIdentity,
+    profile: &TrialProfile,
+    sandbox_uid: u32,
+    sandbox_gid: u32,
+) -> Result<(), TrialRelayStartFailure> {
+    let invalid = || TrialRelayStartFailure {
+        code: TrialRelayFailure::InvalidRequest,
+        cleanup_unsettled: false,
+    };
+    validate_private_root(relay_root, sandbox_uid, sandbox_gid).map_err(|_| invalid())?;
+    validate_private_root(verified_material_root, sandbox_uid, sandbox_gid).map_err(|_| {
+        TrialRelayStartFailure {
+            code: TrialRelayFailure::MaterialUnavailable,
+            cleanup_unsettled: false,
+        }
+    })?;
+    validate_private_root(trial_scratch_root, sandbox_uid, sandbox_gid).map_err(|_| {
+        TrialRelayStartFailure {
+            code: TrialRelayFailure::MaterialUnavailable,
+            cleanup_unsettled: false,
+        }
+    })?;
+    if verified_material_root == trial_scratch_root
+        || !valid_trial_grant(grant, &identity.request_digest)
+        || !valid_profile(profile)
+        || (
+            grant.profile_id.as_str(),
+            grant.profile_version,
+            grant.profile_digest.as_str(),
+        ) != (
+            profile.profile_id.as_str(),
+            profile.profile_version,
+            profile.profile_digest.as_str(),
+        )
+        || identity.registry_entry_id != profile.registry_entry_id
+        || identity.registry_entry_digest != profile.registry_entry_digest
+        || identity.checker_image_digest != profile.checker_image_digest
+        || identity.configuration_sha256 != profile.configuration_sha256
+        || !valid_identity(identity)
+    {
+        return Err(invalid());
+    }
+    let socket_path = relay_root
+        .join(format!("{INVOCATION_DIRECTORY_PREFIX}{}", "0".repeat(16)))
+        .join("execution.sock");
+    if relay_root.as_os_str().as_bytes().contains(&b',')
+        || socket_path.as_os_str().as_bytes().len() >= 108
+    {
+        return Err(invalid());
+    }
+    Ok(())
+}
+
+pub(crate) fn valid_trial_grant(grant: &TrialGrant, request_digest: &str) -> bool {
+    grant.binding_digest == request_digest
+        && grant.grant_id.len() == 38
+        && grant.grant_id.starts_with("trial_")
+        && grant.grant_id[6..].bytes().all(lower_hex)
+        && valid_uuid(&grant.profile_id)
+        && grant.profile_version > 0
+        && valid_sha256(&grant.profile_digest)
+}
+
+fn valid_profile(profile: &TrialProfile) -> bool {
+    let allowed_roles: HashSet<_> = profile.allowed_material_roles.iter().collect();
+    let build_roles: HashSet<_> = profile.build_context_roles.iter().collect();
+    let base_digests: HashSet<_> = profile.approved_base_digests.iter().collect();
+    let slot_ids: HashSet<_> = profile
+        .required_slots
+        .iter()
+        .map(|slot| &slot.slot_id)
+        .collect();
+    valid_uuid(&profile.profile_id)
+        && profile.profile_version > 0
+        && valid_sha256(&profile.profile_digest)
+        && valid_identifier(&profile.trial_kind)
+        && valid_uuid(&profile.registry_entry_id)
+        && valid_sha256(&profile.registry_entry_digest)
+        && valid_sha256(&profile.checker_image_digest)
+        && valid_sha256(&profile.configuration_sha256)
+        && valid_sha256(&profile.engine_identity_digest)
+        && valid_sha256(&profile.platform_identity_digest)
+        && valid_sha256(&profile.builder_image_digest)
+        && valid_sha256(&profile.offline_cache_digest)
+        && !profile.approved_base_digests.is_empty()
+        && base_digests.len() == profile.approved_base_digests.len()
+        && profile
+            .approved_base_digests
+            .iter()
+            .all(|value| valid_sha256(value))
+        && !allowed_roles.is_empty()
+        && allowed_roles.len() == profile.allowed_material_roles.len()
+        && profile
+            .allowed_material_roles
+            .iter()
+            .all(|value| valid_identifier(value))
+        && !profile.build_context_roles.is_empty()
+        && build_roles.len() == profile.build_context_roles.len()
+        && profile
+            .build_context_roles
+            .iter()
+            .all(|value| allowed_roles.contains(value))
+        && !profile.required_slots.is_empty()
+        && slot_ids.len() == profile.required_slots.len()
+        && profile.required_slots.iter().all(|slot| {
+            let visible_roles: HashSet<_> = slot.visible_roles.iter().collect();
+            valid_identifier(&slot.slot_id)
+                && !slot.visible_roles.is_empty()
+                && visible_roles.len() == slot.visible_roles.len()
+                && slot
+                    .visible_roles
+                    .iter()
+                    .all(|value| allowed_roles.contains(value))
+        })
+        && (1..=ABSOLUTE_MAXIMUM_FRAME_BYTES).contains(&profile.maximum_frame_bytes)
+        && (1..=ABSOLUTE_MAXIMUM_FRAME_BYTES).contains(&profile.maximum_response_bytes)
+        && profile.maximum_steps >= profile.required_slots.len()
+        && profile.maximum_build_timeout_ms > 0
+        && profile.maximum_step_timeout_ms > 0
+        && profile.maximum_step_output_bytes > 0
+        && profile.maximum_step_output_bytes <= ABSOLUTE_MAXIMUM_FRAME_BYTES
+        && profile.maximum_observation_bytes > 0
+        && profile.maximum_observation_bytes <= ABSOLUTE_MAXIMUM_FRAME_BYTES
+        && profile.maximum_cpu_millis > 0
+        && profile.maximum_memory_bytes > 0
+        && profile.maximum_disk_bytes > 0
+        && profile.maximum_entries > 0
+        && profile.maximum_pids > 0
+        && !profile.platform.is_empty()
+}
+
+fn valid_identity(identity: &TrialRequestIdentity) -> bool {
+    valid_sha256(&identity.request_digest)
+        && valid_sha256(&identity.material_binding_digest)
+        && [
+            &identity.project_id,
+            &identity.task_id,
+            &identity.assignment_id,
+            &identity.submission_id,
+            &identity.registry_entry_id,
+            &identity.evaluation_request_id,
+            &identity.checker_run_id,
+            &identity.attempt_id,
+            &identity.result_id,
+            &identity.worker_lease_id,
+        ]
+        .into_iter()
+        .all(|value| valid_uuid(value))
+        && identity.submission_version > 0
+        && identity.evaluation_generation > 0
+        && identity.worker_lease_generation > 0
+        && valid_identifier(&identity.requirement_id)
+        && valid_sha256(&identity.registry_entry_digest)
+        && valid_sha256(&identity.checker_image_digest)
+        && valid_sha256(&identity.configuration_sha256)
+        && !identity.worker_lease_expires_at.is_empty()
+        && identity.worker_lease_expires_at.len() <= 64
+        && !identity
+            .worker_lease_expires_at
+            .chars()
+            .any(char::is_control)
+}
+
+fn validate_plan(plan: &TrialPlan, profile: &TrialProfile) -> Result<(), TrialRelayFailure> {
+    if plan.schema_version != TRIAL_PLAN_SCHEMA
+        || !safe_relative_path(&plan.environment.dockerfile, false)
+        || !safe_relative_path(&plan.environment.context, true)
+        || plan.environment.platform != profile.platform
+        || plan.build_timeout_ms == 0
+        || plan.build_timeout_ms > profile.maximum_build_timeout_ms
+        || plan.steps.is_empty()
+        || plan.steps.len() > profile.maximum_steps
+        || plan.resources.cpu_millis == 0
+        || plan.resources.cpu_millis > profile.maximum_cpu_millis
+        || plan.resources.memory_bytes == 0
+        || plan.resources.memory_bytes > profile.maximum_memory_bytes
+        || plan.resources.disk_bytes == 0
+        || plan.resources.disk_bytes > profile.maximum_disk_bytes
+        || plan.resources.maximum_entries == 0
+        || plan.resources.maximum_entries > profile.maximum_entries
+        || plan.resources.pids == 0
+        || plan.resources.pids > profile.maximum_pids
+    {
+        return Err(TrialRelayFailure::InvalidRequest);
+    }
+    let mut completed_ids = HashSet::new();
+    for (step, expected) in plan.steps.iter().zip(&profile.required_slots) {
+        let expected_roles: HashSet<_> = expected.visible_roles.iter().collect();
+        let actual_roles: HashSet<_> = step.visible_roles.iter().collect();
+        if !valid_identifier(&step.slot_id)
+            || step.slot_id != expected.slot_id
+            || step.operation != "run"
+            || expected_roles != actual_roles
+            || expected.visible_roles.len() != step.visible_roles.len()
+            || step.command.is_empty()
+            || step.command.len() > 64
+            || step.command.iter().any(|value| {
+                value.is_empty() || value.len() > 4096 || value.as_bytes().contains(&0)
+            })
+            || !safe_relative_path(&step.working_directory, true)
+            || step.timeout_ms == 0
+            || step.timeout_ms > profile.maximum_step_timeout_ms
+            || (expected.fresh_workspace && step.state_source != "fresh")
+            || (!expected.fresh_workspace
+                && step.state_source != "fresh"
+                && !completed_ids.contains(&step.state_source))
+        {
+            return Err(TrialRelayFailure::InvalidRequest);
+        }
+        completed_ids.insert(step.slot_id.clone());
+    }
+    if completed_ids.len() != profile.required_slots.len() {
+        return Err(TrialRelayFailure::InvalidRequest);
+    }
+    Ok(())
+}
+
+fn relay_once(
+    listener: UnixListener,
+    context: &TrialEngineContext,
+    publisher: Arc<dyn TrialReceiptPublisher>,
+    engine: Arc<dyn TrialEngine>,
+    deadline: Instant,
+    relay_cancelled: &AtomicBool,
+    invocation_cancelled: &AtomicBool,
+) -> WorkerOutcome {
+    let mut stream = match accept_until(&listener, deadline, relay_cancelled, invocation_cancelled)
+    {
+        Ok(stream) => stream,
+        Err(code) => return failed_outcome(code, false, false),
+    };
+    let frame = match read_frame_until(
+        &mut stream,
+        context.profile.maximum_frame_bytes,
+        deadline,
+        relay_cancelled,
+        invocation_cancelled,
+    ) {
+        Ok(frame) => frame,
+        Err(code) => {
+            let _ = write_unavailable(
+                &mut stream,
+                code,
+                context.profile.maximum_response_bytes,
+                deadline,
+            );
+            return failed_outcome(code, false, false);
+        }
+    };
+    let request: ImageTrialRequest = match serde_json::from_slice(&frame) {
+        Ok(request) => request,
+        Err(_) => {
+            let code = TrialRelayFailure::InvalidRequest;
+            let _ = write_unavailable(
+                &mut stream,
+                code,
+                context.profile.maximum_response_bytes,
+                deadline,
+            );
+            return failed_outcome(code, false, false);
+        }
+    };
+    if request.protocol_version != TRIAL_PROTOCOL
+        || request.operation != "execute_plan"
+        || validate_plan(&request.plan, &context.profile).is_err()
+    {
+        let code = TrialRelayFailure::InvalidRequest;
+        let _ = write_unavailable(
+            &mut stream,
+            code,
+            context.profile.maximum_response_bytes,
+            deadline,
+        );
+        return failed_outcome(code, false, false);
+    }
+    let execution = match engine.execute(
+        context,
+        &request.plan,
+        deadline,
+        invocation_cancelled,
+        relay_cancelled,
+    ) {
+        Ok(execution) => execution,
+        Err(failure) => {
+            let code = if failure.cleanup_unsettled {
+                TrialRelayFailure::CleanupUnsettled
+            } else {
+                failure.code
+            };
+            let _ = write_unavailable(
+                &mut stream,
+                code,
+                context.profile.maximum_response_bytes,
+                deadline,
+            );
+            return failed_outcome(code, true, failure.cleanup_unsettled);
+        }
+    };
+    if let Err(code) = validate_execution(&execution, &request.plan, &context.profile) {
+        let _ = write_unavailable(
+            &mut stream,
+            code,
+            context.profile.maximum_response_bytes,
+            deadline,
+        );
+        return failed_outcome(code, true, code == TrialRelayFailure::CleanupUnsettled);
+    }
+    let publication = match receipt_publication(context, request.plan, execution) {
+        Ok(publication) => publication,
+        Err(code) => {
+            let _ = write_unavailable(
+                &mut stream,
+                code,
+                context.profile.maximum_response_bytes,
+                deadline,
+            );
+            return failed_outcome(code, true, false);
+        }
+    };
+    let published = match publisher.publish_completed(publication) {
+        Ok(published)
+            if valid_receipt_handle(&published.receipt_handle)
+                && valid_sha256(&published.receipt_digest) =>
+        {
+            published
+        }
+        Ok(_) => {
+            let code = TrialRelayFailure::ImplementationUnavailable;
+            let _ = write_unavailable(
+                &mut stream,
+                code,
+                context.profile.maximum_response_bytes,
+                deadline,
+            );
+            return failed_outcome(code, true, false);
+        }
+        Err(failure) => {
+            let _ = write_unavailable(
+                &mut stream,
+                failure.code,
+                context.profile.maximum_response_bytes,
+                deadline,
+            );
+            return failed_outcome(
+                failure.code,
+                true,
+                failure.code == TrialRelayFailure::CleanupUnsettled,
+            );
+        }
+    };
+    let response = CompletedImageTrialResponse {
+        protocol_version: TRIAL_PROTOCOL,
+        outcome: "completed",
+        receipt_handle: &published.receipt_handle,
+        receipt_digest: &published.receipt_digest,
+        failure_code: None,
+    };
+    if write_json_frame(
+        &mut stream,
+        &response,
+        context.profile.maximum_response_bytes,
+        deadline,
+    )
+    .is_err()
+    {
+        return failed_outcome(TrialRelayFailure::ImplementationUnavailable, true, false);
+    }
+    WorkerOutcome {
+        failure: None,
+        cleanup_unsettled: false,
+        plan_started: true,
+        plan_completed: true,
+        receipt_handle: Some(published.receipt_handle),
+        receipt_digest: Some(published.receipt_digest),
+    }
+}
+
+fn receipt_publication(
+    context: &TrialEngineContext,
+    plan: TrialPlan,
+    execution: TrialExecution,
+) -> Result<TrialReceiptPublication, TrialRelayFailure> {
+    let plan_value =
+        serde_json::to_value(&plan).map_err(|_| TrialRelayFailure::ImplementationUnavailable)?;
+    let execution_value = serde_json::to_value(&execution)
+        .map_err(|_| TrialRelayFailure::ImplementationUnavailable)?;
+    let observation_bytes = canonical_json(&execution_value)
+        .map_err(|_| TrialRelayFailure::ImplementationUnavailable)?
+        .len();
+    if observation_bytes > context.profile.maximum_observation_bytes {
+        return Err(TrialRelayFailure::CapacityExceeded);
+    }
+    Ok(TrialReceiptPublication {
+        schema_version: TRIAL_RECEIPT_SCHEMA,
+        request_identity_digest: context.identity.request_digest.clone(),
+        material_binding_digest: context.identity.material_binding_digest.clone(),
+        profile_id: context.profile.profile_id.clone(),
+        profile_version: context.profile.profile_version,
+        profile_digest: context.profile.profile_digest.clone(),
+        trial_kind: context.profile.trial_kind.clone(),
+        engine_identity_digest: context.profile.engine_identity_digest.clone(),
+        plan_digest: canonical_hash(&plan_value)
+            .map_err(|_| TrialRelayFailure::ImplementationUnavailable)?,
+        observation_digest: canonical_hash(&execution_value)
+            .map_err(|_| TrialRelayFailure::ImplementationUnavailable)?,
+        observation_byte_count: observation_bytes,
+        slot_ids: plan.steps.iter().map(|step| step.slot_id.clone()).collect(),
+        plan_started: true,
+        plan_completed: true,
+        cleanup_confirmed: true,
+        plan,
+        execution,
+    })
+}
+
+fn validate_execution(
+    execution: &TrialExecution,
+    plan: &TrialPlan,
+    profile: &TrialProfile,
+) -> Result<(), TrialRelayFailure> {
+    if !execution.cleanup_confirmed {
+        return Err(TrialRelayFailure::CleanupUnsettled);
+    }
+    if execution.platform_identity_digest != profile.platform_identity_digest
+        || execution.builder_image_digest != profile.builder_image_digest
+        || execution.offline_cache_digest != profile.offline_cache_digest
+        || execution.base_image_digests != profile.approved_base_digests
+        || execution.steps.len() != plan.steps.len()
+        || !valid_build_observation(&execution.build, plan, profile)
+        || !valid_role_inventory(
+            &execution.material_inventory_digests,
+            &profile.allowed_material_roles,
+        )
+    {
+        return Err(TrialRelayFailure::ImplementationUnavailable);
+    }
+    for (index, (observation, step)) in execution.steps.iter().zip(&plan.steps).enumerate() {
+        if observation.slot_id != step.slot_id
+            || observation.operation_order != (index + 1) as u32
+            || !valid_identifier(&observation.workspace_identity)
+            || !valid_identifier(&observation.completion)
+            || !valid_identifier(&observation.measurement_method)
+            || !valid_sha256(&observation.stdout_sha256)
+            || !valid_sha256(&observation.stderr_sha256)
+            || !valid_sha256(&observation.workspace_before_sha256)
+            || !valid_sha256(&observation.workspace_after_sha256)
+            || sha256_text(&observation.stdout) != observation.stdout_sha256
+            || sha256_text(&observation.stderr) != observation.stderr_sha256
+            || observation
+                .stdout
+                .len()
+                .saturating_add(observation.stderr.len())
+                > profile.maximum_step_output_bytes
+            || observation.elapsed_ms > step.timeout_ms
+            || observation.cpu_millis > plan.resources.cpu_millis
+            || observation.peak_memory_bytes > plan.resources.memory_bytes
+            || observation.peak_pids > plan.resources.pids
+            || observation.written_bytes > plan.resources.disk_bytes
+            || observation.written_entries > plan.resources.maximum_entries
+            || !valid_role_inventory(
+                &observation.visible_role_inventory_digests,
+                &step.visible_roles,
+            )
+        {
+            return Err(TrialRelayFailure::ImplementationUnavailable);
+        }
+    }
+    Ok(())
+}
+
+fn valid_build_observation(
+    observation: &TrialBuildObservation,
+    plan: &TrialPlan,
+    profile: &TrialProfile,
+) -> bool {
+    valid_identifier(&observation.completion)
+        && valid_identifier(&observation.measurement_method)
+        && observation
+            .candidate_image_digest
+            .as_deref()
+            .is_none_or(valid_sha256)
+        && observation
+            .candidate_archive_digest
+            .as_deref()
+            .is_none_or(valid_sha256)
+        && observation.elapsed_ms <= plan.build_timeout_ms
+        && observation.cpu_millis <= plan.resources.cpu_millis
+        && observation.peak_memory_bytes <= plan.resources.memory_bytes
+        && observation.peak_pids <= plan.resources.pids
+        && observation.written_bytes <= plan.resources.disk_bytes
+        && observation.written_entries <= plan.resources.maximum_entries
+        && (observation.candidate_image_digest.is_none()
+            == observation.candidate_archive_digest.is_none())
+        && observation.candidate_image_digest.is_some()
+        && profile
+            .approved_base_digests
+            .iter()
+            .all(|digest| valid_sha256(digest))
+}
+
+fn valid_role_inventory(values: &[RoleInventoryDigest], expected: &[String]) -> bool {
+    let mut roles = HashSet::new();
+    values.len() == expected.len()
+        && values.iter().all(|value| {
+            valid_identifier(&value.role)
+                && valid_sha256(&value.digest)
+                && roles.insert(value.role.as_str())
+        })
+        && roles == expected.iter().map(String::as_str).collect()
+}
+
+fn failed_outcome(
+    code: TrialRelayFailure,
+    plan_started: bool,
+    cleanup_unsettled: bool,
+) -> WorkerOutcome {
+    WorkerOutcome {
+        failure: Some(code),
+        cleanup_unsettled,
+        plan_started,
+        plan_completed: false,
+        receipt_handle: None,
+        receipt_digest: None,
+    }
+}
+
+fn accept_until(
+    listener: &UnixListener,
+    deadline: Instant,
+    relay_cancelled: &AtomicBool,
+    invocation_cancelled: &AtomicBool,
+) -> Result<UnixStream, TrialRelayFailure> {
+    loop {
+        check_available(deadline, relay_cancelled, invocation_cancelled)?;
+        match listener.accept() {
+            Ok((stream, _)) => {
+                stream
+                    .set_nonblocking(true)
+                    .map_err(|_| TrialRelayFailure::ImplementationUnavailable)?;
+                return Ok(stream);
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                thread::park_timeout(Duration::from_millis(2));
+            }
+            Err(_) => return Err(TrialRelayFailure::ImplementationUnavailable),
+        }
+    }
+}
+
+fn read_frame_until(
+    stream: &mut UnixStream,
+    maximum: usize,
+    deadline: Instant,
+    relay_cancelled: &AtomicBool,
+    invocation_cancelled: &AtomicBool,
+) -> Result<Vec<u8>, TrialRelayFailure> {
+    let mut length = [0_u8; 4];
+    read_exact_until(
+        stream,
+        &mut length,
+        deadline,
+        relay_cancelled,
+        invocation_cancelled,
+    )?;
+    let length = u32::from_be_bytes(length) as usize;
+    if length == 0 || length > maximum {
+        return Err(TrialRelayFailure::InvalidRequest);
+    }
+    let mut bytes = vec![0_u8; length];
+    read_exact_until(
+        stream,
+        &mut bytes,
+        deadline,
+        relay_cancelled,
+        invocation_cancelled,
+    )?;
+    Ok(bytes)
+}
+
+fn read_exact_until(
+    stream: &mut UnixStream,
+    mut bytes: &mut [u8],
+    deadline: Instant,
+    relay_cancelled: &AtomicBool,
+    invocation_cancelled: &AtomicBool,
+) -> Result<(), TrialRelayFailure> {
+    while !bytes.is_empty() {
+        check_available(deadline, relay_cancelled, invocation_cancelled)?;
+        match stream.read(bytes) {
+            Ok(0) => return Err(TrialRelayFailure::InvalidRequest),
+            Ok(count) => bytes = &mut bytes[count..],
+            Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                thread::park_timeout(Duration::from_millis(2));
+            }
+            Err(_) => return Err(TrialRelayFailure::ImplementationUnavailable),
+        }
+    }
+    Ok(())
+}
+
+fn write_unavailable(
+    stream: &mut UnixStream,
+    code: TrialRelayFailure,
+    maximum: usize,
+    deadline: Instant,
+) -> Result<(), TrialRelayFailure> {
+    write_json_frame(
+        stream,
+        &UnavailableImageTrialResponse {
+            protocol_version: TRIAL_PROTOCOL,
+            outcome: "unavailable",
+            receipt_handle: None,
+            receipt_digest: None,
+            failure_code: code.wire_code(),
+        },
+        maximum,
+        deadline,
+    )
+}
+
+fn write_json_frame<T: Serialize>(
+    stream: &mut UnixStream,
+    value: &T,
+    maximum: usize,
+    deadline: Instant,
+) -> Result<(), TrialRelayFailure> {
+    let bytes =
+        serde_json::to_vec(value).map_err(|_| TrialRelayFailure::ImplementationUnavailable)?;
+    if bytes.is_empty() || bytes.len() > maximum || bytes.len() > u32::MAX as usize {
+        return Err(TrialRelayFailure::CapacityExceeded);
+    }
+    write_all_until(stream, &(bytes.len() as u32).to_be_bytes(), deadline)?;
+    write_all_until(stream, &bytes, deadline)
+}
+
+fn write_all_until(
+    stream: &mut UnixStream,
+    mut bytes: &[u8],
+    deadline: Instant,
+) -> Result<(), TrialRelayFailure> {
+    while !bytes.is_empty() {
+        if Instant::now() >= deadline {
+            return Err(TrialRelayFailure::DeadlineExceeded);
+        }
+        match stream.write(bytes) {
+            Ok(0) => return Err(TrialRelayFailure::ImplementationUnavailable),
+            Ok(count) => bytes = &bytes[count..],
+            Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                thread::park_timeout(Duration::from_millis(2));
+            }
+            Err(_) => return Err(TrialRelayFailure::ImplementationUnavailable),
+        }
+    }
+    Ok(())
+}
+
+fn check_available(
+    deadline: Instant,
+    relay_cancelled: &AtomicBool,
+    invocation_cancelled: &AtomicBool,
+) -> Result<(), TrialRelayFailure> {
+    if relay_cancelled.load(Ordering::Acquire) || invocation_cancelled.load(Ordering::Acquire) {
+        Err(TrialRelayFailure::Cancelled)
+    } else if Instant::now() >= deadline {
+        Err(TrialRelayFailure::DeadlineExceeded)
+    } else {
+        Ok(())
+    }
+}
+
+fn create_invocation_directory(root: &Path) -> Result<PathBuf, TrialRelayStartFailure> {
+    for _ in 0..32 {
+        let sequence = INVOCATION_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+        let path = root.join(format!(
+            "{INVOCATION_DIRECTORY_PREFIX}{:08x}{:08x}",
+            std::process::id(),
+            sequence
+        ));
+        let mut builder = DirBuilder::new();
+        builder.mode(0o700);
+        match builder.create(&path) {
+            Ok(()) => return Ok(path),
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(_) => {
+                return Err(TrialRelayStartFailure {
+                    code: TrialRelayFailure::ImplementationUnavailable,
+                    cleanup_unsettled: false,
+                });
+            }
+        }
+    }
+    Err(TrialRelayStartFailure {
+        code: TrialRelayFailure::CapacityExceeded,
+        cleanup_unsettled: false,
+    })
+}
+
+fn remove_created_paths(directory: &Path, socket: &Path) -> TrialRelayStartFailure {
+    let socket_removed = match fs::symlink_metadata(socket) {
+        Ok(metadata) if metadata.file_type().is_socket() => fs::remove_file(socket).is_ok(),
+        Ok(_) => false,
+        Err(error) => error.kind() == std::io::ErrorKind::NotFound,
+    };
+    let directory_removed = fs::remove_dir(directory).is_ok();
+    TrialRelayStartFailure {
+        code: TrialRelayFailure::ImplementationUnavailable,
+        cleanup_unsettled: !(socket_removed && directory_removed),
+    }
+}
+
+fn cleanup_paths(paths: &RelayPaths) -> bool {
+    let socket_ok = match fs::symlink_metadata(&paths.socket) {
+        Ok(metadata)
+            if metadata.file_type().is_socket()
+                && metadata.dev() == paths.socket_device
+                && metadata.ino() == paths.socket_inode
+                && metadata.uid() == paths.sandbox_uid
+                && metadata.gid() == paths.sandbox_gid =>
+        {
+            fs::remove_file(&paths.socket).is_ok()
+        }
+        _ => false,
+    };
+    let directory_ok = match fs::symlink_metadata(&paths.directory) {
+        Ok(metadata)
+            if private_directory(&metadata, paths.sandbox_uid, paths.sandbox_gid)
+                && metadata.dev() == paths.directory_device
+                && metadata.ino() == paths.directory_inode =>
+        {
+            fs::remove_dir(&paths.directory).is_ok()
+        }
+        _ => false,
+    };
+    socket_ok && directory_ok
+}
+
+fn validate_private_root(path: &Path, uid: u32, gid: u32) -> Result<(), ()> {
+    let metadata = fs::symlink_metadata(path).map_err(|_| ())?;
+    if !private_directory(&metadata, uid, gid)
+        || path.as_os_str().as_bytes().contains(&0)
+        || path.as_os_str().as_bytes().contains(&b'\n')
+        || path.as_os_str().as_bytes().contains(&b'\r')
+    {
+        return Err(());
+    }
+    Ok(())
+}
+
+fn private_directory(metadata: &fs::Metadata, uid: u32, gid: u32) -> bool {
+    metadata.file_type().is_dir()
+        && metadata.mode() & 0o077 == 0
+        && metadata.uid() == uid
+        && metadata.gid() == gid
+}
+
+fn safe_relative_path(value: &str, allow_dot: bool) -> bool {
+    if value.is_empty()
+        || value.len() > 1000
+        || value.as_bytes().contains(&0)
+        || value.contains('\\')
+        || (!allow_dot && value == ".")
+    {
+        return false;
+    }
+    let path = Path::new(value);
+    !path.is_absolute()
+        && path.components().all(|component| match component {
+            Component::Normal(part) => !part.is_empty(),
+            Component::CurDir => allow_dot && value == ".",
+            _ => false,
+        })
+}
+
+fn valid_identifier(value: &str) -> bool {
+    let mut characters = value.chars();
+    value.len() <= 100
+        && characters
+            .next()
+            .is_some_and(|first| first.is_ascii_lowercase())
+        && characters.all(|item| {
+            item.is_ascii_lowercase() || item.is_ascii_digit() || matches!(item, '_' | '.' | '-')
+        })
+}
+
+fn valid_uuid(value: &str) -> bool {
+    value.len() == 36
+        && value.bytes().enumerate().all(|(index, item)| {
+            if matches!(index, 8 | 13 | 18 | 23) {
+                item == b'-'
+            } else {
+                lower_hex(item)
+            }
+        })
+}
+
+fn valid_sha256(value: &str) -> bool {
+    value.len() == 71 && value.starts_with("sha256:") && value[7..].bytes().all(lower_hex)
+}
+
+fn valid_receipt_handle(value: &str) -> bool {
+    value.len() == 46 && value.starts_with("trial_receipt_") && value[14..].bytes().all(lower_hex)
+}
+
+fn lower_hex(value: u8) -> bool {
+    value.is_ascii_digit() || (b'a'..=b'f').contains(&value)
+}
+
+fn sha256_text(value: &str) -> String {
+    format!("sha256:{:x}", Sha256::digest(value.as_bytes()))
+}

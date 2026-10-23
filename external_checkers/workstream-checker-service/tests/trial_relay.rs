@@ -1,0 +1,430 @@
+use serde_json::{json, Value};
+use sha2::{Digest, Sha256};
+use std::fs;
+use std::io::{Read, Write};
+use std::os::unix::fs::{MetadataExt, PermissionsExt};
+use std::os::unix::net::UnixStream;
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
+
+#[allow(dead_code)]
+#[path = "../src/trial_relay.rs"]
+mod trial_relay;
+use trial_relay::*;
+
+static TEST_SEQUENCE: AtomicUsize = AtomicUsize::new(0);
+
+struct TestRoot(PathBuf);
+
+impl TestRoot {
+    fn new() -> Self {
+        let path = std::env::temp_dir().join(format!(
+            "workstream-trial-relay-test-{}-{}",
+            std::process::id(),
+            TEST_SEQUENCE.fetch_add(1, Ordering::Relaxed)
+        ));
+        fs::create_dir(&path).unwrap();
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o700)).unwrap();
+        Self(path)
+    }
+
+    fn child(&self, name: &str) -> PathBuf {
+        let path = self.0.join(name);
+        fs::create_dir(&path).unwrap();
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o700)).unwrap();
+        path
+    }
+}
+
+impl Drop for TestRoot {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.0);
+    }
+}
+
+#[derive(Default)]
+struct FakePublisher(Mutex<Vec<Value>>);
+
+impl TrialReceiptPublisher for FakePublisher {
+    fn publish_completed(
+        &self,
+        publication: TrialReceiptPublication,
+    ) -> Result<PublishedTrialReceipt, TrialReceiptPublishFailure> {
+        self.0
+            .lock()
+            .unwrap()
+            .push(serde_json::to_value(publication).unwrap());
+        Ok(PublishedTrialReceipt {
+            receipt_handle: format!("trial_receipt_{}", "a".repeat(32)),
+            receipt_digest: digest('b'),
+        })
+    }
+}
+
+struct FakeEngine {
+    calls: AtomicUsize,
+    cleanup_confirmed: bool,
+}
+
+impl TrialEngine for FakeEngine {
+    fn execute(
+        &self,
+        _context: &TrialEngineContext,
+        _plan: &TrialPlan,
+        _deadline: Instant,
+        invocation_cancelled: &AtomicBool,
+        relay_cancelled: &AtomicBool,
+    ) -> Result<TrialExecution, TrialEngineFailure> {
+        assert!(!invocation_cancelled.load(Ordering::Acquire));
+        assert!(!relay_cancelled.load(Ordering::Acquire));
+        self.calls.fetch_add(1, Ordering::Relaxed);
+        Ok(execution(self.cleanup_confirmed))
+    }
+}
+
+fn digest(character: char) -> String {
+    format!("sha256:{}", character.to_string().repeat(64))
+}
+
+fn text_digest(value: &str) -> String {
+    format!("sha256:{:x}", Sha256::digest(value.as_bytes()))
+}
+
+fn identity() -> TrialRequestIdentity {
+    TrialRequestIdentity {
+        request_digest: digest('1'),
+        material_binding_digest: digest('2'),
+        project_id: "018f6f49-66b8-7d2a-bf4d-0e2eeaa00001".into(),
+        task_id: "018f6f49-66b8-7d2a-bf4d-0e2eeaa00002".into(),
+        assignment_id: "018f6f49-66b8-7d2a-bf4d-0e2eeaa00003".into(),
+        submission_id: "018f6f49-66b8-7d2a-bf4d-0e2eeaa00004".into(),
+        submission_version: 2,
+        requirement_id: "check_a".into(),
+        registry_entry_id: "018f6f49-66b8-7d2a-bf4d-0e2eeaa00005".into(),
+        registry_entry_digest: digest('3'),
+        checker_image_digest: digest('4'),
+        configuration_sha256: digest('5'),
+        evaluation_request_id: "018f6f49-66b8-7d2a-bf4d-0e2eeaa00006".into(),
+        evaluation_generation: 3,
+        checker_run_id: "018f6f49-66b8-7d2a-bf4d-0e2eeaa00007".into(),
+        attempt_id: "018f6f49-66b8-7d2a-bf4d-0e2eeaa00008".into(),
+        result_id: "018f6f49-66b8-7d2a-bf4d-0e2eeaa00009".into(),
+        worker_lease_id: "018f6f49-66b8-7d2a-bf4d-0e2eeaa0000a".into(),
+        worker_lease_generation: 4,
+        worker_lease_expires_at: "2026-10-23T12:00:00Z".into(),
+    }
+}
+
+fn profile() -> TrialProfile {
+    let identity = identity();
+    TrialProfile {
+        profile_id: "018f6f49-66b8-7d2a-bf4d-0e2eeaa0000b".into(),
+        profile_version: 1,
+        profile_digest: digest('6'),
+        trial_kind: "generic_build_and_run".into(),
+        registry_entry_id: identity.registry_entry_id,
+        registry_entry_digest: identity.registry_entry_digest,
+        checker_image_digest: identity.checker_image_digest,
+        configuration_sha256: identity.configuration_sha256,
+        engine_identity_digest: digest('7'),
+        platform: "linux/amd64".into(),
+        platform_identity_digest: digest('8'),
+        builder_image_digest: digest('9'),
+        offline_cache_digest: digest('a'),
+        approved_base_digests: vec![digest('b')],
+        build_context_roles: vec!["source".into()],
+        allowed_material_roles: vec!["source".into(), "checks".into()],
+        required_slots: vec![TrialSlotProfile {
+            slot_id: "slot_a".into(),
+            visible_roles: vec!["source".into()],
+            fresh_workspace: true,
+        }],
+        maximum_frame_bytes: 32 * 1024,
+        maximum_response_bytes: 4 * 1024,
+        maximum_steps: 2,
+        maximum_build_timeout_ms: 2_000,
+        maximum_step_timeout_ms: 1_000,
+        maximum_step_output_bytes: 4_096,
+        maximum_observation_bytes: 32 * 1024,
+        maximum_cpu_millis: 2_000,
+        maximum_memory_bytes: 128 * 1024 * 1024,
+        maximum_disk_bytes: 64 * 1024 * 1024,
+        maximum_entries: 1_000,
+        maximum_pids: 32,
+    }
+}
+
+fn grant() -> TrialGrant {
+    let profile = profile();
+    TrialGrant {
+        grant_id: format!("trial_{}", "c".repeat(32)),
+        binding_digest: identity().request_digest,
+        profile_id: profile.profile_id,
+        profile_version: profile.profile_version,
+        profile_digest: profile.profile_digest,
+    }
+}
+
+fn plan() -> Value {
+    json!({
+        "schema_version": "workstream.checker_trial_plan.v1",
+        "environment": {"dockerfile": "Containerfile", "context": ".", "platform": "linux/amd64"},
+        "resources": {"cpu_millis": 1000, "memory_bytes": 67_108_864, "disk_bytes": 33_554_432, "maximum_entries": 500, "pids": 16},
+        "build_timeout_ms": 1500,
+        "steps": [{
+            "slot_id": "slot_a", "operation": "run", "state_source": "fresh",
+            "visible_roles": ["source"],
+            "command": ["/candidate/bin/check", "--case", "a"],
+            "working_directory": ".", "timeout_ms": 800
+        }]
+    })
+}
+
+fn execution(cleanup_confirmed: bool) -> TrialExecution {
+    let profile = profile();
+    TrialExecution {
+        platform_identity_digest: profile.platform_identity_digest,
+        builder_image_digest: profile.builder_image_digest,
+        offline_cache_digest: profile.offline_cache_digest,
+        base_image_digests: profile.approved_base_digests,
+        material_inventory_digests: vec![
+            RoleInventoryDigest {
+                role: "source".into(),
+                digest: digest('c'),
+            },
+            RoleInventoryDigest {
+                role: "checks".into(),
+                digest: digest('d'),
+            },
+        ],
+        build: TrialBuildObservation {
+            completion: "completed".into(),
+            exit_code: Some(0),
+            signal: None,
+            candidate_image_digest: Some(digest('e')),
+            candidate_archive_digest: Some(digest('f')),
+            elapsed_ms: 100,
+            cpu_millis: 50,
+            peak_memory_bytes: 1024,
+            peak_pids: 2,
+            written_bytes: 2048,
+            written_entries: 4,
+            measurement_method: "cgroup_v2".into(),
+        },
+        steps: vec![TrialStepObservation {
+            slot_id: "slot_a".into(),
+            operation_order: 1,
+            workspace_identity: "workspace_a".into(),
+            visible_role_inventory_digests: vec![RoleInventoryDigest {
+                role: "source".into(),
+                digest: digest('c'),
+            }],
+            completion: "completed".into(),
+            exit_code: Some(0),
+            signal: None,
+            stdout: "ok\n".into(),
+            stdout_sha256: text_digest("ok\n"),
+            stderr: String::new(),
+            stderr_sha256: text_digest(""),
+            workspace_before_sha256: digest('1'),
+            workspace_after_sha256: digest('2'),
+            elapsed_ms: 20,
+            cpu_millis: 10,
+            peak_memory_bytes: 512,
+            peak_pids: 1,
+            written_bytes: 64,
+            written_entries: 1,
+            measurement_method: "cgroup_v2".into(),
+        }],
+        cleanup_confirmed,
+    }
+}
+
+struct StartedRelay {
+    _root: TestRoot,
+    relay: TrialRelay,
+    publisher: Arc<FakePublisher>,
+    engine: Arc<FakeEngine>,
+}
+
+fn start(cleanup_confirmed: bool) -> StartedRelay {
+    let root = TestRoot::new();
+    let relay_root = root.child("relay");
+    let material_root = root.child("material");
+    let scratch_root = root.child("scratch");
+    let metadata = fs::metadata(&root.0).unwrap();
+    let publisher = Arc::new(FakePublisher::default());
+    let engine = Arc::new(FakeEngine {
+        calls: AtomicUsize::new(0),
+        cleanup_confirmed,
+    });
+    let relay = TrialRelay::start(
+        &relay_root,
+        &material_root,
+        &scratch_root,
+        &grant(),
+        &identity(),
+        &profile(),
+        publisher.clone(),
+        engine.clone(),
+        metadata.uid(),
+        metadata.gid(),
+        Instant::now() + Duration::from_secs(5),
+        Arc::new(AtomicBool::new(false)),
+    )
+    .unwrap();
+    StartedRelay {
+        _root: root,
+        relay,
+        publisher,
+        engine,
+    }
+}
+
+fn exchange(path: &Path, value: &Value) -> Value {
+    let mut stream = UnixStream::connect(path).unwrap();
+    let bytes = serde_json::to_vec(value).unwrap();
+    stream
+        .write_all(&(bytes.len() as u32).to_be_bytes())
+        .unwrap();
+    stream.write_all(&bytes).unwrap();
+    let mut length = [0_u8; 4];
+    stream.read_exact(&mut length).unwrap();
+    let mut response = vec![0_u8; u32::from_be_bytes(length) as usize];
+    stream.read_exact(&mut response).unwrap();
+    serde_json::from_slice(&response).unwrap()
+}
+
+fn request(plan: Value) -> Value {
+    json!({"protocol_version": "workstream.checker_trial.v1", "operation": "execute_plan", "plan": plan})
+}
+
+fn assert_plan_rejected(mutator: impl FnOnce(&mut Value)) {
+    let started = start(true);
+    let mut bad_plan = plan();
+    mutator(&mut bad_plan);
+    let response = exchange(started.relay.socket_path(), &request(bad_plan));
+    assert_eq!(response["outcome"], "unavailable");
+    assert_eq!(response["failure_code"], "invalid_request");
+    assert_eq!(started.engine.calls.load(Ordering::Relaxed), 0);
+    assert!(started.publisher.0.lock().unwrap().is_empty());
+    let finish = started.relay.finish();
+    assert_eq!(finish.failure, Some(TrialRelayFailure::InvalidRequest));
+}
+
+#[test]
+fn completed_plan_publishes_runner_facts_only_after_confirmed_cleanup() {
+    let started = start(true);
+    assert!(started
+        .relay
+        .mount_spec()
+        .contains("dst=/work/execution.sock"));
+    assert!(started.relay.mount_spec().ends_with(",readonly"));
+    let response = exchange(started.relay.socket_path(), &request(plan()));
+    assert_eq!(response["outcome"], "completed");
+    assert!(response.get("plan").is_none());
+    assert_eq!(started.engine.calls.load(Ordering::Relaxed), 1);
+    let publications = started.publisher.0.lock().unwrap();
+    assert_eq!(publications.len(), 1);
+    assert_eq!(publications[0]["request_identity_digest"], digest('1'));
+    assert_eq!(publications[0]["trial_kind"], "generic_build_and_run");
+    assert_eq!(publications[0]["cleanup_confirmed"], true);
+    assert!(publications[0].get("verdict").is_none());
+    drop(publications);
+    let finish = started.relay.finish();
+    assert_eq!(finish.failure, None);
+    assert!(finish.plan_started && finish.plan_completed && !finish.cleanup_unsettled);
+}
+
+#[test]
+fn host_runtime_fields_and_profile_slot_substitution_are_rejected_before_engine() {
+    assert_plan_rejected(|value| value["network_mode"] = json!("host"));
+    assert_plan_rejected(|value| value["steps"][0]["slot_id"] = json!("foreign_slot"));
+    assert_plan_rejected(|value| value["steps"][0]["visible_roles"] = json!(["checks"]));
+    assert_plan_rejected(|value| value["steps"][0]["working_directory"] = json!("../host"));
+    assert_plan_rejected(|value| value["resources"]["pids"] = json!(33));
+    assert_plan_rejected(|value| value["environment"]["platform"] = json!("linux/arm64"));
+}
+
+#[test]
+fn cleanup_ambiguity_never_publishes_receipt_or_work_verdict() {
+    let started = start(false);
+    let response = exchange(started.relay.socket_path(), &request(plan()));
+    assert_eq!(response["outcome"], "unavailable");
+    assert_eq!(response["failure_code"], "cleanup_unsettled");
+    assert!(response["receipt_handle"].is_null());
+    assert!(started.publisher.0.lock().unwrap().is_empty());
+    let finish = started.relay.finish();
+    assert_eq!(finish.failure, Some(TrialRelayFailure::CleanupUnsettled));
+    assert!(finish.cleanup_unsettled && finish.plan_started && !finish.plan_completed);
+}
+
+#[test]
+fn mismatched_request_bound_profile_is_rejected_before_socket_creation() {
+    let root = TestRoot::new();
+    let relay_root = root.child("relay");
+    let material_root = root.child("material");
+    let scratch_root = root.child("scratch");
+    let metadata = fs::metadata(&root.0).unwrap();
+    let mut foreign = profile();
+    foreign.configuration_sha256 = digest('0');
+    let result = TrialRelay::start(
+        &relay_root,
+        &material_root,
+        &scratch_root,
+        &grant(),
+        &identity(),
+        &foreign,
+        Arc::new(FakePublisher::default()),
+        Arc::new(FakeEngine {
+            calls: AtomicUsize::new(0),
+            cleanup_confirmed: true,
+        }),
+        metadata.uid(),
+        metadata.gid(),
+        Instant::now() + Duration::from_secs(1),
+        Arc::new(AtomicBool::new(false)),
+    );
+    let failure = result.err().expect("mismatched profile must fail");
+    assert_eq!(failure.code, TrialRelayFailure::InvalidRequest);
+    assert!(!failure.cleanup_unsettled);
+    assert!(fs::read_dir(relay_root).unwrap().next().is_none());
+}
+
+#[test]
+fn invocation_cancellation_closes_waiting_relay_without_receipt() {
+    let root = TestRoot::new();
+    let relay_root = root.child("relay");
+    let material_root = root.child("material");
+    let scratch_root = root.child("scratch");
+    let metadata = fs::metadata(&root.0).unwrap();
+    let cancelled = Arc::new(AtomicBool::new(false));
+    let publisher = Arc::new(FakePublisher::default());
+    let engine = Arc::new(FakeEngine {
+        calls: AtomicUsize::new(0),
+        cleanup_confirmed: true,
+    });
+    let relay = TrialRelay::start(
+        &relay_root,
+        &material_root,
+        &scratch_root,
+        &grant(),
+        &identity(),
+        &profile(),
+        publisher.clone(),
+        engine.clone(),
+        metadata.uid(),
+        metadata.gid(),
+        Instant::now() + Duration::from_secs(2),
+        cancelled.clone(),
+    )
+    .unwrap();
+    cancelled.store(true, Ordering::Release);
+    let finish = relay.finish();
+    assert_eq!(finish.failure, Some(TrialRelayFailure::Cancelled));
+    assert!(!finish.plan_started && !finish.plan_completed);
+    assert_eq!(engine.calls.load(Ordering::Relaxed), 0);
+    assert!(publisher.0.lock().unwrap().is_empty());
+}
