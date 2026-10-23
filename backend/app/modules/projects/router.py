@@ -219,9 +219,10 @@ async def guide_upload_context(
     key: Annotated[UUID, Depends(require_guide_mutation_key)],
     request: Request,
     resolved: Annotated[ResolvedActor, Depends(guide_authorization_actor)],
+    session: Annotated[AsyncSession, Depends(get_db_session)],
 ):
     """Reuse the key-gated actor dependency before composing ingest context."""
-    return key, await get_artifact_authorization_context(request, resolved)
+    return key, await get_artifact_authorization_context(request, resolved, session)
 
 
 def guide_document_upload_command(

@@ -110,6 +110,11 @@ AWS_ARTIFACT_ACTIVATION_TARGETS = frozenset({
     "backend/scripts/aws_artifact_provider_proof.py",
     "backend/scripts/aws_roles_anywhere_config.py",
 })
+AUTH_ART_OPERATOR_TARGETS = frozenset({
+    "backend/app/modules/artifacts/api/operator_authority.py",
+    "backend/app/modules/authorization/artifact_operator_authorization.py",
+    "backend/app/modules/authorization/domain/artifact_operator.py",
+})
 PILOT_READ_1_TARGETS = frozenset({
     "backend/app/modules/tasks/submission_attempts.py",
 })
@@ -1030,6 +1035,7 @@ def _validate_additive_partition_transition(
         | PILOT_08_REVISION_TARGETS
         | PILOT_READ_1_TARGETS
         | AWS_ARTIFACT_ACTIVATION_TARGETS
+        | AUTH_ART_OPERATOR_TARGETS
         | CHECKER_IMAGE_PUBLISH_TARGETS
         | PILOT_READ_2_TARGETS
         | PILOT_READ_3_TARGETS
