@@ -90,6 +90,14 @@
     },
     {
       "group": "lifecycle",
+      "target": "backend/app/adapters/project_agents/omnicore_agent.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/adapters/project_agents/omnicore_profile.py"
+    },
+    {
+      "group": "lifecycle",
       "target": "backend/app/adapters/project_agents/openai_agent_sdk.py"
     },
     {
@@ -2209,6 +2217,10 @@
       "target": "backend/app/workers/project_setup.py"
     },
     {
+      "group": "lifecycle",
+      "target": "backend/app/workers/project_setup_topology.py"
+    },
+    {
       "group": "shared",
       "target": "backend/app/workers/revision_recovery.py"
     },
@@ -2357,7 +2369,7 @@
       "target": "backend/scripts/validate_test_lane_evidence.py"
     }
   ],
-  "authority_digest": "fe5a6909f59a60d0d75f1159c6d0eecde9737a748895901e3f0edb5bc8d8a71a",
+  "authority_digest": "38802d2eaf89cd8ce3ec68743f7c8a4868771d69fb99544400dd16559a269098",
   "protected_base_commit": "7676ce4347db0c9694962a9b587a20765e16eac6",
   "schema": "workstream.behavior-ownership-partition.v1"
 }

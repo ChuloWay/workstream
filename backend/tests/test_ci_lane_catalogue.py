@@ -24,7 +24,7 @@ def test_committed_lanes_cover_recursive_inventory_exactly_once() -> None:
     runner.validate_lane_inventory(discovered)
 
     assigned = [module for lane in LANES for module in lane.modules]
-    assert len(LANES) == 16
+    assert len(LANES) == 17
     assert all(lane.requires_postgres for lane in LANES)
     assert Counter(assigned)[catalogue.SCHEMA_MODULE] == 1
     assert all(
@@ -269,11 +269,11 @@ def test_semantic_family_membership_has_an_independent_fingerprint() -> None:
     expected = {
         "shared": (
             258,
-            "899f78556b7f85b8b260ddc64e524cc87daa97dfaa56612c8c7f40ea70a67965",
+            "6dac9695511a0cafc5aa32daa590857c84e38a6410630546e8ce02b4e5263324",
         ),
         "project": (
-            212,
-            "e2bc41c30367873c9f58951329906e437b83d76c520ec14ea19007a9f2a81c47",
+            213,
+            "3c2477009349137e7aefd268294a811c16ee8b2ffff23d5aa513f4b479b1889d",
         ),
         "task": (
             95,
@@ -345,9 +345,9 @@ def test_project_lane_ownership_has_an_independent_fingerprint() -> None:
         )
         + "\n"
     )
-    assert len(catalogue.PROJECT_PARTITIONED_MODULES) == 212
+    assert len(catalogue.PROJECT_PARTITIONED_MODULES) == 213
     assert hashlib.sha256(canonical.encode()).hexdigest() == (
-        "8999426e5b39eaadc925b94ae506924030a81787ffcdf82eb6d8c4c6ae631754"
+        "41e0285a424449b5d639407cfd4ca5a4ac1065baa8057198417274d310adc3a8"
     )
 
 
@@ -763,8 +763,8 @@ def test_workflow_lane_inventory_matches_catalogue() -> None:
     assert source.count("path: backend/.ci/download\n          merge-multiple: false") == 1
     assert '--expected-head "${GITHUB_SHA}"' in source
     assert '--run-attempt "${GITHUB_RUN_ATTEMPT}"' in source
-    assert 'test "${#coverage_files[@]}" -eq 16' in source
-    assert "len(lanes) != 16" in source
+    assert 'test "${#coverage_files[@]}" -eq 17' in source
+    assert "len(lanes) != 17" in source
     assert 'Path(".ci/download"), expected_head, int(os.environ["GITHUB_RUN_ATTEMPT"])' in source
     assert 'timing_path = bundle / "job-start-epoch.txt"' in source
     assert (

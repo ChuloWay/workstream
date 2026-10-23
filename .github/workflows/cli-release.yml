@@ -1,0 +1,295 @@
+name: CLI release proof and publication
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/cli-release.yml
+      - scripts/package_cli_release.py
+      - scripts/test_cli_release.py
+      - scripts/test_cli_release_smoke.py
+      - scripts/test_package_cli_release.py
+      - scripts/check_cli_release_controls.py
+      - scripts/test_cli_release_controls.py
+      - .gitattributes
+      - LICENSE
+      - cli/**
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing annotated cli-vMAJOR.MINOR.PATCH tag on main
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  prepare:
+    runs-on: ubuntu-24.04
+    outputs:
+      commit: ${{ steps.source.outputs.commit }}
+      tag: ${{ steps.source.outputs.tag }}
+      tag_oid: ${{ steps.source.outputs.tag_oid }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - id: source
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_REF: ${{ github.ref }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT_NAME" = workflow_dispatch ]; then
+            test "$EVENT_REF" = refs/heads/main
+            [[ "$RELEASE_TAG" =~ ^cli-v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]
+            git fetch --no-tags origin main
+            git fetch --no-tags origin "refs/tags/$RELEASE_TAG:refs/tags/$RELEASE_TAG"
+            test "$(git cat-file -t "refs/tags/$RELEASE_TAG")" = tag
+            commit="$(git rev-parse "refs/tags/$RELEASE_TAG^{}")"
+            tag_oid="$(git rev-parse "refs/tags/$RELEASE_TAG")"
+            git merge-base --is-ancestor "$commit" origin/main
+            test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          else
+            test "$EVENT_NAME" = pull_request
+            commit="$(git rev-parse HEAD)"
+            test "$commit" = "$GITHUB_SHA"
+            tag_oid=preview
+            RELEASE_TAG=cli-v0.0.0
+          fi
+          printf 'commit=%s\ntag=%s\ntag_oid=%s\n' "$commit" "$RELEASE_TAG" "$tag_oid" >> "$GITHUB_OUTPUT"
+  release_guard:
+    if: github.event_name == 'workflow_dispatch'
+    needs: prepare
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Require human approval and immutable CLI tags
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.prepare.outputs.tag }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = refs/heads/main
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          python3 scripts/test_cli_release_controls.py
+          python3 scripts/check_cli_release_controls.py --tag "$TAG"
+
+  native_proof:
+    needs: [prepare, release_guard]
+    if: always() && !cancelled() && needs.prepare.result == 'success' && (github.event_name == 'pull_request' || needs.release_guard.result == 'success')
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux-amd64
+            runner: ubuntu-24.04
+          - platform: darwin-amd64
+            runner: macos-15-intel
+          - platform: darwin-arm64
+            runner: macos-15
+          - platform: windows-amd64
+            runner: windows-2025
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: ${{ needs.prepare.outputs.commit }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
+        with:
+          go-version-file: cli/go.mod
+          cache-dependency-path: cli/go.sum
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+      - name: Bind exact source and tag
+        shell: bash
+        env:
+          COMMIT: ${{ needs.prepare.outputs.commit }}
+          TAG: ${{ needs.prepare.outputs.tag }}
+          TAG_OID: ${{ needs.prepare.outputs.tag_oid }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$COMMIT"
+          test -z "$(git status --porcelain)"
+          if [ "$EVENT_NAME" = workflow_dispatch ]; then
+            test "$(git cat-file -t "refs/tags/$TAG")" = tag
+            test "$(git rev-parse "refs/tags/$TAG")" = "$TAG_OID"
+            test "$(git rev-parse "refs/tags/$TAG^{}")" = "$COMMIT"
+            git fetch --no-tags origin main
+            git merge-base --is-ancestor "$COMMIT" origin/main
+          fi
+      - name: Verify Go inputs and test CLI
+        shell: bash
+        working-directory: cli
+        run: |
+          set -euo pipefail
+          go mod download
+          go mod verify
+          go mod tidy -diff
+          go vet ./...
+          go test ./...
+          python ../scripts/test_cli_release_smoke.py
+      - name: Build deterministic archive twice and smoke native installation
+        shell: bash
+        env:
+          COMMIT: ${{ needs.prepare.outputs.commit }}
+          TAG: ${{ needs.prepare.outputs.tag }}
+          PLATFORM: ${{ matrix.platform }}
+        run: |
+          set -euo pipefail
+          python scripts/package_cli_release.py build --root . --out "$RUNNER_TEMP/release-native" --tag "$TAG" --commit "$COMMIT" --platform "$PLATFORM"
+          python scripts/package_cli_release.py build --root . --out "$RUNNER_TEMP/release-repeat" --tag "$TAG" --commit "$COMMIT" --platform "$PLATFORM"
+          archive="$(find "$RUNNER_TEMP/release-native" -maxdepth 1 -type f ! -name '*.sha256')"
+          repeat="$(find "$RUNNER_TEMP/release-repeat" -maxdepth 1 -type f ! -name '*.sha256')"
+          cmp "$archive" "$repeat"
+          python scripts/test_cli_release.py --archive "$archive" --source . --tag "$TAG" --commit "$COMMIT" --platform "$PLATFORM"
+      - id: upload
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: cli-native-${{ matrix.platform }}-attempt-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/release-native/
+          if-no-files-found: error
+          retention-days: 7
+
+  assemble:
+    needs: [prepare, native_proof]
+    if: always() && !cancelled() && needs.prepare.result == 'success' && needs.native_proof.result == 'success'
+    runs-on: ubuntu-24.04
+    outputs:
+      artifact_id: ${{ steps.upload.outputs.artifact-id }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: cli-native-linux-amd64-attempt-${{ github.run_attempt }}
+          path: native/linux-amd64
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: cli-native-darwin-amd64-attempt-${{ github.run_attempt }}
+          path: native/darwin-amd64
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: cli-native-darwin-arm64-attempt-${{ github.run_attempt }}
+          path: native/darwin-arm64
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: cli-native-windows-amd64-attempt-${{ github.run_attempt }}
+          path: native/windows-amd64
+      - name: Bind source and assemble exact allowlist
+        shell: bash
+        env:
+          COMMIT: ${{ needs.prepare.outputs.commit }}
+          TAG: ${{ needs.prepare.outputs.tag }}
+          TAG_OID: ${{ needs.prepare.outputs.tag_oid }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          python3 scripts/test_package_cli_release.py
+          python3 scripts/test_cli_release_controls.py
+          if [ "$EVENT_NAME" = workflow_dispatch ]; then
+            git fetch --no-tags origin "refs/tags/$TAG:refs/tags/$TAG"
+            test "$(git cat-file -t "refs/tags/$TAG")" = tag
+            test "$(git rev-parse "refs/tags/$TAG")" = "$TAG_OID"
+            test "$(git rev-parse "refs/tags/$TAG^{}")" = "$COMMIT"
+          fi
+          mkdir -p native-flat
+          for platform in linux-amd64 darwin-amd64 darwin-arm64 windows-amd64; do
+            test "$(find "native/$platform" -maxdepth 1 -type f | wc -l)" -eq 2
+            cp "native/$platform/"* native-flat/
+          done
+          python scripts/package_cli_release.py assemble --root native-flat --out release-verified --tag "$TAG" --commit "$COMMIT"
+      - id: upload
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: cli-release-verified-${{ needs.prepare.outputs.commit }}-attempt-${{ github.run_attempt }}
+          path: release-verified/
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    if: github.event_name == 'workflow_dispatch'
+    needs: [prepare, assemble]
+    runs-on: ubuntu-24.04
+    environment: cli-release
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          artifact-ids: ${{ needs.assemble.outputs.artifact_id }}
+          path: ${{ runner.temp }}/release-verified
+      - name: Revalidate trusted source, tag and exact assets
+        shell: bash
+        env:
+          COMMIT: ${{ needs.prepare.outputs.commit }}
+          TAG: ${{ needs.prepare.outputs.tag }}
+          TAG_OID: ${{ needs.prepare.outputs.tag_oid }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = refs/heads/main
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test -z "$(git status --porcelain)"
+          git fetch --no-tags origin main
+          git fetch --no-tags origin "refs/tags/$TAG:refs/tags/$TAG"
+          test "$(git cat-file -t "refs/tags/$TAG")" = tag
+          test "$(git rev-parse "refs/tags/$TAG")" = "$TAG_OID"
+          test "$(git rev-parse "refs/tags/$TAG^{}")" = "$COMMIT"
+          git merge-base --is-ancestor "$COMMIT" origin/main
+          python scripts/package_cli_release.py verify --out "$RUNNER_TEMP/release-verified" --tag "$TAG" --commit "$COMMIT"
+      - name: Recheck release environment and immutable tag protection
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.prepare.outputs.tag }}
+        run: |
+          set -euo pipefail
+          python3 scripts/check_cli_release_controls.py --tag "$TAG"
+      - name: Create draft, verify uploaded bytes, then publish
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          COMMIT: ${{ needs.prepare.outputs.commit }}
+          TAG: ${{ needs.prepare.outputs.tag }}
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo 'release already exists' >&2
+            exit 1
+          fi
+          gh release create "$TAG" "$RUNNER_TEMP/release-verified/"* --verify-tag --draft --title "Workstream CLI ${TAG#cli-}" --notes "CLI source commit: $COMMIT. Verify SHA256SUMS before installation."
+          mkdir -p "$RUNNER_TEMP/downloaded"
+          gh release download "$TAG" --dir "$RUNNER_TEMP/downloaded"
+          python scripts/package_cli_release.py verify --out "$RUNNER_TEMP/downloaded" --tag "$TAG" --commit "$COMMIT"
+          python3 scripts/check_cli_release_controls.py --tag "$TAG"
+          git fetch --no-tags origin "refs/tags/$TAG:refs/tags/$TAG"
+          test "$(git rev-parse "refs/tags/$TAG")" = "${{ needs.prepare.outputs.tag_oid }}"
+          test "$(git rev-parse "refs/tags/$TAG^{}")" = "$COMMIT"
+          gh release edit "$TAG" --draft=false
+          git fetch --no-tags origin "refs/tags/$TAG:refs/tags/$TAG"
+          test "$(git rev-parse "refs/tags/$TAG")" = "${{ needs.prepare.outputs.tag_oid }}"
+          test "$(git rev-parse "refs/tags/$TAG^{}")" = "$COMMIT"

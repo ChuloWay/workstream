@@ -405,6 +405,11 @@ ARCH_04F4_RETRY_TARGETS = frozenset({
 MANAGER_AUTHORED_GUIDE_RUNTIME_TARGETS = frozenset({
     "backend/app/adapters/project_agents/manager_authored.py",
 })
+OMNICORE_GUIDE_RUNTIME_TARGETS = frozenset({
+    "backend/app/adapters/project_agents/omnicore_agent.py",
+    "backend/app/adapters/project_agents/omnicore_profile.py",
+    "backend/app/workers/project_setup_topology.py",
+})
 NEUTRAL_GUIDE_RUNTIME_REMOVED_TARGETS = frozenset({
     "backend/app/modules/artifacts/zip_safety.py",
 })
@@ -1113,6 +1118,7 @@ def _validate_additive_partition_transition(
             | ARCH_04F4_RETRY_TARGETS
             | ARCH_04F5_DELIVERY_RECONCILIATION_TARGETS
             | MANAGER_AUTHORED_GUIDE_RUNTIME_TARGETS
+            | OMNICORE_GUIDE_RUNTIME_TARGETS
             | GUIDE_COMPILATION_DRAFT_TARGETS
             | NEUTRAL_GUIDE_RUNTIME_TARGETS
             | OBSERVABILITY_FOUNDATION_TARGETS

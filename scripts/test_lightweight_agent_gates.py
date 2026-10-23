@@ -67,7 +67,9 @@ class LightweightAgentGateTests(unittest.TestCase):
         install = step("Install backend and adapter test environments")
         self.assertIn('python -m pip install "uv==0.10.7"', install)
         self.assertIn("uv lock --check --project backend", install)
-        self.assertIn("uv sync --frozen --all-extras --project backend", install)
+        self.assertIn(
+            "uv sync --frozen --extra agents --extra dev --project backend", install
+        )
         self.assertNotIn('pip install -e "./backend', install)
         openapi = step("Compare selected OpenAPI contract")
         self.assertIn(
@@ -222,7 +224,7 @@ class LightweightAgentGateTests(unittest.TestCase):
         self.assertIn("        working-directory: backend", install)
         self.assertIn('python -m pip install "uv==0.10.7"', install)
         self.assertIn('test "$(uv --version)" = "uv 0.10.7"', install)
-        self.assertIn("uv sync --frozen --all-extras", install)
+        self.assertIn("uv sync --frozen --extra agents --extra dev", install)
         self.assertIn(
             'test "$(uv run --frozen ruff --version)" = "ruff 0.15.22"',
             install,
@@ -554,7 +556,8 @@ class LightweightAgentGateTests(unittest.TestCase):
             "${{ hashFiles('backend/uv.lock', '.github/workflows/backend.yml') }}"
         )
         self.assertEqual(workflow.count("Restore exact backend uv downloads from trusted cache"), 3)
-        self.assertEqual(workflow.count(f"key: {key}"), 4)
+        self.assertEqual(workflow.count(f"key: {key}"), 3)
+        self.assertEqual(workflow.count("py312-${{ matrix.sdk_environment }}-"), 1)
         self.assertEqual(
             workflow.count(
                 "uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830"
@@ -566,15 +569,23 @@ class LightweightAgentGateTests(unittest.TestCase):
             2,
         )
         tool_install = 'python -m pip install "uv==0.10.7"'
-        frozen_install = "uv sync --frozen --all-extras"
         lock_check = "uv lock --check"
         cache_env = 'echo "UV_CACHE_DIR=${RUNNER_TEMP}/backend-uv-cache" >> "${GITHUB_ENV}"'
         job_blocks = (
-            workflow.split("\n  auth-boundary-preflight:\n", 1)[1].split("\n  lanes:\n", 1)[0],
-            workflow.split("\n  lanes:\n", 1)[1].split("\n  cli-public-contract:\n", 1)[0],
-            workflow.split("\n  full-suite:\n", 1)[1].split("\n  test:\n", 1)[0],
+            (
+                workflow.split("\n  auth-boundary-preflight:\n", 1)[1].split("\n  lanes:\n", 1)[0],
+                "uv sync --frozen --extra agents --extra dev",
+            ),
+            (
+                workflow.split("\n  lanes:\n", 1)[1].split("\n  cli-public-contract:\n", 1)[0],
+                'uv sync --frozen --extra "${{ matrix.sdk_environment }}" --extra dev',
+            ),
+            (
+                workflow.split("\n  full-suite:\n", 1)[1].split("\n  test:\n", 1)[0],
+                "uv sync --frozen --extra agents --extra dev",
+            ),
         )
-        for job in job_blocks:
+        for job, frozen_install in job_blocks:
             self.assertEqual(job.count("Restore exact backend uv downloads from trusted cache"), 1)
             self.assertEqual(job.count(tool_install), 1)
             self.assertEqual(job.count(lock_check), 1)
@@ -587,7 +598,15 @@ class LightweightAgentGateTests(unittest.TestCase):
             self.assertLess(job.index(tool_install), job.index(frozen_install))
         self.assertEqual(workflow.count(tool_install), 3)
         self.assertEqual(workflow.count(lock_check), 3)
-        self.assertEqual(workflow.count(frozen_install), 3)
+        self.assertEqual(
+            workflow.count("uv sync --frozen --extra agents --extra dev"), 2
+        )
+        self.assertEqual(
+            workflow.count(
+                'uv sync --frozen --extra "${{ matrix.sdk_environment }}" --extra dev'
+            ),
+            1,
+        )
         self.assertEqual(workflow.count(cache_env), 3)
         self.assertNotIn('python -m pip install -e ".[dev,agents]"', workflow)
         root_env = workflow.split("\nenv:\n", 1)[1].split("\njobs:\n", 1)[0]

@@ -43,6 +43,7 @@ class TestLane:
     name: str
     modules: tuple[str, ...]
     requires_postgres: bool = True
+    sdk_environment: str = "agents"
 
 
 SHARED_FOUNDATION_MODULES = (
@@ -81,6 +82,7 @@ SHARED_FOUNDATION_MODULES = (
     "tests/authorization/setup_finalization/test_structure.py",
     "tests/test_actor_legacy_classification.py",
     "tests/test_agent_runtime.py",
+    "tests/test_omnicore_sdk_unavailable.py",
     "tests/test_guide_compilation_draft.py",
     "tests/guide_document_tools/test_parsing.py",
     "tests/guide_document_tools/test_transport.py",
@@ -174,7 +176,6 @@ SHARED_FOUNDATION_MODULES = (
     "tests/migrations/test_service_identity_schema.py",
     "tests/migrations/test_project_role_schema.py",
     "tests/test_mutation_policy.py",
-    "tests/test_s3_artifact_store.py",
     "tests/test_submission_archive.py",
     "tests/test_submission_change_gate.py",
     "tests/test_submission_manifest.py",
@@ -446,6 +447,7 @@ PROJECT_MODULES = (
     "tests/projects/guide_compilation/test_hidden_orchestrator_postgresql.py",
     "tests/projects/guide_compilation/test_live_cutover_postgresql.py",
     "tests/projects/guide_compilation/test_live_worker.py",
+    "tests/projects/guide_compilation/test_worker_topology.py",
     "tests/projects/guide_compilation/test_runtime_configuration_schema.py",
     "tests/projects/guide_compilation/test_runtime_configuration_postgresql.py",
     "tests/projects/guide_compilation/test_schema_contract.py",
@@ -753,4 +755,14 @@ LANES = (
         for name in PARTITIONED_PROJECT_LANES
     ),
     *(TestLane(name, TASK_MODULES) for name in PARTITIONED_TASK_LANES),
+    TestLane(
+        "omnicore_sdk",
+        (
+            "tests/test_omnicore_agent_sdk.py",
+            "tests/test_openai_agents_sdk_unavailable.py",
+            "tests/test_project_agent_sdk_installation.py",
+            "tests/test_s3_artifact_store.py",
+        ),
+        sdk_environment="omnicore",
+    ),
 )

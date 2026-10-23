@@ -126,7 +126,7 @@ jobs:
           set -euo pipefail
           python -m pip install "uv==0.10.7"
           uv lock --check --project backend
-          uv sync --frozen --all-extras --project backend
+          uv sync --frozen --extra agents --extra dev --project backend
           cd mcp_server
           uv sync --frozen --extra dev
           uv build --wheel --out-dir dist
