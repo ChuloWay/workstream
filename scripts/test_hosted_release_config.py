@@ -1599,13 +1599,17 @@ class ReleaseSecretLoaderTests(unittest.TestCase):
                 sdk_environment="omnicore",
             )
             self.assertEqual(omni.returncode, 0, omni.stderr)
-            manager = self._run_loader(
-                root,
-                runtime="manager_authored",
-                provider="none",
-                sdk_environment="omnicore",
-            )
-            self.assertEqual(manager.returncode, 0, manager.stderr)
+            for sdk_environment in ("agents", "omnicore"):
+                with self.subTest(
+                    runtime="manager_authored", sdk_environment=sdk_environment
+                ):
+                    manager = self._run_loader(
+                        root,
+                        runtime="manager_authored",
+                        provider="none",
+                        sdk_environment=sdk_environment,
+                    )
+                    self.assertEqual(manager.returncode, 0, manager.stderr)
             mismatch = self._run_loader(
                 root,
                 runtime="omnicore_agent",

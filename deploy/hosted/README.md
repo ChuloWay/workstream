@@ -156,10 +156,11 @@ Before either OpenRouter-backed runtime receives real guide material, the
 operator must retain evidence for the exact account, organization or workspace
 and credential scope showing that account plugins cannot override the request.
 The evidence must cover the plugin catalogue, defaults, overrides, and especially
-alignment; name the verifier and approver. Revalidate it after account ownership,
-credential scope, plugin catalogue/defaults, provider policy, selected model or
-runtime changes. Request-level plugin-disable fields are defense in depth and do
-not prove the external account state.
+alignment; name the verifier and approver. Revalidate it after the selected
+account, account ownership, organization, workspace, credential scope, plugin
+catalogue or defaults, override policy, provider policy, selected model or runtime
+changes. Request-level plugin-disable fields are defense in depth and do not prove
+the external account state.
 This provider credential is not reused for retained OpenAI resource cleanup.
 The exact-ID historical cleanup reader has no hosted credential selector in
 this slice and therefore fails closed until a separately reviewed retained-data

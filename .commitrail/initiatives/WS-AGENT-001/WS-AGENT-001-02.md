@@ -371,13 +371,24 @@ image selection and no data leakage.
 
 ## Evidence
 
-SDK source/dependency inspection and separate frozen resolution are complete.
-Integrated proofs still require both CI environments, full synthetic qualification,
-prefork hard-timeout containment, exact package/image inspection, complete real
-MinIO execution, test-custody reconciliation and the selected-image AWS proof before
-a deployment claim. The repository documents but cannot prove OpenRouter account
-defaults; do not run real guide material or label the privacy profile passing
-before the operator confirms and retains that prerequisite evidence.
+SDK source/dependency inspection and separate frozen resolution are complete. The
+actual OmniCoreAgent 0.6.0 loopback suite exercises native tools, draft/review,
+configured models, per-logical-request circuit admission, native retries,
+malformed success/error sanitization, source substitution, quotas, cancellation
+and cleanup. Focused proof also covers static registration, opposite-environment
+failure, mutually exclusive dependency closure, provider-free `manager_authored`
+composition, exact release markers, CI custody and a real Redis/prefork
+concurrency-two/three-task fail-stop discriminator. The durable hard-timeout proof
+retains the fenced attempt as `compilation_provider_uncertain`.
+
+The complete Omni-environment MinIO suite, both selected release-image builds and
+parser isolation runs, and a successful provider-backed synthetic production-
+factory run remain required before this record is complete. The selected-image AWS
+proof remains required before a deployment claim. The repository documents but
+cannot prove OpenRouter account defaults; real original-guide material remains
+behind retained account/organization/workspace/plugin evidence and operator
+confirmation. A generated-data provider call does not establish privacy or hosted
+readiness.
 
 ## Reconciliation
 

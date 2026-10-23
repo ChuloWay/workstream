@@ -7,8 +7,8 @@ PROJECTS/ART business logic or source-evidence schema. The user explicitly asked
 for OpenRouter and a second real OmniCoreAgent adapter to prove that boundary.
 The first hosted contribution journey remains the delivery objective.
 
-The current OpenAI-hosted file/attachment coupling violates that boundary.
-Use trusted on-demand document tools, a fixed isolated parser and the existing
+The implementation replaces the former OpenAI-hosted file/attachment coupling
+with trusted on-demand document tools, a fixed isolated parser and the existing
 compilation/result contract. Each adapter owns its SDK mechanics; the core owns
 exact source access, immutable attempt evidence and overall run bounds.
 

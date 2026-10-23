@@ -250,8 +250,10 @@ def test_actual_inference_worker_startup_rejects_unsafe_pool(pool):
         app.close()
 
 
-def test_prefork_hard_timeout_acknowledges_without_reinvocation(monkeypatch, tmp_path):
-    """A cancellation-resistant guide run is killed once and acknowledged."""
+def test_prefork_hard_timeout_acknowledges_without_reinvocation(
+    monkeypatch, tmp_path, isolated_database_env
+):
+    """A killed provider run stays durably fenced and is acknowledged once."""
     import asyncio
     from threading import Event
     from uuid import uuid4
@@ -264,10 +266,42 @@ def test_prefork_hard_timeout_acknowledges_without_reinvocation(monkeypatch, tmp
     from kombu.message import Message
 
     from app.workers import project_setup
+    from app.modules.projects.guide_compilation.repository import GuideCompilationRepository
+    from sqlalchemy import text
+    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+    from tests.projects.guide_compilation.helpers import (
+        context,
+        identity,
+        runtime_configuration,
+        seed_database,
+    )
 
     marker = tmp_path / "provider-invocations.txt"
 
+    async def reserve_attempt():
+        values = await seed_database(isolated_database_env)
+        engine = create_async_engine(isolated_database_env)
+        try:
+            async with async_sessionmaker(engine, expire_on_commit=False)() as session:
+                async with session.begin():
+                    _outcome, attempt = await GuideCompilationRepository(session).reserve_attempt(
+                        identity(context(values)),
+                        runtime_configuration=runtime_configuration(),
+                    )
+            return attempt.id
+        finally:
+            await engine.dispose()
+
+    attempt_id = asyncio.run(reserve_attempt())
+
     async def stubborn(_delivery):
+        engine = create_async_engine(isolated_database_env)
+        try:
+            async with async_sessionmaker(engine, expire_on_commit=False)() as session:
+                async with session.begin():
+                    await GuideCompilationRepository(session).mark_provider_uncertain(attempt_id)
+        finally:
+            await engine.dispose()
         with marker.open("a", encoding="utf-8") as stream:
             stream.write("invoked\n")
         while True:
@@ -318,6 +352,23 @@ def test_prefork_hard_timeout_acknowledges_without_reinvocation(monkeypatch, tmp
         pool.terminate()
         processes.join()
     assert marker.read_text(encoding="utf-8").splitlines() == ["invoked"]
+
+    async def attempt_status():
+        engine = create_async_engine(isolated_database_env)
+        try:
+            async with async_sessionmaker(engine, expire_on_commit=False)() as session:
+                value = await session.scalar(
+                    text(
+                        "select status from project_guide_compilation_attempts where id=:attempt_id"
+                    ),
+                    {"attempt_id": attempt_id},
+                )
+                await session.rollback()
+                return value
+        finally:
+            await engine.dispose()
+
+    assert asyncio.run(attempt_status()) == "compilation_provider_uncertain"
 
 
 @pytest.mark.skipif(

@@ -317,11 +317,15 @@ class OmniCoreAgentProjectGuideRuntime:
 
         configuration = self._configuration
         profile = self._profile
+        admission = self._admission
+        if admission is None:
+            raise ProjectAgentRuntimeError("project guide runtime was not admitted")
         maximum_requests = configuration.maximum_turns * OMNICORE_PROVIDER_ATTEMPTS
         guard = _LoopbackOpenRouterGuard(
             credential=self._credential,
             model=configuration.model,
             profile=profile,
+            admission=admission,
             maximum_requests=maximum_requests,
             io_timeout_seconds=max(1, min(300, configuration.timeout_seconds)),
             upstream=self._test_upstream,
@@ -391,7 +395,7 @@ class OmniCoreAgentProjectGuideRuntime:
                 draft_agent,
                 prompt,
                 guard=guard,
-                admission=self._admission,
+                admission=admission,
                 cleanup_timeout_seconds=profile.cleanup_timeout_seconds,
             )
             candidate = draft_parser.parse(draft_output)
@@ -436,7 +440,7 @@ class OmniCoreAgentProjectGuideRuntime:
                 review_agent,
                 review_input,
                 guard=guard,
-                admission=self._admission,
+                admission=admission,
                 cleanup_timeout_seconds=profile.cleanup_timeout_seconds,
             )
             if len(final_output.encode("utf-8")) > configuration.maximum_manifest_bytes:
@@ -551,8 +555,6 @@ async def _run_native_agent(
     admission: ModelCircuitAdmission,
     cleanup_timeout_seconds: int,
 ) -> str:
-    admission.before_request()
-    guard.begin_logical_request()
     native_task = asyncio.create_task(
         agent.run(
             query,
@@ -585,7 +587,6 @@ async def _run_native_agent(
     ):
         admission.request_failed(guard.transient_failure_exhausted)
         raise ProjectAgentRuntimeError("project guide native run failed")
-    admission.request_succeeded()
     return response["response"]
 
 
@@ -639,6 +640,7 @@ class _LoopbackOpenRouterGuard:
         credential: str,
         model: str,
         profile: OmniCoreAgentProfile,
+        admission: ModelCircuitAdmission,
         maximum_requests: int,
         io_timeout_seconds: int,
         upstream: _UpstreamTarget | None,
@@ -646,6 +648,7 @@ class _LoopbackOpenRouterGuard:
         self._credential = credential
         self._model = model
         self._profile = profile
+        self._admission = admission
         self._maximum_requests = maximum_requests
         self._io_timeout_seconds = io_timeout_seconds
         self._upstream_url = (upstream or _PRODUCTION_UPSTREAM).url
@@ -658,6 +661,7 @@ class _LoopbackOpenRouterGuard:
         self._requests = 0
         self._active = False
         self._last_upstream_transient_failure = False
+        self._logical_request_active = False
         self._closing = False
         self._close_task: asyncio.Task[None] | None = None
 
@@ -671,10 +675,6 @@ class _LoopbackOpenRouterGuard:
     def transient_failure_exhausted(self) -> bool:
         """Report only the last upstream outcome after the SDK's native retries."""
         return self._last_upstream_transient_failure
-
-    def begin_logical_request(self) -> None:
-        """Reset phase-local provider health before the native retry owner runs."""
-        self._last_upstream_transient_failure = False
 
     async def start(self) -> None:
         import httpx
@@ -861,6 +861,10 @@ class _LoopbackOpenRouterGuard:
     async def _forward(self, request: _ParsedRequest) -> tuple[int, Mapping[str, str], bytes]:
         import httpx
 
+        if not self._logical_request_active:
+            self._admission.before_request()
+            self._logical_request_active = True
+            self._last_upstream_transient_failure = False
         outbound = _rebuild_openrouter_body(request.body, model=self._model)
         request_body = json.dumps(
             outbound,
@@ -911,6 +915,8 @@ class _LoopbackOpenRouterGuard:
                     except (UnicodeDecodeError, ValueError, RecursionError, _GuardRejection):
                         self._last_upstream_transient_failure = True
                         return 502, {}, _SANITIZED_PROVIDER_ERROR_BODY
+                    self._admission.request_succeeded()
+                    self._logical_request_active = False
                 return response.status_code, returned_headers, response_body
         except httpx.TransportError:
             self._last_upstream_transient_failure = True
@@ -1109,9 +1115,26 @@ def _rebuild_provider_success_body(body_bytes: bytes, *, expected_model: str) ->
     if finish_reason == "tool_calls":
         if not isinstance(calls, list) or not 1 <= len(calls) <= 64:
             raise _GuardRejection(502)
-        for call in calls:
-            _validate_tool_call(call)
-        rebuilt_message["tool_calls"] = calls
+        rebuilt_calls: list[dict[str, Any]] = []
+        for index, call in enumerate(calls):
+            if (
+                not isinstance(call, dict)
+                or set(call)
+                not in (
+                    {"id", "type", "function"},
+                    {"id", "type", "function", "index"},
+                )
+                or ("index" in call and call["index"] != index)
+            ):
+                raise _GuardRejection(502)
+            rebuilt_call = {
+                "id": call.get("id"),
+                "type": call.get("type"),
+                "function": call.get("function"),
+            }
+            _validate_tool_call(rebuilt_call)
+            rebuilt_calls.append(rebuilt_call)
+        rebuilt_message["tool_calls"] = rebuilt_calls
     elif calls is not None or not isinstance(content, str):
         raise _GuardRejection(502)
     usage = body.get("usage")

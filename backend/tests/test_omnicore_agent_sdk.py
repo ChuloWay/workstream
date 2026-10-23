@@ -10,6 +10,7 @@ from contextlib import suppress
 from dataclasses import replace
 from types import SimpleNamespace
 from urllib.parse import urlparse
+from uuid import uuid4
 
 import pytest
 
@@ -64,6 +65,7 @@ class _SyntheticOpenRouter:
         retry_statuses: tuple[int, ...] = (),
         always_status: int | None = None,
         error_message: str = "synthetic persistent provider failure",
+        tool_calls_before_final: int = 1,
         hang: bool = False,
     ) -> None:
         self.handle = handle
@@ -71,6 +73,7 @@ class _SyntheticOpenRouter:
         self.retry_statuses = retry_statuses
         self.always_status = always_status
         self.error_message = error_message
+        self.tool_calls_before_final = tool_calls_before_final
         self.hang = hang
         self.requests: list[tuple[dict[str, str], dict[str, object]]] = []
         self.received = asyncio.Event()
@@ -136,13 +139,15 @@ class _SyntheticOpenRouter:
                 )
                 return
             successful_index = len(self.requests) - len(self.retry_statuses)
-            if successful_index % 2 == 1:
+            cycle_index = (successful_index - 1) % (self.tool_calls_before_final + 1)
+            if cycle_index < self.tool_calls_before_final:
                 message = {
                     "role": "assistant",
                     "content": None,
                     "tool_calls": [
                         {
                             "id": f"call_{successful_index}",
+                            "index": 0,
                             "type": "function",
                             "function": {
                                 "name": "read_document",
@@ -218,34 +223,75 @@ def _runtime_context():
     return compilation_context.model_copy(update={"runtime_configuration": configuration})
 
 
+class _GuardAdmission:
+    """Minimal admission probe for direct guard transport tests."""
+
+    def __init__(self) -> None:
+        self.before = 0
+        self.succeeded = 0
+
+    def before_request(self) -> None:
+        self.before += 1
+
+    def request_succeeded(self) -> None:
+        self.succeeded += 1
+
+
 def _provider_output() -> str:
     return generated_result().model_dump_json()
 
 
-def _capabilities(compilation_context):
+def _capabilities(
+    compilation_context,
+    *,
+    returned_text: str = "Generated synthetic guide text.",
+    returned_source_item_id=None,
+):
     opened: set[str] = set()
     reads: list[str] = []
+    attempts: list[str] = []
+    rejections: list[str] = []
+    output_characters = 0
     document = compilation_context.material.documents[0]
     handle = compilation_context.material.handle_for(document)
 
-    async def read_document(
-        supplied_handle: str, *, offset: int = 0, limit: int = 16000
-    ) -> GuideDocumentToolResult:
-        assert supplied_handle == handle
-        assert offset == 0 and limit == 16000
+    def result(supplied_handle: str, operation: str) -> GuideDocumentToolResult:
+        nonlocal output_characters
+        attempts.append(supplied_handle)
+        if len(attempts) > compilation_context.runtime_configuration.maximum_tool_calls:
+            rejections.append("tool_calls")
+            raise ValueError("synthetic workspace tool-call budget exceeded")
+        if supplied_handle != handle:
+            rejections.append("handle")
+            raise ValueError("synthetic workspace handle is invalid")
+        source_item_id = returned_source_item_id or document.source_item_id
+        if source_item_id != document.source_item_id:
+            rejections.append("source_identity")
+            raise ValueError("synthetic workspace source identity changed")
+        next_output = output_characters + len(returned_text)
+        if next_output > compilation_context.runtime_configuration.maximum_tool_output_characters:
+            rejections.append("tool_output")
+            raise ValueError("synthetic workspace output budget exceeded")
+        output_characters = next_output
         opened.add(supplied_handle)
         reads.append(supplied_handle)
         return GuideDocumentToolResult(
             handle=handle,
-            source_item_id=document.source_item_id,
+            source_item_id=source_item_id,
             document_version_id=document.ingest_id,
             sha256=document.sha256,
-            operation="read",
-            text="Generated synthetic guide text.",
+            operation=operation,
+            text=returned_text,
             locators=(),
             next_offset=None,
-            total_characters=31,
+            total_characters=len(returned_text),
         )
+
+    async def read_document(
+        supplied_handle: str, *, offset: int = 0, limit: int = 16000
+    ) -> GuideDocumentToolResult:
+        assert offset == 0 and limit == 16000
+        return result(supplied_handle, "read")
 
     async def search_document(
         supplied_handle: str,
@@ -254,9 +300,8 @@ def _capabilities(compilation_context):
         offset: int = 0,
         limit: int = 20,
     ) -> GuideDocumentToolResult:
-        value = await read_document(supplied_handle, offset=offset, limit=16000)
-        assert query and limit == 20
-        return value.model_copy(update={"operation": "search"})
+        assert offset == 0 and query and limit == 20
+        return result(supplied_handle, "search")
 
     async def opened_handles() -> frozenset[str]:
         return frozenset(opened)
@@ -267,6 +312,8 @@ def _capabilities(compilation_context):
                 read_document=read_document,
                 search_document=search_document,
                 opened_handles=opened_handles,
+                attempts=attempts,
+                rejections=rejections,
             )
         ),
         reads,
@@ -419,6 +466,7 @@ async def test_transport_header_mutations_never_reach_upstream(header, value):
             credential="synthetic-omnicore-test-key",
             model=OMNICORE_QUALIFICATION_MODEL,
             profile=profile,
+            admission=_GuardAdmission(),
             maximum_requests=1,
             io_timeout_seconds=5,
             upstream=_validated_test_upstream(provider.url, _TEST_UPSTREAM_AUTHORITY),
@@ -442,6 +490,7 @@ async def test_transport_stops_oversized_provider_response():
             credential="synthetic-omnicore-test-key",
             model=OMNICORE_QUALIFICATION_MODEL,
             profile=replace(profile, maximum_response_bytes=64),
+            admission=_GuardAdmission(),
             maximum_requests=1,
             io_timeout_seconds=5,
             upstream=_validated_test_upstream(provider.url, _TEST_UPSTREAM_AUTHORITY),
@@ -472,6 +521,7 @@ async def test_transport_binds_the_trusted_configured_model():
             credential="synthetic-omnicore-test-key",
             model=configured_model,
             profile=profile,
+            admission=_GuardAdmission(),
             maximum_requests=1,
             io_timeout_seconds=5,
             upstream=_validated_test_upstream(provider.url, _TEST_UPSTREAM_AUTHORITY),
@@ -492,6 +542,34 @@ async def test_transport_binds_the_trusted_configured_model():
 async def test_actual_sdk_tool_loop_retries_and_rebuilds_private_provider_controls(
     monkeypatch, tmp_path
 ):
+    from app.adapters.project_agents import provider_resilience
+
+    class CountingCircuit:
+        def __init__(self):
+            self.acquired = 0
+            self.required = 0
+            self.successes = 0
+            self.failures = 0
+            self.releases = 0
+
+        def acquire(self, _lifetime):
+            self.acquired += 1
+            return object()
+
+        def require_current(self, _lease):
+            self.required += 1
+
+        def succeeded(self, _lease):
+            self.successes += 1
+
+        def failed(self, _lease):
+            self.failures += 1
+
+        def release(self, _lease):
+            self.releases += 1
+
+    circuit = CountingCircuit()
+    monkeypatch.setattr(provider_resilience, "circuit_for", lambda *_: circuit)
     monkeypatch.chdir(tmp_path)
     compilation_context = _runtime_context()
     capabilities, reads, handle = _capabilities(compilation_context)
@@ -513,6 +591,10 @@ async def test_actual_sdk_tool_loop_retries_and_rebuilds_private_provider_contro
     assert outcome == generated_result()
     assert reads == [handle, handle]
     assert len(provider.requests) == 7
+    assert circuit.acquired == 4
+    assert circuit.required == 4
+    assert circuit.successes == 4
+    assert circuit.failures == 0
     expected_options = openrouter_request_options()
     assert all(body["provider"] == expected_options["provider"] for _, body in provider.requests)
     assert all(body["plugins"] == expected_options["plugins"] for _, body in provider.requests)
@@ -542,6 +624,83 @@ async def test_actual_sdk_tool_loop_retries_and_rebuilds_private_provider_contro
     assert not (tmp_path / "workspace").exists()
     assert not (tmp_path / "telemetry").exists()
     assert os.environ["OPENROUTER_API_KEY"] == "synthetic-omnicore-test-key"
+
+
+async def test_actual_sdk_foreign_source_identity_is_rejected_before_opening():
+    compilation_context = _runtime_context()
+    capabilities, reads, handle = _capabilities(
+        compilation_context,
+        returned_source_item_id=uuid4(),
+    )
+    async with _SyntheticOpenRouter(
+        handle=handle,
+        final_output=_provider_output(),
+    ) as provider:
+        runtime = OmniCoreAgentProjectGuideRuntime._for_test(
+            compilation_context.runtime_configuration,
+            upstream_url=provider.url,
+        )
+        runtime.admit_execution()
+        try:
+            with pytest.raises(ProjectGuideCompilationInvalidOutputError):
+                await runtime.compile_project_guide(compilation_context, capabilities)
+        finally:
+            await runtime.aclose()
+    assert provider.requests
+    assert reads == []
+    assert capabilities.tools.rejections == ["source_identity", "source_identity"]
+    assert await capabilities.tools.opened_handles() == frozenset()
+
+
+@pytest.mark.parametrize(
+    ("configuration_updates", "returned_text", "tool_calls_before_final", "rejection"),
+    [
+        ({"maximum_turns": 12, "maximum_tool_calls": 3}, "bounded", 3, "tool_calls"),
+        (
+            {"maximum_turns": 12, "maximum_tool_output_characters": 65_536},
+            "x" * 16_000,
+            5,
+            "tool_output",
+        ),
+    ],
+)
+async def test_actual_sdk_neutral_tool_budgets_stop_access(
+    configuration_updates,
+    returned_text,
+    tool_calls_before_final,
+    rejection,
+):
+    base = _runtime_context()
+    compilation_context = base.model_copy(
+        update={
+            "runtime_configuration": base.runtime_configuration.model_copy(
+                update=configuration_updates
+            )
+        }
+    )
+    capabilities, _reads, handle = _capabilities(
+        compilation_context,
+        returned_text=returned_text,
+    )
+    async with _SyntheticOpenRouter(
+        handle=handle,
+        final_output=_provider_output(),
+        tool_calls_before_final=tool_calls_before_final,
+    ) as provider:
+        runtime = OmniCoreAgentProjectGuideRuntime._for_test(
+            compilation_context.runtime_configuration,
+            upstream_url=provider.url,
+        )
+        runtime.admit_execution()
+        try:
+            with pytest.raises(
+                (ProjectAgentRuntimeError, ProjectGuideCompilationInvalidOutputError)
+            ):
+                await runtime.compile_project_guide(compilation_context, capabilities)
+        finally:
+            await runtime.aclose()
+    assert provider.requests
+    assert rejection in capabilities.tools.rejections
 
 
 async def test_actual_sdk_malformed_output_is_terminal_invalid_output():
