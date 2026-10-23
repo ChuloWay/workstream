@@ -1,7 +1,7 @@
 # WS-EXEC-001-02 — Upload-overlapped trusted intake
 
 - Initiative: WS-EXEC-001
-- Durable disposition: Planned
+- Durable disposition: Complete
 - Intended merge outcome: prepare one bounded trusted intake microVM during the authorized ZIP upload, inspect/extract and run the Workstream default inside it, and feed the existing PRE/POST owners verified material without host ZIP/default execution.
 
 ## Intent
@@ -173,30 +173,37 @@ After this boundary's verified implementation: deployment composition and the
 public PRE -> immutable Submission -> durable POST -> governed outcome drill,
 including failure/retry, both review-policy branches and exact contribution facts.
 
-## Implementation checkpoint
+## Implemented boundary and proof limits
 
-The typed adapter, closed guest worker, prepared Rust session and canonical raw
-export are connected to PRE and POST owners. This remains unverified integration
-work: affected owner fixtures, live KVM intake, single-slot handoff, full suite
-and required implementation reviewers are outstanding. Local focused proof
-currently covers canonical guest rejection/default identity, socket cancellation,
-raw export corruption, and retained-reader cancellation. No completed capability
-or public journey is claimed by this checkpoint.
+The typed adapter, closed guest worker and Rust prepared session connect PRE and
+POST to canonical guest ZIP/default processing. Confirmed intake cleanup precedes
+ordered project checks. An ART deadline after confirmed cleanup finalizes the
+selected run as `deadline_exceeded`; an unconfirmed close retains unresolved lease
+recovery. Caller cancellation drains both upload and preparation, and exact
+committed reservation fields bind default evaluation before any project grant.
 
-The first real KVM intake probe now completes pinned-image preparation, canonical
-ZIP inspection, exact raw export, default evaluation and cleanup acknowledgment
-through the Python adapter. A streaming defect reused the one-shot project's
-trailing-byte rejection as a disconnect check; a focused socket-pair regression
-now distinguishes legitimate pending ZIP input while retaining the project rule.
-The ART raw exporter also now accepts the scratch owner's retained directory-FD
-path, with a regression retaining descriptor-relative child containment.
+The maintained real-node intake matrix passes PRE/POST retained-reader export,
+PRE default and ART grant issuance with host ZIP/default execution poisoned.
+Abandoned upload, cancellation, idle deadline and malformed ZIP recover the
+one-slot node. The streaming probe exposed and repaired misuse of the one-shot
+project trailing-byte guard; its socket-pair regression now protects legitimate
+pending ZIP input. The ART exporter accepts the retained directory-FD path while
+preserving descriptor-relative child containment.
 
-The maintained real-node intake matrix passes PRE and POST retained-reader/raw
-export, PRE default evaluation and ART grant issuance, with host ZIP/default
-execution poisoned. A one-slot node admits a fresh VM only after confirmed
-cleanup. Abandoned upload, preparation cancellation, idle deadline and malformed
-ZIP cases all recover capacity; the node has no remaining owned lease or workload
-cgroup afterward. This is adapter/ART custody proof, not a public API reservation,
-project-binding order, durable worker or acceptance proof. Those claims remain
-explicitly outstanding. Exact architecture and CI inventories add only the new
-capability/consumer and four production modules; their negative controls remain.
+Real PostgreSQL/MinIO proof covers verified original material, immutable
+Submission/lease custody, late authority and content drift, cancellation and
+scratch revocation, durable worker materialization and public intake outcomes.
+The combined 139-case EC2 run passes with database and MinIO cleanup confirmed.
+These transaction fixtures explicitly inject an in-process intake fake; the
+separate KVM matrix establishes the real adapter/guest boundary. Neither proof
+is mislabeled as a public API -> Smol -> durable worker -> governed outcome drill.
+That combined proof and deployment composition remain boundary 3.
+
+Implementation review findings repaired the exact default-binding assertion,
+combined upload/preparation cancellation, and recoverable deadline finalization.
+Hosted checks also exposed collection-time ZIP timestamps and an oversized test
+module. Deterministic ZIP metadata/stable case IDs and a focused intake lifecycle
+test module repair those defects without loosening the structural guard or test
+selection. Exact architecture and CI inventories retain all prior assignments.
+Required full hosted-suite evidence and reviewer receipts belong to the PR's
+current candidate; no deployment or complete user-journey claim is made here.
