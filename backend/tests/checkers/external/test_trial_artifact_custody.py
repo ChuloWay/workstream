@@ -169,6 +169,8 @@ async def test_trial_bytes_use_real_art_custody_and_recover_exact_original(
         )
         assert result.outcome == "completed", result.model_dump_json()
         assert adapter.ack is not None
+        assert list((h.scratch / "workspaces").iterdir()) == []
+        assert not h.preparation._active
 
 
 class CompetingPublication(ControlledSelectedExecution):
@@ -297,3 +299,5 @@ async def test_competing_trial_publication_observes_pin_commit_or_complete_rollb
         adapter = CompetingPublication(h, catalog, projected, rollback)
         result = await live_executor(h, selected_execution=adapter).evaluate_post_submission(h.request)
         assert result.outcome == "completed", result.model_dump_json()
+        assert list((h.scratch / "workspaces").iterdir()) == []
+        assert not h.preparation._active
