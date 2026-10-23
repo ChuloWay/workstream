@@ -45,7 +45,8 @@ def generated_compilation_schema(schema: dict) -> dict:
         "exact default PRE coverage, or guide defects preventing check specification."
     )
     del generated["properties"]["setup_notes"]
-    generated["required"].remove("setup_notes")
+    if "setup_notes" in generated.get("required", []):
+        generated["required"].remove("setup_notes")
     return generated
 
 
