@@ -125,7 +125,7 @@ def _receipt(request, grant, ticket, profile, plan):
         "submission_id": str(identity["submission_id"]),
         "submission_version": identity["submission_version"],
         "requirement_id": request.input["requirement_id"],
-        "registry_entry_id": request.registry.registry_entry_id,
+        "registry_entry_id": str(request.registry.registry_entry_id),
         "registry_entry_digest": request.registry.entry_digest,
         "checker_image_digest": request.registry.image_digest,
         "configuration_sha256": request.configuration_sha256,
