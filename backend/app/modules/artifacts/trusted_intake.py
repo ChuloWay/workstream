@@ -1,4 +1,5 @@
 """ART ownership of one upload/download-overlapped trusted intake session."""
+
 from __future__ import annotations
 
 import asyncio
@@ -6,10 +7,15 @@ from contextlib import asynccontextmanager
 from collections.abc import Awaitable
 from typing import BinaryIO
 
-from app.core.cancellation import await_cancellation_resistant, await_completion_preserving_cancellation
+from app.core.cancellation import (
+    await_cancellation_resistant,
+    await_completion_preserving_cancellation,
+)
 from app.interfaces.external_services import ExternalServiceAdapterError
 from app.interfaces.trusted_submission_intake import (
-    TrustedIntakePreparation, TrustedIntakeSession, TrustedSubmissionIntakeAdapter,
+    TrustedIntakePreparation,
+    TrustedIntakeSession,
+    TrustedSubmissionIntakeAdapter,
 )
 from app.modules.artifacts.sources import ArtifactCommitment, PreparedArtifact
 from app.modules.artifacts.api.submission_archive import SubmissionArchiveInspectionResult
@@ -22,13 +28,17 @@ class TrustedArchiveInspector:
         self._intake, self._commitment = intake, commitment
 
     def inspect(self, reader: BinaryIO) -> SubmissionArchiveInspectionResult:
-        return self._intake.inspect(reader, archive_sha256=self._commitment.sha256,
-                                    archive_byte_count=self._commitment.byte_count)
+        return self._intake.inspect(
+            reader,
+            archive_sha256=self._commitment.sha256,
+            archive_byte_count=self._commitment.byte_count,
+        )
 
 
 @asynccontextmanager
-async def prepared_trusted_intake(adapter: TrustedSubmissionIntakeAdapter,
-                                 request: TrustedIntakePreparation):
+async def prepared_trusted_intake(
+    adapter: TrustedSubmissionIntakeAdapter, request: TrustedIntakePreparation
+):
     """Prepare while bytes arrive; every exit drains preparation and cleanup."""
     pending = asyncio.create_task(adapter.prepare(request))
     failure: BaseException | None = None

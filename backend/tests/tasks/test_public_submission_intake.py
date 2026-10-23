@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from unittest.mock import patch
+from tests.trusted_intake_fixtures import LocalIntakeAdapter
+
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from types import SimpleNamespace
@@ -45,7 +48,7 @@ from tests.test_submission_predecessor_custody import (
 async def _client(
     h, monkeypatch, database_url, *, subject=None, raise_app_exceptions=True,
 ):
-    """Use a normal development bearer for the seeded exact human identity."""
+    """Use real HTTP authority/storage and explicit in-process guest-rule execution."""
     actor = getattr(h, "actor_context", None) or h.context
     monkeypatch.setenv("WORKSTREAM_AUTH_PROVIDER", "dev")
     monkeypatch.setenv("WORKSTREAM_ENVIRONMENT", "test")
@@ -103,7 +106,8 @@ async def _client(
             base_url="http://testserver",
             headers={"Authorization": "Bearer public-intake-token"},
         ) as client:
-            yield client
+            with patch("app.adapters.artifacts.trusted_submission_intake", return_value=LocalIntakeAdapter()):
+                yield client
     finally:
         get_settings.cache_clear()
 

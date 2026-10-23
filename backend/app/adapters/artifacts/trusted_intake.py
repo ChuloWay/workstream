@@ -1,4 +1,5 @@
 """Private framed transport for ART's one prepared trusted-intake lease."""
+
 from __future__ import annotations
 
 import asyncio
@@ -60,28 +61,40 @@ def _object(value: object, keys: set[str]) -> dict:
 
 def _entry(value: object) -> SubmissionArchiveEntry:
     body = _object(value, {field.name for field in fields(SubmissionArchiveEntry)})
-    if (type(body["normalized_path"]) is not str
-            or type(body["byte_count"]) is not int or body["byte_count"] < 0
-            or type(body["entry_type"]) is not str
-            or body["entry_type"] not in {"file", "directory"}):
+    if (
+        type(body["normalized_path"]) is not str
+        or type(body["byte_count"]) is not int
+        or body["byte_count"] < 0
+        or type(body["entry_type"]) is not str
+        or body["entry_type"] not in {"file", "directory"}
+    ):
         raise ExternalServiceProtocolError()
     if body["entry_type"] == "file":
-        if (type(body["sha256"]) is not str
-                or re.fullmatch(r"sha256:[0-9a-f]{64}", body["sha256"]) is None
-                or type(body["executable"]) is not bool):
+        if (
+            type(body["sha256"]) is not str
+            or re.fullmatch(r"sha256:[0-9a-f]{64}", body["sha256"]) is None
+            or type(body["executable"]) is not bool
+        ):
             raise ExternalServiceProtocolError()
     elif body["sha256"] is not None or body["executable"] is not None or body["byte_count"] != 0:
         raise ExternalServiceProtocolError()
-    return SubmissionArchiveEntry(**{**body, "entry_type": SubmissionArchiveEntryType(body["entry_type"])})
+    return SubmissionArchiveEntry(
+        **{**body, "entry_type": SubmissionArchiveEntryType(body["entry_type"])}
+    )
 
 
 class UnixSocketTrustedIntakeAdapter:
     """Construct one local session; the node owns all preparation retry decisions."""
 
     def __init__(self, *, socket_path: Path, image_digest: str, config_digest: str) -> None:
-        if (not socket_path.is_absolute() or socket_path.is_symlink()
-                or any(type(v) is not str or re.fullmatch(r"sha256:[0-9a-f]{64}", v) is None
-                       for v in (image_digest, config_digest))):
+        if (
+            not socket_path.is_absolute()
+            or socket_path.is_symlink()
+            or any(
+                type(v) is not str or re.fullmatch(r"sha256:[0-9a-f]{64}", v) is None
+                for v in (image_digest, config_digest)
+            )
+        ):
             raise ValueError("trusted intake configuration invalid")
         self._path = socket_path
         self._image = image_digest
@@ -93,9 +106,12 @@ class UnixSocketTrustedIntakeAdapter:
 
     def _validate_identity(self, raw: object) -> TrustedIntakeIdentity:
         try:
-            identity = TrustedIntakeIdentity(**_object(
-                raw, {field.name for field in fields(TrustedIntakeIdentity)},
-            ))
+            identity = TrustedIntakeIdentity(
+                **_object(
+                    raw,
+                    {field.name for field in fields(TrustedIntakeIdentity)},
+                )
+            )
         except (ValueError, TypeError) as exc:
             raise ExternalServiceProtocolError(self.identity) from exc
         if (identity.image_digest, identity.config_digest) != (self._image, self._config):
@@ -124,8 +140,12 @@ class UnixSocketTrustedIntakeAdapter:
 class _Session:
     """One connection, one boot-scoped nonce, and one non-renewable deadline."""
 
-    def __init__(self, adapter: UnixSocketTrustedIntakeAdapter, deadline: float,
-                 request: TrustedIntakePreparation | None = None) -> None:
+    def __init__(
+        self,
+        adapter: UnixSocketTrustedIntakeAdapter,
+        deadline: float,
+        request: TrustedIntakePreparation | None = None,
+    ) -> None:
         self._adapter = adapter
         self._deadline = deadline
         self._request = request
@@ -189,9 +209,16 @@ class _Session:
         return bytes(data)
 
     def _command(self, operation: str, payload: dict, *, cleanup: bool = False) -> None:
-        data = json.dumps({"protocol_version": _PROTOCOL, "operation": operation,
-                           "lease": self._lease, "payload": payload},
-                          allow_nan=False, separators=(",", ":")).encode()
+        data = json.dumps(
+            {
+                "protocol_version": _PROTOCOL,
+                "operation": operation,
+                "lease": self._lease,
+                "payload": payload,
+            },
+            allow_nan=False,
+            separators=(",", ":"),
+        ).encode()
         if len(data) > _MAX_COMMAND:
             raise ExternalServiceProtocolError(self._adapter.identity)
         self._send(struct.pack(">I", len(data)) + data, cleanup=cleanup)
@@ -201,19 +228,26 @@ class _Session:
         if not 0 < length <= _MAX_FRAME:
             raise ExternalServiceProtocolError(self._adapter.identity)
         try:
-            body = _object(json.loads(self._read(length, cleanup=cleanup)),
-                           {"protocol_version", "operation", "lease", "status", "payload"})
+            body = _object(
+                json.loads(self._read(length, cleanup=cleanup)),
+                {"protocol_version", "operation", "lease", "status", "payload"},
+            )
         except (ValueError, UnicodeError) as exc:
             raise ExternalServiceProtocolError(self._adapter.identity) from exc
-        if (body["protocol_version"] != _PROTOCOL or body["operation"] != operation
-                or (operation != "prepare" and body["lease"] != self._lease)
-                or type(body["payload"]) is not dict):
+        if (
+            body["protocol_version"] != _PROTOCOL
+            or body["operation"] != operation
+            or (operation != "prepare" and body["lease"] != self._lease)
+            or type(body["payload"]) is not dict
+        ):
             raise ExternalServiceProtocolError(self._adapter.identity)
         if body["status"] == "error":
             code = _object(body["payload"], {"code"})["code"]
             if type(code) is not str:
                 raise ExternalServiceProtocolError(self._adapter.identity)
-            if operation == "inspect" and code in {value.value for value in SubmissionArchiveFailureCode}:
+            if operation == "inspect" and code in {
+                value.value for value in SubmissionArchiveFailureCode
+            }:
                 raise SubmissionArchiveRejectedError(SubmissionArchiveFailureCode(code))
             if code in {"runtime_unavailable", "capacity_unavailable", "deadline_exceeded"}:
                 raise ExternalServiceUnavailableError(self._adapter.identity)
@@ -221,7 +255,10 @@ class _Session:
         if body["status"] != "ok":
             raise ExternalServiceProtocolError(self._adapter.identity)
         if operation == "prepare":
-            if type(body["lease"]) is not str or re.fullmatch(r"[0-9a-f]{128}", body["lease"]) is None:
+            if (
+                type(body["lease"]) is not str
+                or re.fullmatch(r"[0-9a-f]{128}", body["lease"]) is None
+            ):
                 raise ExternalServiceProtocolError(self._adapter.identity)
             self._lease = body["lease"]
         return body["payload"]
@@ -245,17 +282,23 @@ class _Session:
             self._identity = self._adapter._validate_identity(self._response("prepare"))
             self._state = "prepared"
 
-    def inspect(self, reader: BinaryIO, *, archive_sha256: str,
-                archive_byte_count: int) -> SubmissionArchiveInspectionResult:
+    def inspect(
+        self, reader: BinaryIO, *, archive_sha256: str, archive_byte_count: int
+    ) -> SubmissionArchiveInspectionResult:
         with self._lock:
-            if (self._state != "prepared" or type(archive_byte_count) is not int
-                    or not 0 < archive_byte_count <= _MAX_ARCHIVE
-                    or type(archive_sha256) is not str
-                    or re.fullmatch(r"sha256:[0-9a-f]{64}", archive_sha256) is None):
+            if (
+                self._state != "prepared"
+                or type(archive_byte_count) is not int
+                or not 0 < archive_byte_count <= _MAX_ARCHIVE
+                or type(archive_sha256) is not str
+                or re.fullmatch(r"sha256:[0-9a-f]{64}", archive_sha256) is None
+            ):
                 raise ExternalServiceProtocolError(self._adapter.identity)
             self._state = "inspecting"
-            self._command("inspect", {"archive_sha256": archive_sha256,
-                                      "archive_byte_count": archive_byte_count})
+            self._command(
+                "inspect",
+                {"archive_sha256": archive_sha256, "archive_byte_count": archive_byte_count},
+            )
             reader.seek(0)
             remaining = archive_byte_count
             digest = hashlib.sha256()
@@ -269,17 +312,33 @@ class _Session:
             if reader.read(1) or "sha256:" + digest.hexdigest() != archive_sha256:
                 self.abort()
                 raise ExternalServiceProtocolError(self._adapter.identity)
-            payload = _object(self._response("inspect"), {"archive_sha256", "archive_byte_count", "inspection"})
-            if (payload["archive_sha256"], payload["archive_byte_count"]) != (archive_sha256, archive_byte_count):
+            payload = _object(
+                self._response("inspect"), {"archive_sha256", "archive_byte_count", "inspection"}
+            )
+            if (payload["archive_sha256"], payload["archive_byte_count"]) != (
+                archive_sha256,
+                archive_byte_count,
+            ):
                 raise ExternalServiceProtocolError(self._adapter.identity)
-            raw = _object(payload["inspection"], {field.name for field in fields(SubmissionArchiveInspectionResult)})
-            if type(raw["entries"]) is not list or len(raw["entries"]) > self._request.limits.maximum_entries:
+            raw = _object(
+                payload["inspection"],
+                {field.name for field in fields(SubmissionArchiveInspectionResult)},
+            )
+            if (
+                type(raw["entries"]) is not list
+                or len(raw["entries"]) > self._request.limits.maximum_entries
+            ):
                 raise ExternalServiceProtocolError(self._adapter.identity)
             entries = tuple(_entry(value) for value in raw["entries"])
-            counts = (len(entries), sum(e.entry_type is SubmissionArchiveEntryType.FILE for e in entries),
-                      sum(e.entry_type is SubmissionArchiveEntryType.DIRECTORY for e in entries),
-                      sum(e.byte_count for e in entries))
-            for name, expected in zip(("entry_count", "file_count", "directory_count", "total_expanded_bytes"), counts):
+            counts = (
+                len(entries),
+                sum(e.entry_type is SubmissionArchiveEntryType.FILE for e in entries),
+                sum(e.entry_type is SubmissionArchiveEntryType.DIRECTORY for e in entries),
+                sum(e.byte_count for e in entries),
+            )
+            for name, expected in zip(
+                ("entry_count", "file_count", "directory_count", "total_expanded_bytes"), counts
+            ):
                 if type(raw[name]) is not int or raw[name] != expected:
                     raise ExternalServiceProtocolError(self._adapter.identity)
             if counts[3] > self._request.limits.maximum_expanded_bytes:
@@ -314,26 +373,38 @@ class _Session:
             _object(self._response("export"), set())
             self._state = "exported"
 
-    async def evaluate_default(self, binding: TrustedDefaultBinding,
-                               value: WorkstreamDefaultCheckerInput) -> WorkstreamDefaultCheckerResult:
+    async def evaluate_default(
+        self, binding: TrustedDefaultBinding, value: WorkstreamDefaultCheckerInput
+    ) -> WorkstreamDefaultCheckerResult:
         def evaluate() -> WorkstreamDefaultCheckerResult:
             with self._lock:
-                if (self._state != "exported" or self._request.phase != "pre_submit"
-                        or type(binding) is not TrustedDefaultBinding
-                        or binding.policy_sha256 != self._request.policy_sha256
-                        or binding.semantic_manifest_sha256 != value.semantic_manifest_sha256
-                        or binding.default_input_sha256 != workstream_default_input_sha256(value)
-                        or self._archive != (value.archive_sha256, value.archive_byte_count)):
+                if (
+                    self._state != "exported"
+                    or self._request.phase != "pre_submit"
+                    or type(binding) is not TrustedDefaultBinding
+                    or binding.policy_sha256 != self._request.policy_sha256
+                    or binding.semantic_manifest_sha256 != value.semantic_manifest_sha256
+                    or binding.default_input_sha256 != workstream_default_input_sha256(value)
+                    or self._archive != (value.archive_sha256, value.archive_byte_count)
+                ):
                     raise ExternalServiceProtocolError(self._adapter.identity)
                 self._state = "evaluating"
-                self._command("default", {"binding": {**asdict(binding), "attempt_id": str(binding.attempt_id)},
-                                          "input": _INPUT.dump_python(value, mode="json")})
+                self._command(
+                    "default",
+                    {
+                        "binding": {**asdict(binding), "attempt_id": str(binding.attempt_id)},
+                        "input": _INPUT.dump_python(value, mode="json"),
+                    },
+                )
                 try:
-                    result = WorkstreamDefaultCheckerResult.model_validate(self._response("default"))
+                    result = WorkstreamDefaultCheckerResult.model_validate(
+                        self._response("default")
+                    )
                 except (TypeError, ValueError) as exc:
                     raise ExternalServiceProtocolError(self._adapter.identity) from exc
                 self._state = "evaluated"
                 return result
+
         return await self._async(evaluate)
 
     def abort(self) -> None:
@@ -355,4 +426,5 @@ class _Session:
                     self._state = "closed"
                 finally:
                     self.abort()
+
         await self._async(finish)

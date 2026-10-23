@@ -1,4 +1,5 @@
 """Explicit in-process intake fake for owner/transaction tests, never isolation proof."""
+
 from __future__ import annotations
 
 from dataclasses import asdict
@@ -9,7 +10,10 @@ import tempfile
 from app.interfaces.external_services import ExternalServiceAdapterIdentity
 from app.interfaces.trusted_submission_intake import TrustedIntakeIdentity
 from app.modules.artifacts.api.submission_archive import SubmissionArchiveLimits
-from app.modules.artifacts.submission_archive import SubmissionArchiveInspector, SealedSubmissionTree
+from app.modules.artifacts.submission_archive import (
+    SubmissionArchiveInspector,
+    SealedSubmissionTree,
+)
 from app.modules.checkers.api.default_checker import WORKSTREAM_DEFAULT_BEHAVIOR_SHA256
 from app.modules.checkers.api.material import SubmissionMaterialEntry
 from app.modules.checkers.default_checker import evaluate_verified_archive
@@ -25,12 +29,18 @@ class LocalIntakeSession:
         self.inspection = None
         self.events = []
         self.identity = TrustedIntakeIdentity(
-            "sha256:" + "1" * 64, "sha256:" + "2" * 64, WORKSTREAM_DEFAULT_BEHAVIOR_SHA256,
-            "smolvm", "smol-microvm", 1000, 2 * 1024**3,
+            "sha256:" + "1" * 64,
+            "sha256:" + "2" * 64,
+            WORKSTREAM_DEFAULT_BEHAVIOR_SHA256,
+            "smolvm",
+            "smol-microvm",
+            1000,
+            2 * 1024**3,
         )
 
     def inspect(self, reader, *, archive_sha256, archive_byte_count):
         import hashlib
+
         self.data = reader.read()
         assert len(self.data) == archive_byte_count
         assert "sha256:" + hashlib.sha256(self.data).hexdigest() == archive_sha256
@@ -42,7 +52,9 @@ class LocalIntakeSession:
         assert self.inspection is not None and not self.closed
         with tempfile.TemporaryDirectory(prefix="test-intake-guest-") as directory:
             workspace = Path(directory)
-            with self.inspector._projected_tree(BytesIO(self.data), workspace, expected=self.inspection) as tree:
+            with self.inspector._projected_tree(
+                BytesIO(self.data), workspace, expected=self.inspection
+            ) as tree:
                 content = {}
                 for entry in tree.entries:
                     if entry.entry_type == "file":

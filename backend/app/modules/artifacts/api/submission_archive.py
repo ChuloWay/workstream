@@ -1,4 +1,5 @@
 """Canonical structural ZIP contracts shared by ART and trusted intake."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -84,9 +85,10 @@ class SubmissionArchiveLimits:
             raise ValueError("submission archive expansion exceeds 512 MiB")
         if self.maximum_entry_bytes > self.maximum_expanded_bytes:
             raise ValueError("submission archive entry limit exceeds total limit")
-        if not isinstance(self.maximum_inspection_seconds, (int, float)) or isinstance(
-            self.maximum_inspection_seconds, bool
-        ) or not math.isfinite(self.maximum_inspection_seconds) or self.maximum_inspection_seconds <= 0:
+        if (
+            not isinstance(self.maximum_inspection_seconds, (int, float))
+            or isinstance(self.maximum_inspection_seconds, bool)
+            or not math.isfinite(self.maximum_inspection_seconds)
+            or self.maximum_inspection_seconds <= 0
+        ):
             raise ValueError("submission archive deadline is invalid")
-
-

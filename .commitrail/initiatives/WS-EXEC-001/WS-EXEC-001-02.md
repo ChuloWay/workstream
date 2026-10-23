@@ -41,7 +41,7 @@ public API/durable-worker drill. A node probe is not completion.
 - `external_checkers/`: private prepared-intake protocol sharing the existing
   Smol machine/guardian engine, trusted intake image using canonical Python
   inspection/default code, controlled guest scratch/streaming and proof fixtures.
-- Focused owner/adapter/conformance tests, their explicit CI catalogue membership and affected runtime documentation,
+- Focused owner/adapter/conformance tests, their exact architecture inventories, explicit CI catalogue membership, and the four new production modules in `backend/scripts/behavior_ownership.py` and `.ci/behavior-ownership/partition.v1.json`; affected runtime documentation,
   configuration examples, roadmap and initiative records.
 
 ### Not allowed
@@ -190,3 +190,13 @@ trailing-byte rejection as a disconnect check; a focused socket-pair regression
 now distinguishes legitimate pending ZIP input while retaining the project rule.
 The ART raw exporter also now accepts the scratch owner's retained directory-FD
 path, with a regression retaining descriptor-relative child containment.
+
+The maintained real-node intake matrix passes PRE and POST retained-reader/raw
+export, PRE default evaluation and ART grant issuance, with host ZIP/default
+execution poisoned. A one-slot node admits a fresh VM only after confirmed
+cleanup. Abandoned upload, preparation cancellation, idle deadline and malformed
+ZIP cases all recover capacity; the node has no remaining owned lease or workload
+cgroup afterward. This is adapter/ART custody proof, not a public API reservation,
+project-binding order, durable worker or acceptance proof. Those claims remain
+explicitly outstanding. Exact architecture and CI inventories add only the new
+capability/consumer and four production modules; their negative controls remain.
