@@ -515,6 +515,9 @@ def _build_agent(
         "enable_workspace_files": False,
         "tool_offload": {"enabled": False},
         "governance_config": {"enabled": False},
+        "guardrail_config": {
+            "max_input_length": configuration.maximum_manifest_bytes,
+        },
     }
     return OmniCoreAgent(
         name="ProjectGuideCompilationAgent",
@@ -1099,11 +1102,7 @@ def _rebuild_provider_success_body(body_bytes: bytes, *, expected_model: str) ->
     if not isinstance(choices, list) or len(choices) != 1:
         raise _GuardRejection(502)
     choice = choices[0]
-    if (
-        not isinstance(choice, dict)
-        or type(choice.get("index")) is not int
-        or choice["index"] != 0
-    ):
+    if not isinstance(choice, dict) or type(choice.get("index")) is not int or choice["index"] != 0:
         raise _GuardRejection(502)
     finish_reason = choice.get("finish_reason")
     message = choice.get("message")
@@ -1128,10 +1127,7 @@ def _rebuild_provider_success_body(body_bytes: bytes, *, expected_model: str) ->
                     {"id", "type", "function"},
                     {"id", "type", "function", "index"},
                 )
-                or (
-                    "index" in call
-                    and (type(call["index"]) is not int or call["index"] != index)
-                )
+                or ("index" in call and (type(call["index"]) is not int or call["index"] != index))
             ):
                 raise _GuardRejection(502)
             rebuilt_call = {

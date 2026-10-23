@@ -185,6 +185,11 @@ must be loopback-only, and is never accepted from product configuration.
 Keep SDK-native completion retries as the only retry owner and record the exact
 observed effective profile. Enforce the common whole-run deadline and tool/output
 bounds in the adapter/capability; prove cancellation terminates native tasks.
+Keep the SDK's full prompt-injection guardrail enabled, but set its public
+`max_input_length` configuration to the existing Workstream
+`maximum_manifest_bytes` bound. Workstream continues to reject oversized prompt
+and review bytes before provider contact; the SDK's smaller default must not block
+a valid bounded draft from reaching the review phase.
 Acquire the existing process-local model circuit during `admit_execution`, before
 the durable dispatch fence. Generalize only that owner's effective-profile and
 failure-classification inputs; do not add a second circuit or retry loop. Each
@@ -299,6 +304,9 @@ image claim; synthetic CI does not replace it.
   content and cannot establish plugin/privacy qualification. A real original-guide
   run remains behind operator confirmation and retained deployment evidence for
   the account-default prerequisite.
+- A valid draft larger than OmniCore's default input cap reaches the independent
+  review phase under the existing Workstream byte bound; an oversized Workstream
+  prompt still fails before provider contact.
 - No hosted file/container calls, persistent SDK session, unexpected tool or
   telemetry endpoint. Retention claims match observed/provider-documented behavior.
 - Every captured upstream model request contains the exact enforced OpenRouter

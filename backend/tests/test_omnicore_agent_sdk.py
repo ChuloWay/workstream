@@ -242,6 +242,27 @@ def _provider_output() -> str:
     return generated_result().model_dump_json()
 
 
+def _large_provider_output() -> str:
+    result = generated_result()
+    requirement = result.requirements[0]
+    payload = result.model_dump(mode="python")
+    payload["requirements"] = [
+        requirement.model_copy(
+            update={
+                "requirement_id": f"synthetic_requirement_{index}",
+                "statement": (
+                    "The synthetic guide requires a bounded observable answer. " * 12
+                ).strip(),
+                "classification_rationale": (
+                    "This informational requirement preserves exact source evidence. " * 10
+                ).strip(),
+            }
+        ).model_dump(mode="python")
+        for index in range(10)
+    ]
+    return type(result).model_validate(payload).model_dump_json()
+
+
 def _capabilities(
     compilation_context,
     *,
@@ -706,6 +727,54 @@ async def test_actual_sdk_tool_loop_retries_and_rebuilds_private_provider_contro
     assert not (tmp_path / "workspace").exists()
     assert not (tmp_path / "telemetry").exists()
     assert os.environ["OPENROUTER_API_KEY"] == "synthetic-omnicore-test-key"
+
+
+async def test_actual_sdk_large_valid_draft_crosses_review_handoff():
+    compilation_context = _runtime_context()
+    capabilities, reads, handle = _capabilities(compilation_context)
+    output = _large_provider_output()
+    assert 16_000 < len(output.encode("utf-8")) < 32_000
+    async with _SyntheticOpenRouter(handle=handle, final_output=output) as provider:
+        runtime = OmniCoreAgentProjectGuideRuntime._for_test(
+            compilation_context.runtime_configuration,
+            upstream_url=provider.url,
+        )
+        runtime.admit_execution()
+        try:
+            result = await runtime.compile_project_guide(compilation_context, capabilities)
+        finally:
+            await runtime.aclose()
+    assert result == type(result).model_validate_json(output)
+    assert reads == [handle, handle]
+    assert len(provider.requests) == 4
+
+
+async def test_actual_sdk_rejects_oversized_workstream_input_before_provider():
+    base = _runtime_context()
+    compilation_context = base.model_copy(
+        update={
+            "runtime_configuration": base.runtime_configuration.model_copy(
+                update={"maximum_manifest_bytes": 1024}
+            )
+        }
+    )
+    capabilities, reads, handle = _capabilities(compilation_context)
+    async with _SyntheticOpenRouter(
+        handle=handle,
+        final_output=_provider_output(),
+    ) as provider:
+        runtime = OmniCoreAgentProjectGuideRuntime._for_test(
+            compilation_context.runtime_configuration,
+            upstream_url=provider.url,
+        )
+        runtime.admit_execution()
+        try:
+            with pytest.raises(ProjectAgentRuntimeError, match="prompt exceeds"):
+                await runtime.compile_project_guide(compilation_context, capabilities)
+        finally:
+            await runtime.aclose()
+    assert reads == []
+    assert provider.requests == []
 
 
 async def test_actual_sdk_foreign_source_identity_is_rejected_before_opening():
