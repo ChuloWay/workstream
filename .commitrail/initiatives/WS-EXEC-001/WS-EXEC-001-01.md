@@ -29,6 +29,8 @@ Existing owner files and startup cleanup protect Docker container ownership.
   default handle belongs only to boundary 2's ART-owned port.
 - `backend/scripts/checker_image.py`, shared manifest validation and Smol cache
   provisioning commands, plus their tests: one canonical platform identity rule.
+- `backend/scripts/test_lane_catalogue.py`: register the new cache test module
+  in the existing shared-foundations lane; preserve strict suite completeness.
 - Affected checker receipt validators, configuration, execution contract docs,
   capability ledger and this initiative/index: truthful runtime support.
 
@@ -180,6 +182,11 @@ proof (QA-TD-SMOL-001..003); and an io_uring path around the direct socket filte
 proof requires io_uring denial before a socket operation can be submitted.
 
 ## Reconciliation
+
+Hosted CI exposed an omitted cache-test catalogue entry before running its
+lanes. Registering that module restores complete selection; no check, test,
+service or exit-status requirement is weakened. CI integrity review covers
+this additional affected owner.
 
 - Current-source reconciliation: `733c752f7` adds the merged audit restore-path repair without changing these runtime owners.
 - Next usable boundary: typed same-request preparation and canonical guest ART processing.
