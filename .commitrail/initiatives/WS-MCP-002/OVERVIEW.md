@@ -12,23 +12,25 @@
 - Actor and identity lifecycle: [Actor and identity-link lifecycle](WS-MCP-002-05.md), merged in PR #597.
 - Project shells: [Project creation and authority-selected reads](WS-MCP-002-06.md), merged in PR #627.
 - Project participation: [Project-role grants](WS-MCP-002-07.md), merged in PR #644.
-- Current change: [Guide declarations and draft metadata](WS-MCP-002-08.md).
-- Next usable boundary: WS-MCP-002-09 draft policies after this change is
+- Guide declarations: [Guide declarations and draft metadata](WS-MCP-002-08.md), merged in PR #655.
+- Current change: [Draft review and revision policies](WS-MCP-002-09.md).
+- Next usable boundary: WS-MCP-002-10 assembled release proof after this change is
   reviewed and merged; no later tool starts automatically.
 
 ## Current implementation
 
 [`mcp_server/`](../../../mcp_server/README.md) is an independently packaged
-Streamable HTTP adapter with twenty-five tools: three self-service tools for profile read,
+Streamable HTTP adapter with twenty-seven tools: three self-service tools for profile read,
 profile update and exact-project authorization context, plus six administrative
 reads for permission/role definitions, grants and actor/identity projections, two
 administrative grant mutations, five actor/identity lifecycle mutations, two
-project-shell tools, five project-participation tools and two guide-metadata tools. It includes a container,
+project-shell tools, five project-participation tools, two guide-metadata tools
+and two draft-policy tools. It includes a container,
 selected response-schema validation and additive CI. Its integration tests
 exercise the installed adapter against the real Workstream API. Workstream
 still owns token verification and authorization. This is delivered packaging,
 not proof of a deployed public gateway, production Flow integration or the
-remaining 2 tools. The initiative remains Planned because that larger scope
+assembled release drill. The initiative remains Planned because that larger scope
 is unfinished. Historical hashes below describe their stated design/proof;
 each implemented binding records its current source baseline separately.
 
@@ -404,11 +406,12 @@ authority-selected project reads, bringing the catalogue to eighteen tools.
 WS-MCP-002-07 adds five project-participation tools, bringing it to twenty-three.
 WS-MCP-002-08 adds guide declaration and draft-summary editing, bringing it to
 twenty-five.
-Reconcile each later binding with its public API when that chunk starts; do not
-reopen credential architecture or require all 27 implementations at once.
+WS-MCP-002-09 adds draft review and revision policy selection, completing the
+twenty-seven-tool catalogue. Reconcile the assembled release proof with its
+live environment; do not reopen credential architecture.
 
-The following stable IDs replace the four broad headings. Rows 01 through 08 are
-implemented; rows 09–10 remain planned, with proposed ownership under `mcp_server/`, not
+The following stable IDs replace the four broad headings. Rows 01 through 09 are
+implemented; row 10 remains planned, with proposed ownership under `mcp_server/`, not
 claims that later tools exist. Each row is one bounded outcome. Tool names omit
 only the common `workstream_` prefix; all 27 names in section 6 appear exactly
 once. Each row also owns its change record and affected tests/docs, not backend
@@ -459,16 +462,18 @@ and [WS-MCP-002-07](WS-MCP-002-07.md) adds project participation, bringing the
 catalogue to twenty-three of the proposed 27 tools.
 WS-MCP-002-08 adds guide declaration and summary-only draft editing, bringing the
 catalogue to twenty-five of the proposed 27 tools.
+WS-MCP-002-09 adds review and revision policy selection, completing the proposed
+twenty-seven-tool catalogue.
 The package remains an
 independently deployed custom bearer-header adapter, not a public deployment.
 
-The next usable boundary is WS-MCP-002-09: draft review and revision policies.
+The next usable boundary is WS-MCP-002-10: assembled release proof.
 Start it only after this chunk is reviewed and
 merged, recapture each selected operation from then-current backend OpenAPI, and
 preserve the existing fixed-route, caller-token and no-private-import boundaries.
 
-Keep the remaining 2-tool inventory and later mutation boundaries. Guide uploads/setup
-completion and missing policy-selector recovery remain outside that inventory;
+Keep the catalogue fixed at 27 tools. Guide uploads/setup completion and missing
+policy-selector recovery remain outside that inventory;
 do not silently add tools to repair those workflow limits. GitHub permissions
 govern contribution; these technical prerequisites are not another approval system.
 

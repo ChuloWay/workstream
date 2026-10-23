@@ -479,6 +479,94 @@ GUIDE_INPUT_SCHEMAS: dict[str, dict[str, Any]] = {
     },
 }
 
+_POLICY_SELECTOR_INPUT = {
+    "type": "string",
+    "minLength": 1,
+    "pattern": r"^[\u0020-\u007e]+$",
+}
+POLICY_INPUT_SCHEMAS: dict[str, dict[str, Any]] = {
+    "review_policy_put": {
+        "type": "object",
+        "properties": {
+            "project_id": _UUID_INPUT,
+            "guide_id": _UUID_INPUT,
+            "body": {
+                "type": "object",
+                "properties": {
+                    "human_review_required": {"type": "boolean"},
+                    "review_preference_window_seconds": {
+                        "type": "integer",
+                        "exclusiveMinimum": 0,
+                    },
+                    "review_lease_duration_seconds": {
+                        "type": "integer",
+                        "exclusiveMinimum": 0,
+                    },
+                    "max_active_review_leases_per_reviewer": {"const": 1},
+                    "self_review_allowed": {"const": False},
+                    "reject_policy": {"const": "close_task"},
+                    "finding_evidence_requirement": {
+                        "type": "string",
+                        "enum": [
+                            "optional",
+                            "required_for_blocking",
+                            "required_for_all",
+                        ],
+                    },
+                    "requires_second_review": {"const": False},
+                    "allowed_decisions": {
+                        "type": "array",
+                        "items": {
+                            "type": "string",
+                            "enum": ["accept", "needs_revision", "reject"],
+                        },
+                    },
+                    "minimum_finding_fields": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                    },
+                },
+                "required": [
+                    "review_preference_window_seconds",
+                    "review_lease_duration_seconds",
+                ],
+                "additionalProperties": False,
+            },
+            "idempotency_key": _IDEMPOTENCY_KEY_INPUT,
+            "if_match": _POLICY_SELECTOR_INPUT,
+        },
+        "required": ["project_id", "guide_id", "body", "idempotency_key", "if_match"],
+        "additionalProperties": False,
+    },
+    "revision_policy_put": {
+        "type": "object",
+        "properties": {
+            "project_id": _UUID_INPUT,
+            "guide_id": _UUID_INPUT,
+            "body": {
+                "type": "object",
+                "properties": {
+                    "max_revision_rounds": {"type": "integer", "minimum": 0},
+                    "revision_deadline_hours": {"type": "integer", "minimum": 1},
+                    "allowed_resubmission_states": {
+                        "type": "array",
+                        "items": {"const": "needs_revision"},
+                        "minItems": 1,
+                        "maxItems": 1,
+                    },
+                    "reviewer_reassignment_rule": {"type": ["string", "null"]},
+                },
+                "required": ["max_revision_rounds", "revision_deadline_hours"],
+                "additionalProperties": False,
+            },
+            "idempotency_key": _IDEMPOTENCY_KEY_INPUT,
+            "if_match": _POLICY_SELECTOR_INPUT,
+        },
+        "required": ["project_id", "guide_id", "body", "idempotency_key", "if_match"],
+        "additionalProperties": False,
+    },
+}
+
 
 class ContractError(RuntimeError):
     """The reviewed packaged contract is absent or invalid."""
@@ -659,4 +747,16 @@ def guide_output_schema(name: str) -> dict[str, Any]:
 
 def guide_output_validator(name: str) -> Draft202012Validator:
     """Validate one guide-mutation response projection."""
+    return _contract_output_validator(name)
+
+
+def policy_output_schema(name: str) -> dict[str, Any]:
+    """Load one reviewed draft-policy mutation response contract."""
+    if name not in POLICY_INPUT_SCHEMAS:
+        raise ContractError("unknown policy contract")
+    return _contract_output_schema(name)
+
+
+def policy_output_validator(name: str) -> Draft202012Validator:
+    """Validate one draft-policy mutation response projection."""
     return _contract_output_validator(name)

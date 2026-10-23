@@ -59,6 +59,8 @@ packages = ["workstream_mcp"]
 "contracts/project_grants_revoke.json" = "workstream_mcp/contracts/project_grants_revoke.json"
 "contracts/guides_create.json" = "workstream_mcp/contracts/guides_create.json"
 "contracts/guides_update.json" = "workstream_mcp/contracts/guides_update.json"
+"contracts/review_policy_put.json" = "workstream_mcp/contracts/review_policy_put.json"
+"contracts/revision_policy_put.json" = "workstream_mcp/contracts/revision_policy_put.json"
 
 [tool.hatch.build.targets.sdist]
 include = [

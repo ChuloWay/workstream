@@ -58,6 +58,14 @@ OPERATIONS = {
         "/api/v1/projects/{project_id}/guides/{guide_id}",
         "patch",
     ),
+    "review_policy_put": (
+        "/api/v1/projects/{project_id}/guides/{guide_id}/review-policy",
+        "put",
+    ),
+    "revision_policy_put": (
+        "/api/v1/projects/{project_id}/guides/{guide_id}/revision-policy",
+        "put",
+    ),
 }
 
 
