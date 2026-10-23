@@ -37,6 +37,32 @@ def owned_resources(config, root=None):
             'machines': [row['name'] for row in machines], 'cgroups': groups}
 
 
+def _trace_require(condition, message):
+    if not condition:
+        raise RuntimeError(message)
+
+
+def trace_events(root):
+    return [json.loads(line) for line in (root / 'runtime-trace.jsonl').read_text().splitlines()]
+
+
+def assert_launches(root, start, *, creates, executions, project=True, shared_deadline=True):
+    events = [event for event in trace_events(root)[start:] if event['project'] is project]
+    made = [event['name'] for event in events if event['operation'] == 'create']
+    _trace_require(len(made) == creates and len(set(made)) == creates,
+             'runtime retry did not allocate the expected fresh machines')
+    _trace_require(len([e for e in events if e['operation'] == 'exec']) == executions,
+             'runtime retried an invoked guest or skipped expected execution')
+    _trace_require(set(made) == {event['name'] for event in events if event['operation'] == 'delete'},
+             'runtime retry lacks deletion of each exact machine')
+    leases = [event['lease'] for event in events if event.get('lease')]
+    if made and shared_deadline:
+        _trace_require(len({lease['epoch'] for lease in leases}) == 1
+                 and len({lease['expires_ms'] for lease in leases}) == 1,
+                 'launch retry changed its original lease epoch/deadline')
+    return made
+
+
 async def node_command(root, action):
     """Send only a closed fixture command to the separately owned host supervisor."""
     identifier = uuid4().hex
@@ -63,6 +89,8 @@ async def node_command(root, action):
 
 
 def validate_node(config_path, config, unit, manifest_path):
+    if config['smol'].get('maximum_parallel') != 1:
+        raise ValueError('public proof requires a one-slot node')
     private_path(config_path, 0o600)
     private_path(manifest_path, 0o600)
     manifest = json.loads(manifest_path.read_text())

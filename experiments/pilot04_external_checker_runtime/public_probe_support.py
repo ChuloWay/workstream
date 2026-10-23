@@ -30,6 +30,19 @@ def _require(condition: bool, message: str) -> None:
         raise RuntimeError(message)
 
 
+def _fixture_hashes(archive):
+    """Derive expected identities from fixture bytes before public processing."""
+    from tests.post_submit_materialization_helpers import _archive_facts
+
+    _, manifest, _, archive_sha256 = _archive_facts(archive)
+    return {'archive_sha256': archive_sha256, 'semantic_manifest_sha256': manifest.sha256}
+
+
+def _assert_input_hashes(row, expected):
+    _require(all(getattr(row, key) == value for key, value in expected.items()),
+             'retained artifact differs from independently inspected submitted ZIP')
+
+
 def _token(env: dict[str, str], actor) -> str:
     issuer, audience, secret = flow_settings(env)
     return issue_flow_token(

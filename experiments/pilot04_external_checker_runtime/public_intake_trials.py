@@ -14,6 +14,7 @@ from app.modules.tasks.models import Submission
 from experiments.pilot04_external_checker_runtime.public_probe_support import (
     _json, _public_project, _require, _started_public_task, _with_fixture_file,
 )
+from experiments.pilot04_external_checker_runtime.public_node_faults import assert_launches, node_command, trace_events
 from tests.post_submit_materialization_helpers import archive_with_modes
 
 
@@ -66,24 +67,49 @@ def _events(path):
     return [json.loads(line) for line in path.read_text().splitlines()] if path.exists() else []
 
 
-async def _wait_event(path, start, event):
+def _assert_project_invocations(row, trace, observer_start, node_root, runtime_start):
+    members = row.terminal_json['execution']['external_members']
+    expected = [member['request_digest'] for member in members]
+    observed = _events(trace)[observer_start:]
+    starts = [event for event in observed if event['event'] == 'project_started']
+    ends = [event for event in observed if event['event'] == 'project_completed']
+    _require([event['session'] for event in starts] == expected
+             and [event['session'] for event in ends] == expected,
+             'project adapter invocations differ from retained ordered members')
+    machines = assert_launches(node_root, runtime_start, creates=len(expected),
+                               executions=len(expected), shared_deadline=False)
+    executions = [event for event in trace_events(node_root)[runtime_start:]
+                  if event['project'] and event['operation'] == 'exec']
+    _require([event['name'] for event in executions] == machines,
+             'project guest execution order differs from fresh allocation order')
+    for started, ended, executed in zip(starts, ends, executions, strict=True):
+        _require(started['monotonic'] <= executed['monotonic'] <= ended['monotonic'],
+                 'project VM execution is outside its exact adapter request')
+    return machines
+
+
+async def _wait_event(path, start, event, session=None):
     deadline = time.monotonic() + 45
     while time.monotonic() < deadline:
-        found = [item for item in _events(path)[start:] if item["event"] == event]
+        found = [item for item in _events(path)[start:] if item["event"] == event
+                 and (session is None or item["session"] == session)]
         if found:
             return found[0]
         await asyncio.sleep(0.05)
     raise RuntimeError("real intake adapter did not acknowledge " + event)
 
 
-async def _cancel_upload(client, factory, route, headers, token, archive, trace, task):
+async def _cancel_upload(client, factory, route, headers, token, archive, trace, task, node_root):
     start = len(_events(trace))
     key = str(uuid4())
     ready = asyncio.Event()
+    session_id = None
+    runtime_start = len(trace_events(node_root))
 
     async def incomplete():
+        nonlocal session_id
         yield archive[:1]
-        await _wait_event(trace, start, "prepare_ready")
+        session_id = (await _wait_event(trace, start, "prepare_ready"))["session"]
         ready.set()
         await asyncio.Event().wait()
 
@@ -96,16 +122,22 @@ async def _cancel_upload(client, factory, route, headers, token, archive, trace,
     finally:
         pending.cancel()
         await asyncio.gather(pending, return_exceptions=True)
-    await _wait_event(trace, start, "close_confirmed")
+    await _wait_event(trace, start, "close_confirmed", session_id)
+    cleanup = await node_command(node_root, "drained")
+    _require(cleanup["foreign_preserved"] and not any(cleanup["resources"].values()),
+             "cancelled upload retained owned resources or changed the foreign control")
+    machines = assert_launches(node_root, runtime_start, creates=1, executions=0, project=False)
+    assert_launches(node_root, runtime_start, creates=0, executions=0)
     async with factory() as session:
         _require(await session.scalar(select(func.count()).select_from(SelectedPreSubmitRun).where(
             SelectedPreSubmitRun.idempotency_key == key)) == 0,
             "incomplete upload reserved a selected checker run")
     await _assert_no_submission_after_intake_failure(factory, task)
-    return {"case": "cancelled_upload", "reserved_runs": 0}
+    return {"case": "cancelled_upload", "session": session_id, "machines": machines,
+            "cleanup": cleanup, "reserved_runs": 0}
 
 
-async def public_intake_trials(client, factory, env, trace: Path):
+async def public_intake_trials(client, factory, env, trace: Path, node_root: Path):
     evidence = []
     for count in (0, 2):
         project, _, manager, contributor = await _public_project(
@@ -127,9 +159,10 @@ async def public_intake_trials(client, factory, env, trace: Path):
                      f"unauthenticated upload returned {response.status_code}; expected 401")
             _require(len(_events(trace)) == start, "unauthenticated upload allocated an intake session")
             evidence.append(await _cancel_upload(
-                client, factory, route, headers, contributor, archive, trace, task,
+                client, factory, route, headers, contributor, archive, trace, task, node_root,
             ))
             start = len(_events(trace))
+            runtime_start = len(trace_events(node_root))
             key = str(uuid4())
             async def delayed_upload():
                 yield archive[:1]
@@ -142,19 +175,24 @@ async def public_intake_trials(client, factory, env, trace: Path):
             await _wait_event(trace, start, "close_confirmed")
             row = await _selected(factory, key)
             _assert_default_only_pre(row)
+            _assert_project_invocations(row, trace, start, node_root, runtime_start)
             evidence.append({"case": "default_only", "run_id": row.id,
                              "preparation_status": result["submission_bundle_preparation_status"]})
         else:
             for failed in (True, False):
+                runtime_start = len(trace_events(node_root))
+                observer_start = len(_events(trace))
                 key = str(uuid4())
                 result = await _json(client, "POST", route, contributor, 422 if failed else 202,
                                      headers=headers | {"Idempotency-Key": key},
                                      content=_with_fixture_file(archive, "project-rejected.txt") if failed else archive)
                 row = await _selected(factory, key)
                 _assert_ordered_pre_and_stop(row, failed=failed)
+                machines = _assert_project_invocations(
+                    row, trace, observer_start, node_root, runtime_start)
                 if failed:
                     await _assert_no_submission_after_intake_failure(factory, task, row.id)
-                evidence.append({"case": "ordered_stop" if failed else "ordered_pass", "run_id": row.id,
+                evidence.append({"case": "ordered_stop" if failed else "ordered_pass", "run_id": row.id, "machines": machines,
                                  "request_digests": [member["request_digest"]
                                                      for member in row.terminal_json["execution"]["external_members"]]})
     return evidence

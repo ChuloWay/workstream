@@ -53,6 +53,24 @@ class PrivateFaultControls(unittest.TestCase):
         with self.assertRaises(ValueError):
             PrivateControlDirectory(alias)
 
+    def test_launch_trace_rejects_extra_execution_and_reset_deadline(self):
+        trace = self.root / 'runtime-trace.jsonl'
+        lease = {'epoch': 'original', 'expires_ms': 1000}
+        rows = [{'operation': operation, 'name': name, 'project': True, 'lease': dict(lease)}
+                for name in ('first', 'second') for operation in ('create', 'start', 'delete')]
+        rows.insert(5, {'operation': 'exec', 'name': 'second', 'project': True, 'lease': dict(lease)})
+        def write(values):
+            trace.write_text(''.join(json.dumps(row) + '\n' for row in values))
+        write(rows)
+        self.assertEqual(faults.assert_launches(self.root, 0, creates=2, executions=1), ['first', 'second'])
+        write(rows + [{'operation': 'exec', 'name': 'hidden-second-checker', 'project': True, 'lease': lease}])
+        with self.assertRaisesRegex(RuntimeError, 'retried an invoked guest'):
+            faults.assert_launches(self.root, 0, creates=2, executions=1)
+        rows[3]['lease']['expires_ms'] += 1
+        write(rows)
+        with self.assertRaisesRegex(RuntimeError, 'original lease epoch/deadline'):
+            faults.assert_launches(self.root, 0, creates=2, executions=1)
+
     def test_busy_node_refused_before_control_or_config_mutation(self):
         config_path = self.root / 'service.json'
         original = b'{"test": "untouched"}'
@@ -92,7 +110,7 @@ class PrivateFaultControls(unittest.TestCase):
         owner.chmod(0o600)
         config_path = self.root / 'service.json'
         config = {'socket_path': str(socket_root / 'checker.sock'), 'smol': {
-            'binary': str(smol), 'guest_binary': str(guest),
+            'binary': str(smol), 'guest_binary': str(guest), 'maximum_parallel': 1,
             'cgroup_root': '/sys/fs/cgroup/system.slice/ws-proof.service'}}
         config_path.write_text(json.dumps(config))
         config_path.chmod(0o600)
@@ -128,6 +146,18 @@ class PrivateFaultControls(unittest.TestCase):
             with self.assertRaises(ValueError):
                 validate_node(config_path, config, 'ws-proof.service', manifest_path)
             argv[1] = str(config_path)
+            config['smol']['maximum_parallel'] = 2
+            config_path.write_text(json.dumps(config))
+            manifest['node_config'] = config
+            manifest['config_sha256'] = digest(config_path)
+            manifest_path.write_text(json.dumps(manifest))
+            with self.assertRaisesRegex(ValueError, 'one-slot'):
+                validate_node(config_path, config, 'ws-proof.service', manifest_path)
+            config['smol']['maximum_parallel'] = 1
+            config_path.write_text(json.dumps(config))
+            manifest['node_config'] = config
+            manifest['config_sha256'] = digest(config_path)
+            manifest_path.write_text(json.dumps(manifest))
             binary.write_bytes(b'substituted-controller')
             with self.assertRaises(ValueError):
                 validate_node(config_path, config, 'ws-proof.service', manifest_path)

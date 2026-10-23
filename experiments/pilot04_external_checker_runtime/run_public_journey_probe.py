@@ -70,7 +70,7 @@ from api_contract_e2e import (  # noqa: E402
 from experiments.pilot04_external_checker_runtime.public_probe_support import (  # noqa: E402
     _assert_outbox_worker_custody, _assert_task_has_no_effects, _json, _public_project,
     _require, _started_public_task, _token, _wait_outbox_acknowledged,
-    _with_fixture_file, _GOVERNED_TABLES,
+    _with_fixture_file, _GOVERNED_TABLES, _fixture_hashes, _assert_input_hashes,
 )
 
 
@@ -415,6 +415,7 @@ async def _ready_admission(client, factory, task_id: str, assignment_id: str,
                            attestation: str, predecessor_id: str | None = None) -> str:
     from app.workers.artifacts import verify_object
 
+    expected_input = _fixture_hashes(archive)
     key = str(uuid4())
     headers = {
         "Content-Type": "application/zip",
@@ -447,6 +448,11 @@ async def _ready_admission(client, factory, task_id: str, assignment_id: str,
         if status == "ready":
             _require(result["admission_id"] is not None, "ready intake omitted admission")
             if await _scan_audit_count(factory) > scans_before:
+                async with factory() as session:
+                    admission = await session.get(SubmissionBundleAdmission, result["admission_id"])
+                    _assert_input_hashes(admission, expected_input)
+                    selected = await session.get(SelectedPreSubmitRun, admission.selected_pre_submit_run_id)
+                    _assert_input_hashes(selected, expected_input)
                 return result["admission_id"]
             await asyncio.sleep(1)
             continue
@@ -578,7 +584,7 @@ async def _assert_outcome(factory, *, guide_source, project_id: UUID, task_id: s
                           submission_id: str, initial_submission_id: str,
                           contributor_id: UUID,
                           human_review_required: bool, expected_awards: int,
-                          expected_submissions: int) -> dict:
+                          expected_submissions: int, expected_inputs: dict) -> dict:
     async with factory() as session:
         task = await session.get(WorkstreamTask, task_id)
         submission = await session.get(Submission, submission_id)
@@ -634,6 +640,10 @@ async def _assert_outcome(factory, *, guide_source, project_id: UUID, task_id: s
         _require(admission is not None and admission.status == "consumed"
                  and admission.consumed_by_submission_id == submission_id,
                  "governed Submission lost its consumed admission")
+        for identifier, expected in expected_inputs.items():
+            retained = await session.get(Submission, identifier)
+            retained_admission = await session.get(SubmissionBundleAdmission, retained.submission_bundle_admission_id)
+            _assert_input_hashes(retained_admission, expected)
         counts = {}
         for name in ("submissions", "final_acceptances", "contribution_records",
                      "compensation_awards", "reviews"):
@@ -873,6 +883,7 @@ async def _one_mode(client, factory, env, *,
     _require([item["id"] for item in history["items"]] == [saved["submission_id"]],
              "public submission history differs")
     first_submission_id = saved["submission_id"]
+    expected_inputs = {first_submission_id: _fixture_hashes(first_archive)}
     successor = post_retry = None
     if not human_review_required and fault_root:
         from experiments.pilot04_external_checker_runtime.public_runtime_trials import retry_post_outage
@@ -893,12 +904,14 @@ async def _one_mode(client, factory, env, *,
             task_id=task_id, submission_id=first_submission_id,
             attempt_id=first_attempt_id,
         )
+        replacement_archive = revision_archive(archive)
         saved = await _submit(
             client, factory, task_id=task_id, assignment_id=assignment_id,
             contributor_token=contributor_token,
-            archive=revision_archive(archive), summary=summary,
+            archive=replacement_archive, summary=summary,
             attestation=attestation, predecessor_id=first_submission_id,
         )
+        expected_inputs[saved["submission_id"]] = _fixture_hashes(replacement_archive)
         _require(saved["submission_version"] == 2,
                  "public checker remediation did not create version 2")
         history = await _json(client, "GET", submission_path, contributor_token, 200)
@@ -934,7 +947,7 @@ async def _one_mode(client, factory, env, *,
         contributor_id=contributor.actor_profile_id,
         human_review_required=human_review_required,
         expected_awards=len(awards),
-        expected_submissions=2 if human_review_required else 1,
+        expected_submissions=2 if human_review_required else 1, expected_inputs=expected_inputs,
     )
     if not human_review_required:
         exported = await _json(
@@ -973,7 +986,7 @@ async def _one_mode(client, factory, env, *,
         contributor_id=contributor.actor_profile_id,
         human_review_required=human_review_required,
         expected_awards=len(awards),
-        expected_submissions=2 if human_review_required else 1,
+        expected_submissions=2 if human_review_required else 1, expected_inputs=expected_inputs,
     )
     _require(again == outcome, "duplicate completion changed governed outcome")
     late_revocation = None
@@ -1000,6 +1013,7 @@ async def _one_mode(client, factory, env, *,
             [first_attempt_id, attempt_id] if human_review_required else [attempt_id]
         ),
         "outcome": outcome,
+        "submitted_inputs": expected_inputs,
         "late_revocation": late_revocation,
     }
 
@@ -1018,6 +1032,8 @@ async def run(database_url: str, image_reference: str, node_config: Path,
     _require(custody['source_tree'] == subprocess.check_output(
         ['git', 'rev-parse', 'HEAD'], cwd=BACKEND, text=True).strip(), 'custody source differs')
     service_config = json.loads(node_config.read_text())
+    _require(service_config["smol"].get("maximum_parallel") == 1,
+             "public proof requires a one-slot node")
     original_config = json.loads(json.dumps(service_config))
     wrapper = root / 'node-control/runtime-wrapper'
     _require(service_config['smol']['binary'] == str(wrapper)
@@ -1188,7 +1204,8 @@ async def run(database_url: str, image_reference: str, node_config: Path,
         await _wait_beat_scan(factory, beat, scans_before_beat)
         async with httpx.AsyncClient(base_url=origin, timeout=90) as client:
             from experiments.pilot04_external_checker_runtime.public_intake_trials import public_intake_trials
-            intake_trials = await public_intake_trials(client, factory, env, root / "intake-trace.jsonl")
+            intake_trials = await public_intake_trials(
+                client, factory, env, root / "intake-trace.jsonl", root / "node-control")
             from experiments.pilot04_external_checker_runtime.public_runtime_trials import public_runtime_trials
             fault_root = root / "node-control"
             _require((fault_root / "supervisor-ready").exists(), "owned node supervisor is absent")
@@ -1209,7 +1226,7 @@ async def run(database_url: str, image_reference: str, node_config: Path,
         ).strip(), "runtime": "smolvm/smol-microvm", "image_digest": image["platform_manifest_digest"],
                 "trusted_intake_image_digest": intake_health.image_digest,
                 "trusted_intake_config_digest": intake_health.config_digest,
-                "public_api": True, "prefork_worker": True,
+                "public_api": True, "prefork_worker": True, "maximum_parallel": 1,
                 "scheduled_artifact_scans": True,
                 "public_original_guide_setup": True,
                 "recorded_inference": True,

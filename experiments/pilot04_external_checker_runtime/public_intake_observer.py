@@ -7,9 +7,11 @@ import time
 from uuid import uuid4
 
 from app.adapters.artifacts.trusted_intake import UnixSocketTrustedIntakeAdapter
+from app.adapters.checkers.external_service import UnixSocketExternalCheckerAdapter
 
 _TRACE = Path(os.environ["WORKSTREAM_PROBE_INTAKE_TRACE"])
 _prepare = UnixSocketTrustedIntakeAdapter.prepare
+_execute = UnixSocketExternalCheckerAdapter.execute
 
 
 def _record(event, identifier, **facts):
@@ -41,7 +43,15 @@ async def _observe_prepare(self, request):
     return session
 
 
+async def _observe_execute(self, request, grant):
+    _record('project_started', request.request_digest)
+    result = await _execute(self, request, grant)
+    _record('project_completed', request.request_digest)
+    return result
+
+
 # This explicitly selected proof entry point delegates all work to the original
 # typed adapter. Production app imports and ordinary workers never install it.
 UnixSocketTrustedIntakeAdapter.prepare = _observe_prepare
+UnixSocketExternalCheckerAdapter.execute = _observe_execute
 from app.main import app as app  # noqa: E402

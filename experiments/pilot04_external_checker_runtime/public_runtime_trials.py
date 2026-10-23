@@ -11,28 +11,12 @@ from app.modules.tasks.models import SubmissionDispatch
 from experiments.pilot04_external_checker_runtime.public_intake_trials import (
     _assert_no_submission_after_intake_failure, _selected,
 )
-from experiments.pilot04_external_checker_runtime.public_node_faults import node_command
+from experiments.pilot04_external_checker_runtime.public_node_faults import assert_launches, node_command, trace_events
 from experiments.pilot04_external_checker_runtime.public_probe_support import (
     _assert_task_has_no_effects, _json, _public_project, _require, _started_public_task,
     _wait_outbox_acknowledged, _with_fixture_file,
 )
 from tests.post_submit_materialization_helpers import archive_with_modes
-
-
-def trace_events(root):
-    return [json.loads(line) for line in (root / 'runtime-trace.jsonl').read_text().splitlines()]
-
-
-def assert_launches(root, start, *, creates, executions):
-    events = [event for event in trace_events(root)[start:] if event['project']]
-    made = [event['name'] for event in events if event['operation'] == 'create']
-    _require(len(made) == creates and len(set(made)) == creates,
-             'runtime retry did not allocate the expected fresh machines')
-    _require(len([e for e in events if e['operation'] == 'exec']) == executions,
-             'runtime retried an invoked guest or skipped expected execution')
-    _require(set(made) == {event['name'] for event in events if event['operation'] == 'delete'},
-             'runtime retry lacks deletion of each exact machine')
-    return made
 
 
 async def public_runtime_trials(client, factory, env, root: Path):
@@ -54,11 +38,12 @@ async def public_runtime_trials(client, factory, env, root: Path):
             ('project_fail_once', 202, 2, 1),
             ('project_fail_all', 503, 3, 0),
             ('project_kill', 503, 1, 1),
+            ('project_deadline', 503, 1, 1),
         ):
-            control = await node_command(root, action)
+            control = await node_command(root, 'clear' if action == 'project_deadline' else action)
             start = len(trace_events(root))
             key = str(uuid4())
-            content = _with_fixture_file(archive, 'runtime-wait.txt') if action == 'project_kill' else archive
+            content = _with_fixture_file(archive, 'runtime-wait.txt') if action in {'project_kill', 'project_deadline'} else archive
             began = time.monotonic()
             result = await _json(client, 'POST', route, contributor, expected,
                                  headers=headers | {'Idempotency-Key': key}, content=content)

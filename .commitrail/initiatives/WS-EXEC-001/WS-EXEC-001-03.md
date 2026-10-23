@@ -40,6 +40,9 @@ that probe and deployment owners; do not create another lifecycle or business wr
   runtime; verify both typed health identities and use the existing public flow.
   Add only focused proof helpers needed for upload overlap/cancel and exact
   runtime/cleanup observations.
+- `.github/workflows/release-images.yml` and `scripts/test_public_smol_proof.py`:
+  execute the fault-control safety regressions in required CI and trigger on their
+  proof owners. Preserve all existing checks, pins and permissions.
 - Focused existing release/probe tests, docs describing deployment prerequisites,
   roadmap, initiative records and index reconciliation.
 - Disposable EC2 resources in a uniquely owned directory/unit/container/database/
