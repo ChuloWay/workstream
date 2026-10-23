@@ -450,6 +450,13 @@ fallback adapter. The complete Agent Gates command list and complete hosted
 authorization preflight are required on the repaired candidate before another
 push.
 
+That complete preflight then reached the repository's unchanged docstring gate
+and exposed that new adapter/guard/topology helpers left aggregate coverage at
+79.8%, below the existing 80% requirement. The repair documents those helpers'
+runtime ownership and failure boundaries without changing tool descriptions,
+request behavior, exclusions or the threshold. The complete preflight and exact
+image/source evidence must be refreshed on the resulting candidate.
+
 ## Reconciliation
 
 Depends on 01's merged exact contract. Registration and image selection return to

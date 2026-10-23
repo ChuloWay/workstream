@@ -20,14 +20,17 @@ _validated_parent: int | None = None
 
 
 def _uses_inference() -> bool:
+    """Report whether the selected runtime requires an inference worker."""
     return get_settings().project_agent_runtime != "manager_authored"
 
 
 def _redis_url(value: object) -> bool:
+    """Accept only Redis transports that implement the required visibility controls."""
     return isinstance(value, str) and urlsplit(value).scheme in {"redis", "rediss"}
 
 
 def _valid_delivery_settings(app: object) -> bool:
+    """Check the exact no-prefetch and visibility settings for guide delivery."""
     conf = app.conf
     return (
         _redis_url(conf.broker_url)

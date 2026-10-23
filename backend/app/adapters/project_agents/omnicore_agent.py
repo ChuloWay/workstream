@@ -542,6 +542,7 @@ def _build_agent(
 
 
 async def _require_exact_tool_inventory(agent: Any) -> None:
+    """Reject any SDK tool registration beyond the two neutral document tools."""
     inventory = await agent.list_all_available_tools()
     if [item.get("name") for item in inventory] != [
         "read_document",
@@ -558,6 +559,7 @@ async def _run_native_agent(
     admission: ModelCircuitAdmission,
     cleanup_timeout_seconds: int,
 ) -> str:
+    """Run one native phase while preserving bounded cancellation and circuit facts."""
     native_task = asyncio.create_task(
         agent.run(
             query,
@@ -619,6 +621,7 @@ async def _cancel_and_join_native_task(
 
 
 async def _cleanup_agent(agent: Any, timeout_seconds: int) -> None:
+    """Finish SDK cleanup within the reserved shutdown interval."""
     cleanup = asyncio.create_task(agent.cleanup())
     try:
         await asyncio.wait_for(asyncio.shield(cleanup), timeout=timeout_seconds)
@@ -648,6 +651,7 @@ class _LoopbackOpenRouterGuard:
         io_timeout_seconds: int,
         upstream: _UpstreamTarget | None,
     ) -> None:
+        """Bind one attempt's credential, model, limits, and fixed upstream."""
         self._credential = credential
         self._model = model
         self._profile = profile
@@ -670,6 +674,7 @@ class _LoopbackOpenRouterGuard:
 
     @property
     def base_url(self) -> str:
+        """Return the capability-bearing loopback URL only after startup."""
         if self._port is None:
             raise RuntimeError("OpenRouter guard is not started")
         return f"http://127.0.0.1:{self._port}/{self._path_token}/v1"
@@ -680,6 +685,7 @@ class _LoopbackOpenRouterGuard:
         return self._last_upstream_transient_failure
 
     async def start(self) -> None:
+        """Open the bounded loopback listener and proxy-free upstream client."""
         import httpx
 
         self._client = httpx.AsyncClient(
@@ -708,6 +714,7 @@ class _LoopbackOpenRouterGuard:
         self._port = int(sockets[0].getsockname()[1])
 
     def _accepted(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+        """Admit at most one active SDK connection while the guard is open."""
         if self._closing or self._tasks:
             writer.close()
             return
@@ -718,6 +725,7 @@ class _LoopbackOpenRouterGuard:
         task.add_done_callback(lambda _task: self._writers.discard(writer))
 
     async def close(self, timeout_seconds: int) -> None:
+        """Close admission once and share the same bounded cleanup task."""
         if self._close_task is None:
             self._closing = True
             self._close_task = asyncio.create_task(self._finish_close(timeout_seconds))
@@ -755,6 +763,7 @@ class _LoopbackOpenRouterGuard:
             raise cleanup_error
 
     async def _handle(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+        """Translate one accepted connection into a closed, sanitized response."""
         status = 400
         response_headers: Mapping[str, str] = {}
         response_body = b'{"error":{"message":"request rejected"}}'
@@ -789,6 +798,7 @@ class _LoopbackOpenRouterGuard:
                 await asyncio.wait_for(writer.wait_closed(), timeout=1)
 
     async def _read_request(self, reader: asyncio.StreamReader) -> _ParsedRequest:
+        """Parse and validate the pinned SDK HTTP envelope within byte bounds."""
         timeout = self._io_timeout_seconds
         try:
             header_block = await asyncio.wait_for(reader.readuntil(b"\r\n\r\n"), timeout=timeout)
@@ -862,6 +872,7 @@ class _LoopbackOpenRouterGuard:
         return _ParsedRequest(body=body)
 
     async def _forward(self, request: _ParsedRequest) -> tuple[int, Mapping[str, str], bytes]:
+        """Rebuild and forward one validated request to the fixed upstream."""
         import httpx
 
         if not self._logical_request_active:
@@ -934,6 +945,7 @@ class _LoopbackOpenRouterGuard:
         headers: Mapping[str, str],
         body: bytes,
     ) -> None:
+        """Write one bounded JSON response and force connection closure."""
         reason = {
             200: "OK",
             400: "Bad Request",
@@ -960,10 +972,12 @@ class _LoopbackOpenRouterGuard:
 
 class _GuardRejection(Exception):
     def __init__(self, status: int) -> None:
+        """Carry only the safe HTTP status selected by a closed guard check."""
         self.status = status
 
 
 def _validate_request_body(body: dict[str, Any], *, expected_model: str) -> None:
+    """Accept only the pinned LiteLLM request fields and configured model."""
     if set(body) - _ALLOWED_BODY_FIELDS:
         raise _GuardRejection(400)
     if body.get("model") != expected_model:
@@ -998,6 +1012,7 @@ def _validate_request_body(body: dict[str, Any], *, expected_model: str) -> None
 
 
 def _validate_message(message: object) -> None:
+    """Validate one closed Chat Completions message shape."""
     if not isinstance(message, dict):
         raise _GuardRejection(400)
     role = message.get("role")
@@ -1024,6 +1039,7 @@ def _validate_message(message: object) -> None:
 
 
 def _validate_tool_call(call: object) -> None:
+    """Validate one bounded function call for the neutral document tools."""
     if (
         not isinstance(call, dict)
         or set(call) != {"id", "type", "function"}
@@ -1054,6 +1070,7 @@ def _validate_tool_call(call: object) -> None:
 
 
 def _rebuild_openrouter_body(body: dict[str, Any], *, model: str) -> dict[str, Any]:
+    """Build trusted OpenRouter state instead of forwarding caller objects."""
     rebuilt = {
         key: body[key]
         for key in (
@@ -1172,6 +1189,7 @@ def _rebuild_provider_success_body(body_bytes: bytes, *, expected_model: str) ->
 
 
 def _unique_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    """Build a JSON object while rejecting ambiguous duplicate members."""
     result: dict[str, Any] = {}
     for key, value in pairs:
         if key in result:
@@ -1181,6 +1199,7 @@ def _unique_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
 
 
 def _reject_constant(_value: str) -> None:
+    """Reject non-finite JSON constants that standard JSON does not admit."""
     raise ValueError("nonstandard JSON constant")
 
 
@@ -1188,6 +1207,7 @@ _TEST_UPSTREAM_AUTHORITY = object()
 
 
 def _validated_test_upstream(value: str | None, authority: object | None) -> _UpstreamTarget | None:
+    """Admit a test-composed upstream only with authority and a loopback URL."""
     if value is None and authority is None:
         return None
     if authority is not _TEST_UPSTREAM_AUTHORITY or not isinstance(value, str):
