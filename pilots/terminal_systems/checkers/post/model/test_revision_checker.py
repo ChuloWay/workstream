@@ -19,7 +19,7 @@ from revision_checker import (  # noqa: E402
     execute_revision_objective_check,
     execute_revision_rerun_check,
 )
-from trial_plan import project_revision_trial_execution_projection  # noqa: E402
+from trial_plan import project_trial_projection_selector  # noqa: E402
 from trial_transport import CompletedTrial  # noqa: E402
 
 
@@ -69,8 +69,13 @@ def context(kind: str) -> dict[str, object]:
 def request(requirement: str, kind: str) -> dict[str, object]:
     configuration = {"check": requirement}
     if requirement == REVISION_RERUN_REQUIREMENT:
-        configuration["trial_execution"] = (
-            project_revision_trial_execution_projection()
+        configuration.update(
+            {
+                "trial_profile_id": "018f6f49-66b8-7d2a-bf4d-0e2eeaa00001",
+                "trial_profile_version": 1,
+                "trial_profile_digest": "sha256:" + "9" * 64,
+                **project_trial_projection_selector(revision=True),
+            }
         )
     return {
         "request_digest": "sha256:" + "1" * 64,
@@ -149,7 +154,9 @@ class RevisionModel:
         return CompletedModelCall(0, json.dumps(output), DIGEST, True)
 
 
-def trial_from_plan(plan: dict[str, object], *, verification_fails=False) -> CompletedTrial:
+def trial_from_plan(
+    plan: dict[str, object], *, verification_fails=False
+) -> CompletedTrial:
     steps = []
     for order, item in enumerate(plan["steps"], start=1):
         outcome = (
@@ -192,9 +199,7 @@ class RevisionCheckerTests(unittest.TestCase):
             (root / "instruction.md").write_text(
                 f"{label} objective\n", encoding="utf-8"
             )
-            (root / "AUTHOR_NOTES.md").write_text(
-                f"{label} notes\n", encoding="utf-8"
-            )
+            (root / "AUTHOR_NOTES.md").write_text(f"{label} notes\n", encoding="utf-8")
         (self.current / "task.toml").write_text(TASK_METADATA, encoding="utf-8")
 
     def tearDown(self) -> None:
@@ -225,7 +230,9 @@ class RevisionCheckerTests(unittest.TestCase):
             model,
             predecessor_root=self.prior,
         )
-        self.assertEqual((result["outcome"], result["verdict"]), ("completed", "passed"))
+        self.assertEqual(
+            (result["outcome"], result["verdict"]), ("completed", "passed")
+        )
         self.assertEqual(model.calls, 1)
 
     def test_revision_finding_cannot_point_at_hidden_predecessor_path(self):
@@ -261,7 +268,9 @@ class RevisionCheckerTests(unittest.TestCase):
             self.current,
             lambda plan: trial_from_plan(plan, verification_fails=True),
         )
-        self.assertEqual((failed["outcome"], failed["verdict"]), ("completed", "failed"))
+        self.assertEqual(
+            (failed["outcome"], failed["verdict"]), ("completed", "failed")
+        )
         self.assertEqual(failed["findings"][0]["code"], "revision_rerun_failure")
 
     def test_missing_predecessor_material_is_infrastructure_not_work(self):

@@ -43,6 +43,25 @@ class TrialProfileSelector:
 
 
 @dataclass(frozen=True, slots=True)
+class TrialProjectionSelector:
+    """Exact immutable project projection selected by locked policy."""
+
+    projection_id: UUID
+    projection_version: int
+    projection_digest: Sha256
+
+    def __post_init__(self) -> None:
+        if (
+            type(self.projection_id) is not UUID
+            or type(self.projection_version) is not int
+            or self.projection_version < 1
+            or type(self.projection_digest) is not str
+            or _DIGEST.fullmatch(self.projection_digest) is None
+        ):
+            raise TrialProfileError("trial projection selector is invalid")
+
+
+@dataclass(frozen=True, slots=True)
 class TrialResourceCeilings:
     """Whole-invocation and per-operation limits owned by trusted config."""
 
@@ -233,9 +252,9 @@ class TrialMaterialProjection:
 
 @dataclass(frozen=True, slots=True)
 class TrialExecutionProjection:
-    """Exact project-owned subset carried by hashed checker configuration."""
+    """Exact project-owned subset resolved from trusted immutable config."""
 
-    selector: TrialProfileSelector
+    selector: TrialProjectionSelector
     trial_kind: Identifier
     material_projections: tuple[TrialMaterialProjection, ...]
     allowed_material_roles: tuple[Identifier, ...]
@@ -307,14 +326,14 @@ class TrialExecutionProjection:
                 )
                 for slot in self.slot_templates
             )
+            or projection_digest(self) != self.selector.projection_digest
         ):
             raise TrialProfileError("trial execution projection is invalid")
 
     def validate_profile(self, profile: TrialExecutionProfile) -> None:
-        """Require exact selector and a role/operation subset of trusted authority."""
+        """Require the project projection to be a subset of trusted authority."""
         if (
-            self.selector != profile.selector
-            or not set(self.allowed_material_roles) <= set(profile.permitted_material_roles)
+            not set(self.allowed_material_roles) <= set(profile.permitted_material_roles)
             or not {item.source_role for item in self.material_projections}
             <= set(profile.permitted_source_roles)
             or sum(slot.maximum_occurrences for slot in self.slot_templates)
@@ -367,89 +386,75 @@ def make_trial_execution_profile(**fields: object) -> TrialExecutionProfile:
     return TrialExecutionProfile(**exact)
 
 
-def trial_projection_from_configuration(
+def projection_digest(projection: TrialExecutionProjection) -> Sha256:
+    """Hash the canonical immutable projection without its self digest."""
+    value = asdict(projection)
+    value["selector"] = {
+        "projection_id": str(projection.selector.projection_id),
+        "projection_version": projection.selector.projection_version,
+    }
+    return external_checker_json_hash(value)
+
+
+def make_trial_execution_projection(**fields: object) -> TrialExecutionProjection:
+    """Derive, then validate, a project projection digest."""
+    selector = fields.get("selector")
+    if not isinstance(selector, TrialProjectionSelector):
+        raise TrialProfileError("trial projection selector is invalid")
+    placeholder = TrialProjectionSelector(
+        projection_id=selector.projection_id,
+        projection_version=selector.projection_version,
+        projection_digest="sha256:" + "0" * 64,
+    )
+    candidate = object.__new__(TrialExecutionProjection)
+    for name in TrialExecutionProjection.__dataclass_fields__:
+        object.__setattr__(candidate, name, placeholder if name == "selector" else fields[name])
+    exact = dict(fields)
+    exact["selector"] = TrialProjectionSelector(
+        projection_id=selector.projection_id,
+        projection_version=selector.projection_version,
+        projection_digest=projection_digest(candidate),
+    )
+    return TrialExecutionProjection(**exact)
+
+
+@dataclass(frozen=True, slots=True)
+class TrialExecutionSelector:
+    """Flat policy selection of one compatible profile/projection pair."""
+
+    profile: TrialProfileSelector
+    projection: TrialProjectionSelector
+
+
+def trial_selector_from_configuration(
     configuration: Mapping[str, object],
-) -> TrialExecutionProjection | None:
-    """Parse the closed trial subset while allowing sibling project/model fields."""
+) -> TrialExecutionSelector | None:
+    """Parse only flat immutable selectors from locked checker configuration."""
     selector_keys = {
         "trial_profile_id",
         "trial_profile_version",
         "trial_profile_digest",
+        "trial_projection_id",
+        "trial_projection_version",
+        "trial_projection_digest",
     }
     present = selector_keys & configuration.keys()
-    projection = configuration.get("trial_execution")
-    if not present and projection is None:
+    if not present:
         return None
-    if present != selector_keys or type(projection) is not dict:
-        raise TrialProfileError("trial profile selector is incomplete")
+    if present != selector_keys or "trial_execution" in configuration:
+        raise TrialProfileError("trial execution selector is incomplete")
     try:
-        if set(projection) != {
-            "trial_kind",
-            "material_projections",
-            "allowed_material_roles",
-            "build_context_roles",
-            "slot_templates",
-        }:
-            raise TrialProfileError("trial execution projection is invalid")
-        slots = projection["slot_templates"]
-        materials = projection["material_projections"]
-        if type(slots) is not list or type(materials) is not list:
-            raise TrialProfileError("trial execution projection is invalid")
-        parsed_materials = []
-        for material in materials:
-            if type(material) is not dict or set(material) != {
-                "role",
-                "source_role",
-                "projection_kind",
-                "source_relative",
-                "destination_relative",
-                "exclusions",
-            }:
-                raise TrialProfileError("trial material projection is invalid")
-            parsed_materials.append(
-                TrialMaterialProjection(
-                    role=material["role"],
-                    source_role=material["source_role"],
-                    projection_kind=material["projection_kind"],
-                    source_relative=material["source_relative"],
-                    destination_relative=material["destination_relative"],
-                    exclusions=_string_tuple(material["exclusions"]),
-                )
-            )
-        parsed_slots = []
-        for slot in slots:
-            if type(slot) is not dict or set(slot) != {
-                "slot_kind",
-                "minimum_occurrences",
-                "maximum_occurrences",
-                "seed_roles",
-                "visible_roles",
-                "fresh_workspace",
-                "retain_state_after",
-            }:
-                raise TrialProfileError("trial slot projection is invalid")
-            parsed_slots.append(
-                TrialSlotProjection(
-                    slot_kind=slot["slot_kind"],
-                    minimum_occurrences=slot["minimum_occurrences"],
-                    maximum_occurrences=slot["maximum_occurrences"],
-                    seed_roles=_string_tuple(slot["seed_roles"]),
-                    visible_roles=_string_tuple(slot["visible_roles"]),
-                    fresh_workspace=slot["fresh_workspace"],
-                    retain_state_after=_string_tuple(slot["retain_state_after"]),
-                )
-            )
-        return TrialExecutionProjection(
-            selector=TrialProfileSelector(
+        return TrialExecutionSelector(
+            profile=TrialProfileSelector(
                 profile_id=UUID(configuration["trial_profile_id"]),
                 profile_version=configuration["trial_profile_version"],
                 profile_digest=configuration["trial_profile_digest"],
             ),
-            trial_kind=projection["trial_kind"],
-            material_projections=tuple(parsed_materials),
-            allowed_material_roles=_string_tuple(projection["allowed_material_roles"]),
-            build_context_roles=_string_tuple(projection["build_context_roles"]),
-            slot_templates=tuple(parsed_slots),
+            projection=TrialProjectionSelector(
+                projection_id=UUID(configuration["trial_projection_id"]),
+                projection_version=configuration["trial_projection_version"],
+                projection_digest=configuration["trial_projection_digest"],
+            ),
         )
     except (KeyError, TypeError, ValueError) as exc:
         if isinstance(exc, TrialProfileError):
@@ -507,16 +512,63 @@ class PinnedTrialProfileCatalog:
         )
 
 
+class PinnedTrialExecutionCatalog:
+    """Exact profile/projection bundles provisioned by trusted service config."""
+
+    def __init__(
+        self,
+        entries: tuple[tuple[TrialExecutionProfile, TrialExecutionProjection], ...],
+    ) -> None:
+        values: dict[
+            tuple[UUID, int, str, UUID, int, str],
+            tuple[TrialExecutionProfile, TrialExecutionProjection],
+        ] = {}
+        for profile, projection in entries:
+            projection.validate_profile(profile)
+            key = (
+                profile.selector.profile_id,
+                profile.selector.profile_version,
+                profile.selector.profile_digest,
+                projection.selector.projection_id,
+                projection.selector.projection_version,
+                projection.selector.projection_digest,
+            )
+            if key in values:
+                raise TrialProfileError("trial execution bundle is duplicated")
+            values[key] = (profile, projection)
+        self._entries = MappingProxyType(values)
+
+    def read(
+        self, selector: TrialExecutionSelector
+    ) -> tuple[TrialExecutionProfile, TrialExecutionProjection] | None:
+        """Resolve only one exact trusted profile/projection pair."""
+        return self._entries.get(
+            (
+                selector.profile.profile_id,
+                selector.profile.profile_version,
+                selector.profile.profile_digest,
+                selector.projection.projection_id,
+                selector.projection.projection_version,
+                selector.projection.projection_digest,
+            )
+        )
+
+
 __all__ = (
     "PinnedTrialProfileCatalog",
+    "PinnedTrialExecutionCatalog",
     "TrialExecutionProfile",
     "TrialExecutionProjection",
+    "TrialExecutionSelector",
     "TrialMaterialProjection",
     "TrialProfileError",
     "TrialProfileSelector",
+    "TrialProjectionSelector",
     "TrialResourceCeilings",
     "TrialSlotProjection",
     "make_trial_execution_profile",
+    "make_trial_execution_projection",
     "profile_digest",
-    "trial_projection_from_configuration",
+    "projection_digest",
+    "trial_selector_from_configuration",
 )

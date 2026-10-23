@@ -9,6 +9,7 @@ from pathlib import Path, PurePosixPath
 import re
 import shlex
 import tomllib
+from uuid import UUID
 
 
 PLAN_SCHEMA_VERSION = "terminal_systems.trial_plan_proposal.v1"
@@ -28,6 +29,9 @@ PURPOSE_ORDER = (
 PURPOSES = frozenset(PURPOSE_ORDER)
 _IDENTIFIER = re.compile(r"[a-z][a-z0-9_.-]{0,99}")
 _PLATFORM = re.compile(r"linux/[a-z0-9_.-]{1,32}")
+_DIGEST = re.compile(r"sha256:[0-9a-f]{64}")
+RUNTIME_PROJECTION_ID = "019a14ee-5f61-7f21-8dd8-11d4d41a0001"
+REVISION_PROJECTION_ID = "019a14ee-5f61-7f21-8dd8-11d4d41a0002"
 
 
 class TrialPlanError(ValueError):
@@ -216,7 +220,10 @@ def parse_task_metadata(root: Path) -> dict[str, object]:
             type(command) is not list
             or not command
             or len(command) > 64
-            or any(type(item) is not str or not item or len(item) > 4096 or "\x00" in item for item in command)
+            or any(
+                type(item) is not str or not item or len(item) > 4096 or "\x00" in item
+                for item in command
+            )
         ):
             raise TrialPlanError("material_unavailable")
     if not _safe_relative(environment.get("dockerfile"), allow_dot=False) or not all(
@@ -236,7 +243,10 @@ def parse_task_metadata(root: Path) -> dict[str, object]:
         "reference_timeout_seconds",
         "verification_timeout_seconds",
     )
-    if any(type(resources.get(name)) is not int or resources[name] < 1 for name in required_resources):
+    if any(
+        type(resources.get(name)) is not int or resources[name] < 1
+        for name in required_resources
+    ):
         raise TrialPlanError("material_unavailable")
     return {
         "environment": {
@@ -401,7 +411,10 @@ def validate_plan_proposal(
             or type(command) is not list
             or not command
             or len(command) > 64
-            or any(type(item) is not str or not item or len(item) > 4096 or "\x00" in item for item in command)
+            or any(
+                type(item) is not str or not item or len(item) > 4096 or "\x00" in item
+                for item in command
+            )
             or not _safe_relative(procedure["working_directory"], allow_dot=True)
             or type(source) is not str
             or type(source) is str
@@ -433,10 +446,7 @@ def validate_plan_proposal(
     complete = value["coverage_complete"]
     if complete and (
         counts["documented_command"] < 1
-        or any(
-            counts[purpose] != 1
-            for purpose in PURPOSES - {"documented_command"}
-        )
+        or any(counts[purpose] != 1 for purpose in PURPOSES - {"documented_command"})
     ):
         raise TrialPlanError("invalid_output")
     restart = next((item for item in normalized if item["purpose"] == "restart"), None)
@@ -456,7 +466,9 @@ def validate_plan_proposal(
         )["state_source"]
         != "reference_baseline"
         or next(
-            item for item in normalized if item["purpose"] == "fabricated_output_mutation"
+            item
+            for item in normalized
+            if item["purpose"] == "fabricated_output_mutation"
         )["state_source"]
         != "reference_baseline"
         or interrupted["state_source"] != "fresh"
@@ -474,9 +486,15 @@ def validate_plan_proposal(
             raise TrialPlanError("invalid_output")
         if purpose == "documented_command":
             earlier_documented.add(item["procedure_id"])
-        elif purpose in {"incomplete_repair", "controlled_interruption"} and source != "fresh":
+        elif (
+            purpose in {"incomplete_repair", "controlled_interruption"}
+            and source != "fresh"
+        ):
             raise TrialPlanError("invalid_output")
-        elif purpose in {"missing_output_mutation", "fabricated_output_mutation"} and source != "reference_baseline":
+        elif (
+            purpose in {"missing_output_mutation", "fabricated_output_mutation"}
+            and source != "reference_baseline"
+        ):
             raise TrialPlanError("invalid_output")
         elif purpose == "restart" and source != controlled_id:
             raise TrialPlanError("invalid_output")
@@ -518,8 +536,7 @@ def validate_plan_proposal(
         [PURPOSE_ORDER.index(item) for item in gap_purposes]
         != sorted(PURPOSE_ORDER.index(item) for item in gap_purposes)
         or not complete
-        and {item["purpose"] for item in normalized} | set(gap_purposes)
-        != PURPOSES
+        and {item["purpose"] for item in normalized} | set(gap_purposes) != PURPOSES
     ):
         raise TrialPlanError("invalid_output")
     return TrialPlanProposal(
@@ -832,6 +849,59 @@ def project_revision_trial_execution_projection() -> dict[str, object]:
     return value
 
 
+def project_trial_projection_selector(*, revision: bool = False) -> dict[str, object]:
+    """Return the flat immutable selector for one project projection."""
+    projection = (
+        project_revision_trial_execution_projection()
+        if revision
+        else project_trial_execution_projection()
+    )
+    projection_id = REVISION_PROJECTION_ID if revision else RUNTIME_PROJECTION_ID
+    canonical = json.dumps(
+        {
+            "selector": {"projection_id": projection_id, "projection_version": 1},
+            **projection,
+        },
+        ensure_ascii=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8")
+    return {
+        "trial_projection_id": projection_id,
+        "trial_projection_version": 1,
+        "trial_projection_digest": "sha256:" + hashlib.sha256(canonical).hexdigest(),
+    }
+
+
+def validate_trial_configuration(
+    configuration: object, *, revision: bool = False
+) -> None:
+    """Require a trusted profile selector and this exact flat project selector."""
+    if type(configuration) is not dict or "trial_execution" in configuration:
+        raise TrialPlanError("invalid_trial_configuration")
+    try:
+        profile_id = configuration["trial_profile_id"]
+        profile_version = configuration["trial_profile_version"]
+        profile_digest = configuration["trial_profile_digest"]
+        if (
+            type(profile_id) is not str
+            or str(UUID(profile_id)) != profile_id
+            or type(profile_version) is not int
+            or profile_version < 1
+            or type(profile_digest) is not str
+            or _DIGEST.fullmatch(profile_digest) is None
+            or any(
+                configuration.get(key) != value
+                for key, value in project_trial_projection_selector(
+                    revision=revision
+                ).items()
+            )
+        ):
+            raise TrialPlanError("invalid_trial_configuration")
+    except (KeyError, TypeError, ValueError) as exc:
+        raise TrialPlanError("invalid_trial_configuration") from exc
+
+
 def build_revision_rerun_plan(
     metadata: dict[str, object], limits: TrialPlanLimits
 ) -> dict[str, object]:
@@ -913,6 +983,8 @@ __all__ = (
     "parse_task_metadata",
     "project_slot_templates",
     "project_revision_trial_execution_projection",
+    "project_trial_projection_selector",
     "project_trial_execution_projection",
+    "validate_trial_configuration",
     "validate_plan_proposal",
 )

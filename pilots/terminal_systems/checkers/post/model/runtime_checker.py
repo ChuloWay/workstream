@@ -28,7 +28,7 @@ from trial_plan import (
     build_runtime_trial_plan,
     collect_plan_sources,
     parse_task_metadata,
-    project_trial_execution_projection,
+    validate_trial_configuration,
     validate_plan_proposal,
 )
 from trial_transport import CompletedTrial, TrialTransportError, TrialUnavailable
@@ -65,9 +65,7 @@ def execute_runtime_check(
             build_plan_prompt(metadata, material_digest, sources),
             required_receipt_handles=(),
         )
-        proposal = validate_plan_proposal(
-            planning.output, material_digest, sources
-        )
+        proposal = validate_plan_proposal(planning.output, material_digest, sources)
         if not proposal.coverage_complete:
             return _coverage_incomplete_result(request, sources, proposal.coverage_gaps)
         if planning.session_exhausted:
@@ -102,7 +100,9 @@ def execute_runtime_check(
     except TrialAssessmentError as exc:
         return infrastructure_result(
             request,
-            "capacity_exceeded" if str(exc) == "capacity_exceeded" else "invalid_output",
+            "capacity_exceeded"
+            if str(exc) == "capacity_exceeded"
+            else "invalid_output",
         )
     except AssessmentError:
         return infrastructure_result(request, "invalid_output")
@@ -123,10 +123,9 @@ def _validate_request(request: dict[str, object]) -> None:
             or type(input_value) is not dict
             or configuration.get("check") != RUNTIME_REQUIREMENT
             or input_value.get("requirement_id") != RUNTIME_REQUIREMENT
-            or configuration.get("trial_execution")
-            != project_trial_execution_projection()
         ):
             raise ValueError("invalid_request")
+        validate_trial_configuration(configuration)
     except (KeyError, TypeError) as exc:
         raise ValueError("invalid_request") from exc
 

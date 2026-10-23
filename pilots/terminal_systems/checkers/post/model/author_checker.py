@@ -7,7 +7,12 @@ import hashlib
 import json
 from pathlib import Path
 
-from assessment import AssessmentError, ValidatedFinding, build_prompt, validate_assessment
+from assessment import (
+    AssessmentError,
+    ValidatedFinding,
+    build_prompt,
+    validate_assessment,
+)
 from checker import DEFAULT_LIMITS
 from material import MaterialEvidence, MaterialError, MaterialSnapshot, collect_material
 from model_transport import ModelCallUnavailable, ModelSessionError
@@ -22,7 +27,7 @@ from trial_plan import (
     build_runtime_trial_plan,
     collect_plan_sources,
     parse_task_metadata,
-    project_trial_execution_projection,
+    validate_trial_configuration,
     validate_plan_proposal,
 )
 from trial_transport import CompletedTrial, TrialTransportError, TrialUnavailable
@@ -94,10 +99,9 @@ def _validate_request(request: dict[str, object]) -> None:
         or type(input_value) is not dict
         or configuration.get("check") != AUTHOR_REQUIREMENT
         or input_value.get("requirement_id") != AUTHOR_REQUIREMENT
-        or configuration.get("trial_execution")
-        != project_trial_execution_projection()
     ):
         raise ValueError("invalid_request")
+    validate_trial_configuration(configuration)
 
 
 def _prepare_assessment(

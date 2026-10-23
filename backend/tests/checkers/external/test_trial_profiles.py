@@ -4,19 +4,23 @@ from uuid import UUID
 import pytest
 
 from app.modules.checkers.api.trial_profiles import (
+    PinnedTrialExecutionCatalog,
     PinnedTrialProfileCatalog,
     TrialExecutionProjection,
     TrialMaterialProjection,
     TrialProfileError,
     TrialProfileSelector,
+    TrialProjectionSelector,
     TrialResourceCeilings,
     TrialSlotProjection,
     make_trial_execution_profile,
-    trial_projection_from_configuration,
+    make_trial_execution_projection,
+    trial_selector_from_configuration,
 )
 
 
 PROFILE_ID = UUID("018f6f49-66b8-7d2a-bf4d-0e2eeaa00001")
+PROJECTION_ID = UUID("018f6f49-66b8-7d2a-bf4d-0e2eeaa00002")
 
 
 def digest(character: str) -> str:
@@ -78,8 +82,35 @@ def profile():
     )
 
 
-def configuration(selected=None) -> dict[str, object]:
+def projection(selected=None) -> TrialExecutionProjection:
     selected = selected or profile()
+    return make_trial_execution_projection(
+        selector=TrialProjectionSelector(PROJECTION_ID, 1, digest("0")),
+        trial_kind="generic_build_run",
+        allowed_material_roles=("candidate_source", "verification"),
+        build_context_roles=("candidate_source",),
+        material_projections=(
+            TrialMaterialProjection(
+                "candidate_source",
+                "submission_archive",
+                "build_context",
+                ".",
+                ".",
+                ("solution", "tests"),
+            ),
+            TrialMaterialProjection(
+                "verification", "submission_archive", "state_overlay", "tests", "tests", ()
+            ),
+        ),
+        slot_templates=(
+            TrialSlotProjection("generic_run", 1, 2, (), ("verification",), True, ("succeeded",)),
+        ),
+    )
+
+
+def configuration(selected=None, projected=None) -> dict[str, object]:
+    selected = selected or profile()
+    projected = projected or projection(selected)
     return {
         "check": "check_a",
         "model_profile_id": "018f6f49-66b8-7d2a-bf4d-0e2eeaa00002",
@@ -88,40 +119,9 @@ def configuration(selected=None) -> dict[str, object]:
         "trial_profile_id": str(selected.selector.profile_id),
         "trial_profile_version": selected.selector.profile_version,
         "trial_profile_digest": selected.selector.profile_digest,
-        "trial_execution": {
-            "trial_kind": "generic_build_run",
-            "allowed_material_roles": ["candidate_source", "verification"],
-            "build_context_roles": ["candidate_source"],
-            "material_projections": [
-                {
-                    "role": "candidate_source",
-                    "source_role": "submission_archive",
-                    "projection_kind": "build_context",
-                    "source_relative": ".",
-                    "destination_relative": ".",
-                    "exclusions": ["solution", "tests"],
-                },
-                {
-                    "role": "verification",
-                    "source_role": "submission_archive",
-                    "projection_kind": "state_overlay",
-                    "source_relative": "tests",
-                    "destination_relative": "tests",
-                    "exclusions": [],
-                },
-            ],
-            "slot_templates": [
-                {
-                    "slot_kind": "generic_run",
-                    "minimum_occurrences": 1,
-                    "maximum_occurrences": 2,
-                    "seed_roles": [],
-                    "visible_roles": ["verification"],
-                    "fresh_workspace": True,
-                    "retain_state_after": ["succeeded"],
-                }
-            ],
-        },
+        "trial_projection_id": str(projected.selector.projection_id),
+        "trial_projection_version": projected.selector.projection_version,
+        "trial_projection_digest": projected.selector.projection_digest,
     }
 
 
@@ -152,27 +152,26 @@ def test_runtime_split_and_no_swap_are_closed_trusted_profile_rules():
 
 def test_locked_configuration_parses_trial_and_model_selectors_independently():
     selected = profile()
-    projection = trial_projection_from_configuration(configuration(selected))
-    assert projection is not None
-    assert projection.selector == selected.selector
-    assert projection.slot_templates[0].visible_roles == ("verification",)
-    assert projection.material_projections[0].exclusions == ("solution", "tests")
-    projection.validate_profile(selected)
+    projected = projection(selected)
+    selector = trial_selector_from_configuration(configuration(selected, projected))
+    assert selector is not None
+    assert selector.profile == selected.selector
+    assert selector.projection == projected.selector
+    catalog = PinnedTrialExecutionCatalog(((selected, projected),))
+    assert catalog.read(selector) == (selected, projected)
 
     without_trial = {
         key: value for key, value in configuration(selected).items() if not key.startswith("trial_")
     }
-    assert trial_projection_from_configuration(without_trial) is None
+    assert trial_selector_from_configuration(without_trial) is None
 
 
 @pytest.mark.parametrize(
     "mutation",
     (
         lambda value: value.pop("trial_profile_digest"),
-        lambda value: value["trial_execution"].update(network_mode="host"),
-        lambda value: value["trial_execution"]["slot_templates"][0].update(
-            visible_roles=["protected_role"]
-        ),
+        lambda value: value.update(trial_execution={"network_mode": "host"}),
+        lambda value: value.update(trial_projection_digest=["bad"]),
         lambda value: value.update(trial_profile_version=True),
     ),
 )
@@ -180,13 +179,13 @@ def test_partial_unknown_foreign_or_wrong_typed_projection_is_rejected(mutation)
     value = configuration()
     mutation(value)
     with pytest.raises(TrialProfileError):
-        trial_projection_from_configuration(value)
+        trial_selector_from_configuration(value)
 
 
 def test_projection_cannot_exceed_trusted_roles_or_step_count():
     selected = profile()
-    foreign_role = TrialExecutionProjection(
-        selector=selected.selector,
+    foreign_role = make_trial_execution_projection(
+        selector=TrialProjectionSelector(PROJECTION_ID, 1, digest("f")),
         trial_kind="generic_build_run",
         material_projections=(
             TrialMaterialProjection(
@@ -205,8 +204,9 @@ def test_projection_cannot_exceed_trusted_roles_or_step_count():
     with pytest.raises(TrialProfileError, match="exceeds"):
         foreign_role.validate_profile(selected)
 
-    too_many = replace(
-        foreign_role,
+    too_many = make_trial_execution_projection(
+        selector=foreign_role.selector,
+        trial_kind=foreign_role.trial_kind,
         material_projections=(
             TrialMaterialProjection(
                 "candidate_source",
@@ -229,36 +229,13 @@ def test_projection_cannot_exceed_trusted_roles_or_step_count():
 
 
 def test_projection_rejects_escape_overlap_shadow_and_unsafe_state_retention():
-    value = configuration()
-    value["trial_execution"]["material_projections"][0]["source_relative"] = "../host"
     with pytest.raises(TrialProfileError, match="material projection"):
-        trial_projection_from_configuration(value)
+        TrialMaterialProjection("bad", "submission_archive", "build_context", "../host", ".", ())
 
-    value = configuration()
-    value["trial_execution"]["material_projections"][0]["exclusions"] = [
-        "tests",
-        "tests/fixtures",
-    ]
     with pytest.raises(TrialProfileError, match="material projection"):
-        trial_projection_from_configuration(value)
+        TrialMaterialProjection(
+            "bad", "submission_archive", "build_context", ".", ".", ("tests", "tests/fixtures")
+        )
 
-    value = configuration()
-    value["trial_execution"]["material_projections"].append(
-        {
-            "role": "workspace_seed",
-            "source_role": "submission_archive",
-            "projection_kind": "state_seed",
-            "source_relative": "workspace",
-            "destination_relative": "tests",
-            "exclusions": [],
-        }
-    )
-    value["trial_execution"]["allowed_material_roles"].append("workspace_seed")
-    value["trial_execution"]["slot_templates"][0]["seed_roles"] = ["workspace_seed"]
-    with pytest.raises(TrialProfileError, match="execution projection"):
-        trial_projection_from_configuration(value)
-
-    value = configuration()
-    value["trial_execution"]["slot_templates"][0]["retain_state_after"] = ["deadline_exceeded"]
     with pytest.raises(TrialProfileError, match="slot projection"):
-        trial_projection_from_configuration(value)
+        TrialSlotProjection("bad", 1, 1, (), (), True, ("deadline_exceeded",))

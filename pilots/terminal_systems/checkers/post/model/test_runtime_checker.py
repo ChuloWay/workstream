@@ -16,7 +16,7 @@ sys.path.insert(0, str(HERE))
 from model_transport import CompletedModelCall  # noqa: E402
 from author_checker import AUTHOR_REQUIREMENT, execute_author_accuracy_check  # noqa: E402
 from runtime_checker import RUNTIME_REQUIREMENT, execute_runtime_check  # noqa: E402
-from trial_plan import project_trial_execution_projection  # noqa: E402
+from trial_plan import project_trial_projection_selector  # noqa: E402
 from trial_transport import CompletedTrial, TrialUnavailable  # noqa: E402
 
 
@@ -64,7 +64,10 @@ def request(check: str = RUNTIME_REQUIREMENT) -> dict[str, object]:
         "identity": {"phase": "post_submit"},
         "configuration": {
             "check": check,
-            "trial_execution": project_trial_execution_projection(),
+            "trial_profile_id": "018f6f49-66b8-7d2a-bf4d-0e2eeaa00001",
+            "trial_profile_version": 1,
+            "trial_profile_digest": "sha256:" + "9" * 64,
+            **project_trial_projection_selector(),
         },
         "input": {"requirement_id": check},
     }
@@ -92,7 +95,9 @@ def procedure(
 
 
 class FakeModelSession:
-    def __init__(self, *, coverage_complete: bool = True, exhausted: bool = False) -> None:
+    def __init__(
+        self, *, coverage_complete: bool = True, exhausted: bool = False
+    ) -> None:
         self.coverage_complete = coverage_complete
         self.exhausted = exhausted
         self.calls: list[tuple[str, tuple[str, ...]]] = []
@@ -126,7 +131,13 @@ class FakeModelSession:
             )
         ]
         remaining = [
-            ("apply_incomplete", "incomplete_repair", "sh solution/incomplete.sh", "fresh", 2),
+            (
+                "apply_incomplete",
+                "incomplete_repair",
+                "sh solution/incomplete.sh",
+                "fresh",
+                2,
+            ),
             (
                 "remove_output",
                 "missing_output_mutation",
@@ -211,9 +222,7 @@ def trial_from_plan(
     }
     for order, planned in enumerate(trial_plan["steps"], start=1):
         outcome = (
-            "exit_nonzero"
-            if planned["slot_kind"] in expected_failures
-            else "succeeded"
+            "exit_nonzero" if planned["slot_kind"] in expected_failures else "succeeded"
         )
         if failed_reference and planned["slot_kind"] == "reference_verify_2":
             outcome = "exit_nonzero"
@@ -280,7 +289,9 @@ class RuntimeCheckerTests(unittest.TestCase):
             return trial_from_plan(value)
 
         result = execute_runtime_check(request(), self.root, session, execute)
-        self.assertEqual((result["outcome"], result["verdict"]), ("completed", "passed"))
+        self.assertEqual(
+            (result["outcome"], result["verdict"]), ("completed", "passed")
+        )
         self.assertEqual(len(plans), 1)
         self.assertEqual(len(session.calls), 2)
         self.assertEqual(session.calls[0][1], ())
@@ -293,7 +304,9 @@ class RuntimeCheckerTests(unittest.TestCase):
             self.fail("incomplete coverage must not execute an invented plan")
 
         result = execute_runtime_check(request(), self.root, session, forbidden)
-        self.assertEqual((result["outcome"], result["verdict"]), ("completed", "failed"))
+        self.assertEqual(
+            (result["outcome"], result["verdict"]), ("completed", "failed")
+        )
         self.assertEqual(
             [item["code"] for item in result["findings"]],
             ["behavioral_coverage_incomplete"],
@@ -308,7 +321,9 @@ class RuntimeCheckerTests(unittest.TestCase):
             lambda value: trial_from_plan(value),
         )
         self.assertEqual(result["outcome"], "infrastructure_failed")
-        self.assertEqual(result["infrastructure_failure_code"], "implementation_unavailable")
+        self.assertEqual(
+            result["infrastructure_failure_code"], "implementation_unavailable"
+        )
 
     def test_trial_infrastructure_unavailability_never_becomes_a_work_finding(self):
         def unavailable(_value):
@@ -332,12 +347,12 @@ class RuntimeCheckerTests(unittest.TestCase):
 
     def test_project_profile_cannot_relax_three_runs_or_protected_exclusions(self):
         for mutate in (
-            lambda value: value["configuration"]["trial_execution"]["slot_templates"][1].update(
-                minimum_occurrences=0
+            lambda value: value["configuration"].update(
+                trial_projection_digest="sha256:" + "0" * 64
             ),
-            lambda value: value["configuration"]["trial_execution"][
-                "material_projections"
-            ][0].update(exclusions=[]),
+            lambda value: value["configuration"].update(
+                trial_execution={"material_projections": []}
+            ),
         ):
             selected = deepcopy(request())
             mutate(selected)
@@ -358,7 +373,9 @@ class RuntimeCheckerTests(unittest.TestCase):
             session,
             trial_from_plan,
         )
-        self.assertEqual((result["outcome"], result["verdict"]), ("completed", "passed"))
+        self.assertEqual(
+            (result["outcome"], result["verdict"]), ("completed", "passed")
+        )
         self.assertEqual(len(session.calls), 2)
         self.assertEqual(session.calls[1][1], ("trial_receipt_" + "b" * 32,))
 
@@ -371,7 +388,9 @@ class RuntimeCheckerTests(unittest.TestCase):
         result = execute_author_accuracy_check(
             request(AUTHOR_REQUIREMENT), self.root, session, forbidden
         )
-        self.assertEqual((result["outcome"], result["verdict"]), ("completed", "failed"))
+        self.assertEqual(
+            (result["outcome"], result["verdict"]), ("completed", "failed")
+        )
         self.assertEqual(
             [item["code"] for item in result["findings"]],
             ["reproduction_procedure_unavailable"],

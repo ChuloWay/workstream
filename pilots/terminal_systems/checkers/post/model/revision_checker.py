@@ -9,7 +9,12 @@ import os
 from pathlib import Path
 import stat
 
-from assessment import AssessmentError, ValidatedFinding, build_prompt, validate_assessment
+from assessment import (
+    AssessmentError,
+    ValidatedFinding,
+    build_prompt,
+    validate_assessment,
+)
 from material import MaterialEvidence, MaterialSnapshot
 from model_transport import ModelCallUnavailable, ModelSessionError
 from result import completed_result, infrastructure_result
@@ -22,7 +27,7 @@ from trial_plan import (
     TrialPlanLimits,
     build_revision_rerun_plan,
     parse_task_metadata,
-    project_revision_trial_execution_projection,
+    validate_trial_configuration,
 )
 from trial_transport import CompletedTrial, TrialTransportError, TrialUnavailable
 
@@ -82,12 +87,9 @@ def execute_revision_rerun_check(
     try:
         context = _context(request, REVISION_RERUN_REQUIREMENT)
         configuration = request["configuration"]
-        if (
-            type(configuration) is not dict
-            or configuration.get("trial_execution")
-            != project_revision_trial_execution_projection()
-        ):
+        if type(configuration) is not dict:
             raise ValueError("invalid_request")
+        validate_trial_configuration(configuration, revision=True)
         if context["kind"] == "initial":
             return completed_result(request, REVISION_RERUN_REQUIREMENT, ())
         metadata = parse_task_metadata(material_root)
