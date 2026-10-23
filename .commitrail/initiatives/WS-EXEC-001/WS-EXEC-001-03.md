@@ -27,7 +27,7 @@ that probe and deployment owners; do not create another lifecycle or business wr
 
 ### Allowed files and responsibilities
 
-- `deploy/hosted/compose.yml`, `release.env.example`, `preflight.py` and their
+- `deploy/hosted/compose.yml`, `release.env.example`, `preflight.py`, `compose.py` and their
   existing `scripts/test_hosted_release_config.py` tests: require pinned intake
   identities and mount its private Unix socket into API/Celery processes;
   retain existing artifact-store, secrets and project execution boundaries.

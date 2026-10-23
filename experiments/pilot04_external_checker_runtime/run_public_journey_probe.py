@@ -48,13 +48,11 @@ from app.modules.outbox.models import OutboxDeliveryAttempt, OutboxEvent
 from app.modules.artifacts.service import artifact_storage_namespace_spec
 from app.modules.projects.models import ProjectGuide
 from app.modules.tasks.models import AuditEvent, Submission, SubmissionDispatch, WorkstreamTask
-from experiments.pilot04_external_checker_runtime.run_probe import _image_identity
+from app.adapters.artifacts import trusted_submission_intake
+from app.adapters.checkers import configured_external_checker_execution
 from experiments.pilot04_external_checker_runtime.run_selected_end_to_end_probe import (
     _locked_spec,
     _secret_archive,
-    _start_service,
-    _stop_service,
-    _wait_service,
 )
 from tests.authorization.post_submit_routing.support import provision_router
 from tests.post_submit_materialization_helpers import (
@@ -1216,17 +1214,26 @@ async def _pre_runs(factory, task_id: str) -> list[str]:
         ).order_by(SelectedPreSubmitRun.queued_at)))
 
 
-async def run(database_url: str, image_reference: str, service_binary: Path,
+async def run(database_url: str, image_reference: str, node_config: Path,
               broker_url: str, root: Path) -> dict:
     root.mkdir(parents=True, mode=0o700, exist_ok=True)
-    image = _image_identity(image_reference)
+    service_config = json.loads(node_config.read_text())
+    _require((service_config["runtime"], service_config["isolation_mode"])
+             == ("smolvm", "smol-microvm"), "public drill requires the provisioned Smol node")
+    repository, digest = image_reference.rsplit("@", 1)
+    images = [entry for entry in service_config["cache"]
+              if entry["repository"] == repository and entry["platform_manifest_digest"] == digest]
+    _require(len(images) == 1, "project image is absent or ambiguous in node cache")
+    image = images[0]
     bucket = os.environ["WORKSTREAM_TEST_MINIO_BUCKET"]
     prefix = os.environ["WORKSTREAM_TEST_MINIO_PREFIX"]
-    scratch = root / "scratch"
-    socket_root = root / "service"
-    scratch.mkdir(mode=0o700)
-    socket_root.mkdir(mode=0o700)
-    socket_path = socket_root / "checker.sock"
+    scratch = Path(service_config["material_root"])
+    socket_path = Path(service_config["socket_path"])
+    intake_images = [entry for entry in service_config["cache"]
+                     if entry["platform_manifest_digest"]
+                     == service_config["trusted_intake"]["platform_manifest_digest"]]
+    _require(len(intake_images) == 1, "trusted intake image is absent or ambiguous")
+    intake_image = intake_images[0]
     settings = minio_settings(private_prefix=prefix).model_copy(update={
         "artifact_s3_bucket": bucket,
         "artifact_scratch_root": scratch,
@@ -1234,20 +1241,13 @@ async def run(database_url: str, image_reference: str, service_binary: Path,
         "external_checker_service_socket": socket_path,
         "external_checker_material_root": scratch,
         "external_checker_service_timeout_seconds": 90.0,
+        "artifact_intake_service_socket": socket_path,
+        "artifact_intake_image_digest": intake_image["platform_manifest_digest"],
+        "artifact_intake_config_digest": intake_image["config_image_id"],
     })
     bootstrap = create_artifact_store_bootstrap(settings, activation_guard=None)
     namespace = artifact_storage_namespace_spec(settings, bootstrap)
     bootstrap.close()
-    service_config = {
-        "socket_path": str(socket_path), "material_root": str(scratch),
-        "docker_binary": "/usr/bin/docker", "runtime": "runc",
-        "isolation_mode": "docker-dev", "operating_system": image["operating_system"],
-        "architecture": image["architecture"], "sandbox_uid": os.getuid(),
-        "sandbox_gid": os.getgid(), "cache": [image],
-    }
-    config_path = socket_root / "service.json"
-    config_path.write_text(json.dumps(service_config, separators=(",", ":")))
-
     os.environ["WORKSTREAM_E2E_FLOW_ISSUER"] = "https://identity.flowresearch.tech"
     env = api_environment()
     env.update({
@@ -1263,6 +1263,9 @@ async def run(database_url: str, image_reference: str, service_binary: Path,
         "WORKSTREAM_EXTERNAL_CHECKER_SERVICE_SOCKET": str(socket_path),
         "WORKSTREAM_EXTERNAL_CHECKER_MATERIAL_ROOT": str(scratch),
         "WORKSTREAM_EXTERNAL_CHECKER_SERVICE_TIMEOUT_SECONDS": "90",
+        "WORKSTREAM_ARTIFACT_INTAKE_SERVICE_SOCKET": str(socket_path),
+        "WORKSTREAM_ARTIFACT_INTAKE_IMAGE_DIGEST": intake_image["platform_manifest_digest"],
+        "WORKSTREAM_ARTIFACT_INTAKE_CONFIG_DIGEST": intake_image["config_image_id"],
         "PYTHONPATH": os.pathsep.join(map(str, (BACKEND, BACKEND / "tests", BACKEND.parent))),
     })
     env.pop("OPENAI_API_KEY", None)
@@ -1319,7 +1322,7 @@ async def run(database_url: str, image_reference: str, service_binary: Path,
 
     engine = create_async_engine(database_url)
     factory = async_sessionmaker(engine, expire_on_commit=False)
-    rust = api = worker = beat = None
+    api = worker = beat = None
     worker_generation = 0
 
     def stop_owned_worker() -> None:
@@ -1349,8 +1352,11 @@ async def run(database_url: str, image_reference: str, service_binary: Path,
         from tests.reviews.lifecycle.transition_support import command_for, transition
         await transition(await command_for(operator.actor_profile_id, "shadow"))
 
-        rust = _start_service(service_binary, config_path, socket_path)
-        await _wait_service(rust, socket_path)
+        intake_health = await trusted_submission_intake(runtime_settings).health()
+        execution_health = await configured_external_checker_execution(runtime_settings).health()
+        _require((execution_health.runtime, execution_health.isolation_mode)
+                 == (intake_health.runtime, intake_health.isolation_mode)
+                 == ("smolvm", "smol-microvm"), "typed capability health identities disagree")
         port = find_free_port()
         origin = f"http://127.0.0.1:{port}"
         api = _process([
@@ -1380,7 +1386,9 @@ async def run(database_url: str, image_reference: str, service_binary: Path,
                  "API, prefork worker, or Beat exited during public journey")
         return {"tree_sha": subprocess.check_output(
             ["git", "rev-parse", "HEAD"], text=True, cwd=BACKEND
-        ).strip(), "runtime": "runc/docker-dev", "image_digest": image["platform_manifest_digest"],
+        ).strip(), "runtime": "smolvm/smol-microvm", "image_digest": image["platform_manifest_digest"],
+                "trusted_intake_image_digest": intake_health.image_digest,
+                "trusted_intake_config_digest": intake_health.config_digest,
                 "public_api": True, "prefork_worker": True,
                 "scheduled_artifact_scans": True,
                 "public_original_guide_setup": True,
@@ -1392,8 +1400,6 @@ async def run(database_url: str, image_reference: str, service_binary: Path,
             schedule_file.unlink()
         _stop_process(worker)
         _stop_process(api)
-        if rust is not None:
-            _stop_service(rust)
         await engine.dispose()
 
 
@@ -1401,20 +1407,20 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--database-url", default=os.environ.get("WORKSTREAM_TEST_DATABASE_URL"))
     parser.add_argument("--image-reference")
-    parser.add_argument("--service-binary", type=Path)
+    parser.add_argument("--node-config", type=Path, help="Owned provisioned Smol node configuration")
     parser.add_argument("--broker-url")
     parser.add_argument("--work-dir", type=Path,
                         help="Unique private directory retaining API and worker diagnostics")
     args = parser.parse_args()
     if not args.database_url:
         parser.error("isolated --database-url or WORKSTREAM_TEST_DATABASE_URL is required")
-    if not args.image_reference or not args.service_binary or not args.broker_url:
-        parser.error("full drill requires image, service binary, and broker URL")
+    if not args.image_reference or not args.node_config or not args.broker_url:
+        parser.error("full drill requires image, node config, and broker URL")
     workspace = (nullcontext(args.work_dir) if args.work_dir else
                  tempfile.TemporaryDirectory(prefix="ws-pilot04-public-"))
     with workspace as directory:
         value = asyncio.run(run(
-            args.database_url, args.image_reference, args.service_binary,
+            args.database_url, args.image_reference, args.node_config,
             args.broker_url, Path(directory),
         ))
     print(json.dumps(value, sort_keys=True, separators=(",", ":")))
