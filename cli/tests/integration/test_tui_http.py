@@ -552,6 +552,30 @@ if os.name == "posix":
             assert len(requests) == before
             assert TOKEN.encode() not in terminal.raw
 
+    def test_posix_terminal_observation_rejects_actual_unrestored_raw_mode():
+        """The restoration observer must not repair a genuinely raw private PTY."""
+        import termios
+        import tty
+
+        with (
+            socket_peer(Reads()) as (origin, _),
+            Terminal(origin, TOKEN, "--plain") as terminal,
+        ):
+            terminal.wait("Terminal project")
+            terminal.quit()
+            # Deliberate test-only fault after normal CLI teardown; the helper
+            # must only observe it. Closing this private PTY needs no restore.
+            tty.setraw(terminal.slave)
+            injected = termios.tcgetattr(terminal.slave)
+            assert injected != terminal.original
+            assert not injected[3] & (termios.ICANON | termios.ECHO)
+            with pytest.raises(
+                AssertionError, match="terminal settings were not restored"
+            ):
+                terminal._assert_restored()
+            assert termios.tcgetattr(terminal.slave) == injected
+            assert termios.tcgetattr(terminal.slave) != terminal.original
+
 
 def test_manual_handoffs_name_existing_commands_without_invoking_them(cli):
     with socket_peer(Reads()) as (origin, requests):

@@ -252,6 +252,12 @@ class Terminal:
         self._assert_restored()
 
     def _assert_restored(self):
+        if sys.platform == "darwin":
+            # XNU sets transient PENDIN on raw -> canonical restoration. Its
+            # ttyselect(FREAD) -> ttnread -> ttypend path settles that kernel
+            # state without consuming input or changing application flags.
+            # See xnu-11417.140.69/bsd/kern/tty.c in apple-oss-distributions/xnu.
+            select.select([self.slave], [], [], 0)
         restored = termios.tcgetattr(self.slave)
         # Only bounded OS terminal fields reach this diagnostic, never output,
         # credentials, or server text. Keep the exact restoration comparison.
