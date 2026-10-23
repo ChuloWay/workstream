@@ -21,7 +21,6 @@ from app.modules.projects.guide_compilation.runtime_resources import (
 from .helpers import runtime_configuration
 
 RETAINED_RUNTIME = "openai_agents_sdk"
-pytestmark = pytest.mark.postgres_schema_contract
 
 
 def _historical_configuration():

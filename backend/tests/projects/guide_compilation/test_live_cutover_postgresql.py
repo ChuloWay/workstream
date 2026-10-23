@@ -3,13 +3,19 @@
 from uuid import UUID, uuid4
 
 import pytest
-from sqlalchemy import text
+from sqlalchemy import select, text
 
+from app.core.config import get_settings
 from app.modules.projects.api.guide_compilation import ProjectGuideCompilationDelivery
 from app.modules.projects.api.setup_identity import project_guide_compilation_task_id
 from app.modules.projects.api.guide_compilation import ProjectGuideCompilationDeliveryError
+from app.modules.model_usage.api import ProjectModelProfileSpec
+from app.modules.projects.models import ProjectSetupRun
+from tests.actors.support import set_dev_actor
+from tests.checkers_model_calls.test_model_call_contract import profile_spec
 from tests.committed_guide_fixtures import create_committed_document_fixture
 from tests.projects.client_fixtures import (
+    auth_headers,
     project_client as project_client,
     project_database_env as project_database_env,
 )
@@ -36,6 +42,80 @@ def scripted_document_port(monkeypatch):
     monkeypatch.setattr(
         worker, "guide_document_parser_factory", scripted_guide_document_parser_factory
     )
+
+
+@pytest.fixture
+async def scripted_model_profile(automatic_source, project_client, monkeypatch):
+    """Publish the exact inference profile selected by these live coordinator tests."""
+    factory, _actor, setup_id, _snapshot = automatic_source
+    async with factory() as session:
+        project_id = await session.scalar(
+            select(ProjectSetupRun.project_id).where(ProjectSetupRun.id == str(setup_id))
+        )
+        assert project_id is not None
+
+    set_dev_actor(
+        monkeypatch,
+        roles="viewer",
+        subject="scripted-model-operator",
+        issuer="flow-test",
+        token="project-token",
+    )
+    admitted = await project_client.get("/api/v1/actors/me", headers=auth_headers())
+    assert admitted.status_code == 200, admitted.text
+    operator_id = admitted.json()["actor_profile_id"]
+    set_dev_actor(
+        monkeypatch,
+        roles="project_manager",
+        subject="project-manager-subject",
+        issuer="flow-test",
+        token="project-token",
+    )
+    grant = await project_client.post(
+        "/api/v1/admin-role-grants",
+        headers=auth_headers(),
+        json={
+            "target_actor_profile_id": operator_id,
+            "role": "operator",
+            "scope_type": "system",
+            "scope_project_id": None,
+            "reason": "Exercise profile-selected project guide compilation",
+        },
+    )
+    assert grant.status_code == 201, grant.text
+    set_dev_actor(
+        monkeypatch,
+        roles="viewer",
+        subject="scripted-model-operator",
+        issuer="flow-test",
+        token="project-token",
+    )
+    configuration = scripted_runtime_configuration(
+        get_settings(), adapter_profile_builder=lambda value: value
+    )
+    source = profile_spec().model_dump(mode="python")
+    source.update(
+        project_id=project_id,
+        profile_version=1,
+        provider=configuration.model_provider,
+        api=configuration.model_api,
+        model_snapshot=configuration.model,
+    )
+    spec = ProjectModelProfileSpec.model_validate(source)
+    published = await project_client.post(
+        f"/api/v1/operations/projects/{project_id}/model-profiles",
+        headers=auth_headers(),
+        json=spec.model_dump(mode="json"),
+    )
+    assert published.status_code == 201, published.text
+    set_dev_actor(
+        monkeypatch,
+        roles="project_manager",
+        subject="project-manager-subject",
+        issuer="flow-test",
+        token="project-token",
+    )
+    yield
 
 
 async def _delivery(factory, setup_id):
@@ -67,6 +147,7 @@ async def _delivery(factory, setup_id):
 
 
 
+@pytest.mark.usefixtures("scripted_model_profile")
 @pytest.mark.parametrize("status", ["draft_ready", "draft_ready_with_warnings", "guide_blocked"])
 async def test_pending_exact_delivery_compiles_once_and_replays_finalization(
     automatic_source, monkeypatch, status, project_client
@@ -177,6 +258,7 @@ async def test_pending_exact_delivery_compiles_once_and_replays_finalization(
     assert runtime.calls == 1
 
 
+@pytest.mark.usefixtures("scripted_model_profile")
 @pytest.mark.parametrize("phase", ["compilation", "sufficiency", "finalization"])
 async def test_compilation_phase_and_public_setup_read_share_parent_lock_order(
     automatic_source, project_client, project_database_env, monkeypatch, phase
@@ -300,6 +382,7 @@ async def test_stale_delivery_rejects_before_any_compilation_effect(
             assert await session.scalar(text("select count(*) from " + table)) == 0
 
 
+@pytest.mark.usefixtures("scripted_model_profile")
 @pytest.mark.parametrize("outcome", ["invalid", "uncertain"])
 async def test_invalid_or_uncertain_attempt_reports_durable_diagnostics_without_projection(
     automatic_source, monkeypatch, outcome, project_client
@@ -388,6 +471,7 @@ async def test_invalid_or_uncertain_attempt_reports_durable_diagnostics_without_
             assert await session.scalar(text("select count(*) from " + table)) == 0
 
 
+@pytest.mark.usefixtures("scripted_model_profile")
 async def test_finalized_receipt_excludes_every_recovery_shape(automatic_source, monkeypatch):
     from app.workers import project_setup as worker
 
@@ -479,6 +563,7 @@ async def _assert_terminal_not_reclaimable(factory, delivery, monkeypatch, *, fi
             )
 
 
+@pytest.mark.usefixtures("scripted_model_profile")
 async def test_publisher_acknowledgement_cannot_overwrite_worker_finalization(
     automatic_source, monkeypatch
 ):
@@ -558,6 +643,7 @@ async def test_publisher_acknowledgement_cannot_overwrite_worker_finalization(
 @pytest.mark.parametrize(
     "boundary", ["persisted", "sufficiency", "both_projections", "retained_unconfigured"]
 )
+@pytest.mark.usefixtures("scripted_model_profile")
 async def test_phase_crash_recovers_same_attempt_without_reinference(
     automatic_source, monkeypatch, boundary
 ):
@@ -648,6 +734,7 @@ async def test_phase_crash_recovers_same_attempt_without_reinference(
         )
 
 
+@pytest.mark.usefixtures("scripted_model_profile")
 @pytest.mark.parametrize("phase", ["request", "fence", "sufficiency", "policy", "finalization"])
 async def test_each_phase_rechecks_service_authority_and_restoration_reuses_attempt(
     automatic_source, monkeypatch, phase
@@ -746,6 +833,7 @@ async def test_each_phase_rechecks_service_authority_and_restoration_reuses_atte
         )
 
 
+@pytest.mark.usefixtures("scripted_model_profile")
 async def test_concurrent_live_deliveries_share_one_provider_and_finalization(
     automatic_source, monkeypatch
 ):
@@ -845,6 +933,7 @@ async def test_dirty_setup_rejects_before_request_or_provider(
             assert await session.scalar(text("select count(*) from " + table)) == 0
 
 
+@pytest.mark.usefixtures("scripted_model_profile")
 async def test_stale_queued_configuration_failure_is_reclaimed_and_finishes_same_delivery(
     automatic_source, monkeypatch
 ):
