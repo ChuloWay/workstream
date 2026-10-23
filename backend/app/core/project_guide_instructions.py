@@ -319,8 +319,9 @@ capacity, deadline, provider failure and invalid output cannot consume revision 
 DEPENDENCIES
 Specifications grant no access. Images receive verified material and approved
 metadata, never provider keys or host sockets. current_runner isolates the image.
-POST model assistance, including planning trials, declares model_service/model_proxy
-with implementation_unavailable and selects an exact model profile.
+POST model_evaluation requires model_service/model_proxy and implementation_unavailable.
+Model-assisted trials declare the same dependency. Both require a registered project
+image and its exact approved profile.
 Building submitted environments or isolating trials declares nested_sandbox/trial_proxy
 with implementation_unavailable and selects exact trial profile and projection pins.
 Only the invocation-local trial tool receives runtime authority. Its prepared offline

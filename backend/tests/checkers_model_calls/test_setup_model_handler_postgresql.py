@@ -503,7 +503,8 @@ async def _state(journey: _Journey):
                     "account.lifetime_settled_nanodollars "
                     "from model_usage_effects effect "
                     "join setup_model_usage_slots slot on slot.id=effect.setup_slot_id "
-                    "join model_usage_budget_accounts account on account.project_id=slot.project_id "
+                    "left join model_usage_budget_accounts account "
+                    "on account.project_id=slot.project_id "
                     "where slot.compilation_attempt_id=:attempt"
                 ),
                 {"attempt": str(journey.request.subject.compilation_attempt_id)},
@@ -607,6 +608,10 @@ async def test_setup_response_recovers_from_verified_minio_after_ledger_loss(
         journey = await _journey(storage, admin_access)
         first = await journey.handler().handle(journey.request)
         assert first.outcome == "unavailable"
+        assert first.failure_code == "model_call_unavailable"
+        assert journey.reserve_observations == [("setup_model_call", "model_request", "verified")]
+        assert journey.provider_calls == ["dispatch"]
+        assert journey.fail_completion == [False]
         uncertain = await _state(journey)
         assert uncertain.state == "uncertain"
         assert uncertain.response_binding_id is None
