@@ -281,8 +281,11 @@ inputs, ordered checks, pass conditions, coded findings, positive and negative
 cases, runtime dependencies and infrastructure failures must agree. Current
 images are offline and do not implicitly receive task/guide prose or model access.
 Older retained results remain readable with the new fields absent; new results
-cannot use that historical omission. Invalid new output ends terminally and is
-diagnosed without logging guide or model content.
+cannot use that historical omission. Known invalid inference output receives at
+most two corrections across drafting and review, using bounded field paths and
+error codes within the original execution budget. Exhaustion ends terminally;
+provider uncertainty is never retried as an output correction. Diagnostics never
+log guide or model content.
 
 The Celery worker captures runtime, model provider, model, API, instructions,
 timeout, document limits and tool budgets on the attempt before execution. Credentials stay in

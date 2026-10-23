@@ -267,10 +267,12 @@ async def test_corrections_cannot_reset_model_turn_budget(monkeypatch):
 @pytest.mark.usefixtures("model_credentials")
 @pytest.mark.parametrize("phase", ["draft", "review"])
 @pytest.mark.parametrize("corrected", [True, False])
+@pytest.mark.parametrize("access", ["omitted", "search", "offset_read", "empty_read"])
 async def test_blocked_proposal_must_open_all_originals_even_during_correction(
     monkeypatch,
     phase,
     corrected,
+    access,
 ):
     """A blocker from one source cannot conceal a second assigned original."""
     from agents import Runner
@@ -305,6 +307,23 @@ async def test_blocked_proposal_must_open_all_originals_even_during_correction(
         calls.append(json.loads(prompt))
         incomplete = len(calls) == rejected_call or (not corrected and len(calls) > rejected_call)
         await _open_prompt_documents(agent, prompt, count=1 if incomplete else None)
+        if incomplete and access != "omitted":
+            from agents.tool_context import ToolContext
+
+            handle = compilation.material.handle_for(second)
+            name = "search_document" if access == "search" else "read_document"
+            arguments = {"handle": handle}
+            if access == "search":
+                arguments["query"] = "absent-from-original"
+            else:
+                arguments["offset"] = 1 if access == "offset_read" else 1000
+            encoded = json.dumps(arguments)
+            tool = next(item for item in agent.tools if item.name == name)
+            observed = json.loads(await tool.on_invoke_tool(
+                ToolContext(context=None, tool_name=name, tool_call_id="test-nonreading-access",
+                            tool_arguments=encoded), encoded,
+            ))
+            assert bool(observed["text"]) is (access == "offset_read")
         if len(calls) == rejected_call + 1:
             assert calls[-1]["validation_errors"] == [{"path": [], "code": "source_coverage"}]
         return SimpleNamespace(final_output=agent.output_type.validate_json(json.dumps(blocked)))
@@ -375,3 +394,28 @@ async def test_real_sdk_runner_corrects_invalid_json_then_performs_fresh_review(
     assert marker not in json.dumps(calls[2])
     assert "coverage_review" in json.dumps(calls[4])
     assert "validation_errors" not in json.dumps(calls[4])
+
+
+@pytest.mark.usefixtures("model_credentials")
+async def test_empty_original_can_be_read_and_reported_as_blocked(monkeypatch):
+    """A verified empty original is valid access evidence, unlike an empty search."""
+    from agents import Runner
+
+    blocked = _provider_payload()
+    blocked.update(status="guide_blocked", submission_artifact_policy=None, requirements=[])
+    blocked["findings"][0].update(severity="blocking_gap", message="The guide is empty.")
+    calls = []
+
+    async def run(agent, prompt, **kwargs):
+        calls.append(prompt)
+        await _open_prompt_documents(agent, prompt)
+        return SimpleNamespace(final_output=agent.output_type.validate_json(json.dumps(blocked)))
+
+    monkeypatch.setattr(Runner, "run", run)
+    compilation = context(ids())
+    output = await _compile(
+        OpenAIAgentSdkProjectGuideRuntime(compilation.runtime_configuration), compilation,
+        document_text="",
+    )
+    assert output.status == "guide_blocked"
+    assert len(calls) == 2

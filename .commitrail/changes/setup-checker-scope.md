@@ -129,3 +129,11 @@ Failed hosted fixtures were still emitting removed notes or generating human-pol
 requirements. Growth proposals now use the strict inference fixture. Human-review
 activation proofs explicitly select the manager-authored runtime, preserving real
 request identity, persisted configuration, activation refusal and SQL backstops.
+
+Merge security review found that a no-match search could satisfy fresh-source
+coverage. Per-phase observation now requires a first-page read returning text or
+a verified genuinely empty original. Search and offset-only access remain audited
+and budgeted but do not establish source observation. Regressions exercise both
+phases, correction success/exhaustion, no-match searches and empty/partial reads.
+Current setup and roadmap documentation now describes neutral tools and bounded
+correction before terminal failure.

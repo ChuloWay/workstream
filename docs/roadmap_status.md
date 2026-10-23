@@ -945,14 +945,16 @@ cannot be reused as post-submission review-gate evidence. See the
   reliably finish within 60 seconds before Submission, including durable/polled
   execution; longer and model work belongs to background POST. POL-05B exposes the complete POL-05A review package;
   AUTH-12F4 supplies exact manager authority; suggestions cannot register or activate a checker. Runtime, model/provider and instructions are independently
-  configured and bound to the attempt. The agent opens assigned files on demand
-  in an isolated workspace and assesses them with every supplied task example;
+  configured and bound to the attempt. The agent reads assigned originals with bounded trusted read/search tools
+  through the isolated parser and assesses them with every supplied task example;
   exact grants exclude other projects and runs. The provider-free
   `manager_authored` runtime instead converts one manager-uploaded rules
   document into the same untrusted result; it reads every original through the
   same grant, records those reads without provider resources, and stores
-  provider, API and model `none` on the attempt. Known
-  invalid output ends terminally, and replay never starts a second inference.
+  provider, API and model `none` on the attempt. Known invalid inference output
+  receives at most two value-free corrections across drafting and review within
+  the original execution budget; exhaustion ends terminally. Exact replay never
+  starts a second inference.
   The model-facing default capability names exactly four platform guarantees:
   bounded safe ZIP handling, received-byte/manifest identity, high-confidence
   secret detection and unchanged-work detection. Required project files, layout,

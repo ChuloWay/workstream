@@ -289,7 +289,9 @@ class OpenAIAgentSdkProjectGuideRuntime:
                     offset=offset,
                     limit=limit,
                 )
-                phase_opened.add(handle)
+                # Audit access alone is not proof that this phase observed an original.
+                if offset == 0 and (value.text or value.total_characters == 0):
+                    phase_opened.add(handle)
                 return value.model_dump_json()
 
             @function_tool(failure_error_function=None)
@@ -303,7 +305,6 @@ class OpenAIAgentSdkProjectGuideRuntime:
                     offset=offset,
                     limit=limit,
                 )
-                phase_opened.add(handle)
                 return value.model_dump_json()
 
             extra_body = None

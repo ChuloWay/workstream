@@ -85,7 +85,7 @@ def _sdk_result(agent, value=None):
     ))
 
 
-async def _compile(runtime, compilation_context):
+async def _compile(runtime, compilation_context, *, document_text="Assigned guide text."):
     """Supply scripted prior document access and always release circuit admission."""
     opened = {
         compilation_context.material.handle_for(document)
@@ -109,7 +109,7 @@ async def _compile(runtime, compilation_context):
             if compilation_context.material.handle_for(item) == handle
         )
         opened.add(handle)
-        text = "Assigned guide text."
+        text = document_text[offset:offset + limit]
         total = tool_output_characters + len(text)
         if (
             total
@@ -126,12 +126,14 @@ async def _compile(runtime, compilation_context):
             text=text,
             locators=(),
             next_offset=None,
-            total_characters=20,
+            total_characters=len(document_text),
         )
 
     async def search_document(handle, query, *, offset=0, limit=20):
         value = await read_document(handle, offset=offset, limit=limit)
-        return value.model_copy(update={"operation": "search"})
+        return value.model_copy(update={
+            "operation": "search", "text": value.text if query in value.text else "",
+        })
 
     capabilities = SimpleNamespace(tools=SimpleNamespace(
         opened_handles=opened_handles,
