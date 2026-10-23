@@ -58,8 +58,9 @@ Historical pre-cutover work records: [`STATUS.md`](pre-cutover/STATUS.md),
 - Artifact Operator boundary: [AUTH-ART-02D-OPERATOR](WS-AUTH-001-ART02DOPERATOR.md)
   activates the eight already reserved system-Operator actions for bounded
   artifact diagnosis and independently guarded verification retry through the
-  existing public ART routes. Client-only #611 remains a dependent CLI change;
-  hosted S3 proof remains separate.
+  existing public ART routes. [WS-CLI-001-43](../WS-CLI-001/WS-CLI-001-43.md)
+  consumes all nine public ART operations through the CLI; hosted S3 proof
+  remains separate.
 - Delivered dependent boundary: ARCH-04E1A immutable route-neutral source facts
   and accepted-effects contracts follow
   [ARCH-04D2](../WS-ARCH-001/WS-ARCH-001-04D2.md) exact input, execute and

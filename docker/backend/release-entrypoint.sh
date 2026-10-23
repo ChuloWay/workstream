@@ -1,6 +1,49 @@
 #!/bin/sh
 set -eu
 
+sdk_marker=/etc/workstream/project-agent-sdk-environment
+if [ ! -f "$sdk_marker" ] || [ -L "$sdk_marker" ] \
+    || [ "$(stat -c '%u:%g:%a' -- "$sdk_marker")" != "0:0:444" ]; then
+    echo "project agent SDK environment marker is unavailable or unsafe" >&2
+    exit 1
+fi
+sdk_environment="$(cat -- "$sdk_marker")"
+case "$sdk_environment" in
+    agents|omnicore)
+        ;;
+    *)
+        echo "project agent SDK environment marker is unavailable or unsafe" >&2
+        exit 1
+        ;;
+esac
+role="${WORKSTREAM_RELEASE_ROLE:-}"
+runtime="${WORKSTREAM_PROJECT_AGENT_RUNTIME:-}"
+provider="${WORKSTREAM_PROJECT_AGENT_MODEL_PROVIDER:-}"
+model_api="${WORKSTREAM_PROJECT_AGENT_MODEL_API:-}"
+model="${WORKSTREAM_PROJECT_AGENT_MODEL:-}"
+if [ "$role" != "parser" ]; then
+    case "$runtime:$sdk_environment" in
+        openai_agents_sdk:agents|omnicore_agent:omnicore)
+            ;;
+        manager_authored:agents|manager_authored:omnicore)
+            if [ "$provider:$model_api:$model" != "none:none:none" ]; then
+                echo "manager-authored project agent configuration is invalid" >&2
+                exit 1
+            fi
+            ;;
+        *)
+            echo "project agent runtime does not match the installed SDK environment" >&2
+            exit 1
+            ;;
+    esac
+    if [ "$runtime" = "omnicore_agent" ] \
+        && [ "$provider:$model_api" != "openrouter:chat_completions" ]; then
+        echo "OmniCoreAgent requires OpenRouter chat completions" >&2
+        exit 1
+    fi
+fi
+unset sdk_marker sdk_environment model_api model
+
 load_required_secret() {
     setting_name="$1"
     secret_path="$2"
@@ -27,9 +70,23 @@ unset WORKSTREAM_DATABASE_URL
 unset WORKSTREAM_CELERY_BROKER_URL
 unset WORKSTREAM_API_RATE_LIMIT_KEY_SECRET
 unset WORKSTREAM_PAGINATION_CURSOR_HMAC_SECRET
+unset WORKSTREAM_PROJECT_AGENT_API_KEY
 unset OPENAI_API_KEY
+unset OPENROUTER_API_KEY
+unset WORKSTREAM_ARTIFACT_S3_ACCESS_KEY_ID
+unset WORKSTREAM_ARTIFACT_S3_SECRET_ACCESS_KEY
+unset WORKSTREAM_ARTIFACT_S3_SESSION_TOKEN
+unset WORKSTREAM_FLOW_AUTH_LOCAL_HMAC_SECRET
+unset WORKSTREAM_DEV_AUTH_TOKEN
+unset WORKSTREAM_TOKEN_INTROSPECTION_CLIENT_SECRET
+unset AWS_ACCESS_KEY_ID
+unset AWS_SECRET_ACCESS_KEY
+unset AWS_SESSION_TOKEN
+unset AWS_SHARED_CREDENTIALS_FILE
+unset AWS_CONFIG_FILE
+unset AWS_WEB_IDENTITY_TOKEN_FILE
 
-case "${WORKSTREAM_RELEASE_ROLE:-}" in
+case "$role" in
     api)
         load_required_secret WORKSTREAM_DATABASE_URL "${WORKSTREAM_DATABASE_URL_FILE:-}"
         load_required_secret WORKSTREAM_CELERY_BROKER_URL "${WORKSTREAM_CELERY_BROKER_URL_FILE:-}"
@@ -39,7 +96,22 @@ case "${WORKSTREAM_RELEASE_ROLE:-}" in
     worker)
         load_required_secret WORKSTREAM_DATABASE_URL "${WORKSTREAM_DATABASE_URL_FILE:-}"
         load_required_secret WORKSTREAM_CELERY_BROKER_URL "${WORKSTREAM_CELERY_BROKER_URL_FILE:-}"
-        load_required_secret OPENAI_API_KEY "${OPENAI_API_KEY_FILE:-}"
+        case "$runtime" in
+            manager_authored)
+                ;;
+            *) case "$provider" in
+            openrouter)
+                load_required_secret OPENROUTER_API_KEY "${WORKSTREAM_PROJECT_AGENT_API_KEY_FILE:-}"
+                ;;
+            openai)
+                load_required_secret OPENAI_API_KEY "${WORKSTREAM_PROJECT_AGENT_API_KEY_FILE:-}"
+                ;;
+            *)
+                echo "trusted project agent model provider is unavailable or unsupported" >&2
+                exit 1
+                ;;
+            esac ;;
+        esac
         ;;
     beat)
         load_required_secret WORKSTREAM_DATABASE_URL "${WORKSTREAM_DATABASE_URL_FILE:-}"
@@ -47,6 +119,10 @@ case "${WORKSTREAM_RELEASE_ROLE:-}" in
         ;;
     proof)
         load_required_secret WORKSTREAM_DATABASE_URL "${WORKSTREAM_DATABASE_URL_FILE:-}"
+        ;;
+    parser)
+        unset WORKSTREAM_ARTIFACT_S3_ROLES_ANYWHERE_CERTIFICATE_FILE
+        unset WORKSTREAM_ARTIFACT_S3_ROLES_ANYWHERE_PRIVATE_KEY_FILE
         ;;
     *)
         echo "required release role is unavailable or unsupported" >&2
@@ -58,7 +134,12 @@ unset WORKSTREAM_DATABASE_URL_FILE
 unset WORKSTREAM_CELERY_BROKER_URL_FILE
 unset WORKSTREAM_API_RATE_LIMIT_KEY_SECRET_FILE
 unset WORKSTREAM_PAGINATION_CURSOR_HMAC_SECRET_FILE
+unset WORKSTREAM_PROJECT_AGENT_API_KEY_FILE
 unset OPENAI_API_KEY_FILE
+unset AWS_SHARED_CREDENTIALS_FILE
+unset AWS_CONFIG_FILE
+unset AWS_WEB_IDENTITY_TOKEN_FILE
 unset WORKSTREAM_RELEASE_ROLE
+unset role runtime provider
 
 exec "$@"

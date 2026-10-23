@@ -5,8 +5,9 @@ This guide holds the complete local setup for the Workstream backend. The
 
 The supported backend setup uses CPython 3.11 or 3.12. The pinned Docker image
 provides the Linux environment for macOS and Windows contributors. Guide
-originals are stored in ArtifactStore and read by the configured agent runtime;
-the backend does not run a separate guide extractor.
+originals are stored in ArtifactStore. The configured runtime reads bounded text
+through trusted tools and an isolated fixed parser; extracted text is not retained
+in PostgreSQL or a provider-hosted file store.
 
 ## Docker Workflow (Recommended)
 
@@ -118,35 +119,31 @@ ACLs.
 
 ## Native Unified Guide Inference
 
-Set `WORKSTREAM_PROJECT_AGENT_MODEL=gpt-5.6-terra` (or your chosen supported model)
-and `OPENAI_API_KEY` in ignored `backend/.env`. Runtime, provider/API protocol,
-model and instructions are separate settings in `backend/.env.example`.
-Prepare the ignored root `.env` as described in the Docker workflow and start
-backing services using its port and credential settings. Put native backend and
-provider settings in ignored `backend/.env`, then install the agent runtime and
-load that file into API and Celery worker:
+The default runtime is `openai_agents_sdk`, with OpenRouter as the inference
+provider and `openai/gpt-5.6-terra` as the model. Runtime, provider, model,
+instructions and runtime-specific options are separate settings. OpenRouter uses
+`WORKSTREAM_PROJECT_AGENT_MODEL_API=chat_completions`, as in both environment
+examples. Put
+`OPENROUTER_API_KEY` only in the ignored local Compose `.env`; the Celery worker receives
+it, while the fixed guide-document parser has no credentials or network.
+Direct OpenAI inference remains an explicit provider selection with its own key;
+there is no automatic provider fallback.
+
+Use the containerized Celery worker for connected guide inference so untrusted document
+parsing runs in its separate, bounded service:
 
 ```bash
-docker compose up -d --wait postgres redis minio
-cd backend
-uv sync --locked --extra dev --extra agents
-uv run --env-file .env uvicorn app.main:app --reload
-# In another terminal, from backend/:
-uv run --env-file .env celery -A app.workers.celery_app worker --pool=prefork -Q celery --beat --loglevel=info
+# From the repository root, after preparing the private .env:
+docker compose --profile backend up -d --build --wait
 ```
 
-The model key must be in the process environment; `--env-file` supplies it without
-shell-exporting or printing it. For connected guide testing, start Postgres,
-Redis and MinIO, create the private bucket as described below, and enable the
-S3-compatible settings in `.env`. The disabled-store first-run profile does not
-support guide artifact ingestion. Committed original-document readiness runs one compilation
-and stops at findings and draft proposals; manager review/approval remains separate.
-
-Project guides do not need to repeat platform upload limits. Setup leaves absent
-project-specific file, expanded-package, compressed-archive and entry-count
-limits null. ART still enforces its configured platform safety limits and storage
-admission quotas. An explicit project limit adds a restriction; it cannot relax
-platform enforcement. Platform defaults are not copied into frozen project policy.
+This starts the API, Celery worker, Beat and parser with the backing services. Native
+API-only development remains supported, but starting a native Celery process
+alone does not provide the isolated parser. The parser supports bounded read and
+search over the exact assigned Markdown, PDF, DOCX and PPTX originals; it exposes
+no shell or model-selected storage paths. Rebuild the local image after changing
+parser code. Committed original-document readiness runs one compilation and
+stops at findings and proposals; manager review and approval remain separate.
 
 ## Logs, Shutdown, And Reset
 
@@ -252,19 +249,21 @@ guide blocker prevents the draft.
 
 The SDK adapter first produces a private structured candidate, then uses a fresh model context
 to check it against the original documents and return the corrected proposal.
-Both phases expose the same strict JSON Schema. The private draft must satisfy
-JSON syntax and structural limits; canonical content constraints are checked
-diagnostically so review can correct them. Diagnostics contain bounded field
-paths and a fixed code, never rejected values or exception messages. Only the
-reviewed output passes through canonical Pydantic and owner validation for
-acceptance. The draft is never persisted, projected or accepted.
-Both phases share one attempt, workspace, client, overall timeout and aggregate
-model-turn/hosted-tool budgets. The draft can use at most half the configured turn
+Every draft, review and correction is checked against the same strict JSON Schema,
+canonical content rules, owner context and source identities. Bounded field paths
+and fixed error codes permit at most two corrections across both phases; rejected
+values and exception messages are never returned. The private draft is never
+persisted, projected or accepted. Only the validated final review can become a
+retained proposal.
+Both phases share one attempt, trusted document tools, client, overall timeout and
+aggregate model-turn/tool budgets. The draft can use at most half the configured turn
 allowance; review receives the unused remainder. The serialized review input
 (original credential-free context plus candidate) must fit `maximum_manifest_bytes`;
-an oversized candidate is terminal invalid output. The review must reopen every
-cited original, and every assigned original for a ready proposal; draft-phase
-opens cannot satisfy review access.
+an oversized candidate is terminal invalid output. Every phase and correction must
+initially read every assigned original, including for blocked proposals. Only a
+read at offset zero returning text, or proving a genuinely empty original, counts
+as initial observation. Search supports revisiting content; it cannot establish
+initial observation. Earlier phases cannot supply later phases' observation.
 A review failure, cancellation, invalid result or exhausted budget does not publish
 the unchecked draft. This is a bounded phase of the same attempt, not a retry of
 an uncertain or terminal invocation. PM review and approval remain separate.
@@ -284,32 +283,46 @@ inputs, ordered checks, pass conditions, coded findings, positive and negative
 cases, runtime dependencies and infrastructure failures must agree. Current
 images are offline and do not implicitly receive task/guide prose or model access.
 Older retained results remain readable with the new fields absent; new results
-cannot use that historical omission. Invalid new output ends terminally and is
-diagnosed without logging guide or model content.
+cannot use that historical omission. Known invalid inference output receives at
+most two corrections across drafting and review, using bounded field paths and
+error codes within the original execution budget. Exhaustion ends terminally;
+provider uncertainty is never retried as an output correction. Diagnostics never
+log guide or model content.
 
 The Celery worker captures runtime, model provider, model, API, instructions,
 timeout, document limits and tool budgets on the attempt before execution. Credentials stay in
 the Celery worker environment. `WORKSTREAM_PROJECT_AGENT_INSTRUCTIONS` and
 `WORKSTREAM_PROJECT_AGENT_INSTRUCTION_VERSION` configure trusted instructions;
 omitting the text selects the repository's canonical compilation instructions.
-The current adapter uses OpenAI Responses with a private Code Interpreter
-workspace. `WORKSTREAM_PROJECT_AGENT_MODEL=gpt-5.6-terra` selects the model
-independently of the runtime and instructions. Changing that setting requires
-verifying the chosen model supports the configured tools and structured output.
-`WORKSTREAM_PROJECT_AGENT_REQUEST_TIMEOUT_SECONDS` defaults to 300 seconds per
-provider request. `WORKSTREAM_PROJECT_AGENT_RUN_TIMEOUT_SECONDS` defaults to 1,800
-seconds for the whole run, including retry waits. The Agents SDK retries a model
-request at most twice, with exponential backoff and jitter capped at 30 seconds.
-Only proven pre-transmission failures, explicit temporary rate limits, or
-provider-confirmed safe replay are eligible. Billing, authentication, invalid
-output, denied document access, and unknown dispatched outcomes do not retry.
-A process-local circuit opens after three exhausted transient model requests,
-then admits one recovery probe after 60 seconds. Cleanup remains available.
-The corresponding retry and circuit settings are listed in `backend/.env.example`.
-The runtime adapter is selected through the shared typed adapter factory.
+The OpenAI Agents SDK uses explicit read/search function tools over verified
+originals; it no longer uploads guide files to OpenAI or creates hosted containers.
+Changing the inference provider does not change PROJECTS document custody or the
+proposal contract. The attempt records a validated adapter profile with the exact
+SDK versions and effective settings. `WORKSTREAM_PROJECT_AGENT_RUNTIME_OPTIONS`
+is a JSON object; unsupported options fail before dispatch. For this adapter,
+`request_timeout_seconds` defaults to 300 and `maximum_retries` to 2. The shared
+`WORKSTREAM_PROJECT_AGENT_RUN_TIMEOUT_SECONDS` defaults to 1,800 seconds and
+includes retry waits. Only known safe transient failures are retried; uncertain
+provider outcomes remain fenced. The existing circuit breaker retains bounded
+backoff and recovery behavior. Native SDK retry behavior belongs to that adapter,
+not a universal promise for every future runtime.
 
-The local Celery command above includes Beat; start it before creating guide sources.
+The runtime adapter is selected through the shared typed adapter factory. The
+core grants only bounded document tools and validates the returned proposal;
+it does not depend on a vendor SDK's files, containers or session objects. Retained
+historical OpenAI resource IDs remain available solely for exact cleanup, using
+the original provider credential, without redispatching uncertain attempts.
+
+
+The connected Compose configuration includes Beat; start it before creating guide sources.
 
 The Beat scheduler must run alongside the Celery execution processes so
 artifact pending-work, verified guide-continuation and post-policy approval scans can recover
 publication failures automatically.
+
+OpenRouter account plugins must all be disabled before sending private guide
+content, including any organization-enforced settings. The runtime requests
+disabling supported plugins, but the current Alignment API rejects an `enabled`
+flag; it must remain off in account settings. Account enforcement can override
+request controls. `data_collection=deny` constrains provider routing and does not
+claim zero data retention. See [OpenRouter plugin precedence](https://openrouter.ai/docs/guides/features/plugins).

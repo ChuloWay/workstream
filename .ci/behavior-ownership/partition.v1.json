@@ -70,6 +70,30 @@
     },
     {
       "group": "shared",
+      "target": "backend/app/adapters/guide_document_tools/child.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/app/adapters/guide_document_tools/client.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/app/adapters/guide_document_tools/contracts.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/app/adapters/guide_document_tools/identity.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/app/adapters/guide_document_tools/parsing.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/app/adapters/guide_document_tools/service.py"
+    },
+    {
+      "group": "shared",
       "target": "backend/app/adapters/observability.py"
     },
     {
@@ -82,7 +106,19 @@
     },
     {
       "group": "lifecycle",
+      "target": "backend/app/adapters/project_agents/omnicore_agent.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/adapters/project_agents/omnicore_profile.py"
+    },
+    {
+      "group": "lifecycle",
       "target": "backend/app/adapters/project_agents/openai_agent_sdk.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/adapters/project_agents/openai_profile.py"
     },
     {
       "group": "lifecycle",
@@ -90,11 +126,23 @@
     },
     {
       "group": "lifecycle",
+      "target": "backend/app/adapters/project_agents/openrouter_policy.py"
+    },
+    {
+      "group": "lifecycle",
       "target": "backend/app/adapters/project_agents/provider_resilience.py"
     },
     {
       "group": "lifecycle",
+      "target": "backend/app/adapters/project_agents/result_validation.py"
+    },
+    {
+      "group": "lifecycle",
       "target": "backend/app/adapters/projects/contribution_validation.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/adapters/projects/guide_document_tools.py"
     },
     {
       "group": "lifecycle",
@@ -310,6 +358,10 @@
     },
     {
       "group": "shared",
+      "target": "backend/app/core/zip_safety.py"
+    },
+    {
+      "group": "shared",
       "target": "backend/app/db/base.py"
     },
     {
@@ -351,6 +403,10 @@
     {
       "group": "artifacts",
       "target": "backend/app/interfaces/external_services.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/app/interfaces/guide_document_tools.py"
     },
     {
       "group": "shared",
@@ -567,10 +623,6 @@
     {
       "group": "artifacts",
       "target": "backend/app/modules/artifacts/task_import_sources.py"
-    },
-    {
-      "group": "artifacts",
-      "target": "backend/app/modules/artifacts/zip_safety.py"
     },
     {
       "group": "shared",
@@ -2237,6 +2289,10 @@
       "target": "backend/app/workers/project_setup.py"
     },
     {
+      "group": "lifecycle",
+      "target": "backend/app/workers/project_setup_topology.py"
+    },
+    {
       "group": "shared",
       "target": "backend/app/workers/revision_recovery.py"
     },
@@ -2385,7 +2441,7 @@
       "target": "backend/scripts/validate_test_lane_evidence.py"
     }
   ],
-  "authority_digest": "6f933bd4c8f9205db13e5656efd967d08597d2b11d0dbb1950139662e205b493",
+  "authority_digest": "fdc50e4a445dde95d5c3d077f60447c4a1b8d93b2490b1dea766c8a88019f5f5",
   "protected_base_commit": "7676ce4347db0c9694962a9b587a20765e16eac6",
   "schema": "workstream.behavior-ownership-partition.v1"
 }

@@ -1,0 +1,675 @@
+{
+  "canonical_sha256": "9827a7fb2b0ed674c02ba3c8c859d1c63c9f9d473269beec5fe6841bddef086a",
+  "components": {
+    "schemas": {
+      "ApiError": {
+        "additionalProperties": false,
+        "description": "Canonical machine-readable API error.",
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "correlation_id": {
+            "title": "Correlation Id",
+            "type": "string"
+          },
+          "details": {
+            "additionalProperties": true,
+            "title": "Details",
+            "type": "object"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "retryable": {
+            "title": "Retryable",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "code",
+          "message",
+          "details",
+          "correlation_id",
+          "retryable"
+        ],
+        "title": "ApiError",
+        "type": "object"
+      },
+      "ApiErrorResponse": {
+        "additionalProperties": false,
+        "description": "Canonical error plus additive legacy compatibility fields.",
+        "properties": {
+          "detail": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          },
+          "error": {
+            "$ref": "#/components/schemas/ApiError"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "title": "ApiErrorResponse",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "additionalProperties": false,
+        "properties": {
+          "detail": {
+            "items": {
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "error": {
+            "$ref": "#/components/schemas/ApiError"
+          }
+        },
+        "required": [
+          "detail",
+          "error"
+        ],
+        "type": "object"
+      },
+      "ReviewPolicyInput": {
+        "additionalProperties": false,
+        "description": "Input schema for review rules on a guide version.",
+        "properties": {
+          "allowed_decisions": {
+            "items": {
+              "enum": [
+                "accept",
+                "needs_revision",
+                "reject"
+              ],
+              "type": "string"
+            },
+            "title": "Allowed Decisions",
+            "type": "array"
+          },
+          "finding_evidence_requirement": {
+            "default": "optional",
+            "enum": [
+              "optional",
+              "required_for_blocking",
+              "required_for_all"
+            ],
+            "title": "Finding Evidence Requirement",
+            "type": "string"
+          },
+          "human_review_required": {
+            "default": true,
+            "title": "Human Review Required",
+            "type": "boolean"
+          },
+          "max_active_review_leases_per_reviewer": {
+            "const": 1,
+            "default": 1,
+            "title": "Max Active Review Leases Per Reviewer",
+            "type": "integer"
+          },
+          "minimum_finding_fields": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Minimum Finding Fields",
+            "type": "array"
+          },
+          "reject_policy": {
+            "const": "close_task",
+            "default": "close_task",
+            "title": "Reject Policy",
+            "type": "string"
+          },
+          "requires_second_review": {
+            "const": false,
+            "default": false,
+            "title": "Requires Second Review",
+            "type": "boolean"
+          },
+          "review_lease_duration_seconds": {
+            "exclusiveMinimum": 0.0,
+            "title": "Review Lease Duration Seconds",
+            "type": "integer"
+          },
+          "review_preference_window_seconds": {
+            "exclusiveMinimum": 0.0,
+            "title": "Review Preference Window Seconds",
+            "type": "integer"
+          },
+          "self_review_allowed": {
+            "const": false,
+            "default": false,
+            "title": "Self Review Allowed",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "review_preference_window_seconds",
+          "review_lease_duration_seconds"
+        ],
+        "title": "ReviewPolicyInput",
+        "type": "object"
+      },
+      "ReviewPolicyResponse": {
+        "additionalProperties": false,
+        "description": "Response schema for review policy records.",
+        "properties": {
+          "allowed_decisions": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Allowed Decisions",
+            "type": "array"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "finding_evidence_requirement": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finding Evidence Requirement"
+          },
+          "guide_version": {
+            "title": "Guide Version",
+            "type": "string"
+          },
+          "human_review_required": {
+            "default": true,
+            "title": "Human Review Required",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "max_active_review_leases_per_reviewer": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Active Review Leases Per Reviewer"
+          },
+          "minimum_finding_fields": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Minimum Finding Fields",
+            "type": "array"
+          },
+          "policy_generation": {
+            "title": "Policy Generation",
+            "type": "integer"
+          },
+          "policy_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Policy Hash"
+          },
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          },
+          "reject_policy": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reject Policy"
+          },
+          "requires_second_review": {
+            "const": false,
+            "title": "Requires Second Review",
+            "type": "boolean"
+          },
+          "review_lease_duration_seconds": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Review Lease Duration Seconds"
+          },
+          "review_preference_window_seconds": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Review Preference Window Seconds"
+          },
+          "self_review_allowed": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Self Review Allowed"
+          },
+          "semantics_format": {
+            "default": "v1",
+            "enum": [
+              "v1",
+              "v2"
+            ],
+            "title": "Semantics Format",
+            "type": "string"
+          },
+          "semantics_status": {
+            "enum": [
+              "complete",
+              "legacy_incomplete"
+            ],
+            "title": "Semantics Status",
+            "type": "string"
+          },
+          "supersedes_policy_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supersedes Policy Id"
+          }
+        },
+        "required": [
+          "id",
+          "project_id",
+          "guide_version",
+          "policy_generation",
+          "policy_hash",
+          "semantics_status",
+          "supersedes_policy_id",
+          "review_preference_window_seconds",
+          "review_lease_duration_seconds",
+          "max_active_review_leases_per_reviewer",
+          "self_review_allowed",
+          "reject_policy",
+          "finding_evidence_requirement",
+          "requires_second_review",
+          "allowed_decisions",
+          "minimum_finding_fields",
+          "created_at"
+        ],
+        "title": "ReviewPolicyResponse",
+        "type": "object"
+      }
+    }
+  },
+  "operation": {
+    "description": "Append and select one authorized review-policy version.",
+    "operationId": "replace_review_policy_api_v1_projects__project_id__guides__guide_id__review_policy_put",
+    "parameters": [
+      {
+        "in": "path",
+        "name": "project_id",
+        "required": true,
+        "schema": {
+          "format": "uuid",
+          "title": "Project Id",
+          "type": "string"
+        }
+      },
+      {
+        "in": "path",
+        "name": "guide_id",
+        "required": true,
+        "schema": {
+          "format": "uuid",
+          "title": "Guide Id",
+          "type": "string"
+        }
+      },
+      {
+        "in": "header",
+        "name": "If-Match",
+        "required": true,
+        "schema": {
+          "title": "If-Match",
+          "type": "string"
+        }
+      },
+      {
+        "in": "header",
+        "name": "Idempotency-Key",
+        "required": true,
+        "schema": {
+          "title": "Idempotency-Key",
+          "type": "string"
+        }
+      },
+      {
+        "in": "header",
+        "name": "X-Request-ID",
+        "required": false,
+        "schema": {
+          "format": "uuid",
+          "maxLength": 36,
+          "minLength": 36,
+          "type": "string"
+        }
+      },
+      {
+        "in": "header",
+        "name": "X-Correlation-ID",
+        "required": false,
+        "schema": {
+          "format": "uuid",
+          "maxLength": 36,
+          "minLength": 36,
+          "type": "string"
+        }
+      }
+    ],
+    "requestBody": {
+      "content": {
+        "application/json": {
+          "schema": {
+            "$ref": "#/components/schemas/ReviewPolicyInput"
+          }
+        }
+      },
+      "required": true
+    },
+    "responses": {
+      "200": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ReviewPolicyResponse"
+            }
+          }
+        },
+        "description": "Successful Response",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "400": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Invalid request.",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "401": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Authentication failed.",
+        "headers": {
+          "WWW-Authenticate": {
+            "schema": {
+              "type": "string"
+            }
+          },
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "403": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Permission denied.",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "404": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Resource not found.",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "409": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Request conflict.",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "422": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/HTTPValidationError"
+            }
+          }
+        },
+        "description": "Validation Error",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "500": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Internal server error.",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "503": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Identity verification unavailable.",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "security": [
+      {
+        "HTTPBearer": []
+      }
+    ],
+    "summary": "Replace Review Policy",
+    "tags": [
+      "projects"
+    ],
+    "x-workstream-action-id": "project.review_policy.update"
+  },
+  "source": {
+    "method": "PUT",
+    "openapi_version": "3.1.0",
+    "path": "/api/v1/projects/{project_id}/guides/{guide_id}/review-policy",
+    "repository_sha": "6fa9a9b557fa3ae22c16af67bca25dc868f67b38"
+  }
+}

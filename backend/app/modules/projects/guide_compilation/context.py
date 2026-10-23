@@ -133,7 +133,7 @@ def compilation_context_from_material(
         len(canonical_project_guide_compilation_context_bytes(context))
         > MAXIMUM_PROJECT_GUIDE_COMPILATION_PROMPT_BYTES
         or (
-            not runtime_configuration.provider_free
+            runtime_configuration.uses_inference
             and len(project_guide_compilation_prompt_bytes(context))
             > runtime_configuration.maximum_manifest_bytes
         )

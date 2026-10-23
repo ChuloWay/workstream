@@ -51,6 +51,10 @@
 
 [WS-CLI-001-40](WS-CLI-001-40.md) additionally delivers exact-project uncertain
 delivery inspection and explicit reconciliation.
+[WS-CLI-001-44](WS-CLI-001-44.md) prepares four native CLI release archives,
+integrity metadata and a separately gated manual GitHub Releases publisher;
+the environment and immutable tag ruleset remain external prerequisites.
+It does not claim a tag, published binary or signed/notarized artifact.
 
 ## Current boundary
 
@@ -60,7 +64,9 @@ and separate guide-bound review/revision policy configuration. The commands
 the existing public writes with caller-owned replay keys and policy `If-Match`.
 The backend owns manager authorization for new writes, policy semantics, replay and activation;
 editing/configuring a guide does not approve or activate it. Other public API
-client gaps, optional TUI and binary distribution remain separate work.
+client gaps and the optional TUI remain separate work. Binary distribution's
+workflow is prepared by -44; a protected release run and public-asset audit
+remain operational work.
 
 The Operator commands `operations task list`, `operations task locked-context`
 and `operations task start` use three existing public routes. Their restricted
@@ -163,16 +169,18 @@ revision-context presentation correction.
 | [#608](https://github.com/Flow-Research/workstream/issues/608) | External-checker registry and explicit retry, delivered by [WS-CLI-001-29](WS-CLI-001-29.md) | 4 |
 | [#609](https://github.com/Flow-Research/workstream/issues/609) | Operator task inspection/start override, delivered by [WS-CLI-001-36](WS-CLI-001-36.md) | 3 |
 | [#610](https://github.com/Flow-Research/workstream/issues/610) | Task audit context/evidence — delivered by [WS-CLI-001-34](WS-CLI-001-34.md) | 2 |
-| [#611](https://github.com/Flow-Research/workstream/issues/611) | Artifact operator inspection/recovery CLI remains separate from the exact-authorized backend prerequisite [AUTH-ART-02D-OPERATOR](../WS-AUTH-001/WS-AUTH-001-ART02DOPERATOR.md) | 9 |
+| [#611](https://github.com/Flow-Research/workstream/issues/611) | Artifact Operator inspection/recovery CLI in [WS-CLI-001-43](WS-CLI-001-43.md), consuming the exact-authorized backend prerequisite [AUTH-ART-02D-OPERATOR](../WS-AUTH-001/WS-AUTH-001-ART02DOPERATOR.md) | 9 |
 
 After that baseline, #617 added two live post-submit delivery discovery and
 reconciliation operations. [#634](https://github.com/Flow-Research/workstream/issues/634)
 tracks their public CLI client separately; the baseline counts do not include them.
 For #611, [AUTH-ART-02D-OPERATOR](../WS-AUTH-001/WS-AUTH-001-ART02DOPERATOR.md)
 activates the existing nine backend routes through persisted exact authority.
-The client-only CLI follow-on still needs its
-own bounded implementation and public-route proof; no dormant commands or
-client-side authority bypass belong in this initiative.
+The client-only `operations artifact` commands consume those nine routes with
+explicit pagination and reasoned retry. Signed PostgreSQL proof covers fresh
+authority and exact replay; the connected journey additionally checks custody
+of its real submission. Neither client observation nor cached output grants
+authority. Hosted operation remains separate.
 
 Continue only the remaining boundaries in the inventory above; delivered rows
 are not new assignments. Inspection informs subsequent manual mutations
@@ -286,8 +294,8 @@ neither requires batch-origin Tasks or activates a lifecycle writer.
 All have text/JSON
 output and built-binary integration proof. Mutations preserve omitted/null
 semantics and explicitly report uncertain outcomes without automatic retries.
-Further public workflows
-and binary distribution remain proposed below.
+Further public workflows remain proposed below. Binary release preparation is
+bounded in [WS-CLI-001-44](WS-CLI-001-44.md), separate from product commands.
 
 ## Design
 
@@ -392,7 +400,10 @@ CLIs. Keep the package independent of backend and MCP runtime dependencies.
    history. No automatic retry/polling or inferred acceptance. Revision-change
    summaries are available through current task context, not historical rows;
    [WS-CLI-001-30](WS-CLI-001-30.md) corrects the remaining text. The separate
-   #552 public setup/worker drill is delivered; full native CLI journey proof remains.
+   #552 public setup/worker drill is delivered; [WS-CLI-001-43](WS-CLI-001-43.md)
+   adds the connected local native CLI manager-authored/unpaid automated-acceptance
+   journey through contribution export, with negative intake and authority checks.
+   Hosted and human-review journey proof remain separate.
    Unfinished human review/revision is not current CLI implementation scope.
 26. **Optional TUI:** Add a focused public queue/evidence view after its API
    workflow is complete. Never require a TUI for agents or scripts.
@@ -416,6 +427,7 @@ test setup may use the documented local bootstrap to arrange authority but
 cannot create a private CLI dependency.
 
 The CLI is a separate client package, not an ADR 0014 backend adapter. It does
-not change backend authority or deploy an external provider. A release process,
-installer/signing, and a full contribution journey remain future boundaries;
-source build and CI are not claims of public distribution.
+not change backend authority or deploy an external provider. Protected first CLI
+publication, optional package-manager installers and signing, and a full
+contribution journey remain future boundaries; source build and CI are not
+claims of public distribution.

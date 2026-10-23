@@ -17,6 +17,7 @@ ENV PATH="/opt/venv/bin:$PATH" \
 
 ARG LOCAL_UID=1000
 ARG LOCAL_GID=1000
+ARG WORKSTREAM_PROJECT_AGENT_SDK_ENVIRONMENT
 
 # Docker Desktop ARM VMs can advertise OpenSSL acceleration capabilities that
 # still SIGILL when PyCA's bundled OpenSSL dispatches to them. The generic
@@ -31,6 +32,9 @@ RUN if ! getent group "${LOCAL_GID}" >/dev/null; then \
     fi \
     && useradd --non-unique --uid "${LOCAL_UID}" --gid "${LOCAL_GID}" --create-home --shell /bin/bash workstream
 
+# The fixed guide parser owns this socket directory; workers only connect.
+RUN install -d -m 0750 -o 10002 -g 10001 /var/lib/workstream/guide-runtime
+
 WORKDIR /workspace/backend
 
 RUN mkdir --parents /workspace/scratch \
@@ -41,7 +45,15 @@ COPY backend/ ./
 # Install the committed resolution into a virtual environment outside the
 # bind-mounted source tree using the committed dependency resolution.
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --locked --extra agents --extra dev \
+    case "${WORKSTREAM_PROJECT_AGENT_SDK_ENVIRONMENT}" in \
+        agents|omnicore) ;; \
+        *) echo "WORKSTREAM_PROJECT_AGENT_SDK_ENVIRONMENT must be agents or omnicore" >&2; exit 1 ;; \
+    esac \
+    && uv sync --locked --extra "${WORKSTREAM_PROJECT_AGENT_SDK_ENVIRONMENT}" --extra dev \
+    && install -d -m 0755 /etc/workstream \
+    && printf '%s\n' "${WORKSTREAM_PROJECT_AGENT_SDK_ENVIRONMENT}" \
+        > /etc/workstream/project-agent-sdk-environment \
+    && chmod 0444 /etc/workstream/project-agent-sdk-environment \
     && chown -R "${LOCAL_UID}:${LOCAL_GID}" /workspace /opt/venv
 
 USER workstream

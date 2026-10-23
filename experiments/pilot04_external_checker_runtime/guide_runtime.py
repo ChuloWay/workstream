@@ -12,9 +12,9 @@ from guide_compilation_e2e import E2EProjectGuideRuntime, runtime_factory  # noq
 from app.interfaces.project_agents import (  # noqa: E402
     AtomicGuideRequirement, PreSubmissionBindingProposal, PostSubmissionBindingProposal,
     SubmissionArtifactPolicyProposal, ProjectGuideCompilationResult,
-    canonical_project_guide_compilation_context_bytes,
+    CheckSpecification,
 )
-from app.modules.projects.api.task_examples import task_examples_hash, validate_task_examples  # noqa: E402
+from app.modules.projects.api.task_examples import validate_task_examples  # noqa: E402
 from experiments.pilot04_external_checker_runtime.guide_inputs import (  # noqa: E402
     GUIDE_BYTES, TASK_EXAMPLES, CORRECTION_REASON,
 )
@@ -49,12 +49,14 @@ class RecordedGuideRuntime(E2EProjectGuideRuntime):
             requirements.append(AtomicGuideRequirement(
                 requirement_id=key, statement="Apply the registered project image rules.",
                 disposition="supported_" + stage, evidence_refs=refs,
+                classification_rationale="The recorded fixture has a registered image for this stage.",
+                check_specification=_recorded_specification(stage),
             ))
             target.append(binding_type(
                 requirement_id=key, capability_id=entry.capability_id,
                 capability_version=entry.capability_version, stage=stage,
             ))
-        value = base.model_dump(mode="json")
+        value = base.model_dump(mode="json", exclude={"setup_notes"})
         value.update(
             submission_artifact_policy=SubmissionArtifactPolicyProposal(
                 maximum_file_size_bytes=1_000_000, maximum_package_size_bytes=5_000_000,
@@ -64,15 +66,37 @@ class RecordedGuideRuntime(E2EProjectGuideRuntime):
             requirements=[item.model_dump(mode="json") for item in requirements],
             pre_submit_bindings=[item.model_dump(mode="json") for item in pre],
             post_submit_bindings=[item.model_dump(mode="json") for item in post],
-            setup_notes=[
-                "Recorded provider observed examples " + task_examples_hash(expected),
-                "Recorded provider observed input sha256:" + hashlib.sha256(
-                    canonical_project_guide_compilation_context_bytes(context)
-                ).hexdigest(),
-            ],
         )
         return ProjectGuideCompilationResult.model_validate(value)
 
+
+
+def _recorded_specification(stage):
+    """Describe the negative-trial marker, not a general code-quality evaluator."""
+    pre = stage == "pre_submit"
+    marker = "project-rejected.txt" if pre else "post-rejected.txt"
+    code = "probe.project_rule_failed" if pre else "probe.post_rule_failed"
+    return CheckSpecification.model_validate({
+        "evaluation_method": "static_inspection",
+        "execution_mode": "bounded_pre_submit" if pre else "background",
+        "maximum_duration_seconds": 1,
+        "stage_rationale": (
+            "Bounded fixture-file inspection before intake."
+            if pre else "Recorded background-delivery trial; not a real project classification."
+        ),
+        "inputs": [{"input_id": "package", "kind": "package", "purpose": "Verified fixture files."}],
+        "check_steps": [f"Check whether {marker} exists at the package root."],
+        "pass_conditions": [f"The package does not contain {marker}."],
+        "failure_findings": [{"code": code, "level": "error",
+                              "condition": f"The file {marker} is present.",
+                              "message": "The recorded negative-trial marker is present."}],
+        "positive_tests": [f"A fixture without {marker} passes this rule."],
+        "negative_tests": [{"name": "negative_marker", "scenario": f"Add {marker} to the fixture.",
+                            "expected_verdict": "failed", "expected_finding_codes": [code]}],
+        "runtime_dependencies": [],
+        "infrastructure_failures": [{"code": "invalid_output",
+                                     "condition": "The runner receives malformed checker output."}],
+    })
 
 
 def create_recorded_runtime(configuration):

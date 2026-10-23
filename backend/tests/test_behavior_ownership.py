@@ -2587,6 +2587,26 @@ def test_manager_authored_runtime_ownership_admits_only_its_adapter():
         )
 
 
+def test_omnicore_runtime_ownership_admits_only_its_runtime_and_topology():
+    targets = ownership.OMNICORE_GUIDE_RUNTIME_TARGETS
+    assert targets == {
+        "backend/app/adapters/project_agents/omnicore_agent.py",
+        "backend/app/adapters/project_agents/omnicore_profile.py",
+        "backend/app/workers/project_setup_topology.py",
+    }
+    retained = "backend/app/core/config.py"
+    trusted = _partition([retained])
+    ownership._validate_additive_partition_transition(
+        _partition(sorted({retained, *targets})), trusted,
+    )
+    with pytest.raises(ownership.BehaviorOwnershipError, match="untrusted_partition_change"):
+        ownership._validate_additive_partition_transition(
+            _partition(sorted({retained, *targets,
+                               "backend/app/adapters/project_agents/omnicore_fallback.py"})),
+            trusted,
+        )
+
+
 def test_partition_allows_only_exact_guide_compilation_draft_target():
     targets = ownership.GUIDE_COMPILATION_DRAFT_TARGETS
     assert targets == {"backend/app/adapters/project_agents/compilation_draft.py"}

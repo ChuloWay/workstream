@@ -2,9 +2,19 @@
 
 from celery.utils.log import get_task_logger
 from functools import partial
+from pathlib import Path
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-from app.adapters.project_agents import create_project_guide_runtime
+from app.adapters.project_agents import (
+    RETAINED_OPENAI_GUIDE_RUNTIME_KEY,
+    create_guide_runtime_cleanup_factory,
+    create_project_guide_runtime,
+    build_project_guide_adapter_profile,
+)
+from app.adapters.guide_document_tools import (
+    GUIDE_DOCUMENT_PARSER_PROVIDER_KEY,
+    guide_document_parser_factory,
+)
 from app.core.config import get_settings
 from app.core.project_agents import (
     project_guide_runtime_configuration,
@@ -17,7 +27,10 @@ from app.adapters.auth import (
     artifact_policy_projection_authorization,
     setup_finalization_authorization,
 )
-from app.adapters.projects import project_guide_compilation_delivery_port
+from app.adapters.projects import (
+    project_guide_compilation_delivery_port,
+    project_guide_document_tools_factory,
+)
 from app.adapters.checkers import external_checker_capability_projection
 from app.adapters.artifacts import guide_document_manifest_port, guide_document_access_runtime
 from app.modules.projects.api.guide_compilation import (
@@ -26,23 +39,40 @@ from app.modules.projects.api.guide_compilation import (
 )
 from app.workers.async_runner import run_async_task
 from app.workers.celery_app import celery_app
+from app.workers.project_setup_topology import (
+    PROJECT_GUIDE_HARD_LIMIT_SECONDS,
+    require_project_setup_worker,
+)
 
 PROJECT_GUIDE_COMPILATION_TASK = "workstream.project_setup.compile_project_guide"
 logger = get_task_logger(__name__)
 
 
 async def _coordinator(session_factory):
-    """Compose owner ports and the sole registered runtime at the worker boundary."""
+    """Compose owner ports and the configured runtime at the worker boundary."""
+    settings = get_settings()
     async with session_factory() as session, session.begin():
         capabilities = await external_checker_capability_projection(session)
     return project_guide_compilation_delivery_port(
         session_factory,
         material_factory=guide_document_manifest_port,
-        document_access_factory=partial(guide_document_access_runtime, session_factory),
+        document_tools_factory=project_guide_document_tools_factory(
+            session_factory,
+            document_access_factory=partial(guide_document_access_runtime, session_factory),
+            parser_factory=lambda: guide_document_parser_factory(
+                socket_path=Path(settings.guide_document_parser_socket),
+                timeout_seconds=30.0,
+            ).create(GUIDE_DOCUMENT_PARSER_PROVIDER_KEY),
+        ),
         checker_capabilities=capabilities,
         request_authority=guide_compilation_request_authority,
         execution_authority=guide_compilation_execution_authority,
-        configuration_factory=lambda: project_guide_runtime_configuration(get_settings()),
+        configuration_factory=lambda: project_guide_runtime_configuration(
+            settings,
+            adapter_profile_builder=partial(
+                build_project_guide_adapter_profile, settings.project_agent_runtime
+            ),
+        ),
         runtime_factory=create_project_guide_runtime,
         sufficiency_authorization_factory=guide_sufficiency_projection_authorization,
         policy_authorization_factory=artifact_policy_projection_authorization,
@@ -51,12 +81,18 @@ async def _coordinator(session_factory):
 
 
 @celery_app.task(
-    name=PROJECT_GUIDE_COMPILATION_TASK, bind=True, acks_late=True, reject_on_worker_lost=True
+    name=PROJECT_GUIDE_COMPILATION_TASK,
+    bind=True,
+    acks_late=True,
+    acks_on_failure_or_timeout=True,
+    reject_on_worker_lost=True,
+    time_limit=PROJECT_GUIDE_HARD_LIMIT_SECONDS,
 )
 def run_project_guide_compilation(
     self, project_id, guide_id, source_snapshot_id, setup_run_id, setup_generation
 ):
     """Deliver one exact generation using the broker-bound task ID."""
+    require_project_setup_worker(self)
     try:
         delivery = ProjectGuideCompilationDelivery(
             project_id=project_id,
@@ -109,12 +145,13 @@ def cleanup_guide_runtime_resources():
 async def _cleanup_guide_runtime_resources():
     """Keep SDK and PROJECTS internals behind their public composition boundaries."""
     from app.adapters.projects import cleanup_project_guide_runtime_resources
-
+    cleanup_adapters = create_guide_runtime_cleanup_factory()
     engine = create_async_engine(get_database_url(), pool_pre_ping=True)
     try:
         return await cleanup_project_guide_runtime_resources(
             async_sessionmaker(engine, expire_on_commit=False),
-            runtime_factory=create_project_guide_runtime,
+            retained_runtime_key=RETAINED_OPENAI_GUIDE_RUNTIME_KEY,
+            cleanup_adapter_factory=cleanup_adapters,
         )
     finally:
         await engine.dispose()

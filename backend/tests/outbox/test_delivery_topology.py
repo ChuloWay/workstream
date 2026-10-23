@@ -145,7 +145,7 @@ def test_actual_other_queue_worker_allows_solo(monkeypatch):
     app = create_celery_app()
     app.conf.task_always_eager = False
     try:
-        app.Worker(pool="solo", queues=["celery"])
+        app.Worker(pool="solo", queues=["workstream.unrelated"])
         assert topology._validated_parent is None
     finally:
         app.close()

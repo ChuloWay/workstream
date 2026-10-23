@@ -1,30 +1,47 @@
 """Native SDK retry and circuit proof without provider calls."""
+
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
+from functools import partial
 
 import httpx2
 import pytest
-from agents import Agent, ModelSettings, OpenAIResponsesModel, Runner, RunConfig, function_tool
-from agents.items import ModelResponse
-from agents.usage import Usage
 from openai import APIConnectionError, APIStatusError, APITimeoutError, AsyncOpenAI
-from openai.types.responses import ResponseFunctionToolCall, ResponseOutputMessage, ResponseOutputText
 
 from app.adapters.project_agents.provider_resilience import (
-    ProviderCircuit, ProviderCircuitOpen, model_retry_settings,
+    ProviderCircuit,
+    ProviderCircuitOpen,
+    model_retry_settings,
 )
-from app.core.config import Settings
+from app.adapters.project_agents import build_project_guide_adapter_profile
+from app.adapters.project_agents.openai_profile import (
+    require_openai_agents_sdk_adapter_profile,
+)
+from app.core.config import Settings, get_settings
 from app.core.project_agents import project_guide_runtime_configuration
 
 
 def configuration(**overrides):
-    return project_guide_runtime_configuration(Settings(_env_file=None, **overrides))
+    settings = Settings(_env_file=None, **overrides)
+    return project_guide_runtime_configuration(
+        settings,
+        adapter_profile_builder=partial(
+            build_project_guide_adapter_profile, settings.project_agent_runtime
+        ),
+    )
+
+
+def profile(configuration_):
+    return require_openai_agents_sdk_adapter_profile(configuration_.adapter_profile_values())
 
 
 def status_error(status, code, **headers):
     request = httpx2.Request("POST", "https://api.openai.com/v1/responses")
-    return APIStatusError("provider failure", response=httpx2.Response(
-        status, request=request, headers=headers), body={"code": code})
+    return APIStatusError(
+        "provider failure",
+        response=httpx2.Response(status, request=request, headers=headers),
+        body={"code": code},
+    )
 
 
 def connection_error(cause=None, *, timeout=False):
@@ -35,29 +52,51 @@ def connection_error(cause=None, *, timeout=False):
 
 
 def completed():
-    return ModelResponse(output=[ResponseOutputMessage(
-        id="msg_test", type="message", role="assistant", status="completed",
-        content=[ResponseOutputText(type="output_text", text="done", annotations=[])],
-    )], usage=Usage(), response_id="resp_test")
+    from agents.items import ModelResponse
+    from agents.usage import Usage
+    from openai.types.responses import ResponseOutputMessage, ResponseOutputText
+
+    return ModelResponse(
+        output=[
+            ResponseOutputMessage(
+                id="msg_test",
+                type="message",
+                role="assistant",
+                status="completed",
+                content=[ResponseOutputText(type="output_text", text="done", annotations=[])],
+            )
+        ],
+        usage=Usage(),
+        response_id="resp_test",
+    )
 
 
-class ScriptedModel(OpenAIResponsesModel):
-    def __init__(self, events):
-        super().__init__(model="gpt-5.6-terra", openai_client=AsyncOpenAI(api_key="test", max_retries=0))
-        self.events = list(events)
-        self.calls = 0
+def scripted_model(events):
+    from agents import OpenAIResponsesModel
 
-    async def get_response(self, *args, **kwargs):
-        self.calls += 1
-        event = self.events.pop(0)
-        if isinstance(event, BaseException):
-            raise event
-        return event
+    class ScriptedModel(OpenAIResponsesModel):
+        def __init__(self, scripted_events):
+            super().__init__(
+                model="gpt-5.6-terra",
+                openai_client=AsyncOpenAI(api_key="test", max_retries=0),
+            )
+            self.events = list(scripted_events)
+            self.calls = 0
+
+        async def get_response(self, *args, **kwargs):
+            self.calls += 1
+            event = self.events.pop(0)
+            if isinstance(event, BaseException):
+                raise event
+            return event
+
+    return ScriptedModel(events)
 
 
 @pytest.fixture
 def delays(monkeypatch):
     from agents.run_internal import model_retry
+
     observed = []
 
     async def sleep(delay):
@@ -68,50 +107,74 @@ def delays(monkeypatch):
 
 
 async def run(model, *, tools=()):
-    return await Runner.run(Agent(name="retry-proof", model=model, tools=list(tools),
-        model_settings=ModelSettings(retry=model_retry_settings(configuration()))),
-        "test", run_config=RunConfig(tracing_disabled=True, trace_include_sensitive_data=False))
+    from agents import Agent, ModelSettings, Runner, RunConfig
+
+    config = configuration()
+    return await Runner.run(
+        Agent(
+            name="retry-proof",
+            model=model,
+            tools=list(tools),
+            model_settings=ModelSettings(retry=model_retry_settings(profile(config))),
+        ),
+        "test",
+        run_config=RunConfig(tracing_disabled=True, trace_include_sensitive_data=False),
+    )
 
 
-@pytest.mark.parametrize("error", [
-    status_error(429, "rate_limit_exceeded"),
-    status_error(503, "server_error", **{"x-should-retry": "true"}),
-    connection_error(httpx2.ConnectTimeout("connect failed")),
-    connection_error(httpx2.ConnectError("DNS failed")),
-    connection_error(httpx2.PoolTimeout("pool unavailable")),
-])
+@pytest.mark.parametrize(
+    "error",
+    [
+        status_error(429, "rate_limit_exceeded"),
+        status_error(503, "server_error", **{"x-should-retry": "true"}),
+        connection_error(httpx2.ConnectTimeout("connect failed")),
+        connection_error(httpx2.ConnectError("DNS failed")),
+        connection_error(httpx2.PoolTimeout("pool unavailable")),
+    ],
+)
 async def test_native_sdk_retries_proven_safe_failures(error, delays):
-    model = ScriptedModel([error, completed()])
+    model = scripted_model([error, completed()])
     result = await run(model)
     assert result.final_output == "done"
     assert model.calls == 2
     assert len(delays) == 1 and 0.875 <= delays[0] <= 1.125
 
 
-@pytest.mark.parametrize("error", [
-    status_error(400, "invalid_request"), status_error(401, "invalid_api_key"),
-    status_error(403, "permission_denied"), status_error(408, "request_timeout"),
-    status_error(409, "conflict"), status_error(500, "server_error"),
-    status_error(502, "server_error"), status_error(503, "server_error"),
-    status_error(504, "server_error"), status_error(429, "insufficient_quota"),
-    status_error(429, "billing_hard_limit_reached", **{"x-should-retry": "true"}),
-    status_error(429, "credit_balance_exhausted", **{"x-should-retry": "true"}),
-    status_error(429, "rate_limit_exceeded", **{"x-should-retry": "false"}),
-    status_error(429, "unknown"), connection_error(), connection_error(timeout=True),
-    connection_error(httpx2.ReadTimeout("read failed"), timeout=True),
-    connection_error(httpx2.WriteTimeout("write failed"), timeout=True),
-    connection_error(httpx2.RemoteProtocolError("response lost")),
-    ValueError("invalid model output"), PermissionError("file access denied"),
-])
+@pytest.mark.parametrize(
+    "error",
+    [
+        status_error(400, "invalid_request"),
+        status_error(401, "invalid_api_key"),
+        status_error(403, "permission_denied"),
+        status_error(408, "request_timeout"),
+        status_error(409, "conflict"),
+        status_error(500, "server_error"),
+        status_error(502, "server_error"),
+        status_error(503, "server_error"),
+        status_error(504, "server_error"),
+        status_error(429, "insufficient_quota"),
+        status_error(429, "billing_hard_limit_reached", **{"x-should-retry": "true"}),
+        status_error(429, "credit_balance_exhausted", **{"x-should-retry": "true"}),
+        status_error(429, "rate_limit_exceeded", **{"x-should-retry": "false"}),
+        status_error(429, "unknown"),
+        connection_error(),
+        connection_error(timeout=True),
+        connection_error(httpx2.ReadTimeout("read failed"), timeout=True),
+        connection_error(httpx2.WriteTimeout("write failed"), timeout=True),
+        connection_error(httpx2.RemoteProtocolError("response lost")),
+        ValueError("invalid model output"),
+        PermissionError("file access denied"),
+    ],
+)
 async def test_permanent_or_ambiguous_failure_never_replays(error, delays):
-    model = ScriptedModel([error, completed()])
+    model = scripted_model([error, completed()])
     with pytest.raises(type(error)):
         await run(model)
     assert model.calls == 1 and delays == []
 
 
 async def test_retry_exhaustion_and_exponential_backoff(delays):
-    model = ScriptedModel([status_error(429, "rate_limit_exceeded") for _ in range(4)])
+    model = scripted_model([status_error(429, "rate_limit_exceeded") for _ in range(4)])
     with pytest.raises(APIStatusError):
         await run(model)
     assert model.calls == 3 and len(delays) == 2
@@ -119,17 +182,26 @@ async def test_retry_exhaustion_and_exponential_backoff(delays):
 
 
 async def test_retry_after_is_respected_without_retrying_early(delays):
-    model = ScriptedModel([status_error(429, "rate_limit_exceeded", **{"retry-after": "7"}), completed()])
+    model = scripted_model(
+        [status_error(429, "rate_limit_exceeded", **{"retry-after": "7"}), completed()]
+    )
     await run(model)
     assert delays == [7]
     delays.clear()
-    model = ScriptedModel([status_error(429, "rate_limit_exceeded", **{"retry-after": "90"}), completed()])
+    model = scripted_model(
+        [status_error(429, "rate_limit_exceeded", **{"retry-after": "90"}), completed()]
+    )
     with pytest.raises(APIStatusError):
         await run(model)
     assert model.calls == 1 and delays == []
 
 
 async def test_model_retry_does_not_repeat_completed_local_document_tool(delays):
+    from agents import function_tool
+    from agents.items import ModelResponse
+    from agents.usage import Usage
+    from openai.types.responses import ResponseFunctionToolCall
+
     opened = []
 
     @function_tool(failure_error_function=None)
@@ -137,17 +209,27 @@ async def test_model_retry_does_not_repeat_completed_local_document_tool(delays)
         opened.append(handle)
         return "document staged"
 
-    request = ModelResponse(output=[ResponseFunctionToolCall(
-        id="fc_test", call_id="call_test", name="open_document", type="function_call",
-        arguments='{"handle":"assigned-only"}', status="completed",
-    )], usage=Usage(), response_id="resp_tool")
-    model = ScriptedModel([request, status_error(429, "rate_limit_exceeded"), completed()])
+    request = ModelResponse(
+        output=[
+            ResponseFunctionToolCall(
+                id="fc_test",
+                call_id="call_test",
+                name="open_document",
+                type="function_call",
+                arguments='{"handle":"assigned-only"}',
+                status="completed",
+            )
+        ],
+        usage=Usage(),
+        response_id="resp_tool",
+    )
+    model = scripted_model([request, status_error(429, "rate_limit_exceeded"), completed()])
     await run(model, tools=[open_document])
     assert model.calls == 3 and opened == ["assigned-only"]
 
 
 async def test_cancellation_never_retries(delays):
-    model = ScriptedModel([asyncio.CancelledError(), completed()])
+    model = scripted_model([asyncio.CancelledError(), completed()])
     with pytest.raises(asyncio.CancelledError):
         await run(model)
     assert model.calls == 1 and delays == []
@@ -172,7 +254,7 @@ def test_circuit_single_half_open_probe_and_stale_success():
 
     with ThreadPoolExecutor(max_workers=8) as executor:
         leases = list(executor.map(acquire, range(8)))
-    probe, = [lease for lease in leases if lease is not None]
+    (probe,) = [lease for lease in leases if lease is not None]
     circuit.succeeded(probe)
     circuit.require_current(circuit.acquire(1000))
 
@@ -197,28 +279,33 @@ def test_expired_or_released_probe_cannot_close_new_outage():
 
 def test_request_deadline_is_independent_and_hashed():
     default = configuration()
-    changed = configuration(project_agent_request_timeout_seconds=25)
-    assert default.model == "gpt-5.6-terra" and default.request_timeout_seconds == 300
-    assert changed.request_timeout_seconds == 25
+    changed = configuration(project_agent_runtime_options={"request_timeout_seconds": 25})
+    assert default.model == "openai/gpt-5.6-terra"
+    assert profile(default).request_timeout_seconds == 300
+    assert profile(changed).request_timeout_seconds == 25
     assert default.timeout_seconds == changed.timeout_seconds == 1800
     assert default.sha256 != changed.sha256
 
 
 def test_circuit_counts_exhausted_turn_once_and_isolates_models(monkeypatch):
     from app.adapters.project_agents import provider_resilience as owner
+
     circuit = ProviderCircuit(2, 60)
-    monkeypatch.setattr(owner, "circuit_for", lambda _: circuit)
-    admission = owner.ModelCircuitAdmission(configuration())
+    monkeypatch.setattr(owner, "circuit_for", lambda *_: circuit)
+    config = configuration()
+    admission = owner.ModelCircuitAdmission(config, profile(config))
     for _ in range(3):
         admission.before_request()
-        admission.request_failed(status_error(429, "rate_limit_exceeded"))
+        admission.request_failed(True)
     admission.close()
     admission.close()
     second = circuit.acquire(1000)
     circuit.failed(second)
     with pytest.raises(ProviderCircuitOpen):
         circuit.acquire(1000)
-    assert owner._provider_circuit("openai_agents_sdk", "openai", "responses", "model-a", 3, 60) is not owner._provider_circuit("openai_agents_sdk", "openai", "responses", "model-b", 3, 60)
+    assert owner._provider_circuit(
+        "openai_agents_sdk", "openai", "responses", "model-a", 3, 60
+    ) is not owner._provider_circuit("openai_agents_sdk", "openai", "responses", "model-b", 3, 60)
 
 
 async def test_open_circuit_prevents_product_fence_and_resource_allocation(monkeypatch):
@@ -232,8 +319,8 @@ async def test_open_circuit_prevents_product_fence_and_resource_allocation(monke
 
     circuit = ProviderCircuit(1, 60)
     circuit.failed(circuit.acquire(1000))
-    monkeypatch.setattr(owner, "circuit_for", lambda _: circuit)
-    monkeypatch.setenv("OPENAI_API_KEY", "test-only")
+    monkeypatch.setattr(owner, "circuit_for", lambda *_: circuit)
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-only")
     monkeypatch.setattr(module, "project_guide_compilation_prompt_bytes", lambda _: b"manifest")
     calls = []
 
@@ -260,6 +347,7 @@ async def test_open_circuit_prevents_product_fence_and_resource_allocation(monke
 
 async def test_outer_deadline_cancels_backoff_without_second_request(monkeypatch):
     from agents.run_internal import model_retry
+
     sleeping = asyncio.Event()
 
     async def backoff(_):
@@ -269,7 +357,7 @@ async def test_outer_deadline_cancels_backoff_without_second_request(monkeypatch
         await asyncio.Event().wait()
 
     monkeypatch.setattr(model_retry, "_sleep_for_retry", backoff)
-    model = ScriptedModel([status_error(429, "rate_limit_exceeded"), completed()])
+    model = scripted_model([status_error(429, "rate_limit_exceeded"), completed()])
     with pytest.raises(TimeoutError):
         async with asyncio.timeout(10) as deadline:
             await run(model)
@@ -283,21 +371,28 @@ async def test_cleanup_bypasses_open_inference_circuit(monkeypatch):
     from datetime import datetime, timezone
     from openai import NotFoundError
     from app.adapters.project_agents import provider_resilience as owner
-    from app.adapters.project_agents.openai_workspace import OpenAIGuideWorkspace
+    from app.adapters.project_agents.openai_workspace import (
+        _cleanup_recorded_openai_guide_resources,
+    )
     from app.modules.projects.api.guide_documents import GuideRuntimeResource
 
     circuit = ProviderCircuit(1, 60)
     circuit.failed(circuit.acquire(1000))
     monkeypatch.setattr(owner, "circuit_for", lambda _: circuit)
     allocation = uuid4()
-    resource = GuideRuntimeResource(allocation, "file", "file_assigned", None, None, datetime.now(timezone.utc))
+    resource = GuideRuntimeResource(
+        allocation, "file", "file_assigned", None, None, datetime.now(timezone.utc)
+    )
     calls = []
 
     class Resources:
+        deleted = False
+
         async def cleanup_resources(self):
-            return (resource,)
+            return () if self.deleted else (resource,)
 
         async def record_deleted(self, identifier):
+            self.deleted = True
             calls.append(("record_deleted", identifier))
 
         async def record_cleanup_failed(self, identifier):
@@ -310,10 +405,41 @@ async def test_cleanup_bypasses_open_inference_circuit(monkeypatch):
 
         async def retrieve(self, identifier):
             calls.append(("retrieve", identifier))
-            raise NotFoundError("gone", response=httpx2.Response(404,
-                request=httpx2.Request("GET", "https://api.openai.com/v1/files/file_assigned")), body=None)
+            raise NotFoundError(
+                "gone",
+                response=httpx2.Response(
+                    404,
+                    request=httpx2.Request("GET", "https://api.openai.com/v1/files/file_assigned"),
+                ),
+                body=None,
+            )
 
-    workspace = OpenAIGuideWorkspace(SimpleNamespace(files=Files()), configuration(),
-        SimpleNamespace(documents=()), SimpleNamespace(resources=Resources()))
-    await workspace._cleanup()
-    assert calls == [("delete", "file_assigned"), ("retrieve", "file_assigned"), ("record_deleted", allocation)]
+    assert (
+        await _cleanup_recorded_openai_guide_resources(SimpleNamespace(files=Files()), Resources())
+        is True
+    )
+    assert calls == [
+        ("delete", "file_assigned"),
+        ("retrieve", "file_assigned"),
+        ("record_deleted", allocation),
+    ]
+
+
+def test_project_agent_timeout_is_loaded_from_environment(monkeypatch) -> None:
+    monkeypatch.setenv("WORKSTREAM_PROJECT_AGENT_MODEL", "test-model")
+    monkeypatch.setenv("WORKSTREAM_PROJECT_AGENT_RUN_TIMEOUT_SECONDS", "42")
+    monkeypatch.setenv("WORKSTREAM_PROJECT_AGENT_MAX_MANIFEST_BYTES", "12345")
+    get_settings.cache_clear()
+    try:
+        settings = get_settings()
+        configuration = project_guide_runtime_configuration(
+            settings,
+            adapter_profile_builder=partial(
+                build_project_guide_adapter_profile, settings.project_agent_runtime
+            ),
+        )
+        assert configuration.timeout_seconds == 42
+        assert configuration.maximum_manifest_bytes == 12345
+        assert configuration.model == "test-model"
+    finally:
+        get_settings.cache_clear()

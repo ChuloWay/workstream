@@ -13,19 +13,43 @@ from uuid import uuid4
 
 from dotenv import dotenv_values
 
+from app.adapters.guide_document_tools import (
+    FIXED_PARSER_BUILD_DIGEST,
+    GUIDE_DOCUMENT_PARSER_PROTOCOL,
+    GuideDocumentParserRejectedError,
+    GuideDocumentParserRequest,
+    UnixSocketGuideDocumentParserAdapter,
+)
+from app.interfaces.external_services import (
+    ExternalServiceProtocolError,
+    ExternalServiceUnavailableError,
+)
+
 import external_api_drill as api
+
+
+_PARSER_PROBE_SOURCE = b"# Workstream parser prerequisite\n\nSynthetic connectivity probe.\n"
 
 
 def environment(env, report):
     """Copy only approved model settings; never inherit another worktree's database."""
     report["guide_drill_sha256"] = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
     provider = dotenv_values(os.environ["WORKSTREAM_DRILL_PROVIDER_ENV"])
-    if not provider.get("OPENAI_API_KEY"):
+    model_provider = provider.get("WORKSTREAM_PROJECT_AGENT_MODEL_PROVIDER", "openrouter")
+    key_name = {"openrouter": "OPENROUTER_API_KEY", "openai": "OPENAI_API_KEY"}.get(model_provider)
+    if key_name is None or not provider.get(key_name):
         raise api.ProbeFailure("model_key_missing")
+    for key in ("OPENAI_API_KEY", "OPENROUTER_API_KEY"):
+        env.pop(key, None)
     for key, value in provider.items():
-        if key == "OPENAI_API_KEY" or key.startswith("WORKSTREAM_PROJECT_AGENT_"):
+        if key == key_name or key.startswith("WORKSTREAM_PROJECT_AGENT_"):
             if value is not None:
                 env[key] = value
+    parser_socket_value = os.environ.get("WORKSTREAM_DRILL_GUIDE_PARSER_SOCKET", "")
+    parser_socket = Path(parser_socket_value)
+    if not parser_socket_value or not parser_socket.is_absolute():
+        raise api.ProbeFailure("guide_parser_socket_missing_or_invalid")
+    env["WORKSTREAM_DRILL_GUIDE_PARSER_SOCKET"] = str(parser_socket)
     endpoint = os.environ["WORKSTREAM_TEST_MINIO_ENDPOINT"]
     broker = os.environ["WORKSTREAM_DRILL_BROKER_URL"]
     if (urlsplit(endpoint).hostname not in {"127.0.0.1", "localhost"}
@@ -54,6 +78,33 @@ def environment(env, report):
         "public setup evidence is not manager approval or project activation",
         "no product SQL writes, trigger suppression or fabricated provider outputs",
     ]
+
+
+async def parser_prerequisite(env, report):
+    """Prove the separately operated fixed parser before product or model work."""
+    source = _PARSER_PROBE_SOURCE
+    text = source.decode("utf-8")
+    request = GuideDocumentParserRequest(
+        request_id=uuid4(), source_sha256="sha256:" + hashlib.sha256(source).hexdigest(),
+        source_byte_count=len(source), media_type="text/markdown", operation="read",
+        offset=0, limit=len(source))
+    adapter = UnixSocketGuideDocumentParserAdapter(
+        socket_path=Path(env["WORKSTREAM_GUIDE_DOCUMENT_PARSER_SOCKET"]), timeout_seconds=10.0)
+    try:
+        result = await adapter.parse(request, source)
+    except ExternalServiceUnavailableError:
+        raise api.ProbeFailure("guide_parser_prerequisite_unavailable") from None
+    except ExternalServiceProtocolError:
+        raise api.ProbeFailure("guide_parser_prerequisite_malformed") from None
+    except GuideDocumentParserRejectedError:
+        raise api.ProbeFailure("guide_parser_prerequisite_rejected") from None
+    if (result.text != text or result.total_characters != len(text) or result.next_offset is not None
+            or result.parser_build_digest != FIXED_PARSER_BUILD_DIGEST):
+        raise api.ProbeFailure("guide_parser_prerequisite_malformed")
+    report["guide_parser_prerequisite"] = {
+        "protocol": GUIDE_DOCUMENT_PARSER_PROTOCOL,
+        "parser_build_digest": result.parser_build_digest,
+    }
 
 
 async def stored_documents(env, originals):
@@ -98,6 +149,10 @@ def sufficiency_matches(reports, setup):
 
 async def scenario(drill, issuer, env):
     """Act as separate administrator, manager and ungranted external clients."""
+    worker_env = env | {"WORKSTREAM_GUIDE_DOCUMENT_PARSER_SOCKET":
+                        env["WORKSTREAM_DRILL_GUIDE_PARSER_SOCKET"]}
+    worker_env.pop("WORKSTREAM_DRILL_GUIDE_PARSER_SOCKET")
+    await parser_prerequisite(worker_env, drill.report)
     paths = [Path(value) for value in json.loads(os.environ["WORKSTREAM_DRILL_GUIDE_PDFS"])]
     if len(paths) != 2 or any(path.suffix.lower() != ".pdf" or path.stat().st_size > 10 * 1024 * 1024 for path in paths):
         raise api.ProbeFailure("two_bounded_pdf_originals_required")
@@ -144,8 +199,8 @@ async def scenario(drill, issuer, env):
     await drill.call("waiting_setup", "GET", setup_route, path=setup_path, token=manager,
         values={"id": guide["setup"]["id"], "status": "awaiting_documents", "documents_ready_at": None})
     worker = subprocess.Popen([sys.executable, "-m", "celery", "-A", "app.workers.celery_app",
-        "worker", "--pool=solo", "-Q", "celery", "--concurrency=1", "--without-gossip", "--without-mingle",
-        "--without-heartbeat", "--loglevel=WARNING"], cwd=api.ROOT, env=env,
+        "worker", "--pool=prefork", "-Q", "celery", "--concurrency=1", "--without-gossip", "--without-mingle",
+        "--without-heartbeat", "--loglevel=WARNING"], cwd=api.ROOT, env=worker_env,
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     try:
         upload_route = route + "/{guide_id}/documents/{document_id}/content"

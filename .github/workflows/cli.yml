@@ -83,7 +83,7 @@ jobs:
           set -euo pipefail
           python -m pip install "uv==0.10.7"
           test "$(uv --version)" = "uv 0.10.7"
-          uv sync --frozen --all-extras
+          uv sync --frozen --extra agents --extra dev
           test "$(uv run --frozen ruff --version)" = "ruff 0.15.22"
 
       - name: Check integration test source

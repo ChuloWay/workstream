@@ -19,7 +19,7 @@ import unicodedata
 import zipfile
 import zlib
 
-from app.modules.artifacts.zip_safety import zip_directory_layout
+from app.core.zip_safety import zip_directory_layout
 
 
 _READ_BYTES = 1024 * 1024

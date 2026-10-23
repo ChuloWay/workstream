@@ -75,7 +75,7 @@ async def model_database(postgres_database_url: str):
     registry_entry_id = new_record_id()
     registry_entry_digest = sha("registry")
     migration = runpy.run_path(
-        str(Path(__file__).resolve().parents[2] / "alembic/versions/0059_checker_model_runtime.py")
+        str(Path(__file__).resolve().parents[2] / "alembic/versions/0060_checker_model_runtime.py")
     )
 
     def isolated(statement: str) -> str:

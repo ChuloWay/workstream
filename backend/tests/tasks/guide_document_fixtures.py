@@ -3,6 +3,7 @@
 import hashlib
 import os
 from dataclasses import dataclass
+from functools import partial
 from uuid import uuid4
 
 import pytest
@@ -10,6 +11,8 @@ from sqlalchemy import select
 
 from app.core.config import get_settings
 from app.db import session as db_session
+from app.adapters.artifacts.internal_workers import shutdown_artifact_internal_runtime
+from app.modules.actors.api import ServiceIdentity
 from app.modules.artifacts.models import (
     ArtifactPutAttempt,
     ArtifactOperationReceipt,
@@ -36,6 +39,7 @@ base_task_database_env = _base_task_database_env
 
 @pytest.fixture
 def task_database_env(base_task_database_env, monkeypatch, tmp_path):
+    shutdown_artifact_internal_runtime()
     values = {
         "ARTIFACT_STORE_BACKEND": "s3_compatible",
         "ARTIFACT_S3_PROVIDER_PROFILE": "minio",
@@ -56,8 +60,11 @@ def task_database_env(base_task_database_env, monkeypatch, tmp_path):
     for name, value in values.items():
         monkeypatch.setenv("WORKSTREAM_" + name, value)
     get_settings.cache_clear()
-    yield base_task_database_env
-    get_settings.cache_clear()
+    try:
+        yield base_task_database_env
+    finally:
+        shutdown_artifact_internal_runtime()
+        get_settings.cache_clear()
 
 
 @dataclass
@@ -108,7 +115,16 @@ async def activate_uploaded_guide(client, project_id, monkeypatch, *, version="v
         assert stored.status_code == 202, stored.text
         assert stored.json()["sha256"] == "sha256:" + hashlib.sha256(original).hexdigest()
         assert stored.json()["byte_count"] == len(original)
-    await create_policy_bundle_for_guide(client, project_id, guide["id"])
+    from app.adapters.artifacts import guide_document_access_runtime
+
+    await create_policy_bundle_for_guide(
+        client,
+        project_id,
+        guide["id"],
+        document_access_factory=partial(
+            guide_document_access_runtime, db_session.get_session_factory()
+        ),
+    )
     await seed_active_guide_for_downstream_test(
         db_session.get_session_factory(), project_id=project_id, guide_id=guide["id"]
     )
@@ -162,16 +178,20 @@ async def guide_world(task_client, monkeypatch):
         await grant_fixture_admin_role(
             session, manager.actor_profile_id, role="access_administrator", scope="system"
         )
-    provision = await task_client.post(
-        "/api/v1/service-actors",
-        headers=auth_headers(),
-        json={
-            "service_identity": "workstream.artifact.put_resolver",
-            "subject": "pilot13-put-resolver",
-            "reason": "Real original read integration proof",
-        },
-    )
-    assert provision.status_code == 201, provision.text
+    for identity, subject in (
+        (ServiceIdentity.ARTIFACT_PUT_RESOLVER, "pilot13-put-resolver"),
+        (ServiceIdentity.ARTIFACT_GUIDE_READER, "pilot13-guide-reader"),
+    ):
+        provision = await task_client.post(
+            "/api/v1/service-actors",
+            headers=auth_headers(),
+            json={
+                "service_identity": identity.value,
+                "subject": subject,
+                "reason": "Real original read integration proof",
+            },
+        )
+        assert provision.status_code == 201, provision.text
     project = await task_client.post(
         "/api/v1/projects",
         headers=auth_headers(),

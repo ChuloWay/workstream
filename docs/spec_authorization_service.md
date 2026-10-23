@@ -1418,14 +1418,16 @@ outside any prepared handle; persistence obtains fresh authority. The fixed
 `workstream.project.setup` service may resolve only the run action internally
 with exact setup custody and no matched human grant.
 
-Unified guide compilation separates request authority from provider execution.
+Unified guide compilation separates request authority from selected runtime execution.
 `project.guide_compilation.request` requires a current exact-project Project
 Manager grant; system-scoped grants do not substitute. Transaction-bound PREP
 binds the actor, identity link, matched grant, immutable guide/setup lineage,
 catalogue manifests, agent/instruction versions, and operation/request facts.
 `project.guide_compilation.execute` belongs only to `workstream.project.setup`.
-Its pre-provider check validates the complete typed attempt and provider key
-without issuing a handle or writing authorization evidence. After provider I/O, fresh
+Its pre-execution check validates the complete typed attempt and any credentials
+required by the selected inference adapter. The manager-authored runtime requires
+no provider credential. This check issues no handle and writes no authorization
+evidence. After runtime completion, fresh
 PREP recomputes and verifies the complete result/component digest and commits
 its allowed event only with POL-03B's immutable result transition. AUTH-12I
 activates these authority boundaries only; it exposes no route, dispatches no

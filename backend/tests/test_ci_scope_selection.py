@@ -196,7 +196,9 @@ def test_github_outputs_are_compact_and_parseable() -> None:
     assert outputs["full_suite"] == "true"
     assert outputs["lanes_required"] == "true"
     assert outputs["minio_image"] == "true"
-    assert json.loads(outputs["lane_matrix"]) == {"lane": list(ALL_LANES)}
+    matrix = json.loads(outputs["lane_matrix"])["include"]
+    assert [entry["lane"] for entry in matrix] == list(ALL_LANES)
+    assert {entry["sdk_environment"] for entry in matrix} == {"agents", "omnicore"}
 
 
 def test_empty_scope_keeps_a_valid_but_skipped_fail_safe_matrix() -> None:
@@ -208,7 +210,8 @@ def test_empty_scope_keeps_a_valid_but_skipped_fail_safe_matrix() -> None:
     outputs = scope.outputs()
 
     assert outputs["lanes_required"] == "false"
-    assert json.loads(outputs["lane_matrix"]) == {"lane": list(ALL_LANES)}
+    matrix = json.loads(outputs["lane_matrix"])["include"]
+    assert [entry["lane"] for entry in matrix] == list(ALL_LANES)
 
 
 def test_git_rename_out_of_backend_keeps_the_deleted_source_in_scope(

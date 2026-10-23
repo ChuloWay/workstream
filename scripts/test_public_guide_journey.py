@@ -22,10 +22,15 @@ class SourceEvidenceTests(unittest.TestCase):
                            manifest_json={"task_examples_hash": self.expected["examples_hash"],
                                           "task_examples_count": 2},
                            bundle_hash=self.expected["source_hash"])
+        self.expected.update(source_id="source-1", original_sha256="sha256:" + "e" * 64,
+                             accesses=[{"source_snapshot_id": "source-1", "sha256": "sha256:" + "e" * 64,
+                                        "manifest_sha256": "sha256:" + "f" * 64,
+                                        "access_method": "trusted_parser", "operation": "read"}])
         self.attempt = {"canonical_input_hash": "sha256:" + "c" * 64,
-                        "canonical_result": {"setup_notes": [
-                            "Recorded provider observed examples " + self.expected["examples_hash"],
-                            "Recorded provider observed input sha256:" + "c" * 64]}}
+                        "compiled_input_hash": "sha256:" + "c" * 64,
+                        "source_snapshot_hash": self.expected["source_hash"],
+                        "source_snapshot_id": "source-1", "guide_material_hash": "sha256:" + "f" * 64,
+                        "status": "compilation_persisted"}
 
     def test_control_and_each_independent_source_substitution(self):
         verify_source_commitment(self.source, self.attempt, **self.expected)
@@ -42,14 +47,18 @@ class SourceEvidenceTests(unittest.TestCase):
                 verify_source_commitment(changed, self.attempt, **self.expected)
 
     def test_correct_storage_cannot_hide_different_worker_inputs(self):
-        for index in (0, 1):
-            changed = deepcopy(self.attempt)
-            changed["canonical_result"]["setup_notes"][index] += "foreign"
-            with self.subTest(index=index), self.assertRaisesRegex(AssertionError, "worker observed"):
+        for field in ("canonical_input_hash", "compiled_input_hash", "source_snapshot_hash",
+                      "source_snapshot_id", "status"):
+            changed = self.attempt | {field: "foreign"}
+            with self.subTest(field=field), self.assertRaisesRegex(AssertionError, "worker input"):
                 verify_source_commitment(self.source, changed, **self.expected)
-        changed = self.attempt | {"canonical_input_hash": "sha256:" + "d" * 64}
-        with self.assertRaisesRegex(AssertionError, "worker observed"):
-            verify_source_commitment(self.source, changed, **self.expected)
+        for field in ("source_snapshot_id", "sha256", "manifest_sha256", "access_method", "operation"):
+            changed = deepcopy(self.expected)
+            changed["accesses"][0][field] = "foreign"
+            with self.subTest(field=field), self.assertRaisesRegex(AssertionError, "original-read"):
+                verify_source_commitment(self.source, self.attempt, **changed)
+        with self.assertRaisesRegex(AssertionError, "original-read"):
+            verify_source_commitment(self.source, self.attempt, **(self.expected | {"accesses": []}))
 
 
 class SetupPollingTests(unittest.IsolatedAsyncioTestCase):

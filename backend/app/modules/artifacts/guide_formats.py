@@ -12,7 +12,7 @@ import zipfile
 from defusedxml import ElementTree
 from defusedxml.common import DefusedXmlException
 
-from app.modules.artifacts.zip_safety import zip_directory_facts
+from app.core.zip_safety import zip_directory_facts
 
 
 _SAMPLE_BYTES = 64 * 1024

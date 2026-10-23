@@ -1,6 +1,7 @@
 """HTTP composition for exact human guide proposal operations."""
 
 from dataclasses import dataclass
+from functools import partial
 from collections.abc import AsyncIterator
 from app.modules.projects.api.guide_proposals import (
     GuideProposalOperationsPort,
@@ -84,6 +85,9 @@ async def get_correction_dispatch(
     from app.api.deps.authorization import prepared_authorization_service
     from app.core.config import get_settings
     from app.core.project_agents import project_guide_runtime_configuration
+    from app.adapters.project_agents import build_project_guide_adapter_profile
+
+    settings = get_settings()
 
     actor = await get_authorization_actor_identity(resolved)
     async with prepared_authorization_service(request, resolved, session) as prepared:
@@ -98,7 +102,12 @@ async def get_correction_dispatch(
                 human_guide_compilation_authorization(prepared),
                 material=guide_document_manifest_port(session),
                 capabilities=capabilities,
-                configuration=project_guide_runtime_configuration(get_settings()),
+                configuration=project_guide_runtime_configuration(
+                    settings,
+                    adapter_profile_builder=partial(
+                        build_project_guide_adapter_profile, settings.project_agent_runtime
+                    ),
+                ),
             ),
             actor,
         )

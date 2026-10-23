@@ -23,7 +23,7 @@ from .correction_feedback import correction_feedback
 from .proposal_authority import proposal_resource_json, require_proposal_authority
 from .models import ProjectGuideProposalCorrection
 from .proposal_repository import GuideProposalRepository, LockedGuideProposal
-from .runtime_resources import attempt_is_provider_free
+from .runtime_resources import attempt_uses_inference
 
 
 @dataclass(frozen=True)
@@ -82,7 +82,7 @@ async def stage_proposal_correction(session, command, actor, locator, prepared, 
         return StagedGuideCorrection(locked, receipt, None, None)
     if not locked.current:
         raise GuideProposalError("proposal_stale")
-    if attempt_is_provider_free(locked.view.attempt):
+    if not attempt_uses_inference(locked.view.attempt):
         # Rules come verbatim from the manager's document, so a correction
         # reason cannot change them; revised rules need a new guide version.
         raise GuideProposalError("correction_unsupported")

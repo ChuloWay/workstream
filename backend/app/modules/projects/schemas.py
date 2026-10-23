@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from app.modules.projects.api.guide_documents import GuideDocumentMediaType
+from app.interfaces.guide_document_tools import GuideDocumentMediaType
 from app.modules.projects.api.task_examples import ProjectGuideTaskExamples
 
 from datetime import datetime

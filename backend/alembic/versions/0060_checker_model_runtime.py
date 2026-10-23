@@ -4,8 +4,8 @@ from alembic import op
 from sqlalchemy import text
 
 
-revision = "0059_checker_model_runtime"
-down_revision = "0058_compensation_unit_create"
+revision = "0060_checker_model_runtime"
+down_revision = "0059_neutral_guide_runtime"
 branch_labels = None
 depends_on = None
 

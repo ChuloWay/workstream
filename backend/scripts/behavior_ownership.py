@@ -432,6 +432,29 @@ ARCH_04F4_RETRY_TARGETS = frozenset({
 MANAGER_AUTHORED_GUIDE_RUNTIME_TARGETS = frozenset({
     "backend/app/adapters/project_agents/manager_authored.py",
 })
+OMNICORE_GUIDE_RUNTIME_TARGETS = frozenset({
+    "backend/app/adapters/project_agents/omnicore_agent.py",
+    "backend/app/adapters/project_agents/omnicore_profile.py",
+    "backend/app/workers/project_setup_topology.py",
+})
+NEUTRAL_GUIDE_RUNTIME_REMOVED_TARGETS = frozenset({
+    "backend/app/modules/artifacts/zip_safety.py",
+})
+
+NEUTRAL_GUIDE_RUNTIME_TARGETS = frozenset({
+    "backend/app/adapters/project_agents/openrouter_policy.py",
+    "backend/app/core/zip_safety.py",
+    "backend/app/adapters/guide_document_tools/child.py",
+    "backend/app/adapters/guide_document_tools/client.py",
+    "backend/app/adapters/guide_document_tools/contracts.py",
+    "backend/app/adapters/guide_document_tools/identity.py",
+    "backend/app/adapters/guide_document_tools/parsing.py",
+    "backend/app/adapters/guide_document_tools/service.py",
+    "backend/app/adapters/project_agents/openai_profile.py",
+    "backend/app/adapters/project_agents/result_validation.py",
+    "backend/app/adapters/projects/guide_document_tools.py",
+    "backend/app/interfaces/guide_document_tools.py",
+})
 GUIDE_COMPILATION_DRAFT_TARGETS = frozenset({
     "backend/app/adapters/project_agents/compilation_draft.py",
 })
@@ -1034,7 +1057,7 @@ def _validate_additive_partition_transition(
     ]
     if (
         trusted_targets != sorted(trusted_targets)
-        or removed - (REV_04C_REMOVED_TARGETS | ARCH_04D2_REMOVED_TARGETS | ARCH_03D_REMOVED_TARGETS | TASK_CHECKER_CLEANUP_REMOVED_TARGETS | ARCH_03C2_REMOVED_TARGETS | OUTBOX_IDENTITY_REMOVED_TARGETS | V01_BASELINE_REMOVED_TARGETS | POL_03B_REMOVED_TARGETS | POL_04B_REMOVED_TARGETS | POL_05A_REMOVED_TARGETS | ARCH_03A_GUIDE_CONTEXT_REMOVED_TARGETS | ARCH_04B_SEAM_REMOVED_TARGETS | PILOT_04_RETIRED_CATALOGUE_TARGETS)
+        or removed - (NEUTRAL_GUIDE_RUNTIME_REMOVED_TARGETS | REV_04C_REMOVED_TARGETS | ARCH_04D2_REMOVED_TARGETS | ARCH_03D_REMOVED_TARGETS | TASK_CHECKER_CLEANUP_REMOVED_TARGETS | ARCH_03C2_REMOVED_TARGETS | OUTBOX_IDENTITY_REMOVED_TARGETS | V01_BASELINE_REMOVED_TARGETS | POL_03B_REMOVED_TARGETS | POL_04B_REMOVED_TARGETS | POL_05A_REMOVED_TARGETS | ARCH_03A_GUIDE_CONTEXT_REMOVED_TARGETS | ARCH_04B_SEAM_REMOVED_TARGETS | PILOT_04_RETIRED_CATALOGUE_TARGETS)
         or [current_by_target[item["target"]] for item in retained_trusted]
         != retained_trusted
     ):
@@ -1116,7 +1139,9 @@ def _validate_additive_partition_transition(
             | ARCH_04F4_RETRY_TARGETS
             | ARCH_04F5_DELIVERY_RECONCILIATION_TARGETS
             | MANAGER_AUTHORED_GUIDE_RUNTIME_TARGETS
+            | OMNICORE_GUIDE_RUNTIME_TARGETS
             | GUIDE_COMPILATION_DRAFT_TARGETS
+            | NEUTRAL_GUIDE_RUNTIME_TARGETS
             | OBSERVABILITY_FOUNDATION_TARGETS
         | ARCH_04E1A_SOURCE_TARGETS
         | ARCH_04D2_AUTHORITY_TARGETS

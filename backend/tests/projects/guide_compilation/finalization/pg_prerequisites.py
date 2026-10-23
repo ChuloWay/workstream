@@ -1,7 +1,5 @@
 """Real compiled/projected parents; finalization authority stays a strict test port."""
 
-from tests.projects.guide_compilation.helpers import runtime_configuration
-
 from app.modules.authorization.api import ProjectGuideCompilationRequestOrigin
 from dataclasses import asdict
 from datetime import UTC, datetime
@@ -102,7 +100,7 @@ async def request_compilation(factory, values, compilation_context, predecessor_
             actor=actor,
             facts=facts,
             identity=attempt_identity,
-            runtime_configuration=runtime_configuration(),
+            runtime_configuration=compilation_context.runtime_configuration,
         )
 
 
@@ -153,6 +151,7 @@ async def compilation_and_projections(
         ProjectGuideCompilationExecutionCommand, ProjectGuideCompilationExecutionClassification,
     )
     runtime = _Runtime(outcome)
+    runtime.identity = compilation_context.runtime_configuration.adapter_identity
     receipt = await _port(
         factory,
         runtime,

@@ -24,9 +24,12 @@ from app.modules.projects.post_policy.delivery import PostPolicyServiceAuthority
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from app.modules.projects.api.guide_documents import (
     GuideDocumentManifestPort,
+    GuideDocumentToolsFactory,
     GuideDocumentAccessFactory,
+    GuideRuntimeResourceCleanupAdapter,
 )
 from app.interfaces.project_agents import ProjectGuideAgentRuntime
+from app.interfaces.external_services import ExternalServiceAdapterFactory
 from app.interfaces.project_guide_runtime import ProjectGuideRuntimeConfiguration
 from app.modules.checkers.api.external import ExternalCheckerCapabilityProjection
 from app.modules.authorization.api import (
@@ -70,7 +73,7 @@ def project_guide_compilation_delivery_port(
     session_factory: async_sessionmaker[AsyncSession],
     *,
     material_factory: Callable[[AsyncSession], GuideDocumentManifestPort],
-    document_access_factory: GuideDocumentAccessFactory,
+    document_tools_factory: GuideDocumentToolsFactory,
     checker_capabilities: ExternalCheckerCapabilityProjection,
     request_authority: RequestAuthority,
     execution_authority: GuideCompilationAuthorizationContext,
@@ -99,7 +102,7 @@ def project_guide_compilation_delivery_port(
             checker_capabilities=checker_capabilities,
             authorization_context=execution_authority,
             runtime_factory=runtime_factory,
-            document_access_factory=document_access_factory,
+            document_tools_factory=document_tools_factory,
         ),
         projections=GuideCompilationProjectionService(
             session_factory,
@@ -111,36 +114,67 @@ def project_guide_compilation_delivery_port(
     )
 
 
-async def cleanup_project_guide_runtime_resources(session_factory, *, runtime_factory):
-    """Compose exact retained cleanup scopes without source grants or inference admission."""
+async def cleanup_project_guide_runtime_resources(
+    session_factory,
+    *,
+    retained_runtime_key,
+    cleanup_adapter_factory: ExternalServiceAdapterFactory[
+        GuideRuntimeResourceCleanupAdapter
+    ],
+):
+    """Select a cleanup-only adapter from each immutable retained runtime identity."""
     from app.modules.projects.guide_compilation.runtime_resources import (
         SqlAlchemyGuideRuntimeCleanupCustody,
         pending_runtime_resource_cleanup,
     )
 
     async with session_factory() as session:
-        candidates = await pending_runtime_resource_cleanup(session)
+        candidates = await pending_runtime_resource_cleanup(
+            session, retained_runtime_key=retained_runtime_key
+        )
     completed = 0
-    for attempt_id, manifest_sha256, configuration in candidates:
-        runtime = None
+    for candidate in candidates:
         try:
-            runtime = runtime_factory(configuration)
-            if runtime.identity != configuration.adapter_identity:
-                raise ValueError("cleanup runtime identity mismatch")
+            cleanup_adapter = cleanup_adapter_factory.create(candidate.runtime_key)
             custody = SqlAlchemyGuideRuntimeCleanupCustody(
                 session_factory,
-                attempt_id,
-                manifest_sha256,
-                configuration.runtime_key,
+                candidate.attempt_id,
+                candidate.manifest_sha256,
+                candidate.runtime_key,
             )
-            completed += bool(await runtime.cleanup_resources(custody))
+            completed += bool(await cleanup_adapter.cleanup(custody))
         except Exception:
             # Keep exact-ID custody for the next bounded scan; never re-enter inference.
             continue
-        finally:
-            if runtime is not None:
-                await runtime.aclose()
     return {"selected": len(candidates), "completed": completed}
+
+
+def project_guide_document_tools_factory(
+    session_factory,
+    *,
+    document_access_factory: GuideDocumentAccessFactory,
+    parser_factory,
+) -> GuideDocumentToolsFactory:
+    """Compose ART, parser and PROJECTS custody behind the sole runtime tool port."""
+    from app.adapters.projects.guide_document_tools import (
+        trusted_guide_document_tools_factory,
+    )
+    from app.modules.projects.guide_compilation.runtime_resources import (
+        SqlAlchemyGuideDocumentAccessCustody,
+    )
+
+    return trusted_guide_document_tools_factory(
+        grant_factory=document_access_factory,
+        parser_factory=parser_factory,
+        custody_factory=lambda attempt_id, manifest, configuration: (
+            SqlAlchemyGuideDocumentAccessCustody(
+                session_factory,
+                attempt_id,
+                manifest,
+                configuration.runtime_key,
+            )
+        ),
+    )
 
 
 def project_guide_document_scope_port(session: AsyncSession) -> ProjectGuideDocumentScopePort:

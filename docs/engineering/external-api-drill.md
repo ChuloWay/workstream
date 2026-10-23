@@ -341,10 +341,19 @@ Prior execution results remain bound to their earlier target.
 `backend/scripts/guide_document_api_drill.py` reuses the same HTTP/token/report
 runner for the now-public upload and setup diagnostic routes. It uses two genuine,
 shareable PDFs, an isolated runner-owned PostgreSQL database and MinIO bucket,
-and a separately owned loopback Redis broker and actual Celery worker. It does
-not seed product rows or substitute a model/provider implementation. The private
-provider configuration contributes only `OPENAI_API_KEY` and project-agent
-settings, never another worktree's database, authority or storage configuration.
+and a separately owned loopback Redis broker and actual Celery worker. The
+canonical fixed guide-document parser must already be running as a separate,
+networkless service with its own UID and socket custody. The drill passes its
+canonical socket setting only to its preflight client and Celery worker environment;
+the API subprocess does not receive that setting. The drill does not start a
+parser inside the Celery worker or give the parser provider credentials, database
+access, or an artifact-store mount.
+The Celery worker transmits only the bounded document bytes required by the parser
+protocol. The drill does not seed product rows or substitute a parser or
+model/provider implementation.
+The private provider configuration contributes only the explicitly selected
+provider key and project-agent settings, never another worktree's database,
+authority, storage, or parser configuration.
 Install the repository-declared runtime extra first (`uv sync --frozen --extra
 agents --extra dev` from `backend/`) and verify `import agents, openai` succeeds
 in the interpreter used for both the drill and its Celery worker. A missing SDK can
@@ -356,6 +365,9 @@ Supply these environment variables to the isolated runner:
 - `WORKSTREAM_DRILL_GUIDE_PDFS`: JSON array of two local PDF paths, each at most 10 MiB.
 - `WORKSTREAM_DRILL_BROKER_URL`: disposable loopback Redis broker, not another Celery worker's queue.
 - `WORKSTREAM_DRILL_SCRATCH_ROOT`: unique private processing directory.
+- `WORKSTREAM_DRILL_GUIDE_PARSER_SOCKET`: absolute path to the already-running
+  isolated parser socket. The canonical deployed path is
+  `/var/lib/workstream/guide-runtime/guide.sock`.
 - `WORKSTREAM_TEST_MINIO_ENDPOINT`: local MinIO endpoint supported by the isolated runner.
 
 Invoke the guide entry point using the same `--isolation-metadata` and `--report`
@@ -363,16 +375,28 @@ arguments and `--timeout-seconds 2400` on the isolated runner to cover its
 1800-second setup observation window plus startup and cleanup. Use a Python
 environment with the repository's agent dependencies.
 Real model execution can incur provider usage; it requires explicit approval.
-The operator owns broker teardown. The runner verifies database/bucket cleanup;
-the entry point stops its API and Celery worker even when a scenario fails.
+The operator owns parser startup and shutdown as well as broker teardown. The
+runner verifies database/bucket cleanup; the entry point stops its API and
+Celery worker even when a scenario fails.
 
 This pass checks partial-upload waiting, exact commitments, replay, ungranted and
 wrong-media denials, independently rereads stored original bytes, and observes
-the real Celery worker through public setup diagnostics. A model finding that a guide
+the real Celery worker through public setup diagnostics. Before it reads either
+private PDF, creates a project or guide, starts the Celery worker, or permits model
+inference, it sends a fixed synthetic Markdown parse through the canonical client.
+An absent socket, wrong socket custody, malformed protocol response, or wrong
+fixed-parser identity fails the drill without exposing the synthetic text in the
+report. A model finding that a guide
 is insufficient is a product outcome, not automatically an API defect. Finishing
 setup does not certify manager approval, active project policy, submission or
 acceptance. New upload/setup/findings operations are outside the original
 29-operation census and must be reported separately with their actual evidence.
+
+The diagnostic Celery worker consumes only the default `celery` queue with the
+validated prefork, Redis visibility and no-prefetch topology required for inference.
+It does not consume `workstream.outbox`; that queue has its own prefork validation
+owned by the outbox topology. This pass therefore does not claim outbox delivery
+evidence and must not add the outbox queue to that Celery worker.
 
 The provider's unresolved outcome can describe an invocation still in flight:
 observe the same setup run through completion or the bounded timeout, without

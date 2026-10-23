@@ -173,6 +173,7 @@ func Run(args []string, stdout, stderr io.Writer, getenv environment, version st
 	addCheckerOperations(operations, client, &output, stdout)
 	addPostSubmitDeliveryOperations(operations, client, &output, stdout)
 	addOperatorTasks(operations, client, &output, stdout)
+	addArtifactOperator(operations, client, &output, stdout)
 	root.AddCommand(operations)
 	addContributorTasks(root, client, &output, stdout)
 	addContributorReads(root, client, &output, stdout)

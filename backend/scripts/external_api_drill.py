@@ -54,7 +54,9 @@ def guide_expectations(payload, project_id, manager_id):
     values = {"project_id": project_id, "version": payload["version"], "status": "draft",
               "change_summary": payload.get("change_summary"), "task_examples": examples,
               "task_examples_hash": digest, "approved_by": None, "effective_at": None,
-              "superseded_at": None, "created_by": manager_id}
+              "superseded_at": None, "created_by": manager_id,
+              "activation_operation_id": None, "contribution_policy_id": None,
+              "contribution_policy_version_id": None}
     def documents_match(documents):
         if not isinstance(documents, list) or len(documents) != len(payload["documents"]):
             return False

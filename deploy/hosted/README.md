@@ -1,8 +1,9 @@
 # Hosted Release Configuration
 
 This directory contains the first bounded release composition for the Workstream
-API, durable Celery worker, Beat scheduler and existing Rust external-checker
-service. It targets one dedicated Linux runner host with Docker and gVisor
+API, durable Celery worker, Beat scheduler, fixed guide-document parser and
+existing Rust external-checker service. It targets one dedicated Linux runner
+host with Docker and gVisor
 `runsc`. PostgreSQL, Redis, AWS S3, Flow identity and the optional OTLP collector
 are external services managed by the approved environment.
 
@@ -32,6 +33,24 @@ controller container's mount namespace, resolves checker bind sources:
 
 Do not replace either path with a named volume or another in-container path.
 
+Guide parsing uses a separate private Unix socket at
+`/var/lib/workstream/guide-runtime/guide.sock`. The parser uses the immutable
+backend image without network or secrets. Its bootstrap starts as root with only
+`KILL`, `SETGID` and `SETUID`, then drops the broker to UID 10002 and GID 10001
+before binding the socket. The broker retains those three capabilities only to
+isolate and terminate parser children. Each of its two concurrent children uses
+a distinct fixed identity (10003 or 10004), no supplementary groups and no
+capabilities. The broker and children verify their process protections before
+processing documents; startup fails if the required identity boundary is absent.
+The broker owns the socket directory and socket. Only the guide worker mounts that directory as
+a read-only client. API, Beat, proof jobs and the checker controller do not
+receive it. The parser process validates directory and socket ownership before
+binding. The health check drops to client UID/GID 10001 with no capabilities before
+performing a framed protocol round trip against the fixed parser build identity.
+Keep the configured capability allowlist, no-new-privileges, read-only root,
+network isolation and process limits together; do not replace this profile with
+a privileged container.
+
 ## Prepare source images
 
 Builds are separate from release execution. Build the reviewed source, publish
@@ -40,14 +59,23 @@ the resulting `repository@sha256:...` identity in the release environment.
 Compose never builds and rejects tags.
 
 ```sh
-docker build --file docker/backend/Dockerfile.release \
-  --tag registry.example/workstream/backend:<source-commit> .
+docker build --build-arg WORKSTREAM_PROJECT_AGENT_SDK_ENVIRONMENT=agents \
+  --file docker/backend/Dockerfile.release \
+  --tag registry.example/workstream/backend-agents:<source-commit> .
+docker build --build-arg WORKSTREAM_PROJECT_AGENT_SDK_ENVIRONMENT=omnicore \
+  --file docker/backend/Dockerfile.release \
+  --tag registry.example/workstream/backend-omnicore:<source-commit> .
 docker build --file docker/checker/Dockerfile.release \
   --tag registry.example/workstream/checker-service:<source-commit> .
 ```
 
-Both Dockerfiles pin their base images. The backend build installs the committed
-Python resolution with the agent runtime and without the development extra. It
+Both Dockerfiles pin their base images. Each backend build requires one exact SDK
+environment and installs only its committed `agents` or `omnicore` resolution,
+without the development extra. The image records that choice in a root-owned
+read-only marker; startup rejects a configured inference runtime that does not
+match it before reading the provider credential. `manager_authored` is accepted
+in either image with the exact `none/none/none` model tuple and reads no provider
+credential. The backend image
 also installs the official Roles Anywhere helper 1.8.5 at its fixed path, with
 architecture-specific hashes checked during the build and image proof. The
 checker-service build compiles the committed Rust lock and copies the pinned
@@ -66,7 +94,8 @@ closure and default image commands. Bounded networkless containers verify the
 Docker CLI and the checker's expected missing-configuration failure; they do not
 start Workstream or run a project checker. Its fixed JSON artifact records source
 identity and local image IDs, not publishable repository digests. Full hosted
-operation remains separate evidence. An unconditional workflow cleanup verifies
+operation remains separate evidence. The proof builds and inspects both SDK
+closures and rejects either SDK appearing in the other image. An unconditional workflow cleanup verifies
 that no smoke container owned by that run remains after inspection or timeout.
 
 ## Prepare the host
@@ -75,12 +104,15 @@ Install and configure Docker and gVisor using the approved host process. Confirm
 that Docker reports a `runsc` runtime. Installation and daemon configuration are
 outside this repository configuration.
 
-Choose one nonzero runtime UID/GID and find the Docker socket GID. Create the
-fixed private directories with that runtime identity:
+The hosted profile fixes backend processes at UID/GID 10001 and the parser broker
+at UID 10002 with the shared client group 10001 after its identity bootstrap.
+Find the Docker socket GID and
+create the fixed private directories with these exact identities:
 
 ```sh
 sudo install -d -m 0700 -o 10001 -g 10001 /var/lib/workstream/scratch
 sudo install -d -m 0700 -o 10001 -g 10001 /var/lib/workstream/checker-runtime
+sudo install -d -m 0750 -o 10002 -g 10001 /var/lib/workstream/guide-runtime
 stat -c '%g' /var/run/docker.sock
 ```
 
@@ -101,15 +133,48 @@ not secret values. Select real Flow issuer, audience, JWKS and algorithm values.
 The release profile uses `WORKSTREAM_AUTH_PROVIDER=flow`; local Flow-HMAC and
 development authentication are absent.
 
-Create each secret as a one-value regular file at the configured path. Make it
+Create each secret selected by the configured runtime as a one-value regular file at the configured path. Make it
 owned by the runtime UID/GID with mode `0400`. The explicit role loader gives the
 API only the database, broker, rate-limit and pagination secrets; the worker
-gets the database, broker and OpenAI secrets because it hosts setup jobs; Beat
+gets the database and broker. Inference runtimes additionally select and mount
+one project-agent provider credential because the worker hosts setup jobs;
+`manager_authored` must omit that selector, mount and secret definition. Beat
 gets the database and broker secrets because its startup guard verifies the
 current artifact-provider activation before scheduling jobs. An absent required selector or unknown role stops
 startup, and an unrelated secret is neither mounted nor loaded. The loader
 independently requires the running identity and mode `0400`, performs no shell
 evaluation and never prints a value. Do not put AWS static keys in these files.
+The provider selector is trusted release configuration. For `openrouter`, the
+entrypoint loads the worker-only file as `OPENROUTER_API_KEY`; for `openai`, it
+loads the same selector as `OPENAI_API_KEY`. It clears both native variables
+before selecting one and never exports a neutral key variable. The endpoint is
+fixed by the registered adapter and cannot be supplied in the release file.
+The parser receives no database, broker, S3, Flow, model or provider credential.
+The release file also fixes the runtime, provider, model, model API, adapter
+options and whole-run/document/tool budgets. Those non-secret values are shared
+by API, worker, Beat and proof roles so every Settings snapshot describes the
+same release. The parser receives only its fixed socket selector. The example
+selects `openai_agents_sdk` through OpenRouter with
+`openai/gpt-5.6-terra`; changing a trusted selector requires another reviewed
+release and never changes retained attempt evidence.
+To select `omnicore_agent`, publish and choose the `omnicore` image digest and
+retain OpenRouter with `chat_completions`; ordinary model identity remains a
+reviewed release choice. OpenRouter models with a colon routing suffix and
+`openrouter/*` router identities are rejected.
+
+Before either OpenRouter-backed runtime receives real guide material, the
+operator must retain evidence for the exact account, organization or workspace
+and credential scope showing that account plugins cannot override the request.
+The evidence must cover the plugin catalogue, defaults, overrides, and especially
+alignment; name the verifier and approver. Revalidate it after the selected
+account, account ownership, organization, workspace, credential scope, plugin
+catalogue or defaults, override policy, provider policy, selected model or runtime
+changes. Request-level plugin-disable fields are defense in depth and do not prove
+the external account state.
+This provider credential is not reused for retained OpenAI resource cleanup.
+The exact-ID historical cleanup reader has no hosted credential selector in
+this slice and therefore fails closed until a separately reviewed retained-data
+credential is supplied.
 This external-host profile selects Roles Anywhere and mounts the runtime leaf
 certificate/key read-only into API and worker. Beat keeps only its database and
 broker secrets: its startup guard validates the stored provider activation and
@@ -221,7 +286,8 @@ python3 deploy/hosted/compose.py --env-file /etc/workstream/release.env \
 python3 deploy/hosted/compose.py --env-file /etc/workstream/release.env ps
 ```
 
-The API applies forward migrations before serving. Worker startup uses the
+The API applies forward migrations before serving. The guide parser must pass
+its protocol health check before the worker starts. Worker startup uses the
 existing prefork lifecycle. Beat runs the existing recovery and cleanup
 schedules. The checker health check requires its private socket and Docker's
 registered runsc runtime. It does not attest cache identity; full preflight
@@ -249,18 +315,18 @@ outage does not change product results. Configuration alone is not that proof.
 
 ## Drain, restart and upgrade
 
-Stop Beat first to prevent new periodic publication, stop the API to stop new
-requests, then give the prefork worker its configured 3700-second graceful
-window. Celery task hard limits and durable database/outbox custody remain owned
-by the application.
+The wrapper's `stop` operation stops Beat and API first so they cannot produce
+new work, gives the prefork worker its configured 7,320-second graceful window,
+then stops the parser and checker controller. Keeping both socket services alive
+while the worker drains lets cancellation and terminal persistence finish against
+their original dependencies. Guide inference has a 7,260-second process backstop;
+the shared Redis transport uses a 7,380-second visibility timeout with prefetch
+disabled. The persisted guide-attempt deadline remains the ordinary, shorter
+execution bound. Celery task hard limits and durable database/outbox custody
+remain owned by the application.
 
 ```sh
-python3 deploy/hosted/compose.py --env-file /etc/workstream/release.env \
-  stop beat api
-python3 deploy/hosted/compose.py --env-file /etc/workstream/release.env \
-  stop --timeout 3700 worker
-python3 deploy/hosted/compose.py --env-file /etc/workstream/release.env \
-  stop checker-service
+python3 deploy/hosted/compose.py --env-file /etc/workstream/release.env stop
 ```
 
 For a restart or upgrade, preserve scratch until cleanup/recovery has classified
@@ -268,6 +334,18 @@ all retained work, update only reviewed digest identities/configuration, rerun
 full preflight, pull, and start with `up --detach --wait`. Exercise an interrupted
 job and verify the existing exact retry/reconciliation operations rather than
 editing rows or replaying unknown work blindly.
+
+Before upgrading through `0059_neutral_guide_runtime`, inspect retained guide
+attempts using the currently deployed release's supported diagnostics and
+recovery operations. The migration refuses an inferred attempt without
+`adapter_profile` in `compilation_reserved` or `provider_result_accepted`, with
+`old inferred guide attempt requires removed runtime recovery before upgrade`.
+Finish supported recovery under the existing image and its compatible schema
+before retrying the upgrade. API startup applies migrations, so this refusal also
+prevents the new API from starting. If recovery cannot complete, keep the upgrade
+blocked; do not edit the attempt, delete evidence, or redispatch uncertain work
+under the new runtime. The new image preserves retained evidence and exact-ID
+cleanup, not the removed inference implementation.
 
 Database migrations are forward-only. Never downgrade a protected migration or
 delete immutable rows/objects to force a code rollback. An older application

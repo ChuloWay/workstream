@@ -307,13 +307,15 @@ project rules using the canonical CHECKERS compiler. Post-submit policy is a
 separate deterministic projection of the same unified result; no contributor-work
 evaluator runs during setup or approval.
 
-Inference drafts a private structured candidate, then checks coverage against the original documents
-in a fresh model context before returning its corrected proposal. Review can
-correct draft constraint mistakes; only its final output can pass canonical and
-owner validation and become a retained proposal. Both phases
-share the attempt's limits; a failed review cannot publish the unchecked draft.
-This improves the handoff but does not replace the PM's review of source coverage
-and the proposed checks' observable evidence.
+Inference drafts a private structured candidate, then checks coverage against the
+originals in a fresh model context. Every draft, review and correction must pass
+strict schema, canonical, owner-context and source validation. Every phase must
+initially read every assigned original, including for blocked proposals; searches
+alone do not establish that observation. At most two known-invalid-output
+corrections share the original attempt limits. Only the validated final review
+can become a retained proposal; failed review never publishes the private draft.
+This does not replace the PM's review of source coverage and the proposed checks'
+observable evidence.
 
 For every newly compiled requirement, review `classification_rationale`. A
 supported PRE/POST requirement or capability gap also has one typed
@@ -392,8 +394,9 @@ The rules can come from a person, a deterministic generator or any AI tool
 outside Workstream. Workstream treats them exactly like model output.
 The rules document is an ordinary guide original, so every reader of the
 locked guide, including contributors, can open it; keep internal notes out of
-it. The hosted release configuration still requires its OpenAI key file
-regardless of the selected runtime.
+it. The hosted release guide describes the provider-key file requirement;
+manager-authored compilation itself makes no inference call. All document reads
+use the same isolated parser and exact source-access custody.
 
 The runtime identifies the rules document by content, because guide manifests
 carry no source filenames and JSON is not an admitted guide media type:
@@ -410,7 +413,8 @@ carry no source filenames and JSON is not an admitted guide media type:
 Besides `format`, the object has exactly the result fields `status`,
 `findings`, `submission_artifact_policy`, `requirements`,
 `pre_submit_bindings`, `post_submit_bindings`, `capability_suggestions` and
-`setup_notes`, with the same meaning and limits as the model result. The
+`setup_notes` in this explicit manager-authored format. Inferred setup output has
+no notes field and cannot classify human-review or project-management requirements. The
 runtime adds `agent_name`, `agent_version` and `schema_version`. Each evidence
 reference names a document by `"document"`: either its `sha256:` digest or its
 manifest filename (`<source_item_id>.<extension>`), plus optional `start_page`,

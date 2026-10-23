@@ -33,6 +33,7 @@ ENV PATH="/opt/venv/bin:$PATH" \
 
 ARG WORKSTREAM_RUNTIME_UID=10001
 ARG WORKSTREAM_RUNTIME_GID=10001
+ARG WORKSTREAM_PROJECT_AGENT_SDK_ENVIRONMENT
 
 RUN test "${WORKSTREAM_RUNTIME_UID}" -ne 0 \
     && test "${WORKSTREAM_RUNTIME_GID}" -ne 0 \
@@ -42,6 +43,9 @@ RUN test "${WORKSTREAM_RUNTIME_UID}" -ne 0 \
     && install -d -m 0700 -o workstream -g workstream \
         /var/lib/workstream/scratch /var/lib/workstream/checker-runtime
 
+# The fixed guide parser owns this socket directory; workers only connect.
+RUN install -d -m 0750 -o 10002 -g 10001 /var/lib/workstream/guide-runtime
+
 WORKDIR /workspace/backend
 
 COPY backend/ ./
@@ -49,7 +53,15 @@ COPY docker/backend/release-entrypoint.sh /usr/local/bin/workstream-release-entr
 COPY --from=roles-anywhere-helper /aws_signing_helper /usr/local/bin/aws_signing_helper
 
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --locked --extra agents --no-dev --no-editable \
+    case "${WORKSTREAM_PROJECT_AGENT_SDK_ENVIRONMENT}" in \
+        agents|omnicore) ;; \
+        *) echo "WORKSTREAM_PROJECT_AGENT_SDK_ENVIRONMENT must be agents or omnicore" >&2; exit 1 ;; \
+    esac \
+    && uv sync --locked --extra "${WORKSTREAM_PROJECT_AGENT_SDK_ENVIRONMENT}" --no-dev --no-editable \
+    && install -d -m 0755 /etc/workstream \
+    && printf '%s\n' "${WORKSTREAM_PROJECT_AGENT_SDK_ENVIRONMENT}" \
+        > /etc/workstream/project-agent-sdk-environment \
+    && chmod 0444 /etc/workstream/project-agent-sdk-environment \
     && rm -rf /workspace/backend/build /workspace/backend/workstream_backend.egg-info \
     && chmod 0555 /usr/local/bin/workstream-release-entrypoint \
         /usr/local/bin/aws_signing_helper \

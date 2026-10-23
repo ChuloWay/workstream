@@ -250,9 +250,7 @@ class GuideCompilationService:
             raise GuideCompilationIntegrityError("correction compilation request input mismatch")
         return facts, setup, None
 
-    async def _admit_automatic_request(
-        self, repository, actor, prepared_facts, identity, origin
-    ):
+    async def _admit_automatic_request(self, repository, actor, prepared_facts, identity, origin):
         """Resolve automatic inputs under the setup lock without losing caller selectors."""
         if self._request_inputs is None:
             raise GuideCompilationIntegrityError("automatic compilation inputs unavailable")
@@ -382,19 +380,19 @@ class GuideCompilationService:
             receipt = _dispatch_receipt(operation, attempt, dispatch_permitted=True)
         return receipt
 
-    async def release_provider_free_dispatch(
+    async def release_no_inference_dispatch(
         self,
         *,
         actor: ActorIdentityFacts,
         facts: ProjectGuideCompilationExecutePreflightFacts,
         stale_before: datetime | None = None,
     ) -> bool:
-        """Reopen a provider-free fence so delivery can retry; report whether it is open."""
+        """Reopen a no-inference fence so delivery can retry; report whether it is open."""
         self._require_fresh_session()
         async with self._session.begin():
             repository = GuideCompilationRepository(self._session)
             _operation, attempt = await self._lock_execution(repository, actor, facts)
-            attempt = await repository.release_provider_free_fence(
+            attempt = await repository.release_no_inference_fence(
                 attempt.id, stale_before=stale_before
             )
             return attempt.status == "compilation_reserved"

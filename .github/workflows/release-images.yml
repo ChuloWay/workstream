@@ -6,11 +6,17 @@ on:
     paths:
       - '.github/workflows/release-images.yml'
       - 'docker/backend/Dockerfile.release'
+      - 'docker/backend/Dockerfile.dev'
       - 'docker/backend/release-entrypoint.sh'
+      - 'docker-compose.yml'
+      - '.env.example'
       - 'docker/checker/Dockerfile.release'
       - '.dockerignore'
       - 'deploy/hosted/**'
       - 'scripts/*hosted_release*.py'
+      - 'scripts/test_local_guide_runtime.py'
+      - 'scripts/test_guide_document_api_drill.py'
+      - 'scripts/verify_guide_parser_isolation.py'
       - 'backend/**'
       - 'external_checkers/**'
 
@@ -51,7 +57,7 @@ jobs:
           uv --version
           test "$(uv --version | cut -d ' ' -f 2)" = '0.12.3'
           uv lock --project backend --check
-          uv sync --project backend --frozen --all-extras
+          uv sync --project backend --frozen --extra agents --extra dev
       - name: Require canonical AWS Settings owner and verify configuration
         timeout-minutes: 5
         shell: bash
@@ -64,7 +70,8 @@ jobs:
               tests/test_config.py::test_aws_factory_fails_with_live_proof_before_constructing_provider
           )
           backend/.venv/bin/python -m unittest -v \
-            scripts.test_hosted_release_config scripts.test_hosted_release_images
+            scripts.test_hosted_release_config scripts.test_hosted_release_images \
+            scripts.test_local_guide_runtime scripts.test_guide_document_api_drill
           test -z "$(git status --porcelain)"
       - name: Build exact release images without cache or publication
         timeout-minutes: 42
@@ -72,7 +79,11 @@ jobs:
         run: |
           set -euo pipefail
           timeout --kill-after=30s 1200s docker build --no-cache --pull \
-            --file docker/backend/Dockerfile.release --tag workstream-backend-proof .
+            --build-arg WORKSTREAM_PROJECT_AGENT_SDK_ENVIRONMENT=agents \
+            --file docker/backend/Dockerfile.release --tag workstream-backend-agents-proof .
+          timeout --kill-after=30s 1200s docker build --no-cache --pull \
+            --build-arg WORKSTREAM_PROJECT_AGENT_SDK_ENVIRONMENT=omnicore \
+            --file docker/backend/Dockerfile.release --tag workstream-backend-omnicore-proof .
           timeout --kill-after=30s 1200s docker build --no-cache --pull \
             --file docker/checker/Dockerfile.release --tag workstream-checker-proof .
       - name: Inspect bounded networkless images and write fixed evidence
@@ -84,21 +95,45 @@ jobs:
             scripts/verify_hosted_release_images.py \
             --expected-head "$SOURCE_SHA" \
             --container-owner "$PROOF_OWNER" \
-            --backend-image workstream-backend-proof \
+            --backend-agents-image workstream-backend-agents-proof \
+            --backend-omnicore-image workstream-backend-omnicore-proof \
             --checker-image workstream-checker-proof \
             --evidence "$RUNNER_TEMP/release-image-evidence.json"
+      - name: Prove guide parser child isolation in the exact release image
+        timeout-minutes: 8
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          test -z "$(git status --porcelain)"
+          timeout --kill-after=30s 420s backend/.venv/bin/python \
+            scripts/verify_guide_parser_isolation.py \
+            --expected-head "$SOURCE_SHA" \
+            --backend-image workstream-backend-agents-proof \
+            --container-owner "$PROOF_OWNER" \
+            --evidence "$RUNNER_TEMP/guide-parser-isolation-evidence.json"
       - name: Remove only this run's smoke containers and prove absence
-        timeout-minutes: 2
+        timeout-minutes: 4
         if: always()
         shell: bash
         run: |
           set -euo pipefail
+          parser_cleanup_status=0
           timeout --kill-after=10s 90s python \
-            scripts/verify_hosted_release_images.py --cleanup-owner "$PROOF_OWNER"
+            scripts/verify_guide_parser_isolation.py --cleanup-owner "$PROOF_OWNER" \
+            || parser_cleanup_status=$?
+          image_cleanup_status=0
+          timeout --kill-after=10s 90s python \
+            scripts/verify_hosted_release_images.py --cleanup-owner "$PROOF_OWNER" \
+            || image_cleanup_status=$?
+          test "$parser_cleanup_status" -eq 0
+          test "$image_cleanup_status" -eq 0
       - timeout-minutes: 2
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: release-image-evidence-${{ github.event.pull_request.head.sha }}
-          path: ${{ runner.temp }}/release-image-evidence.json
+          path: |
+            ${{ runner.temp }}/release-image-evidence.json
+            ${{ runner.temp }}/guide-parser-isolation-evidence.json
           if-no-files-found: error
           retention-days: 7

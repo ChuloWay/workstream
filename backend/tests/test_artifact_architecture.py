@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+from collections import Counter
 from importlib.util import resolve_name
 from pathlib import Path
 
@@ -21,12 +22,8 @@ SUBMISSION_PREPARATION_API = (
     APP_ROOT / "modules" / "artifacts" / "api" / "submission_preparation.py"
 )
 SUBMISSION_ADMISSION_API = APP_ROOT / "modules" / "artifacts" / "api" / "submission_admission.py"
-CHECKER_OUTPUT_CUSTODY_API = (
-    APP_ROOT / "modules" / "checkers" / "api" / "output_custody.py"
-)
-CHECKER_MATERIALIZATION_API = (
-    APP_ROOT / "modules" / "checkers" / "api" / "materialization.py"
-)
+CHECKER_OUTPUT_CUSTODY_API = APP_ROOT / "modules" / "checkers" / "api" / "output_custody.py"
+CHECKER_MATERIALIZATION_API = APP_ROOT / "modules" / "checkers" / "api" / "materialization.py"
 CHECKER_MATERIAL_API = APP_ROOT / "modules" / "checkers" / "api" / "material.py"
 RETIRED_ARTIFACT_MATERIALIZATION_API = (
     APP_ROOT / "modules" / "artifacts" / "api" / "submission_materialization.py"
@@ -35,8 +32,18 @@ COMPOSITION_ROOT = APP_ROOT / "adapters" / "artifacts" / "__init__.py"
 CHECKER_COMPOSITION_ROOT = APP_ROOT / "adapters" / "checkers" / "__init__.py"
 MODEL_RUNTIME_COMPOSITION = APP_ROOT / "adapters" / "checkers" / "model_runtime.py"
 AGENT_COMPOSITION_ROOT = APP_ROOT / "adapters/project_agents/__init__.py"
+GUIDE_PARSER_COMPOSITION_ROOT = APP_ROOT / "adapters/guide_document_tools/__init__.py"
 OBSERVABILITY_COMPOSITION_ROOT = APP_ROOT / "adapters" / "observability.py"
-AGENT_ADAPTER_MODULE = "app.adapters.project_agents.openai_agent_sdk"
+AGENT_ADAPTER_MODULES = {
+    "app.adapters.project_agents.manager_authored",
+    "app.adapters.project_agents.omnicore_agent",
+    "app.adapters.project_agents.openai_agent_sdk",
+}
+AGENT_RUNTIME_CONSTRUCTORS = {
+    "ManagerAuthoredProjectGuideRuntime",
+    "OmniCoreAgentProjectGuideRuntime",
+    "OpenAIAgentSdkProjectGuideRuntime",
+}
 S3_ADAPTER_MODULE = APP_ROOT / "adapters" / "artifacts" / "s3_compatible.py"
 AWS_LIVE_PROOF_MODULE = APP_ROOT / "adapters" / "artifacts" / "aws_live_proof.py"
 CLOSED_PORTS = {
@@ -168,19 +175,29 @@ def test_only_canonical_admission_backed_contributor_intake_routes_are_composed(
     # Contributors read their own preparations back and Project Managers list a
     # project's; only the task POST prepares.
     assert {path for path in paths if "submission-bundle" in path} == {
-        preparation_path, f"{preparation_path}/{{preparation_id}}", project_preparations,
+        preparation_path,
+        f"{preparation_path}/{{preparation_id}}",
+        project_preparations,
     }
     assert set(paths[project_preparations]) - {"parameters"} == {"get"}
-    assert {method for path, operations in paths.items() if "submission-bundle" in path
-            for method in operations if method != "parameters"} == {"post", "get"}
+    assert {
+        method
+        for path, operations in paths.items()
+        if "submission-bundle" in path
+        for method in operations
+        if method != "parameters"
+    } == {"post", "get"}
     assert "post" not in paths[f"{preparation_path}/{{preparation_id}}"]
     preparation = paths[preparation_path]["post"]
     assert preparation["security"]
     assert preparation["x-workstream-action-id"] == "artifact.submission_bundle.prepare"
 
     creation_path = "/api/v1/tasks/{task_id}/submissions"
-    assert {path for path, operations in paths.items()
-            if path.endswith("/submissions") and "post" in operations} == {creation_path}
+    assert {
+        path
+        for path, operations in paths.items()
+        if path.endswith("/submissions") and "post" in operations
+    } == {creation_path}
     creation = paths[creation_path]["post"]
     assert creation["security"]
     assert creation["x-workstream-action-id"] == "submission.create"
@@ -339,7 +356,7 @@ def _assert_concrete_adapter_composition(
     for path, imports, calls in inventory:
         if imports & CONCRETE_ADAPTER_MODULES:
             concrete_imports.append(path)
-        if AGENT_ADAPTER_MODULE in imports:
+        if imports & AGENT_ADAPTER_MODULES:
             agent_imports.append(path)
         if imports & CONCRETE_OBSERVABILITY_MODULES:
             observability_imports.append(path)
@@ -355,19 +372,20 @@ def _assert_concrete_adapter_composition(
                 "OpenAIResponsesCheckerModelProvider",
             }
         )
-        agent_calls.extend(path for name in calls if name == "OpenAIAgentSdkProjectGuideRuntime")
+        agent_calls.extend(path for name in calls if name in AGENT_RUNTIME_CONSTRUCTORS)
         observability_calls.extend(
             path
             for name in calls
             if name in {"OTLPMetricExporter", "OTLPSpanExporter", "PeriodicExportingMetricReader"}
         )
-    assert set(factory_calls) == {
-        COMPOSITION_ROOT,
-        CHECKER_COMPOSITION_ROOT,
-        AGENT_COMPOSITION_ROOT,
-        OBSERVABILITY_COMPOSITION_ROOT,
+    assert Counter(factory_calls) == {
+        COMPOSITION_ROOT: 1,
+        CHECKER_COMPOSITION_ROOT: 1,
+        # Inference and retained-resource cleanup are distinct typed capabilities.
+        AGENT_COMPOSITION_ROOT: 2,
+        OBSERVABILITY_COMPOSITION_ROOT: 1,
+        GUIDE_PARSER_COMPOSITION_ROOT: 1,
     }
-    assert len(factory_calls) == 5
     assert adapter_calls == [
         COMPOSITION_ROOT, S3_ADAPTER_MODULE, CHECKER_COMPOSITION_ROOT, CHECKER_COMPOSITION_ROOT,
     ]
@@ -378,30 +396,46 @@ def _assert_concrete_adapter_composition(
         MODEL_RUNTIME_COMPOSITION,
     }
     assert agent_imports == [AGENT_COMPOSITION_ROOT]
-    assert agent_calls == [AGENT_COMPOSITION_ROOT]
+    # Constructors are values in the one explicit registration map, invoked only
+    # by the typed factory. Any additional direct construction is forbidden.
+    assert agent_calls == []
     assert observability_imports == [OBSERVABILITY_COMPOSITION_ROOT]
     assert observability_calls == [OBSERVABILITY_COMPOSITION_ROOT] * 3
 
 
-def test_concrete_adapter_construction_has_one_composition_path(adapter_composition_inventory) -> None:
+def test_concrete_adapter_construction_has_one_composition_path(
+    adapter_composition_inventory,
+) -> None:
     _assert_concrete_adapter_composition(adapter_composition_inventory)
 
 
-@pytest.mark.parametrize("source", [
-    "from app.interfaces.external_services import ExternalServiceAdapterFactory as factory\nfactory[object]('extra')\n",
-    "from app.interfaces.external_services import ExternalServiceAdapterFactory\nfactory: object = ExternalServiceAdapterFactory\nfactory[object]('extra')\n",
-    "import app.interfaces.external_services as external\nexternal.ExternalServiceAdapterFactory[object]('extra')\n",
-    "from app.adapters.project_agents.openai_agent_sdk import OpenAIAgentSdkProjectGuideRuntime as runtime\nruntime(configuration)\n",
-    "import app.adapters.project_agents.openai_agent_sdk as sdk\nsdk.OpenAIAgentSdkProjectGuideRuntime(configuration)\n",
-])
+@pytest.mark.parametrize(
+    "source",
+    [
+        "from app.interfaces.external_services import ExternalServiceAdapterFactory as factory\nfactory[object]('extra')\n",
+        "from app.interfaces.external_services import ExternalServiceAdapterFactory\nfactory: object = ExternalServiceAdapterFactory\nfactory[object]('extra')\n",
+        "import app.interfaces.external_services as external\nexternal.ExternalServiceAdapterFactory[object]('extra')\n",
+        "from app.adapters.project_agents.openai_agent_sdk import OpenAIAgentSdkProjectGuideRuntime as runtime\nruntime(configuration)\n",
+        "import app.adapters.project_agents.openai_agent_sdk as sdk\nsdk.OpenAIAgentSdkProjectGuideRuntime(configuration)\n",
+        "from app.adapters.project_agents.omnicore_agent import OmniCoreAgentProjectGuideRuntime as runtime\nruntime(configuration)\n",
+        "import app.adapters.project_agents.omnicore_agent as sdk\nsdk.OmniCoreAgentProjectGuideRuntime(configuration)\n",
+        "from app.adapters.project_agents.manager_authored import ManagerAuthoredProjectGuideRuntime as runtime\nruntime(configuration)\n",
+        "import app.adapters.project_agents.manager_authored as sdk\nsdk.ManagerAuthoredProjectGuideRuntime(configuration)\n",
+    ],
+)
 def test_composition_proof_rejects_aliased_factories_and_concrete_runtimes(
-    tmp_path, adapter_composition_inventory, source,
+    tmp_path,
+    adapter_composition_inventory,
+    source,
 ):
     _assert_concrete_adapter_composition(adapter_composition_inventory)
     injected = tmp_path / "extra.py"
     injected.write_text(source)
     imports, calls = imported_symbols_and_calls(_tree(injected))
-    injected_inventory = (*adapter_composition_inventory, (injected, frozenset(imports), tuple(calls)))
+    injected_inventory = (
+        *adapter_composition_inventory,
+        (injected, frozenset(imports), tuple(calls)),
+    )
     with pytest.raises(AssertionError):
         _assert_concrete_adapter_composition(injected_inventory)
 
@@ -613,7 +647,10 @@ def test_artifact_ports_keep_prepared_authority_at_the_transaction_boundary() ->
             if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 continue
             assert node.args.posonlyargs == []
-            assert [argument.arg for argument in node.args.args] == ["self", "selector" if node.name == "recover" else "request"]
+            assert [argument.arg for argument in node.args.args] == [
+                "self",
+                "selector" if node.name == "recover" else "request",
+            ]
             assert node.args.kwonlyargs == []
             assert node.args.vararg is None
             assert node.args.kwarg is None
@@ -627,9 +664,7 @@ def test_artifact_ports_keep_prepared_authority_at_the_transaction_boundary() ->
 def test_checker_output_contract_has_one_canonical_consumer_owner() -> None:
     """CHECKERS owns the ports that ART implements for future durable execution."""
     tree = _tree(CHECKER_OUTPUT_CUSTODY_API)
-    classes = {
-        node.name: node for node in tree.body if isinstance(node, ast.ClassDef)
-    }
+    classes = {node.name: node for node in tree.body if isinstance(node, ast.ClassDef)}
     assert {
         "CheckerOutputArtifactRequest",
         "CheckerOutputArtifactResult",
@@ -641,9 +676,7 @@ def test_checker_output_contract_has_one_canonical_consumer_owner() -> None:
     assert "ArtifactBindingPort" not in classes
     for name in ("CheckerOutputArtifactRequest", "CheckerOutputBindingRequest"):
         annotations = _declared_annotation_names(classes[name])
-        assert {"PreparedAuthorizationHandle", "AuthorizationContext"}.isdisjoint(
-            annotations
-        )
+        assert {"PreparedAuthorizationHandle", "AuthorizationContext"}.isdisjoint(annotations)
         assert "CheckerOutputSelector" in annotations
 
     expected_methods = {
@@ -668,11 +701,11 @@ def test_checker_output_contract_has_one_canonical_consumer_owner() -> None:
 def test_checker_materialization_contract_has_one_canonical_consumer_owner() -> None:
     """The complete material callback contract resides in CHECKERS public API."""
     tree = _tree(CHECKER_MATERIALIZATION_API)
-    classes = {
-        node.name: node for node in tree.body if isinstance(node, ast.ClassDef)
-    }
+    classes = {node.name: node for node in tree.body if isinstance(node, ast.ClassDef)}
     assert set(classes) == {
-        "MaterializationFacts", "PreparedMaterialization", "MaterializationAuthorityPort",
+        "MaterializationFacts",
+        "PreparedMaterialization",
+        "MaterializationAuthorityPort",
         "PostSubmissionMaterializationUnavailable",
         "PostSubmissionMaterializationFailure",
         "ExternalCheckerGrantReference",
@@ -736,14 +769,14 @@ def _assert_checker_custody_consumers(
         "app.modules.checkers.api.materialization": {
             "app/modules/authorization/domain/post_submit.py",
             "app/modules/authorization/post_submit_authorization.py",
-                "app/adapters/artifacts/__init__.py",
-                "app/modules/artifacts/post_submit_materialization.py",
-                "app/modules/artifacts/post_submit_selection.py",
-                "app/modules/artifacts/selected_pre_submit_admission.py",
-                "app/modules/checkers/default_checker.py",
-                "app/modules/checkers/execution.py",
-                "app/modules/checkers/selected_pre_submit_execution.py",
-            },
+            "app/adapters/artifacts/__init__.py",
+            "app/modules/artifacts/post_submit_materialization.py",
+            "app/modules/artifacts/post_submit_selection.py",
+            "app/modules/artifacts/selected_pre_submit_admission.py",
+            "app/modules/checkers/default_checker.py",
+            "app/modules/checkers/execution.py",
+            "app/modules/checkers/selected_pre_submit_execution.py",
+        },
     }
     actual = {module: set() for module in expected}
     for path, modules in inventory:
@@ -756,7 +789,8 @@ def _assert_checker_custody_consumers(
         node.name: _annotation_names(node.returns)
         for node in composition.body
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
-        and node.name in {
+        and node.name
+        in {
             "post_submission_materialization",
             "checker_output_storage",
             "checker_output_binding",
@@ -779,7 +813,9 @@ def test_checker_custody_ports_have_exact_owner_and_art_consumers(
 @pytest.mark.parametrize("port", ["output_custody", "materialization"])
 @pytest.mark.parametrize("form", ["symbol", "module", "parent", "relative", "relative_parent"])
 def test_checker_custody_inventory_rejects_unregistered_import(
-    checker_custody_import_inventory, port, form,
+    checker_custody_import_inventory,
+    port,
+    form,
 ):
     """Alternate import spelling must not conceal an additional API consumer."""
     statement = {
@@ -873,23 +909,36 @@ def test_artifact_repository_does_not_own_actor_persistence() -> None:
     assert "actor_identity_links" not in path.read_text()
 
 
-
-
 def test_guide_original_runtime_keeps_provider_sdk_out_of_product_modules() -> None:
     """Product owners depend on ports; hosted inspection belongs to the SDK adapter."""
     for path in (APP_ROOT / "modules").rglob("*.py"):
         for node in ast.walk(_tree(path)):
-            modules = ([node.module] if isinstance(node, ast.ImportFrom) and node.module
-                       else [alias.name for alias in node.names] if isinstance(node, ast.Import) else [])
-            assert not any(module.split(".")[0] in {"openai", "agents", "pypdf", "PIL"} for module in modules), str(path)
+            modules = (
+                [node.module]
+                if isinstance(node, ast.ImportFrom) and node.module
+                else [alias.name for alias in node.names]
+                if isinstance(node, ast.Import)
+                else []
+            )
+            assert not any(
+                module.split(".")[0] in {"openai", "agents", "pypdf", "PIL"} for module in modules
+            ), str(path)
 
 
-def test_safe_xml_dependency_has_one_ingress_consumer() -> None:
+def test_safe_xml_dependency_is_limited_to_ingress_and_isolated_parser() -> None:
     importers = set()
     for path in APP_ROOT.rglob("*.py"):
         for node in ast.walk(_tree(path)):
-            modules = ([node.module] if isinstance(node, ast.ImportFrom) and node.module
-                       else [alias.name for alias in node.names] if isinstance(node, ast.Import) else [])
+            modules = (
+                [node.module]
+                if isinstance(node, ast.ImportFrom) and node.module
+                else [alias.name for alias in node.names]
+                if isinstance(node, ast.Import)
+                else []
+            )
             if any(module.split(".")[0] == "defusedxml" for module in modules):
                 importers.add(path.relative_to(APP_ROOT).as_posix())
-    assert importers == {"modules/artifacts/guide_formats.py"}
+    assert importers == {
+        "modules/artifacts/guide_formats.py",
+        "adapters/guide_document_tools/parsing.py",
+    }

@@ -1,0 +1,14 @@
+services:
+  worker:
+    environment:
+      WORKSTREAM_PROJECT_AGENT_API_KEY_FILE: /run/secrets/project_agent_api_key
+    secrets:
+      - source: project_agent_api_key
+        target: project_agent_api_key
+        uid: "${WORKSTREAM_RUNTIME_UID}"
+        gid: "${WORKSTREAM_RUNTIME_GID}"
+        mode: 0400
+
+secrets:
+  project_agent_api_key:
+    file: ${WORKSTREAM_PROJECT_AGENT_API_KEY_FILE:?set the private project-agent provider key file}

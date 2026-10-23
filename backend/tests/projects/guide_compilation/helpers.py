@@ -28,6 +28,7 @@ from app.modules.projects.api.guide_documents import GuideDocumentManifest, Guid
 from app.interfaces.project_agents import (
     AtomicGuideRequirement,
     CheckFailureFinding,
+    PlatformCoverageRef,
     CheckInfrastructureFailure,
     CheckInput,
     CheckNegativeTest,
@@ -93,7 +94,11 @@ def ids() -> dict[str, UUID]:
 
 def runtime_configuration():
     """Return explicit, non-secret execution settings for isolated test attempts."""
-    from app.interfaces.project_guide_runtime import ProjectGuideRuntimeConfiguration
+    from app.interfaces.project_guide_runtime import (
+        ProjectGuideRuntimeConfiguration,
+        canonical_adapter_profile,
+    )
+    from app.adapters.project_agents import build_project_guide_adapter_profile
 
     instructions = "Inspect assigned originals and propose bounded draft policies."
     return ProjectGuideRuntimeConfiguration(
@@ -101,6 +106,9 @@ def runtime_configuration():
         model_provider="openai",
         model="test-model",
         model_api="responses",
+        adapter_profile=canonical_adapter_profile(
+            build_project_guide_adapter_profile("openai_agents_sdk", {})
+        ),
         instruction_version="v1",
         instructions=instructions,
         instructions_sha256="sha256:" + hashlib.sha256(instructions.encode()).hexdigest(),
@@ -109,11 +117,18 @@ def runtime_configuration():
 
 
 def manager_runtime_configuration():
-    """Return the provider-free configuration recorded by manager-authored attempts."""
-    return runtime_configuration().model_copy(update={
-        "runtime_key": "manager_authored", "model_provider": "none",
-        "model_api": "none", "model": "none",
-    })
+    """Return the no-inference configuration recorded by manager-authored attempts."""
+    configuration = runtime_configuration()
+    return type(configuration).model_validate(
+        configuration.model_dump(mode="json")
+        | {
+            "runtime_key": "manager_authored",
+            "model_provider": "none",
+            "model_api": "none",
+            "model": "none",
+            "adapter_profile": "{}",
+        }
+    )
 
 
 def context(
@@ -242,10 +257,13 @@ def valid_specification() -> CheckSpecification:
 def generated_result() -> ProjectGuideCompilationResult:
     """Return a valid new-generation result without changing retained fixtures."""
     requirement = AtomicGuideRequirement(
-        requirement_id="review_scope",
-        statement="The guide provides background for claim review.",
-        disposition="informational",
-        classification_rationale="This material explains the review scope.",
+        requirement_id="safe_archive",
+        statement="The submitted archive must be safe to open.",
+        disposition="platform_covered",
+        platform_coverage=PlatformCoverageRef(
+            capability_id="workstream.default", capability_version="v1", stage="pre_submit",
+        ),
+        classification_rationale="The default checker enforces bounded archive safety.",
         evidence_refs=(
             GuideEvidenceRef(
                 source_item_id=SOURCE_ITEM_ID,
@@ -254,7 +272,9 @@ def generated_result() -> ProjectGuideCompilationResult:
             ),
         ),
     )
-    return result().model_copy(update={"requirements": (requirement,)})
+    body = result().model_dump(mode="json", exclude={"setup_notes"})
+    body["requirements"] = [requirement.model_dump(mode="json")]
+    return ProjectGuideCompilationResult.model_validate(body)
 
 
 def identity(

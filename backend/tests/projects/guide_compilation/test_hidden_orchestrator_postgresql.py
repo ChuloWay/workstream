@@ -43,6 +43,7 @@ from app.modules.projects.guide_compilation.orchestrator import (
     SqlAlchemyGuideCompilationExecutionBackend,
     project_guide_compilation_execution_port,
 )
+from app.modules.projects.guide_compilation import runtime_resources
 from tests.checkers.external.support import capability_projection
 
 from .helpers import (
@@ -50,10 +51,9 @@ from .helpers import (
     generated_result,
     identity,
     manager_runtime_configuration,
-    result,
     seed_database,
 )
-from .runtime_fixtures import document_access, record_scripted_document_access
+from .runtime_fixtures import document_tools, record_scripted_document_access
 from .test_authorized_request_service import _authorized_service, _request, _seed_human
 
 
@@ -78,6 +78,12 @@ class _Runtime:
             await asyncio.sleep(self.delay)
         if isinstance(self.outcome, BaseException):
             raise self.outcome
+        return self.outcome
+
+
+class _CitingRuntimeWithoutToolAccess(_Runtime):
+    async def compile_project_guide(self, _context, _capabilities):
+        self.calls += 1
         return self.outcome
 
 
@@ -115,7 +121,7 @@ def _backend(factory):
     return SqlAlchemyGuideCompilationExecutionBackend(
         factory,
         material_factory=guide_document_manifest_port,
-        document_access_factory=document_access,
+        document_tools_factory=document_tools(factory),
         checker_capabilities=capability_projection(),
         authorization_context=_fixed_service_authorization,
     )
@@ -125,7 +131,7 @@ def _port(factory, runtime, *, checker_capabilities=None):
     return project_guide_compilation_execution_port(
         factory,
         material_factory=guide_document_manifest_port,
-        document_access_factory=document_access,
+        document_tools_factory=document_tools(factory),
         checker_capabilities=checker_capabilities or capability_projection(),
         authorization_context=_fixed_service_authorization,
         runtime_factory=lambda configuration: runtime,
@@ -222,6 +228,7 @@ async def test_hidden_command_persists_one_complete_result_and_no_projections(
                         "(select count(*) from submission_artifact_policies),"
                         "(select count(*) from pre_submit_checker_policies),"
                         "(select count(*) from checker_policies),"
+                        "(select count(*) from project_guide_document_accesses),"
                         "(select count(*) from outbox_events)"
                     )
                 )
@@ -238,8 +245,61 @@ async def test_hidden_command_persists_one_complete_result_and_no_projections(
                 )
             ).one()
             await session.rollback()
-        assert counts == (1, 1, 1, 0, 0, 0, 0, 0)
+        assert counts == (1, 1, 1, 0, 0, 0, 0, 1, 0)
         assert setup == ("queued", None, None, None)
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_cited_result_without_tool_access_is_rejected_without_persistence(
+    clean_postgres_database: str,
+) -> None:
+    values = await seed_database(clean_postgres_database)
+    requested = await _authorized_attempt(clean_postgres_database, values)
+    engine = create_async_engine(clean_postgres_database)
+    factory = async_sessionmaker(engine, expire_on_commit=False)
+    runtime = _CitingRuntimeWithoutToolAccess()
+    command = ProjectGuideCompilationExecutionCommand(attempt_id=requested.attempt_id)
+    try:
+        compilation_context = context(values)
+        # Prove the service guard directly because the orchestrator deliberately
+        # collapses it and the independent SQL evidence guard to one unresolved receipt.
+        async with factory() as session:
+            with pytest.raises(
+                ValueError, match="^compilation has no document access evidence$"
+            ):
+                await runtime_resources.require_compilation_document_access(
+                    session,
+                    requested.attempt_id,
+                    compilation_context.material,
+                    runtime.outcome,
+                )
+
+        port = _port(factory, runtime)
+        receipt = await port.execute(command)
+        replay = await port.execute(command)
+
+        assert (
+            receipt.classification
+            is ProjectGuideCompilationExecutionClassification.PROVIDER_UNRESOLVED
+        )
+        assert replay == receipt
+        assert runtime.calls == 1
+        async with factory() as session:
+            row = (
+                await session.execute(
+                    text(
+                        "select status,"
+                        "(select count(*) from project_guide_compilations),"
+                        "(select count(*) from project_guide_document_accesses) "
+                        "from project_guide_compilation_attempts where id=:id"
+                    ),
+                    {"id": requested.attempt_id},
+                )
+            ).one()
+            await session.rollback()
+        assert row == ("compilation_provider_uncertain", 0, 0)
     finally:
         await engine.dispose()
 
@@ -507,7 +567,7 @@ async def test_uncertain_provider_failure_never_redispatches(
 async def test_hosted_provider_fence_cannot_be_reopened(
     clean_postgres_database: str,
 ) -> None:
-    """Only a provider-free attempt may return to reservation; hosted uncertainty is final."""
+    """Only a no-inference attempt may return to reservation; inference uncertainty is final."""
     values = await seed_database(clean_postgres_database)
     requested = await _authorized_attempt(clean_postgres_database, values)
     engine = create_async_engine(clean_postgres_database)
@@ -517,7 +577,7 @@ async def test_hosted_provider_fence_cannot_be_reopened(
         state = await backend.load(requested.attempt_id)
         assert (await backend.fence(state)).dispatch_permitted
         with pytest.raises(ProjectGuideCompilationExecutionError, match="context_unavailable"):
-            await backend.release_provider_free(state)
+            await backend.release_no_inference(state)
         async with factory() as session, session.begin():
             with pytest.raises(DBAPIError, match="provider uncertainty timestamp is immutable"):
                 await session.execute(text(
@@ -536,10 +596,10 @@ class _ManagerRuntime(_Runtime):
 
 
 @pytest.mark.asyncio
-async def test_provider_free_transient_failure_reopens_the_attempt_for_retry(
+async def test_no_inference_transient_failure_reopens_the_attempt_for_retry(
     clean_postgres_database: str,
 ) -> None:
-    """A provider-free attempt has no uncertain provider outcome, so delivery can retry it."""
+    """A no-inference attempt has no uncertain model outcome, so delivery can retry it."""
     values = await seed_database(clean_postgres_database)
     configuration = manager_runtime_configuration()
     requested = await _authorized_attempt(clean_postgres_database, values, configuration)
@@ -568,10 +628,10 @@ async def test_provider_free_transient_failure_reopens_the_attempt_for_retry(
 
 
 @pytest.mark.asyncio
-async def test_provider_free_cancellation_reopens_the_attempt(
+async def test_no_inference_cancellation_reopens_the_attempt(
     clean_postgres_database: str,
 ) -> None:
-    """Cancellation propagates, but never strands a provider-free attempt."""
+    """Cancellation propagates, but never strands a no-inference attempt."""
     values = await seed_database(clean_postgres_database)
     requested = await _authorized_attempt(
         clean_postgres_database, values, manager_runtime_configuration())
@@ -592,7 +652,7 @@ async def test_provider_free_cancellation_reopens_the_attempt(
 
 
 @pytest.mark.asyncio
-async def test_recovery_reopens_only_a_stale_provider_free_fence(
+async def test_recovery_reopens_only_a_stale_no_inference_fence(
     clean_postgres_database: str, monkeypatch,
 ) -> None:
     """A fence left by a crashed worker reopens after its run deadline, not before."""
@@ -635,10 +695,10 @@ async def test_recovery_reopens_only_a_stale_provider_free_fence(
 
 
 @pytest.mark.asyncio
-async def test_provider_free_run_ignores_the_hosted_prompt_limit(
+async def test_no_inference_run_ignores_the_model_prompt_limit(
     clean_postgres_database: str,
 ) -> None:
-    """The prompt limit bounds a hosted model request; a provider-free run sends none."""
+    """The prompt limit bounds a model request; a no-inference run sends none."""
     from app.interfaces.project_agents import project_guide_compilation_prompt_bytes
 
     configuration = manager_runtime_configuration().model_copy(
@@ -720,7 +780,7 @@ async def test_unavailable_authority_returns_only_the_safe_public_code(
         port = project_guide_compilation_execution_port(
             factory,
             material_factory=guide_document_manifest_port,
-            document_access_factory=document_access,
+            document_tools_factory=document_tools(factory),
             checker_capabilities=capability_projection(),
             authorization_context=_unavailable_service_authorization,
             runtime_factory=lambda configuration: runtime,
@@ -739,60 +799,52 @@ async def test_unavailable_authority_returns_only_the_safe_public_code(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "kind, failure_code",
+    "kind, expected_issue",
     [
-        ("malformed", "schema_invalid"),
-        ("schema", "schema_invalid"),
-        ("unsafe", "schema_invalid"),
+        ("malformed", {"path": [], "code": "invalid_json"}),
+        ("schema", {"path": ["status"], "code": "schema_enum"}),
+        (
+            "unsafe",
+            {"path": ["findings", 0, "message"], "code": "canonical_constraint"},
+        ),
     ],
 )
 async def test_sdk_parser_rejection_persists_terminal_without_reinvocation(
     clean_postgres_database,
     monkeypatch,
     kind,
-    failure_code,
+    expected_issue,
 ):
-    """Real SDK rejection persists its exact terminal class and replay makes no call."""
+    """Exhausted output corrections persist terminal failure; replay makes no call."""
     import json
     from types import SimpleNamespace
     from agents import Runner
     from app.adapters.project_agents.openai_agent_sdk import OpenAIAgentSdkProjectGuideRuntime
+    from tests.test_agent_runtime import _provider_payload
 
     from agents import _debug
 
     monkeypatch.setattr(_debug, "DONT_LOG_MODEL_DATA", True)
     monkeypatch.setenv("OPENAI_API_KEY", "unit-test-only")
-    payload = result().model_dump(mode="json")
+    payload = _provider_payload(generated_result())
     if kind == "schema":
         payload["status"] = "not-a-status"
     if kind == "unsafe":
-        payload["findings"] = [{"severity": "info", "code": "bad", "message": "token=secret123"}]
+        payload["findings"][0]["message"] = "token=secret123"
     raw = "{invalid" if kind == "malformed" else json.dumps(payload)
     calls = []
 
-    async def run(agent, *args, **kwargs):
+    async def run(agent, prompt, **kwargs):
         calls.append(1)
+        if len(calls) > 1:
+            feedback = json.loads(prompt)
+            assert feedback["phase"] == "checker_specification"
+            assert feedback["validation_errors"] == [expected_issue]
+            assert "token=secret123" not in prompt
         return SimpleNamespace(final_output=agent.output_type.validate_json(raw))
 
     monkeypatch.setattr(Runner, "run", run)
 
-    class ScriptedWorkspace:
-        container_id = "cntr_scripted"
-
-        def __init__(self, client, configuration, manifest, capabilities):
-            self.context = SimpleNamespace(material=manifest)
-            self.capabilities = capabilities
-
-        async def start(self):
-            await record_scripted_document_access(self.context, self.capabilities)
-
-        async def close(self):
-            await self.capabilities.documents.close()
-
-    monkeypatch.setattr(
-        "app.adapters.project_agents.openai_agent_sdk.OpenAIGuideWorkspace",
-        ScriptedWorkspace,
-    )
     values = await seed_database(clean_postgres_database)
     requested = await _authorized_attempt(clean_postgres_database, values)
     engine = create_async_engine(clean_postgres_database)
@@ -804,8 +856,9 @@ async def test_sdk_parser_rejection_persists_terminal_without_reinvocation(
         assert (
             first.classification is ProjectGuideCompilationExecutionClassification.INVALID_TERMINAL
         )
+        assert calls == [1, 1, 1]
         assert await port.execute(command) == first
-        assert calls == [1]
+        assert calls == [1, 1, 1]
         async with factory() as session:
             row = (
                 await session.execute(
@@ -817,6 +870,6 @@ async def test_sdk_parser_rejection_persists_terminal_without_reinvocation(
                     {"id": requested.attempt_id},
                 )
             ).one()
-        assert row == ("compilation_invalid_terminal", failure_code, None, 0)
+        assert row == ("compilation_invalid_terminal", "schema_invalid", None, 0)
     finally:
         await engine.dispose()

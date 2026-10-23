@@ -427,8 +427,10 @@ Its current `source_kind` is `document` and `ingestion_adapter` is `upload`;
 are bound by committed `GuideSourceArtifactIngest` document custody and
 `ArtifactContent`. The setup agent receives only scoped opaque handles, not S3
 keys or credentials. No URL fetching, Markdown body, or extraction continuation
-is part of this path. File access and provider allocations retain exact original
-identity under the runtime custody contracts below.
+is part of this path. Current parser-bound access receipts retain exact original
+identity under the runtime custody contracts below. Neutral inference creates no
+provider file or workspace allocations; immutable historical allocation receipts
+remain available only for their separate exact-ID cleanup obligations.
 
 A new guide version requires its own sufficiency findings, policy proposals,
 acknowledgements and approvals before activation. Prior immutable evidence is
@@ -1774,7 +1776,7 @@ or incomplete usage never permits another create. Late completion may retain
 evidence after the originating run ends; fresh current execution is still
 required to release that output to an image.
 
-Migration `0059_checker_model_runtime` extends existing ART put/receipt custody
+Migration `0060_checker_model_runtime` extends existing ART put/receipt custody
 with `model_call_attempt_id` and exact private request/response slots. Transcript
 bytes stay in ART, never these ledger rows or outbox payloads. Existing historical
 run-bound ART rows remain retained; new model evidence uses the paid attempt.
