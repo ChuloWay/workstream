@@ -963,8 +963,11 @@ def require_complete_generated_specifications(
         if specification is None:
             raise ValueError("check requirement lacks a check specification")
         if expected_stage is CompilationStage.PRE_SUBMIT:
-            if specification.evaluation_method == "model_evaluation":
-                raise ValueError("model evaluation requires post-submit background work")
+            if specification.evaluation_method == "model_evaluation" or any(
+                dependency.kind == "model_service"
+                for dependency in specification.runtime_dependencies
+            ):
+                raise ValueError("model service requires post-submit background work")
             if (
                 specification.execution_mode != "bounded_pre_submit"
                 or specification.maximum_duration_seconds > 60
