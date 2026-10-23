@@ -48,10 +48,22 @@ impl Drop for TestRoot {
 struct FakePublisher(Mutex<Vec<Value>>);
 
 impl TrialReceiptPublisher for FakePublisher {
+    fn reserve_completed(
+        &self,
+        subject: TrialEvidenceSubject,
+    ) -> Result<TrialReceiptReservation, TrialReceiptPublishFailure> {
+        assert_eq!(subject.slot_index, 0);
+        Ok(TrialReceiptReservation::Fresh {
+            trial_evidence_id: "018f6f49-66b8-7d2a-bf4d-0e2eeaa00100".into(),
+        })
+    }
+
     fn publish_completed(
         &self,
+        trial_evidence_id: &str,
         receipt: CanonicalTrialReceipt,
     ) -> Result<PublishedTrialReceipt, TrialReceiptPublishFailure> {
+        assert_eq!(trial_evidence_id, "018f6f49-66b8-7d2a-bf4d-0e2eeaa00100");
         let parsed: Value = serde_json::from_slice(&receipt.canonical_bytes).unwrap();
         assert_eq!(parsed, serde_json::to_value(&receipt.facts).unwrap());
         assert_eq!(receipt.byte_count, receipt.canonical_bytes.len());
@@ -119,6 +131,8 @@ fn identity() -> TrialRequestIdentity {
     TrialRequestIdentity {
         request_digest: digest('1'),
         material_binding_digest: digest('2'),
+        input_digest: digest('a'),
+        materials_digest: digest('b'),
         project_id: "018f6f49-66b8-7d2a-bf4d-0e2eeaa00001".into(),
         task_id: "018f6f49-66b8-7d2a-bf4d-0e2eeaa00002".into(),
         assignment_id: "018f6f49-66b8-7d2a-bf4d-0e2eeaa00003".into(),

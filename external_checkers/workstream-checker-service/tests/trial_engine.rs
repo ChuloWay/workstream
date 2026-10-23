@@ -325,6 +325,8 @@ fn context(root: &Root) -> TrialEngineContext {
         identity: TrialRequestIdentity {
             request_digest: digest('1'),
             material_binding_digest: digest('2'),
+            input_digest: digest('a'),
+            materials_digest: digest('b'),
             project_id: "018f6f49-66b8-7d2a-bf4d-0e2eeaa00011".into(),
             task_id: "018f6f49-66b8-7d2a-bf4d-0e2eeaa00012".into(),
             assignment_id: "018f6f49-66b8-7d2a-bf4d-0e2eeaa00013".into(),

@@ -23,10 +23,13 @@ const INVOCATION_DIRECTORY_PREFIX: &str = ".trial-";
 const ABSOLUTE_MAXIMUM_FRAME_BYTES: usize = 4 * 1024 * 1024;
 static INVOCATION_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
-#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
 pub(crate) struct TrialRequestIdentity {
     pub(crate) request_digest: String,
     pub(crate) material_binding_digest: String,
+    pub(crate) input_digest: String,
+    pub(crate) materials_digest: String,
     pub(crate) project_id: String,
     pub(crate) task_id: String,
     pub(crate) assignment_id: String,
@@ -162,7 +165,8 @@ pub(crate) struct TrialStep {
     pub(crate) timeout_ms: u64,
 }
 
-#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
 pub(crate) struct TrialExecution {
     pub(crate) platform_identity_digest: String,
     pub(crate) builder_image_digest: String,
@@ -174,13 +178,15 @@ pub(crate) struct TrialExecution {
     pub(crate) cleanup_confirmed: bool,
 }
 
-#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
 pub(crate) struct RoleInventoryDigest {
     pub(crate) role: String,
     pub(crate) digest: String,
 }
 
-#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
 pub(crate) struct TrialBuildObservation {
     pub(crate) outcome: TrialOperationOutcome,
     pub(crate) exit_code: Option<i32>,
@@ -200,7 +206,8 @@ pub(crate) struct TrialBuildObservation {
     pub(crate) measurement_method: String,
 }
 
-#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
 pub(crate) struct TrialStepObservation {
     pub(crate) slot_id: String,
     pub(crate) operation_order: u32,
@@ -224,7 +231,7 @@ pub(crate) struct TrialStepObservation {
     pub(crate) measurement_method: String,
 }
 
-#[derive(Clone, Copy, Debug, Serialize, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum TrialOperationOutcome {
     Succeeded,
@@ -289,7 +296,8 @@ pub(crate) struct TrialEngineContext {
     pub(crate) trial_scratch_root: PathBuf,
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 pub(crate) struct TrialReceiptPublication {
     pub(crate) schema_version: &'static str,
     pub(crate) request_identity_digest: String,
@@ -335,14 +343,50 @@ pub(crate) struct PublishedTrialReceipt {
     pub(crate) custody: TrialReceiptCustodyAck,
 }
 
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+pub(crate) struct TrialEvidenceSubject {
+    pub(crate) project_id: String,
+    pub(crate) task_id: String,
+    pub(crate) assignment_id: String,
+    pub(crate) submission_id: String,
+    pub(crate) submission_version: u64,
+    pub(crate) requirement_id: String,
+    pub(crate) registry_entry_id: String,
+    pub(crate) registry_entry_digest: String,
+    pub(crate) configuration_sha256: String,
+    pub(crate) trial_kind: String,
+    pub(crate) slot_index: u32,
+    pub(crate) plan_sha256: String,
+    pub(crate) input_digest: String,
+    pub(crate) materials_digest: String,
+}
+
+#[derive(Debug)]
+pub(crate) enum TrialReceiptReservation {
+    Fresh {
+        trial_evidence_id: String,
+    },
+    Retained {
+        trial_evidence_id: String,
+        receipt: CanonicalTrialReceipt,
+        published: PublishedTrialReceipt,
+    },
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct TrialReceiptPublishFailure {
     pub(crate) code: TrialRelayFailure,
 }
 
 pub(crate) trait TrialReceiptPublisher: Send + Sync + 'static {
+    fn reserve_completed(
+        &self,
+        subject: TrialEvidenceSubject,
+    ) -> Result<TrialReceiptReservation, TrialReceiptPublishFailure>;
+
     fn publish_completed(
         &self,
+        trial_evidence_id: &str,
         receipt: CanonicalTrialReceipt,
     ) -> Result<PublishedTrialReceipt, TrialReceiptPublishFailure>;
 }
@@ -868,6 +912,8 @@ fn projection_destinations_overlap<'a>(values: impl Iterator<Item = &'a str>) ->
 fn valid_identity(identity: &TrialRequestIdentity) -> bool {
     valid_sha256(&identity.request_digest)
         && valid_sha256(&identity.material_binding_digest)
+        && valid_sha256(&identity.input_digest)
+        && valid_sha256(&identity.materials_digest)
         && [
             &identity.project_id,
             &identity.task_id,
@@ -1032,6 +1078,85 @@ fn relay_once(
         );
         return failed_outcome(code, false, false);
     }
+    let subject = match trial_evidence_subject(context, &request.plan) {
+        Ok(subject) => subject,
+        Err(code) => {
+            let _ = write_unavailable(
+                &mut stream,
+                code,
+                context.profile.maximum_response_bytes,
+                deadline,
+            );
+            return failed_outcome(code, false, false);
+        }
+    };
+    let trial_evidence_id = match publisher.reserve_completed(subject) {
+        Ok(TrialReceiptReservation::Fresh { trial_evidence_id })
+            if valid_uuid(&trial_evidence_id) =>
+        {
+            trial_evidence_id
+        }
+        Ok(TrialReceiptReservation::Retained {
+            trial_evidence_id,
+            receipt,
+            published,
+        }) if valid_uuid(&trial_evidence_id)
+            && validate_retained_receipt(&receipt, context, &request.plan).is_ok()
+            && valid_receipt_handle(&published.receipt_handle)
+            && valid_custody_ack(
+                &published.custody,
+                &receipt.receipt_digest,
+                receipt.byte_count,
+            ) =>
+        {
+            let observations = observation_projection(&receipt.facts);
+            let response = CompletedImageTrialResponse {
+                protocol_version: TRIAL_PROTOCOL,
+                outcome: "completed",
+                receipt_handle: &published.receipt_handle,
+                receipt_digest: &receipt.receipt_digest,
+                observations: &observations,
+                failure_code: None,
+            };
+            if write_json_frame(
+                &mut stream,
+                &response,
+                context.profile.maximum_response_bytes,
+                deadline,
+            )
+            .is_err()
+            {
+                return failed_outcome(TrialRelayFailure::ImplementationUnavailable, false, false);
+            }
+            return WorkerOutcome {
+                failure: None,
+                cleanup_unsettled: false,
+                plan_started: false,
+                plan_completed: true,
+                receipt_handle: Some(published.receipt_handle),
+                receipt_digest: Some(receipt.receipt_digest),
+            };
+        }
+        Ok(_) => {
+            let code = TrialRelayFailure::ImplementationUnavailable;
+            let _ = write_unavailable(
+                &mut stream,
+                code,
+                context.profile.maximum_response_bytes,
+                deadline,
+            );
+            return failed_outcome(code, false, false);
+        }
+        Err(failure) => {
+            let _ = write_unavailable(
+                &mut stream,
+                failure.code,
+                context.profile.maximum_response_bytes,
+                deadline,
+            );
+            return failed_outcome(failure.code, false, false);
+        }
+    };
     let execution = match engine.execute(
         context,
         &request.plan,
@@ -1079,7 +1204,7 @@ fn relay_once(
     let receipt_digest = receipt.receipt_digest.clone();
     let receipt_byte_count = receipt.byte_count;
     let observations = observation_projection(&receipt.facts);
-    let published = match publisher.publish_completed(receipt) {
+    let published = match publisher.publish_completed(&trial_evidence_id, receipt) {
         Ok(published)
             if valid_receipt_handle(&published.receipt_handle)
                 && valid_custody_ack(&published.custody, &receipt_digest, receipt_byte_count) =>
@@ -1250,6 +1375,75 @@ fn canonical_receipt(
         canonical_bytes: canonical,
         facts,
     })
+}
+
+fn trial_evidence_subject(
+    context: &TrialEngineContext,
+    plan: &TrialPlan,
+) -> Result<TrialEvidenceSubject, TrialRelayFailure> {
+    let plan_value =
+        serde_json::to_value(plan).map_err(|_| TrialRelayFailure::ImplementationUnavailable)?;
+    Ok(TrialEvidenceSubject {
+        project_id: context.identity.project_id.clone(),
+        task_id: context.identity.task_id.clone(),
+        assignment_id: context.identity.assignment_id.clone(),
+        submission_id: context.identity.submission_id.clone(),
+        submission_version: context.identity.submission_version,
+        requirement_id: context.identity.requirement_id.clone(),
+        registry_entry_id: context.identity.registry_entry_id.clone(),
+        registry_entry_digest: context.identity.registry_entry_digest.clone(),
+        configuration_sha256: context.identity.configuration_sha256.clone(),
+        trial_kind: context.profile.trial_kind.clone(),
+        slot_index: 0,
+        plan_sha256: canonical_hash(&plan_value)
+            .map_err(|_| TrialRelayFailure::ImplementationUnavailable)?,
+        input_digest: context.identity.input_digest.clone(),
+        materials_digest: context.identity.materials_digest.clone(),
+    })
+}
+
+fn validate_retained_receipt(
+    receipt: &CanonicalTrialReceipt,
+    context: &TrialEngineContext,
+    plan: &TrialPlan,
+) -> Result<(), TrialRelayFailure> {
+    let value = serde_json::to_value(&receipt.facts)
+        .map_err(|_| TrialRelayFailure::ImplementationUnavailable)?;
+    let canonical = canonical_json(&value)
+        .map_err(|_| TrialRelayFailure::ImplementationUnavailable)?
+        .into_bytes();
+    let expected_digest =
+        canonical_hash(&value).map_err(|_| TrialRelayFailure::ImplementationUnavailable)?;
+    let expected_plan = trial_evidence_subject(context, plan)?.plan_sha256;
+    if canonical != receipt.canonical_bytes
+        || receipt.byte_count != canonical.len()
+        || receipt.byte_count == 0
+        || receipt.byte_count > context.profile.maximum_receipt_bytes
+        || receipt.receipt_digest != expected_digest
+        || receipt.facts.schema_version != TRIAL_RECEIPT_SCHEMA
+        || receipt.facts.request_identity_digest != context.identity.request_digest
+        || receipt.facts.originating_identity != context.identity
+        || receipt.facts.material_binding_digest != context.identity.material_binding_digest
+        || receipt.facts.profile_id != context.profile.profile_id
+        || receipt.facts.profile_version != context.profile.profile_version
+        || receipt.facts.profile_digest != context.profile.profile_digest
+        || receipt.facts.trial_kind != context.profile.trial_kind
+        || receipt.facts.engine_identity_digest != context.profile.engine_identity_digest
+        || receipt.facts.plan_digest != expected_plan
+        || receipt.facts.plan != *plan
+        || receipt.facts.slot_ids
+            != plan
+                .steps
+                .iter()
+                .map(|step| step.slot_id.clone())
+                .collect::<Vec<_>>()
+        || !receipt.facts.plan_started
+        || !receipt.facts.plan_completed
+        || !receipt.facts.cleanup_confirmed
+    {
+        return Err(TrialRelayFailure::ImplementationUnavailable);
+    }
+    validate_execution(&receipt.facts.execution, plan, &context.profile)
 }
 
 fn validate_execution(
