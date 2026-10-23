@@ -29,7 +29,13 @@ from app.modules.checkers.api.trial_evidence import (
 from app.interfaces.artifacts import ArtifactStore, ArtifactByteRange, ArtifactIntegrityError
 from app.modules.artifacts.checker_output_custody import select_checker_output
 from app.modules.artifacts.models import ArtifactVerificationJob, ArtifactReplica, ArtifactBinding
-from app.modules.model_usage.api import ModelCallEvidence
+from app.modules.model_usage.api import (
+    ModelCallEvidence,
+    SetupModelOutputArtifactRequest,
+    SetupModelOutputArtifactResult,
+    SetupModelOutputReservationPort,
+    SetupModelOutputSelector,
+)
 from app.modules.artifacts.preparation import ArtifactPreparationService
 from app.modules.artifacts.schemas import (
     ArtifactInternalAuthority,
@@ -50,7 +56,7 @@ class CheckerArtifactOutputService:
         *,
         sessions: async_sessionmaker[AsyncSession],
         reservations: Callable[
-            [AsyncSession], CheckerOutputReservationPort | TrialEvidenceReservationPort
+            [AsyncSession], CheckerOutputReservationPort | TrialEvidenceReservationPort | SetupModelOutputReservationPort
         ],
         authority: Callable[[AsyncSession], CheckerOutputWriteAuthority],
         internal_authority: Callable[[AsyncSession], ArtifactInternalAuthority],
@@ -80,9 +86,24 @@ class CheckerArtifactOutputService:
             raise TypeError("invalid trial evidence artifact request")
         return await self._store_output(request)
 
+    async def store_setup_output(
+        self, request: SetupModelOutputArtifactRequest
+    ) -> SetupModelOutputArtifactResult:
+        """Store setup request/response bytes through the same verified path."""
+        if type(request) is not SetupModelOutputArtifactRequest:
+            raise TypeError("invalid setup model output request")
+        result = await self._store_output(request)
+        return SetupModelOutputArtifactResult(
+            result.put_attempt_id,
+            result.status,
+            result.content_id,
+            result.verification_receipt_id,
+            result.replayed,
+        )
+
     async def _store_output(
         self,
-        request: CheckerOutputArtifactRequest | TrialEvidenceArtifactRequest,
+        request: CheckerOutputArtifactRequest | TrialEvidenceArtifactRequest | SetupModelOutputArtifactRequest,
     ) -> CheckerOutputArtifactResult:
         """Prepare outside custody, then atomically admit exact owner content."""
         selector = GENERATED_OUTPUT_SELECTOR.validate_python(request.selector)
@@ -154,6 +175,22 @@ class CheckerArtifactOutputService:
         """Recover the original trial put after a lost acknowledgement."""
         return await self._recover(TrialEvidenceSelector.model_validate(selector))
 
+    async def recover_setup_output(
+        self, selector: SetupModelOutputSelector
+    ) -> SetupModelOutputArtifactResult | None:
+        result = await self._recover(SetupModelOutputSelector.model_validate(selector))
+        return (
+            None
+            if result is None
+            else SetupModelOutputArtifactResult(
+                result.put_attempt_id,
+                result.status,
+                result.content_id,
+                result.verification_receipt_id,
+                result.replayed,
+            )
+        )
+
     async def _recover(
         self,
         selector: GeneratedOutputSelector,
@@ -213,6 +250,15 @@ class CheckerArtifactOutputService:
             evidence.trial_evidence_id,
             evidence.content_sha256,
         ):
+            raise CheckerOutputUnavailable("checker_output_response_unavailable")
+        return await self._read(selector, evidence)
+
+    async def read_setup_response(
+        self, selector: SetupModelOutputSelector, evidence: ModelCallEvidence
+    ) -> bytes:
+        selector = SetupModelOutputSelector.model_validate(selector)
+        evidence = ModelCallEvidence.model_validate(evidence)
+        if selector.role != "model_response" or selector.content_sha256 != evidence.content_sha256:
             raise CheckerOutputUnavailable("checker_output_response_unavailable")
         return await self._read(selector, evidence)
 

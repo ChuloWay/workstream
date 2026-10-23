@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
-from typing import Annotated
+from collections.abc import Callable
+from typing import Annotated, cast
 from uuid import UUID
 
 from fastapi import Depends, Request
@@ -17,6 +18,11 @@ from app.adapters.tasks import task_submission_context_port
 from app.db.session import get_db_session, get_session_factory
 from app.interfaces.artifact_operations import GuideArtifactIngestCommand
 from app.modules.projects.api.guide_documents import GuideDocumentUploadTargetPort
+from app.modules.model_usage.api import (
+    SetupModelArtifactOutputPort,
+    SetupModelOutputBindingPort,
+    SetupModelUsageOwnerPort,
+)
 from app.modules.artifacts.api import SubmissionBundlePreparationCommand
 from app.modules.artifacts.api.task_import_source import TaskImportSourceCommandPort
 from app.modules.checkers.api.materialization import PostSubmissionMaterializationPort
@@ -728,11 +734,64 @@ def checker_output_binding(session, *, namespace, reservations) -> CheckerOutput
     )
 
 
+def setup_model_output_storage(
+    *,
+    sessions,
+    store,
+    namespace,
+    preparation,
+    settings,
+    owner: Callable[[AsyncSession], SetupModelUsageOwnerPort],
+) -> SetupModelArtifactOutputPort:
+    """Compose setup request/response custody without importing PROJECTS into MODEL-USAGE."""
+    from app.adapters.model_usage import setup_model_output_reservations
+
+    return cast(
+        SetupModelArtifactOutputPort,
+        checker_output_storage(
+            sessions=sessions,
+            store=store,
+            namespace=namespace,
+            preparation=preparation,
+            settings=settings,
+            reservations=lambda session: setup_model_output_reservations(
+                session, owner=owner(session)
+            ),
+        ),
+    )
+
+
+def setup_model_output_binding(
+    session,
+    *,
+    namespace,
+    owner: SetupModelUsageOwnerPort,
+) -> SetupModelOutputBindingPort:
+    """Compose exact setup-effect publication through the shared ART binding path."""
+    from app.adapters.model_usage import setup_model_output_reservations
+
+    return cast(
+        SetupModelOutputBindingPort,
+        checker_output_binding(
+            session,
+            namespace=namespace,
+            reservations=setup_model_output_reservations(session, owner=owner),
+        ),
+    )
+
+
 def checker_model_evidence(session):
     """Expose verified call binding facts to CHECKERS without transcript bytes."""
     from app.modules.artifacts.checker_model_evidence import CheckerModelEvidence
 
     return CheckerModelEvidence(session)
+
+
+def setup_model_evidence(session):
+    """Expose verified setup-effect bindings to MODEL-USAGE without transcript bytes."""
+    from app.modules.artifacts.checker_model_evidence import SetupModelEvidence
+
+    return SetupModelEvidence(session)
 
 
 async def get_task_import_source_commands(

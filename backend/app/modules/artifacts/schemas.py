@@ -333,4 +333,9 @@ class ArtifactRecoveryNotFoundError(ArtifactRecoveryError):
 
 
 # Only these current producers use post-put full-object verification.
-VERIFICATION_PRODUCERS = ("checker_output", "submission_bundle", "task_import_source")
+VERIFICATION_PRODUCERS = (
+    "checker_output",
+    "setup_model_output",
+    "submission_bundle",
+    "task_import_source",
+)

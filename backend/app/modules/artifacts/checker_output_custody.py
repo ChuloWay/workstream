@@ -61,10 +61,10 @@ async def select_checker_output(
             attempt.namespace_fingerprint,
         )
         != (
-            "checker_output",
+            owner.producer_request_type,
             str(owner.project_id),
-            str(owner.task_id),
-            str(owner.submission_id),
+            str(owner.task_id) if owner.task_id else None,
+            str(owner.submission_id) if owner.submission_id else None,
             owner.submission_version,
             str(owner.model_call_attempt_id) if owner.model_call_attempt_id else None,
             str(owner.checker_trial_evidence_id) if owner.checker_trial_evidence_id else None,

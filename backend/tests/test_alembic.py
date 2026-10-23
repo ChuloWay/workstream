@@ -787,6 +787,7 @@ def test_checker_trial_evidence_upgrade_preserves_existing_art_lineages(
         for value in (
             "checker_run",
             "checker_model_call",
+            "setup_model_call",
             "model_request",
             "model_response",
             "checker_trial_evidence",

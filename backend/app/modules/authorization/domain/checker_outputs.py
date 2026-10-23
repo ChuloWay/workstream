@@ -1,4 +1,4 @@
-"""Exact prepared resources for private generated checker-output custody."""
+"""Exact prepared resources for private generated model-output custody."""
 
 from __future__ import annotations
 
@@ -13,6 +13,7 @@ from app.modules.authorization.catalogue import ActionId
 from app.modules.checkers.api.output_custody import (
     GENERATED_OUTPUT_RESERVATION,
     GENERATED_OUTPUT_SELECTOR,
+    GeneratedOutputSubject,
     GeneratedOutputReservation,
     GeneratedOutputSelector,
     CheckerOutputUnavailable,
@@ -22,6 +23,7 @@ from app.modules.checkers.api.trial_evidence import (
     TrialEvidenceSelector,
     TrialEvidenceUnavailable,
 )
+from app.modules.model_usage.api import ModelCallUnavailable, SetupModelOutputSelector
 
 
 WRITE = ActionId.ARTIFACT_CHECKER_OUTPUT_WRITE
@@ -82,7 +84,9 @@ class CheckerOutputResourceContext(BaseModel):
     """One exact selector prepared before owner locks and closed by stored facts."""
 
     model_config = _STRICT_FROZEN
-    resource_type: Literal["checker_model_output", "checker_trial_evidence"]
+    resource_type: Literal[
+        "checker_model_output", "setup_model_call", "checker_trial_evidence"
+    ]
     resource_id: UUID
     scope_project_id: UUID
     action_id: ActionId
@@ -108,15 +112,20 @@ class CheckerOutputResourceContext(BaseModel):
             reservation = GENERATED_OUTPUT_RESERVATION.validate_python(self.reservation)
             try:
                 slot = reservation.select(selector)
-            except (CheckerOutputUnavailable, TrialEvidenceUnavailable, ValidationError) as error:
-                raise ValueError("checker output reservation differs from selector") from error
+            except (
+                CheckerOutputUnavailable,
+                ModelCallUnavailable,
+                TrialEvidenceUnavailable,
+                ValidationError,
+            ) as error:
+                raise ValueError("model output reservation differs from selector") from error
             subject = generated_output_subject(reservation)
             if (
-                subject.resource_id != self.resource_id
+                _subject_resource_id(subject) != self.resource_id
                 or subject.project_id != self.scope_project_id
                 or _subject_resource_type(subject.resource_type) != self.resource_type
             ):
-                raise ValueError("checker output reservation resource differs")
+                raise ValueError("model output reservation resource differs")
             if self.commitment is not None and (
                 self.commitment.byte_count > slot.maximum_bytes
                 or self.commitment.media_type != slot.media_type
@@ -222,10 +231,16 @@ def checker_output_stored_resource(
 
 def _selector_resource(
     selector: GeneratedOutputSelector,
-) -> tuple[Literal["checker_model_output", "checker_trial_evidence"], UUID, UUID]:
+) -> tuple[
+    Literal["checker_model_output", "setup_model_call", "checker_trial_evidence"],
+    UUID,
+    UUID,
+]:
     """Project one closed selector union onto its AUTH resource identity."""
     if isinstance(selector, TrialEvidenceSelector):
         return "checker_trial_evidence", selector.trial_evidence_id, selector.project_id
+    if isinstance(selector, SetupModelOutputSelector):
+        return "setup_model_call", selector.model_call_attempt_id, selector.slot_key.project_id
     return (
         "checker_model_output",
         selector.model_call_attempt_id,
@@ -234,9 +249,20 @@ def _selector_resource(
 
 
 def _subject_resource_type(
-    value: Literal["checker_model_call", "checker_trial_evidence"],
-) -> Literal["checker_model_output", "checker_trial_evidence"]:
+    value: Literal["checker_model_call", "setup_model_call", "checker_trial_evidence"],
+) -> Literal["checker_model_output", "setup_model_call", "checker_trial_evidence"]:
     return "checker_model_output" if value == "checker_model_call" else value
+
+
+def _subject_resource_id(subject: GeneratedOutputSubject) -> UUID:
+    """Project the exact non-null owner ID from the closed shared subject."""
+    if subject.resource_type == "checker_trial_evidence":
+        if subject.checker_trial_evidence_id is None:
+            raise ValueError("trial evidence subject owner is missing")
+        return subject.checker_trial_evidence_id
+    if subject.model_call_attempt_id is None:
+        raise ValueError("model output subject owner is missing")
+    return subject.model_call_attempt_id
 
 
 def parse_checker_output_prepare(

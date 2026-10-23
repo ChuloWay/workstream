@@ -160,6 +160,12 @@ ck_artifact_put_attempts_producer_reference CHECK (
             AND checker_trial_evidence_id IS NOT NULL
             AND logical_role='trial_receipt')))
   OR
+  (producer_request_type='setup_model_output' AND task_import_source_id IS NULL
+   AND guide_source_item_id IS NULL AND checker_run_id IS NULL
+   AND model_call_attempt_id IS NOT NULL AND checker_trial_evidence_id IS NULL
+   AND task_id IS NULL AND submission_id IS NULL AND submission_version IS NULL
+   AND logical_role IN ('model_request','model_response'))
+  OR
   (producer_request_type='submission_bundle' AND task_import_source_id IS NULL
    AND guide_source_item_id IS NULL AND checker_run_id IS NULL
    AND model_call_attempt_id IS NULL AND checker_trial_evidence_id IS NULL
@@ -207,11 +213,11 @@ ck_artifact_operation_receipts_contract_producer_reference CHECK (
         r"""
 ALTER TABLE public.artifact_bindings ADD CONSTRAINT
 ck_artifact_bindings_checker_output_lineage CHECK (
-  (resource_type IN ('checker_run','checker_model_call','checker_trial_evidence')
+  (resource_type IN ('checker_run','checker_model_call','setup_model_call','checker_trial_evidence')
    AND scope_version=1 AND put_attempt_id IS NOT NULL
    AND verification_receipt_id IS NOT NULL)
   OR
-  (resource_type NOT IN ('checker_run','checker_model_call','checker_trial_evidence')
+  (resource_type NOT IN ('checker_run','checker_model_call','setup_model_call','checker_trial_evidence')
    AND put_attempt_id IS NULL AND verification_receipt_id IS NULL))
         """
     )
@@ -449,8 +455,8 @@ def _extend_art_guards() -> None:
     _replace_receipt_guard()
     _replace_function(
         "public.guard_checker_output_put_attempt_custody()",
-        "binding.resource_type IN ('checker_run','checker_model_call')",
-        "binding.resource_type IN ('checker_run','checker_model_call','checker_trial_evidence')",
+        "binding.resource_type IN ('checker_run','checker_model_call','setup_model_call')",
+        "binding.resource_type IN ('checker_run','checker_model_call','setup_model_call','checker_trial_evidence')",
     )
     _replace_function(
         "public.guard_checker_output_put_attempt_custody()",
@@ -470,14 +476,14 @@ def _extend_art_guards() -> None:
     ):
         _replace_function(
             signature,
-            "binding.resource_type IN ('checker_run','checker_model_call')",
+            "binding.resource_type IN ('checker_run','checker_model_call','setup_model_call')",
             "binding.resource_type IN "
-            "('checker_run','checker_model_call','checker_trial_evidence')",
+            "('checker_run','checker_model_call','setup_model_call','checker_trial_evidence')",
         )
     _replace_function(
         "public.seal_checker_output_binding_ancestry()",
-        "NEW.resource_type NOT IN ('checker_run','checker_model_call')",
-        "NEW.resource_type NOT IN ('checker_run','checker_model_call','checker_trial_evidence')",
+        "NEW.resource_type NOT IN ('checker_run','checker_model_call','setup_model_call')",
+        "NEW.resource_type NOT IN ('checker_run','checker_model_call','setup_model_call','checker_trial_evidence')",
     )
     _replace_binding_guard()
     op.execute(
@@ -567,7 +573,7 @@ BEGIN
        NEW.guide_source_item_id IS NOT NULL AND NEW.checker_run_id IS NULL
        AND NEW.model_call_attempt_id IS NULL AND NEW.checker_trial_evidence_id IS NULL
        AND NEW.logical_role IS NULL))
-     OR (attempt.producer_request_type='checker_output' AND NOT (
+     OR (attempt.producer_request_type IN ('checker_output','setup_model_output') AND NOT (
        NEW.guide_source_item_id IS NULL AND (
          (attempt.checker_run_id IS NOT NULL
           AND NEW.checker_run_id IS NOT NULL
@@ -595,7 +601,7 @@ BEGIN
        OR NEW.model_call_attempt_id IS NOT NULL OR NEW.checker_trial_evidence_id IS NOT NULL
        OR NEW.logical_role IS DISTINCT FROM 'task_import_source'))
      OR attempt.producer_request_type NOT IN (
-       'guide','checker_output','submission_bundle','task_import_source') THEN
+       'guide','checker_output','setup_model_output','submission_bundle','task_import_source') THEN
     RAISE EXCEPTION 'artifact receipt producer reference mismatch' USING ERRCODE='23514';
   END IF;
   RETURN NEW;
@@ -608,8 +614,8 @@ def _replace_binding_guard() -> None:
     signature = "public.guard_checker_output_binding_insert()"
     _replace_function(
         signature,
-        "NEW.resource_type NOT IN ('checker_run','checker_model_call')",
-        "NEW.resource_type NOT IN ('checker_run','checker_model_call','checker_trial_evidence')",
+        "NEW.resource_type NOT IN ('checker_run','checker_model_call','setup_model_call')",
+        "NEW.resource_type NOT IN ('checker_run','checker_model_call','setup_model_call','checker_trial_evidence')",
     )
     _replace_function(
         signature,
@@ -621,10 +627,10 @@ def _replace_binding_guard() -> None:
     )
     _replace_function(
         signature,
-        "CASE WHEN NEW.resource_type='checker_model_call'\n"
+        "CASE WHEN NEW.resource_type IN ('checker_model_call','setup_model_call')\n"
         "                  THEN attempt.model_call_attempt_id::text ELSE "
         "attempt.checker_run_id::text END",
-        "CASE WHEN NEW.resource_type='checker_model_call'\n"
+        "CASE WHEN NEW.resource_type IN ('checker_model_call','setup_model_call')\n"
         "                  THEN attempt.model_call_attempt_id::text\n"
         "                  WHEN NEW.resource_type='checker_trial_evidence'\n"
         "                  THEN attempt.checker_trial_evidence_id::text\n"

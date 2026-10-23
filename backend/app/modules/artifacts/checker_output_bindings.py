@@ -22,6 +22,11 @@ from app.modules.checkers.api.trial_evidence import (
     TrialEvidenceCustodyAck,
     TrialEvidenceReservationPort,
 )
+from app.modules.model_usage.api import (
+    SetupModelOutputBindingRequest,
+    SetupModelOutputBindingResult,
+    SetupModelOutputReservationPort,
+)
 from app.modules.actors.api import ServiceIdentity
 from app.modules.artifacts.checker_output_custody import select_checker_output
 from app.modules.artifacts.models import ArtifactBinding
@@ -34,7 +39,7 @@ class CheckerOutputBindingService:
         self,
         session: AsyncSession,
         *,
-        reservations: CheckerOutputReservationPort | TrialEvidenceReservationPort,
+        reservations: CheckerOutputReservationPort | TrialEvidenceReservationPort | SetupModelOutputReservationPort,
         authority: CheckerOutputBindingAuthority,
         namespace_fingerprint: str,
     ) -> None:
@@ -58,9 +63,23 @@ class CheckerOutputBindingService:
             raise TypeError("invalid trial evidence binding request")
         return await self._bind(request)
 
+    async def bind_setup_output(
+        self, request: SetupModelOutputBindingRequest
+    ) -> SetupModelOutputBindingResult:
+        if type(request) is not SetupModelOutputBindingRequest:
+            raise TypeError("invalid setup model output binding request")
+        result = await self._bind(request)
+        return SetupModelOutputBindingResult(
+            result.binding_id,
+            result.content_id,
+            result.put_attempt_id,
+            result.verification_receipt_id,
+            result.replayed,
+        )
+
     async def _bind(
         self,
-        request: CheckerOutputBindingRequest | TrialEvidenceBindingRequest,
+        request: CheckerOutputBindingRequest | TrialEvidenceBindingRequest | SetupModelOutputBindingRequest,
     ) -> CheckerOutputBindingResult | TrialEvidenceCustodyAck:
         """Fence current worker facts before acquiring ART binding/verification locks."""
         if (

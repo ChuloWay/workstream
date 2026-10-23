@@ -48,6 +48,10 @@ from app.modules.model_usage.api import (
     ModelCallExecutionFacts,
     ModelCallUnavailable,
     ModelPaidSlotKey,
+    SetupModelOutputReservation,
+    SetupModelOutputSelector,
+    SetupModelOutputSlot,
+    SetupModelUsageSlotKey,
 )
 from app.modules.checkers.api.output_custody import (
     CheckerOutputReservation,
@@ -203,6 +207,85 @@ def test_output_prepare_accepts_its_json_packet_without_coercing_integers(action
         error["loc"][-1] == "submission_version" and error["type"] == "int_type"
         for error in rejected.value.__cause__.errors()
     )
+
+
+def setup_selector(*, role="model_request") -> SetupModelOutputSelector:
+    key = SetupModelUsageSlotKey(
+        compilation_attempt_id=new_record_id(),
+        project_id=new_record_id(),
+        guide_id=new_record_id(),
+        source_snapshot_id=new_record_id(),
+        setup_run_id=new_record_id(),
+        setup_generation=1,
+        runtime_configuration_hash=sha("runtime configuration"),
+        profile_id=new_record_id(),
+        profile_version=1,
+        profile_digest=sha("setup profile"),
+        phase="draft",
+        call_index=0,
+    )
+    return SetupModelOutputSelector(
+        slot_key=key,
+        model_call_slot_id=new_record_id(),
+        model_call_attempt_id=new_record_id(),
+        role=role,
+        content_sha256=sha(role),
+    )
+
+
+@pytest.mark.parametrize("action", [WRITE, BIND])
+def test_setup_output_resource_is_closed_to_exact_effect_and_project(action) -> None:
+    selected = setup_selector()
+    reservation = SetupModelOutputReservation(
+        selector=selected,
+        slot=SetupModelOutputSlot(key="model_request", maximum_bytes=2048),
+    )
+    prepared = checker_output_prepare_resource(action, selected)
+
+    assert prepared.resource_type == "setup_model_call"
+    assert prepared.resource_id == selected.model_call_attempt_id
+    assert prepared.scope_project_id == selected.slot_key.project_id
+    subject = generated_output_subject(reservation)
+    assert subject.operation_identity == canonical_json_hash(
+        {
+            "request_type": "setup_model_output",
+            "model_call_attempt_id": str(selected.model_call_attempt_id),
+            "logical_role": "model_request",
+        }
+    )
+    assert subject.request_digest_facts == {
+        "slot_key": selected.slot_key.model_dump(mode="json"),
+        "model_call_slot_id": str(selected.model_call_slot_id),
+        "model_call_attempt_id": str(selected.model_call_attempt_id),
+        "content_sha256": selected.content_sha256,
+        "role": "model_request",
+        "media_type": "application/json",
+        "maximum_bytes": 2048,
+    }
+    assert parse_checker_output_prepare(
+        action, prepared.model_dump(mode="json"), RuntimeError
+    ) == prepared
+
+    substituted = selected.model_copy(
+        update={"model_call_attempt_id": new_record_id()}
+    )
+    with pytest.raises(ValueError, match="differs from selector"):
+        checker_output_stored_resource(
+            action,
+            substituted,
+            reservation,
+            SimpleNamespace(
+                put_attempt_id=new_record_id(),
+                checker_request_digest=sha("custody"),
+                sha256=substituted.content_sha256,
+                byte_count=100,
+                media_type="application/json",
+                status="object_confirmed",
+                content_id=None,
+                replica_id=None,
+                verification_receipt_id=None,
+            ),
+        )
 
 
 def test_output_final_facts_cannot_substitute_selector_or_unverified_binding() -> None:

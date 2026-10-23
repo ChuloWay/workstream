@@ -218,6 +218,42 @@ async def test_sql_requires_all_none_or_all_concrete_inference_identity(
         await engine.dispose()
 
 
+async def test_sql_model_profile_selector_is_all_null_or_complete(
+    clean_postgres_database,
+):
+    """Partial selectors fail closed even when a missing JSON key yields SQL NULL."""
+    values = await seed_database(clean_postgres_database)
+    null_selector = runtime_configuration().model_dump(mode="json")
+    complete = null_selector | {
+        "model_profile_id": str(new_record_id()),
+        "model_profile_version": 1,
+        "model_profile_digest": canonical_json_hash({"profile": "runtime-test"}),
+    }
+    invalid = (
+        {key: value for key, value in complete.items() if key != "model_profile_id"},
+        {key: value for key, value in complete.items() if key != "model_profile_digest"},
+    )
+    engine = create_async_engine(clean_postgres_database)
+    try:
+        for configuration in invalid:
+            async with engine.begin() as connection:
+                with pytest.raises(
+                    DBAPIError, match="compilation runtime configuration is invalid"
+                ) as error:
+                    await connection.execute(
+                        insert(ProjectGuideCompilationAttempt).values(
+                            **_row(values, configuration)
+                        )
+                    )
+                assert error.value.orig.sqlstate == "23514"
+        async with engine.begin() as connection:
+            await connection.execute(
+                insert(ProjectGuideCompilationAttempt).values(**_row(values, complete))
+            )
+    finally:
+        await engine.dispose()
+
+
 async def test_sql_runtime_configuration_and_hash_are_immutable(clean_postgres_database):
     values = await seed_database(clean_postgres_database)
     configuration = runtime_configuration().model_dump(mode="json")

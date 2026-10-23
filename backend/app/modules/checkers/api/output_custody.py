@@ -14,6 +14,8 @@ from app.modules.model_usage.api import (
     ModelCallExecutionFacts,
     ModelPaidSlotKey,
     ModelCallEvidence,
+    SetupModelOutputReservation,
+    SetupModelOutputSelector,
 )
 from app.modules.checkers.api.canonical_values import (
     CheckerValue,
@@ -170,8 +172,8 @@ class CheckerArtifactOutputPort(Protocol):
         """Read one authorized private response with exact byte/hash verification."""
 
 
-GeneratedOutputSelector = CheckerOutputSelector | TrialEvidenceSelector
-GeneratedOutputReservation = CheckerOutputReservation | TrialEvidenceReservation
+GeneratedOutputSelector = CheckerOutputSelector | TrialEvidenceSelector | SetupModelOutputSelector
+GeneratedOutputReservation = CheckerOutputReservation | TrialEvidenceReservation | SetupModelOutputReservation
 GENERATED_OUTPUT_SELECTOR = TypeAdapter(GeneratedOutputSelector)
 GENERATED_OUTPUT_RESERVATION = TypeAdapter(GeneratedOutputReservation)
 
@@ -180,11 +182,12 @@ GENERATED_OUTPUT_RESERVATION = TypeAdapter(GeneratedOutputReservation)
 class GeneratedOutputSubject:
     """Closed native lineage for the shared ART generated-output pipeline."""
 
+    producer_request_type: Literal["checker_output", "setup_model_output"]
     project_id: UUID
-    task_id: UUID
-    submission_id: UUID
-    submission_version: int
-    resource_type: Literal["checker_model_call", "checker_trial_evidence"]
+    task_id: UUID | None
+    submission_id: UUID | None
+    submission_version: int | None
+    resource_type: Literal["checker_model_call", "checker_trial_evidence", "setup_model_call"]
     resource_id: UUID
     logical_role: str
     model_call_attempt_id: UUID | None
@@ -194,12 +197,43 @@ class GeneratedOutputSubject:
 
 
 def generated_output_subject(reservation: GeneratedOutputReservation) -> GeneratedOutputSubject:
-    """Preserve model identities and add exactly one independent trial subject."""
+    """Normalize the three exact owners without changing retained output identities."""
     reservation = GENERATED_OUTPUT_RESERVATION.validate_python(reservation)
     selector, slot = reservation.selector, reservation.slot
+    if isinstance(reservation, SetupModelOutputReservation):
+        key = selector.slot_key
+        return GeneratedOutputSubject(
+            "setup_model_output",
+            key.project_id,
+            None,
+            None,
+            None,
+            "setup_model_call",
+            selector.model_call_attempt_id,
+            slot.key,
+            selector.model_call_attempt_id,
+            None,
+            canonical_json_hash(
+                {
+                    "request_type": "setup_model_output",
+                    "model_call_attempt_id": str(selector.model_call_attempt_id),
+                    "logical_role": slot.key,
+                }
+            ),
+            {
+                "slot_key": key.model_dump(mode="json"),
+                "model_call_slot_id": str(selector.model_call_slot_id),
+                "model_call_attempt_id": str(selector.model_call_attempt_id),
+                "content_sha256": selector.content_sha256,
+                "role": slot.key,
+                "media_type": slot.media_type,
+                "maximum_bytes": slot.maximum_bytes,
+            },
+        )
     if isinstance(reservation, TrialEvidenceReservation):
         subject = reservation.subject
         return GeneratedOutputSubject(
+            "checker_output",
             subject.project_id,
             subject.task_id,
             subject.submission_id,
@@ -224,6 +258,7 @@ def generated_output_subject(reservation: GeneratedOutputReservation) -> Generat
         )
     paid = selector.paid_slot
     return GeneratedOutputSubject(
+        "checker_output",
         paid.project_id,
         selector.task_id,
         paid.submission_id,

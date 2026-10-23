@@ -436,3 +436,12 @@ live provider call, deployment setting, image publication, policy activation,
 or alternative durable acknowledgment. Real runsc engine qualification remains
 the separately recorded PILOT-00 harness proof until the same process journey
 is executed with its existing pinned cache and runtime identities.
+
+The complementary service-boundary qualifier owns
+`external_checkers/workstream-checker-service/tests/terminal_systems_post_composition.py`.
+It launches the production Rust service binary with the actual locally built
+Terminal Systems POST image and a closed controlled v2 proxy, proving exact
+image identity, request/grant validation, invocation-local socket mounting and
+cleanup without a provider call. It is not durable ART custody proof and does
+not replace the PostgreSQL/MinIO composition test above or the runsc engine
+qualification.

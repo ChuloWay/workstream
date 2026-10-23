@@ -302,6 +302,28 @@ Review current main and open migrations before allocating a
 revision number. Required execution trials and authenticated prior-work context
 must still be supplied before final guide activation.
 
+### Active setup-output custody ownership
+
+The setup ART continuation is limited to public setup selector/reservation
+types and a MODEL-USAGE-owned resolver, the existing ART generated-output
+admission/storage/verification/binding path, its prepared AUTH resource, the
+`0061_model_usage` ART constraints/guards, adapter composition, and focused
+AUTH/PostgreSQL/MinIO regressions. Its owned paths are
+`backend/app/modules/model_usage/api.py`, a new cohesive resolver under
+`backend/app/modules/model_usage/`,
+`backend/app/modules/checkers/api/output_custody.py`, the existing
+`backend/app/modules/artifacts/` checker-output API, custody, binding, service,
+schema, model and adapter-composition files,
+`backend/app/adapters/model_usage/__init__.py`,
+`backend/app/modules/authorization/checker_output_authorization.py`,
+`backend/app/modules/authorization/domain/checker_outputs.py`,
+`backend/app/modules/authorization/domain/audit.py`,
+`backend/alembic/versions/0061_model_usage.py`, and only their focused tests and
+schema inventory/fingerprint updates. This continuation does not edit
+`backend/app/modules/model_usage/setup.py`, SDK/transport/provider dispatch,
+PROJECTS owners, or CHECKERS ORM. It adds only the closed setup-model-output
+case; independent trial-evidence types remain outside this branch.
+
 ## Independent QA, test-delta and CI review
 
 Review dimensions: `qa`, `test_delta`, and `ci_integrity`. Review target:

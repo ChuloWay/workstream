@@ -424,9 +424,9 @@ class ArtifactBinding(Base):
             name="scope_version_predecessor",
         ),
         CheckConstraint(
-            "(resource_type in ('checker_run','checker_model_call','checker_trial_evidence') and scope_version = 1 "
+            "(resource_type in ('checker_run','checker_model_call','setup_model_call','checker_trial_evidence') and scope_version = 1 "
             "and put_attempt_id is not null and verification_receipt_id is not null) or "
-            "(resource_type not in ('checker_run','checker_model_call','checker_trial_evidence') and put_attempt_id is null "
+            "(resource_type not in ('checker_run','checker_model_call','setup_model_call','checker_trial_evidence') and put_attempt_id is null "
             "and verification_receipt_id is null)",
             name="checker_output_lineage",
         ),
@@ -1324,7 +1324,8 @@ class ArtifactPutAttempt(Base):
             ondelete="RESTRICT", name="fk_artifact_put_attempt_import_source_custody",
         ),
         CheckConstraint(
-            "producer_request_type in ('guide', 'checker_output', 'submission_bundle', 'task_import_source')",
+            "producer_request_type in ('guide', 'checker_output', 'setup_model_output', "
+            "'submission_bundle', 'task_import_source')",
             name="producer_request_type",
         ),
         CheckConstraint(
@@ -1335,7 +1336,7 @@ class ArtifactPutAttempt(Base):
             "((producer_request_type in ('guide', 'task_import_source') "
             "and producer_type = 'actor_profile' and "
             + ACTOR_UUID7_CHECK.format(column="producer_ref")
-            + ") or (producer_request_type = 'checker_output' "
+            + ") or (producer_request_type in ('checker_output', 'setup_model_output') "
             "and producer_type = 'service_identity' "
             "and producer_ref = 'workstream.artifact.checker_output') or "
             "(producer_request_type = 'submission_bundle' "
@@ -1359,9 +1360,11 @@ class ArtifactPutAttempt(Base):
             name="request_digest_shape",
         ),
         CheckConstraint(
-            "(producer_request_type = 'checker_output' and checker_request_digest is not null "
+            "(producer_request_type in ('checker_output','setup_model_output') "
+            "and checker_request_digest is not null "
             "and checker_request_digest ~ '^sha256:[0-9a-f]{64}$') or "
-            "(producer_request_type <> 'checker_output' and checker_request_digest is null)",
+            "(producer_request_type not in ('checker_output','setup_model_output') "
+            "and checker_request_digest is null)",
             name="checker_request_digest",
         ),
         CheckConstraint(
@@ -1422,6 +1425,12 @@ class ArtifactPutAttempt(Base):
         OR (checker_run_id IS NULL AND model_call_attempt_id IS NULL
             AND checker_trial_evidence_id IS NOT NULL
             AND logical_role='trial_receipt')))
+  OR
+  (producer_request_type='setup_model_output' AND task_import_source_id IS NULL
+   AND guide_source_item_id IS NULL AND checker_run_id IS NULL
+   AND model_call_attempt_id IS NOT NULL AND checker_trial_evidence_id IS NULL
+   AND task_id IS NULL AND submission_id IS NULL AND submission_version IS NULL
+   AND logical_role IN ('model_request','model_response'))
   OR
   (producer_request_type='submission_bundle' AND task_import_source_id IS NULL
    AND guide_source_item_id IS NULL AND checker_run_id IS NULL

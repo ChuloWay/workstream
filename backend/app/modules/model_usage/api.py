@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterable
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Annotated, Literal, Protocol, Self
 from uuid import RFC_4122, UUID
@@ -559,6 +561,124 @@ class ModelEvidenceCustodyPort(Protocol):
         ...
 
 
+class SetupModelOutputSelector(ModelCallValue):
+    """Select one private setup request or response by its exact paid effect."""
+
+    slot_key: SetupModelUsageSlotKey
+    model_call_slot_id: UUID
+    model_call_attempt_id: UUID
+    role: Literal["model_request", "model_response"]
+    content_sha256: Sha256
+
+    _decode_public_uuids = field_validator(
+        "model_call_slot_id", "model_call_attempt_id", mode="before"
+    )(_public_uuid)
+
+
+class SetupModelOutputSlot(ModelCallValue):
+    """One bounded canonical JSON role issued by the setup effect owner."""
+
+    key: Literal["model_request", "model_response"]
+    media_type: Literal["application/json"] = "application/json"
+    maximum_bytes: StrictInt = Field(ge=1, le=1_048_576)
+
+
+class SetupModelOutputReservation(ModelCallValue):
+    """Detached setup owner facts, never fresh dispatch authority."""
+
+    selector: SetupModelOutputSelector
+    slot: SetupModelOutputSlot
+
+    @model_validator(mode="after")
+    def exact_role(self) -> Self:
+        if self.slot.key != self.selector.role:
+            raise ValueError("setup model output role differs from reservation")
+        return self
+
+    def select(self, selector: SetupModelOutputSelector) -> SetupModelOutputSlot:
+        current = SetupModelOutputReservation.model_validate(self)
+        if current.selector != SetupModelOutputSelector.model_validate(selector):
+            raise ModelCallUnavailable("setup_model_output_reservation_unavailable")
+        return current.slot
+
+
+class SetupModelOutputReservationPort(Protocol):
+    """Resolve current request or retained paid-effect response ART custody."""
+
+    async def resolve(
+        self, selector: SetupModelOutputSelector
+    ) -> SetupModelOutputReservation:
+        """Return exact bounds after the role-specific owner checks."""
+        ...
+
+
+@dataclass(frozen=True, slots=True)
+class SetupModelOutputArtifactRequest:
+    """Bounded setup bytes admitted through the shared generated-output path."""
+
+    selector: SetupModelOutputSelector
+    byte_source: AsyncIterable[bytes]
+
+
+@dataclass(frozen=True, slots=True)
+class SetupModelOutputBindingRequest:
+    """Bind one independently verified setup output to its paid effect."""
+
+    selector: SetupModelOutputSelector
+    put_attempt_id: UUID
+    verification_receipt_id: UUID
+
+
+@dataclass(frozen=True, slots=True)
+class SetupModelOutputArtifactResult:
+    put_attempt_id: UUID
+    status: str
+    content_id: UUID | None
+    verification_receipt_id: UUID | None
+    replayed: bool
+
+
+@dataclass(frozen=True, slots=True)
+class SetupModelOutputBindingResult:
+    binding_id: UUID
+    content_id: UUID
+    put_attempt_id: UUID
+    verification_receipt_id: UUID
+    replayed: bool
+
+
+class SetupModelOutputBindingPort(Protocol):
+    """Publish exact verified setup bytes under the paid effect owner."""
+
+    async def bind_setup_output(
+        self, request: SetupModelOutputBindingRequest
+    ) -> SetupModelOutputBindingResult:
+        """Bind one setup request or response in the caller transaction."""
+        ...
+
+
+class SetupModelArtifactOutputPort(Protocol):
+    """Store and recover bounded setup output through shared ART custody."""
+
+    async def store_setup_output(
+        self, request: SetupModelOutputArtifactRequest
+    ) -> SetupModelOutputArtifactResult:
+        """Store one setup request or response."""
+        ...
+
+    async def recover_setup_output(
+        self, selector: SetupModelOutputSelector
+    ) -> SetupModelOutputArtifactResult | None:
+        """Recover a committed setup output without regenerating bytes."""
+        ...
+
+    async def read_setup_response(
+        self, selector: SetupModelOutputSelector, evidence: ModelCallEvidence
+    ) -> bytes:
+        """Read exact independently verified response bytes."""
+        ...
+
+
 class ModelRecoverySourcePort(Protocol):
     """Read retained recovery lineage without granting fresh owner authority."""
 
@@ -1054,6 +1174,16 @@ __all__ = (
     "ProjectModelProfileSpec",
     "PreparedSetupModelUsageEffect",
     "SetupModelDispatchReservation",
+    "SetupModelOutputReservation",
+    "SetupModelOutputReservationPort",
+    "SetupModelArtifactOutputPort",
+    "SetupModelOutputArtifactRequest",
+    "SetupModelOutputArtifactResult",
+    "SetupModelOutputBindingPort",
+    "SetupModelOutputBindingRequest",
+    "SetupModelOutputBindingResult",
+    "SetupModelOutputSelector",
+    "SetupModelOutputSlot",
     "SetupModelEffectAuthorityFacts",
     "SetupModelUsageAuthorityPort",
     "SetupModelUsageEvidencePort",
