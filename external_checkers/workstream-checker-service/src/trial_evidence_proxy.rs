@@ -662,4 +662,54 @@ mod tests {
         }
         worker.join().unwrap();
     }
+
+    fn wire_ack(owner: String, replayed: bool) -> WireCustodyAck {
+        WireCustodyAck {
+            trial_evidence_id: "018f6f49-66b8-7d2a-bf4d-0e2eeaa00006".into(),
+            owner_digest: owner,
+            content_sha256: digest('c'),
+            byte_count: 17,
+            binding_id: "018f6f49-66b8-7d2a-bf4d-0e2eeaa00009".into(),
+            content_id: "018f6f49-66b8-7d2a-bf4d-0e2eeaa0000a".into(),
+            put_attempt_id: "018f6f49-66b8-7d2a-bf4d-0e2eeaa0000b".into(),
+            verification_receipt_id: "018f6f49-66b8-7d2a-bf4d-0e2eeaa0000c".into(),
+            replayed,
+        }
+    }
+
+    #[test]
+    fn custody_ack_rejects_owner_substitution_and_wrong_replay_state() {
+        let expected = digest('d');
+        assert_eq!(
+            custody_ack(
+                wire_ack(digest('e'), false),
+                "018f6f49-66b8-7d2a-bf4d-0e2eeaa00006",
+                &digest('c'),
+                17,
+                &expected,
+                false,
+            ),
+            Err(TrialEvidenceProxyFailure::InvalidResponse),
+        );
+        assert_eq!(
+            custody_ack(
+                wire_ack(expected.clone(), true),
+                "018f6f49-66b8-7d2a-bf4d-0e2eeaa00006",
+                &digest('c'),
+                17,
+                &expected,
+                false,
+            ),
+            Err(TrialEvidenceProxyFailure::InvalidResponse),
+        );
+        assert!(custody_ack(
+            wire_ack(expected.clone(), true),
+            "018f6f49-66b8-7d2a-bf4d-0e2eeaa00006",
+            &digest('c'),
+            17,
+            &expected,
+            true,
+        )
+        .is_ok());
+    }
 }
