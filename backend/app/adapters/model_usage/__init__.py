@@ -51,6 +51,13 @@ def setup_model_usage_service(session, *, authority, evidence, owner):
     )
 
 
+def setup_model_output_reservations(session, *, owner):
+    """Compose MODEL-USAGE-owned setup ART reservations behind its public port."""
+    from app.modules.model_usage.output_custody import SetupModelOutputReservations
+
+    return SetupModelOutputReservations(session, owner=owner)
+
+
 __all__ = (
     "model_call_service",
     "model_evidence_custody",
@@ -58,4 +65,5 @@ __all__ = (
     "model_profile_reader",
     "model_recovery_sources",
     "setup_model_usage_service",
+    "setup_model_output_reservations",
 )

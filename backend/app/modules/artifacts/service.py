@@ -109,17 +109,17 @@ from app.modules.artifacts.schemas import (
     GuideArtifactIngestAuthorityFacts,
     SubmissionBundleArtifactAdmissionRequest,
     SubmissionBundleDurableIntentAuthorityFacts,
-    checker_output_operation_identity,
-    checker_output_request_digest_facts,
 )
 from app.modules.artifacts.submission_authorization import (
     SubmissionBundlePreparedAuthorization,
 )
 from app.modules.artifacts.sources import CommittedArtifactSource, PreparedArtifact
 from app.modules.checkers.api.output_custody import (
-    CheckerOutputReservation,
+    GENERATED_OUTPUT_RESERVATION,
+    generated_output_subject,
     CheckerOutputUnavailable,
 )
+from app.modules.model_usage.api import ModelCallUnavailable
 from app.modules.authorization.runtime import (
     AuthorizationContext,
     HumanAuthorizationContext,
@@ -2409,7 +2409,7 @@ class ArtifactAdmissionService:
                             "checker_output_request": facts.checker_request_digest_facts,
                             "model_call_attempt_id": facts.model_call_attempt_id,
                         }
-                        if facts.request_type == "checker_output"
+                        if facts.request_type in {"checker_output", "setup_model_output"}
                         else {}
                     ),
                     "pre_submit_evidence_set_id": facts.pre_submit_evidence_set_id,
@@ -2558,13 +2558,14 @@ class ArtifactAdmissionService:
         if type(request.source) is not CommittedArtifactSource:
             raise TypeError("invalid artifact admission source")
         if type(request) is CheckerOutputArtifactAdmissionRequest:
-            if type(request.reservation) is not CheckerOutputReservation:
-                raise TypeError("invalid checker output reservation")
             try:
-                request.reservation.select(request.reservation.selector)
-                if request.slot_key != request.reservation.selector.slot_key:
+                reservation = GENERATED_OUTPUT_RESERVATION.validate_python(
+                    request.reservation
+                )
+                reservation.select(reservation.selector)
+                if request.slot_key != reservation.slot.key:
                     raise CheckerOutputUnavailable("checker_output_slot_unavailable")
-            except (CheckerOutputUnavailable, ValueError) as exc:
+            except (CheckerOutputUnavailable, ModelCallUnavailable, ValueError) as exc:
                 raise ArtifactAdmissionRelationshipError(
                     "checker output reservation is unavailable"
                 ) from exc
@@ -2631,13 +2632,13 @@ class ArtifactAdmissionService:
         self, request: CheckerOutputArtifactAdmissionRequest
     ) -> _AdmissionFacts:
         """Bind committed transcript bytes to one durable call effect and role."""
-        reservation = CheckerOutputReservation.model_validate(request.reservation)
+        reservation = GENERATED_OUTPUT_RESERVATION.validate_python(request.reservation)
         selector = reservation.selector
         try:
             slot = reservation.select(selector)
             if slot.key != request.slot_key:
                 raise CheckerOutputUnavailable("checker_output_slot_unavailable")
-        except (CheckerOutputUnavailable, ValueError) as exc:
+        except (CheckerOutputUnavailable, ModelCallUnavailable, ValueError) as exc:
             raise ArtifactAdmissionRelationshipError(
                 "checker output reservation is unavailable"
             ) from exc
@@ -2650,29 +2651,24 @@ class ArtifactAdmissionService:
             raise ArtifactAdmissionRelationshipError(
                 "checker output does not match reserved slot"
             )
-        paid_slot = selector.paid_slot
         logical_role = slot.key
-        operation_identity = checker_output_operation_identity(
-            model_call_attempt_id=selector.model_call_attempt_id, slot_key=logical_role
-        )
-        digest_facts = checker_output_request_digest_facts(
-            reservation=reservation,
-            slot=slot,
-        )
+        owner = generated_output_subject(reservation)
+        operation_identity = owner.operation_identity
+        digest_facts = owner.request_digest_facts
         return _AdmissionFacts(
-            request_type="checker_output",
+            request_type=owner.producer_request_type,
             producer_type="service_identity",
             producer_ref=ServiceIdentity.ARTIFACT_CHECKER_OUTPUT.value,
-            project_id=str(paid_slot.project_id),
+            project_id=str(owner.project_id),
             guide_id=None,
-            task_id=str(selector.task_id),
+            task_id=str(owner.task_id) if owner.task_id else None,
             guide_source_item_id=None,
             guide_source_snapshot_id=None,
             checker_run_id=None,
-            model_call_attempt_id=str(selector.model_call_attempt_id),
+            model_call_attempt_id=str(owner.resource_id),
             logical_role=logical_role,
-            submission_id=str(paid_slot.submission_id),
-            submission_version=paid_slot.submission_version,
+            submission_id=str(owner.submission_id) if owner.submission_id else None,
+            submission_version=owner.submission_version,
             checker_request_digest=canonical_json_hash(digest_facts),
             checker_request_digest_facts=digest_facts,
             pre_submit_evidence_set_id=None,

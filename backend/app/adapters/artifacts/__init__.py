@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
-from typing import Annotated
+from collections.abc import Callable
+from typing import Annotated, cast
 from uuid import UUID
 
 from fastapi import Depends, Request
@@ -18,6 +19,11 @@ from app.adapters.tasks import task_submission_context_port
 from app.db.session import get_db_session, get_session_factory
 from app.interfaces.artifact_operations import GuideArtifactIngestCommand
 from app.modules.projects.api.guide_documents import GuideDocumentUploadTargetPort
+from app.modules.model_usage.api import (
+    SetupModelArtifactOutputPort,
+    SetupModelOutputBindingPort,
+    SetupModelUsageOwnerPort,
+)
 from app.modules.artifacts.api import SubmissionBundlePreparationCommand
 from app.modules.artifacts.api.task_import_source import TaskImportSourceCommandPort
 from app.modules.checkers.api.materialization import PostSubmissionMaterializationPort
@@ -681,7 +687,8 @@ def worker_post_submission_materialization(*, sessions) -> PostSubmissionMateria
 
 
 def checker_output_storage(
-    *, sessions, store, namespace, preparation, settings
+    *, sessions, store, namespace, preparation, settings,
+    reservations=checker_output_reservations,
 ) -> CheckerArtifactOutputPort:
     """Compose private call evidence through canonical admission and verification."""
     from app.adapters.auth import checker_output_write_authorization
@@ -703,7 +710,7 @@ def checker_output_storage(
         namespace=namespace,
         preparation=preparation,
         settings=settings,
-        reservations=checker_output_reservations,
+        reservations=reservations,
         authority=checker_output_write_authorization,
         internal_authority=lambda session: authority(
             session, ServiceIdentity.ARTIFACT_PUT_RESOLVER
@@ -714,7 +721,9 @@ def checker_output_storage(
     )
 
 
-def checker_output_binding(session, *, namespace) -> CheckerOutputBindingPort:
+def checker_output_binding(
+    session, *, namespace, reservations=None
+) -> CheckerOutputBindingPort:
     """Bind one exact private call effect to independently verified ART bytes."""
     from app.adapters.auth import checker_output_binding_authorization
     from app.modules.artifacts.checker_output_bindings import CheckerOutputBindingService
@@ -722,8 +731,54 @@ def checker_output_binding(session, *, namespace) -> CheckerOutputBindingPort:
     return CheckerOutputBindingService(
         session,
         namespace_fingerprint=namespace.namespace_fingerprint,
-        reservations=checker_output_reservations(session),
+        reservations=reservations or checker_output_reservations(session),
         authority=checker_output_binding_authorization(session),
+    )
+
+
+def setup_model_output_storage(
+    *,
+    sessions,
+    store,
+    namespace,
+    preparation,
+    settings,
+    owner: Callable[[AsyncSession], SetupModelUsageOwnerPort],
+) -> SetupModelArtifactOutputPort:
+    """Compose setup request/response custody without importing PROJECTS into MODEL-USAGE."""
+    from app.adapters.model_usage import setup_model_output_reservations
+
+    return cast(
+        SetupModelArtifactOutputPort,
+        checker_output_storage(
+            sessions=sessions,
+            store=store,
+            namespace=namespace,
+            preparation=preparation,
+            settings=settings,
+            reservations=lambda session: setup_model_output_reservations(
+                session, owner=owner(session)
+            ),
+        ),
+    )
+
+
+def setup_model_output_binding(
+    session,
+    *,
+    namespace,
+    owner: SetupModelUsageOwnerPort,
+) -> SetupModelOutputBindingPort:
+    """Compose exact setup-effect publication through the shared ART binding path."""
+    from app.adapters.model_usage import setup_model_output_reservations
+
+    return cast(
+        SetupModelOutputBindingPort,
+        checker_output_binding(
+            session,
+            namespace=namespace,
+            reservations=setup_model_output_reservations(session, owner=owner),
+        ),
     )
 
 
@@ -732,6 +787,13 @@ def checker_model_evidence(session):
     from app.modules.artifacts.checker_model_evidence import CheckerModelEvidence
 
     return CheckerModelEvidence(session)
+
+
+def setup_model_evidence(session):
+    """Expose verified setup-effect bindings to MODEL-USAGE without transcript bytes."""
+    from app.modules.artifacts.checker_model_evidence import SetupModelEvidence
+
+    return SetupModelEvidence(session)
 
 
 async def get_task_import_source_commands(

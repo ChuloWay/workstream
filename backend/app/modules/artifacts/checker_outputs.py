@@ -17,11 +17,19 @@ from app.modules.checkers.api.output_custody import (
     CheckerOutputReservationPort,
     CheckerOutputSelector,
     CheckerOutputUnavailable,
+    GeneratedOutputSelector,
+    GENERATED_OUTPUT_SELECTOR,
 )
 from app.interfaces.artifacts import ArtifactStore, ArtifactByteRange, ArtifactIntegrityError
 from app.modules.artifacts.checker_output_custody import select_checker_output
 from app.modules.artifacts.models import ArtifactVerificationJob, ArtifactReplica
-from app.modules.model_usage.api import ModelCallEvidence
+from app.modules.model_usage.api import (
+    ModelCallEvidence,
+    SetupModelOutputArtifactRequest,
+    SetupModelOutputArtifactResult,
+    SetupModelOutputReservationPort,
+    SetupModelOutputSelector,
+)
 from app.modules.artifacts.preparation import ArtifactPreparationService
 from app.modules.artifacts.schemas import (
     ArtifactInternalAuthority,
@@ -41,7 +49,9 @@ class CheckerArtifactOutputService:
         self,
         *,
         sessions: async_sessionmaker[AsyncSession],
-        reservations: Callable[[AsyncSession], CheckerOutputReservationPort],
+        reservations: Callable[
+            [AsyncSession], CheckerOutputReservationPort | SetupModelOutputReservationPort
+        ],
         authority: Callable[[AsyncSession], CheckerOutputWriteAuthority],
         internal_authority: Callable[[AsyncSession], ArtifactInternalAuthority],
         verification_authority: Callable[[AsyncSession], ArtifactInternalAuthority],
@@ -59,7 +69,28 @@ class CheckerArtifactOutputService:
         """Commit checked output bytes before I/O, never a CHECKERS completion."""
         if type(request) is not CheckerOutputArtifactRequest:
             raise TypeError("invalid checker output request")
-        selector = CheckerOutputSelector.model_validate(request.selector)
+        return await self._store_output(request)
+
+    async def store_setup_output(
+        self, request: SetupModelOutputArtifactRequest
+    ) -> SetupModelOutputArtifactResult:
+        """Store setup request/response bytes through the same verified path."""
+        if type(request) is not SetupModelOutputArtifactRequest:
+            raise TypeError("invalid setup model output request")
+        result = await self._store_output(request)
+        return SetupModelOutputArtifactResult(
+            result.put_attempt_id,
+            result.status,
+            result.content_id,
+            result.verification_receipt_id,
+            result.replayed,
+        )
+
+    async def _store_output(
+        self,
+        request: CheckerOutputArtifactRequest | SetupModelOutputArtifactRequest,
+    ) -> CheckerOutputArtifactResult:
+        selector = GENERATED_OUTPUT_SELECTOR.validate_python(request.selector)
         prepared = None
         async with self._sessions() as session:
             authority = self._authority(session)
@@ -114,7 +145,27 @@ class CheckerArtifactOutputService:
 
     async def recover(self, selector: CheckerOutputSelector) -> CheckerOutputArtifactResult | None:
         """Recover a lost response by logical identity without regenerating bytes."""
-        selector = CheckerOutputSelector.model_validate(selector)
+        return await self._recover(CheckerOutputSelector.model_validate(selector))
+
+    async def recover_setup_output(
+        self, selector: SetupModelOutputSelector
+    ) -> SetupModelOutputArtifactResult | None:
+        result = await self._recover(SetupModelOutputSelector.model_validate(selector))
+        return (
+            None
+            if result is None
+            else SetupModelOutputArtifactResult(
+                result.put_attempt_id,
+                result.status,
+                result.content_id,
+                result.verification_receipt_id,
+                result.replayed,
+            )
+        )
+
+    async def _recover(
+        self, selector: GeneratedOutputSelector
+    ) -> CheckerOutputArtifactResult | None:
         async with self._sessions() as session:
             authority = self._authority(session)
             try:
@@ -150,6 +201,20 @@ class CheckerArtifactOutputService:
         evidence = ModelCallEvidence.model_validate(evidence)
         if selector.slot_key != "model_response" or selector.content_sha256 != evidence.content_sha256:
             raise CheckerOutputUnavailable("checker_output_response_unavailable")
+        return await self._read(selector, evidence)
+
+    async def read_setup_response(
+        self, selector: SetupModelOutputSelector, evidence: ModelCallEvidence
+    ) -> bytes:
+        selector = SetupModelOutputSelector.model_validate(selector)
+        evidence = ModelCallEvidence.model_validate(evidence)
+        if selector.role != "model_response" or selector.content_sha256 != evidence.content_sha256:
+            raise CheckerOutputUnavailable("checker_output_response_unavailable")
+        return await self._read(selector, evidence)
+
+    async def _read(
+        self, selector: GeneratedOutputSelector, evidence: ModelCallEvidence
+    ) -> bytes:
         async with self._sessions() as session:
             authority = self._authority(session)
             try:
@@ -241,7 +306,7 @@ class CheckerArtifactOutputService:
         self,
         session: AsyncSession,
         authority: CheckerOutputWriteAuthority,
-        selector: CheckerOutputSelector,
+        selector: GeneratedOutputSelector,
         *,
         replayed: bool,
     ) -> CheckerOutputArtifactResult:

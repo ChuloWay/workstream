@@ -425,12 +425,42 @@ CREATE INDEX ix_artifact_operation_receipts_model_call_attempt_id ON artifact_op
     )
     op.execute(
         r"""
+ALTER TABLE artifact_put_attempts DROP CONSTRAINT ck_artifact_put_attempts_producer_request_type
+        """
+    )
+    op.execute(
+        r"""
+ALTER TABLE artifact_put_attempts ADD CONSTRAINT ck_artifact_put_attempts_producer_request_type CHECK (producer_request_type IN ('guide','checker_output','setup_model_output','submission_bundle','task_import_source'))
+        """
+    )
+    op.execute(
+        r"""
+ALTER TABLE artifact_put_attempts DROP CONSTRAINT ck_artifact_put_attempts_producer_identity
+        """
+    )
+    op.execute(
+        r"""
+ALTER TABLE artifact_put_attempts ADD CONSTRAINT ck_artifact_put_attempts_producer_identity CHECK (((producer_request_type IN ('guide','task_import_source') AND producer_type='actor_profile' AND producer_ref ~ '^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$') OR (producer_request_type IN ('checker_output','setup_model_output') AND producer_type='service_identity' AND producer_ref='workstream.artifact.checker_output') OR (producer_request_type='submission_bundle' AND producer_type='actor_profile' AND producer_ref ~ '^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$')))
+        """
+    )
+    op.execute(
+        r"""
+ALTER TABLE artifact_put_attempts DROP CONSTRAINT ck_artifact_put_attempts_checker_request_digest
+        """
+    )
+    op.execute(
+        r"""
+ALTER TABLE artifact_put_attempts ADD CONSTRAINT ck_artifact_put_attempts_checker_request_digest CHECK (((producer_request_type IN ('checker_output','setup_model_output') AND checker_request_digest IS NOT NULL AND checker_request_digest ~ '^sha256:[0-9a-f]{64}$') OR (producer_request_type NOT IN ('checker_output','setup_model_output') AND checker_request_digest IS NULL)))
+        """
+    )
+    op.execute(
+        r"""
 ALTER TABLE artifact_put_attempts DROP CONSTRAINT ck_artifact_put_attempts_producer_reference
         """
     )
     op.execute(
         r"""
-ALTER TABLE artifact_put_attempts ADD CONSTRAINT ck_artifact_put_attempts_producer_reference CHECK ((producer_request_type = 'guide' and task_import_source_id is null and guide_source_item_id is not null and checker_run_id is null and model_call_attempt_id is null and task_id is null and submission_id is null and submission_version is null and logical_role is null) or (producer_request_type = 'checker_output' and task_import_source_id is null and guide_source_item_id is null and ((checker_run_id is not null and model_call_attempt_id is null) or (checker_run_id is null and model_call_attempt_id is not null and logical_role in ('model_request','model_response'))) and task_id is not null and submission_id is not null and submission_version is not null and octet_length(logical_role) between 1 and 100) or (producer_request_type = 'submission_bundle' and task_import_source_id is null and guide_source_item_id is null and checker_run_id is null and model_call_attempt_id is null and task_id is not null and submission_id is null and submission_version is null and logical_role is null) or (producer_request_type = 'task_import_source' and task_import_source_id is not null and guide_source_item_id is null and checker_run_id is null and model_call_attempt_id is null and task_id is null and submission_id is null and submission_version is null and logical_role is not distinct from 'task_import_source'))
+ALTER TABLE artifact_put_attempts ADD CONSTRAINT ck_artifact_put_attempts_producer_reference CHECK ((producer_request_type = 'guide' and task_import_source_id is null and guide_source_item_id is not null and checker_run_id is null and model_call_attempt_id is null and task_id is null and submission_id is null and submission_version is null and logical_role is null) or (producer_request_type = 'checker_output' and task_import_source_id is null and guide_source_item_id is null and ((checker_run_id is not null and model_call_attempt_id is null) or (checker_run_id is null and model_call_attempt_id is not null and logical_role in ('model_request','model_response'))) and task_id is not null and submission_id is not null and submission_version is not null and octet_length(logical_role) between 1 and 100) or (producer_request_type = 'setup_model_output' and task_import_source_id is null and guide_source_item_id is null and checker_run_id is null and model_call_attempt_id is not null and task_id is null and submission_id is null and submission_version is null and logical_role in ('model_request','model_response')) or (producer_request_type = 'submission_bundle' and task_import_source_id is null and guide_source_item_id is null and checker_run_id is null and model_call_attempt_id is null and task_id is not null and submission_id is null and submission_version is null and logical_role is null) or (producer_request_type = 'task_import_source' and task_import_source_id is not null and guide_source_item_id is null and checker_run_id is null and model_call_attempt_id is null and task_id is null and submission_id is null and submission_version is null and logical_role is not distinct from 'task_import_source'))
         """
     )
     op.execute(
@@ -459,7 +489,7 @@ CREATE OR REPLACE FUNCTION public.guard_artifact_receipt_producer_reference() RE
                AND NEW.checker_run_id IS NULL
                AND NEW.model_call_attempt_id IS NULL
                AND NEW.logical_role IS NULL))
-             OR (attempt.producer_request_type='checker_output' AND NOT (
+             OR (attempt.producer_request_type IN ('checker_output','setup_model_output') AND NOT (
                NEW.guide_source_item_id IS NULL
                AND (
                  (attempt.model_call_attempt_id IS NULL
@@ -483,7 +513,7 @@ CREATE OR REPLACE FUNCTION public.guard_artifact_receipt_producer_reference() RE
                OR NEW.model_call_attempt_id IS NOT NULL
                OR NEW.logical_role IS DISTINCT FROM 'task_import_source'))
              OR attempt.producer_request_type NOT IN (
-               'guide','checker_output','submission_bundle','task_import_source') THEN
+               'guide','checker_output','setup_model_output','submission_bundle','task_import_source') THEN
             RAISE EXCEPTION 'artifact receipt producer reference mismatch'
               USING ERRCODE='23514';
           END IF;
@@ -498,7 +528,7 @@ ALTER TABLE artifact_bindings DROP CONSTRAINT ck_artifact_bindings_checker_outpu
     )
     op.execute(
         r"""
-ALTER TABLE artifact_bindings ADD CONSTRAINT ck_artifact_bindings_checker_output_lineage CHECK ((resource_type in ('checker_run','checker_model_call') and scope_version = 1 and put_attempt_id is not null and verification_receipt_id is not null) or (resource_type not in ('checker_run','checker_model_call') and put_attempt_id is null and verification_receipt_id is null))
+ALTER TABLE artifact_bindings ADD CONSTRAINT ck_artifact_bindings_checker_output_lineage CHECK ((resource_type in ('checker_run','checker_model_call','setup_model_call') and scope_version = 1 and put_attempt_id is not null and verification_receipt_id is not null) or (resource_type not in ('checker_run','checker_model_call','setup_model_call') and put_attempt_id is null and verification_receipt_id is null))
         """
     )
     op.execute(
@@ -507,7 +537,7 @@ CREATE OR REPLACE FUNCTION public.guard_checker_output_put_attempt_custody() RET
         LANGUAGE plpgsql SET search_path=pg_catalog,public,pg_temp AS $$
         BEGIN
           IF TG_OP='DELETE' THEN
-            IF OLD.producer_request_type='checker_output'
+            IF OLD.producer_request_type IN ('checker_output','setup_model_output')
                OR OLD.checker_output_custody_sealed THEN
               RAISE EXCEPTION 'checker output put attempt custody is immutable'
                 USING ERRCODE='55000';
@@ -530,7 +560,7 @@ CREATE OR REPLACE FUNCTION public.guard_checker_output_put_attempt_custody() RET
                  (to_jsonb(OLD) - 'checker_output_custody_sealed')
                OR NOT EXISTS (
                  SELECT 1 FROM artifact_bindings binding
-                 WHERE binding.resource_type IN ('checker_run','checker_model_call')
+                 WHERE binding.resource_type IN ('checker_run','checker_model_call','setup_model_call')
                    AND binding.put_attempt_id=OLD.id
                ) THEN
               RAISE EXCEPTION 'checker output put attempt seal requires binding'
@@ -538,8 +568,8 @@ CREATE OR REPLACE FUNCTION public.guard_checker_output_put_attempt_custody() RET
             END IF;
             RETURN NEW;
           END IF;
-          IF OLD.producer_request_type='checker_output'
-             OR NEW.producer_request_type='checker_output' THEN
+          IF OLD.producer_request_type IN ('checker_output','setup_model_output')
+             OR NEW.producer_request_type IN ('checker_output','setup_model_output') THEN
             IF ROW(
                  NEW.id, NEW.producer_request_type, NEW.producer_type, NEW.producer_ref,
                  NEW.project_id, NEW.task_id, NEW.guide_source_item_id, NEW.checker_run_id, NEW.model_call_attempt_id,
@@ -596,7 +626,7 @@ CREATE OR REPLACE FUNCTION public.guard_checker_output_verification_job_custody(
                  FROM artifact_bindings binding
                  JOIN artifact_verification_receipts receipt
                    ON receipt.id=binding.verification_receipt_id
-                 WHERE binding.resource_type IN ('checker_run','checker_model_call')
+                 WHERE binding.resource_type IN ('checker_run','checker_model_call','setup_model_call')
                    AND receipt.verification_job_id=OLD.id
                ) THEN
               RAISE EXCEPTION 'checker output verification job seal requires binding'
@@ -646,7 +676,7 @@ CREATE OR REPLACE FUNCTION public.guard_checker_output_replica_custody() RETURNS
                    ON receipt.id=binding.verification_receipt_id
                  JOIN artifact_verification_jobs job
                    ON job.id=receipt.verification_job_id
-                 WHERE binding.resource_type IN ('checker_run','checker_model_call')
+                 WHERE binding.resource_type IN ('checker_run','checker_model_call','setup_model_call')
                    AND job.replica_id=OLD.id
                ) THEN
               RAISE EXCEPTION 'checker output replica seal requires binding'
@@ -669,7 +699,7 @@ CREATE OR REPLACE FUNCTION public.guard_checker_output_binding_insert() RETURNS 
           content artifact_contents%ROWTYPE;
           write_receipt_matches integer;
         BEGIN
-          IF NEW.resource_type NOT IN ('checker_run','checker_model_call') THEN
+          IF NEW.resource_type NOT IN ('checker_run','checker_model_call','setup_model_call') THEN
             RETURN NEW;
           END IF;
 
@@ -730,7 +760,7 @@ CREATE OR REPLACE FUNCTION public.guard_checker_output_binding_insert() RETURNS 
              OR NEW.content_id IS DISTINCT FROM content.id
              OR NEW.project_id IS DISTINCT FROM attempt.project_id
              OR NEW.resource_id IS DISTINCT FROM (
-                  CASE WHEN NEW.resource_type='checker_model_call'
+                  CASE WHEN NEW.resource_type IN ('checker_model_call','setup_model_call')
                   THEN attempt.model_call_attempt_id::text ELSE attempt.checker_run_id::text END
                 )
              OR NEW.logical_role IS DISTINCT FROM attempt.logical_role
@@ -738,7 +768,9 @@ CREATE OR REPLACE FUNCTION public.guard_checker_output_binding_insert() RETURNS 
              OR NEW.attribution_type IS DISTINCT FROM 'service_identity'
              OR NEW.scope_version <> 1
              OR NEW.supersedes_binding_id IS NOT NULL
-             OR attempt.producer_request_type <> 'checker_output'
+             OR attempt.producer_request_type IS DISTINCT FROM (
+                  CASE WHEN NEW.resource_type='setup_model_call'
+                  THEN 'setup_model_output' ELSE 'checker_output' END)
              OR attempt.producer_type <> 'service_identity'
              OR attempt.submission_id IS NULL OR attempt.submission_version IS NULL
              OR attempt.checker_request_digest IS NULL
@@ -778,7 +810,7 @@ CREATE OR REPLACE FUNCTION public.seal_checker_output_binding_ancestry() RETURNS
           verification artifact_verification_receipts%ROWTYPE;
           job artifact_verification_jobs%ROWTYPE;
         BEGIN
-          IF NEW.resource_type NOT IN ('checker_run','checker_model_call') THEN
+          IF NEW.resource_type NOT IN ('checker_run','checker_model_call','setup_model_call') THEN
             RETURN NEW;
           END IF;
           SELECT receipt.* INTO STRICT verification
@@ -806,18 +838,79 @@ CREATE OR REPLACE FUNCTION public.seal_checker_output_binding_ancestry() RETURNS
 CREATE FUNCTION public.guard_checker_model_artifact_ancestry() RETURNS trigger
 LANGUAGE plpgsql SET search_path=pg_catalog,public,pg_temp AS $$
 DECLARE effect model_usage_effects%ROWTYPE;
-        slot checker_model_usage_slots%ROWTYPE;
+        checker_slot checker_model_usage_slots%ROWTYPE;
+        setup_slot setup_model_usage_slots%ROWTYPE;
         profile model_usage_profiles%ROWTYPE;
+        expected_maximum integer;
+        expected_operation varchar;
+        expected_custody varchar;
 BEGIN
   IF NEW.model_call_attempt_id IS NULL THEN RETURN NEW; END IF;
   SELECT * INTO STRICT effect FROM model_usage_effects WHERE id=NEW.model_call_attempt_id;
-  SELECT * INTO STRICT slot FROM checker_model_usage_slots
+  IF NEW.producer_request_type='setup_model_output' THEN
+    IF effect.setup_slot_id IS NULL OR effect.checker_slot_id IS NOT NULL THEN
+      RAISE EXCEPTION 'setup model artifact call ancestry mismatch' USING ERRCODE='23514';
+    END IF;
+    SELECT * INTO STRICT setup_slot FROM setup_model_usage_slots
+     WHERE id=effect.setup_slot_id;
+    SELECT * INTO STRICT profile FROM model_usage_profiles
+      WHERE id=setup_slot.profile_id AND profile_version=setup_slot.profile_version
+        AND profile_digest=setup_slot.profile_digest;
+    expected_maximum := CASE WHEN NEW.logical_role='model_request'
+                        THEN profile.maximum_request_bytes
+                        ELSE profile.maximum_response_bytes END;
+    expected_operation := public.model_usage_json_digest(pg_catalog.jsonb_build_object(
+      'request_type','setup_model_output',
+      'model_call_attempt_id',effect.id,
+      'logical_role',NEW.logical_role));
+    expected_custody := public.model_usage_json_digest(pg_catalog.jsonb_build_object(
+      'slot_key',pg_catalog.jsonb_build_object(
+        'compilation_attempt_id',setup_slot.compilation_attempt_id,
+        'project_id',setup_slot.project_id,
+        'guide_id',setup_slot.guide_id,
+        'source_snapshot_id',setup_slot.source_snapshot_id,
+        'setup_run_id',setup_slot.setup_run_id,
+        'setup_generation',setup_slot.setup_generation,
+        'runtime_configuration_hash',setup_slot.runtime_configuration_hash,
+        'profile_id',setup_slot.profile_id,
+        'profile_version',setup_slot.profile_version,
+        'profile_digest',setup_slot.profile_digest,
+        'phase',setup_slot.phase,
+        'call_index',setup_slot.call_index),
+      'model_call_slot_id',setup_slot.id,
+      'model_call_attempt_id',effect.id,
+      'content_sha256',NEW.sha256,
+      'role',NEW.logical_role,
+      'media_type',NEW.media_type,
+      'maximum_bytes',expected_maximum));
+    IF NEW.project_id IS DISTINCT FROM setup_slot.project_id
+       OR NEW.task_id IS NOT NULL OR NEW.submission_id IS NOT NULL
+       OR NEW.submission_version IS NOT NULL OR NEW.checker_run_id IS NOT NULL
+       OR NEW.logical_role NOT IN ('model_request','model_response')
+       OR NEW.media_type IS DISTINCT FROM 'application/json'
+       OR NEW.byte_count < 1 OR NEW.byte_count > expected_maximum
+       OR effect.request_sha256 IS DISTINCT FROM setup_slot.request_sha256
+       OR (NEW.logical_role='model_request'
+           AND NEW.sha256 IS DISTINCT FROM effect.request_sha256)
+       OR (NEW.logical_role='model_response' AND
+           (effect.state NOT IN ('dispatching','uncertain','completed','known_failed')
+            OR (effect.response_content_sha256 IS NOT NULL
+                AND NEW.sha256 IS DISTINCT FROM effect.response_content_sha256)))
+       OR NEW.operation_identity IS DISTINCT FROM expected_operation
+       OR NEW.checker_request_digest IS DISTINCT FROM expected_custody THEN
+      RAISE EXCEPTION 'setup model artifact call ancestry mismatch' USING ERRCODE='23514';
+    END IF;
+    RETURN NEW;
+  END IF;
+
+  SELECT * INTO STRICT checker_slot FROM checker_model_usage_slots
    WHERE id=effect.checker_slot_id;
   SELECT * INTO STRICT profile FROM model_usage_profiles
-    WHERE id=slot.profile_id AND profile_version=slot.profile_version
-      AND profile_digest=slot.profile_digest;
+    WHERE id=checker_slot.profile_id AND profile_version=checker_slot.profile_version
+      AND profile_digest=checker_slot.profile_digest;
   IF ROW(NEW.project_id,NEW.task_id,NEW.submission_id,NEW.submission_version)
-       IS DISTINCT FROM ROW(slot.project_id,slot.task_id,slot.submission_id,slot.submission_version)
+       IS DISTINCT FROM ROW(checker_slot.project_id,checker_slot.task_id,checker_slot.submission_id,checker_slot.submission_version)
+     OR NEW.producer_request_type IS DISTINCT FROM 'checker_output'
      OR NEW.checker_run_id IS NOT NULL
      OR NEW.media_type IS DISTINCT FROM 'application/json'
      OR NEW.byte_count < 1

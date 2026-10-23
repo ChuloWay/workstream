@@ -40,10 +40,13 @@ from app.modules.authorization.runtime import (
     PreparedAuthorityScopeKind,
 )
 from app.modules.checkers.api.output_custody import (
-    CheckerOutputReservation,
-    CheckerOutputSelector,
+    GENERATED_OUTPUT_RESERVATION,
+    GENERATED_OUTPUT_SELECTOR,
+    GeneratedOutputReservation,
+    GeneratedOutputSelector,
     CheckerOutputUnavailable,
 )
+from app.modules.model_usage.api import ModelCallUnavailable
 
 
 _AUTH_ERRORS = (
@@ -80,12 +83,12 @@ class _PreparedCheckerOutputAuthorization:
         self._prepared: PreparedAuthorizationService | None = None
         self._handle: PreparedAuthorizationHandle | None = None
         self._input: PreparedAuthorizationInput | None = None
-        self._selector: CheckerOutputSelector | None = None
+        self._selector: GeneratedOutputSelector | None = None
 
-    async def preflight(self, selector: CheckerOutputSelector) -> None:
+    async def preflight(self, selector: GeneratedOutputSelector) -> None:
         """Reject malformed or unavailable action shape before protected reads."""
         try:
-            CheckerOutputSelector.model_validate(selector)
+            GENERATED_OUTPUT_SELECTOR.validate_python(selector)
             action = ACTION_BY_ID[self._action]
             if (
                 action.availability is not ActionAvailability.ACTIVE
@@ -95,7 +98,7 @@ class _PreparedCheckerOutputAuthorization:
         except (KeyError, TypeError, ValueError) as error:
             raise CheckerOutputUnavailable("checker_output_authority_unavailable") from error
 
-    async def prepare(self, selector: CheckerOutputSelector) -> None:
+    async def prepare(self, selector: GeneratedOutputSelector) -> None:
         """Lock one fixed-service grant before CHECKERS or ART feature rows."""
         self.discard()
         if not self._session.in_transaction() or self._session.in_nested_transaction():
@@ -190,7 +193,14 @@ class PreparedCheckerOutputWriteAuthorization(
         if type(facts) is not CheckerOutputCommitmentAuthorityFacts:
             raise CheckerOutputUnavailable("checker_output_authority_unavailable")
         selector = self._require_selector()
-        if facts.slot_key != selector.slot_key:
+        try:
+            reservation = GENERATED_OUTPUT_RESERVATION.validate_python(facts.reservation)
+            slot = reservation.select(selector)
+        except (CheckerOutputUnavailable, ModelCallUnavailable, TypeError, ValueError) as error:
+            self.discard()
+            raise CheckerOutputUnavailable("checker_output_authority_unavailable") from error
+        if facts.slot_key != slot.key:
+            self.discard()
             raise CheckerOutputUnavailable("checker_output_authority_unavailable")
         try:
             resource = checker_output_admission_resource(selector, facts)
@@ -201,7 +211,7 @@ class PreparedCheckerOutputWriteAuthorization(
 
     async def consume_existing(
         self,
-        reservation: CheckerOutputReservation,
+        reservation: GeneratedOutputReservation,
         facts: CheckerOutputStoredFacts,
     ) -> None:
         """Consume exact stored ancestry selected under the prepared selector."""
@@ -213,7 +223,7 @@ class PreparedCheckerOutputWriteAuthorization(
             raise CheckerOutputUnavailable("checker_output_authority_unavailable") from error
         await self._consume(resource)
 
-    def _require_selector(self) -> CheckerOutputSelector:
+    def _require_selector(self) -> GeneratedOutputSelector:
         if self._selector is None:
             raise CheckerOutputUnavailable("checker_output_authority_unavailable")
         return self._selector
@@ -233,7 +243,7 @@ class PreparedCheckerOutputBindingAuthorization(
 
     async def consume(
         self,
-        reservation: CheckerOutputReservation,
+        reservation: GeneratedOutputReservation,
         facts: CheckerOutputStoredFacts,
     ) -> None:
         """Consume only complete verified ancestry for the prepared selector."""

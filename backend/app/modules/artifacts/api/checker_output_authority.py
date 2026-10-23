@@ -5,8 +5,8 @@ from typing import Protocol, final
 from uuid import UUID
 
 from app.modules.checkers.api.output_custody import (
-    CheckerOutputReservation,
-    CheckerOutputSelector,
+    GeneratedOutputReservation,
+    GeneratedOutputSelector,
 )
 
 
@@ -15,7 +15,7 @@ from app.modules.checkers.api.output_custody import (
 class CheckerOutputCommitmentAuthorityFacts:
     """Server-computed commitment without source bytes or scratch identity."""
 
-    reservation: CheckerOutputReservation
+    reservation: GeneratedOutputReservation
     slot_key: str
     sha256: str
     byte_count: int
@@ -41,14 +41,14 @@ class CheckerOutputStoredFacts:
 class CheckerOutputWriteAuthority(Protocol):
     """Fresh write authority; no prepared handle survives storage I/O."""
 
-    async def preflight(self, selector: CheckerOutputSelector) -> None: ...
+    async def preflight(self, selector: GeneratedOutputSelector) -> None: ...
 
-    async def prepare(self, selector: CheckerOutputSelector) -> None: ...
+    async def prepare(self, selector: GeneratedOutputSelector) -> None: ...
 
     async def consume(self, facts: CheckerOutputCommitmentAuthorityFacts) -> None: ...
 
     async def consume_existing(
-        self, reservation: CheckerOutputReservation, facts: CheckerOutputStoredFacts
+        self, reservation: GeneratedOutputReservation, facts: CheckerOutputStoredFacts
     ) -> None: ...
 
     def discard(self) -> None: ...
@@ -57,12 +57,12 @@ class CheckerOutputWriteAuthority(Protocol):
 class CheckerOutputBindingAuthority(Protocol):
     """Fresh publication authority for independently verified call evidence."""
 
-    async def preflight(self, selector: CheckerOutputSelector) -> None: ...
+    async def preflight(self, selector: GeneratedOutputSelector) -> None: ...
 
-    async def prepare(self, selector: CheckerOutputSelector) -> None: ...
+    async def prepare(self, selector: GeneratedOutputSelector) -> None: ...
 
     async def consume(
-        self, reservation: CheckerOutputReservation, facts: CheckerOutputStoredFacts
+        self, reservation: GeneratedOutputReservation, facts: CheckerOutputStoredFacts
     ) -> None: ...
 
     def discard(self) -> None: ...

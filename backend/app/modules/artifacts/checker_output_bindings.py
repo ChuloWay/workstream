@@ -13,8 +13,14 @@ from app.modules.checkers.api.output_custody import (
     CheckerOutputBindingRequest,
     CheckerOutputBindingResult,
     CheckerOutputReservationPort,
-    CheckerOutputSelector,
+    GENERATED_OUTPUT_SELECTOR,
+    generated_output_subject,
     CheckerOutputUnavailable,
+)
+from app.modules.model_usage.api import (
+    SetupModelOutputBindingRequest,
+    SetupModelOutputBindingResult,
+    SetupModelOutputReservationPort,
 )
 from app.modules.actors.api import ServiceIdentity
 from app.modules.artifacts.checker_output_custody import select_checker_output
@@ -28,7 +34,7 @@ class CheckerOutputBindingService:
         self,
         session: AsyncSession,
         *,
-        reservations: CheckerOutputReservationPort,
+        reservations: CheckerOutputReservationPort | SetupModelOutputReservationPort,
         authority: CheckerOutputBindingAuthority,
         namespace_fingerprint: str,
     ) -> None:
@@ -38,25 +44,47 @@ class CheckerOutputBindingService:
     async def bind_checker_output(
         self, request: CheckerOutputBindingRequest
     ) -> CheckerOutputBindingResult:
-        """Fence current worker facts before acquiring ART binding/verification locks."""
+        """Bind exact checker evidence through the shared publication operation."""
+        if type(request) is not CheckerOutputBindingRequest:
+            raise TypeError("invalid checker output binding request")
+        return await self._bind(request)
+
+    async def bind_setup_output(
+        self, request: SetupModelOutputBindingRequest
+    ) -> SetupModelOutputBindingResult:
+        if type(request) is not SetupModelOutputBindingRequest:
+            raise TypeError("invalid setup model output binding request")
+        result = await self._bind(request)
+        return SetupModelOutputBindingResult(
+            result.binding_id,
+            result.content_id,
+            result.put_attempt_id,
+            result.verification_receipt_id,
+            result.replayed,
+        )
+
+    async def _bind(
+        self, request: CheckerOutputBindingRequest | SetupModelOutputBindingRequest
+    ) -> CheckerOutputBindingResult:
+        """Fence owner facts before acquiring ART binding/verification locks."""
         if (
-            type(request) is not CheckerOutputBindingRequest
-            or not self._session.in_transaction()
+            not self._session.in_transaction()
             or self._session.in_nested_transaction()
             or type(request.put_attempt_id) is not UUID
             or type(request.verification_receipt_id) is not UUID
         ):
             raise CheckerOutputUnavailable("checker_output_binding_unavailable")
-        selector = CheckerOutputSelector.model_validate(request.selector)
+        selector = GENERATED_OUTPUT_SELECTOR.validate_python(request.selector)
         try:
             await self._authority.preflight(selector)
             await self._authority.prepare(selector)
             reservation = await self._reservations.resolve(selector)
             reservation.select(selector)
+            owner = generated_output_subject(reservation)
             await self._session.execute(
                 text("select pg_advisory_xact_lock(hashtextextended(:key, 0))"),
                 {
-                    "key": f"checker-output:{selector.paid_slot.project_id}:{selector.model_call_attempt_id}:{selector.slot_key}",
+                    "key": f"generated-output:{owner.project_id}:{owner.resource_id}:{owner.logical_role}",
                 },
             )
             facts = await select_checker_output(
@@ -78,10 +106,10 @@ class CheckerOutputBindingService:
             binding = await self._session.scalar(
                 select(ArtifactBinding)
                 .where(
-                    ArtifactBinding.project_id == str(selector.paid_slot.project_id),
-                    ArtifactBinding.resource_type == "checker_model_call",
-                    ArtifactBinding.resource_id == str(selector.model_call_attempt_id),
-                    ArtifactBinding.logical_role == selector.slot_key,
+                    ArtifactBinding.project_id == str(owner.project_id),
+                    ArtifactBinding.resource_type == owner.resource_type,
+                    ArtifactBinding.resource_id == str(owner.resource_id),
+                    ArtifactBinding.logical_role == owner.logical_role,
                     ArtifactBinding.scope_version == 1,
                 )
                 .with_for_update()
@@ -107,10 +135,10 @@ class CheckerOutputBindingService:
                 binding = ArtifactBinding(
                     id=str(new_record_id()),
                     content_id=str(facts.content_id),
-                    project_id=str(selector.paid_slot.project_id),
-                    resource_type="checker_model_call",
-                    resource_id=str(selector.model_call_attempt_id),
-                    logical_role=selector.slot_key,
+                    project_id=str(owner.project_id),
+                    resource_type=owner.resource_type,
+                    resource_id=str(owner.resource_id),
+                    logical_role=owner.logical_role,
                     scope_version=1,
                     actor_id=ServiceIdentity.ARTIFACT_CHECKER_OUTPUT.value,
                     attribution_type="service_identity",
