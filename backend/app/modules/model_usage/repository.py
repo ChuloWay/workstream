@@ -253,7 +253,7 @@ class ModelCallRepository:
     @staticmethod
     def _setup_envelope_predicates(key: SetupModelUsageSlotKey):
         return (
-            SetupModelUsageEnvelope.compilation_attempt_id == str(key.compilation_attempt_id),
+            SetupModelUsageEnvelope.compilation_attempt_id == key.compilation_attempt_id,
             SetupModelUsageEnvelope.project_id == str(key.project_id),
             SetupModelUsageEnvelope.guide_id == str(key.guide_id),
             SetupModelUsageEnvelope.source_snapshot_id == str(key.source_snapshot_id),
@@ -278,7 +278,7 @@ class ModelCallRepository:
     @staticmethod
     def _setup_slot_predicates(key: SetupModelUsageSlotKey):
         return (
-            SetupModelUsageSlot.compilation_attempt_id == str(key.compilation_attempt_id),
+            SetupModelUsageSlot.compilation_attempt_id == key.compilation_attempt_id,
             SetupModelUsageSlot.runtime_configuration_hash == key.runtime_configuration_hash,
             SetupModelUsageSlot.profile_id == str(key.profile_id),
             SetupModelUsageSlot.profile_version == key.profile_version,

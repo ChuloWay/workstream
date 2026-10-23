@@ -157,9 +157,12 @@ project budget.
 
 Setup recovery never fabricates checker lineage. The setup handler reads retained
 verified response ART and completes the original setup effect. Provider storage is
-disabled; an ID-less genuinely ambiguous response may remain held indefinitely.
-The exact Operator read provides visibility but cannot assert no effect, release
-money or create a replacement.
+disabled: if delivery succeeds but the process is lost before response ART is
+retained, a provider ID alone does not make that response retrievable. That effect,
+like an ID-less genuinely ambiguous response, remains uncertain with its reservation
+held until authenticated evidence can establish a safe terminal outcome. The exact
+Operator read provides visibility but cannot assert no effect, release money or
+create a replacement.
 
 For POST, budget exhaustion, provider outage, unavailable runtime and invalid
 provider output remain infrastructure failure on the original Submission. They do

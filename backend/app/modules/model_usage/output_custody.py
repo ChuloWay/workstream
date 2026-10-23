@@ -29,9 +29,7 @@ class SetupModelOutputReservations:
         self._owner = owner
         self._session = session
 
-    async def resolve(
-        self, selector: SetupModelOutputSelector
-    ) -> SetupModelOutputReservation:
+    async def resolve(self, selector: SetupModelOutputSelector) -> SetupModelOutputReservation:
         """Resolve one exact setup role without MODEL-to-PROJECTS lock backedges."""
         require_model_call_transaction(self._session)
         selector = SetupModelOutputSelector.model_validate(selector)
@@ -63,7 +61,7 @@ class SetupModelOutputReservations:
             or effect.setup_slot_id != slot.id
             or profile.project_id != str(key.project_id)
             or (
-                slot.compilation_attempt_id,
+                str(slot.compilation_attempt_id),
                 slot.project_id,
                 slot.guide_id,
                 slot.source_snapshot_id,

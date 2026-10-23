@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from uuid import UUID
 
 from sqlalchemy import (
     BigInteger,
@@ -185,6 +186,11 @@ class ModelUsageBudgetConfiguration(Base):
             "configuration_version",
             "configuration_digest",
             name="model_usage_budget_configurations_attempt_identity",
+        ),
+        UniqueConstraint(
+            "id",
+            "project_id",
+            name="model_usage_budget_configurations_id_project",
         ),
         UniqueConstraint("configuration_digest", name="model_usage_budget_configurations_digest"),
         UniqueConstraint("operation_id", name="model_usage_budget_configurations_operation"),
@@ -437,7 +443,7 @@ class SetupModelUsageEnvelope(Base):
     )
 
     id: Mapped[str] = mapped_column(Uuid(as_uuid=False), primary_key=True)
-    compilation_attempt_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False)
+    compilation_attempt_id: Mapped[UUID] = mapped_column(Uuid(), nullable=False)
     project_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False)
     guide_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False)
     source_snapshot_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False)
@@ -521,7 +527,7 @@ class SetupModelUsageSlot(Base):
         ForeignKey("setup_model_usage_envelopes.id", ondelete="RESTRICT"),
         nullable=False,
     )
-    compilation_attempt_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False)
+    compilation_attempt_id: Mapped[UUID] = mapped_column(Uuid(), nullable=False)
     project_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False)
     guide_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False)
     source_snapshot_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False)
@@ -551,9 +557,7 @@ class ModelUsageEffect(Base):
         UniqueConstraint(
             "setup_slot_id", "attempt_number", name="model_usage_effects_setup_number"
         ),
-        UniqueConstraint(
-            "internal_call_request_id", name="model_usage_effects_internal_request"
-        ),
+        UniqueConstraint("internal_call_request_id", name="model_usage_effects_internal_request"),
         UniqueConstraint(
             "prepared_authorization_evidence_id",
             name="model_usage_effects_prepare_authority",
@@ -694,6 +698,10 @@ class CheckerModelUsageRecovery(Base):
             "authorization_evidence_id", name="checker_model_usage_recoveries_authority"
         ),
         CheckConstraint("worker_lease_generation > 0", name="lease_generation"),
+        CheckConstraint(
+            "jsonb_typeof(execution_facts) = 'object' and jsonb_typeof(effect_facts) = 'object'",
+            name="facts",
+        ),
     )
 
     id: Mapped[str] = mapped_column(Uuid(as_uuid=False), primary_key=True)
@@ -707,6 +715,8 @@ class CheckerModelUsageRecovery(Base):
     )
     worker_lease_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False)
     worker_lease_generation: Mapped[int] = mapped_column(Integer, nullable=False)
+    execution_facts: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    effect_facts: Mapped[dict] = mapped_column(JSONB, nullable=False)
     authorization_evidence_id: Mapped[str] = mapped_column(
         Uuid(as_uuid=False), ForeignKey("audit_events.id", ondelete="RESTRICT"), nullable=False
     )
@@ -721,7 +731,7 @@ class CheckerModelInvocationGrant(Base):
     __tablename__ = "checker_model_invocation_grants"
     __table_args__ = (
         CheckConstraint(
-            "(get_byte(uuid_send(id),6)>>4)=7 and (get_byte(uuid_send(id),8)&192)=128",
+            _UUID7,
             name="id_uuid7",
         ),
         CheckConstraint(
@@ -738,8 +748,8 @@ class CheckerModelInvocationGrant(Base):
     checker_run_id: Mapped[str] = mapped_column(
         Uuid(as_uuid=False), ForeignKey("checker_runs.id", ondelete="RESTRICT"), nullable=False
     )
-    registry_entry_id: Mapped[str] = mapped_column(
-        Uuid(as_uuid=False),
+    registry_entry_id: Mapped[UUID] = mapped_column(
+        Uuid(),
         ForeignKey("external_checker_registry_entries.id", ondelete="RESTRICT"),
         nullable=False,
     )

@@ -1764,7 +1764,7 @@ another paid effect.
 | `model_usage_budget_accounts` | Current configuration and serialized lifetime reserved/settled integer USD nanodollars; configuration changes never reset spend |
 | `checker_model_usage_slots` | Stable project, assignment, Submission/version, requirement, registry digest, configuration hash, exact profile and call-slot identity; excludes retry generation and execution lease |
 | `model_usage_effects` | Immutable first request hash, dispatch intent, reservation, provider identity, private ART request/response references, usage and once-only terminal settlement |
-| `checker_model_usage_recoveries` | Fresh current-run attachment to an existing attempt; cannot authorize a new provider create |
+| `checker_model_usage_recoveries` | Fresh current-run attachment with canonical execution/effect facts; SQL verifies the exact paid slot, running successor lease, fixed-service recovery receipt and resource digest, and the row cannot authorize a new provider create |
 | `checker_model_invocation_grants` | Hashed short-lived capability, exact execution and binding, PostgreSQL expiry and one consumption into the selected attempt/request |
 
 An attempt progresses from `prepared` to `dispatching`, with uncertain delivery

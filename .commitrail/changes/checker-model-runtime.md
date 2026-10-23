@@ -135,6 +135,12 @@ retain their reservation; absence of a provider ID is not proof of no effect.
 Known provider IDs may be retrieved without another create. Cached completion
 is immutable and survives process, lease and Operator retries.
 
+Setup requests disable provider-side storage. A known provider ID is therefore a
+durable observation, not by itself a recovery source: if the process is lost before
+response ART custody, the exact effect remains uncertain and keeps its reservation.
+Only retained verified response evidence or an authenticated provider/no-effect
+proof may settle or release it; an Operator read cannot manufacture certainty.
+
 Keep the existing CheckerRun lifecycle. A run may finish `infrastructure_failed`
 when its model response is unavailable, while the independent paid call remains
 `dispatching` or `uncertain`. Operator retry attaches the same slot; it may only
@@ -280,6 +286,36 @@ Current owner documentation replaces deny-only generated-output wording with
 active paid-call ART custody, lists all nine model permission/action mappings and
 describes stable effect records. Existing normalized checker outcomes and
 true/false review-policy routing remain unchanged.
+
+The current security repair makes setup `known_failed` completion record the
+required settlement authority and timestamp before the terminal transition. A
+real PostgreSQL regression proves one provider dispatch, exact settled cost,
+zero remaining reservation and immutable restart replay. Checker recovery rows
+now retain canonical execution/effect facts, and the `0061_model_usage` guard
+independently verifies exact project, Task, assignment, Submission, registry,
+run, lease, generation, effect, service actor, action and resource digest. The
+valid fresh retry successor and independent substitutions of every one of those
+facts passed together with the setup settlement case (`2 passed` in 14.76s).
+
+The same repair closes repository metadata drift: project budget accounts and
+grant-call bindings are explicitly classified natural/composite identities,
+all MODEL foreign keys use the referenced native UUID representation, and the
+ORM declares the budget configuration uniqueness required by the account's
+composite foreign key. Native UUID metadata tests pass `5/5`; the complete
+static identifier inventory passes `24/24`. The first combined canonical 0061
+run installed every migration through `0061_model_usage` and emitted six passing
+tests, but its final ART case exceeded the deliberately bounded 240-second child
+limit. Cleanup completed and no full-run pass is claimed from that attempt;
+split exact-head PostgreSQL replay and retained-data upgrade remain pending.
+
+Hosted configuration proof at `9a57c8831` passes 31 focused tests. An actual
+parent Rust relay image built from `04bbac112` passed a controlled smoke with no
+network, read-only input/root filesystem, only the invocation socket exposed,
+the global grant concealed, and owned image/container cleanup confirmed. This
+does not qualify hosted deployment or the composed gVisor runtime. The final
+static API/lane run passes 59 tests, the CLI permission contract passes 23, and
+the actual MCP permission payload passes 231; these are controlled local proofs,
+not live provider or deployment evidence.
 
 Plan review found that existing ART output slots are empty and run/lease-bound;
 the stable call evidence reservation above is required. It also required exact

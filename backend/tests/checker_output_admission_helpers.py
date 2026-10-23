@@ -51,8 +51,11 @@ from app.modules.tasks.models import AuditEvent, Submission, WorkstreamTask
 _ISOLATED_DATABASE_RE = re.compile(r"workstream_test_([a-f0-9]{12})")
 _ISOLATED_ROLE_RE = re.compile(r"workstream_role_([a-f0-9]{12})")
 _CONTROLLED_MODEL_GUARDS = {
-    "model_usage_profiles": "model_usage_profiles_guard",
-    "model_usage_effects": "model_usage_effects_guard",
+    "model_usage_profiles": ("model_usage_profiles_guard",),
+    "model_usage_effects": (
+        "model_usage_effects_guard",
+        "checker_model_call_attempt_reconcile",
+    ),
 }
 
 
@@ -61,8 +64,8 @@ async def _suspend_controlled_model_guard(
     session: AsyncSession, *, table: str
 ) -> AsyncIterator[None]:
     """Suspend one named guard only in the isolated database for this ART fixture."""
-    trigger = _CONTROLLED_MODEL_GUARDS.get(table)
-    if trigger is None:
+    triggers = _CONTROLLED_MODEL_GUARDS.get(table)
+    if triggers is None:
         raise RuntimeError("unsupported model usage guard suspension")
     database_name, database_role = (
         await session.execute(text("select current_database(), current_user"))
@@ -76,17 +79,20 @@ async def _suspend_controlled_model_guard(
     ):
         raise RuntimeError("model usage guard suspension requires an isolated test database")
     try:
-        await session.execute(text(f"alter table {table} disable trigger {trigger}"))
+        for trigger in triggers:
+            await session.execute(text(f"alter table {table} disable trigger {trigger}"))
         yield
         # PostgreSQL will not ALTER a table with deferred FK events pending. This
         # fixture owns its dedicated arrangement session, so finish the controlled
         # seed before restoring the guard in a new transaction.
         await session.commit()
-        await session.execute(text(f"alter table {table} enable trigger {trigger}"))
+        for trigger in triggers:
+            await session.execute(text(f"alter table {table} enable trigger {trigger}"))
         await session.commit()
     except BaseException:
         await session.rollback()
-        await session.execute(text(f"alter table {table} enable trigger {trigger}"))
+        for trigger in triggers:
+            await session.execute(text(f"alter table {table} enable trigger {trigger}"))
         await session.commit()
         raise
 

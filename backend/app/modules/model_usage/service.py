@@ -841,6 +841,8 @@ class ModelCallService:
                     checker_run_id=str(execution.checker_run_id),
                     worker_lease_id=str(execution.worker_lease_id),
                     worker_lease_generation=execution.worker_lease_generation,
+                    execution_facts=execution.model_dump(mode="json"),
+                    effect_facts=effect.model_dump(mode="json"),
                     authorization_evidence_id=str(authority.evidence_id),
                 )
             )
@@ -906,6 +908,8 @@ class ModelCallService:
                     checker_run_id=str(execution.checker_run_id),
                     worker_lease_id=str(execution.worker_lease_id),
                     worker_lease_generation=execution.worker_lease_generation,
+                    execution_facts=execution.model_dump(mode="json"),
+                    effect_facts=effect.model_dump(mode="json"),
                     authorization_evidence_id=str(authority.evidence_id),
                 )
             )

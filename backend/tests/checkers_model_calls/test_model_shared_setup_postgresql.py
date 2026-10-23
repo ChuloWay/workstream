@@ -1,10 +1,16 @@
 """Focused setup and shared-budget PostgreSQL model-usage proofs."""
 
+from copy import deepcopy
+import json
+
 from app.modules.model_usage.models import ModelUsageEffect
+from tests.checkers_model_calls.model_usage_pg_support import (
+    DatabaseFacts,
+    model_database as _model_database,
+)
 from tests.checkers_model_calls.test_model_call_transactions_postgresql import (
     AsyncSession,
     BoundaryPorts,
-    DatabaseFacts,
     DBAPIError,
     ModelCallBudgetUnavailable,
     ModelCallConflict,
@@ -17,6 +23,7 @@ from tests.checkers_model_calls.test_model_call_transactions_postgresql import (
     canonical_json_hash,
     evidence,
     execution,
+    insert_checker_run,
     new_record_id,
     provision,
     pytest,
@@ -27,9 +34,6 @@ from tests.checkers_model_calls.test_model_call_transactions_postgresql import (
     slot,
     text,
     uuid4,
-)
-from tests.checkers_model_calls.test_model_call_transactions_postgresql import (
-    model_database as _model_database,
 )
 
 model_database = _model_database
@@ -86,9 +90,7 @@ async def test_setup_profile_selection_pins_latest_matching_identity(
         first.spec.model_copy(
             update={
                 "profile_version": 2,
-                "settings": ModelGenerationSettings(
-                    reasoning_effort="high", text_verbosity="low"
-                ),
+                "settings": ModelGenerationSettings(reasoning_effort="high", text_verbosity="low"),
             }
         )
     )
@@ -400,6 +402,64 @@ async def test_setup_draft_review_correction_settle_three_shared_calls(
         assert account.lifetime_settled_nanodollars == settled
 
 
+async def test_setup_known_failure_settles_once_and_replays_after_restart(
+    model_database: DatabaseFacts,
+) -> None:
+    """An unusable paid response conserves exact spend and never dispatches twice."""
+    ports = BoundaryPorts()
+    reservation = 100 * 11 + 50 * 29
+    profile = await provision(model_database, ports, limit=reservation)
+    key = await setup_slot_key(model_database, profile)
+    request_sha = sha("setup-known-failure-request")
+    response = evidence("setup-known-failure-response", sha("setup-known-failure-response"))
+    usage = ModelCallUsage(
+        input_tokens=40,
+        cached_input_tokens=10,
+        output_tokens=12,
+        reasoning_tokens=3,
+    )
+
+    async with AsyncSession(model_database.engine, expire_on_commit=False) as session:
+        async with session.begin():
+            owner = setup_service(session, ports)
+            prepared = await owner.prepare(key, request_sha)
+            dispatched = await owner.reserve_dispatch(
+                prepared,
+                evidence("setup-known-failure-request", request_sha),
+            )
+            failed = await owner.complete(
+                dispatched.effect,
+                provider_response_id="resp_setup_known_failure",
+                provider_model_snapshot=profile.spec.model_snapshot,
+                response_evidence=response,
+                usage=usage,
+                usable=False,
+            )
+            assert failed.state == "known_failed"
+            assert failed.replayed is False
+
+    async with AsyncSession(model_database.engine, expire_on_commit=False) as session:
+        async with session.begin():
+            replay = await setup_service(session, ports).complete(
+                dispatched.effect,
+                provider_response_id="resp_setup_known_failure",
+                provider_model_snapshot=profile.spec.model_snapshot,
+                response_evidence=response,
+                usage=usage,
+                usable=False,
+            )
+            account = await session.get(ModelUsageBudgetAccount, str(model_database.project_id))
+            row = await session.get(ModelUsageEffect, str(dispatched.effect.effect_id))
+            assert replay.state == "known_failed"
+            assert replay.replayed is True
+            assert account.lifetime_reserved_nanodollars == 0
+            assert account.lifetime_settled_nanodollars == 30 * 11 + 10 * 2 + 12 * 29
+            assert row.settlement_authorization_evidence_id is not None
+            assert row.settled_at is not None
+
+    assert ports.events.count("setup_dispatch") == 1
+
+
 async def test_setup_rejects_same_project_profile_substitution_before_effect(
     model_database: DatabaseFacts,
 ) -> None:
@@ -626,10 +686,7 @@ async def test_fresh_execution_authority_precedes_currentness_and_owner_locks(
 
     async with AsyncSession(model_database.engine, expire_on_commit=False) as session:
         async with session.begin():
-            await session.execute(
-                text("insert into checker_runs(id) values (:id)"),
-                {"id": run.checker_run_id},
-            )
+            await insert_checker_run(session, run)
             owner = service(session, ports)
             ports.events.clear()
             await owner.attach_recovery(run, dispatched.effect)
@@ -644,6 +701,180 @@ async def test_fresh_execution_authority_precedes_currentness_and_owner_locks(
                     request_sha256=prepared.request_sha256,
                 )
             assert ports.events == ["child", "recovery_current"]
+
+
+async def test_recovery_insert_rejects_every_substituted_owner_and_authority_fact(
+    model_database: DatabaseFacts,
+) -> None:
+    """The SQL boundary proves a fresh successor and rejects unrelated recovery facts."""
+    ports = BoundaryPorts()
+    profile = await provision(model_database, ports, limit=10_000)
+    origin = execution(model_database)
+    paid_slot = slot(model_database, profile, "recovery_guard_origin")
+    request_sha = sha("recovery-guard-origin")
+    async with AsyncSession(model_database.engine, expire_on_commit=False) as session:
+        async with session.begin():
+            owner = service(session, ports)
+            prepared = await owner.prepare_attempt(
+                origin,
+                paid_slot,
+                registry_entry_id=model_database.registry_entry_id,
+                request_sha256=request_sha,
+            )
+            dispatched = await owner.reserve_dispatch(
+                origin,
+                prepared,
+                evidence("recovery-guard-origin", request_sha),
+            )
+            await owner.mark_uncertain(
+                dispatched.effect,
+                sha("recovery-guard-origin-uncertain"),
+                provider_response_id="resp_recovery_guard_origin",
+            )
+
+    other_origin = execution(model_database)
+    other_slot = slot(model_database, profile, "recovery_guard_other")
+    other_sha = sha("recovery-guard-other")
+    async with AsyncSession(model_database.engine, expire_on_commit=False) as session:
+        async with session.begin():
+            owner = service(session, ports)
+            other_prepared = await owner.prepare_attempt(
+                other_origin,
+                other_slot,
+                registry_entry_id=model_database.registry_entry_id,
+                request_sha256=other_sha,
+            )
+            other_dispatched = await owner.reserve_dispatch(
+                other_origin,
+                other_prepared,
+                evidence("recovery-guard-other", other_sha),
+            )
+            await owner.mark_uncertain(
+                other_dispatched.effect,
+                sha("recovery-guard-other-uncertain"),
+                provider_response_id="resp_recovery_guard_other",
+            )
+
+    successor = execution(model_database)
+    async with AsyncSession(model_database.engine, expire_on_commit=False) as session:
+        async with session.begin():
+            await insert_checker_run(session, successor)
+            attached = await service(session, ports).attach_recovery(successor, dispatched.effect)
+            assert attached.replayed is False
+            stored = (
+                (
+                    await session.execute(
+                        text(
+                            "select attempt_id,checker_run_id,worker_lease_id,"
+                            "worker_lease_generation,execution_facts,effect_facts,"
+                            "authorization_evidence_id from checker_model_usage_recoveries "
+                            "where attempt_id=:effect"
+                        ),
+                        {"effect": dispatched.effect.attempt_id},
+                    )
+                )
+                .mappings()
+                .one()
+            )
+            authority = (
+                (
+                    await session.execute(
+                        text(
+                            "select actor_id,action_id,permission_id,after_facts "
+                            "from audit_events where id=:id"
+                        ),
+                        {"id": stored["authorization_evidence_id"]},
+                    )
+                )
+                .mappings()
+                .one()
+            )
+
+    unrelated_run = execution(model_database)
+    async with AsyncSession(model_database.engine, expire_on_commit=False) as session:
+        async with session.begin():
+            await insert_checker_run(session, unrelated_run)
+
+    base_execution = deepcopy(stored["execution_facts"])
+    base_effect = deepcopy(stored["effect_facts"])
+    wrong_project = str(new_record_id())
+    wrong_lease = str(new_record_id())
+    mutations = {
+        "project": lambda row: row["execution"].__setitem__("project_id", wrong_project),
+        "run": lambda row: row.__setitem__("run", str(unrelated_run.checker_run_id)),
+        "lease": lambda row: row.__setitem__("lease", wrong_lease),
+        "generation": lambda row: row.__setitem__("generation", 99),
+        "effect": lambda row: (
+            row.__setitem__("effect_id", str(other_dispatched.effect.attempt_id)),
+            row.__setitem__("effect", other_dispatched.effect.model_dump(mode="json")),
+        ),
+        "action": lambda row: row.__setitem__("action", "checker.model_call.dispatch"),
+        "actor": lambda row: row.__setitem__("actor", str(new_record_id())),
+        "resource_digest": lambda row: row.__setitem__(
+            "after", {"allowed": True, "resource_context_digest": sha("wrong-recover")}
+        ),
+    }
+    for label, mutate in mutations.items():
+        row = {
+            "effect_id": str(stored["attempt_id"]),
+            "run": str(stored["checker_run_id"]),
+            "lease": str(stored["worker_lease_id"]),
+            "generation": stored["worker_lease_generation"],
+            "execution": deepcopy(base_execution),
+            "effect": deepcopy(base_effect),
+            "actor": authority["actor_id"],
+            "action": authority["action_id"],
+            "permission": authority["permission_id"],
+            "after": authority["after_facts"],
+        }
+        mutate(row)
+        async with AsyncSession(model_database.engine) as session:
+            with pytest.raises(DBAPIError, match="recovery (ancestry|authority) is invalid"):
+                async with session.begin():
+                    if label == "actor":
+                        await session.execute(
+                            text(
+                                "insert into actor_profiles(id,actor_kind,status) "
+                                "values (:id,'human','active')"
+                            ),
+                            {"id": row["actor"]},
+                        )
+                    evidence_id = new_record_id()
+                    await session.execute(
+                        text(
+                            "insert into audit_events(id,event_domain,event_type,actor_ref_kind,"
+                            "actor_id,action_id,permission_id,denial_code,after_facts) values "
+                            "(:id,'authority','SensitiveAuthorizationAllowed','actor_profile',"
+                            ":actor,:action,:permission,null,cast(:after as json))"
+                        ),
+                        {
+                            "id": evidence_id,
+                            "actor": row["actor"],
+                            "action": row["action"],
+                            "permission": row["permission"],
+                            "after": json.dumps(row["after"]),
+                        },
+                    )
+                    await session.execute(
+                        text(
+                            "insert into checker_model_usage_recoveries("
+                            "id,attempt_id,checker_run_id,worker_lease_id,"
+                            "worker_lease_generation,execution_facts,effect_facts,"
+                            "authorization_evidence_id) values "
+                            "(:id,:effect,:run,:lease,:generation,cast(:execution as jsonb),"
+                            "cast(:effect_facts as jsonb),:authority)"
+                        ),
+                        {
+                            "id": new_record_id(),
+                            "effect": row["effect_id"],
+                            "run": row["run"],
+                            "lease": row["lease"],
+                            "generation": row["generation"],
+                            "execution": json.dumps(row["execution"]),
+                            "effect_facts": json.dumps(row["effect"]),
+                            "authority": evidence_id,
+                        },
+                    )
 
 
 async def test_reservation_rollback_and_completion_settle_exactly_once(
@@ -702,10 +933,7 @@ async def test_reservation_rollback_and_completion_settle_exactly_once(
 
     async with AsyncSession(model_database.engine, expire_on_commit=False) as session:
         async with session.begin():
-            await session.execute(
-                text("insert into checker_runs(id) values (:id)"),
-                {"id": run.checker_run_id},
-            )
+            await insert_checker_run(session, run)
             ports.events.clear()
             attached = await service(session, ports).attach_completed(run, dispatched.effect)
             assert attached.replayed is False
