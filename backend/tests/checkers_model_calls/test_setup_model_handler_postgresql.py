@@ -367,20 +367,26 @@ class _Journey:
     response_marker: str
     provider_calls: list[str]
     reserve_observations: list[tuple[str, str, str]]
+    stages: list[str]
+    failures: list[BaseException]
     fail_completion: list[bool]
     outputs: object
 
     def handler(self) -> SetupModelProxyHandler:
-        return SetupModelProxyHandler(
+        return _ObservedHandler(
+            failures=self.failures,
             sessions=self.storage.factory,
             authorization=setup_model_service_authorization,
             calls=lambda session, authority: _ObservedCalls(session, authority, self),
             profiles=model_profile_reader,
             outputs=self.outputs,
-            bindings=lambda session: setup_model_output_binding(
-                session,
-                namespace=self.storage.namespace,
-                owner=setup_model_usage_owner(session),
+            bindings=lambda session: _ObservedBindings(
+                setup_model_output_binding(
+                    session,
+                    namespace=self.storage.namespace,
+                    owner=setup_model_usage_owner(session),
+                ),
+                self.stages,
             ),
             provider=lambda profile: _provider(self, profile),
         )
@@ -391,6 +397,7 @@ class _Provider:
         self.journey = journey
 
     async def count_input(self, _body):
+        self.journey.stages.append("count_input")
         return 1
 
     async def dispatch(self, _body):
@@ -417,6 +424,19 @@ async def _provider(journey: _Journey, _profile) -> AsyncIterator[_Provider]:
     yield _Provider(journey)
 
 
+class _ObservedHandler(SetupModelProxyHandler):
+    def __init__(self, *, failures: list[BaseException], **kwargs) -> None:
+        super().__init__(**kwargs)
+        self.failures = failures
+
+    async def _handle(self, request):
+        try:
+            return await super()._handle(request)
+        except Exception as exc:
+            self.failures.append(exc)
+            raise
+
+
 class _ObservedCalls:
     def __init__(self, session, authority, journey: _Journey) -> None:
         self.session = session
@@ -431,7 +451,20 @@ class _ObservedCalls:
     def __getattr__(self, name):
         return getattr(self.owner, name)
 
+    async def recover_existing(self, *args, **kwargs):
+        self.journey.stages.append("recover_existing")
+        result = await self.owner.recover_existing(*args, **kwargs)
+        self.journey.stages.append("recover_existing_done")
+        return result
+
+    async def prepare(self, *args, **kwargs):
+        self.journey.stages.append("prepare")
+        result = await self.owner.prepare(*args, **kwargs)
+        self.journey.stages.append("prepare_done")
+        return result
+
     async def reserve_dispatch(self, prepared, request_evidence):
+        self.journey.stages.append("reserve_dispatch")
         row = (
             await self.session.execute(
                 text(
@@ -454,6 +487,46 @@ class _ObservedCalls:
             self.journey.fail_completion[0] = False
             raise ModelCallUnavailable("simulated_setup_ledger_unavailable")
         return await self.owner.complete(*args, **kwargs)
+
+
+class _ObservedOutputs:
+    def __init__(self, owner, stages: list[str]) -> None:
+        self.owner = owner
+        self.stages = stages
+
+    def __getattr__(self, name):
+        return getattr(self.owner, name)
+
+    async def store_setup_output(self, request):
+        role = request.selector.role
+        self.stages.append(f"store_{role}")
+        try:
+            result = await self.owner.store_setup_output(request)
+        except Exception as exc:
+            self.stages.append(f"store_{role}_failed:{type(exc).__name__}:{exc}")
+            raise
+        self.stages.append(f"store_{role}_done")
+        return result
+
+
+class _ObservedBindings:
+    def __init__(self, owner, stages: list[str]) -> None:
+        self.owner = owner
+        self.stages = stages
+
+    def __getattr__(self, name):
+        return getattr(self.owner, name)
+
+    async def bind_setup_output(self, request):
+        role = request.selector.role
+        self.stages.append(f"bind_{role}")
+        try:
+            result = await self.owner.bind_setup_output(request)
+        except Exception as exc:
+            self.stages.append(f"bind_{role}_failed:{type(exc).__name__}:{exc}")
+            raise
+        self.stages.append(f"bind_{role}_done")
+        return result
 
 
 async def _journey(storage: _StorageCase, access) -> _Journey:
@@ -484,7 +557,21 @@ async def _journey(storage: _StorageCase, access) -> _Journey:
         settings=storage.settings,
         owner=setup_model_usage_owner,
     )
-    return _Journey(storage, profile, request, response, marker, [], [], [True], outputs)
+    stages: list[str] = []
+    observed_outputs = _ObservedOutputs(outputs, stages)
+    return _Journey(
+        storage,
+        profile,
+        request,
+        response,
+        marker,
+        [],
+        [],
+        stages,
+        [],
+        [True],
+        observed_outputs,
+    )
 
 
 async def _state(journey: _Journey):
@@ -609,6 +696,9 @@ async def test_setup_response_recovers_from_verified_minio_after_ledger_loss(
         first = await journey.handler().handle(journey.request)
         assert first.outcome == "unavailable"
         assert first.failure_code == "model_call_unavailable"
+        assert [f"{type(exc).__name__}:{exc}" for exc in journey.failures] == [
+            "ModelCallUnavailable:simulated_setup_ledger_unavailable"
+        ]
         assert journey.reserve_observations == [("setup_model_call", "model_request", "verified")]
         assert journey.provider_calls == ["dispatch"]
         assert journey.fail_completion == [False]
