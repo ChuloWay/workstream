@@ -221,7 +221,10 @@ class Terminal:
             or (self.sent_after is not None and len(self.raw) <= self.sent_after)
         ) and time.monotonic() < deadline:
             self.pump()
-            assert self.process.poll() is None, f"TUI exited: {self.screen}"
+            returncode = self.process.poll()
+            assert returncode is None, (
+                f"TUI exited (return code {returncode}): {self.screen}"
+            )
         assert text in self.screen, f"missing {text!r} on screen:\n{self.screen}"
         assert self.sent_after is None or len(self.raw) > self.sent_after, (
             "no new terminal frame after input"
