@@ -4,7 +4,9 @@
 - Durable disposition: Planned
 - Intended merge outcome: prepare one bounded trusted intake microVM during the authorized ZIP upload, inspect/extract and run the Workstream default inside it, and feed the existing PRE/POST owners verified material without host ZIP/default execution.
 
-## Intent and current gap
+## Intent
+
+## Current behavior
 
 Boundary 1 supplies real Smol execution and recovery through CHECKERS' existing
 adapter. Public upload still invokes ART's host `SubmissionArchiveInspector`,
@@ -15,7 +17,9 @@ requested overlap and the fresh-VM custody for all ZIP processing.
 The user authorized continuing through this boundary and the separate full
 public API/durable-worker drill. A node probe is not completion.
 
-## Allowed scope
+## Bounded change
+
+### Allowed
 
 - `backend/app/interfaces/`: narrow typed trusted-intake capability and session;
   shared external adapter convention remains unchanged.
@@ -36,13 +40,15 @@ public API/durable-worker drill. A node probe is not completion.
 - Focused owner/adapter/conformance tests and affected runtime documentation,
   configuration examples, roadmap and initiative records.
 
+### Not allowed
+
 No policy, authorization, database schema, persistent workflow, submission,
 review, acceptance, award or artifact-store semantic changes. No project image
 may assert ART inspection or Workstream default authority. No host ZIP/default
 production fallback, generic command API, project VM handle, new scheduler,
 managed service or edits to the independently owned model gateway work.
 
-## Owner and operation plan
+## Design and decisions
 
 1. Add `trusted_submission_intake/unix_socket` through
    `ExternalServiceAdapterFactory[TrustedSubmissionIntakeAdapter]`, registered
@@ -107,7 +113,7 @@ cancelling an `asyncio.to_thread` await alone is insufficient. A failed or unkno
 inspection/default execution does not cause an unsafe in-session retry. Existing
 request/retry and durable-worker owners decide the next business attempt.
 
-## Acceptance and proof
+## Acceptance criteria
 
 | Atomic behavior | Owner and required proof |
 |---|---|
@@ -123,18 +129,24 @@ request/retry and durable-worker owners decide the next business attempt.
 | Canonical rules have one implementation | Existing corpus remains; source/composition negative checks reject production host inspector/default calls |
 | Existing policy branches remain | Required checks still feed existing true-policy review routing and false-policy shared acceptance; full public durable proof belongs to boundary 3 |
 
+## Evidence
+
 Run relevant owner/adapter suites, canonical archive/default corpus, real
 PostgreSQL integration and live KVM intake/cleanup tests. Full suite and public
 Celery journey remain blocking before the overall user goal is complete.
 
-## Risk and review
+## Risk and review routing
 
 - Risk class: L1
-- Reviewers: architecture/reuse, security, QA/test-delta, product/operations, documentation; CI integrity if workflow changes become necessary.
+- Required reviewers: architecture/reuse, security, QA/test-delta, product/operations, documentation; CI integrity if workflow changes become necessary.
 - Human review focus: preparation before bytes versus authority, two-phase default ordering, exact material export custody, cancellation/deadline cleanup, and explicit deployment prerequisites.
 - Plan review: required before implementation; no implementation proof claimed here.
 
-## Next usable boundary
+## Review findings
+
+Plan review has not yet run.
+
+## Reconciliation
 
 After this boundary's verified implementation: deployment composition and the
 public PRE -> immutable Submission -> durable POST -> governed outcome drill,
