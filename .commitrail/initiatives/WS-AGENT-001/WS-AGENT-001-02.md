@@ -33,7 +33,8 @@ focused tests; `backend/scripts/behavior_ownership.py`, its focused regression
 tests, and `.ci/behavior-ownership/partition.v1.json` for the exact three new
 runtime/topology owner registrations; the existing public-dispatch, outbox-topology,
 Celery-observability and lane-timing regressions when required to preserve their
-owner boundaries under that topology; and this record. The current initiative overview/index and
+owner boundaries under that topology; the existing external API drill operator
+documentation for the same worker-pool contract; and this record. The current initiative overview/index and
 `docs/roadmap_status.md` may be reconciled only for the resulting durable
 capability and next boundary. The dependency change may touch only
 `backend/pyproject.toml` and `backend/uv.lock` plus the focused installation tests.

@@ -392,10 +392,11 @@ setup does not certify manager approval, active project policy, submission or
 acceptance. New upload/setup/findings operations are outside the original
 29-operation census and must be reported separately with their actual evidence.
 
-The diagnostic Celery worker consumes only the default `celery` queue with the solo
-pool. It does not consume `workstream.outbox`; that queue requires the validated
-prefork Celery worker owned by the outbox topology. This pass therefore does not claim
-outbox delivery evidence and must not add the outbox queue to its solo Celery worker.
+The diagnostic Celery worker consumes only the default `celery` queue with the
+validated prefork, Redis visibility and no-prefetch topology required for inference.
+It does not consume `workstream.outbox`; that queue has its own prefork validation
+owned by the outbox topology. This pass therefore does not claim outbox delivery
+evidence and must not add the outbox queue to its guide worker.
 
 The provider's unresolved outcome can describe an invocation still in flight:
 observe the same setup run through completion or the bounded timeout, without

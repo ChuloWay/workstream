@@ -367,7 +367,13 @@ def test_global_signal_ignores_unowned_apps_without_resetting_guide_worker():
     configured = worker()
     topology.validate_project_setup_worker(configured)
     validated_parent = topology._validated_parent
-    unrelated = worker()
+    unrelated = worker(
+        pool=SoloPool,
+        eager=True,
+        broker="memory://",
+        disable_prefetch=False,
+        visibility=60,
+    )
     delattr(unrelated.app.conf, topology.PROJECT_GUIDE_CONSUMER_MARKER)
 
     topology.validate_project_setup_worker(unrelated)
