@@ -337,6 +337,7 @@ def test_v01_graph_has_one_root_and_head() -> None:
 
     assert [revision.revision for revision in revisions] == [
         HEAD_REVISION,
+        "0059_neutral_guide_runtime",
         "0058_compensation_unit_create",
         "0057_roles_anywhere_custody",
         "0056_manager_authored_runtime",
@@ -549,6 +550,7 @@ def test_repeated_upgrade_head_preserves_current_database(
         "0056_manager_authored_runtime",
         "0057_roles_anywhere_custody",
         "0058_compensation_unit_create",
+        "0059_neutral_guide_runtime",
     ],
 )
 def test_preceding_head_upgrades_to_current_without_recreation(
