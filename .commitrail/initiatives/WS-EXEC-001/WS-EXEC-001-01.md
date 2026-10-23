@@ -1,7 +1,7 @@
 # WS-EXEC-001-01 — Production Smol node lifecycle
 
 - Initiative: WS-EXEC-001
-- Durable disposition: Planned
+- Durable disposition: Complete
 - Intended merge outcome: execute existing registered checker images in fresh Smol microVMs through the existing typed execution boundary, with prepared sessions and recoverable exact-owner cleanup.
 
 ## Intent
@@ -27,6 +27,8 @@ Existing owner files and startup cleanup protect Docker container ownership.
   fixed factory composition and closed Smol health/receipt validation. Project
   preparation remains private inside Rust execute; the typed prepare/inspect/
   default handle belongs only to boundary 2's ART-owned port.
+- `backend/scripts/checker_image.py`, shared manifest validation and Smol cache
+  provisioning commands, plus their tests: one canonical platform identity rule.
 - Affected checker receipt validators, configuration, execution contract docs,
   capability ledger and this initiative/index: truthful runtime support.
 
@@ -101,7 +103,7 @@ only consume existing read-only grants. The service-owned intake image and defau
 behavior digest appear in health and intake receipts and cannot be selected or
 asserted by a project checker. No production host ZIP/default fallback remains.
 
-## Acceptance and executable proof map
+## Acceptance criteria
 
 The table records the acceptance map. Boundary 2 rows remain future proof;
 executed node evidence and its limits are described below.
@@ -169,6 +171,13 @@ An optimized-build startup failure exposed an omitted KVM ioctl argument;
 explicit zero now makes readiness reliable. Recursive `nodev` protects against
 image-owned device files, with a narrow exception for the trusted `/dev` whitelist;
 the live adversarial image includes a device file to exercise that denial.
+
+The implementation review found and repaired: incomplete cache manifest graph
+closure (ARCH/REUSE-SMOL-001); stale next-boundary wording (DOC-SMOL-001);
+non-discriminating device and post-launch failure fixtures plus missing retry
+proof (QA-TD-SMOL-001..003); and an io_uring path around the direct socket filter
+(WS-EXEC-SEC-001). The cache now shares publisher validation, and native guest
+proof requires io_uring denial before a socket operation can be submitted.
 
 ## Reconciliation
 

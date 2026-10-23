@@ -111,9 +111,11 @@ class Proof:
                "observed": observed, "seconds": time.monotonic() - started}
         print(json.dumps(row), flush=True)
         assert observed == expected, response
-        if result["outcome"] == "completed":
-            assert response["isolation"]["runtime"] == "smolvm", response
-            assert response["isolation"]["platform_manifest_digest"] == image["platform_manifest_digest"], response
+        # Every matrix case deliberately reaches guest execution, including
+        # negative workload cases. A pre-launch failure must not count as proof.
+        assert response["isolation"] is not None, response
+        assert response["isolation"]["runtime"] == "smolvm", response
+        assert response["isolation"]["platform_manifest_digest"] == image["platform_manifest_digest"], response
         return row
 
     def close(self):
@@ -138,6 +140,7 @@ def main():
                 proof.execute(image, phase, "pass")
         for case in ("isolation", "cpu", "pids", "disk"):
             proof.execute(python, "pre_submit", case)
+        proof.execute(native, "pre_submit", "io_uring")
         for case, expected, deadline in (("memory", "capacity_exceeded", 30000),
                                           ("output", "invalid_output", 30000),
                                           ("sleep", "deadline_exceeded", 2500)):

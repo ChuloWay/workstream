@@ -208,6 +208,11 @@ fn syscall_filter() -> Result<()> {
         libc::SYS_fsmount,
         libc::SYS_move_mount,
         libc::SYS_open_tree,
+        // io_uring can issue socket/connect operations without passing through
+        // the socket syscall rule below. No management-transport bypass.
+        libc::SYS_io_uring_setup,
+        libc::SYS_io_uring_enter,
+        libc::SYS_io_uring_register,
     ] {
         filter.extend([
             op(EQUAL, 0, 1, call as u32),
