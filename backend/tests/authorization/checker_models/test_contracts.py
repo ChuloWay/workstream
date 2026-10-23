@@ -6,19 +6,26 @@ from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
 import pytest
-from pydantic import ValidationError
+from pydantic import TypeAdapter, ValidationError
 
 from app.core.hashing import canonical_json_hash
 from app.core.identifiers import new_record_id
 from app.modules.actors.api import ServiceIdentity
 from app.modules.authorization.catalogue import ActionId, PermissionId
+from app.modules.authorization.domain.audit import (
+    AuthorizationDecisionResourceType,
+    CONTEXT_DIGEST_RESOURCE_TYPES,
+)
 from app.modules.authorization.model_usage_authorization import CheckerModelAuthorization
 from app.modules.authorization.domain.model_usage import (
     GRANT,
     RECOVER,
+    SETUP_PREPARE,
     ModelCallGrantAuthorityFacts,
     ModelCallRecoverAuthorityFacts,
+    SetupModelPrepareAuthorityFacts,
     checker_model_call_resource,
+    setup_model_usage_resource,
 )
 from app.modules.authorization.domain.checker_outputs import (
     BIND,
@@ -183,6 +190,26 @@ def setup_selector(*, role="model_request") -> SetupModelOutputSelector:
         role=role,
         content_sha256=sha(role),
     )
+
+
+def test_setup_usage_resource_is_admitted_by_decision_and_audit_vocabularies() -> None:
+    slot = setup_selector().slot_key
+    resource = setup_model_usage_resource(
+        SETUP_PREPARE,
+        SetupModelPrepareAuthorityFacts(
+            slot=slot,
+            request_sha256=sha("setup request"),
+        ),
+    )
+
+    assert resource.resource_type == "setup_model_usage"
+    assert (
+        TypeAdapter(AuthorizationDecisionResourceType).validate_python(
+            resource.resource_type
+        )
+        == resource.resource_type
+    )
+    assert resource.resource_type in CONTEXT_DIGEST_RESOURCE_TYPES
 
 
 @pytest.mark.parametrize("action", [WRITE, BIND])
