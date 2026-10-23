@@ -13,6 +13,7 @@ depends_on = None
 def upgrade() -> None:
     """Create shared MODEL-USAGE owners before ART and AUTH extensions."""
     op.execute("SET LOCAL search_path=pg_catalog,public,pg_temp")
+    _upgrade_setup_runtime_configuration_guard()
     for statement in _TABLES:
         op.execute(statement)
     for statement in _FUNCTIONS:
@@ -22,6 +23,55 @@ def upgrade() -> None:
     _upgrade_invocation_grants()
     _upgrade_art_custody()
     _upgrade_authorization_vocabulary()
+
+
+def _upgrade_setup_runtime_configuration_guard() -> None:
+    """Admit only an absent/null or exact complete model-profile selector."""
+    signature = "public.guard_project_guide_runtime_configuration()"
+    definition = (
+        op.get_bind()
+        .execute(
+            text(
+                "select pg_catalog.pg_get_functiondef(cast(:signature as pg_catalog.regprocedure))"
+            ),
+            {"signature": signature},
+        )
+        .scalar_one()
+    )
+    allowed_anchor = "'maximum_tool_calls','maximum_tool_output_characters'] <> '{}'::jsonb"
+    allowed_replacement = (
+        "'maximum_tool_calls','maximum_tool_output_characters',"
+        "'model_profile_id','model_profile_version','model_profile_digest'] <> '{}'::jsonb"
+    )
+    validation_anchor = "     OR jsonb_typeof(config->'adapter_profile') IS DISTINCT FROM 'string'"
+    profile_validation = r"""
+     OR NOT (
+       ((NOT config ? 'model_profile_id' OR config->'model_profile_id'='null'::jsonb)
+        AND (NOT config ? 'model_profile_version' OR
+             config->'model_profile_version'='null'::jsonb)
+        AND (NOT config ? 'model_profile_digest' OR
+             config->'model_profile_digest'='null'::jsonb))
+       OR
+       (jsonb_typeof(config->'model_profile_id')='string'
+        AND config->>'model_profile_id' ~
+          '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+        AND public._guide_runtime_integer(
+          config,'model_profile_version',1,2147483647) IS TRUE
+        AND jsonb_typeof(config->'model_profile_digest')='string'
+        AND config->>'model_profile_digest' ~ '^sha256:[0-9a-f]{64}$')
+     )
+"""
+    if (
+        definition.count(allowed_anchor) != 1
+        or definition.count(validation_anchor) != 1
+        or "model_profile_id" in definition
+    ):
+        raise RuntimeError("setup runtime configuration predecessor changed")
+    op.execute(
+        definition.replace(allowed_anchor, allowed_replacement).replace(
+            validation_anchor, profile_validation + validation_anchor
+        )
+    )
 
 
 def _upgrade_invocation_grants() -> None:
