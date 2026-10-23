@@ -136,6 +136,7 @@ _ALLOWED_BODY_FIELDS = frozenset(
         "messages",
         "temperature",
         "max_tokens",
+        "reasoning_effort",
         "top_p",
         "stream",
         "tools",
@@ -908,7 +909,11 @@ class _LoopbackOpenRouterGuard:
             raise _GuardRejection(400) from None
         if not isinstance(body, dict):
             raise _GuardRejection(400)
-        _validate_request_body(body, expected_model=self._model)
+        _validate_request_body(
+            body,
+            expected_model=self._model,
+            expected_reasoning_effort=self._reasoning_effort,
+        )
         return _ParsedRequest(body=body)
 
     async def _forward(self, request: _ParsedRequest) -> tuple[int, Mapping[str, str], bytes]:
@@ -1066,7 +1071,12 @@ class _GuardRejection(Exception):
         self.status = status
 
 
-def _validate_request_body(body: dict[str, Any], *, expected_model: str) -> None:
+def _validate_request_body(
+    body: dict[str, Any],
+    *,
+    expected_model: str,
+    expected_reasoning_effort: str,
+) -> None:
     """Accept only the pinned LiteLLM request fields and configured model."""
     if set(body) - _ALLOWED_BODY_FIELDS:
         raise _GuardRejection(400)
@@ -1077,6 +1087,8 @@ def _validate_request_body(body: dict[str, Any], *, expected_model: str) -> None
     if body.get("usage") != {"include": True}:
         raise _GuardRejection(400)
     if body.get("stream", False) is not False:
+        raise _GuardRejection(400)
+    if body.get("reasoning_effort") != expected_reasoning_effort:
         raise _GuardRejection(400)
     if "tool_choice" in body and body["tool_choice"] != "auto":
         raise _GuardRejection(400)

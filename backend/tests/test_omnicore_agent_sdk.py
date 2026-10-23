@@ -372,7 +372,12 @@ def _capabilities(
                 opened_handles=opened_handles,
                 attempts=attempts,
                 rejections=rejections,
-            )
+            ),
+            model=SimpleNamespace(
+                maximum_output_tokens=16_384,
+                reasoning_effort="medium",
+                text_verbosity="low",
+            ),
         ),
         reads,
         handle,
@@ -445,8 +450,8 @@ def test_profile_provider_and_test_transport_are_closed(monkeypatch):
 
     compilation_context = _runtime_context()
     monkeypatch.delenv("OPENROUTER_API_KEY")
-    with pytest.raises(ProjectAgentRuntimeConfigurationError, match="credentials"):
-        OmniCoreAgentProjectGuideRuntime(compilation_context.runtime_configuration)
+    runtime = OmniCoreAgentProjectGuideRuntime(compilation_context.runtime_configuration)
+    assert runtime.identity == compilation_context.runtime_configuration.adapter_identity
     monkeypatch.setenv("OPENROUTER_API_KEY", "synthetic-omnicore-test-key")
     with pytest.raises(ProjectAgentRuntimeConfigurationError, match="loopback"):
         OmniCoreAgentProjectGuideRuntime._for_test(
@@ -477,6 +482,7 @@ def test_profile_rejects_litellm_distribution_drift():
         lambda body: body.update(plugins=[]),
         lambda body: body.update(model="openrouter/auto"),
         lambda body: body.update(usage={"include": False}),
+        lambda body: body.update(reasoning_effort="high"),
         lambda body: body.update(temperature=1),
         lambda body: body.update(max_tokens=1),
         lambda body: body.update(tools=[{"type": "web_search", "web_search": {}}]),
@@ -491,12 +497,17 @@ def test_transport_rejects_each_routing_and_tool_mutation_before_forward(mutatio
         ],
         "temperature": 0,
         "max_tokens": 16_384,
+        "reasoning_effort": "medium",
         "tools": copy.deepcopy(_MODEL_TOOLS),
         "usage": {"include": True},
     }
     mutation(body)
     with pytest.raises(_GuardRejection):
-        _validate_request_body(body, expected_model=OMNICORE_QUALIFICATION_MODEL)
+        _validate_request_body(
+            body,
+            expected_model=OMNICORE_QUALIFICATION_MODEL,
+            expected_reasoning_effort="medium",
+        )
 
 
 def test_transport_rejects_duplicate_json_members():
