@@ -19,7 +19,7 @@ The stacked intake candidate is `2c9c6685fd3de12d2976504fe0f9e0b1bc4bf3e5`.
 Its API and POST composition require the new typed intake configuration, while
 hosted Compose/preflight and the opt-in public journey probe still construct a
 Docker-only node. The existing public probe already exercises public project/guide
-setup, upload feedback, immutable Submission, prefork Celery/Beat, infrastructure
+setup, upload feedback, immutable Submission, prefork Celery/Beat, known pre-effect routing
 retry, true-policy review routing and false-policy shared acceptance/awards. Extend
 that probe and deployment owners; do not create another lifecycle or business writer.
 
@@ -34,7 +34,8 @@ that probe and deployment owners; do not create another lifecycle or business wr
 - `external_checkers/deploy/`, `external_checkers/README.md`: concrete Smol
   provisioning/startup/recovery instructions and exact source/cache custody.
 - `experiments/pilot04_external_checker_runtime/run_public_journey_probe.py`,
-  its existing shared probe helpers, Dockerfile/checker proof fixture and README:
+  `guide_runtime.py`, `guide_inputs.py`, its existing shared probe helpers,
+  Dockerfile/checker proof fixture and README:
   accept a provisioned node/config rather than inventing a hard-coded Docker
   runtime; verify both typed health identities and use the existing public flow.
   Add only focused proof helpers needed for upload overlap/cancel and exact
@@ -81,6 +82,62 @@ in boundary 2 return to that owner/PR for a focused regression and review.
    attempt; confirm cleanup and recovery before a fresh request. Do not retry an
    unknown guest execution in-session or reuse a dirty VM. Preserve foreign
    resource controls.
+7. Extend `RecordedGuideRuntime` explicitly for zero, one and two project PRE
+   requirements. Select the recorded project variant from its exact public guide
+   source, not by mutating approved policy rows. Preserve the existing one-image
+   capability registration and one-binding journey. The two-binding compilation
+   assigns distinct requirement IDs to the same registered PRE image; its check
+   specification and fixture image distinguish those IDs. Public compilation,
+   manager approvals and activation lock the resulting canonical order. The
+   zero-binding variant compiles no project PRE requirement and retains default
+   intake plus its required POST requirement. Extend the guide document/examples
+   assertions per variant rather than disabling evidence checks.
+8. Add named proof helpers `_assert_default_only_pre`,
+   `_assert_ordered_pre_and_stop`, and `_assert_no_submission_after_intake_failure`.
+   Read selected PRE evidence to verify zero/two binding counts and canonical
+   order; a first-binding rejection marker makes the first fail while the second
+   would pass if incorrectly invoked. Assert there is no second member/execution
+   and no admission/Submission. A passing two-binding fixture must show both
+   exact request identities after confirmed intake cleanup.
+
+## Distinct failure and retry trials
+
+Do not describe the existing `_wait_known_retry` as a runtime outage: it proves
+known pre-effect completion-routing refusal while the lifecycle is non-live,
+followed by the authorized live transition. Retain that proof separately.
+
+- `_assert_prepare_retry_bound`: use the owned Smol executable shim/control
+  launch injection before any guest input to fail known VM create/start launch
+  attempts. The node retries only after exact lease cleanup, at most three
+  attempts with the existing 100/200 ms backoff charged to the same deadline.
+  Record launch counts, original deadline and absence of residual disks/cgroups;
+  exhausted failure creates no selected completion, admission or Submission.
+- `_assert_public_intake_recovery`: stop only the owned intake node before an
+  authenticated upload, or inject a known project PRE execution outage after
+  reservation. Assert public 503, exact selected terminal infrastructure code
+  when execution is known (otherwise unresolved lease), and no admission or
+  Submission. Same-key replay must preserve the owner's existing recovery
+  contract; it must not silently rerun a terminal failure. Restart the node and
+  use a fresh authorized request/key to repeat upload and checks successfully.
+- `_assert_post_runtime_failure`: keep intake available and inject an outage in
+  the owned project execution node after immutable Submission creation. Await
+  the terminal `CheckerRun.infrastructure_failed` directly, not `_complete_post`
+  (which requires completed work and a completion event). Assert no fabricated
+  completion event, acceptance or contribution. Restore the node, then invoke
+  the existing `checker_retry.py` Operator-authorized operation with fresh
+  authorization and a new request key; assert its exact next evaluation
+  generation, durable dispatch, real worker success and single governed result.
+  This is explicitly a hidden owner-level retry operation in this checkout,
+  not a claimed public retry endpoint. Do not add a route in this boundary.
+- `_assert_unknown_execution_cleanup`: kill only the owned controller after
+  guest invocation begins, observe connection loss/unresolved status and no
+  in-session retry. Verify guardian cleanup and startup reconciliation before a
+  fresh request. Retain exact attempt/lease IDs and assert no duplicate business
+  facts. Controller recovery must not reset the original attempt deadline.
+
+Each trial uses uniquely owned unit/socket/cache/VM/DB resources. Evidence records
+whether entry was public API, durable worker, or the existing authorized hidden
+retry owner; no direct SQL writes manufacture lifecycle outcomes.
 
 ## Acceptance criteria
 
