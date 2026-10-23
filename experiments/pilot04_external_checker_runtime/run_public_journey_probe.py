@@ -1263,6 +1263,7 @@ async def run(database_url: str, image_reference: str, node_config: Path,
     env = api_environment()
     env.update({
         "WORKSTREAM_DATABASE_URL": database_url,
+        "WORKSTREAM_PROBE_INTAKE_TRACE": str(root / "intake-trace.jsonl"),
         "WORKSTREAM_E2E_FLOW_ISSUER": "https://identity.flowresearch.tech",
         "WORKSTREAM_FLOW_AUTH_ISSUER": "https://identity.flowresearch.tech",
         "WORKSTREAM_CELERY_BROKER_URL": broker_url,
@@ -1371,7 +1372,8 @@ async def run(database_url: str, image_reference: str, node_config: Path,
         port = find_free_port()
         origin = f"http://127.0.0.1:{port}"
         api = _process([
-            sys.executable, "-m", "uvicorn", "app.main:app",
+            sys.executable, "-m", "uvicorn",
+            "experiments.pilot04_external_checker_runtime.public_intake_observer:app",
             "--host", "127.0.0.1", "--port", str(port),
             "--log-level", "error", "--no-access-log",
         ], env=env, log=root / "api.log")
@@ -1385,6 +1387,8 @@ async def run(database_url: str, image_reference: str, node_config: Path,
         ], env=env, log=root / "beat.log")
         await _wait_beat_scan(factory, beat, scans_before_beat)
         async with httpx.AsyncClient(base_url=origin, timeout=90) as client:
+            from experiments.pilot04_external_checker_runtime.public_intake_trials import public_intake_trials
+            intake_trials = await public_intake_trials(client, factory, env, root / "intake-trace.jsonl")
             true = await _one_mode(client, factory, env,
                                    human_review_required=True,
                                    operator_id=operator.actor_profile_id)
@@ -1404,7 +1408,7 @@ async def run(database_url: str, image_reference: str, node_config: Path,
                 "scheduled_artifact_scans": True,
                 "public_original_guide_setup": True,
                 "recorded_inference": True,
-                "human": true, "automatic": false}
+                "intake_trials": intake_trials, "human": true, "automatic": false}
     finally:
         _stop_process(beat)
         for schedule_file in root.glob("beat-schedule*"):
