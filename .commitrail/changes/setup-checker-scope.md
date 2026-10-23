@@ -60,7 +60,7 @@ review remain required before readiness.
 
 ## Reconciliation
 
-- Current-source reconciliation: Main `6fa9a9b55`; open #659 replaces the hosted document runtime and overlaps the adapter. Keep this change focused and reconcile the adapter before readiness if that PR lands.
+- Current-source reconciliation: Main `09c18e77d` includes the project PRE image (#656) and ART CLI completion (#662); both are retained. The roadmap distinguishes implemented PRE intake from the historical proposal requiring fresh correction. Open #659 replaces the hosted document runtime and overlaps the adapter. Keep this change focused and reconcile the adapter before readiness if that PR lands.
 - Next usable boundary: Real project proposal regeneration after human merge; model runtime work remains separate.
 - Remaining risks: Generated prose still requires PM review; schemas cannot prove every statement is semantically within scope.
 
