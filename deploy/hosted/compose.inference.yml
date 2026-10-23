@@ -1,6 +1,18 @@
 services:
   worker:
     environment:
+      WORKSTREAM_CHECKER_MODEL_PROXY_SOCKET: /var/lib/workstream/model-runtime/model.sock
+    volumes:
+      - type: bind
+        source: /var/lib/workstream/model-runtime
+        target: /var/lib/workstream/model-runtime
+        read_only: true
+    depends_on:
+      model-proxy:
+        condition: service_healthy
+
+  model-proxy:
+    environment:
       WORKSTREAM_PROJECT_AGENT_API_KEY_FILE: /run/secrets/project_agent_api_key
     secrets:
       - source: project_agent_api_key

@@ -137,6 +137,7 @@ class HostedReleaseConfigTests(unittest.TestCase):
                 "api",
                 "worker",
                 "beat",
+                "model-proxy",
                 "guide-document-parser",
                 "checker-service",
                 *preflight.PROOF_SERVICES,
@@ -151,6 +152,7 @@ class HostedReleaseConfigTests(unittest.TestCase):
             "api",
             "worker",
             "beat",
+            "model-proxy",
             "guide-document-parser",
             "checker-service",
         ):
@@ -175,7 +177,13 @@ class HostedReleaseConfigTests(unittest.TestCase):
             key: self.environment[key]
             for key in preflight.PROJECT_AGENT_CONFIGURATION_KEYS
         }
-        for name in ("api", "worker", "beat", *preflight.PROOF_SERVICES):
+        for name in (
+            "api",
+            "worker",
+            "beat",
+            "model-proxy",
+            *preflight.PROOF_SERVICES,
+        ):
             self.assertEqual(
                 {
                     key: services[name]["environment"][key]
@@ -190,14 +198,25 @@ class HostedReleaseConfigTests(unittest.TestCase):
         self.assertIn("--pool=prefork", worker_command)
         health_commands = {
             name: " ".join(services[name]["healthcheck"]["test"])
-            for name in ("api", "worker", "beat", "checker-service")
+            for name in (
+                "api",
+                "worker",
+                "beat",
+                "model-proxy",
+                "checker-service",
+            )
         }
         self.assertIn("/api/v1/health", health_commands["api"])
         self.assertIn("/tmp/celery-worker.pid", health_commands["worker"])
         self.assertIn("/tmp/celerybeat.pid", health_commands["beat"])
+        self.assertIn(
+            "/var/lib/workstream/model-runtime/model.sock",
+            health_commands["model-proxy"],
+        )
         self.assertIn(".Runtimes.runsc", health_commands["checker-service"])
         self.assertEqual(services["api"]["stop_grace_period"], "30s")
         self.assertIn(services["worker"]["stop_grace_period"], {"7320s", "2h2m0s"})
+        self.assertIn(services["model-proxy"]["stop_grace_period"], {"7320s", "2h2m0s"})
         self.assertEqual(services["beat"]["stop_grace_period"], "30s")
         self.assertEqual(services["guide-document-parser"]["stop_grace_period"], "30s")
         self.assertEqual(services["api"]["ports"][0]["host_ip"], "127.0.0.1")
@@ -272,7 +291,7 @@ class HostedReleaseConfigTests(unittest.TestCase):
                 str(preflight.GUIDE_SOCKET_ROOT),
                 preflight._service_mounts(services[name]),
             )
-        for name in ("api", "worker"):
+        for name in ("api", "worker", "model-proxy"):
             mounts = preflight._service_mounts(services[name])
             self.assertEqual(
                 mounts[str(preflight.ROLES_ANYWHERE_CERTIFICATE_TARGET)]["source"],
@@ -283,6 +302,18 @@ class HostedReleaseConfigTests(unittest.TestCase):
             )
         beat_mounts = preflight._service_mounts(services["beat"])
         self.assertEqual(beat_mounts, {})
+        model_socket_root = str(preflight.MODEL_SOCKET_ROOT)
+        self.assertTrue(worker_mounts[model_socket_root]["read_only"])
+        self.assertFalse(
+            preflight._service_mounts(services["model-proxy"])[model_socket_root].get(
+                "read_only", False
+            )
+        )
+        for name in ("api", "beat", "checker-service", *preflight.PROOF_SERVICES):
+            self.assertNotIn(
+                model_socket_root,
+                preflight._service_mounts(services[name]),
+            )
         checker_mounts = preflight._service_mounts(services["checker-service"])
         self.assertNotIn(
             str(preflight.ROLES_ANYWHERE_CERTIFICATE_TARGET), checker_mounts
@@ -605,16 +636,20 @@ class HostedReleaseConfigTests(unittest.TestCase):
         self.assertEqual(commands[0][-3:], ["stop", "beat", "api"])
         self.assertEqual(commands[1][-4:], ["stop", "--timeout", "7320", "worker"])
         self.assertEqual(
-            commands[2][-3:],
+            commands[2][-4:],
+            ["stop", "--timeout", "7320", "model-proxy"],
+        )
+        self.assertEqual(
+            commands[3][-3:],
             ["stop", "guide-document-parser", "checker-service"],
         )
 
     def test_shutdown_failure_keeps_later_dependencies_running(self) -> None:
-        for failed_phase in (0, 1):
+        for failed_phase in (0, 1, 2):
             with self.subTest(failed_phase=failed_phase):
                 results = [
                     subprocess.CompletedProcess([], 17 if index == failed_phase else 0)
-                    for index in range(3)
+                    for index in range(4)
                 ]
                 with patch.object(
                     preflight.subprocess, "run", side_effect=results
@@ -1207,9 +1242,11 @@ class HostedReleaseConfigTests(unittest.TestCase):
     ) -> None:
         scratch = self.root / "scratch"
         socket_root = self.root / "socket"
+        model_socket_root = self.root / "model-socket"
         guide_socket_root = self.root / "guide-socket"
         scratch.mkdir(mode=0o700)
         socket_root.mkdir(mode=0o700)
+        model_socket_root.mkdir(mode=0o700)
         guide_socket_root.mkdir(mode=0o750)
         host_uid = os.getuid()
         host_gid = os.getgid()
@@ -1237,6 +1274,12 @@ class HostedReleaseConfigTests(unittest.TestCase):
             with (
                 patch.object(preflight, "SCRATCH_ROOT", scratch),
                 patch.object(preflight, "SOCKET_ROOT", socket_root),
+                patch.object(preflight, "MODEL_SOCKET_ROOT", model_socket_root),
+                patch.object(
+                    preflight,
+                    "MODEL_SOCKET_PATH",
+                    model_socket_root / "model.sock",
+                ),
                 patch.object(preflight, "GUIDE_SOCKET_ROOT", guide_socket_root),
                 patch.object(
                     preflight,
@@ -1297,6 +1340,12 @@ class HostedReleaseConfigTests(unittest.TestCase):
             with (
                 patch.object(preflight, "SCRATCH_ROOT", scratch),
                 patch.object(preflight, "SOCKET_ROOT", socket_root),
+                patch.object(preflight, "MODEL_SOCKET_ROOT", model_socket_root),
+                patch.object(
+                    preflight,
+                    "MODEL_SOCKET_PATH",
+                    model_socket_root / "model.sock",
+                ),
                 patch.object(preflight, "GUIDE_SOCKET_ROOT", guide_socket_root),
                 patch.object(
                     preflight,
@@ -1323,6 +1372,12 @@ class HostedReleaseConfigTests(unittest.TestCase):
             with (
                 patch.object(preflight, "SCRATCH_ROOT", scratch),
                 patch.object(preflight, "SOCKET_ROOT", socket_root),
+                patch.object(preflight, "MODEL_SOCKET_ROOT", model_socket_root),
+                patch.object(
+                    preflight,
+                    "MODEL_SOCKET_PATH",
+                    model_socket_root / "model.sock",
+                ),
                 patch.object(preflight, "GUIDE_SOCKET_ROOT", guide_socket_root),
                 patch.object(
                     preflight,
@@ -1348,6 +1403,12 @@ class HostedReleaseConfigTests(unittest.TestCase):
             with (
                 patch.object(preflight, "SCRATCH_ROOT", scratch),
                 patch.object(preflight, "SOCKET_ROOT", socket_root),
+                patch.object(preflight, "MODEL_SOCKET_ROOT", model_socket_root),
+                patch.object(
+                    preflight,
+                    "MODEL_SOCKET_PATH",
+                    model_socket_root / "model.sock",
+                ),
                 patch.object(preflight, "GUIDE_SOCKET_ROOT", guide_socket_root),
                 patch.object(
                     preflight,
@@ -1367,6 +1428,12 @@ class HostedReleaseConfigTests(unittest.TestCase):
             with (
                 patch.object(preflight, "SCRATCH_ROOT", scratch),
                 patch.object(preflight, "SOCKET_ROOT", socket_root),
+                patch.object(preflight, "MODEL_SOCKET_ROOT", model_socket_root),
+                patch.object(
+                    preflight,
+                    "MODEL_SOCKET_PATH",
+                    model_socket_root / "model.sock",
+                ),
                 patch.object(preflight, "GUIDE_SOCKET_ROOT", guide_socket_root),
                 patch.object(
                     preflight,
@@ -1392,6 +1459,12 @@ class HostedReleaseConfigTests(unittest.TestCase):
             with (
                 patch.object(preflight, "SCRATCH_ROOT", scratch),
                 patch.object(preflight, "SOCKET_ROOT", socket_root),
+                patch.object(preflight, "MODEL_SOCKET_ROOT", model_socket_root),
+                patch.object(
+                    preflight,
+                    "MODEL_SOCKET_PATH",
+                    model_socket_root / "model.sock",
+                ),
                 patch.object(preflight, "GUIDE_SOCKET_ROOT", guide_socket_root),
                 patch.object(
                     preflight,
@@ -1430,6 +1503,9 @@ class ReleaseSecretLoaderTests(unittest.TestCase):
         "worker": (
             "WORKSTREAM_DATABASE_URL_FILE",
             "WORKSTREAM_CELERY_BROKER_URL_FILE",
+        ),
+        "model-proxy": (
+            "WORKSTREAM_DATABASE_URL_FILE",
             "WORKSTREAM_PROJECT_AGENT_API_KEY_FILE",
         ),
         "beat": (
@@ -1511,9 +1587,7 @@ class ReleaseSecretLoaderTests(unittest.TestCase):
         )
         environment["EXPECT_PARSER_SELECTOR_SCRUB"] = "1" if role == "parser" else "0"
         expected = {self.FILE_TO_SECRET[key] for key in self.ROLE_FILES.get(role, ())}
-        if role == "worker" and runtime == "manager_authored":
-            expected.remove("OPENROUTER_API_KEY")
-        if role == "worker" and provider == "openai":
+        if role == "model-proxy" and provider == "openai":
             expected.remove("OPENROUTER_API_KEY")
             expected.add("OPENAI_API_KEY")
         environment["EXPECTED_SECRET_NAMES"] = ",".join(sorted(expected))
@@ -1603,9 +1677,9 @@ class ReleaseSecretLoaderTests(unittest.TestCase):
                         self.assertIn(
                             "required secret file is unavailable", missing.stderr
                         )
-            openai = self._run_loader(root, provider="openai")
+            openai = self._run_loader(root, role="model-proxy", provider="openai")
             self.assertEqual(openai.returncode, 0, openai.stderr)
-            unsupported = self._run_loader(root, provider="unknown")
+            unsupported = self._run_loader(root, role="model-proxy", provider="unknown")
             self.assertNotEqual(unsupported.returncode, 0)
             self.assertIn("model provider", unsupported.stderr)
             unknown = self._run_loader(root, role="unknown")
@@ -1622,6 +1696,13 @@ class ReleaseSecretLoaderTests(unittest.TestCase):
                 sdk_environment="omnicore",
             )
             self.assertEqual(omni.returncode, 0, omni.stderr)
+            omni_proxy = self._run_loader(
+                root,
+                role="model-proxy",
+                runtime="omnicore_agent",
+                sdk_environment="agents",
+            )
+            self.assertEqual(omni_proxy.returncode, 0, omni_proxy.stderr)
             for sdk_environment in ("agents", "omnicore"):
                 with self.subTest(
                     runtime="manager_authored", sdk_environment=sdk_environment
