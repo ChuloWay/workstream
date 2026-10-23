@@ -18,7 +18,7 @@ readonly INNER_ROOT="/workstream-state"
 readonly COMPOSITION_ROOT="${SHARED_ROOT}/terminal-systems-runsc-composition"
 readonly INNER_COMPOSITION_ROOT="${INNER_ROOT}/terminal-systems-runsc-composition"
 readonly ORIGINAL_CONFIG="$(mktemp /tmp/ws493-runsc-daemon.XXXXXX.json)"
-readonly ORIGINAL_CONFIG_MODE="$(stat -c '%a' "${SHARED_ROOT}/daemon.json")"
+ORIGINAL_CONFIG_MODE=""
 readonly BUILD_MESSAGES="$(mktemp /tmp/ws493-runsc-build.XXXXXX.jsonl)"
 readonly METADATA="${WORKSTREAM_TS_RUNSC_METADATA:-/tmp/ws493-terminal-systems-runsc.json}"
 readonly RESULT_LOG="${WORKSTREAM_TS_RUNSC_LOG:-/tmp/ws493-terminal-systems-runsc.log}"
@@ -87,6 +87,36 @@ trap cleanup EXIT INT TERM
 [[ "${CONTAINER}" =~ ^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$ ]]
 [[ -n "${WORKSTREAM_TEST_ADMIN_DATABASE_URL:-}" ]]
 [[ -n "${WORKSTREAM_TEST_MINIO_ENDPOINT:-}" ]]
+if docker inspect "${CONTAINER}" >/dev/null 2>&1; then
+  echo "qualification sibling container already exists" >&2
+  exit 1
+fi
+mkdir -p -- "${SHARED_ROOT}/cache"
+chmod 0700 "${SHARED_ROOT}" "${SHARED_ROOT}/cache"
+rm -rf -- "${SHARED_ROOT}/cache/content"
+cp -a -- "${STATE_ROOT}/cache/content" "${SHARED_ROOT}/cache/content"
+cp -- "${STATE_ROOT}/cache/cache.sha256" "${SHARED_ROOT}/cache/cache.sha256"
+cp -- "${STATE_ROOT}/daemon.json" "${SHARED_ROOT}/daemon.json"
+chmod 0444 "${SHARED_ROOT}/cache/cache.sha256"
+chmod 0644 "${SHARED_ROOT}/daemon.json"
+ORIGINAL_CONFIG_MODE="$(stat -c '%a' "${SHARED_ROOT}/daemon.json")"
+
+readonly PREPARED_IMAGE="$(docker inspect --format '{{.Config.Image}}' "${PREPARED_CONTAINER}")"
+[[ "${PREPARED_IMAGE}" =~ @sha256:[a-f0-9]{64}$ ]]
+docker create \
+  --name "${CONTAINER}" \
+  --label "org.workstream.pilot00.run=${RUN_ID}" \
+  --label "workstream.qualifier=terminal-systems-runsc" \
+  --privileged \
+  --network none \
+  --security-opt label=disable \
+  --mount "type=bind,src=${STATE_ROOT}/dind-state,dst=/var/lib/docker" \
+  --mount "type=bind,src=${STATE_ROOT}/tools,dst=/opt/gvisor,readonly" \
+  --mount "type=bind,src=${SHARED_ROOT},dst=${INNER_ROOT}" \
+  --mount "type=bind,src=${SHARED_ROOT}/daemon.json,dst=/etc/docker/pilot-daemon.json,readonly" \
+  --mount "type=bind,src=${REPOSITORY_ROOT}/experiments/pilot00_gvisor_offline,dst=/pilot,readonly" \
+  "${PREPARED_IMAGE}" --config-file=/etc/docker/pilot-daemon.json >/dev/null
+QUALIFIER_CONTAINER_OWNED=1
 
 python3 - "${STATE_ROOT}/prepared-assets.json" "${STATE_ROOT}" "${SHARED_ROOT}" "${RUN_ID}" "${CONTAINER}" "${PREPARED_CONTAINER}" <<'PY'
 import hashlib
@@ -135,7 +165,23 @@ cache_manifest = Path(shared_root, "cache", "cache.sha256").read_bytes()
 if "sha256:" + hashlib.sha256(cache_manifest).hexdigest() != manifest["cache_manifest_sha256"]:
     raise SystemExit("qualification shared cache manifest differs")
 PY
-QUALIFIER_CONTAINER_OWNED=1
+
+docker start "${CONTAINER}" >/dev/null
+STARTED=1
+for _attempt in $(seq 1 45); do
+  if docker exec "${CONTAINER}" docker info >/dev/null 2>&1; then
+    break
+  fi
+  sleep 1
+done
+docker exec "${CONTAINER}" docker info >/dev/null
+readonly HOST_CACHE_MANIFEST_SHA="$(sha256sum "${SHARED_ROOT}/cache/cache.sha256" | awk '{print $1}')"
+readonly INNER_CACHE_MANIFEST_SHA="$(docker exec "${CONTAINER}" sha256sum "${INNER_ROOT}/cache/cache.sha256" | awk '{print $1}')"
+[[ "${HOST_CACHE_MANIFEST_SHA}" == "${INNER_CACHE_MANIFEST_SHA}" ]]
+docker exec "${CONTAINER}" docker info --format '{{json .Runtimes}}' \
+  | python3 -c 'import json,sys; assert "runsc" in json.load(sys.stdin)'
+docker stop --time 15 "${CONTAINER}" >/dev/null
+STARTED=0
 
 cp -- "${SHARED_ROOT}/daemon.json" "${ORIGINAL_CONFIG}"
 python3 - "${STATE_ROOT}/prepared-assets.json" "${ORIGINAL_CONFIG}" "${SHARED_ROOT}/daemon.json" <<'PY'
@@ -328,7 +374,8 @@ cd "${REPOSITORY_ROOT}/backend"
 set +e
 .venv/bin/python scripts/run_isolated_tests.py \
   --metadata-json "${METADATA}" --timeout-seconds 900 --lane trial_composition -- \
-  env PYTHONPATH=.:tests .venv/bin/pytest -vv -x -p conftest -o faulthandler_timeout=120 \
+  env PYTHONPATH=.:tests .venv/bin/pytest -vv -x \
+  -p conftest -p tests.checkers.external.conftest -o faulthandler_timeout=120 \
   ../external_checkers/workstream-checker-service/tests/terminal_systems_runsc_composition.py \
   >"${RESULT_LOG}" 2>&1
 readonly TEST_STATUS=$?
