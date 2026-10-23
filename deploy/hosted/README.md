@@ -50,14 +50,23 @@ the resulting `repository@sha256:...` identity in the release environment.
 Compose never builds and rejects tags.
 
 ```sh
-docker build --file docker/backend/Dockerfile.release \
-  --tag registry.example/workstream/backend:<source-commit> .
+docker build --build-arg WORKSTREAM_PROJECT_AGENT_SDK_ENVIRONMENT=agents \
+  --file docker/backend/Dockerfile.release \
+  --tag registry.example/workstream/backend-agents:<source-commit> .
+docker build --build-arg WORKSTREAM_PROJECT_AGENT_SDK_ENVIRONMENT=omnicore \
+  --file docker/backend/Dockerfile.release \
+  --tag registry.example/workstream/backend-omnicore:<source-commit> .
 docker build --file docker/checker/Dockerfile.release \
   --tag registry.example/workstream/checker-service:<source-commit> .
 ```
 
-Both Dockerfiles pin their base images. The backend build installs the committed
-Python resolution with the agent runtime and without the development extra. It
+Both Dockerfiles pin their base images. Each backend build requires one exact SDK
+environment and installs only its committed `agents` or `omnicore` resolution,
+without the development extra. The image records that choice in a root-owned
+read-only marker; startup rejects a configured inference runtime that does not
+match it before reading the provider credential. `manager_authored` is accepted
+in either image with the exact `none/none/none` model tuple and reads no provider
+credential. The backend image
 also installs the official Roles Anywhere helper 1.8.5 at its fixed path, with
 architecture-specific hashes checked during the build and image proof. The
 checker-service build compiles the committed Rust lock and copies the pinned
@@ -76,7 +85,8 @@ closure and default image commands. Bounded networkless containers verify the
 Docker CLI and the checker's expected missing-configuration failure; they do not
 start Workstream or run a project checker. Its fixed JSON artifact records source
 identity and local image IDs, not publishable repository digests. Full hosted
-operation remains separate evidence. An unconditional workflow cleanup verifies
+operation remains separate evidence. The proof builds and inspects both SDK
+closures and rejects either SDK appearing in the other image. An unconditional workflow cleanup verifies
 that no smoke container owned by that run remains after inspection or timeout.
 
 ## Prepare the host
@@ -136,6 +146,19 @@ same release. The parser receives only its fixed socket selector. The example
 selects `openai_agents_sdk` through OpenRouter with
 `openai/gpt-5.6-terra`; changing a trusted selector requires another reviewed
 release and never changes retained attempt evidence.
+To select `omnicore_agent`, publish and choose the `omnicore` image digest and
+retain OpenRouter with `chat_completions`; ordinary model identity remains a
+reviewed release choice. OpenRouter models with a colon routing suffix and
+`openrouter/*` router identities are rejected.
+
+Before either OpenRouter-backed runtime receives real guide material, the
+operator must retain evidence for the exact account, organization or workspace
+and credential scope showing that account plugins cannot override the request.
+The evidence must cover the plugin catalogue, defaults, overrides, and especially
+alignment; name the verifier and approver. Revalidate it after account ownership,
+credential scope, plugin catalogue/defaults, provider policy, selected model or
+runtime changes. Request-level plugin-disable fields are defense in depth and do
+not prove the external account state.
 This provider credential is not reused for retained OpenAI resource cleanup.
 The exact-ID historical cleanup reader has no hosted credential selector in
 this slice and therefore fails closed until a separately reviewed retained-data
@@ -281,11 +304,14 @@ outage does not change product results. Configuration alone is not that proof.
 ## Drain, restart and upgrade
 
 The wrapper's `stop` operation stops Beat and API first so they cannot produce
-new work, gives the prefork worker its configured 3700-second graceful window,
+new work, gives the prefork worker its configured 7,320-second graceful window,
 then stops the parser and checker controller. Keeping both socket services alive
 while the worker drains lets cancellation and terminal persistence finish against
-their original dependencies. Celery task hard limits and durable database/outbox
-custody remain owned by the application.
+their original dependencies. Guide inference has a 7,260-second process backstop;
+the shared Redis transport uses a 7,380-second visibility timeout with prefetch
+disabled. The persisted guide-attempt deadline remains the ordinary, shorter
+execution bound. Celery task hard limits and durable database/outbox custody
+remain owned by the application.
 
 ```sh
 python3 deploy/hosted/compose.py --env-file /etc/workstream/release.env stop

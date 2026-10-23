@@ -37,6 +37,10 @@ from app.modules.projects.api.guide_compilation import (
 )
 from app.workers.async_runner import run_async_task
 from app.workers.celery_app import celery_app
+from app.workers.project_setup_topology import (
+    PROJECT_GUIDE_HARD_LIMIT_SECONDS,
+    require_project_setup_worker,
+)
 
 PROJECT_GUIDE_COMPILATION_TASK = "workstream.project_setup.compile_project_guide"
 logger = get_task_logger(__name__)
@@ -75,12 +79,18 @@ async def _coordinator(session_factory):
 
 
 @celery_app.task(
-    name=PROJECT_GUIDE_COMPILATION_TASK, bind=True, acks_late=True, reject_on_worker_lost=True
+    name=PROJECT_GUIDE_COMPILATION_TASK,
+    bind=True,
+    acks_late=True,
+    acks_on_failure_or_timeout=True,
+    reject_on_worker_lost=True,
+    time_limit=PROJECT_GUIDE_HARD_LIMIT_SECONDS,
 )
 def run_project_guide_compilation(
     self, project_id, guide_id, source_snapshot_id, setup_run_id, setup_generation
 ):
     """Deliver one exact generation using the broker-bound task ID."""
+    require_project_setup_worker(self)
     try:
         delivery = ProjectGuideCompilationDelivery(
             project_id=project_id,

@@ -141,10 +141,11 @@ automated acceptance. Human review/revision still belongs to the complete v0.1 r
 Identity, authorization, guide ingestion, automatic unified compilation and
 public manager proposal/approval operations and terminal guide activation are
 implemented. Compilation uses bounded source read/search tools behind the chosen
-runtime adapter; the default OpenAI Agents SDK selects OpenRouter separately from
-the runtime. It does not require OpenAI-hosted files or containers. The new
-provider/tool path needs its own live qualification; earlier setup evidence does
-not establish interchangeability. Compilation runs either through inference or
+runtime adapter. The OpenAI Agents SDK and OmniCoreAgent adapters are statically
+selectable in mutually exclusive worker images; OpenRouter remains a separate
+provider choice. Neither adapter requires provider-hosted files or containers.
+Synthetic SDK and image closure proof does not replace live provider/account and
+selected-image AWS qualification. Compilation runs either through inference or
 through the provider-free `manager_authored` runtime, which converts a
 manager-uploaded rules document with no inference. Managers discover exact activation selections through the authorized
 draft post-policy read; Finance publication remains separate. Task policy

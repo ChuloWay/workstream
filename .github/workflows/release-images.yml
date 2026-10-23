@@ -51,7 +51,7 @@ jobs:
           uv --version
           test "$(uv --version | cut -d ' ' -f 2)" = '0.12.3'
           uv lock --project backend --check
-          uv sync --project backend --frozen --all-extras
+          uv sync --project backend --frozen --extra agents --extra dev
       - name: Require canonical AWS Settings owner and verify configuration
         timeout-minutes: 5
         shell: bash
@@ -72,7 +72,11 @@ jobs:
         run: |
           set -euo pipefail
           timeout --kill-after=30s 1200s docker build --no-cache --pull \
-            --file docker/backend/Dockerfile.release --tag workstream-backend-proof .
+            --build-arg WORKSTREAM_PROJECT_AGENT_SDK_ENVIRONMENT=agents \
+            --file docker/backend/Dockerfile.release --tag workstream-backend-agents-proof .
+          timeout --kill-after=30s 1200s docker build --no-cache --pull \
+            --build-arg WORKSTREAM_PROJECT_AGENT_SDK_ENVIRONMENT=omnicore \
+            --file docker/backend/Dockerfile.release --tag workstream-backend-omnicore-proof .
           timeout --kill-after=30s 1200s docker build --no-cache --pull \
             --file docker/checker/Dockerfile.release --tag workstream-checker-proof .
       - name: Inspect bounded networkless images and write fixed evidence
@@ -84,7 +88,8 @@ jobs:
             scripts/verify_hosted_release_images.py \
             --expected-head "$SOURCE_SHA" \
             --container-owner "$PROOF_OWNER" \
-            --backend-image workstream-backend-proof \
+            --backend-agents-image workstream-backend-agents-proof \
+            --backend-omnicore-image workstream-backend-omnicore-proof \
             --checker-image workstream-checker-proof \
             --evidence "$RUNNER_TEMP/release-image-evidence.json"
       - name: Remove only this run's smoke containers and prove absence

@@ -301,7 +301,7 @@ services:
       guide-document-parser:
         condition: service_healthy
     restart: on-failure:5
-    stop_grace_period: 3700s
+    stop_grace_period: 7320s
     healthcheck:
       test: [CMD-SHELL, "test -s /tmp/celery-worker.pid && kill -0 $$(cat /tmp/celery-worker.pid)"]
       interval: 20s

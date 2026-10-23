@@ -14,9 +14,10 @@ exact source access, immutable attempt evidence and overall run bounds.
 
 1. [Neutral tools and OpenRouter](WS-AGENT-001-01.md): replace the current hosted
    document path, preserve historical facts/cleanup, qualify OpenAI Agents SDK.
-2. OmniCoreAgent qualification (companion change): register the real second
-   runtime, handle its native mechanics inside its adapter, run the same contract
-   and live-guide qualification in its isolated dependency environment.
+2. [OmniCoreAgent qualification](WS-AGENT-001-02.md): register the real second
+   runtime, contain its native mechanics in an isolated dependency image and run
+   the shared contract plus exact image/worker qualification. Live provider and
+   original-guide evidence remain explicit hosted prerequisites.
 
 SDK environments may differ; product contracts and core behavior must not.
 No speculative Claude adapter, generic plugin platform, runtime-generated shell

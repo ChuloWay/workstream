@@ -15,6 +15,13 @@ from app.adapters.project_agents.openai_agent_sdk import (
 from app.adapters.project_agents.openai_profile import (
     build_openai_agents_sdk_adapter_profile,
 )
+from app.adapters.project_agents.omnicore_agent import (
+    OMNICORE_RUNTIME_KEY,
+    OmniCoreAgentProjectGuideRuntime,
+)
+from app.adapters.project_agents.omnicore_profile import (
+    build_omnicore_agent_adapter_profile,
+)
 from app.interfaces.external_services import ExternalServiceAdapterFactory
 from app.interfaces.project_agents import (
     ProjectAgentRuntimeConfigurationError,
@@ -50,6 +57,10 @@ _RUNTIMES = {
     "openai_agents_sdk": _RuntimeRegistration(
         profile_builder=build_openai_agents_sdk_adapter_profile,
         runtime_builder=OpenAIAgentSdkProjectGuideRuntime,
+    ),
+    OMNICORE_RUNTIME_KEY: _RuntimeRegistration(
+        profile_builder=build_omnicore_agent_adapter_profile,
+        runtime_builder=OmniCoreAgentProjectGuideRuntime,
     ),
     MANAGER_AUTHORED_RUNTIME_KEY: _RuntimeRegistration(
         profile_builder=_manager_authored_profile,

@@ -197,7 +197,7 @@ class HostedReleaseConfigTests(unittest.TestCase):
         self.assertIn("/tmp/celerybeat.pid", health_commands["beat"])
         self.assertIn(".Runtimes.runsc", health_commands["checker-service"])
         self.assertEqual(services["api"]["stop_grace_period"], "30s")
-        self.assertEqual(services["worker"]["stop_grace_period"], "1h1m40s")
+        self.assertIn(services["worker"]["stop_grace_period"], {"7320s", "2h2m0s"})
         self.assertEqual(services["beat"]["stop_grace_period"], "30s")
         self.assertEqual(services["guide-document-parser"]["stop_grace_period"], "30s")
         self.assertEqual(services["api"]["ports"][0]["host_ip"], "127.0.0.1")
@@ -600,7 +600,7 @@ class HostedReleaseConfigTests(unittest.TestCase):
             )
         commands = [call.args[0] for call in run.call_args_list]
         self.assertEqual(commands[0][-3:], ["stop", "beat", "api"])
-        self.assertEqual(commands[1][-4:], ["stop", "--timeout", "3700", "worker"])
+        self.assertEqual(commands[1][-4:], ["stop", "--timeout", "7320", "worker"])
         self.assertEqual(
             commands[2][-3:],
             ["stop", "guide-document-parser", "checker-service"],
@@ -849,6 +849,31 @@ class HostedReleaseConfigTests(unittest.TestCase):
                 del changed[key]
                 with self.assertRaises(preflight.PreflightError):
                     preflight.validate_environment(changed)
+
+    def test_environment_accepts_only_registered_runtime_provider_tuples(self) -> None:
+        omni = self.environment | {
+            "WORKSTREAM_PROJECT_AGENT_RUNTIME": "omnicore_agent",
+            "WORKSTREAM_PROJECT_AGENT_MODEL_PROVIDER": "openrouter",
+            "WORKSTREAM_PROJECT_AGENT_MODEL_API": "chat_completions",
+            "WORKSTREAM_PROJECT_AGENT_RUNTIME_OPTIONS": "{}",
+        }
+        preflight.validate_environment(omni)
+        manager = self.environment | {
+            "WORKSTREAM_PROJECT_AGENT_RUNTIME": "manager_authored",
+            "WORKSTREAM_PROJECT_AGENT_MODEL_PROVIDER": "none",
+            "WORKSTREAM_PROJECT_AGENT_MODEL_API": "none",
+            "WORKSTREAM_PROJECT_AGENT_MODEL": "none",
+            "WORKSTREAM_PROJECT_AGENT_RUNTIME_OPTIONS": "{}",
+        }
+        preflight.validate_environment(manager)
+        for changed in (
+            omni | {"WORKSTREAM_PROJECT_AGENT_MODEL_PROVIDER": "openai"},
+            omni | {"WORKSTREAM_PROJECT_AGENT_MODEL": "openai/gpt-5.6-terra:online"},
+            omni | {"WORKSTREAM_PROJECT_AGENT_MODEL": "OpenRouter/auto"},
+            manager | {"WORKSTREAM_PROJECT_AGENT_MODEL": "configured"},
+        ):
+            with self.assertRaises(preflight.PreflightError):
+                preflight.validate_environment(changed)
 
     def test_checker_config_rejects_non_hosted_or_substituted_identity(self) -> None:
         cases = {
@@ -1357,6 +1382,8 @@ class ReleaseSecretLoaderTests(unittest.TestCase):
         override: tuple[str, Path] | None = None,
         unset_selector: str | None = None,
         provider: str = "openrouter",
+        runtime: str = "openai_agents_sdk",
+        sdk_environment: str = "agents",
     ) -> subprocess.CompletedProcess[str]:
         environment = os.environ.copy()
         file_names = {
@@ -1391,7 +1418,14 @@ class ReleaseSecretLoaderTests(unittest.TestCase):
         if unset_selector is not None:
             environment.pop(unset_selector, None)
         environment["WORKSTREAM_RELEASE_ROLE"] = role
+        environment["WORKSTREAM_PROJECT_AGENT_RUNTIME"] = runtime
         environment["WORKSTREAM_PROJECT_AGENT_MODEL_PROVIDER"] = provider
+        environment["WORKSTREAM_PROJECT_AGENT_MODEL_API"] = (
+            "none" if runtime == "manager_authored" else "chat_completions"
+        )
+        environment["WORKSTREAM_PROJECT_AGENT_MODEL"] = (
+            "none" if runtime == "manager_authored" else "openai/gpt-5.6-terra"
+        )
         environment["WORKSTREAM_ARTIFACT_S3_ROLES_ANYWHERE_CERTIFICATE_FILE"] = (
             "/run/private/certificate.pem"
         )
@@ -1400,6 +1434,8 @@ class ReleaseSecretLoaderTests(unittest.TestCase):
         )
         environment["EXPECT_PARSER_SELECTOR_SCRUB"] = "1" if role == "parser" else "0"
         expected = {self.FILE_TO_SECRET[key] for key in self.ROLE_FILES.get(role, ())}
+        if role == "worker" and runtime == "manager_authored":
+            expected.remove("OPENROUTER_API_KEY")
         if role == "worker" and provider == "openai":
             expected.remove("OPENROUTER_API_KEY")
             expected.add("OPENAI_API_KEY")
@@ -1430,8 +1466,26 @@ class ReleaseSecretLoaderTests(unittest.TestCase):
             "assert 'WORKSTREAM_RELEASE_ROLE' not in os.environ;"
             "print('loader-ok')"
         )
+        marker = root / "project-agent-sdk-environment"
+        if marker.exists():
+            marker.chmod(0o600)
+        marker.write_text(f"{sdk_environment}\n", encoding="utf-8")
+        marker.chmod(0o444)
+        loader = root / "release-entrypoint.sh"
+        if loader.exists():
+            loader.chmod(0o700)
+        loader.write_text(
+            ENTRYPOINT_PATH.read_text(encoding="utf-8")
+            .replace(
+                "sdk_marker=/etc/workstream/project-agent-sdk-environment",
+                f"sdk_marker={marker}",
+            )
+            .replace("0:0:444", f"{os.getuid()}:{os.getgid()}:444"),
+            encoding="utf-8",
+        )
+        loader.chmod(0o555)
         return subprocess.run(
-            ["/bin/sh", str(ENTRYPOINT_PATH), sys.executable, "-c", program],
+            ["/bin/sh", str(loader), sys.executable, "-c", program],
             env=environment,
             capture_output=True,
             text=True,
@@ -1481,6 +1535,32 @@ class ReleaseSecretLoaderTests(unittest.TestCase):
             self.assertNotEqual(unknown.returncode, 0)
             self.assertEqual(unknown.stdout, "")
             self.assertIn("release role is unavailable or unsupported", unknown.stderr)
+
+    def test_loader_binds_runtime_to_sdk_marker_before_provider_secret(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            omni = self._run_loader(
+                root,
+                runtime="omnicore_agent",
+                sdk_environment="omnicore",
+            )
+            self.assertEqual(omni.returncode, 0, omni.stderr)
+            manager = self._run_loader(
+                root,
+                runtime="manager_authored",
+                provider="none",
+                sdk_environment="omnicore",
+            )
+            self.assertEqual(manager.returncode, 0, manager.stderr)
+            mismatch = self._run_loader(
+                root,
+                runtime="omnicore_agent",
+                sdk_environment="agents",
+                content="provider-secret-must-not-load",
+            )
+            self.assertNotEqual(mismatch.returncode, 0)
+            self.assertIn("does not match", mismatch.stderr)
+            self.assertNotIn("provider-secret-must-not-load", mismatch.stderr)
 
     def test_loader_rejects_empty_missing_directory_and_symlink_without_disclosure(
         self,

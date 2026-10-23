@@ -111,7 +111,11 @@ FORBIDDEN_RENDERED_KEYS = tuple(
 EXACT_RELEASE_VALUES = {
     "WORKSTREAM_ARTIFACT_S3_AWS_WORKLOAD_IDENTITY_METHOD": {"roles-anywhere"},
     "WORKSTREAM_TOKEN_INTROSPECTION_MODE": {"disabled"},
-    "WORKSTREAM_PROJECT_AGENT_RUNTIME": {"openai_agents_sdk"},
+    "WORKSTREAM_PROJECT_AGENT_RUNTIME": {
+        "openai_agents_sdk",
+        "omnicore_agent",
+        "manager_authored",
+    },
 }
 PROJECT_AGENT_LIMIT_KEYS = (
     "WORKSTREAM_PROJECT_AGENT_RUN_TIMEOUT_SECONDS",
@@ -312,21 +316,29 @@ def validate_environment(values: dict[str, str]) -> None:
         or _positive_id(values, "WORKSTREAM_RUNTIME_GID") != GUIDE_PARSER_GID
     ):
         raise PreflightError("hosted backend runtime identity must be 10001:10001")
-    if values["WORKSTREAM_PROJECT_AGENT_MODEL_PROVIDER"] not in {
-        "openai",
-        "openrouter",
-    }:
-        raise PreflightError("unsupported project agent model provider")
-    if values["WORKSTREAM_PROJECT_AGENT_MODEL_API"] not in {
-        "chat_completions",
-        "responses",
-    }:
-        raise PreflightError("unsupported project agent model API")
-    if (
-        values["WORKSTREAM_PROJECT_AGENT_MODEL_PROVIDER"] == "openrouter"
-        and values["WORKSTREAM_PROJECT_AGENT_MODEL_API"] != "chat_completions"
-    ):
-        raise PreflightError("OpenRouter hosted releases require chat_completions")
+    runtime = values["WORKSTREAM_PROJECT_AGENT_RUNTIME"]
+    provider = values["WORKSTREAM_PROJECT_AGENT_MODEL_PROVIDER"]
+    model_api = values["WORKSTREAM_PROJECT_AGENT_MODEL_API"]
+    model = values["WORKSTREAM_PROJECT_AGENT_MODEL"]
+    if runtime == "manager_authored":
+        if (provider, model_api, model) != ("none", "none", "none"):
+            raise PreflightError("manager-authored project agent configuration is invalid")
+    else:
+        if provider not in {"openai", "openrouter"}:
+            raise PreflightError("unsupported project agent model provider")
+        if model_api not in {"chat_completions", "responses"}:
+            raise PreflightError("unsupported project agent model API")
+        if provider == "openrouter" and model_api != "chat_completions":
+            raise PreflightError("OpenRouter hosted releases require chat_completions")
+        if runtime == "omnicore_agent" and (provider, model_api) != (
+            "openrouter",
+            "chat_completions",
+        ):
+            raise PreflightError("OmniCoreAgent requires OpenRouter chat completions")
+        if provider == "openrouter" and (
+            ":" in model or model.casefold().startswith("openrouter/")
+        ):
+            raise PreflightError("OpenRouter model routing variants are unsupported")
     try:
         runtime_options = json.loads(values["WORKSTREAM_PROJECT_AGENT_RUNTIME_OPTIONS"])
     except json.JSONDecodeError as exc:
@@ -361,6 +373,8 @@ def validate_environment(values: dict[str, str]) -> None:
         "retry_max_delay_seconds", 30
     ):
         raise PreflightError("project agent runtime options are invalid")
+    if runtime in {"manager_authored", "omnicore_agent"} and runtime_options:
+        raise PreflightError("selected project agent runtime accepts no runtime options")
     if not values["WORKSTREAM_TOKEN_ISSUER"].startswith("https://"):
         raise PreflightError("Flow issuer must use HTTPS")
     if not values["WORKSTREAM_TOKEN_JWKS_URL"].startswith("https://"):
@@ -603,7 +617,7 @@ def run_shutdown(environment_path: Path, values: dict[str, str]) -> int:
     """Stop producers, drain the worker, then stop its isolated dependencies."""
     phases = (
         ["stop", "beat", "api"],
-        ["stop", "--timeout", "3700", "worker"],
+        ["stop", "--timeout", "7320", "worker"],
         ["stop", "guide-document-parser", "checker-service"],
     )
     for arguments in phases:
@@ -992,6 +1006,18 @@ def validate_compose(rendered: dict[str, Any], values: dict[str, str]) -> None:
         "guide-document-parser"
     ) != {"condition": "service_healthy", "required": True}:
         raise PreflightError("worker must wait for a healthy guide parser")
+    worker = services["worker"]
+    worker_command = worker.get("command")
+    if (
+        worker.get("stop_grace_period") not in {"7320s", "2h2m0s"}
+        or not isinstance(worker_command, list)
+        or "--pool=prefork" not in worker_command
+        or any(
+            value == "-Q" or str(value).startswith("--queues")
+            for value in worker_command
+        )
+    ):
+        raise PreflightError("project guide worker delivery profile is invalid")
     for name in ("aws-proof-runtime", "aws-proof-readiness", "aws-proof-negative"):
         service = services[name]
         if service.get("profiles") != ["aws-proof"]:

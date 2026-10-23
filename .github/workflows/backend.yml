@@ -176,7 +176,7 @@ jobs:
           python -m pip install "uv==0.10.7"
           test "$(uv --version)" = "uv 0.10.7"
           uv lock --check
-          uv sync --frozen --all-extras
+          uv sync --frozen --extra agents --extra dev
           test "$(uv run --frozen ruff --version)" = "ruff 0.15.22"
 
       - name: Validate module, AUTH, and test boundaries
@@ -308,7 +308,7 @@ jobs:
         uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
         with:
           path: ${{ runner.temp }}/backend-uv-cache
-          key: backend-uv-v1-${{ runner.os }}-${{ runner.arch }}-py312-${{ hashFiles('backend/uv.lock', '.github/workflows/backend.yml') }}
+          key: backend-uv-v1-${{ runner.os }}-${{ runner.arch }}-py312-${{ matrix.sdk_environment }}-${{ hashFiles('backend/uv.lock', '.github/workflows/backend.yml') }}
 
       - id: identity
         name: Bind exact checked-out tree
@@ -331,7 +331,8 @@ jobs:
           python -m pip install "uv==0.10.7"
           test "$(uv --version)" = "uv 0.10.7"
           uv lock --check
-          uv sync --frozen --all-extras
+          uv sync --frozen --extra "${{ matrix.sdk_environment }}" --extra dev
+          uv pip check
 
       - name: Download source-pinned MinIO image
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
@@ -518,7 +519,7 @@ jobs:
           python -m pip install "uv==0.10.7"
           test "$(uv --version)" = "uv 0.10.7"
           uv lock --check
-          uv sync --frozen --all-extras
+          uv sync --frozen --extra agents --extra dev
 
       - name: Download source-pinned MinIO image
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
@@ -599,7 +600,7 @@ jobs:
           set -euo pipefail
           shopt -s nullglob
           coverage_files=(.ci/test-lanes/run/.coverage.*)
-          test "${#coverage_files[@]}" -eq 16
+          test "${#coverage_files[@]}" -eq 17
           for source in "${coverage_files[@]}"; do
             destination="$(basename "${source}")"
             test -f "${source}"
@@ -678,7 +679,7 @@ jobs:
               raise SystemExit("hosted evidence head drift")
 
           lanes = summary.get("lanes")
-          if not isinstance(lanes, list) or len(lanes) != 16:
+          if not isinstance(lanes, list) or len(lanes) != 17:
               raise SystemExit("invalid hosted lane inventory")
           collected: list[str] = []
           completed: list[str] = []

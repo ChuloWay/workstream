@@ -14,6 +14,23 @@ from scripts import verify_hosted_release_images as proof
 
 
 class ReleaseImageProofTests(unittest.TestCase):
+    def test_release_workflow_builds_and_verifies_both_sdk_environments(self):
+        workflow = Path(".github/workflows/release-images.yml").read_text(
+            encoding="utf-8"
+        )
+        for environment in ("agents", "omnicore"):
+            self.assertEqual(
+                workflow.count(
+                    "--build-arg "
+                    f"WORKSTREAM_PROJECT_AGENT_SDK_ENVIRONMENT={environment}"
+                ),
+                1,
+            )
+            self.assertEqual(
+                workflow.count(f"--backend-{environment}-image"),
+                1,
+            )
+
     def test_helper_pins_match_runtime_download_and_image_verification(self):
         root = Path(__file__).resolve().parents[1]
         runtime = ast.parse(
@@ -31,6 +48,11 @@ class ReleaseImageProofTests(unittest.TestCase):
         ]
         self.assertEqual(pins, [proof.ROLES_ANYWHERE_HELPER_SHA256])
         dockerfile = (root / "docker/backend/Dockerfile.release").read_text()
+        self.assertIn("ARG WORKSTREAM_PROJECT_AGENT_SDK_ENVIRONMENT", dockerfile)
+        self.assertIn(
+            '--extra "${WORKSTREAM_PROJECT_AGENT_SDK_ENVIRONMENT}"', dockerfile
+        )
+        self.assertIn("/etc/workstream/project-agent-sdk-environment", dockerfile)
         downloads = re.findall(
             r"ADD --checksum=sha256:([0-9a-f]{64})\s+\\\n\s+"
             r"https://rolesanywhere\.amazonaws\.com/releases/[^/]+/"
@@ -56,6 +78,7 @@ class ReleaseImageProofTests(unittest.TestCase):
                 iter(proof.ROLES_ANYWHERE_HELPER_SHA256.values())
             ),
             "proof_command_timeout": True,
+            "sdk_environment": "agents",
         }
         self.checker = {
             "status": 1,
@@ -66,7 +89,13 @@ class ReleaseImageProofTests(unittest.TestCase):
         }
 
     def test_valid_backend_allows_production_dev_overlap(self):
-        proof.verify_backend(self.backend, self.source, self.packages, self.loader)
+        proof.verify_backend(
+            self.backend, self.source, self.packages, self.loader, "agents"
+        )
+        with self.assertRaisesRegex(ValueError, "SDK environment marker"):
+            proof.verify_backend(
+                self.backend, self.source, self.packages, self.loader, "omnicore"
+            )
 
     def test_source_lock_loader_and_extra_file_substitutions_reject(self):
         for key in ("app/main.py", "uv.lock", "app/extra.py"):
@@ -75,20 +104,26 @@ class ReleaseImageProofTests(unittest.TestCase):
                 altered["source"][key] = "f" * 64
                 with self.assertRaisesRegex(ValueError, "source inventory"):
                     proof.verify_backend(
-                        altered, self.source, self.packages, self.loader
+                        altered, self.source, self.packages, self.loader, "agents"
                     )
         altered = copy.deepcopy(self.backend)
         altered["loader"] = "e" * 64
         with self.assertRaisesRegex(ValueError, "secret loader"):
-            proof.verify_backend(altered, self.source, self.packages, self.loader)
+            proof.verify_backend(
+                altered, self.source, self.packages, self.loader, "agents"
+            )
         altered = copy.deepcopy(self.backend)
         altered["roles_anywhere_helper"] = "0" * 64
         with self.assertRaisesRegex(ValueError, "Roles Anywhere helper"):
-            proof.verify_backend(altered, self.source, self.packages, self.loader)
+            proof.verify_backend(
+                altered, self.source, self.packages, self.loader, "agents"
+            )
         altered = copy.deepcopy(self.backend)
         altered["proof_command_timeout"] = False
         with self.assertRaisesRegex(ValueError, "proof timeout command"):
-            proof.verify_backend(altered, self.source, self.packages, self.loader)
+            proof.verify_backend(
+                altered, self.source, self.packages, self.loader, "agents"
+            )
 
     def test_missing_agent_or_added_dev_only_package_rejects(self):
         for extra in (False, True):
@@ -101,7 +136,9 @@ class ReleaseImageProofTests(unittest.TestCase):
                 self.subTest(extra=extra),
                 self.assertRaisesRegex(ValueError, "package closure"),
             ):
-                proof.verify_backend(altered, self.source, self.packages, self.loader)
+                proof.verify_backend(
+                    altered, self.source, self.packages, self.loader, "agents"
+                )
 
     def test_image_failure_diagnostics_never_expose_arbitrary_output(self):
         for stderr, expected in (
@@ -192,6 +229,9 @@ class ReleaseImageProofTests(unittest.TestCase):
                 patch.object(proof, "checked", return_value=b""),
                 patch.object(proof, "source_inventory", return_value={}),
                 patch.object(
+                    proof, "read_sdk_environment_marker", return_value="agents"
+                ),
+                patch.object(
                     proof.importlib.metadata, "distributions", return_value=[]
                 ),
             ):
@@ -229,6 +269,9 @@ class ReleaseImageProofTests(unittest.TestCase):
                 patch.object(proof.os, "getuid", return_value=10001),
                 patch.object(proof, "checked", return_value=b""),
                 patch.object(proof, "source_inventory", return_value={}),
+                patch.object(
+                    proof, "read_sdk_environment_marker", return_value="agents"
+                ),
                 patch.object(
                     proof.importlib.metadata, "distributions", return_value=[]
                 ),
@@ -365,7 +408,8 @@ class ReleaseImageProofTests(unittest.TestCase):
         evidence.update(
             source_sha="b" * 40,
             tree_sha="c" * 40,
-            backend_image_id="sha256:" + "d" * 64,
+            backend_agents_image_id="sha256:" + "d" * 64,
+            backend_omnicore_image_id="sha256:" + "f" * 64,
             checker_image_id="sha256:" + "e" * 64,
         )
         with tempfile.TemporaryDirectory() as directory:

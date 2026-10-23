@@ -17,6 +17,7 @@ def worker(monkeypatch):
     from app.workers import project_setup
 
     monkeypatch.setattr(project_setup, "run_async_task", lambda factory: asyncio.run(factory()))
+    monkeypatch.setattr(project_setup, "require_project_setup_worker", lambda _task: None)
     yield project_setup
     get_settings.cache_clear()
 
