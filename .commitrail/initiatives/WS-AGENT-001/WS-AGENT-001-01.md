@@ -63,6 +63,11 @@ obligation before claiming the hosted journey recovered.
   Remove only their obsolete generated-ID inventory entries.
 - Focused affected tests, ownership/lane inventories, and current guide/runtime,
   deployment, developer and roadmap documentation. No unrelated inventory edits.
+- Historical TASK migration fixtures may restore checksum-bound predecessor
+  data through the existing isolated archive-restore operation. Restore is setup,
+  not proof of a current writer: all guards must be restored before the real
+  migration, recovery or replay assertions. Do not retain old runtime execution
+  merely to construct that data.
 - `.github/workflows/release-images.yml`: select the affected local deployment,
   drill-readiness and parser-isolation proof in the existing release gate. Preserve
   frozen installation, complete test execution and existing image checks.
@@ -180,6 +185,10 @@ obligation before claiming the hosted journey recovered.
   reuse, startup rejection for invalid identity/capabilities, and a discriminating
   removal probe. Unprivileged transport fixtures may model only the OS identity
   boundary; production has no same-UID fallback.
+- Normal container SIGTERM must run the existing parser shutdown operation,
+  reap admitted children and remove only its own socket. The real release-image
+  proof must observe clean exit and socket removal, without a harness cleanup
+  substituting for production shutdown.
 - SQL profile validation rejects noncanonical inner JSON even when the outer
   configuration hash matches, with a valid control. Production tool-budget tests
   enforce call and aggregate-output limits. Conflicting receipt replay preserves
@@ -220,7 +229,8 @@ obligation before claiming the hosted journey recovered.
 | Existing durable setup callers use the neutral contract | Isolated PostgreSQL worker, capability-growth, public dispatch and recovery batch at `898d10712` | 50 passed | Scripted inference does not qualify a real provider |
 | Canonical profile and conflicting receipt guards discriminate invalid input | Remove each guard independently on `96b657e5f` | Both named regressions fail at their expected rejection assertion | No claim about unrelated guards |
 | Unread-source rejection has independent service and database protection | Disable the service check on `96b657e5f`, then replay the direct service regression at `1c806ea2c` | PostgreSQL independently rejects missing access; the service control passes and removing its guard fails the exact rejection assertion | No claim about unrelated finalization guards |
-| Parser process identities isolate concurrent document reads | Clean release-image proof at `898d10712` | All ten cases passed: four formats, separate child identities, denied socket/process access, timeout/cancellation and reuse; owned containers removed and no Git index lock retained | Later parser edits add docstrings only. Read-only Git inspection fixes the proof-runner file-limit failure; removing it fails the large-index regression |
+| Parser process identities isolate concurrent document reads | Clean release-image proof at `898d10712` | All ten cases passed: four formats, separate child identities, denied socket/process access, timeout/cancellation and reuse; owned containers removed and no Git index lock retained | This run predates the normal SIGTERM cleanup repair and does not prove that later boundary. Read-only Git inspection fixes the proof-runner file-limit failure; removing it fails the large-index regression |
+| The public guide drill recognizes unapproved guide lineage | Shared external-client oracle at `c735327fb` | 37 script tests passed; the new valid-response regression rejects the preceding oracle at its exact shape assertion, and fabricated activation/policy IDs remain rejected | An oracle test is not a completed provider-backed guide run |
 
 ## Reconciliation
 
