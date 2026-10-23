@@ -36,9 +36,11 @@ class ModelEvidenceCustody:
     """Lock and validate exact shared effect custody after owner locks."""
 
     def __init__(self, session: AsyncSession) -> None:
+        """Bind evidence resolution to one caller-owned transaction."""
         self._repo = ModelCallRepository(session)
 
     async def resolve_evidence(self, selector: ModelEvidenceSelector) -> ModelEvidenceReservation:
+        """Lock and verify the exact effect, role, digest and profile byte bound."""
         selector = ModelEvidenceSelector.model_validate(selector)
         await self._repo.lock_envelope_scope(selector.paid_slot)
         if await self._repo.envelope(selector.paid_slot, lock=True) is None:
@@ -76,12 +78,14 @@ class ModelRecoverySources:
     """Project retained checker recovery lineage without owner authorization."""
 
     def __init__(self, session: AsyncSession) -> None:
+        """Bind retained recovery reads to one caller-owned transaction."""
         self._session = session
         self._repo = ModelCallRepository(session)
 
     async def recovery_owner(
         self, slot: ModelPaidSlotKey, parent_attempt_id: UUID
     ) -> ModelRecoveryOwnerFacts:
+        """Resolve the immutable checker owner for one eligible parent effect."""
         slot = ModelPaidSlotKey.model_validate(slot)
         slot_row = await self._repo.slot(slot)
         parent = await self._repo.attempt(parent_attempt_id)
@@ -119,6 +123,7 @@ class ModelRecoverySources:
     async def recovery_candidates(
         self, source_run_ids: tuple[UUID, ...]
     ) -> dict[UUID, tuple[ModelRecoveryCandidate, ...]]:
+        """Project terminal effects that may receive an authorized child."""
         if not source_run_ids:
             return {}
         child = aliased(ModelUsageEffect)
@@ -132,8 +137,7 @@ class ModelRecoverySources:
                 )
                 .join(
                     CheckerModelInvocationGrantCall,
-                    CheckerModelInvocationGrantCall.grant_id
-                    == CheckerModelInvocationGrant.id,
+                    CheckerModelInvocationGrantCall.grant_id == CheckerModelInvocationGrant.id,
                 )
                 .join(
                     ModelUsageEffect,

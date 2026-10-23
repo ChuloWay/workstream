@@ -109,6 +109,7 @@ class SetupProviderUncertain(RuntimeError):
     """A provider dispatch may have created a paid effect."""
 
     def __init__(self, digest: str, provider_response_id: str | None = None) -> None:
+        """Retain a safe uncertainty digest and any authenticated provider ID."""
         super().__init__("setup provider outcome is uncertain")
         self.digest = digest
         self.provider_response_id = provider_response_id
@@ -117,15 +118,20 @@ class SetupProviderUncertain(RuntimeError):
 class SetupProvider(Protocol):
     """Closed provider boundary used by the trusted setup model handler."""
 
-    async def count_input(self, body: dict[str, object]) -> int: ...
+    async def count_input(self, body: dict[str, object]) -> int:
+        """Return a conservative provider-qualified input-token count."""
+        ...
 
-    async def dispatch(self, body_json: str) -> SetupProviderResponse: ...
+    async def dispatch(self, body_json: str) -> SetupProviderResponse:
+        """Send one bounded request without an automatic paid retry."""
+        ...
 
 
 class OpenAISetupProvider:
     """No-retry OpenAI Responses adapter owned only by the trusted model process."""
 
     def __init__(self, *, api_key: str, profile: ProjectModelProfile) -> None:
+        """Bind no-retry clients to one approved OpenAI profile."""
         import httpx
         from openai import AsyncOpenAI
 
@@ -202,6 +208,7 @@ class OpenAISetupProvider:
             ) from exc
 
     async def aclose(self) -> None:
+        """Close both provider clients and their connection pools."""
         await self._counter.close()
         await self._client.aclose()
 
@@ -210,15 +217,14 @@ class OpenRouterSetupProvider:
     """No-retry OpenRouter adapter reserving its full pinned model context."""
 
     def __init__(self, *, api_key: str, profile: ProjectModelProfile) -> None:
+        """Bind one no-retry client to an exact direct OpenRouter model."""
         import httpx
 
         model_parts = profile.spec.model_snapshot.split("/")
         if len(model_parts) != 2 or not all(model_parts):
             raise ModelCallUnavailable("model_profile_provider_unavailable")
         self._profile = profile
-        self._model_url = _OPENROUTER_MODEL_URL.format(
-            author=model_parts[0], slug=model_parts[1]
-        )
+        self._model_url = _OPENROUTER_MODEL_URL.format(author=model_parts[0], slug=model_parts[1])
         self._client = httpx.AsyncClient(
             trust_env=False,
             follow_redirects=False,
@@ -246,6 +252,7 @@ class OpenRouterSetupProvider:
         return self._profile.spec.maximum_input_tokens
 
     async def dispatch(self, body_json: str) -> SetupProviderResponse:
+        """Send one bounded Chat Completions request and classify uncertainty."""
         raw = b""
         try:
             async with self._client.stream(
@@ -291,6 +298,7 @@ class OpenRouterSetupProvider:
             ) from exc
 
     async def aclose(self) -> None:
+        """Close the provider metadata and dispatch connection pool."""
         await self._client.aclose()
 
 
@@ -306,10 +314,9 @@ class SetupModelProxyHandler:
         profiles,
         outputs,
         bindings,
-        provider: Callable[
-            [ProjectModelProfile], AbstractAsyncContextManager[SetupProvider]
-        ],
+        provider: Callable[[ProjectModelProfile], AbstractAsyncContextManager[SetupProvider]],
     ) -> None:
+        """Inject transaction, authority, ledger, ART and provider factories."""
         self._sessions = sessions
         self._authorization = authorization
         self._calls = calls
@@ -319,6 +326,7 @@ class SetupModelProxyHandler:
         self._provider = provider
 
     async def handle(self, request: SetupModelProxyRequest) -> SetupModelProxyReply:
+        """Map owner, budget and request failures to the closed wire outcome."""
         try:
             return await self._handle(request)
         except ModelCallBudgetUnavailable:
@@ -327,6 +335,7 @@ class SetupModelProxyHandler:
             return _unavailable(request, "model_call_unavailable")
 
     async def _handle(self, request: SetupModelProxyRequest) -> SetupModelProxyReply:
+        """Retain, reserve, dispatch and settle one stable setup call slot."""
         subject = request.subject
         key = SetupModelUsageSlotKey(
             compilation_attempt_id=subject.compilation_attempt_id,
@@ -491,6 +500,7 @@ class SetupModelProxyHandler:
     async def _store(
         self, prepared: PreparedSetupModelUsageEffect, role: str, data: bytes
     ) -> ModelCallEvidence:
+        """Store, verify and bind one exact setup request or response artifact."""
         selector = SetupModelOutputSelector(
             slot_key=prepared.slot_key,
             model_call_slot_id=prepared.slot_id,
@@ -500,6 +510,7 @@ class SetupModelProxyHandler:
         )
 
         async def source():
+            """Yield the one canonical bounded evidence payload."""
             yield data
 
         stored = await self._outputs.store_setup_output(
@@ -530,6 +541,7 @@ class SetupModelProxyHandler:
         completed: CompletedSetupModelUsageEffect,
         profile: ProjectModelProfile,
     ) -> SetupModelProxyReply:
+        """Read and revalidate the retained response for a completed replay."""
         selector = SetupModelOutputSelector(
             slot_key=completed.effect.slot_key,
             model_call_slot_id=completed.effect.slot_id,
@@ -575,6 +587,7 @@ def _validate_request(
     request: SetupModelProxyRequest,
     body: object,
 ) -> None:
+    """Validate the complete SDK request against the locked profile."""
     subject = request.subject
     if (
         not isinstance(body, dict)
@@ -583,8 +596,7 @@ def _validate_request(
         or profile.spec.allowed_tools != ("read_document", "search_document")
         or body.get("model") != subject.model
         or body.get("stream", False) is not False
-        or len(request.provider_request_json.encode("utf-8"))
-        > profile.spec.maximum_request_bytes
+        or len(request.provider_request_json.encode("utf-8")) > profile.spec.maximum_request_bytes
         or not _safe_tools(body.get("tools"))
     ):
         raise ModelCallUnavailable("setup_model_request_invalid")
@@ -598,15 +610,10 @@ def _validate_request(
             or body.get("parallel_tool_calls") is not False
             or body.get("truncation") not in {None, "disabled"}
             or body.get("include", []) != []
-            or body.get("reasoning")
-            != {"effort": profile.spec.settings.reasoning_effort}
-            or not _safe_response_text(
-                body.get("text"), profile.spec.settings.text_verbosity
-            )
+            or body.get("reasoning") != {"effort": profile.spec.settings.reasoning_effort}
+            or not _safe_response_text(body.get("text"), profile.spec.settings.text_verbosity)
             or type(body.get("max_output_tokens")) is not int
-            or not 1
-            <= body["max_output_tokens"]
-            <= profile.spec.maximum_output_tokens
+            or not 1 <= body["max_output_tokens"] <= profile.spec.maximum_output_tokens
         ):
             raise ModelCallUnavailable("setup_model_request_invalid")
     elif identity == ("openrouter", "chat_completions"):
@@ -631,6 +638,7 @@ def _validate_request(
 
 
 def _safe_tools(value: object) -> bool:
+    """Accept only the two neutral setup document tools."""
     if not isinstance(value, list) or len(value) != 2:
         return False
     names: list[str] = []
@@ -647,6 +655,7 @@ def _safe_tools(value: object) -> bool:
 
 
 def _safe_response_text(value: object, verbosity: str) -> bool:
+    """Validate strict Responses output shape and locked verbosity."""
     if not isinstance(value, dict) or set(value) - {"format", "verbosity"}:
         return False
     output_format = value.get("format")
@@ -661,6 +670,7 @@ def _safe_response_text(value: object, verbosity: str) -> bool:
 
 
 def _safe_chat_response_format(value: object) -> bool:
+    """Validate the optional strict Chat Completions JSON schema."""
     if value is None:
         return True
     if not isinstance(value, dict) or set(value) != {"type", "json_schema"}:
@@ -676,9 +686,7 @@ def _safe_chat_response_format(value: object) -> bool:
     )
 
 
-def _validate_openrouter_metadata(
-    profile: ProjectModelProfile, value: object
-) -> None:
+def _validate_openrouter_metadata(profile: ProjectModelProfile, value: object) -> None:
     """Fail before spend unless current provider metadata fits the pinned profile."""
     if not isinstance(value, dict) or set(value) != {"data"}:
         raise ModelCallUnavailable("model_profile_provider_unavailable")
@@ -699,9 +707,7 @@ def _validate_openrouter_metadata(
         or type(top_provider.get("context_length")) is not int
         or top_provider["context_length"] != context_length
         or type(top_provider.get("max_completion_tokens")) is not int
-        or not 1
-        <= profile.spec.maximum_output_tokens
-        <= top_provider["max_completion_tokens"]
+        or not 1 <= profile.spec.maximum_output_tokens <= top_provider["max_completion_tokens"]
         or not isinstance(supported, list)
         or any(type(item) is not str for item in supported)
         or not _OPENROUTER_REQUIRED_PARAMETERS.issubset(supported)
@@ -710,9 +716,7 @@ def _validate_openrouter_metadata(
     _validate_openrouter_pricing(profile, data.get("pricing"))
 
 
-def _validate_openrouter_pricing(
-    profile: ProjectModelProfile, value: object
-) -> None:
+def _validate_openrouter_pricing(profile: ProjectModelProfile, value: object) -> None:
     """Require pinned rates to cover every advertised tier and cache class."""
     if not isinstance(value, dict):
         raise ModelCallUnavailable("model_profile_provider_unavailable")
@@ -761,6 +765,7 @@ def _require_zero_unsupported_fees(row: dict) -> None:
 
 
 def _nanodollars(value: object) -> int:
+    """Round one nonnegative per-token USD string up to nanodollars."""
     if type(value) is not str:
         raise ModelCallUnavailable("model_profile_provider_unavailable")
     try:
@@ -769,9 +774,7 @@ def _nanodollars(value: object) -> int:
         raise ModelCallUnavailable("model_profile_provider_unavailable") from None
     if not amount.is_finite() or amount < 0:
         raise ModelCallUnavailable("model_profile_provider_unavailable")
-    converted = (amount * Decimal(1_000_000_000)).to_integral_value(
-        rounding=ROUND_CEILING
-    )
+    converted = (amount * Decimal(1_000_000_000)).to_integral_value(rounding=ROUND_CEILING)
     if converted > 9_000_000_000_000_000_000:
         raise ModelCallUnavailable("model_profile_provider_unavailable")
     return int(converted)
@@ -780,6 +783,7 @@ def _nanodollars(value: object) -> int:
 def _openai_response(
     profile: ProjectModelProfile, status_code: int, value: dict[str, object]
 ) -> SetupProviderResponse:
+    """Normalize an exact OpenAI response, usage and output-byte decision."""
     provider_id = value.get("id")
     provider_model = value.get("model")
     if (
@@ -801,6 +805,7 @@ def _openai_response(
 def _openrouter_response(
     profile: ProjectModelProfile, status_code: int, value: dict[str, object]
 ) -> SetupProviderResponse:
+    """Normalize an exact OpenRouter response, usage and output-byte decision."""
     provider_id = value.get("id")
     provider_model = value.get("model")
     if (
@@ -819,9 +824,7 @@ def _openrouter_response(
     )
 
 
-def _retained_provider_response(
-    profile: ProjectModelProfile, data: bytes
-) -> SetupProviderResponse:
+def _retained_provider_response(profile: ProjectModelProfile, data: bytes) -> SetupProviderResponse:
     """Re-validate exact retained ART bytes without another provider request."""
     try:
         value = json.loads(data, parse_constant=_reject_constant)
@@ -838,6 +841,7 @@ def _retained_provider_response(
 
 
 def _usage(value: object) -> ModelCallUsage:
+    """Decode complete Responses usage including cached and reasoning tokens."""
     if not isinstance(value, dict):
         raise TypeError("provider usage is unavailable")
     input_details = value.get("input_tokens_details") or {}
@@ -851,6 +855,7 @@ def _usage(value: object) -> ModelCallUsage:
 
 
 def _chat_usage(value: object) -> ModelCallUsage:
+    """Decode complete Chat Completions usage into the shared ledger shape."""
     if not isinstance(value, dict):
         raise TypeError("provider usage is unavailable")
     input_details = value.get("prompt_tokens_details") or {}
@@ -884,6 +889,7 @@ def _model_output_bytes(value: dict[str, object]) -> int:
 
 
 def _chat_output_bytes(value: dict[str, object]) -> int:
+    """Count model-authored UTF-8 bytes across all completion choices."""
     choices = value.get("choices")
     if not isinstance(choices, list):
         raise TypeError("provider output is invalid")
@@ -891,6 +897,7 @@ def _chat_output_bytes(value: dict[str, object]) -> int:
 
 
 def _generated_string_bytes(root: object) -> int:
+    """Count bounded content, refusal and tool-argument strings recursively."""
     total = 0
     stack = [root]
     while stack:
@@ -907,6 +914,7 @@ def _generated_string_bytes(root: object) -> int:
 
 
 def _canonical_bytes(value: object) -> bytes:
+    """Serialize provider evidence to the canonical retained JSON form."""
     return json.dumps(
         value,
         sort_keys=True,
@@ -929,14 +937,17 @@ async def _bounded_response_bytes(response, maximum_bytes: int) -> bytes:
 
 
 def _sha(data: bytes) -> str:
+    """Return the canonical prefixed digest for retained bytes."""
     return "sha256:" + hashlib.sha256(data).hexdigest()
 
 
 def _reject_constant(_: str) -> None:
+    """Reject non-finite JSON numeric constants."""
     raise ValueError("non-finite provider number")
 
 
 def _unavailable(request: SetupModelProxyRequest, code: str) -> SetupModelProxyReply:
+    """Build the closed bounded unavailable reply for one call index."""
     return SetupModelProxyReply(
         outcome="unavailable",
         call_index=request.call_index,

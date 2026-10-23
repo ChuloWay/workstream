@@ -26,10 +26,12 @@ from app.modules.model_usage.repository import require_model_call_transaction
 
 
 def _uuid(value: str) -> UUID:
+    """Decode a stored canonical record identifier."""
     return UUID(value)
 
 
 def _checker_key(row: CheckerModelUsageSlot) -> ModelPaidSlotKey:
+    """Project one stored checker slot into its public stable owner key."""
     return ModelPaidSlotKey(
         project_id=_uuid(row.project_id),
         assignment_id=_uuid(row.assignment_id),
@@ -46,6 +48,7 @@ def _checker_key(row: CheckerModelUsageSlot) -> ModelPaidSlotKey:
 
 
 def _setup_key(row: SetupModelUsageSlot) -> SetupModelUsageSlotKey:
+    """Project one stored setup slot into its public stable owner key."""
     return SetupModelUsageSlotKey(
         compilation_attempt_id=_uuid(row.compilation_attempt_id),
         project_id=_uuid(row.project_id),
@@ -63,6 +66,7 @@ def _setup_key(row: SetupModelUsageSlot) -> SetupModelUsageSlotKey:
 
 
 def _optional_evidence(row: ModelUsageEffect, prefix: str) -> ModelCallEvidence | None:
+    """Return complete bounded ART facts or reject partial retained custody."""
     values = {
         "binding_id": getattr(row, f"{prefix}_binding_id"),
         "content_id": getattr(row, f"{prefix}_content_id"),
@@ -81,6 +85,7 @@ def _optional_evidence(row: ModelUsageEffect, prefix: str) -> ModelCallEvidence 
 
 
 def _optional_usage(row: ModelUsageEffect) -> ModelCallUsage | None:
+    """Return complete provider usage or reject a partial usage tuple."""
     values = {
         "input_tokens": row.input_tokens,
         "cached_input_tokens": row.cached_input_tokens,
@@ -98,10 +103,12 @@ class ModelUsageInspectionService:
     """Authorize before reading MODEL-USAGE and conceal absent or foreign effects."""
 
     def __init__(self, session: AsyncSession, authority: ModelCallAuthorityPort) -> None:
+        """Bind one database transaction to the exact-effect authority port."""
         self._session = session
         self._authority = authority
 
     async def inspect_effect(self, facts: ModelUsageInspectionFacts) -> ModelUsageEffectInspection:
+        """Authorize and return one redacted same-project paid effect."""
         require_model_call_transaction(self._session)
         facts = ModelUsageInspectionFacts.model_validate(facts)
         evidence = await self._authority.authorize_usage_read(facts)

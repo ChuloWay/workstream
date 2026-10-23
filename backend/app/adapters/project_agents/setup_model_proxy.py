@@ -44,6 +44,7 @@ class SetupModelProxySession:
         text_verbosity: str,
         timeout_seconds: float,
     ) -> None:
+        """Validate and bind one attempt's immutable subject and session limits."""
         if (
             not isinstance(socket_path, Path)
             or type(subject) is not SetupModelProxySubject
@@ -51,8 +52,7 @@ class SetupModelProxySession:
             or not 1 <= maximum_calls <= 100
             or type(maximum_output_tokens) is not int
             or not 1 <= maximum_output_tokens <= 10_000_000
-            or reasoning_effort
-            not in {"none", "minimal", "low", "medium", "high", "xhigh", "max"}
+            or reasoning_effort not in {"none", "minimal", "low", "medium", "high", "xhigh", "max"}
             or text_verbosity not in {"low", "medium", "high"}
             or type(timeout_seconds) is not float
             or not 0.1 <= timeout_seconds <= 7_200.0
@@ -71,14 +71,17 @@ class SetupModelProxySession:
 
     @property
     def maximum_output_tokens(self) -> int:
+        """Return the locked per-dispatch completion-token ceiling."""
         return self._maximum_output_tokens
 
     @property
     def reasoning_effort(self) -> str:
+        """Return the locked provider reasoning setting."""
         return self._reasoning_effort
 
     @property
     def text_verbosity(self) -> str:
+        """Return the locked provider text-verbosity setting."""
         return self._text_verbosity
 
     async def dispatch(
@@ -116,6 +119,7 @@ class SetupModelProxySession:
         return reply
 
     async def _round_trip(self, request: SetupModelProxyRequest) -> SetupModelProxyReply:
+        """Exchange one bounded frame over the exact private Unix socket."""
         identity = _validated_socket(self._socket_path)
         reader: asyncio.StreamReader | None = None
         writer: asyncio.StreamWriter | None = None
@@ -142,7 +146,13 @@ class SetupModelProxySession:
                 if await reader.read(1):
                     raise SetupModelProxyUnavailable("setup model reply has trailing bytes")
             return _decode_reply(payload)
-        except (OSError, TimeoutError, asyncio.IncompleteReadError, ValueError, UnicodeError) as exc:
+        except (
+            OSError,
+            TimeoutError,
+            asyncio.IncompleteReadError,
+            ValueError,
+            UnicodeError,
+        ) as exc:
             raise SetupModelProxyUnavailable("setup model proxy is unavailable") from exc
         finally:
             if writer is not None:
@@ -161,6 +171,7 @@ def setup_model_session_factory(*, sessions, socket_path: Path | None):
         subject: SetupModelProxySubject | None,
         configuration: ProjectGuideRuntimeConfiguration,
     ):
+        """Yield an exact profile-bound model session or no capability."""
         if not configuration.uses_inference:
             if subject is not None:
                 raise SetupModelProxyUnavailable("setup model subject is unexpected")
@@ -236,6 +247,7 @@ def _profile_covers_tool_runtime(profile, configuration) -> bool:
 
 
 def _decode_reply(payload: bytes) -> SetupModelProxyReply:
+    """Decode the closed trusted-listener response frame."""
     value = json.loads(
         payload.decode("utf-8"),
         parse_constant=_reject_constant,
@@ -272,6 +284,7 @@ def _decode_reply(payload: bytes) -> SetupModelProxyReply:
 
 
 def _validated_socket(path: Path) -> tuple[int, int]:
+    """Verify exact same-identity socket custody and return its stable inode."""
     encoded = os.fsencode(path)
     if not path.is_absolute() or not encoded or b"\0" in encoded or len(encoded) >= 108:
         raise SetupModelProxyUnavailable("setup model proxy path is invalid")
@@ -288,6 +301,7 @@ def _validated_socket(path: Path) -> tuple[int, int]:
 
 
 def _closed_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    """Decode one JSON object while rejecting duplicate members."""
     value: dict[str, Any] = {}
     for key, item in pairs:
         if key in value:
@@ -297,6 +311,7 @@ def _closed_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
 
 
 def _reject_constant(_: str) -> None:
+    """Reject non-finite numbers in private transport JSON."""
     raise ValueError("non-finite setup model proxy number")
 
 
@@ -327,7 +342,10 @@ def create_setup_httpx_client(
         raise ValueError("setup model API is unsupported")
 
     class DispatchTransport(httpx2.AsyncBaseTransport):
+        """Translate one closed native SDK request into the setup session."""
+
         async def handle_async_request(self, request):
+            """Validate the SDK endpoint and return the trusted proxy reply."""
             if (
                 request.method != "POST"
                 or request.url.host != "model-proxy.invalid"

@@ -114,7 +114,7 @@ socket, a provider key, model coordinates or arbitrary network egress. See the
 [external checker protocol](../external_checkers/README.md).
 
 Socket roots are canonical mode-`0700` directories and sockets are mode `0600`
-under one non-root identity. Stop producers first, drain workers, then drain the
+under one non-root identity. Stop producers first, drain active executions, then drain the
 proxy before removing any stale socket. Restarting a process does not clear a
 reservation or authorize another provider create.
 
@@ -153,7 +153,7 @@ project budget.
 | Delivery ambiguous without usable provider evidence | `uncertain`, full reservation retained | Inspect the exact effect; never create again without authenticated no-effect proof |
 | Provider ID/response known, ART or callback interrupted | Exact effect and response identity retained | Recover and verify original ART/provider evidence, then complete without another create |
 | Complete provider failure with authenticated usage | `known_failed`, usage settled | Checker-only authorized child may be prepared when eligibility is proven |
-| Completion delivered but worker/image reply lost | Completed effect, ART response and settled cost | Fresh authorized owner consumes the cached completion |
+| Completion delivered but runtime/image reply lost | Completed effect, ART response and settled cost | Fresh authorized owner consumes the cached completion |
 
 Setup recovery never fabricates checker lineage. The setup handler reads retained
 verified response ART and completes the original setup effect. Provider storage is
