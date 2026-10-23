@@ -8,15 +8,17 @@ set -euo pipefail
 readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly REPOSITORY_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
 readonly STATE_ROOT="${WORKSTREAM_TS_RUNSC_STATE_ROOT:?set the prepared PILOT-00 state root}"
+readonly SHARED_ROOT="${WORKSTREAM_TS_RUNSC_SHARED_ROOT:?set the daemon-visible qualification root}"
 readonly CONTAINER="${WORKSTREAM_TS_RUNSC_CONTAINER:?set the owned DIND container}"
+readonly PREPARED_CONTAINER="${WORKSTREAM_TS_RUNSC_PREPARED_CONTAINER:?set the stopped prepared DIND container}"
 readonly RUN_ID="${WORKSTREAM_TS_RUNSC_RUN_ID:?set the prepared PILOT-00 run ID}"
 readonly CHECKER_IMAGE="${WORKSTREAM_TS_RUNSC_CHECKER_IMAGE:-ws-terminal-systems-post:qualification}"
 readonly REGISTRY_IMAGE="${WORKSTREAM_TS_RUNSC_REGISTRY_IMAGE:-registry:2}"
-readonly INNER_ROOT="${STATE_ROOT}"
-readonly COMPOSITION_ROOT="${STATE_ROOT}/terminal-systems-runsc-composition"
+readonly INNER_ROOT="/workstream-state"
+readonly COMPOSITION_ROOT="${SHARED_ROOT}/terminal-systems-runsc-composition"
 readonly INNER_COMPOSITION_ROOT="${INNER_ROOT}/terminal-systems-runsc-composition"
 readonly ORIGINAL_CONFIG="$(mktemp /tmp/ws493-runsc-daemon.XXXXXX.json)"
-readonly ORIGINAL_CONFIG_MODE="$(stat -c '%a' "${STATE_ROOT}/daemon.json")"
+readonly ORIGINAL_CONFIG_MODE="$(stat -c '%a' "${SHARED_ROOT}/daemon.json")"
 readonly BUILD_MESSAGES="$(mktemp /tmp/ws493-runsc-build.XXXXXX.jsonl)"
 readonly METADATA="${WORKSTREAM_TS_RUNSC_METADATA:-/tmp/ws493-terminal-systems-runsc.json}"
 readonly RESULT_LOG="${WORKSTREAM_TS_RUNSC_LOG:-/tmp/ws493-terminal-systems-runsc.log}"
@@ -27,6 +29,7 @@ STARTED=0
 CONFIG_REPLACED=0
 EXTRACT_CREATED=0
 HOST_CHECKER_BUILT=0
+QUALIFIER_CONTAINER_OWNED=0
 
 cleanup() {
   local status=$?
@@ -54,6 +57,9 @@ cleanup() {
     fi
     docker stop --time 15 "${CONTAINER}" >/dev/null 2>&1 || status=1
   fi
+  if [[ "${QUALIFIER_CONTAINER_OWNED}" == 1 ]]; then
+    docker rm "${CONTAINER}" >/dev/null 2>&1 || status=1
+  fi
   if [[ "${EXTRACT_CREATED}" == 1 ]]; then
     docker rm -f "${EXTRACT_CONTAINER}" >/dev/null 2>&1 || status=1
   fi
@@ -61,9 +67,9 @@ cleanup() {
     docker image rm "${CHECKER_IMAGE}" >/dev/null 2>&1 || status=1
   fi
   if [[ "${CONFIG_REPLACED}" == 1 ]]; then
-    cp -- "${ORIGINAL_CONFIG}" "${STATE_ROOT}/daemon.json" || status=1
-    chmod "${ORIGINAL_CONFIG_MODE}" "${STATE_ROOT}/daemon.json" || status=1
-    if ! cmp -s -- "${ORIGINAL_CONFIG}" "${STATE_ROOT}/daemon.json"; then
+    cp -- "${ORIGINAL_CONFIG}" "${SHARED_ROOT}/daemon.json" || status=1
+    chmod "${ORIGINAL_CONFIG_MODE}" "${SHARED_ROOT}/daemon.json" || status=1
+    if ! cmp -s -- "${ORIGINAL_CONFIG}" "${SHARED_ROOT}/daemon.json"; then
       status=1
     fi
   fi
@@ -75,40 +81,64 @@ trap cleanup EXIT INT TERM
 
 [[ "${STATE_ROOT}" == /* ]]
 [[ "${STATE_ROOT}" =~ ^/tmp/ws-pilot00-[a-z0-9-]+$ ]]
+[[ "${SHARED_ROOT}" == "${REPOSITORY_ROOT}/external_checkers/target/ws493-"* ]]
+[[ "${CONTAINER}" != "${PREPARED_CONTAINER}" ]]
 [[ "${RUN_ID}" =~ ^[a-z0-9][a-z0-9-]{0,30}$ ]]
 [[ "${CONTAINER}" =~ ^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$ ]]
 [[ -n "${WORKSTREAM_TEST_ADMIN_DATABASE_URL:-}" ]]
 [[ -n "${WORKSTREAM_TEST_MINIO_ENDPOINT:-}" ]]
 
-python3 - "${STATE_ROOT}/prepared-assets.json" "${STATE_ROOT}" "${RUN_ID}" "${CONTAINER}" <<'PY'
+python3 - "${STATE_ROOT}/prepared-assets.json" "${STATE_ROOT}" "${SHARED_ROOT}" "${RUN_ID}" "${CONTAINER}" "${PREPARED_CONTAINER}" <<'PY'
+import hashlib
 import json
 from pathlib import Path
 import subprocess
 import sys
 
-manifest_path, root, run_id, container = sys.argv[1:]
+manifest_path, state_root, shared_root, run_id, container, prepared_container = sys.argv[1:]
 manifest = json.loads(Path(manifest_path).read_text(encoding="utf-8"))
 expected = {
     "run_id": run_id,
-    "container": container,
-    "shared_state_path": root,
-    "runtime_configuration_path": f"{root}/daemon.json",
+    "container": prepared_container,
+    "shared_state_path": state_root,
+    "runtime_configuration_path": f"{state_root}/daemon.json",
 }
 for key, value in expected.items():
     if manifest.get(key) != value:
         raise SystemExit(f"prepared qualification identity differs: {key}")
+prepared = json.loads(
+    subprocess.check_output(["docker", "inspect", prepared_container], text=True)
+)[0]
 inspection = json.loads(subprocess.check_output(["docker", "inspect", container], text=True))[0]
+if prepared["State"]["Running"]:
+    raise SystemExit("prepared qualification container must remain stopped")
+if prepared["Config"]["Labels"].get("org.workstream.pilot00.run") != run_id:
+    raise SystemExit("prepared qualification container has the wrong owner label")
 if inspection["Config"]["Labels"].get("org.workstream.pilot00.run") != run_id:
     raise SystemExit("qualification container has the wrong owner label")
+if inspection["Config"]["Labels"].get("workstream.qualifier") != "terminal-systems-runsc":
+    raise SystemExit("qualification container has the wrong qualifier label")
 if inspection["State"]["Running"]:
     raise SystemExit("qualification requires the owned DIND container to be stopped")
-mounts = [item["Source"] for item in inspection["Mounts"] if item["Destination"] == root]
-if mounts != [root]:
+if inspection["Image"] != prepared["Image"]:
+    raise SystemExit("qualification container image differs from prepared harness")
+mounts = {item["Destination"]: item["Source"] for item in inspection["Mounts"]}
+required_mounts = {
+    "/workstream-state": shared_root,
+    "/var/lib/docker": manifest["docker_state_path"],
+    "/opt/gvisor": f"{state_root}/tools",
+    "/etc/docker/pilot-daemon.json": f"{shared_root}/daemon.json",
+}
+if any(mounts.get(destination) != source for destination, source in required_mounts.items()):
     raise SystemExit("qualification container has the wrong shared-state mount")
+cache_manifest = Path(shared_root, "cache", "cache.sha256").read_bytes()
+if "sha256:" + hashlib.sha256(cache_manifest).hexdigest() != manifest["cache_manifest_sha256"]:
+    raise SystemExit("qualification shared cache manifest differs")
 PY
+QUALIFIER_CONTAINER_OWNED=1
 
-cp -- "${STATE_ROOT}/daemon.json" "${ORIGINAL_CONFIG}"
-python3 - "${STATE_ROOT}/prepared-assets.json" "${ORIGINAL_CONFIG}" "${STATE_ROOT}/daemon.json" <<'PY'
+cp -- "${SHARED_ROOT}/daemon.json" "${ORIGINAL_CONFIG}"
+python3 - "${STATE_ROOT}/prepared-assets.json" "${ORIGINAL_CONFIG}" "${SHARED_ROOT}/daemon.json" <<'PY'
 import hashlib
 import json
 from pathlib import Path
@@ -137,7 +167,7 @@ temporary.replace(sys.argv[3])
 print("sha256:" + hashlib.sha256(encoded).hexdigest())
 PY
 CONFIG_REPLACED=1
-readonly DUAL_RUNTIME_DIGEST="$(sha256sum "${STATE_ROOT}/daemon.json" | awk '{print "sha256:" $1}')"
+readonly DUAL_RUNTIME_DIGEST="$(sha256sum "${SHARED_ROOT}/daemon.json" | awk '{print "sha256:" $1}')"
 
 rm -rf -- "${COMPOSITION_ROOT}"
 mkdir -p -- "${COMPOSITION_ROOT}/bin" "${COMPOSITION_ROOT}/input" "${COMPOSITION_ROOT}/registry-data"
