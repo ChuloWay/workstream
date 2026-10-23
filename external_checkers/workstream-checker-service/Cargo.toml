@@ -5,9 +5,19 @@ edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
 
+[features]
+trial-docker-qualification = []
+
 [dependencies]
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
 libc.workspace = true
 workstream-checker-sdk = { path = "../workstream-checker-sdk" }
+
+[[bin]]
+name = "qualify-trial-docker"
+path = "src/bin/qualify_trial_docker.rs"
+test = false
+bench = false
+required-features = ["trial-docker-qualification"]

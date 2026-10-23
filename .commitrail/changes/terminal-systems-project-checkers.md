@@ -82,7 +82,9 @@ command, ownership journal, observation and recovery implementation. The
 model-runtime owner retains serialized composition in `main.rs`; implementation
 of the trial engine is not deferred to that owner. The explicit real-engine
 qualification entrypoint is
-`external_checkers/workstream-checker-service/scripts/qualify_trial_docker.sh`;
+`external_checkers/workstream-checker-service/scripts/qualify_trial_docker.sh`,
+backed by the non-production binary
+`external_checkers/workstream-checker-service/src/bin/qualify_trial_docker.rs`;
 it must exercise the real target with zero silently skipped proof cases.
 The trial module publishes a generic typed relay, profile and observation API;
 it does not treat relay success as a work verdict. Backend trial authority starts

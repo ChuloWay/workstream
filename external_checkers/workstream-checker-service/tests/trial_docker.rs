@@ -1,3 +1,4 @@
+use sha2::Digest;
 use std::collections::VecDeque;
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
@@ -8,18 +9,30 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
+#[cfg(not(feature = "trial-docker-qualification"))]
 #[allow(dead_code)]
 #[path = "../src/trial_docker.rs"]
 mod trial_docker;
+#[cfg(not(feature = "trial-docker-qualification"))]
 #[allow(dead_code)]
 #[path = "../src/trial_engine.rs"]
 mod trial_engine;
+#[cfg(not(feature = "trial-docker-qualification"))]
 #[allow(dead_code)]
 #[path = "../src/trial_relay.rs"]
 mod trial_relay;
 
+#[cfg(feature = "trial-docker-qualification")]
+use crate::trial_docker::*;
+#[cfg(feature = "trial-docker-qualification")]
+use crate::trial_engine::*;
+#[cfg(feature = "trial-docker-qualification")]
+use crate::trial_relay::*;
+#[cfg(not(feature = "trial-docker-qualification"))]
 use trial_docker::*;
+#[cfg(not(feature = "trial-docker-qualification"))]
 use trial_engine::*;
+#[cfg(not(feature = "trial-docker-qualification"))]
 use trial_relay::*;
 
 static TEST_ROOT_SEQUENCE: AtomicU64 = AtomicU64::new(0);
@@ -333,7 +346,7 @@ fn backend_rejects_runtime_profile_that_would_expose_host_uds() {
     identity.child_host_uds = "open".into();
     let result = DockerTrialBackend::new(
         DockerTrialConfiguration {
-            identity,
+            identity: identity.clone(),
             deployment_owner: "deployment_a".into(),
             request_digest: digest('9'),
             attempt_id: "018f6f49-66b8-7d2a-bf4d-0e2eeaa00001".into(),
@@ -352,9 +365,7 @@ fn backend_rejects_runtime_profile_that_would_expose_host_uds() {
     );
 }
 
-#[test]
-#[ignore = "requires the owned, pre-provisioned networkless gVisor qualification harness"]
-fn concrete_runtime_builds_and_runs_offline_under_runsc() {
+pub fn concrete_runtime_builds_and_runs_offline_under_runsc() {
     let state = PathBuf::from(
         std::env::var("WORKSTREAM_TRIAL_QUALIFICATION_ROOT")
             .expect("qualification root must be explicit"),
@@ -419,7 +430,7 @@ fn concrete_runtime_builds_and_runs_offline_under_runsc() {
     .unwrap();
     let backend = DockerTrialBackend::new(
         DockerTrialConfiguration {
-            identity,
+            identity: identity.clone(),
             deployment_owner: "qualification".into(),
             request_digest: digest('9'),
             attempt_id: "018f6f49-66b8-7d2a-bf4d-0e2eeaa00026".into(),
@@ -566,6 +577,93 @@ fn concrete_runtime_builds_and_runs_offline_under_runsc() {
     let cleanup = backend.cleanup(&owner_id, Instant::now() + Duration::from_secs(20));
     let (build, step, deadline_step) = execution.unwrap();
     cleanup.unwrap();
+    let recovery_owner = RuntimeOwner {
+        deployment_owner: "qualification".into(),
+        request_digest: digest('8'),
+        attempt_id: "018f6f49-66b8-7d2a-bf4d-0e2eeaa00027".into(),
+        trial_owner_id: format!("trial_{}", "b".repeat(32)),
+    };
+    backend
+        .control
+        .create_owned_container(
+            OwnedContainerCreate {
+                owner: recovery_owner,
+                name: "ws-trial-restart-recovery".into(),
+                arguments: vec![
+                    "--runtime".into(),
+                    "runsc".into(),
+                    "--network".into(),
+                    "none".into(),
+                    "--cap-drop".into(),
+                    "ALL".into(),
+                    "--security-opt".into(),
+                    "no-new-privileges".into(),
+                    "--pids-limit".into(),
+                    "16".into(),
+                    "--memory".into(),
+                    (64 * 1024 * 1024).to_string(),
+                    "--cpus".into(),
+                    "0.5".into(),
+                    "sha256:b8c743a43e82f0cef9956ea09eae79c2d56b51d359b65a736c171624a9fc95e3"
+                        .into(),
+                    "--version".into(),
+                ],
+                mounts: vec![OwnedBindMount {
+                    source: run.join("context"),
+                    destination: "/workspace".into(),
+                    readonly: true,
+                    class: OwnedMountClass::ProjectedContext,
+                }],
+            },
+            Instant::now() + Duration::from_secs(10),
+            &cancelled,
+            &cancelled,
+        )
+        .unwrap();
+    drop(backend);
+    let recovered = DockerRuntimeControl::new(
+        PathBuf::from("/usr/local/bin/docker"),
+        run.join("runtime"),
+        PathBuf::from("/etc/docker/pilot-daemon.json"),
+    )
+    .unwrap();
+    recovered
+        .recover_deployment("qualification", Instant::now() + Duration::from_secs(20))
+        .unwrap();
+    let invalid_configuration = run.join("invalid-daemon.json");
+    let mut invalid_configuration_bytes = fs::read("/etc/docker/pilot-daemon.json").unwrap();
+    invalid_configuration_bytes.push(b'\n');
+    fs::write(&invalid_configuration, invalid_configuration_bytes).unwrap();
+    let invalid_control = DockerRuntimeControl::new(
+        PathBuf::from("/usr/local/bin/docker"),
+        run.join("runtime"),
+        invalid_configuration,
+    )
+    .unwrap();
+    assert_eq!(
+        invalid_control.require_image(
+            "sha256:b8c743a43e82f0cef9956ea09eae79c2d56b51d359b65a736c171624a9fc95e3",
+            &identity,
+            "runsc",
+            Instant::now() + Duration::from_secs(10),
+        ),
+        Err(RuntimeControlFailure::ImageUnavailable)
+    );
+    let cache_root = run.join("cache-negative/content");
+    fs::create_dir_all(&cache_root).unwrap();
+    fs::write(cache_root.join("base"), b"sealed").unwrap();
+    let base_digest = sha2::Sha256::digest(b"sealed");
+    let manifest = format!("{base_digest:x}  ./base\n");
+    fs::write(run.join("cache-negative/cache.sha256"), manifest.as_bytes()).unwrap();
+    let manifest_digest = format!("sha256:{:x}", sha2::Sha256::digest(manifest.as_bytes()));
+    recovered
+        .require_offline_cache(&cache_root, &manifest_digest)
+        .unwrap();
+    fs::write(cache_root.join("base"), b"mutated").unwrap();
+    assert_eq!(
+        recovered.require_offline_cache(&cache_root, &manifest_digest),
+        Err(RuntimeControlFailure::CacheUnavailable)
+    );
     assert_eq!(build.observation.outcome, TrialOperationOutcome::Succeeded);
     assert_eq!(step.observation.outcome, TrialOperationOutcome::Succeeded);
     assert_eq!(step.observation.stdout, "qualification=pass\n");
@@ -592,6 +690,9 @@ fn concrete_runtime_builds_and_runs_offline_under_runsc() {
         "measurement_method": step.observation.measurement_method,
         "protected_layer_canary_absent": true,
         "cleanup_confirmed": true,
+        "restart_recovery_confirmed": true,
+        "runtime_configuration_substitution_rejected": true,
+        "offline_cache_mutation_rejected": true,
     });
     fs::create_dir_all(state.join("results")).unwrap();
     fs::write(

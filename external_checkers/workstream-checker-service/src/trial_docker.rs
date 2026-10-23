@@ -12,7 +12,7 @@ use sha2::{Digest, Sha256};
 use std::collections::{HashMap, HashSet};
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Seek, SeekFrom};
-use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+use std::os::unix::fs::{MetadataExt, OpenOptionsExt, PermissionsExt};
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
 use std::sync::atomic::AtomicBool;
@@ -178,10 +178,19 @@ pub(crate) trait RuntimeControl: Send + Sync + 'static {
     ) -> Result<(), RuntimeControlFailure>;
 }
 
-#[derive(Default)]
+#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
 struct OwnedRuntimeResources {
     containers: Vec<String>,
     images: Vec<(String, String)>,
+}
+
+#[derive(Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct RuntimeJournal {
+    schema_version: String,
+    owner: RuntimeOwner,
+    resources: OwnedRuntimeResources,
 }
 
 /// Concrete Docker CLI + cgroup-v2 control used on a dedicated runsc node.
@@ -220,12 +229,43 @@ impl DockerRuntimeControl {
         {
             return Err(RuntimeControlFailure::InvalidConfiguration);
         }
+        let owned = load_runtime_journals(&root)?;
         Ok(Self {
             docker_binary: binary,
             runtime_root: root,
             runtime_configuration,
-            owned: Mutex::new(HashMap::new()),
+            owned: Mutex::new(owned),
         })
+    }
+
+    pub(crate) fn recover_deployment(
+        &self,
+        deployment_owner: &str,
+        deadline: Instant,
+    ) -> Result<(), RuntimeControlFailure> {
+        if !valid_label_value(deployment_owner, 128) {
+            return Err(RuntimeControlFailure::InvalidConfiguration);
+        }
+        let owners = self
+            .owned
+            .lock()
+            .map_err(|_| RuntimeControlFailure::CleanupUnsettled)?
+            .keys()
+            .filter(|owner| owner.deployment_owner == deployment_owner)
+            .cloned()
+            .collect::<Vec<_>>();
+        for owner in owners {
+            self.cleanup_owner(&owner, deadline)?;
+        }
+        Ok(())
+    }
+
+    fn persist_owner(
+        &self,
+        owner: &RuntimeOwner,
+        resources: &OwnedRuntimeResources,
+    ) -> Result<(), RuntimeControlFailure> {
+        persist_runtime_journal(&self.runtime_root, owner, resources)
     }
 
     fn command(
@@ -535,6 +575,25 @@ impl RuntimeControl for DockerRuntimeControl {
             arguments.extend(["--mount".into(), specification]);
         }
         arguments.extend(request.arguments.iter().cloned());
+        {
+            let mut owned = self
+                .owned
+                .lock()
+                .map_err(|_| RuntimeControlFailure::CleanupUnsettled)?;
+            let resources = owned.entry(request.owner.clone()).or_default();
+            if resources
+                .containers
+                .iter()
+                .any(|item| item == &request.name)
+            {
+                return Err(RuntimeControlFailure::InvalidObservation);
+            }
+            resources.containers.push(request.name.clone());
+            if self.persist_owner(&request.owner, resources).is_err() {
+                resources.containers.pop();
+                return Err(RuntimeControlFailure::CleanupUnsettled);
+            }
+        }
         let output = self.command(&arguments, deadline, 1024 * 1024)?;
         if !output.success {
             return Err(RuntimeControlFailure::LaunchUnavailable);
@@ -548,19 +607,6 @@ impl RuntimeControl for DockerRuntimeControl {
         if !owned_container_matches(self, &request.name, &request.owner, deadline)? {
             return Err(RuntimeControlFailure::InvalidObservation);
         }
-        let mut owned = self
-            .owned
-            .lock()
-            .map_err(|_| RuntimeControlFailure::CleanupUnsettled)?;
-        let resources = owned.entry(request.owner).or_default();
-        if resources
-            .containers
-            .iter()
-            .any(|item| item == &request.name)
-        {
-            return Err(RuntimeControlFailure::InvalidObservation);
-        }
-        resources.containers.push(request.name);
         Ok(())
     }
 
@@ -753,11 +799,15 @@ impl RuntimeControl for DockerRuntimeControl {
                 .owned
                 .lock()
                 .map_err(|_| RuntimeControlFailure::CleanupUnsettled)?;
-            owned
-                .entry(owner.clone())
-                .or_default()
-                .images
-                .push((expected_tag.into(), String::new()));
+            let resources = owned.entry(owner.clone()).or_default();
+            if resources.images.iter().any(|item| item.0 == expected_tag) {
+                return Err(RuntimeControlFailure::InvalidObservation);
+            }
+            resources.images.push((expected_tag.into(), String::new()));
+            if self.persist_owner(owner, resources).is_err() {
+                resources.images.pop();
+                return Err(RuntimeControlFailure::CleanupUnsettled);
+            }
         }
         let output = self.command(
             &[
@@ -804,6 +854,7 @@ impl RuntimeControl for DockerRuntimeControl {
             .find(|item| item.0 == expected_tag)
             .ok_or(RuntimeControlFailure::CleanupUnsettled)?;
         image.1.clone_from(&config_image_id);
+        self.persist_owner(owner, resources)?;
         Ok(LoadedOwnedImage {
             config_image_id,
             archive_sha256,
@@ -821,7 +872,8 @@ impl RuntimeControl for DockerRuntimeControl {
             .owned
             .lock()
             .map_err(|_| RuntimeControlFailure::CleanupUnsettled)?
-            .remove(owner)
+            .get(owner)
+            .cloned()
             .unwrap_or_default();
         for name in resources.containers.iter().rev() {
             if container_exists(self, name, deadline)? {
@@ -845,9 +897,6 @@ impl RuntimeControl for DockerRuntimeControl {
         }
         for (tag, identifier) in resources.images.iter().rev() {
             if image_exists(self, tag, deadline)? {
-                if identifier.is_empty() {
-                    return Err(RuntimeControlFailure::CleanupUnsettled);
-                }
                 let inspected = self.command(
                     &[
                         "image".into(),
@@ -859,7 +908,10 @@ impl RuntimeControl for DockerRuntimeControl {
                     deadline,
                     4096,
                 )?;
-                if std::str::from_utf8(&inspected.stdout).ok().map(str::trim) != Some(identifier) {
+                if !identifier.is_empty()
+                    && std::str::from_utf8(&inspected.stdout).ok().map(str::trim)
+                        != Some(identifier)
+                {
                     return Err(RuntimeControlFailure::CleanupUnsettled);
                 }
                 let removed = self.command(
@@ -872,7 +924,161 @@ impl RuntimeControl for DockerRuntimeControl {
                 }
             }
         }
+        self.owned
+            .lock()
+            .map_err(|_| RuntimeControlFailure::CleanupUnsettled)?
+            .remove(owner);
+        remove_runtime_journal(&self.runtime_root, owner)?;
         Ok(())
+    }
+}
+
+fn runtime_journal_path(
+    root: &std::path::Path,
+    owner: &RuntimeOwner,
+) -> Result<PathBuf, RuntimeControlFailure> {
+    let value =
+        serde_json::to_value(owner).map_err(|_| RuntimeControlFailure::InvalidConfiguration)?;
+    let digest = canonical_hash(&value).map_err(|_| RuntimeControlFailure::InvalidConfiguration)?;
+    Ok(root.join(format!(".trial-owner-{}.json", &digest[7..])))
+}
+
+fn validate_runtime_resources(
+    owner: &RuntimeOwner,
+    resources: &OwnedRuntimeResources,
+) -> Result<(), RuntimeControlFailure> {
+    validate_owner(owner)?;
+    if resources.containers.len() > 64 || resources.images.len() > 8 {
+        return Err(RuntimeControlFailure::InvalidConfiguration);
+    }
+    let mut containers = HashSet::new();
+    for name in &resources.containers {
+        validate_container_name(name)?;
+        if !containers.insert(name) {
+            return Err(RuntimeControlFailure::InvalidConfiguration);
+        }
+    }
+    let expected_tag = format!(
+        "workstream-trial:{}",
+        owner
+            .trial_owner_id
+            .strip_prefix("trial_")
+            .ok_or(RuntimeControlFailure::InvalidConfiguration)?
+    );
+    let mut images = HashSet::new();
+    for (tag, identifier) in &resources.images {
+        validate_image_tag(tag)?;
+        if tag != &expected_tag
+            || (!identifier.is_empty() && !valid_sha256(identifier))
+            || !images.insert(tag)
+        {
+            return Err(RuntimeControlFailure::InvalidConfiguration);
+        }
+    }
+    Ok(())
+}
+
+fn load_runtime_journals(
+    root: &std::path::Path,
+) -> Result<HashMap<RuntimeOwner, OwnedRuntimeResources>, RuntimeControlFailure> {
+    let root_metadata =
+        fs::symlink_metadata(root).map_err(|_| RuntimeControlFailure::InvalidConfiguration)?;
+    let mut entries = fs::read_dir(root)
+        .map_err(|_| RuntimeControlFailure::InvalidConfiguration)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|_| RuntimeControlFailure::InvalidConfiguration)?;
+    entries.sort_by_key(std::fs::DirEntry::file_name);
+    let mut loaded = HashMap::new();
+    for entry in entries {
+        let name = entry.file_name();
+        let Some(name) = name.to_str() else {
+            continue;
+        };
+        if !name.starts_with(".trial-owner-") || !name.ends_with(".json") {
+            continue;
+        }
+        let path = entry.path();
+        let metadata =
+            fs::symlink_metadata(&path).map_err(|_| RuntimeControlFailure::CleanupUnsettled)?;
+        if !metadata.file_type().is_file()
+            || metadata.file_type().is_symlink()
+            || metadata.permissions().mode() & 0o777 != 0o600
+            || metadata.uid() != root_metadata.uid()
+            || metadata.gid() != root_metadata.gid()
+        {
+            return Err(RuntimeControlFailure::CleanupUnsettled);
+        }
+        let bytes = read_bounded(&path, 1024 * 1024)
+            .map_err(|_| RuntimeControlFailure::CleanupUnsettled)?;
+        let journal: RuntimeJournal =
+            serde_json::from_slice(&bytes).map_err(|_| RuntimeControlFailure::CleanupUnsettled)?;
+        if serde_json::to_vec(&journal).map_err(|_| RuntimeControlFailure::CleanupUnsettled)?
+            != bytes
+        {
+            return Err(RuntimeControlFailure::CleanupUnsettled);
+        }
+        if journal.schema_version != "workstream.trial_runtime_journal.v1"
+            || runtime_journal_path(root, &journal.owner)? != path
+        {
+            return Err(RuntimeControlFailure::CleanupUnsettled);
+        }
+        validate_runtime_resources(&journal.owner, &journal.resources)
+            .map_err(|_| RuntimeControlFailure::CleanupUnsettled)?;
+        if loaded.insert(journal.owner, journal.resources).is_some() {
+            return Err(RuntimeControlFailure::CleanupUnsettled);
+        }
+    }
+    Ok(loaded)
+}
+
+fn persist_runtime_journal(
+    root: &std::path::Path,
+    owner: &RuntimeOwner,
+    resources: &OwnedRuntimeResources,
+) -> Result<(), RuntimeControlFailure> {
+    validate_runtime_resources(owner, resources)?;
+    let path = runtime_journal_path(root, owner)?;
+    let nonce = RUNTIME_FILE_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+    let temporary = root.join(format!(".trial-owner-{nonce:016x}.tmp"));
+    let bytes = serde_json::to_vec(&RuntimeJournal {
+        schema_version: "workstream.trial_runtime_journal.v1".into(),
+        owner: owner.clone(),
+        resources: resources.clone(),
+    })
+    .map_err(|_| RuntimeControlFailure::CleanupUnsettled)?;
+    let result = (|| {
+        let mut file = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .mode(0o600)
+            .open(&temporary)
+            .map_err(|_| RuntimeControlFailure::CleanupUnsettled)?;
+        std::io::Write::write_all(&mut file, &bytes)
+            .map_err(|_| RuntimeControlFailure::CleanupUnsettled)?;
+        file.sync_all()
+            .map_err(|_| RuntimeControlFailure::CleanupUnsettled)?;
+        fs::rename(&temporary, &path).map_err(|_| RuntimeControlFailure::CleanupUnsettled)?;
+        File::open(root)
+            .and_then(|directory| directory.sync_all())
+            .map_err(|_| RuntimeControlFailure::CleanupUnsettled)
+    })();
+    if result.is_err() {
+        let _ = fs::remove_file(&temporary);
+    }
+    result
+}
+
+fn remove_runtime_journal(
+    root: &std::path::Path,
+    owner: &RuntimeOwner,
+) -> Result<(), RuntimeControlFailure> {
+    let path = runtime_journal_path(root, owner)?;
+    match fs::remove_file(path) {
+        Ok(()) => File::open(root)
+            .and_then(|directory| directory.sync_all())
+            .map_err(|_| RuntimeControlFailure::CleanupUnsettled),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(_) => Err(RuntimeControlFailure::CleanupUnsettled),
     }
 }
 
@@ -1439,9 +1645,12 @@ fn validate_single_image_archive(
     if length == 0 || length > maximum_bytes {
         return Err(RuntimeControlFailure::InvalidObservation);
     }
+    if length % 512 != 0 {
+        return Err(RuntimeControlFailure::InvalidObservation);
+    }
     let mut offset = 0_u64;
     let mut manifest = None;
-    let mut paths = HashSet::new();
+    let mut entries = HashMap::new();
     while offset.saturating_add(512) <= length {
         file.seek(SeekFrom::Start(offset))
             .map_err(|_| RuntimeControlFailure::InvalidObservation)?;
@@ -1449,9 +1658,24 @@ fn validate_single_image_archive(
         file.read_exact(&mut header)
             .map_err(|_| RuntimeControlFailure::InvalidObservation)?;
         if header.iter().all(|byte| *byte == 0) {
+            if length.saturating_sub(offset) < 1024 {
+                return Err(RuntimeControlFailure::InvalidObservation);
+            }
+            file.seek(SeekFrom::Start(offset))
+                .map_err(|_| RuntimeControlFailure::InvalidObservation)?;
+            let mut trailing = vec![0_u8; (length - offset) as usize];
+            file.read_exact(&mut trailing)
+                .map_err(|_| RuntimeControlFailure::InvalidObservation)?;
+            if trailing.iter().any(|byte| *byte != 0) {
+                return Err(RuntimeControlFailure::InvalidObservation);
+            }
+            offset = length;
             break;
         }
         validate_tar_checksum(&header)?;
+        if !matches!(header[156], 0 | b'0') || header[157..257].iter().any(|byte| *byte != 0) {
+            return Err(RuntimeControlFailure::InvalidObservation);
+        }
         let name = tar_text(&header[0..100])?;
         let prefix = tar_text(&header[345..500])?;
         let path = if prefix.is_empty() {
@@ -1459,10 +1683,10 @@ fn validate_single_image_archive(
         } else {
             format!("{prefix}/{name}")
         };
-        if path.starts_with('/') || path.split('/').any(|part| part == "..") {
+        if !valid_archive_path(&path) {
             return Err(RuntimeControlFailure::InvalidObservation);
         }
-        if !paths.insert(path.clone()) || path == "repositories" {
+        if entries.len() >= 4096 || entries.contains_key(&path) || path == "repositories" {
             return Err(RuntimeControlFailure::InvalidObservation);
         }
         let size = tar_octal(&header[124..136])?;
@@ -1477,6 +1701,7 @@ fn validate_single_image_archive(
             .checked_add(padded)
             .filter(|value| *value <= length)
             .ok_or(RuntimeControlFailure::InvalidObservation)?;
+        entries.insert(path.clone(), (data, size));
         if path == "manifest.json" {
             if manifest.is_some() || size > 1024 * 1024 {
                 return Err(RuntimeControlFailure::InvalidObservation);
@@ -1489,47 +1714,88 @@ fn validate_single_image_archive(
             manifest = Some(bytes);
         }
     }
-    let manifest = manifest.ok_or(RuntimeControlFailure::InvalidObservation)?;
-    let entries: Vec<serde_json::Value> =
-        serde_json::from_slice(&manifest).map_err(|_| RuntimeControlFailure::InvalidObservation)?;
-    if entries.len() != 1 {
+    if offset != length {
         return Err(RuntimeControlFailure::InvalidObservation);
     }
-    let entry = entries.first().unwrap();
-    let tags = entry
-        .get("RepoTags")
-        .and_then(serde_json::Value::as_array)
-        .ok_or(RuntimeControlFailure::InvalidObservation)?;
-    let config = entry
-        .get("Config")
-        .and_then(serde_json::Value::as_str)
-        .ok_or(RuntimeControlFailure::InvalidObservation)?;
-    let layers = entry
-        .get("Layers")
-        .and_then(serde_json::Value::as_array)
-        .ok_or(RuntimeControlFailure::InvalidObservation)?;
-    let valid_config = valid_sha256(config)
-        || (config.len() == 69
-            && config.ends_with(".json")
-            && config[..64]
-                .bytes()
-                .all(|item| item.is_ascii_hexdigit() && !item.is_ascii_uppercase()));
-    if tags.len() != 1
-        || tags[0].as_str() != Some(expected_tag)
-        || !valid_config
-        || !paths.contains(config)
-        || layers.is_empty()
-        || layers.iter().any(|layer| {
-            layer.as_str().is_none_or(|path| {
-                path.starts_with('/')
-                    || path.split('/').any(|part| part == "..")
-                    || !paths.contains(path)
-            })
-        })
+    let manifest = manifest.ok_or(RuntimeControlFailure::InvalidObservation)?;
+    let manifests: Vec<ImageArchiveManifest> =
+        serde_json::from_slice(&manifest).map_err(|_| RuntimeControlFailure::InvalidObservation)?;
+    if manifests.len() != 1 {
+        return Err(RuntimeControlFailure::InvalidObservation);
+    }
+    let manifest = manifests.first().unwrap();
+    let config_digest = if valid_sha256(&manifest.config) {
+        &manifest.config[7..]
+    } else if manifest.config.len() == 69
+        && manifest.config.ends_with(".json")
+        && manifest.config[..64]
+            .bytes()
+            .all(|item| item.is_ascii_hexdigit() && !item.is_ascii_uppercase())
     {
+        &manifest.config[..64]
+    } else {
+        return Err(RuntimeControlFailure::InvalidObservation);
+    };
+    if manifest.repo_tags.as_slice() != [expected_tag] || manifest.layers.is_empty() {
+        return Err(RuntimeControlFailure::InvalidObservation);
+    }
+    let Some((config_offset, config_size)) = entries.get(&manifest.config).copied() else {
+        return Err(RuntimeControlFailure::InvalidObservation);
+    };
+    if config_size == 0 || config_size > 16 * 1024 * 1024 {
+        return Err(RuntimeControlFailure::InvalidObservation);
+    }
+    file.seek(SeekFrom::Start(config_offset))
+        .map_err(|_| RuntimeControlFailure::InvalidObservation)?;
+    let mut config_bytes = vec![0_u8; config_size as usize];
+    file.read_exact(&mut config_bytes)
+        .map_err(|_| RuntimeControlFailure::InvalidObservation)?;
+    if format!("{:x}", Sha256::digest(&config_bytes)) != config_digest {
+        return Err(RuntimeControlFailure::InvalidObservation);
+    }
+    let mut referenced = HashSet::from(["manifest.json".to_owned(), manifest.config.clone()]);
+    for layer in &manifest.layers {
+        if !valid_archive_path(layer)
+            || layer == "manifest.json"
+            || layer == &manifest.config
+            || !entries.contains_key(layer)
+        {
+            return Err(RuntimeControlFailure::InvalidObservation);
+        }
+        // OCI/Docker layer sequences may legitimately reuse the same content
+        // digest (for example, repeated empty metadata layers). The archive
+        // still contains one canonical regular entry for that digest.
+        referenced.insert(layer.clone());
+    }
+    if referenced.len() != entries.len() {
         return Err(RuntimeControlFailure::InvalidObservation);
     }
     Ok(())
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ImageArchiveManifest {
+    #[serde(rename = "Config")]
+    config: String,
+    #[serde(rename = "RepoTags")]
+    repo_tags: Vec<String>,
+    #[serde(rename = "Layers")]
+    layers: Vec<String>,
+}
+
+fn valid_archive_path(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 4096
+        && !value.starts_with('/')
+        && !value.ends_with('/')
+        && !value.contains('\\')
+        && value.bytes().all(|byte| {
+            byte.is_ascii_alphanumeric() || matches!(byte, b'/' | b'.' | b'_' | b'-' | b':')
+        })
+        && value
+            .split('/')
+            .all(|part| !part.is_empty() && part != "." && part != "..")
 }
 
 fn validate_tar_checksum(header: &[u8; 512]) -> Result<(), RuntimeControlFailure> {
@@ -2055,4 +2321,183 @@ fn valid_sha256(value: &str) -> bool {
 
 fn sha256_text(value: &str) -> String {
     format!("sha256:{:x}", Sha256::digest(value.as_bytes()))
+}
+
+#[cfg(test)]
+mod runtime_journal_tests {
+    use super::*;
+    use std::os::unix::fs::PermissionsExt;
+
+    fn owner() -> RuntimeOwner {
+        RuntimeOwner {
+            deployment_owner: "deployment_a".into(),
+            request_digest: format!("sha256:{}", "9".repeat(64)),
+            attempt_id: "018f6f49-66b8-7d2a-bf4d-0e2eeaa00001".into(),
+            trial_owner_id: format!("trial_{}", "a".repeat(32)),
+        }
+    }
+
+    fn root() -> PathBuf {
+        let root = std::env::temp_dir().join(format!(
+            "workstream-runtime-journal-{}-{}",
+            std::process::id(),
+            RUNTIME_FILE_SEQUENCE.fetch_add(1, Ordering::Relaxed)
+        ));
+        fs::create_dir(&root).unwrap();
+        fs::set_permissions(&root, fs::Permissions::from_mode(0o700)).unwrap();
+        root
+    }
+
+    #[test]
+    fn runtime_journal_round_trips_exact_owner_reservations() {
+        let root = root();
+        let owner = owner();
+        let resources = OwnedRuntimeResources {
+            containers: vec!["ws-trial-reserved".into()],
+            images: vec![(
+                format!("workstream-trial:{}", "a".repeat(32)),
+                String::new(),
+            )],
+        };
+        persist_runtime_journal(&root, &owner, &resources).unwrap();
+        let loaded = load_runtime_journals(&root).unwrap();
+        assert_eq!(loaded.get(&owner), Some(&resources));
+        remove_runtime_journal(&root, &owner).unwrap();
+        assert!(load_runtime_journals(&root).unwrap().is_empty());
+        fs::remove_dir(root).unwrap();
+    }
+
+    #[test]
+    fn runtime_journal_rejects_noncanonical_or_weakly_owned_bytes() {
+        let root = root();
+        let owner = owner();
+        let resources = OwnedRuntimeResources {
+            containers: vec!["ws-trial-reserved".into()],
+            images: Vec::new(),
+        };
+        persist_runtime_journal(&root, &owner, &resources).unwrap();
+        let path = runtime_journal_path(&root, &owner).unwrap();
+        let mut bytes = fs::read(&path).unwrap();
+        bytes.push(b'\n');
+        fs::write(&path, bytes).unwrap();
+        assert_eq!(
+            load_runtime_journals(&root).unwrap_err(),
+            RuntimeControlFailure::CleanupUnsettled
+        );
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o644)).unwrap();
+        assert_eq!(
+            load_runtime_journals(&root).unwrap_err(),
+            RuntimeControlFailure::CleanupUnsettled
+        );
+        fs::remove_file(path).unwrap();
+        fs::remove_dir(root).unwrap();
+    }
+
+    fn tar_entry(path: &str, typeflag: u8, link: &str, bytes: &[u8]) -> Vec<u8> {
+        let mut header = [0_u8; 512];
+        assert!(path.len() < 100);
+        header[..path.len()].copy_from_slice(path.as_bytes());
+        header[100..108].copy_from_slice(b"0000600\0");
+        header[108..116].copy_from_slice(b"0000000\0");
+        header[116..124].copy_from_slice(b"0000000\0");
+        let size = format!("{:011o}\0", bytes.len());
+        header[124..136].copy_from_slice(size.as_bytes());
+        header[136..148].copy_from_slice(b"00000000000\0");
+        header[148..156].fill(b' ');
+        header[156] = typeflag;
+        assert!(link.len() < 100);
+        header[157..157 + link.len()].copy_from_slice(link.as_bytes());
+        header[257..263].copy_from_slice(b"ustar\0");
+        header[263..265].copy_from_slice(b"00");
+        let checksum = header.iter().map(|byte| u64::from(*byte)).sum::<u64>();
+        let checksum = format!("{checksum:06o}\0 ");
+        header[148..156].copy_from_slice(checksum.as_bytes());
+        let mut result = header.to_vec();
+        result.extend_from_slice(bytes);
+        result.resize(result.len().next_multiple_of(512), 0);
+        result
+    }
+
+    fn image_archive(
+        manifest_path: &str,
+        manifest_entries: usize,
+        config_bytes: &[u8],
+        config_name_override: Option<&str>,
+        layer_path: &str,
+        layer_type: u8,
+        layer_link: &str,
+    ) -> Vec<u8> {
+        let config_name = config_name_override
+            .map(str::to_owned)
+            .unwrap_or_else(|| format!("{:x}.json", Sha256::digest(config_bytes)));
+        let item = serde_json::json!({
+            "Config": config_name,
+            "RepoTags": ["workstream-trial:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],
+            "Layers": [layer_path],
+        });
+        let manifest = serde_json::to_vec(&vec![item; manifest_entries]).unwrap();
+        let mut archive = tar_entry(manifest_path, b'0', "", &manifest);
+        archive.extend(tar_entry(&config_name, b'0', "", config_bytes));
+        archive.extend(tar_entry(layer_path, layer_type, layer_link, b"layer"));
+        archive.extend([0_u8; 1024]);
+        archive
+    }
+
+    fn validate_archive_bytes(
+        root: &std::path::Path,
+        bytes: &[u8],
+    ) -> Result<(), RuntimeControlFailure> {
+        let path = root.join("candidate.tar");
+        fs::write(&path, bytes).unwrap();
+        validate_single_image_archive(
+            &path,
+            "workstream-trial:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            1024 * 1024,
+        )
+    }
+
+    #[test]
+    fn image_archive_requires_one_canonical_regular_exactly_referenced_image() {
+        let root = root();
+        let valid = image_archive("manifest.json", 1, b"{}", None, "layer.tar.gz", b'0', "");
+        validate_archive_bytes(&root, &valid).unwrap();
+
+        for invalid in [
+            image_archive("./manifest.json", 1, b"{}", None, "layer.tar.gz", b'0', ""),
+            image_archive("manifest.json", 2, b"{}", None, "layer.tar.gz", b'0', ""),
+            image_archive("manifest.json", 1, b"{}", None, "a//b", b'0', ""),
+            image_archive(
+                "manifest.json",
+                1,
+                b"{}",
+                None,
+                "layer.tar.gz",
+                b'2',
+                "target",
+            ),
+            image_archive("manifest.json", 1, b"{}", None, "layer.tar.gz", b'x', ""),
+            image_archive(
+                "manifest.json",
+                1,
+                b"{}",
+                Some("0000000000000000000000000000000000000000000000000000000000000000.json"),
+                "layer.tar.gz",
+                b'0',
+                "",
+            ),
+        ] {
+            assert_eq!(
+                validate_archive_bytes(&root, &invalid),
+                Err(RuntimeControlFailure::InvalidObservation)
+            );
+        }
+
+        let mut nonzero_trailing = valid;
+        *nonzero_trailing.last_mut().unwrap() = 1;
+        assert_eq!(
+            validate_archive_bytes(&root, &nonzero_trailing),
+            Err(RuntimeControlFailure::InvalidObservation)
+        );
+        fs::remove_dir_all(root).unwrap();
+    }
 }
