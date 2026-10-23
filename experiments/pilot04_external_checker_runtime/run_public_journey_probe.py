@@ -1008,7 +1008,7 @@ async def _public_project(client, factory, env, *, human_review_required, pre_re
 async def _one_mode(client, factory, env, *,
                     human_review_required: bool, operator_id: UUID | None,
                     stop_worker: Callable[[], None] | None = None,
-                    start_worker: Callable[[], Awaitable[None]] | None = None, fault_root=None) -> dict:
+                    start_worker: Callable[[], Awaitable[None]] | None = None, fault_root=None, operator_token=None) -> dict:
     awards = () if human_review_required else ("project_points",)
     from app.workers.outbox import deliver_event
 
@@ -1107,7 +1107,7 @@ async def _one_mode(client, factory, env, *,
     if not human_review_required and fault_root:
         from experiments.pilot04_external_checker_runtime.public_runtime_trials import retry_post_outage
         successor, post_retry = await retry_post_outage(
-            factory, first_submission_id, compilation.project_id, operator_id, fault_root,
+            client, factory, first_submission_id, compilation.project_id, operator_token, fault_root,
         )
     first_attempt_id, completion_id = await _complete_post(
         factory, submission_id=first_submission_id,
@@ -1416,7 +1416,8 @@ async def run(database_url: str, image_reference: str, node_config: Path,
                                     human_review_required=False,
                                     operator_id=operator.actor_profile_id,
                                     stop_worker=stop_owned_worker,
-                                    start_worker=start_owned_worker, fault_root=fault_root)
+                                    start_worker=start_owned_worker, fault_root=fault_root,
+                                    operator_token=_token(env, operator))
         _require(api.poll() is None and worker.poll() is None and beat.poll() is None,
                  "API, prefork worker, or Beat exited during public journey")
         return {"tree_sha": subprocess.check_output(

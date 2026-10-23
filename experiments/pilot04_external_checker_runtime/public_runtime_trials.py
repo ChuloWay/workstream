@@ -3,17 +3,9 @@
 import json
 from pathlib import Path
 import time
-from uuid import UUID, uuid4
+from uuid import uuid4
 
-from sqlalchemy import select
-
-from app.adapters.checkers import checker_retry_service
-from app.core.identifiers import new_record_id
-from app.modules.actors.models import ActorIdentityLink
-from app.modules.authorization.runtime import (
-    ActorKind, ActorStatus, HumanAuthorizationContext, IdentityLinkStatus,
-)
-from app.modules.checkers.api.execution import CheckerRetryCommand
+from app.modules.checkers.api.execution import CheckerRetryPublicResult
 from app.modules.checkers.models import CheckerRun
 from app.modules.tasks.models import SubmissionDispatch
 from experiments.pilot04_external_checker_runtime.public_intake_trials import (
@@ -102,7 +94,7 @@ async def public_runtime_trials(client, factory, env, root: Path):
     return evidence
 
 
-async def retry_post_outage(factory, submission_id, project_id, operator_id, root):
+async def retry_post_outage(client, factory, submission_id, project_id, operator_token, root):
     async with factory() as session:
         dispatch = await session.get(SubmissionDispatch, submission_id)
         run_id, event_id = dispatch.evaluation_attempt_id, dispatch.evaluation_event_id
@@ -114,28 +106,22 @@ async def retry_post_outage(factory, submission_id, project_id, operator_id, roo
                  and failed.finalize_evidence_id is not None,
                  'project POST outage lacks terminal infrastructure custody')
         await _assert_task_has_no_effects(session, failed.task_id)
-        link = (await session.scalars(select(ActorIdentityLink).where(
-            ActorIdentityLink.actor_profile_id == str(operator_id),
-            ActorIdentityLink.status == 'active'))).one()
-        link_id = UUID(link.id)
     await node_command(root, 'clear')
     await node_command(root, 'drained')
-    key = new_record_id()
-    context = HumanAuthorizationContext(
-        actor_profile_id=operator_id, actor_kind=ActorKind.HUMAN, actor_status=ActorStatus.ACTIVE,
-        identity_link_id=link_id, identity_link_status=IdentityLinkStatus.ACTIVE,
-        request_id=key, correlation_id=key,
-    )
-    command = CheckerRetryCommand(project_id=project_id, source_run_id=UUID(run_id),
-                                  request_key=key, reason='Restored dedicated Smol project execution')
-    async with factory.begin() as session:
-        receipt = await checker_retry_service(session, context).retry(command)
-    async with factory.begin() as session:
-        replay = await checker_retry_service(session, context).retry(command)
-        _require(replay == receipt, 'authorized POST retry replay changed receipt')
+    base = f'/api/v1/operations/projects/{project_id}'
+    page = await _json(client, 'GET', base + '/checker-retry-sources', operator_token, 200)
+    _require([item['source']['source_run_id'] for item in page['items']] == [run_id],
+             'public recovery discovery did not return the exact failed run')
+    route = base + f'/checker-runs/{run_id}/retry'
+    headers = {'Idempotency-Key': str(uuid4())}
+    payload = {'reason': 'Restored dedicated Smol project execution'}
+    raw = await _json(client, 'POST', route, operator_token, 201, headers=headers, json=payload)
+    replay = await _json(client, 'POST', route, operator_token, 201, headers=headers, json=payload)
+    _require(replay == raw, 'authorized POST retry replay changed receipt')
+    receipt = CheckerRetryPublicResult.model_validate_json(json.dumps(raw))
     _require(receipt.successor.generation == failed.evaluation_generation + 1,
              'POST retry did not allocate exactly the next evaluation generation')
-    return receipt.successor, {'entry': 'authorized_hidden_checker_retry',
+    return receipt.successor, {'entry': 'public_operator_checker_retry',
                               'failed_run_id': run_id, 'receipt_id': str(receipt.receipt_id),
                               'successor_run_id': str(receipt.successor.run_id),
                               'generation': receipt.successor.generation}

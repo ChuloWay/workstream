@@ -124,11 +124,11 @@ followed by the authorized live transition. Retain that proof separately.
   the terminal `CheckerRun.infrastructure_failed` directly, not `_complete_post`
   (which requires completed work and a completion event). Assert no fabricated
   completion event, acceptance or contribution. Restore the node, then invoke
-  the existing `checker_retry.py` Operator-authorized operation with fresh
-  authorization and a new request key; assert its exact next evaluation
+  the existing public Operator discovery/retry routes backed by `checker_retry.py`,
+  with fresh authorization and a new request key; assert its exact next evaluation
   generation, durable dispatch, real worker success and single governed result.
-  This is explicitly a hidden owner-level retry operation in this checkout,
-  not a claimed public retry endpoint. Do not add a route in this boundary.
+  Discovery confirmed the public routes already exist in `checkers/router.py`;
+  use that entry instead of calling the hidden owner directly. No new route is needed.
 - `_assert_unknown_execution_cleanup`: kill only the owned controller after
   guest invocation begins, observe connection loss/unresolved status and no
   in-session retry. Verify guardian cleanup and startup reconciliation before a
@@ -136,8 +136,8 @@ followed by the authorized live transition. Retain that proof separately.
   facts. Controller recovery must not reset the original attempt deadline.
 
 Each trial uses uniquely owned unit/socket/cache/VM/DB resources. Evidence records
-whether entry was public API, durable worker, or the existing authorized hidden
-retry owner; no direct SQL writes manufacture lifecycle outcomes.
+whether entry was public API, durable worker, or the existing public Operator
+retry route; no direct SQL writes manufacture lifecycle outcomes.
 
 ## Acceptance criteria
 
