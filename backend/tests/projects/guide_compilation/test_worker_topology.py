@@ -482,11 +482,9 @@ def test_prefork_hard_timeout_acknowledges_without_reinvocation(
     """A killed provider run stays durably fenced and is acknowledged once."""
     import asyncio
     from threading import Event
-    from uuid import uuid4
 
     from billiard.connection import wait
     from billiard.einfo import ExceptionWithTraceback
-    from celery.concurrency.prefork import TaskPool
     from celery.exceptions import TimeLimitExceeded
     from celery.worker.request import Request
     from kombu.message import Message
