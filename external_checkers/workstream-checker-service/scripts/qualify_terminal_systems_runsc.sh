@@ -218,16 +218,19 @@ PY
 docker start "${CONTAINER}" >/dev/null
 STARTED=1
 for _attempt in $(seq 1 45); do
-  if docker exec "${CONTAINER}" docker info >/dev/null 2>&1; then
+  if timeout --signal=TERM --kill-after=2s 5s \
+    docker exec "${CONTAINER}" docker info >/dev/null 2>&1; then
     break
   fi
   sleep 1
 done
-docker exec "${CONTAINER}" docker info >/dev/null
+timeout --signal=TERM --kill-after=2s 10s \
+  docker exec "${CONTAINER}" docker info >/dev/null
 readonly HOST_CACHE_MANIFEST_SHA="$(sha256sum "${SHARED_ROOT}/cache/cache.sha256" | awk '{print $1}')"
 readonly INNER_CACHE_MANIFEST_SHA="$(docker exec "${CONTAINER}" sha256sum "${INNER_ROOT}/cache/cache.sha256" | awk '{print $1}')"
 [[ "${HOST_CACHE_MANIFEST_SHA}" == "${INNER_CACHE_MANIFEST_SHA}" ]]
-docker exec "${CONTAINER}" docker info --format '{{json .Runtimes}}' \
+timeout --signal=TERM --kill-after=2s 10s \
+  docker exec "${CONTAINER}" docker info --format '{{json .Runtimes}}' \
   | python3 -c 'import json,sys; assert "runsc" in json.load(sys.stdin)'
 echo "qualification stage=sealed_cache_and_runtime_sentinel_complete"
 docker stop --time 15 "${CONTAINER}" >/dev/null
@@ -334,12 +337,14 @@ chmod 0444 "${COMPOSITION_ROOT}/registry.yml"
 docker start "${CONTAINER}" >/dev/null
 STARTED=1
 for _attempt in $(seq 1 45); do
-  if docker exec "${CONTAINER}" docker info >/dev/null 2>&1; then
+  if timeout --signal=TERM --kill-after=2s 5s \
+    docker exec "${CONTAINER}" docker info >/dev/null 2>&1; then
     break
   fi
   sleep 1
 done
-docker exec "${CONTAINER}" docker info >/dev/null
+timeout --signal=TERM --kill-after=2s 10s \
+  docker exec "${CONTAINER}" docker info >/dev/null
 if docker exec "${CONTAINER}" docker image inspect "${CHECKER_IMAGE}" >/dev/null 2>&1; then
   echo "qualification checker image unexpectedly preexists in owned DIND" >&2
   exit 1
@@ -417,7 +422,8 @@ docker exec "${CONTAINER}" docker push \
 readonly CHECKER_INSPECTION="$(docker exec "${CONTAINER}" docker image inspect 127.0.0.1:5000/terminal-systems-post:qualification)"
 readonly CHECKER_DIGEST="$(python3 -c 'import json,sys; v=json.load(sys.stdin)[0]; print(next(x.split("@",1)[1] for x in v["RepoDigests"] if x.startswith("127.0.0.1:5000/terminal-systems-post@")))' <<<"${CHECKER_INSPECTION}")"
 readonly CHECKER_ID="$(python3 -c 'import json,sys; print(json.load(sys.stdin)[0]["Id"])' <<<"${CHECKER_INSPECTION}")"
-readonly PLATFORM_IDENTITY="$(docker exec "${CONTAINER}" docker info --format '{{json .}}' | python3 -c '
+readonly PLATFORM_IDENTITY="$(timeout --signal=TERM --kill-after=2s 15s \
+  docker exec "${CONTAINER}" docker info --format '{{json .}}' | python3 -c '
 import hashlib,json,sys
 v=json.load(sys.stdin); key="runsc-trial"; runtime=v["Runtimes"][key]
 facts={"architecture":v.get("Architecture"),"cgroup_driver":v.get("CgroupDriver"),"cgroup_version":v.get("CgroupVersion"),"driver":v.get("Driver"),"kernel_version":v.get("KernelVersion"),"operating_system":v.get("OperatingSystem"),"os_type":v.get("OSType"),"runtime":{"path":runtime.get("path"),"runtime_args":runtime.get("runtimeArgs")}}
