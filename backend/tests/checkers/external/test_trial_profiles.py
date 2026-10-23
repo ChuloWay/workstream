@@ -237,5 +237,9 @@ def test_projection_rejects_escape_overlap_shadow_and_unsafe_state_retention():
             "bad", "submission_archive", "build_context", ".", ".", ("tests", "tests/fixtures")
         )
 
+    for alias in ("a//b", "a/./b", "./a"):
+        with pytest.raises(TrialProfileError, match="material projection"):
+            TrialMaterialProjection("bad", "submission_archive", "build_context", alias, ".", ())
+
     with pytest.raises(TrialProfileError, match="slot projection"):
         TrialSlotProjection("bad", 1, 1, (), (), True, ("deadline_exceeded",))

@@ -64,11 +64,15 @@ pub(crate) struct TrialRequestIdentity {
     pub(crate) worker_lease_expires_at: String,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
 pub(crate) struct TrialProfile {
     pub(crate) profile_id: String,
     pub(crate) profile_version: u32,
     pub(crate) profile_digest: String,
+    pub(crate) projection_id: String,
+    pub(crate) projection_version: u32,
+    pub(crate) projection_digest: String,
     pub(crate) trial_kind: String,
     pub(crate) registry_entry_id: String,
     pub(crate) registry_entry_digest: String,
@@ -110,7 +114,8 @@ pub(crate) struct TrialProfile {
     pub(crate) maximum_pids_overrun: u64,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
 pub(crate) struct TrialSlotProfile {
     pub(crate) slot_kind: String,
     pub(crate) minimum_occurrences: usize,
@@ -121,7 +126,8 @@ pub(crate) struct TrialSlotProfile {
     pub(crate) retain_state_after: Vec<String>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
 pub(crate) struct TrialMaterialProjectionProfile {
     pub(crate) role: String,
     pub(crate) source_role: String,
@@ -707,7 +713,7 @@ pub(crate) fn valid_trial_grant(grant: &TrialGrant, request_digest: &str) -> boo
         && valid_sha256(&grant.profile_digest)
 }
 
-fn valid_profile(profile: &TrialProfile) -> bool {
+pub(crate) fn valid_profile(profile: &TrialProfile) -> bool {
     let source_roles: HashSet<_> = profile.source_material_roles.iter().collect();
     let allowed_roles: HashSet<_> = profile.allowed_material_roles.iter().collect();
     let projection_roles: HashSet<_> = profile
@@ -725,6 +731,9 @@ fn valid_profile(profile: &TrialProfile) -> bool {
     valid_uuid(&profile.profile_id)
         && profile.profile_version > 0
         && valid_sha256(&profile.profile_digest)
+        && valid_uuid(&profile.projection_id)
+        && profile.projection_version > 0
+        && valid_sha256(&profile.projection_digest)
         && valid_identifier(&profile.trial_kind)
         && valid_uuid(&profile.registry_entry_id)
         && valid_sha256(&profile.registry_entry_digest)
@@ -1873,7 +1882,7 @@ fn valid_identifier(value: &str) -> bool {
         })
 }
 
-fn valid_uuid(value: &str) -> bool {
+pub(crate) fn valid_uuid(value: &str) -> bool {
     value.len() == 36
         && value.bytes().enumerate().all(|(index, item)| {
             if matches!(index, 8 | 13 | 18 | 23) {
@@ -1884,7 +1893,7 @@ fn valid_uuid(value: &str) -> bool {
         })
 }
 
-fn valid_sha256(value: &str) -> bool {
+pub(crate) fn valid_sha256(value: &str) -> bool {
     value.len() == 71 && value.starts_with("sha256:") && value[7..].bytes().all(lower_hex)
 }
 

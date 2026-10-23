@@ -473,8 +473,11 @@ def _safe_relative(value: object, *, allow_dot: bool) -> bool:
         return False
     if value == ".":
         return allow_dot
+    raw_parts = value.split("/")
+    if any(part in {"", ".", ".."} for part in raw_parts):
+        return False
     path = PurePosixPath(value)
-    return not path.is_absolute() and all(part not in {"", ".", ".."} for part in path.parts)
+    return not path.is_absolute() and str(path) == value and tuple(raw_parts) == path.parts
 
 
 def _paths_overlap(values: tuple[str, ...]) -> bool:
