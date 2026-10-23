@@ -6,7 +6,7 @@ for current product capability.
 
 | Initiative | Durable disposition | Next usable boundary |
 |---|---|---|
-| [WS-EXEC-001](initiatives/WS-EXEC-001/OVERVIEW.md) | Planned | Smol node execution and exact-lease recovery are implemented. Next: same-request upload preparation and trusted ART intake, then public durable-worker proof. Node proof alone is not the complete journey. |
+| [WS-EXEC-001](initiatives/WS-EXEC-001/OVERVIEW.md) | Planned | Smol node lifecycle and upload-overlapped trusted ART intake are implemented. Next: deployment composition and combined public API/durable-worker proof through both policy branches. Separate node and transaction proof is not the complete journey. |
 | [WS-AGENT-001](initiatives/WS-AGENT-001/OVERVIEW.md) | Planned | Neutral document tools plus OpenAI Agents SDK and OmniCoreAgent original-guide qualifications are delivered through the same public API, durable worker, parser and MinIO path. Retain the exact external provider/account and selected-image AWS evidence, then prove the broader hosted Flow contribution journey before deployment claims. |
 | [WS-DB-002](initiatives/WS-DB-002/OVERVIEW.md) | Complete | Shared UUIDv7 record generation, native-UUID relationships and fresh v0.1 baseline; natural-owner retry custody and aligned CI/local setup |
 | [WS-MCP-002](initiatives/WS-MCP-002/OVERVIEW.md) | Planned | Twenty-three tools through WS-MCP-002-07: self-service, administrative access, actor/identity lifecycle, project shells and participation; 4 tools remain and WS-MCP-002-08 guide documents is next |

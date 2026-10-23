@@ -5,15 +5,16 @@
 
 ## Observed owners and concrete gaps
 
-`PreparedSubmissionBundlePreparationCommand.prepare` authorizes/relocks TASK and
-PROJECT before and after byte receipt. It currently starts checking only after
-host-side `SubmissionArchiveInspector.inspect`. Selected PRE uses the canonical
-ART projected tree, default checker and exact callback grants; POST already has
-durable execution/lease/outbox custody. `ExternalCheckerExecutionAdapter` and its
-explicit factory compose a Rust Unix-socket service. That service now supports bounded concurrent Smol microVM execution alongside
-its Docker/runsc and Docker development engines, with exact-owner cleanup and
-independent Smol guardians. The remaining missing capability is typed ART
-preparation and trusted guest intake during upload.
+`PreparedSubmissionBundlePreparationCommand.prepare` authorizes TASK/PROJECT,
+starts trusted intake preparation while the same request uploads, then relocks
+the policy before inspection. ART consumes canonical ZIP/default processing
+through its typed intake capability, independently verifies raw exports and
+closes intake before ordered project PRE execution. POST uses the same intake
+under its durable execution/lease/outbox custody. `ExternalCheckerExecutionAdapter`
+and its explicit factory compose the Rust node's project execution capability.
+The node supports bounded Smol execution, exact-owner cleanup and independent
+guardians. Both capabilities now have owner/adapter proof; the remaining gap is
+deployment composition and their combined public API/durable-worker journey.
 
 The Smol 1.31.4 qualification (PR #672) proves fresh VM overlap, real Python checker
 execution, cancellation/deadlines and request-process recovery, but not production
@@ -95,6 +96,6 @@ results and governed outcome. Test CPU/memory/PID/output enforcement rather than
 inferring limits from vCPU count. Resource exhaustion, cancellation and unknown
 execution outcomes must not become failed-work verdicts or unsafe execution retries.
 
-Next usable boundary: WS-EXEC-001-02, upload-overlapped trusted ART intake.
-Boundary 1 supplies the production node lifecycle and existing execution adapter;
-its synthetic-grant proof does not complete the public contributor journey.
+Next usable boundary: WS-EXEC-001-03, deployment composition and public durable-worker proof.
+Boundaries 1 and 2 supply node lifecycle and upload-overlapped ART intake. Their
+separate real-node and transaction proofs do not complete the public Smol journey.
