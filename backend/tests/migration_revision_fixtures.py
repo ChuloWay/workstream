@@ -1,15 +1,210 @@
-"""Historical 0047 window inputs, inserted with its original guards enabled."""
+"""Checksum-bound historical revision inputs and guarded 0047 writers."""
 
+import base64
+from contextlib import asynccontextmanager
 from datetime import timedelta
+from functools import lru_cache
+import gzip
+import hashlib
 import json
+from pathlib import Path
 from types import SimpleNamespace
+from uuid import UUID
 
 from sqlalchemy import func, select, text
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
+from app.adapters.artifacts import post_submission_materialization
 from app.core.hashing import canonical_json_hash
 from app.core.identifiers import new_record_id
+from app.interfaces.artifacts import ArtifactStoreNamespaceClaim, ArtifactStoreNamespaceIdentity
+from app.modules.artifacts.models import ArtifactStorageNamespace
+from app.modules.artifacts.preparation import ArtifactPreparationService, ArtifactScratchManager
+from app.modules.artifacts.service import ArtifactStorageNamespaceSpec
+from app.modules.artifacts.submission_archive import (
+    SubmissionArchiveInspector,
+    SubmissionArchiveLimits,
+)
+from app.modules.authorization.runtime import HumanAuthorizationContext
+from app.modules.checkers.api import SelectedPostSubmissionEvaluationRequest
+from app.modules.tasks.api import SubmissionCreationRequest
 from app.modules.tasks.api.transition_audit import TaskPolicyLineage
 from app.modules.tasks.models import Submission, WorkstreamTask
+from app.modules.tasks.schemas import AdmissionBackedSubmissionResponse
+from tests.historical_submission_fixtures import (
+    _restore_validated_snapshot_rows,
+)
+from tests.retained_material_fixtures import retained_archive_store
+from tests.test_artifact_admission import _settings
+from tests.test_checker_materialization import _limits
+
+
+_REVISION_ARCHIVE = Path(__file__).with_name("fixtures") / "historical_revision_rows.json.gz"
+_REVISION_ARCHIVE_SHA256 = "40b4c2bde917e6c8907da7d5462f6876a268952c449997af1ea93bffe6058420"
+_REVISION_ARCHIVE_SCHEMA = "workstream.historical_revision_rows.v1"
+_REVISION_ARCHIVE_SOURCE = "6fa9a9b557fa3ae22c16af67bca25dc868f67b38"
+
+
+@lru_cache(maxsize=1)
+def _historical_revision_snapshots() -> dict[str, dict[str, object]]:
+    encoded = _REVISION_ARCHIVE.read_bytes()
+    assert hashlib.sha256(encoded).hexdigest() == _REVISION_ARCHIVE_SHA256, (
+        "historical revision row archive checksum mismatch"
+    )
+    body = json.loads(gzip.decompress(encoded))
+    assert body["schema_version"] == _REVISION_ARCHIVE_SCHEMA
+    assert body["source_revision"] == _REVISION_ARCHIVE_SOURCE
+    return body["snapshots"]
+
+
+async def _restore_historical_revision_rows(
+    database_url: str, snapshot_name: str
+) -> dict[str, object]:
+    """Restore captured setup rows; this setup step is not a writer-guard proof."""
+    snapshot = _historical_revision_snapshots()[snapshot_name]
+    return await _restore_validated_snapshot_rows(
+        database_url,
+        snapshot,
+        expected_revision=snapshot["revision"],
+    )
+
+
+class _HistoricalArtifactBootstrap:
+    """Compose the current in-memory test store for an archived namespace."""
+
+    def __init__(self, store, namespace: ArtifactStorageNamespaceSpec):
+        self._store = store
+        self.identity = store.identity
+        descriptor = {
+            key: value
+            for key, value in namespace.namespace_descriptor.items()
+            if key not in {"backend", "adapter", "provider_profile"}
+        }
+        self.namespace_identity = ArtifactStoreNamespaceIdentity(
+            namespace.provider_profile,
+            tuple(sorted((key, str(value)) for key, value in descriptor.items())),
+        )
+        self._claim = ArtifactStoreNamespaceClaim(
+            self.identity, self.namespace_identity, namespace.namespace_fingerprint
+        )
+
+    def initialize_after_namespace_claim(self, claim):
+        assert claim == self._claim
+        return self._store
+
+    def close(self):
+        return None
+
+
+@asynccontextmanager
+async def historical_revision_source(tmp_path, database_url, monkeypatch, snapshot_name: str):
+    """Load archived setup facts and current test-only ART composition."""
+    seed = await _restore_historical_revision_rows(database_url, snapshot_name)
+    engine = create_async_engine(database_url)
+    factory = async_sessionmaker(engine, expire_on_commit=False)
+    settings = _settings(tmp_path, maximum_bytes=1024 * 1024)
+    manager = ArtifactScratchManager(
+        root=tmp_path / "historical-post-scratch",
+        limits=_limits(reservation_ttl_seconds=300, total_deadline_seconds=180),
+    )
+    try:
+        async with factory() as session:
+            persisted = await session.get(ArtifactStorageNamespace, "primary")
+            assert persisted is not None
+            namespace = ArtifactStorageNamespaceSpec(
+                persisted.backend,
+                persisted.adapter,
+                persisted.provider_profile,
+                persisted.namespace_descriptor,
+                persisted.namespace_fingerprint,
+            )
+        store = retained_archive_store(factory, namespace)
+        data = base64.b64decode(seed["data_base64"])
+        assert len(data) == seed["request"]["byte_count"]
+        assert "sha256:" + hashlib.sha256(data).hexdigest() == seed["request"]["content_sha256"]
+        async with factory() as session:
+            provider_object_ref = await session.scalar(
+                text(
+                    "SELECT provider_object_ref FROM artifact_replicas "
+                    "WHERE content_id=CAST(:content_id AS uuid)"
+                ),
+                {"content_id": seed["request"]["content_id"]},
+            )
+        assert provider_object_ref is not None
+        store.objects[provider_object_ref] = data
+        preparation = ArtifactPreparationService(manager)
+        service = post_submission_materialization(
+            sessions=factory,
+            store=store,
+            namespace=namespace,
+            preparation=preparation,
+            inspector=SubmissionArchiveInspector(SubmissionArchiveLimits()),
+        )
+
+        def archived_bootstrap(_settings, *, activation_guard):
+            assert activation_guard is None
+            return _HistoricalArtifactBootstrap(store, namespace)
+
+        monkeypatch.setattr(
+            "app.adapters.artifacts.create_artifact_store_bootstrap", archived_bootstrap
+        )
+        creation = seed["creation_request"]
+        yield SimpleNamespace(
+            factory=factory,
+            engine=engine,
+            request=SelectedPostSubmissionEvaluationRequest.model_validate_json(
+                json.dumps(seed["request"])
+            ),
+            created=AdmissionBackedSubmissionResponse.model_validate_json(
+                json.dumps(
+                    {
+                        name: seed["created"][name]
+                        for name in AdmissionBackedSubmissionResponse.model_fields
+                    }
+                )
+            ),
+            actor_context=HumanAuthorizationContext.model_validate_json(
+                json.dumps(seed["actor_context"])
+            ),
+            creation_request=SubmissionCreationRequest(
+                admission_id=UUID(creation["admission_id"]),
+                task_id=UUID(creation["task_id"]),
+                assignment_id=UUID(creation["assignment_id"]),
+                contributor_id=UUID(creation["contributor_id"]),
+                predecessor_submission_id=(
+                    UUID(creation["predecessor_submission_id"])
+                    if creation["predecessor_submission_id"] is not None
+                    else None
+                ),
+                summary=creation["summary"],
+                contributor_attestation=creation["contributor_attestation"],
+            ),
+            source={"completion_event_id": UUID(seed["source"]["completion_event_id"])},
+            data=data,
+            settings=settings,
+            namespace=namespace,
+            store=store,
+            service=service,
+        )
+    finally:
+        manager.close()
+        await engine.dispose()
+
+
+async def assert_historical_revision_guards(factory, revision: str) -> None:
+    """Confirm restore is closed before a real historical writer runs."""
+    async with factory() as session:
+        assert await session.scalar(text("SELECT version_num FROM alembic_version")) == revision
+        assert (
+            await session.scalar(
+                text(
+                    "SELECT count(*) FROM pg_trigger t JOIN pg_class c ON c.oid=t.tgrelid "
+                    "JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' "
+                    "AND NOT t.tgisinternal AND t.tgenabled='D'"
+                )
+            )
+            == 0
+        )
 
 
 async def insert_0047_preparation(session, *, manifest, candidate, audit_event_id):

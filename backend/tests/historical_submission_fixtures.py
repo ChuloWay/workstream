@@ -180,21 +180,19 @@ async def _validate_material_custody(
     assert row["task_status"] == "submitted"
 
 
-async def restore_archived_snapshot(
-    database_url: str, snapshot_name: str | None = None
+async def _restore_validated_snapshot_rows(
+    database_url: str,
+    snapshot: dict[str, object],
+    *,
+    expected_revision: str,
 ) -> dict[str, object]:
-    """Restore literal rows into their exact isolated predecessor revision."""
+    """Restore one checksum-validated snapshot into its isolated predecessor."""
     connection = await asyncpg.connect(_asyncpg_url(database_url))
     try:
         await _assert_owned_test_database(connection, database_url)
         await _assert_database_guards_enabled(connection)
         revision = await connection.fetchval("SELECT version_num FROM public.alembic_version")
-        key = snapshot_name or revision
-        snapshot = deepcopy(_snapshots()[key])
-        if snapshot_name is None:
-            assert key == revision
-        else:
-            assert snapshot["revision"] == revision
+        assert expected_revision == revision
         tables = tuple(sorted(snapshot["tables"]))
         database_tables = tuple(row["tablename"] for row in await connection.fetch("""
             SELECT tablename FROM pg_tables
@@ -297,6 +295,30 @@ async def restore_archived_snapshot(
         return deepcopy(snapshot["seed"])
     finally:
         await connection.close()
+
+
+async def restore_archived_snapshot(
+    database_url: str, snapshot_name: str | None = None
+) -> dict[str, object]:
+    """Restore literal rows into their exact isolated predecessor revision."""
+    connection = await asyncpg.connect(_asyncpg_url(database_url))
+    try:
+        await _assert_owned_test_database(connection, database_url)
+        await _assert_database_guards_enabled(connection)
+        revision = await connection.fetchval("SELECT version_num FROM public.alembic_version")
+    finally:
+        await connection.close()
+    key = snapshot_name or revision
+    snapshot = deepcopy(_snapshots()[key])
+    if snapshot_name is None:
+        assert key == revision
+    else:
+        assert snapshot["revision"] == revision
+    return await _restore_validated_snapshot_rows(
+        database_url,
+        snapshot,
+        expected_revision=revision,
+    )
 
 
 @asynccontextmanager
