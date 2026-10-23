@@ -167,6 +167,9 @@ cp -- "$(readlink -f /lib/x86_64-linux-gnu/libm.so.6)" "${COMPOSITION_ROOT}/bin/
 cp -- "$(readlink -f /lib/x86_64-linux-gnu/libc.so.6)" "${COMPOSITION_ROOT}/bin/libc.so.6"
 chmod 0555 "${COMPOSITION_ROOT}/bin/"*
 
+docker build --pull=false --network=none --tag "${CHECKER_IMAGE}" \
+  --file "${REPOSITORY_ROOT}/pilots/terminal_systems/checkers/post/model/Dockerfile" \
+  "${REPOSITORY_ROOT}/pilots/terminal_systems/checkers/post/model" >/dev/null
 docker image inspect "${CHECKER_IMAGE}" >/dev/null
 docker image inspect "${REGISTRY_IMAGE}" >/dev/null
 docker save --output "${COMPOSITION_ROOT}/input/checker-image.tar" "${CHECKER_IMAGE}"
