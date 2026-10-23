@@ -15,16 +15,17 @@ strict draft/review/correction SDK loops. Workstream owns one model-use authorit
 project lifetime budget, provider effect and evidence boundary across both. No
 project rule or generic agent framework belongs in the shared Rust runner.
 
-## Current behavior
+## Intended merge behavior
 
-The unmerged branch already proves a checker-only OpenAI Responses call, project
-budget, protected request/response evidence, provider-effect recovery and a
-single-use invocation socket. Current main separately runs OpenAI Agents SDK and
-OmniCoreAgent setup inference directly through their pinned native transports.
-Neither side is the shared boundary: the checker profile is registry-bound and
-one-call, while setup has no durable usage ledger. Generalize the unmerged schema
-directly after main's `0059_neutral_guide_runtime`; do not preserve checker-only
-development names or introduce a second meter.
+One MODEL-USAGE owner supplies immutable project profiles, a non-resetting
+project-lifetime account, bounded run envelopes, paid effects and private ART
+evidence to both setup inference and approved POST images. Setup retains its
+native OpenAI Agents SDK and OmniCoreAgent loops through the trusted proxy; POST
+retains project-owned rubrics and invocation-local transport. Strong typed setup
+and checker subjects share the meter without fabricating a CheckerRun for setup.
+The linear `0061_model_usage` migration follows main's
+`0060_audit_restore_path`; intermediate upgrades retain main data and leave one
+head.
 
 ## Bounded change
 
@@ -39,10 +40,9 @@ development names or introduce a second meter.
   replacing either agent loop or forwarding arbitrary HTTP.
 - CHECKERS selected POST integration and existing AUTH, PROJECTS and TASK ports
   for fresh owner currentness and Operator provisioning.
-- Existing ART generated checker-output custody to retain bounded private
-  request/response evidence, with matching authority and read concealment; the
-  same put/verify/bind/recover pipeline accepts one typed CHECKERS-owned trial
-  evidence subject so trusted observations are durable before a paid assessment.
+- Existing ART generated-output custody to retain bounded private model
+  request/response evidence, with matching authority, read concealment and
+  exact setup/checker lineage.
 - Typed provider capability under `backend/app/interfaces/`, concrete adapter
   and explicit ADR-0014 composition; fixed settings outside images.
 - One linear Alembic continuation with preflight, intermediate upgrade and
@@ -159,18 +159,10 @@ run-only write selector and deny-only producer composition are replaced; retaine
 historical rows keep their immutable ancestry. Private call bindings remain
 retained independently of the original checker run.
 
-Execution tools use a separate immutable `checker_trial_evidence` owner selected
-after a canonical plan is validated and before its engine runs. Its replay key is
-the stable project/task/assignment/Submission, requirement, registry/configuration,
-trial kind/slot, exact plan and input/material digests. The originating run, lease
-and external-request digest are retained provenance but never the replay key.
-The first completed canonical receipt pins its content digest through the same
-ART put, independent verification and immutable binding path; later workers may
-only recover those exact bytes. An invocation-local opaque handle is minted only
-after the ART binding acknowledgement and may be replaced on retry. Handles and
-lease identities never enter the paid request hash; the exact verified canonical
-receipt bytes and digest do. CHECKERS owns trial reservation/currentness and the
-0061 strong owner schema; MODEL-USAGE owns only the bounded resolver/session seam.
+Execution-trial reservation, engine behavior and trial-evidence ownership remain
+in issue #493. This change exposes the bounded multi-call/model-evidence session
+used by that project runtime, but does not claim execution-tool custody or add a
+trial table to the independent #492 migration.
 
 The local relay root must be mounted at the same Docker-daemon-visible path,
 with private same-UID socket custody. gVisor requires the administrator-provided
@@ -228,11 +220,13 @@ honest separation of local proof from deployed operation.
 ## Evidence
 
 Initial source inspection and architecture review identified the stable paid
-slot and the need to preserve image ownership. This is a design record; no
-live provider spend or project completion is established yet. The implementation
-has focused offline provider, proxy crash/replay, private Unix transport and
-Compose lifecycle proof. The retained-data 0058-to-0059 upgrade and PostgreSQL
-ledger, signed public provisioning and real MCP catalogue adapter checks pass.
+slot and the need to preserve image ownership. No live provider spend or project
+completion is established. The candidate has focused controlled-provider,
+proxy crash/replay, private Unix transport, setup/checker shared-account and
+hosted Compose contract proof. The retained-data upgrade through
+`0060_audit_restore_path` to `0061_model_usage`, PostgreSQL ledger, public
+provisioning and actual authorization catalogue adapter require final exact-head
+evidence before readiness.
 All six composed public profile-to-checker cases pass with real PostgreSQL,
 local/MinIO ART and a controlled provider/image boundary: completion, retained
 paid results after a lost image reply, concurrent callbacks, and explicit child
@@ -247,7 +241,7 @@ requires the exact registered POST image digest, with independent SQL checks of
 canonical profile/budget specification hashes. Regressions cover each boundary;
 the final frozen review must assess their composed behavior and current head.
 
-The retained-data 0058-to-0059 upgrade exposed a PL/pgSQL parsing failure that
+The retained-data upgrade into the model-usage migration exposed a PL/pgSQL parsing failure that
 fresh baseline installation did not expose. A discriminating PostgreSQL probe
 isolated the unparenthesized CASE expression in the ART binding guard; the
 corrected upgrade passes with retained data and owned-database cleanup. Public
@@ -266,7 +260,7 @@ That composed path also exposed an inherited ART receipt trigger that required
 a checker-run producer even for a paid-call receipt. The migration now admits
 only the exact model-call attempt and request/response role while retaining the
 existing producer guards. Fresh schema installation, the canonical ART custody
-case and retained 0058-to-0059 upgrade pass with the corrected trigger.
+case and retained intermediate upgrade pass with the corrected trigger.
 
 Canonical storage regressions also require malformed or substituted commitment
 facts to leave AUTH through its concealed unavailable outcome. Resource
@@ -338,7 +332,14 @@ bytes, credentials, list access or mutation authority. The action/permission
 pair is added to the same linear `0061_model_usage` audit allowlist and the MCP
 authorization-context snapshot.
 
-## Independent QA, test-delta and CI review
+## Historical checker-only review
+
+The following review is retained as evidence for the earlier checker-only
+checkpoint. Its head, paths, migration names and verdict do not qualify the
+current shared setup/POST candidate. Current exact-head recovery qualification,
+full CI and independent security/authorization/database/QA review remain pending.
+
+### Independent QA, test-delta and CI review
 
 Review dimensions: `qa`, `test_delta`, and `ci_integrity`. Review target:
 base and merge base `6fa9a9b557fa3ae22c16af67bca25dc868f67b38`, frozen head

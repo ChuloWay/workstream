@@ -617,6 +617,9 @@ func validateProposalCheckSpecification(raw json.RawMessage, value *ProposalChec
 		(value.EvaluationMethod == "isolated_execution" && !dependencyKinds["isolated_execution"]) {
 		return errors.New("missing runtime dependency")
 	}
+	if stage == "pre_submit" && dependencyKinds["model_service"] {
+		return errors.New("model service must run after submission")
+	}
 
 	infraCodes := make(map[string]bool)
 	infraMembers, err := proposalObjectMembers(fields["infrastructure_failures"], 1, 5)

@@ -79,9 +79,14 @@ def test_checker_delivery_and_routing_preparation_partition_every_node_once() ->
         "tests/checkers_model_calls/test_model_call_transactions_postgresql.py",
         "tests/checkers_model_calls/test_model_invocation_grants_postgresql.py",
         "tests/checkers_model_calls/test_model_shared_setup_postgresql.py",
+        "tests/checkers_model_calls/test_model_usage_inspection.py",
         "tests/checkers_model_calls/test_model_runtime.py",
         "tests/checkers_model_calls/test_proxy_orchestration.py",
         "tests/checkers_model_calls/test_public_api.py",
+        "tests/checkers_model_calls/test_setup_model_handler.py",
+        "tests/checkers_model_calls/test_setup_model_handler_postgresql.py",
+        "tests/checkers_model_calls/test_setup_model_proxy_transport.py",
+        "tests/checkers_model_calls/test_setup_output_custody.py",
         "tests/checkers/model_provider/test_openai_responses.py",
         "tests/checkers/external/test_model_transport.py",
         "tests/checkers/external/test_model_proxy_transport.py",
@@ -293,8 +298,8 @@ def test_semantic_family_membership_has_an_independent_fingerprint() -> None:
             "c8a0538c251f77fc1893ed8aa76feff8fa2134cf8e9b5a049f32fbabd5226277",
         ),
         "project": (
-            224,
-            "af2085eeeeb3f8efce01b9db66ff9d2b6576bf0fb9de9c182a19914fa0507042",
+            229,
+            "5b644de8f6d38d47c7bcd7f048a3497178597dc610f8da5bbe67fccd570a269a",
         ),
         "task": (
             95,
@@ -366,9 +371,9 @@ def test_project_lane_ownership_has_an_independent_fingerprint() -> None:
         )
         + "\n"
     )
-    assert len(catalogue.PROJECT_PARTITIONED_MODULES) == 224
+    assert len(catalogue.PROJECT_PARTITIONED_MODULES) == 229
     assert hashlib.sha256(canonical.encode()).hexdigest() == (
-        "aef9cc55c87d95b2ada9ddda594aea06a7aebc7035205710ecb7083256152a25"
+        "972af04cc7a86c871d97fe4b059a870e0849d9586a67eb8b523c910968f88c8a"
     )
 
 
