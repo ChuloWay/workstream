@@ -120,6 +120,22 @@ def _setup_profile(project_id: UUID) -> ProjectModelProfileSpec:
     return ProjectModelProfileSpec.model_validate(source)
 
 
+def _setup_output_preparation_limits():
+    return replace(
+        artifact_preparation_limits(),
+        maximum_source_bytes=64 * 1024,
+    )
+
+
+def test_setup_profile_fits_output_preparation_capacity() -> None:
+    profile = _setup_profile(new_record_id())
+    limits = _setup_output_preparation_limits()
+
+    assert max(profile.maximum_request_bytes, profile.maximum_response_bytes) <= (
+        limits.maximum_source_bytes
+    )
+
+
 async def _publish_profile(access, project_id: UUID) -> ProjectModelProfile:
     await access.signed.grant(access.admin, access.target, role="operator")
     spec = _setup_profile(project_id)
@@ -325,7 +341,7 @@ async def _storage_case(tmp_path, database_url, monkeypatch) -> AsyncIterator[_S
     )
     manager = ArtifactScratchManager(
         root=tmp_path / "setup-model-preparation",
-        limits=artifact_preparation_limits(),
+        limits=_setup_output_preparation_limits(),
     )
     engine = create_async_engine(database_url)
     factory = async_sessionmaker(engine, expire_on_commit=False)
