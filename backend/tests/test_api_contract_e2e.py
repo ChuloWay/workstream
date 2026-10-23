@@ -79,8 +79,12 @@ async def test_scripted_guide_runtime_reads_neutral_tools_before_citing_original
 
     assert reads == [(handle, 0, 16000)]
     assert runtime.calls == 1
-    assert result.findings[0].evidence_refs == result.requirements[0].evidence_refs
-    assert result.findings[0].evidence_refs[0].source_item_id == document.source_item_id
+    assert result.requirements == ()
+    assert len(result.findings[0].evidence_refs) == 1
+    reference = result.findings[0].evidence_refs[0]
+    assert reference.source_item_id == document.source_item_id
+    assert reference.document_version_id == document.ingest_id
+    assert reference.sha256 == document.sha256
 
 
 @pytest.mark.asyncio
@@ -207,11 +211,15 @@ def test_api_drill_action_expectations_use_current_catalogue():
     from app.modules.authorization.catalogue import ActionId
 
     source = ast.parse(Path(MODULES[0].__file__).read_text())
-    inventories = [node.comparators[0] for node in ast.walk(source)
-        if isinstance(node, ast.Compare) and isinstance(node.left, ast.Subscript)
+    inventories = [
+        node.comparators[0]
+        for node in ast.walk(source)
+        if isinstance(node, ast.Compare)
+        and isinstance(node.left, ast.Subscript)
         and isinstance(node.left.slice, ast.Constant)
         and node.left.slice.value == "effective_action_ids"
-        and isinstance(node.comparators[0], ast.List)]
+        and isinstance(node.comparators[0], ast.List)
+    ]
     assert inventories
     current_actions = {action.value for action in ActionId}
     for inventory in inventories:
