@@ -77,6 +77,27 @@ model→trial→retained-receipt→model flow has not yet completed a controlled
 provider qualification, and this POST image has not been published, registered,
 approved or activated.
 
+[`post/model/execution-rubrics.json`](post/model/execution-rubrics.json) is an
+exact semantic projection of that historical handoff. Its
+`post_submit_capability_gap` disposition records the source proposal's state; it
+is not a current policy binding or a claim that the implemented trial runtime is
+unavailable. Qualification constructs a separate typed specification declaring
+the outer `isolated_execution/current_runner`, nested
+`nested_sandbox/trial_proxy`, and receipt assessment
+`model_service/model_proxy` dependencies. A future #555 correction must review
+that current dependency shape before it can bind or approve it.
+
+The locked POST configuration schema must declare all six flat trial selectors:
+`trial_profile_id`, `trial_profile_version`, `trial_profile_digest`,
+`trial_projection_id`, `trial_projection_version`, and
+`trial_projection_digest`. They are selected together and resolved against the
+exact operator-provisioned authority manifest entry already bound to the
+registry entry, checker image and configuration hashes. Missing, partial,
+unknown or noncanonical `trial_*` fields fail closed. Final qualification
+evidence must carry the exact image digest, profile/projection digests, runtime
+configuration and engine/platform identities, offline builder/cache/base
+identities, canonical retained receipt digest and ART binding identities.
+
 The project image and production service boundary have a separate explicit
 Docker-development qualifier:
 
