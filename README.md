@@ -297,8 +297,8 @@ stops at findings and proposals; manager review and approval remain separate.
 
 To compile guides without any model provider, select the manager-authored
 runtime instead. It makes no inference request and allocates no provider
-resources. It uses the same isolated document tools. The hosted deployment's
-provider-key file requirement is described in its release guide:
+resources. It uses the same isolated document tools. The hosted release omits
+the provider credential for this exact `none/none/none` configuration:
 
 ```bash
 WORKSTREAM_PROJECT_AGENT_RUNTIME=manager_authored
@@ -418,7 +418,7 @@ postgresql+asyncpg://workstream:<password>@localhost:<port>/workstream_test
 ```
 
 One project-guide compilation proposes sufficiency findings and separate
-pre-submission and post-submission policies through the OpenAI Agents SDK adapter.
+pre-submission and post-submission policies through a selected registered runtime.
 Use the locked installation and environment-loading commands in
 [Native Unified Guide Inference](#native-unified-guide-inference).
 
@@ -427,12 +427,17 @@ timeout, document limits and tool budgets on the attempt before execution. Crede
 the Celery worker environment. `WORKSTREAM_PROJECT_AGENT_INSTRUCTIONS` and
 `WORKSTREAM_PROJECT_AGENT_INSTRUCTION_VERSION` configure trusted instructions;
 omitting the text selects the repository's canonical compilation instructions.
-The OpenAI Agents SDK uses explicit read/search function tools over verified
-originals; it no longer uploads guide files to OpenAI or creates hosted containers.
+The OpenAI Agents SDK and OmniCoreAgent runtimes use the same explicit read/search
+tools over verified originals; neither uploads guide files or creates hosted
+containers.
+Both have passed the same bounded original-guide public API, Celery, real-parser
+and MinIO qualification through a warning-ready manager draft. That proves the
+runtime swap at this contract boundary, not deployment or the complete
+guide-to-contribution journey.
 Changing the inference provider does not change PROJECTS document custody or the
 proposal contract. The attempt records a validated adapter profile with the exact
 SDK versions and effective settings. `WORKSTREAM_PROJECT_AGENT_RUNTIME_OPTIONS`
-is a JSON object; unsupported options fail before dispatch. For this adapter,
+is a JSON object; unsupported options fail before dispatch. For the OpenAI adapter,
 `request_timeout_seconds` defaults to 300 and `maximum_retries` to 2. The shared
 `WORKSTREAM_PROJECT_AGENT_RUN_TIMEOUT_SECONDS` defaults to 1,800 seconds and
 includes retry waits. Only known safe transient failures are retried; uncertain
@@ -445,9 +450,12 @@ core grants only bounded document tools and validates the returned proposal;
 it does not depend on a vendor SDK's files, containers or session objects. Retained
 historical OpenAI resource IDs remain available solely for exact cleanup, using
 the original provider credential, without redispatching uncertain attempts.
-The registered runtimes are `openai_agents_sdk` (the default) and the
-provider-free `manager_authored` runtime described above; the latter has no
-retry or circuit settings because it makes no provider request.
+The registered runtimes are `openai_agents_sdk` (the default), `omnicore_agent`
+and the provider-free `manager_authored` runtime described above. OmniCoreAgent
+uses its closed immutable profile and the mutually exclusive `omnicore` inference
+image; it accepts no runtime options. `manager_authored` works in either SDK image
+and has no retry, circuit or provider credential because it makes no provider
+request. See the [hosted runtime selection runbook](deploy/hosted/README.md#prepare-source-images).
 
 Verified guide-source readiness automatically delivers one compilation. A ready
 result records both policy proposals and stops at a draft; an insufficient guide

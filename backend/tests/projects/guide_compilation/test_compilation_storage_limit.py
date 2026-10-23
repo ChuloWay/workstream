@@ -1,12 +1,14 @@
 """The accepted result envelope fits the actual PostgreSQL JSON serializer."""
+
 import json
 
 import pytest
-from agents import AgentOutputSchema
 
 from app.interfaces.project_agents import (
-    MAXIMUM_COMPILATION_RESULT_STORAGE_BYTES, ProjectGuideCompilationResult,
-    project_guide_compilation_result_storage_bytes, validate_project_guide_compilation_result,
+    MAXIMUM_COMPILATION_RESULT_STORAGE_BYTES,
+    ProjectGuideCompilationResult,
+    project_guide_compilation_result_storage_bytes,
+    validate_project_guide_compilation_result,
 )
 from .helpers import context, ids
 from .test_capability_growth import _context as growth_context, growth_report
@@ -19,16 +21,33 @@ def large_report(length):
     suggestion = report.capability_suggestions[0]
     ref = suggestion.evidence_refs[0].model_copy(update={"section": "文" * 200})
     refs = (ref, ref)
-    return report.model_copy(update={
-        "requirements": tuple(requirement.model_copy(update={
-            "requirement_id": f"r{i}", "statement": "文" * length, "evidence_refs": refs,
-        }) for i in range(200)),
-        "capability_suggestions": tuple(suggestion.model_copy(update={
-            "requirement_id": f"r{i}", "title": "文" * length,
-            "rationale": "文" * length, "evidence_refs": refs,
-        }) for i in range(200)),
-        "pre_submit_bindings": (), "post_submit_bindings": (),
-    })
+    return report.model_copy(
+        update={
+            "requirements": tuple(
+                requirement.model_copy(
+                    update={
+                        "requirement_id": f"r{i}",
+                        "statement": "文" * length,
+                        "evidence_refs": refs,
+                    }
+                )
+                for i in range(200)
+            ),
+            "capability_suggestions": tuple(
+                suggestion.model_copy(
+                    update={
+                        "requirement_id": f"r{i}",
+                        "title": "文" * length,
+                        "rationale": "文" * length,
+                        "evidence_refs": refs,
+                    }
+                )
+                for i in range(200)
+            ),
+            "pre_submit_bindings": (),
+            "post_submit_bindings": (),
+        }
+    )
 
 
 def boundary_reports():
@@ -36,7 +55,10 @@ def boundary_reports():
     low, high = 1, 1000
     while low + 1 < high:
         middle = (low + high) // 2
-        if project_guide_compilation_result_storage_bytes(large_report(middle)) <= MAXIMUM_COMPILATION_RESULT_STORAGE_BYTES:
+        if (
+            project_guide_compilation_result_storage_bytes(large_report(middle))
+            <= MAXIMUM_COMPILATION_RESULT_STORAGE_BYTES
+        ):
             low = middle
         else:
             high = middle
@@ -59,6 +81,8 @@ def test_multibyte_storage_threshold_uses_driver_encoding():
 
 @pytest.mark.parametrize("gaps", [False, True])
 def test_actual_sdk_parser_accepts_current_handoff(gaps):
+    from agents import AgentOutputSchema
+
     schema = AgentOutputSchema(ProjectGuideCompilationResult)
     # Strict SDK parsing sees every field, including explicit linkage and evidence.
     parsed = schema.validate_json(growth_report(gaps=gaps).model_dump_json())
@@ -68,13 +92,21 @@ def test_actual_sdk_parser_accepts_current_handoff(gaps):
 
 def test_stored_revalidation_enforces_storage_limit_even_with_valid_hashes():
     from app.modules.projects.guide_compilation.contracts import (
-        CompilationAttemptIdentity, accepted_compilation_result, validate_accepted_compilation_result,
+        CompilationAttemptIdentity,
+        accepted_compilation_result,
+        validate_accepted_compilation_result,
     )
+
     source = context(ids())
     below, above = boundary_reports()
     identity = CompilationAttemptIdentity.from_context(source)
-    assert validate_accepted_compilation_result(identity=identity, context=source,
-        accepted=accepted_compilation_result(below)) == below
+    assert (
+        validate_accepted_compilation_result(
+            identity=identity, context=source, accepted=accepted_compilation_result(below)
+        )
+        == below
+    )
     with pytest.raises(ValueError, match="compilation result exceeds storage byte limit"):
-        validate_accepted_compilation_result(identity=identity, context=source,
-            accepted=accepted_compilation_result(above))
+        validate_accepted_compilation_result(
+            identity=identity, context=source, accepted=accepted_compilation_result(above)
+        )

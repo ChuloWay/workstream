@@ -37,16 +37,13 @@ LANES = (
     "task_lifecycle_c",
     "task_lifecycle_d",
     "task_lifecycle_e",
+    "omnicore_sdk",
 )
 
 
 def test_validator_requires_exact_expanded_lane_and_shared_s3_custody() -> None:
-    assert validator.LANE_COUNT == len(LANES) == 16
-    assert validator.SHARED_S3_LANES == {
-        "shared_foundations_a",
-        "shared_foundations_b",
-        "shared_foundations_c",
-    }
+    assert validator.LANE_COUNT == len(LANES) == 17
+    assert validator.SHARED_S3_LANES == {"omnicore_sdk"}
 
 
 def _write(path: Path, value: object) -> str:

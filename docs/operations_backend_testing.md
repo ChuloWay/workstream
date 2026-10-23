@@ -225,13 +225,15 @@ rebuilds plus fails if a mutation escapes.
 
 Each affected Backend job binds its checkout to `GITHUB_SHA`, installs pinned
 `uv 0.10.7`, verifies the manifest with `uv lock --check`, recreates the backend environment with
-`uv sync --frozen --all-extras`, and runs subsequent Python, Ruff, pytest,
+`uv sync --frozen` with exactly one project-agent SDK extra plus `dev`, and runs subsequent Python, Ruff, pytest,
 docstring and coverage commands through `uv run --frozen`. Its download cache is
 keyed by `backend/uv.lock` and the workflow, but the environment itself is never
 restored from cache. This makes hosted proof use the exact selected backend lock
-without changing any lane or gate. The reusable CLI contract keeps its
+without restoring an environment from cache. Semantic lane metadata selects
+`agents` for the existing lanes and `omnicore` for the actual OmniCore/MinIO
+lane; the mutually exclusive SDK closures are never co-installed. The reusable CLI contract keeps its
 independent Go verification and build, while its Backend Ruff checks, isolated
-runner and five pytest groups use the same pinned, frozen all-extras environment.
+runner and five pytest groups use the pinned, frozen `agents` environment.
 The reusable MCP real-API job runs its OpenAPI subprocess, isolated runner, API
 server and administrator bootstrap from the frozen Backend environment. Both
 lifecycle suites run in the separately locked adapter environment, because its

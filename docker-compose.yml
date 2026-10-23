@@ -8,6 +8,7 @@ x-backend-runtime: &backend-runtime
     args:
       LOCAL_UID: ${LOCAL_UID:-1000}
       LOCAL_GID: ${LOCAL_GID:-1000}
+      WORKSTREAM_PROJECT_AGENT_SDK_ENVIRONMENT: ${WORKSTREAM_PROJECT_AGENT_SDK_ENVIRONMENT:-agents}
   image: ${COMPOSE_PROJECT_NAME}-backend:local
   init: true
   user: "${LOCAL_UID:-1000}:${LOCAL_GID:-1000}"

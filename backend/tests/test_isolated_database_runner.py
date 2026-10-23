@@ -66,30 +66,18 @@ def _mock_successful_main(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, drop)
 
 
 def test_lane_namespaces_bind_real_s3_traffic_and_separate_other_lanes() -> None:
-    """Only shared lanes receive the application's hardcoded integration bucket."""
-    shared_a = runner._minio_namespace("shared_foundations_a", "012345abcdef")
-    shared_b = runner._minio_namespace("shared_foundations_b", "012345abcdef")
-    shared_c = runner._minio_namespace("shared_foundations_c", "012345abcdef")
-    control_bucket, control_prefix = runner._minio_namespace(
-        "project_lifecycle_a", "012345abcdef"
+    """The actual S3 test lane owns the fixed bucket; other lanes stay isolated."""
+    names = (
+        "omnicore_sdk", "shared_foundations_a", "shared_foundations_b",
+        "shared_foundations_c", "project_lifecycle_a", "task_lifecycle_a",
     )
-    execution_bucket, execution_prefix = runner._minio_namespace(
-        "task_lifecycle_a", "fedcba543210"
-    )
-    assert shared_a == (
-        "workstream-artifacts",
-        "ci/shared_foundations_a/012345abcdef",
-    )
-    assert shared_b == (
-        "workstream-artifacts",
-        "ci/shared_foundations_b/012345abcdef",
-    )
-    assert shared_c == (
-        "workstream-artifacts",
-        "ci/shared_foundations_c/012345abcdef",
-    )
-    assert len({shared_a[0], control_bucket, execution_bucket}) == 3
-    assert len({shared_a[1], shared_b[1], shared_c[1], control_prefix, execution_prefix}) == 5
+    namespaces = [runner._minio_namespace(name, "012345abcdef") for name in names]
+    assert namespaces[0] == ("workstream-artifacts", "ci/omnicore_sdk/012345abcdef")
+    for name, (bucket, prefix) in zip(names[1:], namespaces[1:]):
+        assert bucket == f"workstream-ci-{name.replace('_', '-')}-012345abcdef"
+        assert prefix == f"ci/{name}/012345abcdef"
+    assert len({bucket for bucket, _ in namespaces}) == len(names)
+    assert len({prefix for _, prefix in namespaces}) == len(names)
     with pytest.raises(runner.RunnerError, match="invalid_lane"):
         runner._minio_namespace("../foreign", "012345abcdef")
 
@@ -194,7 +182,7 @@ def test_minio_probe_cleans_up_and_preserves_async_cancellation(
         (
             lane.name,
             "workstream-artifacts"
-            if lane.name in runner.S3_TRAFFIC_LANES
+            if lane.name == "omnicore_sdk"
             else f"workstream-ci-{lane.name.replace('_', '-')}-012345abcdef",
         )
         for lane in LANES

@@ -37,6 +37,9 @@ verification retry. Signed local PostgreSQL tests cover the real routes and
 atomic retry evidence. The CLI consumes all nine existing routes through
 `operations artifact`, with explicit pagination and one-shot reasoned retry;
 hosted S3 operation remains a separate proof boundary.
+The [CLI distribution path](../.commitrail/initiatives/WS-CLI-001/WS-CLI-001-44.md)
+prepares native four-platform GitHub Releases proof and a protected manual
+publisher. No approved release tag or public binary has been published yet.
 
 ## Product Goal
 
@@ -142,12 +145,14 @@ automated acceptance. Human review/revision still belongs to the complete v0.1 r
 Identity, authorization, guide ingestion, automatic unified compilation and
 public manager proposal/approval operations and terminal guide activation are
 implemented. Compilation uses bounded source read/search tools behind the chosen
-runtime adapter; the default OpenAI Agents SDK selects OpenRouter separately from
-the runtime. It does not require OpenAI-hosted files or containers. The neutral
-OpenAI Agents SDK/OpenRouter path passed an original-guide public API and durable
-Celery qualification using the real parser and MinIO. OmniCoreAgent qualification
-and deployed Flow/AWS integration remain separate; one runtime does not prove
-interchangeability. Compilation runs either through inference or
+runtime adapter. The OpenAI Agents SDK and OmniCoreAgent adapters are statically
+selectable in mutually exclusive inference images; OpenRouter remains a separate
+provider choice. Neither adapter requires provider-hosted files or containers.
+The OpenAI Agents SDK and OmniCoreAgent paths each passed an original-guide public
+API and durable Celery qualification using the real parser and MinIO. This proves
+the bounded runtime swap for Project Guide compilation, not deployed Flow/AWS
+operation or an independently interoperable protocol implementation. Compilation
+runs either through inference or
 through the provider-free `manager_authored` runtime, which converts a
 manager-uploaded rules document with no inference. Managers discover exact activation selections through the authorized
 draft post-policy read; Finance publication remains separate. Task policy
@@ -391,8 +396,10 @@ single `admin` root. Backend authorization and lifecycle guards remain decisive;
 administrative reads are observations, not permission for later writes. This
 client exposure is not a deployed-service or independent conformance claim.
 CLI write uncertainty is explicit and never automatically
-retried. These source packages do not claim
-hosted deployment, published CLI binaries or the complete proposed workflow catalogue.
+retried. The separate CLI release workflow builds read-only pull-request
+previews for Linux amd64, Intel/Apple Silicon macOS and Windows amd64, then
+permits only a manually approved exact-tag publication. Its presence is not
+a published binary, deployed backend or complete proposed workflow catalogue.
 The [Operator checker CLI](../.commitrail/initiatives/WS-CLI-001/WS-CLI-001-29.md)
 adds explicit registry register/read and project-bound terminal retry-source
 list/retry commands over the existing public API. Registry publication is not
@@ -507,10 +514,11 @@ cannot be reused as post-submission review-gate evidence. See the
 | Identity and actor resolution | **Live foundation** | Flow-token verification; canonical ActorProfile and ActorIdentityLink; human/service separation; lifecycle controls; canonical `/actors/me` self-read with duplicate `/auth/me` removed; suspension denies both self-read and self-update; CLI privileged exact-actor/profile and identity-link reads and explicit separate profile/link lifecycle writes remain distinct from self-service and backend guards | Final end-to-end operational and conformance proof |
 | Authorization kernel | **Live foundation** | Closed action/permission catalogues; deny-by-default evaluation; grants; exact-project, privacy-safe candidate read now consumed by the CLI; fixed services; rate controls; opaque transaction-bound PREP; atomic decision evidence; CLI scope-filtered administrative grant/catalogue reads and explicit keyed grant issue/revoke consume existing public APIs without local authority decisions | Activate only the remaining owner-proven TASK, checker, REV, and CON boundaries; remove obsolete authority after replacement paths are live |
 | Project Guide source custody | **Live foundation** | Guide creation declares documents and task examples; public document upload; immutable internal metadata snapshots; draft guide and review/revision policy writes with fresh-authorized exact replay of original receipts; exact run-scoped setup reads and assigned-task locked-original reads; S3-backed originals and isolated agent document inspection; exact document generation through separate manager approvals and public exact-authorized CP07 activation; Project Manager guide list, guide detail, activation readiness dry run and verified original read-back (PILOT-READ-3); the CLI exposes existing administrative active-chain and retained sufficiency/artifact-policy reads, keyed human sufficiency writes, and separate manual artifact-policy draft create/update with backend-owned policy decisions | Public original upload, task examples, Celery setup and separate approvals are connected locally with recorded inference; prove configured live inference and readers in the intended environment; manual drafts are not compiled activation proposals; deployed CLI remains separate |
-| Unified Project Guide compilation | **Live setup and manager proposal operations** | Committed original-document readiness dispatches one immutable attempt through Celery; complete result and crash/recovery custody; distinct pre/post proposals; typed per-requirement classification and checker specifications; deterministic sufficiency and submission-artifact-policy projections; immutable authorized setup finalization; public exact manager review, pre-submit approval and manual correction dispatch; automatic deterministic post-policy derivation, public complete policy read, separate approval and shared correction custody; provider-free `manager_authored` runtime compiles a manager-uploaded rules document with no inference or provider resources ([change record](../.commitrail/changes/manager-authored-guide-runtime.md)). Capability gaps preserve a warning-ready review package but block activation; retained pre-specification results keep exact hashes and reads. | The neutral SDK/OpenRouter original-guide handoff passed through public APIs, Celery, the isolated parser and MinIO. That retained handoff predates PRE/POST-only inference; its two PRE rules have a project-owned image with local rule/container proof. Obtain a fresh PRE/POST-only correction and reconcile that image before implementing the resulting POST checks and runtime dependencies, registering images, obtaining approved bindings and qualifying the full journey. OmniCoreAgent qualification and hosted operation remain separate |
+| Unified Project Guide compilation | **Live setup and manager proposal operations** | Committed original-document readiness dispatches one immutable attempt through Celery; complete result and crash/recovery custody; distinct pre/post proposals; typed per-requirement classification and checker specifications; deterministic sufficiency and submission-artifact-policy projections; immutable authorized setup finalization; public exact manager review, pre-submit approval and manual correction dispatch; automatic deterministic post-policy derivation, public complete policy read, separate approval and shared correction custody. Neutral read/search tools support statically registered OpenAI Agents SDK and OmniCoreAgent adapters in mutually exclusive inference images, while provider-free `manager_authored` compiles a manager-uploaded rules document with no inference or provider resources ([runtime initiative](../.commitrail/initiatives/WS-AGENT-001/OVERVIEW.md), [manager-authored record](../.commitrail/changes/manager-authored-guide-runtime.md)). Capability gaps preserve a warning-ready review package but block activation; retained pre-specification results keep exact hashes and reads. Exact Omni SDK, mutually exclusive release-image, parser-isolation and real-MinIO proofs pass. Both inference adapters pass the same original-guide public API, durable Celery, real-parser and MinIO path; the Omni run stopped at a warning-ready manager draft with no bindings, approval or activation. The Terminal Systems handoff now has a project-owned image for its two PRE rules, with local rule and networkless-container proof. | Retain the exact external provider/account and selected-image AWS evidence; implement the eight Terminal Systems POST rules and their runtime dependencies; register the required images, obtain approved bindings and qualify the broader hosted Flow contribution journey. Original-guide qualification and local checker proof are not deployed operation or full guide-to-contribution proof. |
 | Contribution policy administration | **Public Finance policy workflow; binding administration internal** | Internal Finance Authority adapter-binding lifecycle; public ContributionPolicy discovery/read/create/update/publish/retire with exact Finance Authority and recoverable draft selectors, and a Finance list of every version (PILOT-READ-3); immutable operation and event history; internal exact selected-version validation; CP07 binding with live exact-project manager authority of the selected published version to the active guide generation | The bounded local public drill passed; policy publication alone does not create a contribution, and hosted operation remains unproven |
 | Task readiness and claim | **Foundation with grant-backed manager and contributor commands** | Task records, assignments and locked work context; guide-bound ContributionPolicyVersion locked before `READY` and copied to TaskAssignment; detached project/guide display; public project-scoped ready, management and operational queues with distinct current grant authority and signed bounded live pagination, with typed task status and manager filters by status, assignee, native import batch and update time (PILOT-READ-2); contributor cross-project own-assignment, attempt and summary reads under current Submitter grants (PILOT-READ-2); Project Manager project-wide attempt, claim, summary and import-batch reads (PILOT-READ-3); public contributor/management detail with exact project and assignment authority; separate current live work-context projections with exact receipt-selected review/revision/ContributionPolicy identities and no obsolete economic fields; explicit management/operational/audit locked-context projections using one historical resolver, with separate public manager, system-Operator and Audit Authority access; immutable contributor/management requirements using one historical translator, with public exact Contributor and Manager authority; the CLI exposes the three exact manager requirements/context reads separately from contributor commands (WS-CLI-001-27); bounded public Audit Authority lifecycle evidence with atomic project/task scoping and exact transition references; separate CLI audit commands consume those two existing Audit Authority GETs with explicit continuation; public manager create/screen/release use exact covered Project Manager authority, atomic audit and replay; claim/start/contributor context use exact-project Submitter grants; assigned context lists documents only and distinct `task.guide.read` verifies locked originals before delivery; separate manager context and system-Operator start; durable claim/start retry receipts with fresh authority and exact assignment checks; hidden exact-assignment invalidation with committed cause verification, delivery fencing, exact fixed-service authority and decision-bound immutable release evidence; atomic authority-loss publication and registered prefork delivery; PILOT-14 exposes both locked contribution types in ready rows and Contributor detail for active exact-project Submitters or Reviewers as unpaid or exact instrument/unit/quantity awards, without Finance binding facts; claim/start remain Submitter-only | The bounded local public durable-runtime journey passed; intended hosted operation remains unproven |
 | Operator task CLI | **Existing public task operations consumed by the CLI** | WS-CLI-001-36 adds separate status-only project pages, exact-project locked-reference reads and explicit reasoned start override with caller-owned manual replay. Backend Operator authority, assignment consistency, locked lineage and audit remain decisive; contributor start has no fallback to override. | Native public-API proof is bounded to existing fixtures; hosted/deployed operation, other Operator workflows and published binary remain separate |
+| CLI binary distribution | **Release path prepared; no public release** | WS-CLI-001-44 defines four native targets, `cli-v` exact-source versioning, deterministic archives and SHA-256 manifest, pull-request native installation/API/upgrade/rollback/removal smoke, and separately gated manual GitHub Releases publication | Confirm `cli-release` environment and immutable `cli-v*` tag ruleset; approve an annotated tag and first publication, then download and independently install all public assets. First-release smoke uses a same-source prior-version stand-in, not a previous published release; signing/notarization are absent |
 | Operator artifact diagnosis | **Public API and CLI with exact Operator authority** | Eight bounded artifact GETs use current persisted system-Operator grants and exact AUTH decisions, with response-validated read commits and concealed denials. An independently guarded reasoned verification retry atomically records its decisions, recovery chain and audit; exact replay rechecks authority. The CLI consumes all nine routes, with malformed-lineage rejection and receipt-specific pagination. Signed PostgreSQL proof covers eligible retry, exact replay, wrong-resource refusal and revoked-Operator concealment. | Hosted S3 proof remains separate; diagnosis does not grant provider access or activate AWS |
 | Bulk task import | **Public backend and CLI batch journey** | PILOT-02A supplies exact source custody; PILOT-02B imports 1..500 verified JSON rows under one immutable native batch, retains per-Task AUTH/TaskCreated facts, recovers exact original IDs with fresh authority and exposes batch status; actual 200-row, rollback, concurrent-wait and SQL-custody controls pass on PostgreSQL/MinIO. PILOT-02C adds atomic whole-batch screen/release with fresh per-Task authority, locked guide/policy custody and explicit CLI/CSV commands. WS-CLI-001-31 adds bounded, hash-checked CLI source download through public custody with no-overwrite local publication. Optional task-local criteria remain optional through single/bulk screening and release; required instructions and guide locks remain enforced. | No remaining PILOT-02 implementation gate; deployment and full contributor-lifecycle proof are separate |
 | Contributor artifact preparation | **Public initial and checker-remediation entry** | One outer ZIP through the published preparation route; unreadable or structurally rejected ZIPs return sanitized non-retryable 422 feedback before PRE reservation or durable effects; bounded scratch inspection; canonical manifest; shared evaluation-content capacity and exact locked-policy checks before attempts or durable intent; platform and project prechecks; unchanged-work rejection; durable put intent; verification; capacity-charged ready admission; final handoff validates the exact activated historical guide through owner ports; same-key ready replay does not repeat checker or PUT. The preparing contributor reads back their own preparations with outcome, storage state, finding counts and intake findings (PILOT-READ-2); a Project Manager lists a project's preparations with finding counts only (PILOT-READ-3). CLI preparation, read-back, creation/replay and history consume these public owners | Bounded local API and native CLI journeys passed, including CLI rejected-intake recovery; hosted operation remains separate |
@@ -850,8 +858,9 @@ cannot be reused as post-submission review-gate evidence. See the
   contributor-visible change summary. Live human decision composition remains later work.
   Built-binary HTTP
   integration and isolated real-API proof accompany
-  the package. Further public commands, optional TUI and binary distribution
-  remain planned; CLI reads do not complete unfinished product lifecycle work.
+  the package. Further public commands and the optional TUI remain planned;
+  binary-release automation is prepared, while protected first publication
+  remains outstanding. CLI reads do not complete unfinished product lifecycle work.
   The public-client drill targets currently usable APIs only; hidden and
   unfinished lifecycle routes are not completion targets. Draft-guide policy
   probes additionally cover optional fields, conditional headers and exact
@@ -1273,6 +1282,7 @@ Delivered foundations (bounded local journey proven; no deployment claim)
   public manager activation context + exact guide activation/binding
   WS-CLI-001-38 keyed human guide sufficiency diagnostic + warning acknowledgement
   WS-CLI-001-41 keyed manual artifact-policy draft create + hash-guarded successor
+  WS-CLI-001-44 native CLI release proof + gated manual publisher (not yet published)
   task/assignment/Submission lineage + public ZIP intake/admission-backed creation
   ARCH-03D exact approved historical guide through durable intake handoff
   ARCH-04B hidden verified Submission input
@@ -1411,9 +1421,11 @@ v0.1 is not ready until all of the following are true:
   publication, activation and both policy outcomes. It does not establish live
   model quality or deployment readiness. See the [connected proof](../.commitrail/changes/public-guide-to-contribution-proof.md).
   The provider-free `manager_authored` runtime removes the inference dependency
-  from local setup (this hosted release still requires the selected provider's
-  `WORKSTREAM_PROJECT_AGENT_API_KEY_FILE`, supplied only to the Celery process) and
-  proves nothing about model quality.
+  from local and hosted setup and selects no provider credential. It proves
+  nothing about model quality. Both inference runtimes now pass the bounded
+  original-guide qualification. Exact OpenRouter account/plugin evidence, the
+  selected-image hosted/AWS proof and the broader Flow contribution journey
+  remain.
 - Publish the reviewed backend and checker-service source builds, substitute
   their registry digests and the approved exact checker cache into the prepared
   release configuration, and rerun its full host preflight. Then prove actual
@@ -1495,6 +1507,12 @@ v0.1 is not ready until all of the following are true:
   drill plus internal pilot passes without weakening safeguards.
 
 ## Trace References
+
+The [neutral runtime contract](../.commitrail/initiatives/WS-AGENT-001/WS-AGENT-001-01.md)
+and [OmniCoreAgent companion](../.commitrail/initiatives/WS-AGENT-001/WS-AGENT-001-02.md)
+define the shared document-tool/result boundary, mutually exclusive SDK images,
+synthetic and original-guide qualifications, and the provider-account and hosted
+evidence that remain outside repository-only proof.
 
 The [observability foundation record](../.commitrail/changes/observability-foundation.md)
 and [operator guide](engineering/observability.md) define diagnostic scope and

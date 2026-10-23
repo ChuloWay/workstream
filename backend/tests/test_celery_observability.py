@@ -419,7 +419,7 @@ class _QueueSpanExporter(SpanExporter):
         return None
 
 
-def _real_worker(app, hostname: str, log_path: str) -> None:
+def _real_worker(app, hostname: str, log_path: str, queue_name: str) -> None:
     os.setsid()
     descriptor = os.open(log_path, os.O_CREAT | os.O_WRONLY | os.O_TRUNC, 0o600)
     os.dup2(descriptor, 2)
@@ -427,7 +427,7 @@ def _real_worker(app, hostname: str, log_path: str) -> None:
     app.Worker(
         pool="prefork",
         concurrency=1,
-        queues=["celery"],
+        queues=[queue_name],
         hostname=hostname,
         loglevel="INFO",
         without_gossip=True,
@@ -452,6 +452,7 @@ async def test_real_celery_prefork_correlates_api_and_resets_sequential_task_con
     connection = redis.Redis.from_url(broker)
     assert connection.ping()
     prefix = f"workstream-observability-{uuid4()}:"
+    queue_name = f"workstream-observability-{uuid4()}"
     observations = multiprocessing.get_context("fork").Queue()
     monkeypatch.setenv("WORKSTREAM_CELERY_BROKER_URL", broker)
     monkeypatch.setenv("WORKSTREAM_CELERY_TASK_ALWAYS_EAGER", "false")
@@ -542,7 +543,7 @@ async def test_real_celery_prefork_correlates_api_and_resets_sequential_task_con
     log_path = tmp_path / "worker.log"
     process = multiprocessing.get_context("fork").Process(
         target=_real_worker,
-        args=(celery_app, hostname, str(log_path)),
+        args=(celery_app, hostname, str(log_path), queue_name),
     )
     process.start()
     assert diagnostics._WORKER_RUNTIME is None
@@ -570,7 +571,9 @@ async def test_real_celery_prefork_correlates_api_and_resets_sequential_task_con
 
         @app.post("/dispatch")
         async def dispatch() -> dict[str, str]:
-            probe_task.apply_async(kwargs={"mode": "success"}, task_id=direct_task_id)
+            probe_task.apply_async(
+                kwargs={"mode": "success"}, task_id=direct_task_id, queue=queue_name
+            )
             return {"task_id": direct_task_id}
 
         app.add_middleware(RequestContextMiddleware)
@@ -593,6 +596,7 @@ async def test_real_celery_prefork_correlates_api_and_resets_sequential_task_con
         probe_task.apply_async(
             kwargs={"mode": "failure"},
             task_id=failure_task_id,
+            queue=queue_name,
             headers={
                 REQUEST_ID_BROKER_HEADER: forged_request_id,
                 CORRELATION_ID_BROKER_HEADER: forged_correlation_id,
@@ -601,7 +605,9 @@ async def test_real_celery_prefork_correlates_api_and_resets_sequential_task_con
                 "baggage": "secret=value",
             },
         )
-        probe_task.apply_async(kwargs={"mode": "retry"}, task_id=retry_task_id)
+        probe_task.apply_async(
+            kwargs={"mode": "retry"}, task_id=retry_task_id, queue=queue_name
+        )
 
         messages: list[dict] = []
         while time.monotonic() < deadline:

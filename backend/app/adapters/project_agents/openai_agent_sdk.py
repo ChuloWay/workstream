@@ -17,6 +17,7 @@ from app.adapters.project_agents.openai_profile import (
 from app.adapters.project_agents.provider_resilience import (
     ModelCircuitAdmission,
     model_retry_settings,
+    transient_provider_failure,
 )
 from app.adapters.project_agents.result_validation import (
     require_result_sources_opened,
@@ -33,7 +34,7 @@ from app.interfaces.project_agents import (
     project_guide_compilation_prompt_bytes,
 )
 from app.interfaces.project_guide_runtime import ProjectGuideRuntimeConfiguration
-from .openrouter_policy import openrouter_request_options
+from .openrouter_policy import openrouter_request_options, require_direct_openrouter_model
 from app.modules.projects.api.guide_documents import GuideRuntimeCapabilities
 
 
@@ -253,7 +254,7 @@ class OpenAIAgentSdkProjectGuideRuntime:
                         prompt=prompt,
                     )
                 except Exception as error:
-                    admission.request_failed(error)
+                    admission.request_failed(transient_provider_failure(error))
                     raise
                 admission.request_succeeded()
                 return response
@@ -424,11 +425,7 @@ def _provider_configuration(
         configuration.model_provider == "openrouter"
         and configuration.model_api == "chat_completions"
     ):
-        normalized_model = configuration.model.lower()
-        if ":" in normalized_model or normalized_model.startswith("openrouter/"):
-            raise ProjectAgentRuntimeConfigurationError(
-                "project guide OpenRouter model routing is unsupported"
-            )
+        require_direct_openrouter_model(configuration.model)
         credential_name = "OPENROUTER_API_KEY"
         base_url = _OPENROUTER_BASE_URL
     elif configuration.model_provider == "openai" and configuration.model_api in {

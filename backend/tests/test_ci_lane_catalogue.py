@@ -24,7 +24,7 @@ def test_committed_lanes_cover_recursive_inventory_exactly_once() -> None:
     runner.validate_lane_inventory(discovered)
 
     assigned = [module for lane in LANES for module in lane.modules]
-    assert len(LANES) == 16
+    assert len(LANES) == 17
     assert all(lane.requires_postgres for lane in LANES)
     assert Counter(assigned)[catalogue.SCHEMA_MODULE] == 1
     assert all(
@@ -267,12 +267,12 @@ def test_semantic_family_membership_has_an_independent_fingerprint() -> None:
     """A catalogue-internal move across semantic families must fail this contract."""
     expected = {
         "shared": (
-            259,
-            "854d9e22a4bf3baf86ad3d939452ad5d5f08d82f77c08584fc52fda1a741c970",
+            258,
+            "6dac9695511a0cafc5aa32daa590857c84e38a6410630546e8ce02b4e5263324",
         ),
         "project": (
-            211,
-            "ba22b9fe6b2c39de30aa5ca052b924c7238eeaf970fab1c5e88238f4edf62760",
+            212,
+            "11225020885fa570a1faf96c0cf37a604a0f9ec17e799794fa52a1b189f87283",
         ),
         "task": (
             95,
@@ -344,9 +344,9 @@ def test_project_lane_ownership_has_an_independent_fingerprint() -> None:
         )
         + "\n"
     )
-    assert len(catalogue.PROJECT_PARTITIONED_MODULES) == 211
+    assert len(catalogue.PROJECT_PARTITIONED_MODULES) == 212
     assert hashlib.sha256(canonical.encode()).hexdigest() == (
-        "e0cdfefc2dd2f608b3a78d0dc6edc954cd697b665ec444d3b51075604f6380d2"
+        "ef5d13776cc1686b98538ee01b496f420391c9c4574f0e6017b9bd395a2da32f"
     )
 
 
@@ -762,8 +762,8 @@ def test_workflow_lane_inventory_matches_catalogue() -> None:
     assert source.count("path: backend/.ci/download\n          merge-multiple: false") == 1
     assert '--expected-head "${GITHUB_SHA}"' in source
     assert '--run-attempt "${GITHUB_RUN_ATTEMPT}"' in source
-    assert 'test "${#coverage_files[@]}" -eq 16' in source
-    assert "len(lanes) != 16" in source
+    assert 'test "${#coverage_files[@]}" -eq 17' in source
+    assert "len(lanes) != 17" in source
     assert 'Path(".ci/download"), expected_head, int(os.environ["GITHUB_RUN_ATTEMPT"])' in source
     assert 'timing_path = bundle / "job-start-epoch.txt"' in source
     assert (
