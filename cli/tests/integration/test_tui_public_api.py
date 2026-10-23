@@ -1,4 +1,4 @@
-"""Built PTY -> real socket/Flow verifier -> isolated PostgreSQL.
+"""Built native PTY/ConPTY -> real socket/Flow verifier -> isolated PostgreSQL.
 
 Canonical fixtures arrange an approved guide, started work and a retained
 immutable attempt. This is read/navigation/reauthorization proof, not a public
@@ -27,7 +27,7 @@ from app.modules.checkers.models import CheckerRun
 from app.modules.contributions.records.models import ContributionRecord
 from app.modules.tasks.models import Submission, TaskAssignment, WorkstreamTask
 from tests.authentication.fixtures import (
-    auth_database_env as auth_database_env,
+    auth_database_env as _auth_database_env,
     clear_settings_cache as clear_settings_cache,
     rsa_signing_material as rsa_signing_material,
 )
@@ -46,6 +46,7 @@ from tests.tasks.test_submission_lineage import _prepared_packet
 
 signed_access = pytest_asyncio.fixture(_signed_access.__wrapped__)
 admin_access = pytest_asyncio.fixture(_admin_access.__wrapped__)
+auth_database_env = _auth_database_env
 
 
 @pytest.mark.asyncio

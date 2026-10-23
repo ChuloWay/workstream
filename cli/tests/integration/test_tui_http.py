@@ -1,4 +1,4 @@
-"""Built TUI -> PTY -> adversarial socket; no model/runtime substitution."""
+"""Built TUI -> native PTY/ConPTY -> adversarial socket; no runtime substitute."""
 
 from copy import deepcopy
 import os
@@ -499,7 +499,7 @@ def test_invalid_configuration_leaves_interactive_terminal_untouched():
     ):
         terminal.wait_exit(expected=2)
         assert requests == []
-        assert b"\x1b" not in terminal.raw
+        terminal.assert_no_terminal_controls()
         assert b"private-origin" not in terminal.raw
         assert TOKEN.encode() not in terminal.raw
 
@@ -575,4 +575,9 @@ def test_redirected_input_output_and_json_are_rejected_without_network(cli):
             finally:
                 os.close(master)
                 os.close(slave)
+        else:
+            for redirect in ("input", "output"):
+                with Terminal(origin, TOKEN, redirect=redirect) as terminal:
+                    terminal.wait_exit(expected=2)
+                    terminal.assert_no_terminal_controls()
         assert requests == []
