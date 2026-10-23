@@ -81,6 +81,12 @@ class PrivateFaultControls(unittest.TestCase):
         rounded = [dict(row, lease=dict(row['lease'], expires_ms=1001)) if row['name'] == 'second' else row for row in rows]
         write(rounded)
         self.assertEqual(faults.assert_launches(self.root, 0, creates=2, executions=1), ['first', 'second'])
+        for reset_lifetime in (900, 1200):
+            reset = [dict(row, lease=dict(row['lease'], lifetime_ms=reset_lifetime))
+                     if row['name'] == 'second' else row for row in rows]
+            write(reset)
+            with self.assertRaisesRegex(RuntimeError, 'original lease epoch/deadline'):
+                faults.assert_launches(self.root, 0, creates=2, executions=1)
         rows[3]['lease']['expires_ms'] += 1000
         write(rows)
         with self.assertRaisesRegex(RuntimeError, 'original lease epoch/deadline'):
