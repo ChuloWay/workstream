@@ -90,6 +90,7 @@ pub(crate) struct TrialProfile {
     pub(crate) maximum_step_timeout_ms: u64,
     pub(crate) maximum_step_output_bytes: usize,
     pub(crate) maximum_observation_bytes: usize,
+    pub(crate) maximum_receipt_bytes: usize,
     pub(crate) maximum_cpu_quota_millis: u64,
     pub(crate) maximum_cpu_time_ms: u64,
     pub(crate) maximum_wall_time_overrun_ms: u64,
@@ -283,6 +284,7 @@ pub(crate) struct TrialEngineContext {
 pub(crate) struct TrialReceiptPublication {
     pub(crate) schema_version: &'static str,
     pub(crate) request_identity_digest: String,
+    pub(crate) originating_identity: TrialRequestIdentity,
     pub(crate) material_binding_digest: String,
     pub(crate) profile_id: String,
     pub(crate) profile_version: u32,
@@ -300,10 +302,28 @@ pub(crate) struct TrialReceiptPublication {
     pub(crate) execution: TrialExecution,
 }
 
+#[derive(Debug)]
+pub(crate) struct CanonicalTrialReceipt {
+    pub(crate) receipt_digest: String,
+    pub(crate) byte_count: usize,
+    pub(crate) canonical_bytes: Vec<u8>,
+    pub(crate) facts: TrialReceiptPublication,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct TrialReceiptCustodyAck {
+    pub(crate) binding_id: String,
+    pub(crate) content_id: String,
+    pub(crate) put_attempt_id: String,
+    pub(crate) verification_receipt_id: String,
+    pub(crate) content_sha256: String,
+    pub(crate) byte_count: usize,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct PublishedTrialReceipt {
     pub(crate) receipt_handle: String,
-    pub(crate) receipt_digest: String,
+    pub(crate) custody: TrialReceiptCustodyAck,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -314,7 +334,7 @@ pub(crate) struct TrialReceiptPublishFailure {
 pub(crate) trait TrialReceiptPublisher: Send + Sync + 'static {
     fn publish_completed(
         &self,
-        publication: TrialReceiptPublication,
+        receipt: CanonicalTrialReceipt,
     ) -> Result<PublishedTrialReceipt, TrialReceiptPublishFailure>;
 }
 
@@ -668,6 +688,8 @@ fn valid_profile(profile: &TrialProfile) -> bool {
         && profile.maximum_step_output_bytes <= ABSOLUTE_MAXIMUM_FRAME_BYTES
         && profile.maximum_observation_bytes > 0
         && profile.maximum_observation_bytes <= ABSOLUTE_MAXIMUM_FRAME_BYTES
+        && profile.maximum_receipt_bytes > 0
+        && profile.maximum_receipt_bytes <= ABSOLUTE_MAXIMUM_FRAME_BYTES
         && profile.maximum_cpu_quota_millis > 0
         && profile.maximum_cpu_time_ms > 0
         && profile.maximum_wall_time_overrun_ms > 0
@@ -862,8 +884,8 @@ fn relay_once(
         );
         return failed_outcome(code, true, code == TrialRelayFailure::CleanupUnsettled);
     }
-    let publication = match receipt_publication(context, request.plan, execution) {
-        Ok(publication) => publication,
+    let receipt = match canonical_receipt(context, request.plan, execution) {
+        Ok(receipt) => receipt,
         Err(code) => {
             let _ = write_unavailable(
                 &mut stream,
@@ -874,10 +896,12 @@ fn relay_once(
             return failed_outcome(code, true, false);
         }
     };
-    let published = match publisher.publish_completed(publication) {
+    let receipt_digest = receipt.receipt_digest.clone();
+    let receipt_byte_count = receipt.byte_count;
+    let published = match publisher.publish_completed(receipt) {
         Ok(published)
             if valid_receipt_handle(&published.receipt_handle)
-                && valid_sha256(&published.receipt_digest) =>
+                && valid_custody_ack(&published.custody, &receipt_digest, receipt_byte_count) =>
         {
             published
         }
@@ -909,7 +933,7 @@ fn relay_once(
         protocol_version: TRIAL_PROTOCOL,
         outcome: "completed",
         receipt_handle: &published.receipt_handle,
-        receipt_digest: &published.receipt_digest,
+        receipt_digest: &receipt_digest,
         failure_code: None,
     };
     if write_json_frame(
@@ -928,15 +952,15 @@ fn relay_once(
         plan_started: true,
         plan_completed: true,
         receipt_handle: Some(published.receipt_handle),
-        receipt_digest: Some(published.receipt_digest),
+        receipt_digest: Some(receipt_digest),
     }
 }
 
-fn receipt_publication(
+fn canonical_receipt(
     context: &TrialEngineContext,
     plan: TrialPlan,
     execution: TrialExecution,
-) -> Result<TrialReceiptPublication, TrialRelayFailure> {
+) -> Result<CanonicalTrialReceipt, TrialRelayFailure> {
     let plan_value =
         serde_json::to_value(&plan).map_err(|_| TrialRelayFailure::ImplementationUnavailable)?;
     let execution_value = serde_json::to_value(&execution)
@@ -947,9 +971,10 @@ fn receipt_publication(
     if observation_bytes > context.profile.maximum_observation_bytes {
         return Err(TrialRelayFailure::CapacityExceeded);
     }
-    Ok(TrialReceiptPublication {
+    let facts = TrialReceiptPublication {
         schema_version: TRIAL_RECEIPT_SCHEMA,
         request_identity_digest: context.identity.request_digest.clone(),
+        originating_identity: context.identity.clone(),
         material_binding_digest: context.identity.material_binding_digest.clone(),
         profile_id: context.profile.profile_id.clone(),
         profile_version: context.profile.profile_version,
@@ -967,6 +992,22 @@ fn receipt_publication(
         cleanup_confirmed: true,
         plan,
         execution,
+    };
+    let value =
+        serde_json::to_value(&facts).map_err(|_| TrialRelayFailure::ImplementationUnavailable)?;
+    let canonical = canonical_json(&value)
+        .map_err(|_| TrialRelayFailure::ImplementationUnavailable)?
+        .into_bytes();
+    if canonical.is_empty() || canonical.len() > context.profile.maximum_receipt_bytes {
+        return Err(TrialRelayFailure::CapacityExceeded);
+    }
+    let receipt_digest =
+        canonical_hash(&value).map_err(|_| TrialRelayFailure::ImplementationUnavailable)?;
+    Ok(CanonicalTrialReceipt {
+        receipt_digest,
+        byte_count: canonical.len(),
+        canonical_bytes: canonical,
+        facts,
     })
 }
 
@@ -1553,6 +1594,23 @@ fn valid_sha256(value: &str) -> bool {
 
 fn valid_receipt_handle(value: &str) -> bool {
     value.len() == 46 && value.starts_with("trial_receipt_") && value[14..].bytes().all(lower_hex)
+}
+
+fn valid_custody_ack(
+    value: &TrialReceiptCustodyAck,
+    receipt_digest: &str,
+    byte_count: usize,
+) -> bool {
+    [
+        &value.binding_id,
+        &value.content_id,
+        &value.put_attempt_id,
+        &value.verification_receipt_id,
+    ]
+    .into_iter()
+    .all(|item| valid_uuid(item))
+        && value.content_sha256 == receipt_digest
+        && value.byte_count == byte_count
 }
 
 fn lower_hex(value: u8) -> bool {

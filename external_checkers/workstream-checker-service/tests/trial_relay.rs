@@ -50,15 +50,26 @@ struct FakePublisher(Mutex<Vec<Value>>);
 impl TrialReceiptPublisher for FakePublisher {
     fn publish_completed(
         &self,
-        publication: TrialReceiptPublication,
+        receipt: CanonicalTrialReceipt,
     ) -> Result<PublishedTrialReceipt, TrialReceiptPublishFailure> {
-        self.0
-            .lock()
-            .unwrap()
-            .push(serde_json::to_value(publication).unwrap());
+        let parsed: Value = serde_json::from_slice(&receipt.canonical_bytes).unwrap();
+        assert_eq!(parsed, serde_json::to_value(&receipt.facts).unwrap());
+        assert_eq!(receipt.byte_count, receipt.canonical_bytes.len());
+        assert_eq!(
+            receipt.receipt_digest,
+            text_digest(&String::from_utf8(receipt.canonical_bytes).unwrap())
+        );
+        self.0.lock().unwrap().push(parsed);
         Ok(PublishedTrialReceipt {
             receipt_handle: format!("trial_receipt_{}", "a".repeat(32)),
-            receipt_digest: digest('b'),
+            custody: TrialReceiptCustodyAck {
+                binding_id: "018f6f49-66b8-7d2a-bf4d-0e2eeaa00101".into(),
+                content_id: "018f6f49-66b8-7d2a-bf4d-0e2eeaa00102".into(),
+                put_attempt_id: "018f6f49-66b8-7d2a-bf4d-0e2eeaa00103".into(),
+                verification_receipt_id: "018f6f49-66b8-7d2a-bf4d-0e2eeaa00104".into(),
+                content_sha256: receipt.receipt_digest,
+                byte_count: receipt.byte_count,
+            },
         })
     }
 }
@@ -148,6 +159,7 @@ fn profile() -> TrialProfile {
         maximum_step_timeout_ms: 1_000,
         maximum_step_output_bytes: 4_096,
         maximum_observation_bytes: 32 * 1024,
+        maximum_receipt_bytes: 64 * 1024,
         maximum_cpu_quota_millis: 2_000,
         maximum_cpu_time_ms: 10_000,
         maximum_wall_time_overrun_ms: 100,
