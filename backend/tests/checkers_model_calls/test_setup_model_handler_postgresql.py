@@ -385,6 +385,7 @@ class _Journey:
     reserve_observations: list[tuple[str, str, str]]
     stages: list[str]
     failures: list[BaseException]
+    evidence_diagnostics: list[dict[str, object] | None]
     fail_completion: list[bool]
     outputs: object
 
@@ -481,6 +482,58 @@ class _ObservedCalls:
 
     async def reserve_dispatch(self, prepared, request_evidence):
         self.journey.stages.append("reserve_dispatch")
+        diagnostic = await self.session.scalar(
+            text(
+                "select jsonb_build_object("
+                "'binding',jsonb_build_array(binding.resource_type='setup_model_call',"
+                "binding.resource_id=:effect,binding.logical_role='model_request',"
+                "binding.scope_version=1,binding.attribution_type='service_identity',"
+                "binding.actor_id='workstream.artifact.checker_output'),"
+                "'content',jsonb_build_array(binding.content_id=:content,"
+                "content.sha256=:sha,content.byte_count=:bytes,content.media_type=:media),"
+                "'attempt',jsonb_build_array(attempt.id=:attempt,"
+                "attempt.model_call_attempt_id=:effect,attempt.checker_run_id is null,"
+                "attempt.producer_request_type='setup_model_output',"
+                "attempt.logical_role='model_request',attempt.sha256=:sha,"
+                "attempt.byte_count=:bytes,attempt.media_type=:media,"
+                "attempt.status='object_confirmed',attempt.checker_output_custody_sealed,"
+                "attempt.replica_id=replica.id,"
+                "attempt.storage_namespace_id=replica.storage_namespace_id,"
+                "attempt.namespace_fingerprint=replica.namespace_fingerprint,"
+                "attempt.canonical_target=replica.provider_object_ref),"
+                "'receipt',jsonb_build_array(binding.verification_receipt_id=:receipt,"
+                "receipt.outcome='verified',"
+                "receipt.execution_generation=job.execution_generation,"
+                "receipt.observed_sha256=:sha,receipt.observed_byte_count=:bytes),"
+                "'job',jsonb_build_array(job.originating_put_attempt_id=attempt.id,"
+                "job.status='verified',job.terminal_result_code='verified',"
+                "job.terminal_at is not null,job.checker_output_custody_sealed),"
+                "'replica',jsonb_build_array(replica.content_id=content.id,"
+                "replica.checker_output_custody_sealed,"
+                "replica.verification_state='verified',"
+                "replica.availability_state='available',replica.integrity_state='valid')) "
+                "from artifact_bindings binding "
+                "left join artifact_contents content on content.id=binding.content_id "
+                "left join artifact_put_attempts attempt on attempt.id=binding.put_attempt_id "
+                "left join artifact_verification_receipts receipt "
+                "on receipt.id=binding.verification_receipt_id "
+                "left join artifact_verification_jobs job "
+                "on job.id=receipt.verification_job_id "
+                "left join artifact_replicas replica on replica.id=job.replica_id "
+                "where binding.id=:binding"
+            ),
+            {
+                "binding": str(request_evidence.binding_id),
+                "content": str(request_evidence.content_id),
+                "attempt": str(request_evidence.put_attempt_id),
+                "receipt": str(request_evidence.verification_receipt_id),
+                "effect": str(prepared.effect_id),
+                "sha": request_evidence.content_sha256,
+                "bytes": request_evidence.byte_count,
+                "media": request_evidence.media_type,
+            },
+        )
+        self.journey.evidence_diagnostics.append(diagnostic)
         row = (
             await self.session.execute(
                 text(
@@ -584,6 +637,7 @@ async def _journey(storage: _StorageCase, access) -> _Journey:
         [],
         [],
         stages,
+        [],
         [],
         [True],
         observed_outputs,
@@ -712,9 +766,18 @@ async def test_setup_response_recovers_from_verified_minio_after_ledger_loss(
         first = await journey.handler().handle(journey.request)
         assert first.outcome == "unavailable"
         assert first.failure_code == "model_call_unavailable"
-        assert [f"{type(exc).__name__}:{exc}" for exc in journey.failures] == [
-            "ModelCallUnavailable:simulated_setup_ledger_unavailable"
-        ]
+        failures = [f"{type(exc).__name__}:{exc}" for exc in journey.failures]
+        if failures != ["ModelCallUnavailable:simulated_setup_ledger_unavailable"]:
+            raise AssertionError(
+                json.dumps(
+                    {
+                        "failures": failures,
+                        "stages": journey.stages,
+                        "evidence": journey.evidence_diagnostics,
+                    },
+                    sort_keys=True,
+                )
+            )
         assert journey.reserve_observations == [("setup_model_call", "model_request", "verified")]
         assert journey.provider_calls == ["dispatch"]
         assert journey.fail_completion == [False]
