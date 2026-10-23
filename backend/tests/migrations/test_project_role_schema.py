@@ -107,6 +107,14 @@ def test_audit_facts_restore_with_safe_helpers(
             await connection.execute(
                 "SELECT pg_catalog.set_config('search_path',$1,false)", search_path
             )
+            if project is not None:
+                # The grant helper is also a callable contract, independently of the event wrapper.
+                statement = (
+                    "SELECT public.authority_grant_facts_are_safe("
+                    "$1::json,ARRAY['submitter','reviewer'],'active',true,$2::text)"
+                )
+                assert await connection.fetchval(statement, json.dumps(valid), project) is True
+                assert await connection.fetchval(statement, json.dumps(invalid), project) is False
             await connection.copy_records_to_table(
                 "restore_audit_facts",
                 schema_name="pg_temp",

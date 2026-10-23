@@ -4,13 +4,13 @@
 - Durable disposition: Planned
 - Intended merge outcome: Standard PostgreSQL backup restoration validates retained authorization audit rows without relying on the restoring session's search path.
 
-## Intent and observed failure
+## Intent
 
 The hosted drill for #555/#582 restored its retained database snapshot into a network-isolated PostgreSQL 16 container. Standard `pg_restore --exit-on-error --no-owner --no-privileges` failed while loading `audit_events`: `authority_event_facts_are_safe` could not resolve `authority_facts_are_safe`. The function and its grant-facts helper use unqualified sibling calls and do not pin their own search paths. `pg_restore` deliberately clears the session search path.
 
 An isolated diagnostic restored schema first, pinned those two functions to `pg_catalog, public, pg_temp`, and then restored data and post-data successfully. All 121 public tables restored; the source database and retained snapshot were unchanged. This is a proposed-repair probe, not a claim that the original snapshot restores unmodified or that the full contribution journey has passed.
 
-## Scope
+## Bounded change
 
 Allowed files:
 
@@ -35,7 +35,7 @@ Prohibited changes:
 
 Security/architecture plan review: PASS WITH LOW RISKS. The two helper paths cover the reproduced failure. Existing pre-fix backups still require isolated schema-first repair or replacement with a fresh post-upgrade backup; this change does not silently rewrite old backups.
 
-## Acceptance and verification
+## Acceptance criteria
 
 - Valid retained audit facts validate with an empty session search path.
 - Invalid private/role facts remain rejected.
@@ -44,7 +44,7 @@ Security/architecture plan review: PASS WITH LOW RISKS. The two helper paths cov
 - Removing the function-path repair makes the focused regression fail for missing helper resolution.
 - Exactly one migration head, correct fingerprint, unchanged test selection and forward-only migration behavior.
 
-## Risk and review
+## Risk and review routing
 
 Risk: L1, authorization audit storage and restore reliability.
 Required review: security, architecture, QA/test-delta; CI integrity if schema fingerprint or test allocation metadata changes; docs for affected claims.
@@ -54,7 +54,7 @@ Human focus: the repair changes name resolution only, preserves validation seman
 
 This closes a discovered restore prerequisite under #582; it does not activate a new product capability or complete the hosted journey. Assess the current release-gate wording with the final candidate.
 
-## Verification in progress
+## Evidence
 
 - Initial focused PostgreSQL run: seven passed, including four COPY cases, the existing role-vocabulary proof, single-head graph, and immediate-predecessor upgrade. Subsequent custody/downgrade refinements require a fresh run.
 - Isolated restore diagnostic: after correcting the two function paths, a fresh ordinary dump restored without schema interception. All 121 table row counts/digests matched. Owned containers were removed. This does not prove future task/submission/acceptance recovery; those records do not yet exist in this drill.
