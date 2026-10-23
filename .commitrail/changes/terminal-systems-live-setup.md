@@ -767,3 +767,12 @@ Preserve every prior target assignment, the protected base and all lane owners;
 recompute only the combined authority digest and shared-family fingerprint.
 Main's unit-creation migration, permission contract and tests remain intact.
 Validate the combined catalogue and full hosted run after this integration.
+
+The final hosted API drill revealed the same empty-ready-inventory assumption in
+`backend/scripts/guide_compilation_e2e.py`, outside the pytest lanes. Supply its
+scripted runtime with an explicit informational guide-context requirement linked
+to the actual opened originals. Preserve exact provider/resource custody,
+finalization replay and all public-API assertions. This is a contract-drill
+fixture, not a claim of source-analysis quality. Rerun the complete API drill
+against isolated PostgreSQL and MinIO before the final push, retaining its
+pre-fix rejection and post-fix cleanup evidence.
