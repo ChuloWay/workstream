@@ -13,7 +13,6 @@ from app.modules.checkers.api.output_custody import (
     CheckerOutputReservation,
     CheckerOutputSlot,
 )
-from app.modules.authorization.runtime import AuthorizationContext
 from app.modules.authorization.catalogue import ActionId
 from app.modules.actors.api import ServiceIdentity
 
@@ -369,109 +368,6 @@ class ArtifactRecoveryIneligibleError(ArtifactRecoveryError):
 
 class ArtifactRecoveryNotFoundError(ArtifactRecoveryError):
     """Conceal a missing recovery lineage before an exact authority decision."""
-
-
-@final
-@dataclass(frozen=True, slots=True)
-class ArtifactRecoveryAuthorityFacts:
-    """Canonical facts bound to one exact Operator retry decision."""
-
-    project_id: UUID
-    task_id: UUID
-    submission_id: UUID | None
-    source_verification_job_id: UUID
-    expected_source_job_cas_version: int
-
-
-@final
-@dataclass(frozen=True, slots=True)
-class ArtifactRecoveryAuthorizationEvidence:
-    """Privacy-bounded evidence returned by the AUTH-owned recovery seam."""
-
-    action_id: ActionId
-    permission_id: str
-    decision_id: UUID
-
-
-class ArtifactRecoveryAuthority(Protocol):
-    """Fresh exact Operator authority seam owned by the later activation chunk."""
-
-    async def authorize(
-        self,
-        *,
-        authorization_context: AuthorizationContext,
-        facts: ArtifactRecoveryAuthorityFacts,
-    ) -> ArtifactRecoveryAuthorizationEvidence: ...
-
-
-class DenyArtifactRecoveryAuthority:
-    """Production-safe recovery authority until AUTH activates the Operator action."""
-
-    async def authorize(
-        self,
-        *,
-        authorization_context: AuthorizationContext,
-        facts: ArtifactRecoveryAuthorityFacts,
-    ) -> ArtifactRecoveryAuthorizationEvidence:
-        del authorization_context, facts
-        raise ArtifactAuthorityDeniedError("artifact recovery action is unavailable")
-
-
-class ArtifactOperatorResourceType(StrEnum):
-    """Closed resource vocabulary exposed to the AUTH activation adapter."""
-
-    BINDING_SCOPE = "artifact_binding_scope"
-    CONTENT = "artifact_content"
-    REPLICA = "artifact_replica"
-    VERIFICATION_JOB = "artifact_verification_job"
-    RECOVERY_ATTEMPT = "artifact_recovery_attempt"
-    AUDIT_RESOURCE = "artifact_audit_resource"
-    ADMISSION_SCOPE = "artifact_admission_scope"
-
-
-@final
-@dataclass(frozen=True, slots=True)
-class ArtifactOperatorAuthorityFacts:
-    """Canonical, provider-neutral facts for one exact Operator decision."""
-
-    resource_type: ArtifactOperatorResourceType
-    resource_id: str
-    project_ids: tuple[UUID, ...]
-    action_id: ActionId
-
-
-@final
-@dataclass(frozen=True, slots=True)
-class ArtifactOperatorAuthorizationEvidence:
-    """Bounded evidence returned by the later AUTH activation adapter."""
-
-    action_id: ActionId
-    permission_id: str
-    decision_id: UUID
-
-
-class ArtifactOperatorAuthority(Protocol):
-    """Exact Operator read authority seam; it never evaluates roles or grants."""
-
-    async def authorize(
-        self,
-        *,
-        authorization_context: AuthorizationContext,
-        facts: ArtifactOperatorAuthorityFacts,
-    ) -> ArtifactOperatorAuthorizationEvidence: ...
-
-
-class DenyArtifactOperatorAuthority:
-    """Production-safe authority while the Operator actions remain planned."""
-
-    async def authorize(
-        self,
-        *,
-        authorization_context: AuthorizationContext,
-        facts: ArtifactOperatorAuthorityFacts,
-    ) -> ArtifactOperatorAuthorizationEvidence:
-        del authorization_context, facts
-        raise ArtifactAuthorityDeniedError("artifact Operator action is unavailable")
 
 
 # Only these current producers use post-put full-object verification.

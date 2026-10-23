@@ -30,6 +30,12 @@ CONTEXT_DIGEST_RESOURCE_TYPES = (
     "artifact_put_attempt",
     "artifact_verification_job",
     "artifact_pending_work",
+    "artifact_binding_scope",
+    "artifact_content",
+    "artifact_replica",
+    "artifact_recovery_attempt",
+    "artifact_audit_resource",
+    "artifact_admission_scope",
     "guide_source_binding",
     "guide_source_read",
     "pre_submit_checker_input",
@@ -122,6 +128,12 @@ AuthorizationDecisionResourceType = Literal[
     "artifact_put_attempt",
     "artifact_verification_job",
     "artifact_pending_work",
+    "artifact_binding_scope",
+    "artifact_content",
+    "artifact_replica",
+    "artifact_recovery_attempt",
+    "artifact_audit_resource",
+    "artifact_admission_scope",
     "guide_source_binding",
     "guide_source_read",
     "pre_submit_checker_input",
@@ -197,6 +209,7 @@ class AuthorizationDecision(BaseModel):
             "workstream:admin_role_definitions",
             "workstream:admin_role_grants",
             "workstream:artifact_pending_work",
+            "workstream:artifact_storage_readiness",
         ]
     )
     resource_context_digest: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")

@@ -73,6 +73,10 @@ from app.modules.artifacts.metrics import (
     artifact_admission_metrics,
 )
 from app.modules.artifacts.repository import ArtifactRepository, GuideSourceIngestConflict
+from app.modules.artifacts.api.operator_authority import (
+    ArtifactRecoveryAuthority,
+    ArtifactRecoveryAuthorityFacts,
+)
 from app.modules.artifacts.provider_activation import require_provider_activation_for_terminal
 from app.modules.artifacts.authorization import (
     GuideArtifactPreparedAuthorization,
@@ -92,8 +96,6 @@ from app.modules.artifacts.schemas import (
     ArtifactPendingWorkAuthorityFacts,
     ArtifactVerificationAuthorityFacts,
     ArtifactRecoveryResult,
-    ArtifactRecoveryAuthority,
-    ArtifactRecoveryAuthorityFacts,
     ArtifactRecoveryConflictError,
     ArtifactRecoveryIneligibleError,
     ArtifactRecoveryNotFoundError,
@@ -117,14 +119,11 @@ from app.modules.checkers.api.output_custody import (
     CheckerOutputUnavailable,
 )
 from app.modules.authorization.runtime import (
-    ActorKind,
-    ActorStatus,
     AuthorizationContext,
     HumanAuthorizationContext,
-    IdentityLinkStatus,
 )
 from app.modules.authorization.prepared import PreparedAuthorizationHandle
-from app.modules.authorization.catalogue import ActionId, PermissionId
+from app.modules.authorization.catalogue import ACTION_BY_ID, ActionId
 from app.modules.audit.repository import AuditRepository
 from app.modules.tasks.models import AuditEvent
 
@@ -995,6 +994,10 @@ class ArtifactStorageOrchestrator:
                     normalized_display_name=None,
                 )
             )
+            locked_content = await self._repo.lock_content(content.id)
+            if locked_content is None:
+                raise ArtifactIngestStateError("artifact content is unavailable")
+            content = locked_content
             await self._require_terminal_activation(activation_id)
             replica = await self._repo.get_or_create_replica(
                 ArtifactReplica(
@@ -1894,7 +1897,6 @@ class ArtifactRecoveryService:
         self._settings = settings
         self._authority = authority
         self._repo = ArtifactRepository(session)
-        self._actors = ActorService(session)
         self._audit = AuditRepository(session)
 
     async def retry_verification(self, request: ArtifactRecoveryRequest) -> ArtifactRecoveryResult:
@@ -2015,7 +2017,7 @@ class ArtifactRecoveryService:
                     "retry_verification_job_id": retry_id,
                     "recovery_class": self._RECOVERY_CLASS,
                     "request_digest": digest,
-                    "authorization_action_id": authorization.action_id.value,
+                    "authorization_action_id": authorization.action_id,
                     "authorization_permission_id": authorization.permission_id,
                     "authorization_decision_id": str(authorization.decision_id),
                     "authorization_request_id": str(context.request_id),
@@ -2053,24 +2055,8 @@ class ArtifactRecoveryService:
         task_id: UUID,
         submission_id: UUID | None,
     ):
-        """Revalidate the human requester and exact Operator action on every call."""
+        """Use the canonical AUTH lock order for each fresh retry decision."""
         context = request.authorization_context
-        actor = await self._actors.lock_admission_proof(
-            context.actor_profile_id, context.identity_link_id
-        )
-        if (
-            context.actor_kind is not ActorKind.HUMAN
-            or context.actor_status is not ActorStatus.ACTIVE
-            or context.identity_link_status is not IdentityLinkStatus.ACTIVE
-            or actor is None
-            or actor.actor_kind != "human"
-            or actor.actor_status != "active"
-            or actor.service_identity is not None
-            or actor.identity_link_id != str(context.identity_link_id)
-            or actor.identity_link_subject_kind != "human"
-            or actor.identity_link_status != "active"
-        ):
-            raise ArtifactAuthorityDeniedError("artifact recovery requester is unavailable")
         authorization = await self._authority.authorize(
             authorization_context=context,
             facts=ArtifactRecoveryAuthorityFacts(
@@ -2082,8 +2068,9 @@ class ArtifactRecoveryService:
             ),
         )
         if (
-            authorization.action_id is not ActionId.ARTIFACT_VERIFICATION_JOB_RETRY
-            or authorization.permission_id != PermissionId.ARTIFACT_VERIFICATION_JOB_RETRY.value
+            authorization.action_id != ActionId.ARTIFACT_VERIFICATION_JOB_RETRY.value
+            or authorization.permission_id
+            != ACTION_BY_ID[ActionId.ARTIFACT_VERIFICATION_JOB_RETRY].permission_id.value
         ):
             raise ArtifactAuthorityDeniedError(
                 "artifact recovery authorization evidence is invalid"

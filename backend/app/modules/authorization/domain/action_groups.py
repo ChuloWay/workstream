@@ -10,6 +10,7 @@ from app.modules.authorization.domain import (
     checker_registry,
     contribution_policies,
 )
+from app.modules.authorization.domain.artifact_operator import ARTIFACT_OPERATOR_ACTIONS
 from app.modules.authorization.runtime import PROJECT_SUBMISSION_POLICY_TARGET_KIND_BY_ACTION
 
 GUIDE_BOUND_PROJECT_MANAGER_ACTIONS = frozenset(
@@ -64,6 +65,7 @@ CONTEXT_DIGEST_ACTIONS = frozenset(
         *contribution_policies.CONTRIBUTION_POLICY_ACTIONS,
         *checker_models.CHECKER_MODEL_ACTIONS,
         *checker_outputs.CHECKER_OUTPUT_ACTIONS,
+        *ARTIFACT_OPERATOR_ACTIONS,
     }
 )
 
