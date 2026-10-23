@@ -10,10 +10,14 @@ from openai import NotFoundError
 import pytest
 
 from app.adapters.project_agents.openai_workspace import (
-    cleanup_recorded_openai_guide_resources,
-    cleanup_retained_openai_guide_resources,
+    OpenAIGuideRuntimeCleanupAdapter,
+    RETAINED_OPENAI_GUIDE_RUNTIME_KEY,
+    _cleanup_recorded_openai_guide_resources,
 )
-from app.modules.projects.api.guide_documents import GuideRuntimeResource
+from app.modules.projects.api.guide_documents import (
+    GUIDE_RUNTIME_RESOURCE_CLEANUP_CAPABILITY_KEY,
+    GuideRuntimeResource,
+)
 
 
 def missing(identifier="missing"):
@@ -86,7 +90,7 @@ async def test_cleanup_deletes_only_exact_recorded_ids_and_confirms_absence():
             missing(identifier)
 
     client = SimpleNamespace(containers=Containers(), files=Files())
-    assert await cleanup_recorded_openai_guide_resources(client, custody) is True
+    assert await _cleanup_recorded_openai_guide_resources(client, custody) is True
     assert custody.deleted == set(custody.resources)
     assert custody.failed == set()
     assert calls == [
@@ -112,7 +116,7 @@ async def test_cleanup_keeps_unconfirmed_or_wrong_receipts_pending():
             retrieve=AsyncMock(side_effect=lambda identifier: missing(identifier)),
         ),
     )
-    assert await cleanup_recorded_openai_guide_resources(client, custody) is False
+    assert await _cleanup_recorded_openai_guide_resources(client, custody) is False
     assert custody.deleted == set()
     assert custody.failed == {container.allocation_id, file.allocation_id}
     client.containers.delete.assert_awaited_once_with("cntr_owned")
@@ -126,7 +130,7 @@ async def test_cleanup_does_not_discover_or_touch_unrecorded_resources():
         containers=SimpleNamespace(delete=AsyncMock(), retrieve=AsyncMock()),
         files=SimpleNamespace(delete=AsyncMock(), retrieve=AsyncMock()),
     )
-    assert await cleanup_recorded_openai_guide_resources(client, custody) is True
+    assert await _cleanup_recorded_openai_guide_resources(client, custody) is True
     client.containers.delete.assert_not_awaited()
     client.containers.retrieve.assert_not_awaited()
     client.files.delete.assert_not_awaited()
@@ -139,7 +143,10 @@ async def test_retained_cleanup_requires_openai_key_and_never_uses_openrouter(
 ):
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     monkeypatch.setenv("OPENROUTER_API_KEY", "must-not-be-used")
-    assert await cleanup_retained_openai_guide_resources(Custody(())) is False
+    adapter = OpenAIGuideRuntimeCleanupAdapter()
+    assert adapter.identity.capability_key == GUIDE_RUNTIME_RESOURCE_CLEANUP_CAPABILITY_KEY
+    assert adapter.identity.provider_key == RETAINED_OPENAI_GUIDE_RUNTIME_KEY
+    assert await adapter.cleanup(Custody(())) is False
 
 
 @pytest.mark.asyncio
@@ -166,7 +173,7 @@ async def test_retained_cleanup_constructs_dedicated_openai_origin_client(monkey
         lambda **kwargs: http_options.append(kwargs) or owned_http_client,
     )
     monkeypatch.setattr("openai.AsyncOpenAI", Client)
-    assert await cleanup_retained_openai_guide_resources(custody) is True
+    assert await OpenAIGuideRuntimeCleanupAdapter().cleanup(custody) is True
     assert observed == [
         {
             "api_key": "cleanup-only",

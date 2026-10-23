@@ -304,7 +304,7 @@ async def test_cleanup_bypasses_open_inference_circuit(monkeypatch):
     from openai import NotFoundError
     from app.adapters.project_agents import provider_resilience as owner
     from app.adapters.project_agents.openai_workspace import (
-        cleanup_recorded_openai_guide_resources,
+        _cleanup_recorded_openai_guide_resources,
     )
     from app.modules.projects.api.guide_documents import GuideRuntimeResource
 
@@ -338,7 +338,7 @@ async def test_cleanup_bypasses_open_inference_circuit(monkeypatch):
             raise NotFoundError("gone", response=httpx2.Response(404,
                 request=httpx2.Request("GET", "https://api.openai.com/v1/files/file_assigned")), body=None)
 
-    assert await cleanup_recorded_openai_guide_resources(
+    assert await _cleanup_recorded_openai_guide_resources(
         SimpleNamespace(files=Files()), Resources()
     ) is True
     assert calls == [("delete", "file_assigned"), ("retrieve", "file_assigned"), ("record_deleted", allocation)]

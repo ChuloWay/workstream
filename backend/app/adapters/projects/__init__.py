@@ -26,8 +26,10 @@ from app.modules.projects.api.guide_documents import (
     GuideDocumentManifestPort,
     GuideDocumentToolsFactory,
     GuideDocumentAccessFactory,
+    GuideRuntimeResourceCleanupAdapter,
 )
 from app.interfaces.project_agents import ProjectGuideAgentRuntime
+from app.interfaces.external_services import ExternalServiceAdapterFactory
 from app.interfaces.project_guide_runtime import ProjectGuideRuntimeConfiguration
 from app.modules.checkers.api.external import ExternalCheckerCapabilityProjection
 from app.modules.authorization.api import (
@@ -116,9 +118,11 @@ async def cleanup_project_guide_runtime_resources(
     session_factory,
     *,
     retained_runtime_key,
-    cleanup_resources,
+    cleanup_adapter_factory: ExternalServiceAdapterFactory[
+        GuideRuntimeResourceCleanupAdapter
+    ],
 ):
-    """Run one fixed cleanup-only adapter over immutable retained IDs."""
+    """Select a cleanup-only adapter from each immutable retained runtime identity."""
     from app.modules.projects.guide_compilation.runtime_resources import (
         SqlAlchemyGuideRuntimeCleanupCustody,
         pending_runtime_resource_cleanup,
@@ -131,13 +135,14 @@ async def cleanup_project_guide_runtime_resources(
     completed = 0
     for candidate in candidates:
         try:
+            cleanup_adapter = cleanup_adapter_factory.create(candidate.runtime_key)
             custody = SqlAlchemyGuideRuntimeCleanupCustody(
                 session_factory,
                 candidate.attempt_id,
                 candidate.manifest_sha256,
                 candidate.runtime_key,
             )
-            completed += bool(await cleanup_resources(custody))
+            completed += bool(await cleanup_adapter.cleanup(custody))
         except Exception:
             # Keep exact-ID custody for the next bounded scan; never re-enter inference.
             continue

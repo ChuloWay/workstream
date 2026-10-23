@@ -221,27 +221,119 @@ async def test_current_provider_selection_cannot_redirect_retained_cleanup(
 
 
 @pytest.mark.parametrize("fail", [False, True])
-async def test_cleanup_composition_uses_only_fixed_cleanup_callable(retained_history_case, fail):
+async def test_cleanup_composition_uses_only_selected_typed_adapter(retained_history_case, fail):
     from app.adapters.projects import cleanup_project_guide_runtime_resources
+    from app.interfaces.external_services import (
+        ExternalServiceAdapterFactory,
+        ExternalServiceAdapterIdentity,
+    )
+    from app.modules.projects.api.guide_documents import (
+        GUIDE_RUNTIME_RESOURCE_CLEANUP_CAPABILITY_KEY,
+        GuideRuntimeResourceCleanupAdapter,
+    )
 
     grant, _context, identifiers, _unknown = retained_history_case
     calls = []
 
-    async def cleanup(custody):
-        rows = await custody.cleanup_resources()
-        calls.append({row.allocation_id for row in rows})
-        if fail:
-            raise RuntimeError("provider unavailable")
-        for row in rows:
-            await custody.record_deleted(row.allocation_id)
-        return True
+    class CleanupAdapter:
+        identity = ExternalServiceAdapterIdentity(
+            GUIDE_RUNTIME_RESOURCE_CLEANUP_CAPABILITY_KEY,
+            RETAINED_RUNTIME,
+        )
+
+        async def cleanup(self, custody):
+            rows = await custody.cleanup_resources()
+            calls.append({row.allocation_id for row in rows})
+            if fail:
+                raise RuntimeError("provider unavailable")
+            for row in rows:
+                await custody.record_deleted(row.allocation_id)
+            return True
+
+    cleanup_adapters = ExternalServiceAdapterFactory[
+        GuideRuntimeResourceCleanupAdapter
+    ](GUIDE_RUNTIME_RESOURCE_CLEANUP_CAPABILITY_KEY)
+    cleanup_adapters.register(RETAINED_RUNTIME, CleanupAdapter)
 
     result = await cleanup_project_guide_runtime_resources(
         grant._sessions,
         retained_runtime_key=RETAINED_RUNTIME,
-        cleanup_resources=cleanup,
+        cleanup_adapter_factory=cleanup_adapters,
     )
     assert result == {"selected": 1, "completed": int(not fail)}
     assert calls == [identifiers]
     if fail:
         assert {state for state, _ in (await persisted_states(grant)).values()} == {"allocated"}
+
+
+async def test_cleanup_composition_rejects_unregistered_retained_identity_without_constructing(
+    retained_history_case,
+):
+    from app.adapters.projects import cleanup_project_guide_runtime_resources
+    from app.interfaces.external_services import ExternalServiceAdapterFactory
+    from app.modules.projects.api.guide_documents import (
+        GUIDE_RUNTIME_RESOURCE_CLEANUP_CAPABILITY_KEY,
+        GuideRuntimeResourceCleanupAdapter,
+    )
+
+    grant, _context, _identifiers, _unknown = retained_history_case
+    cleanup_adapters = ExternalServiceAdapterFactory[
+        GuideRuntimeResourceCleanupAdapter
+    ](GUIDE_RUNTIME_RESOURCE_CLEANUP_CAPABILITY_KEY)
+    constructed = []
+    cleanup_adapters.register(
+        "another_runtime",
+        lambda: constructed.append(True),
+    )
+
+    result = await cleanup_project_guide_runtime_resources(
+        grant._sessions,
+        retained_runtime_key=RETAINED_RUNTIME,
+        cleanup_adapter_factory=cleanup_adapters,
+    )
+
+    assert result == {"selected": 1, "completed": 0}
+    assert constructed == []
+    assert {state for state, _ in (await persisted_states(grant)).values()} == {"allocated"}
+
+
+async def test_cleanup_composition_rejects_wrong_adapter_identity_before_cleanup(
+    retained_history_case,
+):
+    from app.adapters.projects import cleanup_project_guide_runtime_resources
+    from app.interfaces.external_services import (
+        ExternalServiceAdapterFactory,
+        ExternalServiceAdapterIdentity,
+    )
+    from app.modules.projects.api.guide_documents import (
+        GUIDE_RUNTIME_RESOURCE_CLEANUP_CAPABILITY_KEY,
+        GuideRuntimeResourceCleanupAdapter,
+    )
+
+    grant, _context, _identifiers, _unknown = retained_history_case
+    cleanup_calls = []
+
+    class WrongIdentityAdapter:
+        identity = ExternalServiceAdapterIdentity(
+            GUIDE_RUNTIME_RESOURCE_CLEANUP_CAPABILITY_KEY,
+            "another_runtime",
+        )
+
+        async def cleanup(self, custody):
+            cleanup_calls.append(custody)
+            return True
+
+    cleanup_adapters = ExternalServiceAdapterFactory[
+        GuideRuntimeResourceCleanupAdapter
+    ](GUIDE_RUNTIME_RESOURCE_CLEANUP_CAPABILITY_KEY)
+    cleanup_adapters.register(RETAINED_RUNTIME, WrongIdentityAdapter)
+
+    result = await cleanup_project_guide_runtime_resources(
+        grant._sessions,
+        retained_runtime_key=RETAINED_RUNTIME,
+        cleanup_adapter_factory=cleanup_adapters,
+    )
+
+    assert result == {"selected": 1, "completed": 0}
+    assert cleanup_calls == []
+    assert {state for state, _ in (await persisted_states(grant)).values()} == {"allocated"}
