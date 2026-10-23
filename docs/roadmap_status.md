@@ -393,7 +393,7 @@ policy or activate a guide; the separate CLI manual artifact-policy writes only
 append retained drafts after authoritative setup and never authorize activation.
 The separate public `GET /api/v1/projects` and `workstream project list` return
 only bounded ID/name/status pages for the four current system project-reader
-roles. `GET /actors/me/projects` still lists only the caller's exact-grant
+roles. `GET /api/v1/actors/me/projects` still lists only the caller's exact-grant
 projects; neither route discloses guide content by catalogue authority alone.
 The CLI also exposes the eight existing administrative actor, identity-link,
 fixed-service provision and grant POSTs as deliberate keyed commands under the
