@@ -474,12 +474,16 @@ def test_retry_source_page_and_exact_reason_bound_receipt(cli):
             ("slot_index", True),
             ("requirement_id", "invalid space"),
         ):
-            invalid_candidates.append([candidate | {"slot": candidate["slot"] | {key: value}}])
+            invalid_candidates.append(
+                [candidate | {"slot": candidate["slot"] | {key: value}}]
+            )
         for candidates in invalid_candidates:
             invalid_page = deepcopy(model_page)
             invalid_page["items"][0]["model_recovery_candidates"] = candidates
             response["body"] = json.dumps(invalid_page).encode()
-            assert_failure(invoke(cli, origin, "retry-sources", PROJECT), "invalid_api_response")
+            assert_failure(
+                invoke(cli, origin, "retry-sources", PROJECT), "invalid_api_response"
+            )
 
         response.update(status=201, body=json.dumps(receipt()).encode())
         for _ in range(2):
