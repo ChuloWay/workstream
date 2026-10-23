@@ -1,15 +1,19 @@
 """Local guide parsing must retain the same isolation boundary as deployment."""
 
+from contextlib import chdir
 import json
 import os
 from pathlib import Path
 import subprocess
 import sys
+import tempfile
 from types import ModuleType
 import unittest
 from unittest.mock import patch
 
 import yaml
+
+from scripts import verify_guide_parser_isolation as parser_proof
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "backend"))
@@ -20,6 +24,39 @@ from app.adapters.project_agents import (  # noqa: E402
 )
 from app.core.config import Settings  # noqa: E402
 from app.core.project_agents import project_guide_runtime_configuration  # noqa: E402
+
+
+class ParserProofCheckoutTests(unittest.TestCase):
+    def test_read_only_inspection_handles_large_index_and_rejects_dirty_source(self):
+        with tempfile.TemporaryDirectory(prefix="ws-parser-checkout-") as directory:
+            root = Path(directory)
+
+            def git(*arguments):
+                return subprocess.check_output(
+                    ["git", "-c", "core.hooksPath=/dev/null", *arguments],
+                    cwd=root, stderr=subprocess.DEVNULL,
+                ).decode().strip()
+
+            git("init", "--quiet", "--template=")
+            for number in range(1200):
+                (root / f"{number:04d}-{'x' * 120}").touch()
+            git("add", ".")
+            git("-c", "user.name=Parser Proof", "-c", "user.email=proof@example.invalid",
+                "commit", "--quiet", "-m", "Synthetic source")
+            head = git("rev-parse", "HEAD")
+            index = root / ".git/index"
+            self.assertGreater(index.stat().st_size, parser_proof.OUTPUT_LIMIT)
+            before = index.read_bytes()
+            source = root / f"0000-{'x' * 120}"
+            metadata = source.stat()
+            os.utime(source, ns=(metadata.st_atime_ns, metadata.st_mtime_ns - 10**9))
+            with chdir(root):
+                self.assertEqual(parser_proof._source_checkout(head), head)
+                self.assertEqual(index.read_bytes(), before)
+                self.assertFalse((root / ".git/index.lock").exists())
+                source.write_text("changed")
+                with self.assertRaisesRegex(ValueError, "checkout is dirty"):
+                    parser_proof._source_checkout(head)
 
 
 class LocalGuideRuntimeTests(unittest.TestCase):

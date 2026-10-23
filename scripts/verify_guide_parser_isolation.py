@@ -625,6 +625,20 @@ def _broker_failure(logs: bytes) -> ProofFailure:
     return ProofFailure(f"broker_{phase}")
 
 
+def _source_checkout(expected_head: str | None) -> str:
+    # run() bounds all child file writes, including Git's optional index refresh.
+    # Evidence inspection must be read-only even when a large index is stale.
+    git = ["git", "--no-optional-locks"]
+    source_sha = checked([*git, "rev-parse", "HEAD"]).decode().strip()
+    if expected_head is not None:
+        require(source_sha == expected_head, "guide parser proof checkout differs")
+        require(
+            not checked([*git, "status", "--porcelain"]),
+            "guide parser proof checkout is dirty",
+        )
+    return source_sha
+
+
 def host_main(
     image: str,
     owner: str,
@@ -634,13 +648,7 @@ def host_main(
 ) -> int:
     _set_host_phase("preflight")
     _validate_owner(owner)
-    source_sha = checked(["git", "rev-parse", "HEAD"]).decode().strip()
-    if expected_head is not None:
-        require(source_sha == expected_head, "guide parser proof checkout differs")
-        require(
-            not checked(["git", "status", "--porcelain"]),
-            "guide parser proof checkout is dirty",
-        )
+    source_sha = _source_checkout(expected_head)
     image_id = checked(["docker", "image", "inspect", image, "--format", "{{.Id}}"]).decode().strip()
     require(
         len(image_id) == 71
