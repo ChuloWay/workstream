@@ -180,6 +180,33 @@ def test_keyboard_journey_uses_only_nine_fresh_public_reads():
         assert TOKEN.encode() not in terminal.raw
 
 
+def test_startup_retry_binds_profile_before_any_project_read():
+    reads = Reads()
+    profile_reads = 0
+
+    def profile(_):
+        nonlocal profile_reads
+        profile_reads += 1
+        return denial(503) if profile_reads == 1 else (200, PROFILE)
+
+    reads.overrides["/api/v1/actors/me"] = profile
+    with (
+        socket_peer(reads) as (origin, requests),
+        Terminal(origin, TOKEN, "--plain") as terminal,
+    ):
+        terminal.wait("Unavailable")
+        terminal.pump(0.2)
+        assert len(requests) == 1, "failed actor binding must not fetch projects"
+        terminal.send("r")
+        terminal.wait("Terminal project")
+        assert [urlsplit(target).path for _, target, _ in requests] == [
+            "/api/v1/actors/me",
+            "/api/v1/actors/me",
+            "/api/v1/actors/me/projects",
+        ]
+        terminal.quit()
+
+
 def test_explicit_pagination_refresh_and_local_filter_do_not_walk_pages():
     reads = Reads()
 
