@@ -202,7 +202,9 @@ async def test_openai_count_includes_every_semantic_input_field():
     ]
 
 
-@pytest.mark.parametrize("mutation", ["context", "pricing", "alias", "parameters"])
+@pytest.mark.parametrize(
+    "mutation", ["context", "pricing", "request_fee", "alias", "parameters"]
+)
 async def test_openrouter_metadata_drift_fails_before_dispatch(monkeypatch, mutation):
     import httpx
 
@@ -212,6 +214,8 @@ async def test_openrouter_metadata_drift_fails_before_dispatch(monkeypatch, muta
         data["context_length"] = data["top_provider"]["context_length"] = 1_050_001
     elif mutation == "pricing":
         data["pricing"]["overrides"][0]["completion"] = "0.000018001"
+    elif mutation == "request_fee":
+        data["pricing"]["request"] = "1"
     elif mutation == "alias":
         data["id"] = "openai/resolved-other-model"
     else:

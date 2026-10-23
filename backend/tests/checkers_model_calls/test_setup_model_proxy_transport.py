@@ -1,6 +1,7 @@
 """Credential-free setup model frames share the private listener without widening it."""
 
 import json
+from types import SimpleNamespace
 
 import pytest
 
@@ -8,6 +9,7 @@ from app.adapters.checkers.model_proxy_transport import ModelProxyTransport
 from app.adapters.project_agents.setup_model_proxy import (
     SetupModelProxySession,
     SetupModelProxyUnavailable,
+    _profile_covers_tool_runtime,
 )
 from app.core.identifiers import new_record_id
 from app.interfaces.checker_model_proxy import ModelProxyReply
@@ -152,3 +154,39 @@ def test_completed_reply_must_fit_after_inner_json_escaping():
             failure_code=None,
             session_exhausted=True,
         )
+
+
+def test_setup_tool_runtime_must_fit_the_selected_profile_exactly():
+    profile = SimpleNamespace(
+        spec=SimpleNamespace(
+            allowed_tools=("read_document", "search_document"),
+            maximum_tool_calls=3,
+            maximum_tool_output_bytes=400,
+        )
+    )
+    exact = SimpleNamespace(
+        maximum_tool_calls=3,
+        maximum_tool_output_characters=100,
+    )
+
+    assert _profile_covers_tool_runtime(profile, exact) is True
+    assert (
+        _profile_covers_tool_runtime(
+            profile,
+            SimpleNamespace(
+                maximum_tool_calls=4,
+                maximum_tool_output_characters=100,
+            ),
+        )
+        is False
+    )
+    assert (
+        _profile_covers_tool_runtime(
+            profile,
+            SimpleNamespace(
+                maximum_tool_calls=3,
+                maximum_tool_output_characters=101,
+            ),
+        )
+        is False
+    )
