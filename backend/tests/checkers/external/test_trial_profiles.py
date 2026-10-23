@@ -110,9 +110,11 @@ def configuration(selected=None) -> dict[str, object]:
                     "exclusions": [],
                 },
             ],
-            "required_slots": [
+            "slot_templates": [
                 {
-                    "slot_id": "slot_a",
+                    "slot_kind": "generic_run",
+                    "minimum_occurrences": 1,
+                    "maximum_occurrences": 2,
                     "seed_roles": [],
                     "visible_roles": ["verification"],
                     "fresh_workspace": True,
@@ -153,7 +155,7 @@ def test_locked_configuration_parses_trial_and_model_selectors_independently():
     projection = trial_projection_from_configuration(configuration(selected))
     assert projection is not None
     assert projection.selector == selected.selector
-    assert projection.required_slots[0].visible_roles == ("verification",)
+    assert projection.slot_templates[0].visible_roles == ("verification",)
     assert projection.material_projections[0].exclusions == ("solution", "tests")
     projection.validate_profile(selected)
 
@@ -168,7 +170,7 @@ def test_locked_configuration_parses_trial_and_model_selectors_independently():
     (
         lambda value: value.pop("trial_profile_digest"),
         lambda value: value["trial_execution"].update(network_mode="host"),
-        lambda value: value["trial_execution"]["required_slots"][0].update(
+        lambda value: value["trial_execution"]["slot_templates"][0].update(
             visible_roles=["protected_role"]
         ),
         lambda value: value.update(trial_profile_version=True),
@@ -198,7 +200,7 @@ def test_projection_cannot_exceed_trusted_roles_or_step_count():
         ),
         allowed_material_roles=("protected_role",),
         build_context_roles=("protected_role",),
-        required_slots=(TrialSlotProjection("slot_a", (), (), True, ("succeeded",)),),
+        slot_templates=(TrialSlotProjection("generic_run", 1, 1, (), (), True, ("succeeded",)),),
     )
     with pytest.raises(TrialProfileError, match="exceeds"):
         foreign_role.validate_profile(selected)
@@ -217,8 +219,8 @@ def test_projection_cannot_exceed_trusted_roles_or_step_count():
         ),
         allowed_material_roles=("candidate_source",),
         build_context_roles=("candidate_source",),
-        required_slots=tuple(
-            TrialSlotProjection(f"slot_{index}", (), (), True, ("succeeded",))
+        slot_templates=tuple(
+            TrialSlotProjection(f"slot_{index}", 1, 1, (), (), True, ("succeeded",))
             for index in range(selected.limits.maximum_steps + 1)
         ),
     )
@@ -252,11 +254,11 @@ def test_projection_rejects_escape_overlap_shadow_and_unsafe_state_retention():
         }
     )
     value["trial_execution"]["allowed_material_roles"].append("workspace_seed")
-    value["trial_execution"]["required_slots"][0]["seed_roles"] = ["workspace_seed"]
+    value["trial_execution"]["slot_templates"][0]["seed_roles"] = ["workspace_seed"]
     with pytest.raises(TrialProfileError, match="execution projection"):
         trial_projection_from_configuration(value)
 
     value = configuration()
-    value["trial_execution"]["required_slots"][0]["retain_state_after"] = ["deadline_exceeded"]
+    value["trial_execution"]["slot_templates"][0]["retain_state_after"] = ["deadline_exceeded"]
     with pytest.raises(TrialProfileError, match="slot projection"):
         trial_projection_from_configuration(value)

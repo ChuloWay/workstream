@@ -79,6 +79,10 @@ Terminal Systems paths, task names, commands or findings.
 generic offline Kaniko/descendant-runsc launch policy and a narrow
 module-neutral runtime-control seam. This change owns its concrete bounded
 command, ownership journal, observation and recovery implementation. The
+listed trial-profile, relay and engine files also replace exact fixed slots with
+finite ordered slot templates (minimum/maximum occurrences, roles, fresh state
+and retainable work outcomes), so source-cited documented procedures remain
+variable without becoming an unbounded or project-named shared allowlist. The
 model-runtime owner retains serialized composition in `main.rs`; implementation
 of the trial engine is not deferred to that owner. The explicit real-engine
 qualification entrypoint is

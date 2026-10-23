@@ -83,7 +83,7 @@ impl TrialEngine for FakeEngine {
     fn execute(
         &self,
         _context: &TrialEngineContext,
-        _plan: &TrialPlan,
+        plan: &TrialPlan,
         _deadline: Instant,
         invocation_cancelled: &AtomicBool,
         relay_cancelled: &AtomicBool,
@@ -91,7 +91,19 @@ impl TrialEngine for FakeEngine {
         assert!(!invocation_cancelled.load(Ordering::Acquire));
         assert!(!relay_cancelled.load(Ordering::Acquire));
         self.calls.fetch_add(1, Ordering::Relaxed);
-        Ok(execution(self.cleanup_confirmed))
+        let mut result = execution(self.cleanup_confirmed);
+        let template = result.steps[0].clone();
+        result.steps = plan
+            .steps
+            .iter()
+            .enumerate()
+            .map(|(index, step)| TrialStepObservation {
+                slot_id: step.slot_id.clone(),
+                operation_order: (index + 1) as u32,
+                ..template.clone()
+            })
+            .collect();
+        Ok(result)
     }
 }
 
@@ -169,8 +181,10 @@ fn profile() -> TrialProfile {
         ],
         build_context_roles: vec!["source".into()],
         allowed_material_roles: vec!["source".into(), "checks".into()],
-        required_slots: vec![TrialSlotProfile {
-            slot_id: "slot_a".into(),
+        slot_templates: vec![TrialSlotProfile {
+            slot_kind: "generic_run".into(),
+            minimum_occurrences: 1,
+            maximum_occurrences: 1,
             seed_roles: Vec::new(),
             visible_roles: vec!["checks".into()],
             fresh_workspace: true,
@@ -217,7 +231,7 @@ fn plan() -> Value {
         "resources": {"cpu_quota_millis": 1000, "cpu_time_ms": 5000, "memory_bytes": 67_108_864, "disk_bytes": 33_554_432, "maximum_entries": 500, "pids": 16},
         "build_timeout_ms": 1500,
         "steps": [{
-            "slot_id": "slot_a", "operation": "run", "state_source": "fresh",
+            "slot_id": "slot_a", "slot_kind": "generic_run", "operation": "run", "state_source": "fresh",
             "visible_roles": ["checks"],
             "command": ["/candidate/bin/check", "--case", "a"],
             "working_directory": ".", "timeout_ms": 800
@@ -385,6 +399,10 @@ struct StartedRelay {
 }
 
 fn start(cleanup_confirmed: bool) -> StartedRelay {
+    start_with_profile(cleanup_confirmed, profile())
+}
+
+fn start_with_profile(cleanup_confirmed: bool, profile: TrialProfile) -> StartedRelay {
     let root = TestRoot::new();
     let relay_root = root.child("relay");
     let material_root = root.child("material");
@@ -401,7 +419,7 @@ fn start(cleanup_confirmed: bool) -> StartedRelay {
         &scratch_root,
         &grant(),
         &identity(),
-        &profile(),
+        &profile,
         publisher.clone(),
         engine.clone(),
         metadata.uid(),
@@ -493,7 +511,7 @@ fn completed_plan_publishes_runner_facts_only_after_confirmed_cleanup() {
 #[test]
 fn host_runtime_fields_and_profile_slot_substitution_are_rejected_before_engine() {
     assert_plan_rejected(|value| value["network_mode"] = json!("host"));
-    assert_plan_rejected(|value| value["steps"][0]["slot_id"] = json!("foreign_slot"));
+    assert_plan_rejected(|value| value["steps"][0]["slot_kind"] = json!("foreign_kind"));
     assert_plan_rejected(|value| value["steps"][0]["visible_roles"] = json!(["source"]));
     assert_plan_rejected(|value| value["steps"][0]["working_directory"] = json!("../host"));
     assert_plan_rejected(|value| value["resources"]["pids"] = json!(33));
@@ -502,6 +520,63 @@ fn host_runtime_fields_and_profile_slot_substitution_are_rejected_before_engine(
         let trailing = value["steps"][0].clone();
         value["steps"].as_array_mut().unwrap().push(trailing);
     });
+}
+
+#[test]
+fn ordered_slot_template_occurrences_are_finite_and_required() {
+    let mut selected = profile();
+    selected.maximum_steps = 3;
+    selected.slot_templates = vec![
+        TrialSlotProfile {
+            slot_kind: "documented_command".into(),
+            minimum_occurrences: 1,
+            maximum_occurrences: 2,
+            seed_roles: Vec::new(),
+            visible_roles: vec!["checks".into()],
+            fresh_workspace: true,
+            retain_state_after: vec!["succeeded".into()],
+        },
+        TrialSlotProfile {
+            slot_kind: "final_verification".into(),
+            minimum_occurrences: 1,
+            maximum_occurrences: 1,
+            seed_roles: Vec::new(),
+            visible_roles: vec!["checks".into()],
+            fresh_workspace: true,
+            retain_state_after: vec!["succeeded".into()],
+        },
+    ];
+    let started = start_with_profile(true, selected.clone());
+    let mut accepted = plan();
+    accepted["steps"][0]["slot_kind"] = json!("documented_command");
+    let mut final_step = accepted["steps"][0].clone();
+    final_step["slot_id"] = json!("final_a");
+    final_step["slot_kind"] = json!("final_verification");
+    accepted["steps"].as_array_mut().unwrap().push(final_step);
+    let response = exchange(started.relay.socket_path(), &request(accepted));
+    assert_eq!(response["outcome"], "completed");
+    assert_eq!(started.engine.calls.load(Ordering::Relaxed), 1);
+    assert_eq!(started.relay.finish().failure, None);
+
+    let started = start_with_profile(true, selected.clone());
+    let mut missing = plan();
+    missing["steps"][0]["slot_kind"] = json!("documented_command");
+    let response = exchange(started.relay.socket_path(), &request(missing));
+    assert_eq!(response["failure_code"], "invalid_request");
+    assert_eq!(started.engine.calls.load(Ordering::Relaxed), 0);
+    started.relay.finish();
+
+    let started = start_with_profile(true, selected);
+    let mut reversed = plan();
+    reversed["steps"][0]["slot_kind"] = json!("final_verification");
+    let mut trailing = reversed["steps"][0].clone();
+    trailing["slot_id"] = json!("documented_a");
+    trailing["slot_kind"] = json!("documented_command");
+    reversed["steps"].as_array_mut().unwrap().push(trailing);
+    let response = exchange(started.relay.socket_path(), &request(reversed));
+    assert_eq!(response["failure_code"], "invalid_request");
+    assert_eq!(started.engine.calls.load(Ordering::Relaxed), 0);
+    started.relay.finish();
 }
 
 #[test]

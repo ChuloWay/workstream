@@ -262,8 +262,9 @@ impl<B: TrialSandboxBackend> GenericTrialEngine<B> {
             for (index, step) in plan.steps.iter().enumerate() {
                 let slot_profile = context
                     .profile
-                    .required_slots
-                    .get(index)
+                    .slot_templates
+                    .iter()
+                    .find(|template| template.slot_kind == step.slot_kind)
                     .ok_or_else(implementation_failure)?;
                 require_available(deadline, invocation_cancelled, relay_cancelled)?;
                 if step.state_source != "fresh" && !workspaces.contains_key(&step.state_source) {

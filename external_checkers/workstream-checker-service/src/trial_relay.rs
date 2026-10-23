@@ -87,7 +87,7 @@ pub(crate) struct TrialProfile {
     pub(crate) material_projections: Vec<TrialMaterialProjectionProfile>,
     pub(crate) build_context_roles: Vec<String>,
     pub(crate) allowed_material_roles: Vec<String>,
-    pub(crate) required_slots: Vec<TrialSlotProfile>,
+    pub(crate) slot_templates: Vec<TrialSlotProfile>,
     pub(crate) maximum_frame_bytes: usize,
     pub(crate) maximum_response_bytes: usize,
     pub(crate) maximum_steps: usize,
@@ -112,7 +112,9 @@ pub(crate) struct TrialProfile {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct TrialSlotProfile {
-    pub(crate) slot_id: String,
+    pub(crate) slot_kind: String,
+    pub(crate) minimum_occurrences: usize,
+    pub(crate) maximum_occurrences: usize,
     pub(crate) seed_roles: Vec<String>,
     pub(crate) visible_roles: Vec<String>,
     pub(crate) fresh_workspace: bool,
@@ -162,6 +164,7 @@ pub(crate) struct TrialResources {
 #[serde(deny_unknown_fields)]
 pub(crate) struct TrialStep {
     pub(crate) slot_id: String,
+    pub(crate) slot_kind: String,
     pub(crate) operation: String,
     pub(crate) state_source: String,
     pub(crate) visible_roles: Vec<String>,
@@ -714,10 +717,10 @@ fn valid_profile(profile: &TrialProfile) -> bool {
         .collect();
     let build_roles: HashSet<_> = profile.build_context_roles.iter().collect();
     let base_digests: HashSet<_> = profile.approved_base_digests.iter().collect();
-    let slot_ids: HashSet<_> = profile
-        .required_slots
+    let slot_kinds: HashSet<_> = profile
+        .slot_templates
         .iter()
-        .map(|slot| &slot.slot_id)
+        .map(|slot| &slot.slot_kind)
         .collect();
     valid_uuid(&profile.profile_id)
         && profile.profile_version > 0
@@ -777,12 +780,14 @@ fn valid_profile(profile: &TrialProfile) -> bool {
                     .iter()
                     .any(|item| item.role == *value && item.projection_kind == "build_context")
         })
-        && !profile.required_slots.is_empty()
-        && slot_ids.len() == profile.required_slots.len()
-        && profile.required_slots.iter().all(|slot| {
+        && !profile.slot_templates.is_empty()
+        && slot_kinds.len() == profile.slot_templates.len()
+        && profile.slot_templates.iter().all(|slot| {
             let visible_roles: HashSet<_> = slot.visible_roles.iter().collect();
             let seed_roles: HashSet<_> = slot.seed_roles.iter().collect();
-            valid_identifier(&slot.slot_id)
+            valid_identifier(&slot.slot_kind)
+                && slot.minimum_occurrences <= slot.maximum_occurrences
+                && slot.maximum_occurrences > 0
                 && seed_roles.len() == slot.seed_roles.len()
                 && visible_roles.len() == slot.visible_roles.len()
                 && slot.seed_roles.iter().all(|value| {
@@ -819,7 +824,13 @@ fn valid_profile(profile: &TrialProfile) -> bool {
         })
         && (1..=ABSOLUTE_MAXIMUM_FRAME_BYTES).contains(&profile.maximum_frame_bytes)
         && (1..=ABSOLUTE_MAXIMUM_FRAME_BYTES).contains(&profile.maximum_response_bytes)
-        && profile.maximum_steps >= profile.required_slots.len()
+        && profile
+            .slot_templates
+            .iter()
+            .try_fold(0_usize, |total, slot| {
+                total.checked_add(slot.maximum_occurrences)
+            })
+            .is_some_and(|total| total <= profile.maximum_steps)
         && profile.maximum_build_timeout_ms > 0
         && profile.maximum_step_timeout_ms > 0
         && profile.maximum_step_output_bytes > 0
@@ -925,7 +936,6 @@ fn validate_plan(plan: &TrialPlan, profile: &TrialProfile) -> Result<(), TrialRe
         || plan.build_timeout_ms == 0
         || plan.build_timeout_ms > profile.maximum_build_timeout_ms
         || plan.steps.is_empty()
-        || plan.steps.len() != profile.required_slots.len()
         || plan.steps.len() > profile.maximum_steps
         || plan.resources.cpu_quota_millis == 0
         || plan.resources.cpu_quota_millis > profile.maximum_cpu_quota_millis
@@ -943,11 +953,24 @@ fn validate_plan(plan: &TrialPlan, profile: &TrialProfile) -> Result<(), TrialRe
         return Err(TrialRelayFailure::InvalidRequest);
     }
     let mut completed_ids = HashSet::new();
-    for (step, expected) in plan.steps.iter().zip(&profile.required_slots) {
+    let mut counts = vec![0_usize; profile.slot_templates.len()];
+    let mut previous_template = 0_usize;
+    for step in &plan.steps {
+        let Some((template_index, expected)) = profile
+            .slot_templates
+            .iter()
+            .enumerate()
+            .find(|(_, template)| template.slot_kind == step.slot_kind)
+        else {
+            return Err(TrialRelayFailure::InvalidRequest);
+        };
         let expected_roles: HashSet<_> = expected.visible_roles.iter().collect();
         let actual_roles: HashSet<_> = step.visible_roles.iter().collect();
         if !valid_identifier(&step.slot_id)
-            || step.slot_id != expected.slot_id
+            || !completed_ids.insert(step.slot_id.clone())
+            || !valid_identifier(&step.slot_kind)
+            || template_index < previous_template
+            || counts[template_index] >= expected.maximum_occurrences
             || step.operation != "run"
             || expected_roles != actual_roles
             || expected.visible_roles.len() != step.visible_roles.len()
@@ -966,9 +989,17 @@ fn validate_plan(plan: &TrialPlan, profile: &TrialProfile) -> Result<(), TrialRe
         {
             return Err(TrialRelayFailure::InvalidRequest);
         }
-        completed_ids.insert(step.slot_id.clone());
+        counts[template_index] += 1;
+        previous_template = template_index;
     }
-    if completed_ids.len() != profile.required_slots.len() {
+    if profile
+        .slot_templates
+        .iter()
+        .zip(counts)
+        .any(|(template, count)| {
+            count < template.minimum_occurrences || count > template.maximum_occurrences
+        })
+    {
         return Err(TrialRelayFailure::InvalidRequest);
     }
     Ok(())
@@ -1296,13 +1327,12 @@ fn validate_execution(
         return Err(TrialRelayFailure::ImplementationUnavailable);
     }
     let mut retained_slots = HashSet::new();
-    for (index, ((observation, step), slot_profile)) in execution
-        .steps
-        .iter()
-        .zip(&plan.steps)
-        .zip(&profile.required_slots)
-        .enumerate()
-    {
+    for (index, (observation, step)) in execution.steps.iter().zip(&plan.steps).enumerate() {
+        let slot_profile = profile
+            .slot_templates
+            .iter()
+            .find(|template| template.slot_kind == step.slot_kind)
+            .ok_or(TrialRelayFailure::ImplementationUnavailable)?;
         let dependency_succeeded =
             step.state_source == "fresh" || retained_slots.contains(step.state_source.as_str());
         let must_skip = !build_succeeded || !dependency_succeeded;

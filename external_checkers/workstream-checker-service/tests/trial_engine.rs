@@ -217,11 +217,13 @@ fn profile() -> TrialProfile {
         ],
         build_context_roles: vec!["source".into()],
         allowed_material_roles: vec!["source".into(), "protected".into(), "workspace_seed".into()],
-        required_slots: vec![TrialSlotProfile {
-            slot_id: "slot_a".into(),
+        slot_templates: vec![TrialSlotProfile {
+            slot_kind: "generic_run".into(),
+            minimum_occurrences: 1,
+            maximum_occurrences: 1,
             seed_roles: vec!["workspace_seed".into()],
             visible_roles: vec!["protected".into()],
-            fresh_workspace: true,
+            fresh_workspace: false,
             retain_state_after: vec!["succeeded".into()],
         }],
         maximum_frame_bytes: 64 * 1024,
@@ -270,6 +272,7 @@ fn plan() -> TrialPlan {
         build_timeout_ms: 1_000,
         steps: vec![TrialStep {
             slot_id: "slot_a".into(),
+            slot_kind: "generic_run".into(),
             operation: "run".into(),
             state_source: "fresh".into(),
             visible_roles: vec!["protected".into()],
@@ -400,25 +403,19 @@ fn symlinked_material_is_infrastructure_and_never_reaches_backend() {
 fn continuation_context_and_plan(root: &Root) -> (TrialEngineContext, TrialPlan) {
     let mut context = context(root);
     context.profile.maximum_steps = 2;
-    context.profile.required_slots = vec![
-        TrialSlotProfile {
-            slot_id: "slot_a".into(),
-            seed_roles: vec!["workspace_seed".into()],
-            visible_roles: vec!["protected".into()],
-            fresh_workspace: true,
-            retain_state_after: vec!["exit_nonzero".into()],
-        },
-        TrialSlotProfile {
-            slot_id: "slot_b".into(),
-            seed_roles: Vec::new(),
-            visible_roles: vec!["protected".into()],
-            fresh_workspace: false,
-            retain_state_after: vec!["succeeded".into()],
-        },
-    ];
+    context.profile.slot_templates = vec![TrialSlotProfile {
+        slot_kind: "generic_run".into(),
+        minimum_occurrences: 2,
+        maximum_occurrences: 2,
+        seed_roles: vec!["workspace_seed".into()],
+        visible_roles: vec!["protected".into()],
+        fresh_workspace: false,
+        retain_state_after: vec!["exit_nonzero".into()],
+    }];
     let mut plan = plan();
     plan.steps.push(TrialStep {
         slot_id: "slot_b".into(),
+        slot_kind: "generic_run".into(),
         operation: "run".into(),
         state_source: "slot_a".into(),
         visible_roles: vec!["protected".into()],

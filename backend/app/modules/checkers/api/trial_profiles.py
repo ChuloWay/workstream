@@ -172,7 +172,9 @@ class TrialExecutionProfile:
 class TrialSlotProjection:
     """One ordered project-selected operation with an exact material view."""
 
-    slot_id: Identifier
+    slot_kind: Identifier
+    minimum_occurrences: int
+    maximum_occurrences: int
     seed_roles: tuple[Identifier, ...]
     visible_roles: tuple[Identifier, ...]
     fresh_workspace: bool
@@ -180,8 +182,12 @@ class TrialSlotProjection:
 
     def __post_init__(self) -> None:
         if (
-            type(self.slot_id) is not str
-            or _IDENTIFIER.fullmatch(self.slot_id) is None
+            type(self.slot_kind) is not str
+            or _IDENTIFIER.fullmatch(self.slot_kind) is None
+            or type(self.minimum_occurrences) is not int
+            or type(self.maximum_occurrences) is not int
+            or self.minimum_occurrences < 0
+            or self.maximum_occurrences < max(1, self.minimum_occurrences)
             or len(set(self.seed_roles)) != len(self.seed_roles)
             or len(set(self.visible_roles)) != len(self.visible_roles)
             or any(
@@ -234,7 +240,7 @@ class TrialExecutionProjection:
     material_projections: tuple[TrialMaterialProjection, ...]
     allowed_material_roles: tuple[Identifier, ...]
     build_context_roles: tuple[Identifier, ...]
-    required_slots: tuple[TrialSlotProjection, ...]
+    slot_templates: tuple[TrialSlotProjection, ...]
 
     def __post_init__(self) -> None:
         allowed = set(self.allowed_material_roles)
@@ -253,10 +259,10 @@ class TrialExecutionProjection:
             )
             or not set(self.build_context_roles) <= allowed
             or not self.build_context_roles
-            or not self.required_slots
-            or len({slot.slot_id for slot in self.required_slots}) != len(self.required_slots)
-            or any(not set(slot.visible_roles) <= allowed for slot in self.required_slots)
-            or any(not set(slot.seed_roles) <= allowed for slot in self.required_slots)
+            or not self.slot_templates
+            or len({slot.slot_kind for slot in self.slot_templates}) != len(self.slot_templates)
+            or any(not set(slot.visible_roles) <= allowed for slot in self.slot_templates)
+            or any(not set(slot.seed_roles) <= allowed for slot in self.slot_templates)
             or any(
                 _paths_overlap(
                     tuple(
@@ -279,7 +285,7 @@ class TrialExecutionProjection:
                     item for item in self.material_projections if item.role == role
                 ).projection_kind
                 != "state_seed"
-                for slot in self.required_slots
+                for slot in self.slot_templates
                 for role in slot.seed_roles
             )
             or any(
@@ -287,7 +293,7 @@ class TrialExecutionProjection:
                     item for item in self.material_projections if item.role == role
                 ).projection_kind
                 != "state_overlay"
-                for slot in self.required_slots
+                for slot in self.slot_templates
                 for role in slot.visible_roles
             )
             or any(
@@ -299,7 +305,7 @@ class TrialExecutionProjection:
                         for role in (*slot.seed_roles, *slot.visible_roles)
                     )
                 )
-                for slot in self.required_slots
+                for slot in self.slot_templates
             )
         ):
             raise TrialProfileError("trial execution projection is invalid")
@@ -311,10 +317,11 @@ class TrialExecutionProjection:
             or not set(self.allowed_material_roles) <= set(profile.permitted_material_roles)
             or not {item.source_role for item in self.material_projections}
             <= set(profile.permitted_source_roles)
-            or len(self.required_slots) > profile.limits.maximum_steps
+            or sum(slot.maximum_occurrences for slot in self.slot_templates)
+            > profile.limits.maximum_steps
             or any(
                 not set(slot.retain_state_after) <= set(profile.permitted_state_retention_outcomes)
-                for slot in self.required_slots
+                for slot in self.slot_templates
             )
         ):
             raise TrialProfileError("trial execution projection exceeds profile")
@@ -381,10 +388,10 @@ def trial_projection_from_configuration(
             "material_projections",
             "allowed_material_roles",
             "build_context_roles",
-            "required_slots",
+            "slot_templates",
         }:
             raise TrialProfileError("trial execution projection is invalid")
-        slots = projection["required_slots"]
+        slots = projection["slot_templates"]
         materials = projection["material_projections"]
         if type(slots) is not list or type(materials) is not list:
             raise TrialProfileError("trial execution projection is invalid")
@@ -412,7 +419,9 @@ def trial_projection_from_configuration(
         parsed_slots = []
         for slot in slots:
             if type(slot) is not dict or set(slot) != {
-                "slot_id",
+                "slot_kind",
+                "minimum_occurrences",
+                "maximum_occurrences",
                 "seed_roles",
                 "visible_roles",
                 "fresh_workspace",
@@ -421,7 +430,9 @@ def trial_projection_from_configuration(
                 raise TrialProfileError("trial slot projection is invalid")
             parsed_slots.append(
                 TrialSlotProjection(
-                    slot_id=slot["slot_id"],
+                    slot_kind=slot["slot_kind"],
+                    minimum_occurrences=slot["minimum_occurrences"],
+                    maximum_occurrences=slot["maximum_occurrences"],
                     seed_roles=_string_tuple(slot["seed_roles"]),
                     visible_roles=_string_tuple(slot["visible_roles"]),
                     fresh_workspace=slot["fresh_workspace"],
@@ -438,7 +449,7 @@ def trial_projection_from_configuration(
             material_projections=tuple(parsed_materials),
             allowed_material_roles=_string_tuple(projection["allowed_material_roles"]),
             build_context_roles=_string_tuple(projection["build_context_roles"]),
-            required_slots=tuple(parsed_slots),
+            slot_templates=tuple(parsed_slots),
         )
     except (KeyError, TypeError, ValueError) as exc:
         if isinstance(exc, TrialProfileError):
