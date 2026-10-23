@@ -133,6 +133,7 @@ class LightweightAgentGateTests(unittest.TestCase):
         workflow = Path(".github/workflows/cli.yml").read_text(encoding="utf-8")
         names = (
             "Exercise built CLI against task HTTP and local file boundaries",
+            "Exercise native terminal HTTP and proof contracts",
             "Exercise existing guide HTTP contracts",
             "Exercise existing native guide API callers",
             "Exercise existing native CLI self-service caller",
@@ -181,6 +182,15 @@ class LightweightAgentGateTests(unittest.TestCase):
                 "--ignore-glob=../cli/tests/integration/*_public_api.py",
                 "--ignore-glob=../cli/tests/integration/test_guide*.py",
                 "--ignore=../cli/tests/integration/test_public_self_service.py",
+                "--ignore=../cli/tests/integration/test_tui_http.py",
+                "--ignore=../cli/tests/integration/test_tui_native_proof.py",
+            ],
+            [
+                *runner_prefix,
+                "--metadata-json", "${RUNNER_TEMP}/workstream-cli-tui-isolation.json",
+                *pytest_prefix,
+                "../cli/tests/integration/test_tui_http.py",
+                "../cli/tests/integration/test_tui_native_proof.py",
             ],
             [
                 *runner_prefix,
@@ -240,11 +250,11 @@ class LightweightAgentGateTests(unittest.TestCase):
         )
         self.assertEqual(
             workflow.count("uv run --frozen python scripts/run_isolated_tests.py"),
-            5,
+            6,
         )
         self.assertEqual(
             workflow.count("-- uv run --frozen python -m pytest -q"),
-            5,
+            6,
         )
         self.assertNotIn('python -m pip install -e "./backend[dev,agents]"', workflow)
         self.assertNotIn("\n          ruff check cli/tests", workflow)

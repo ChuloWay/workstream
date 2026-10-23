@@ -131,7 +131,24 @@ jobs:
             -- uv run --frozen python -m pytest -q ../cli/tests/integration \
               '--ignore-glob=../cli/tests/integration/*_public_api.py' \
               '--ignore-glob=../cli/tests/integration/test_guide*.py' \
-              --ignore=../cli/tests/integration/test_public_self_service.py
+              --ignore=../cli/tests/integration/test_public_self_service.py \
+              --ignore=../cli/tests/integration/test_tui_http.py \
+              --ignore=../cli/tests/integration/test_tui_native_proof.py
+
+      - name: Exercise native terminal HTTP and proof contracts
+        working-directory: backend
+        env:
+          WORKSTREAM_CLI_EXECUTABLE: ${{ runner.temp }}/workstream-cli
+          WORKSTREAM_TEST_ADMIN_DATABASE_URL: postgresql+asyncpg://workstream:workstream@localhost:5433/postgres
+        shell: bash
+        run: |
+          set -euo pipefail
+          uv run --frozen python scripts/run_isolated_tests.py \
+            --metadata-json "${RUNNER_TEMP}/workstream-cli-tui-isolation.json" \
+            --timeout-seconds 300 \
+            -- uv run --frozen python -m pytest -q \
+              ../cli/tests/integration/test_tui_http.py \
+              ../cli/tests/integration/test_tui_native_proof.py
 
       - name: Exercise existing guide HTTP contracts
         working-directory: backend
