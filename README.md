@@ -295,8 +295,8 @@ stops at findings and proposals; manager review and approval remain separate.
 
 To compile guides without any model provider, select the manager-authored
 runtime instead. It makes no inference request and allocates no provider
-resources. It uses the same isolated document tools. The hosted deployment's
-provider-key file requirement is described in its release guide:
+resources. It uses the same isolated document tools. The hosted release omits
+the provider credential for this exact `none/none/none` configuration:
 
 ```bash
 WORKSTREAM_PROJECT_AGENT_RUNTIME=manager_authored
@@ -449,7 +449,7 @@ and the provider-free `manager_authored` runtime described above. OmniCoreAgent
 uses its closed immutable profile and the mutually exclusive `omnicore` worker
 image; it accepts no runtime options. `manager_authored` works in either SDK image
 and has no retry, circuit or provider credential because it makes no provider
-request. See the [hosted runtime selection runbook](deploy/hosted/README.md#guide-runtime-portability).
+request. See the [hosted runtime selection runbook](deploy/hosted/README.md#prepare-source-images).
 
 Verified guide-source readiness automatically delivers one compilation. A ready
 result records both policy proposals and stops at a draft; an insufficient guide
