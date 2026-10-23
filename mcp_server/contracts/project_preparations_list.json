@@ -1,0 +1,614 @@
+{
+  "canonical_sha256": "f435dfbfcd335f00948ed84edc949d65802052d096620f4ddd8f6593c6880eef",
+  "components": {
+    "schemas": {
+      "ApiError": {
+        "additionalProperties": false,
+        "description": "Canonical machine-readable API error.",
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "correlation_id": {
+            "title": "Correlation Id",
+            "type": "string"
+          },
+          "details": {
+            "additionalProperties": true,
+            "title": "Details",
+            "type": "object"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "retryable": {
+            "title": "Retryable",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "code",
+          "message",
+          "details",
+          "correlation_id",
+          "retryable"
+        ],
+        "title": "ApiError",
+        "type": "object"
+      },
+      "ApiErrorResponse": {
+        "additionalProperties": false,
+        "description": "Canonical error plus additive legacy compatibility fields.",
+        "properties": {
+          "detail": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          },
+          "error": {
+            "$ref": "#/components/schemas/ApiError"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "title": "ApiErrorResponse",
+        "type": "object"
+      },
+      "PreparationFindingCounts": {
+        "additionalProperties": false,
+        "properties": {
+          "blocking": {
+            "minimum": 0.0,
+            "title": "Blocking",
+            "type": "integer"
+          },
+          "coverage_incomplete": {
+            "minimum": 0.0,
+            "title": "Coverage Incomplete",
+            "type": "integer"
+          },
+          "warning": {
+            "minimum": 0.0,
+            "title": "Warning",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "blocking",
+          "warning",
+          "coverage_incomplete"
+        ],
+        "title": "PreparationFindingCounts",
+        "type": "object"
+      },
+      "ProjectSubmissionBundlePreparation": {
+        "additionalProperties": false,
+        "description": "One preparation in a project with its contributor; finding counts only, no findings or files.",
+        "properties": {
+          "actor_profile_id": {
+            "format": "uuid",
+            "title": "Actor Profile Id",
+            "type": "string"
+          },
+          "admission_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Admission Id"
+          },
+          "archive_byte_count": {
+            "exclusiveMinimum": 0.0,
+            "title": "Archive Byte Count",
+            "type": "integer"
+          },
+          "archive_sha256": {
+            "pattern": "^sha256:[0-9a-f]{64}$",
+            "title": "Archive Sha256",
+            "type": "string"
+          },
+          "assignment_id": {
+            "format": "uuid",
+            "title": "Assignment Id",
+            "type": "string"
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "finding_counts": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PreparationFindingCounts"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "infrastructure_failure_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Infrastructure Failure Code"
+          },
+          "outcome": {
+            "enum": [
+              "pending",
+              "passed",
+              "failed",
+              "infrastructure_failed"
+            ],
+            "title": "Outcome",
+            "type": "string"
+          },
+          "preparation_id": {
+            "format": "uuid",
+            "title": "Preparation Id",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "checking",
+              "checks_failed",
+              "infrastructure_failed",
+              "storing",
+              "ready",
+              "submitted",
+              "stale"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "storage_status": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SubmissionBundlePreparationStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "submission_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Submission Id"
+          },
+          "task_id": {
+            "format": "uuid",
+            "title": "Task Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "preparation_id",
+          "task_id",
+          "assignment_id",
+          "outcome",
+          "state",
+          "storage_status",
+          "infrastructure_failure_code",
+          "archive_sha256",
+          "archive_byte_count",
+          "finding_counts",
+          "admission_id",
+          "submission_id",
+          "created_at",
+          "completed_at",
+          "actor_profile_id"
+        ],
+        "title": "ProjectSubmissionBundlePreparation",
+        "type": "object"
+      },
+      "ProjectSubmissionBundlePreparationPage": {
+        "additionalProperties": false,
+        "description": "One page of a project's preparations, newest first.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ProjectSubmissionBundlePreparation"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items",
+          "next_cursor"
+        ],
+        "title": "ProjectSubmissionBundlePreparationPage",
+        "type": "object"
+      },
+      "SubmissionBundlePreparationStatus": {
+        "description": "Closed public state vocabulary for one ART preparation operation.",
+        "enum": [
+          "prepared",
+          "put_in_flight",
+          "object_confirmed",
+          "stored_pending_verification",
+          "observed_confirmed",
+          "acknowledgement_unknown",
+          "provider_unavailable",
+          "conflict",
+          "integrity_mismatch",
+          "missing",
+          "absent_replay_required",
+          "stale",
+          "ready"
+        ],
+        "title": "SubmissionBundlePreparationStatus",
+        "type": "string"
+      }
+    }
+  },
+  "operation": {
+    "description": "Every contributor's ZIP preparations, newest first, with finding counts and no findings or files.\n\n``outcome=failed`` lists completed intake checks that blocked the ZIP.",
+    "operationId": "list_project_preparations_api_v1_projects__project_id__submission_bundle_preparations_get",
+    "parameters": [
+      {
+        "in": "path",
+        "name": "project_id",
+        "required": true,
+        "schema": {
+          "format": "uuid",
+          "title": "Project Id",
+          "type": "string"
+        }
+      },
+      {
+        "in": "query",
+        "name": "outcome",
+        "required": false,
+        "schema": {
+          "anyOf": [
+            {
+              "enum": [
+                "pending",
+                "passed",
+                "failed",
+                "infrastructure_failed"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Outcome"
+        }
+      },
+      {
+        "in": "query",
+        "name": "limit",
+        "required": false,
+        "schema": {
+          "default": 50,
+          "maximum": 100,
+          "minimum": 1,
+          "title": "Limit",
+          "type": "integer"
+        }
+      },
+      {
+        "in": "query",
+        "name": "cursor",
+        "required": false,
+        "schema": {
+          "anyOf": [
+            {
+              "maxLength": 512,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Cursor"
+        }
+      },
+      {
+        "in": "header",
+        "name": "X-Request-ID",
+        "required": false,
+        "schema": {
+          "format": "uuid",
+          "maxLength": 36,
+          "minLength": 36,
+          "type": "string"
+        }
+      },
+      {
+        "in": "header",
+        "name": "X-Correlation-ID",
+        "required": false,
+        "schema": {
+          "format": "uuid",
+          "maxLength": 36,
+          "minLength": 36,
+          "type": "string"
+        }
+      }
+    ],
+    "responses": {
+      "200": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ProjectSubmissionBundlePreparationPage"
+            }
+          }
+        },
+        "description": "Successful Response",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "400": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Invalid request.",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "401": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Authentication failed.",
+        "headers": {
+          "WWW-Authenticate": {
+            "schema": {
+              "type": "string"
+            }
+          },
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "403": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Permission denied.",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "404": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Not Found",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "422": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Unprocessable Entity",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "500": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Internal server error.",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "503": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Service Unavailable",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "security": [
+      {
+        "HTTPBearer": []
+      }
+    ],
+    "summary": "List Project Preparations",
+    "tags": [
+      "projects"
+    ],
+    "x-workstream-action-id": "project.submission_bundle_preparation.list"
+  },
+  "source": {
+    "method": "GET",
+    "openapi_version": "3.1.0",
+    "path": "/api/v1/projects/{project_id}/submission-bundle-preparations",
+    "repository_sha": "bb39ac10aed24e3484f3155706f7a8902ef97694"
+  }
+}

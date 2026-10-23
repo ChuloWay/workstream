@@ -13,19 +13,19 @@
 - Project shells: [Project creation and authority-selected reads](WS-MCP-002-06.md), merged in PR #627.
 - Project participation: [Project-role grants](WS-MCP-002-07.md), merged in PR #644.
 - Guide declarations: [Guide declarations and draft metadata](WS-MCP-002-08.md), merged in PR #655.
-- Current change: [Draft review and revision policies](WS-MCP-002-09.md).
-- Next usable boundary: WS-MCP-002-10 assembled release proof after this change is
-  reviewed and merged; no later tool starts automatically.
+- Current change: [Contributor workspace and contribution policies](WS-MCP-002-10.md).
+- Next usable boundary: WS-MCP-002-11 complete guide lifecycle bindings.
 
 ## Current implementation
 
 [`mcp_server/`](../../../mcp_server/README.md) is an independently packaged
-Streamable HTTP adapter with twenty-seven tools: three self-service tools for profile read,
+Streamable HTTP adapter with forty-seven tools: three self-service tools for profile read,
 profile update and exact-project authorization context, plus six administrative
 reads for permission/role definitions, grants and actor/identity projections, two
 administrative grant mutations, five actor/identity lifecycle mutations, two
 project-shell tools, five project-participation tools, two guide-metadata tools
-and two draft-policy tools. It includes a container,
+and two draft-policy tools, plus twenty contributor workspace, contribution
+evidence and contribution-policy tools. It includes a container,
 selected response-schema validation and additive CI. Its integration tests
 exercise the installed adapter against the real Workstream API. Workstream
 still owns token verification and authorization. This is delivered packaging,
@@ -365,7 +365,7 @@ The following are acceptance requirements from the review addendum, not claims t
 
 | Suite | Required proof |
 | --- | --- |
-| 1. Catalogue | Exactly 27 unique tools, 12 reads, 15 mutations, 14 keyed mutations and one fixed binding per tool. No resources, prompts, login tool, generic HTTP tool, hidden route or extra capability. Input and structured-output schemas are complete and self-contained; references resolve locally; closed schemas reject unknown fields. Read-only, destructive, idempotent and open-world annotations match actual behavior. |
+| 1. Catalogue | Exactly the tools declared by the assembled implementation records, with one fixed binding per tool and no duplicate names. No resources, prompts, login tool, generic HTTP tool, hidden route or extra capability. Input and structured-output schemas are complete and self-contained; references resolve locally; closed schemas reject unknown fields. Read-only, destructive, idempotent and open-world annotations match actual behavior. |
 | 2. MCP protocol | Test the selected Streamable HTTP revision and actual supported clients: initialize, initialized notification, tools/list and tools/call; protocol negotiation, Origin, Accept/content type, malformed JSON-RPC, unknown tools/methods, cancellation and request/response limits. First foundation is stateless, with no authenticated session or resumable event stream. Catalogue is fixed across callers/restarts. Do not claim newer protocol features from SDK transport success. |
 | 3. Caller-token transport | Exact per-request bearer forwarding, no JWT/JWKS verifier or extra authentication API request. Missing/malformed headers do not dispatch; Workstream denies invalid signature, issuer, audience, expiry and premature tokens. Prove first admission grants no authority, concurrent/alternating caller isolation, no retained credential on a later missing-token request, no redirects/environment-proxy leakage, and safe API denial propagation. This custom integration does not publish OAuth discovery as if that profile were implemented. |
 | 4. All tool bindings | At least one positive wire-level case per tool proving exact method, encoded path, query omission/defaults, typed body, headers, successful status and structured response, with no extra API call. Cover both permitted project-response projections and every maximum-valid bounded input. Mock assertions support this proof but do not replace the release drill. |
@@ -374,7 +374,7 @@ The following are acceptance requirements from the review addendum, not claims t
 | 7. Network failures | Bound connection refusal, DNS/TLS failures, connect/read/total/cancellation timeouts, applicable API 429/401/403/404/409/412/422/5xx responses, malformed JSON, wrong content type, schema-invalid success and oversized responses. Test API failure during a call and adapter shutdown with in-flight work. Never claim rollback of a possibly committed write. |
 | 8. Privacy and observability | No credentials or authorization headers in results, logs, traces, exceptions, metric labels or URLs. Do not echo raw arguments or sensitive bodies into diagnostics. Profile data, guide content, reasons and cursor payloads must not enter telemetry. Allow only bounded tool name, fixed method/route template, duration, response size, safe status/error code and approved correlation IDs. Return the declared API fields the caller is authorized to receive, even when a field value also appeared in the request. Prove authorized profile/guide/cursor results are preserved while credentials and sensitive diagnostic content are excluded. Workstream remains audit authority. |
 | 9. Independent deployment | Build, install and start without the backend package. Run in a separate process/container using only the configured public API. Invalid API URL or transport configuration fails startup safely. API unavailability affects readiness/calls without crashing catalogue discovery. No client-name-specific behavior. Two MCP clients see the same catalogue and are independently authorized. Authenticated success and error responses carry `Cache-Control: no-store`; verify proxy/CDN preservation and no cross-caller reuse through the deployed HTTP path. |
-| 10. Contract drift | Use the source mapping in section 6 and jointly freeze the exact 27-tool definitions against the pinned running backend schemas, including routes, schemas, headers, statuses, authorization and API drill evidence. CI must fail on route, method, input/output, header, status, annotation or capability drift. Regeneration must not silently accept a changed contract. Changes require deliberate review and renewed proof. |
+| 10. Contract drift | Use the source mapping in section 6 and jointly freeze every assembled tool definition against the pinned running backend schemas, including routes, schemas, headers, statuses, authorization and API drill evidence. CI must fail on route, method, input/output, header, status, annotation or capability drift. Regeneration must not silently accept a changed contract. Changes require deliberate review and renewed proof. |
 
 For annotations, a logical read is not automatically side-effect-free: first profile access may provision identity records. The annotation tests must reflect the actual API operation rather than its HTTP method alone. The implementation contract will trace the requested protocol assertions to the selected SDK and protocol sources; any mismatch must be raised for review before freezing behavior.
 
@@ -387,9 +387,18 @@ Real MCP client -> HTTP /mcp -> independently running adapter
 
 Use signed test tokens through normal verification, local bootstrap for the first Access Administrator and public grant APIs for subsequent authority. Do not disable guards or seed database authority to make a case pass. The harness may inspect database and audit state for proof; the adapter itself has no database access.
 
-Exercise all 27 tools through HTTP MCP. For equivalent actors and intent, compare MCP execution with direct API execution for API outcome, response contract, database state, replay results, denial and audit provenance. Use equivalent isolated fixtures for the two paths so the first mutation does not change the second path's starting state.
+Exercise every assembled tool through HTTP MCP. For equivalent actors and intent,
+compare MCP execution with direct API execution for API outcome, response
+contract, database state, replay results, denial and audit provenance. Use
+equivalent isolated fixtures for the two paths so the first mutation does not
+change the second path's starting state.
 
-Release requires 27/27 positive cases, corresponding negative and replay cases, zero unresolved schema drift, zero credential leakage, correct direct-API parity, independent package installation and a reviewed dependency lock. SDK tests, mock request counts, API-only drills and successful tool listing are supporting evidence, not substitutes for this gate. Fixture-token proof remains separate from proof of the deployed Flow service.
+Release requires positive coverage for every assembled product tool, corresponding
+negative and replay cases, zero unresolved schema drift, zero credential leakage,
+correct direct-API parity, independent package installation and a reviewed
+dependency lock. SDK tests, mock request counts, API-only drills and successful
+tool listing are supporting evidence, not substitutes for this gate. Fixture-token
+proof remains separate from proof of the deployed Flow service.
 
 ### Confirmed response-data policy
 
@@ -410,12 +419,10 @@ WS-MCP-002-09 adds draft review and revision policy selection, completing the
 twenty-seven-tool catalogue. Reconcile the assembled release proof with its
 live environment; do not reopen credential architecture.
 
-The following stable IDs replace the four broad headings. Rows 01 through 09 are
-implemented; row 10 remains planned, with proposed ownership under `mcp_server/`, not
-claims that later tools exist. Each row is one bounded outcome. Tool names omit
-only the common `workstream_` prefix; all 27 names in section 6 appear exactly
-once. Each row also owns its change record and affected tests/docs, not backend
-product behavior.
+The original fixed 27-tool proposal was completed through row 09. The
+maintainer later requested broad public-API coverage in parallel, domain-based
+batches. Rows 10 through 14 record that superseding implementation sequence;
+assembled release proof follows those bindings rather than occupying row 10.
 
 | Change ID and outcome | Depends on | Owned modules and exact new tools | PR acceptance evidence and next usable boundary |
 | --- | --- | --- | --- |
@@ -428,7 +435,11 @@ product behavior.
 | WS-MCP-002-07: manage project participation | 03, 06 | `tools/project_grants.py`; `contributor_candidates_list`, `project_grants_issue`, `project_grants_list`, `project_grants_get`, `project_grants_revoke` | Populated bounded cursors, qualification fields, both roles, cross-project/target substitution, revoked access, replay/concurrency and unchanged-state denials. Leaves project access management, not task eligibility logic in MCP. |
 | WS-MCP-002-08: declare guide documents and edit draft metadata | 06; agreement on upload exclusion | `tools/guides.py`; `guides_create`, `guides_update` | Current examples/documents schema, waiting-setup response, summary-only PATCH, immutable-field rejection, UTF-8/aggregate limits and replay. Leaves document declarations; actual uploads/setup completion stay outside MCP. |
 | WS-MCP-002-09: configure draft review and revision policies | 08; agreement on selector recovery limitation | `tools/policies.py`; `review_policy_put`, `revision_policy_put` | Correct initial/current `If-Match`, omission versus defaults, human-review mode, stale/malformed selectors, lineage, exact-project denial and replay. Leaves draft policy configuration without approval/activation tools. |
-| WS-MCP-002-10: prove the assembled 27-tool release | 02, 05, 07, 09 and their ancestors; agreed live identity/client environment | `tests/integration/`, release drill, deployment/client docs and contract snapshot validation; no new tools | Complete ten-suite matrix, 27/27 positives plus per-tool negatives and mutation replay, actual client-to-adapter-to-API/PostgreSQL parity, deployed proxy no-store/caller isolation and independent container. Leaves a release candidate for human decision, not an automatic merge/deploy. |
+| WS-MCP-002-10: contributor workspace and contribution policies | 09; current public contracts | `tools/workspace_reads.py`, `tools/contribution_policies.py`; 20 tools | Caller/project workspace, JSON contribution evidence and exact policy lifecycle; catalogue reaches 47. |
+| WS-MCP-002-11: complete guide lifecycle | Current guide contracts | Guide reads, documents, setup/sufficiency/artifact policies, proposals, corrections and activation; 24 tools | Complete public guide lifecycle without local inference or policy authority. |
+| WS-MCP-002-12: checker and artifact operations | Current checker/ART contracts | Ten checker and nine operator-artifact tools | Operator recovery and exact contributor/manager checker projections; catalogue reaches 90. |
+| WS-MCP-002-13: task execution and submissions | Current task/submission contracts | Eighteen contributor and manager execution/submission tools | Preparation, claim/start, context and submission workflows; catalogue reaches 108. |
+| WS-MCP-002-14: task operations and imports | Current task/import/AUTH contracts | Nineteen management, audit, import and service-actor tools | Public product catalogue reaches 127; `/api/v1/health` remains operational liveness, not a user tool. |
 
 The dependency column describes technical prerequisites, not permission to start another chunk automatically. Default delivery follows row order. Independent branches may be proposed only after checking shared registry/schema ownership. One chunk finishes with its checks, focused review and human review/merge direction before beginning the next. If a chunk grows beyond its coherent behavior, revise its contract/map before adding unrelated implementation; do not silently combine rows into one PR.
 
@@ -436,7 +447,7 @@ Every binding chunk includes its route/body/query/header/status tests, public AP
 
 ### Binding-specific implementation prerequisites
 
-- **Catalogue and schemas:** for each chunk, capture only its selected operations and transitive schemas from `/openapi.json` of the pinned backend, with source SHA and explicit differences from the historical mapping. Review those differences in that implementation PR. WS-MCP-002-01 needs only the self-profile contract; reconciling all 27 tools is not a prerequisite to starting it. The full catalogue is assembled and verified by 10.
+- **Catalogue and schemas:** for each chunk, capture only its selected operations and transitive schemas from `/openapi.json` of the pinned backend, with source SHA and explicit differences from the historical mapping. Review those differences in that implementation PR. The full product catalogue is assembled after row 14 and then receives release proof.
 - **Credential contract (settled):** use section 5 unchanged caller-token forwarding. No further resource registration, token exchange or owner credential decision is required for this design.
 - **Workflow limits:** agree that document upload/setup completion and recovery of lost/stale policy selectors remain outside this catalogue. No automatic extra endpoint, hidden route or write-as-read workaround.
 
@@ -467,15 +478,13 @@ twenty-seven-tool catalogue.
 The package remains an
 independently deployed custom bearer-header adapter, not a public deployment.
 
-The next usable boundary is WS-MCP-002-10: assembled release proof.
-Start it only after this chunk is reviewed and
-merged, recapture each selected operation from then-current backend OpenAPI, and
-preserve the existing fixed-route, caller-token and no-private-import boundaries.
-
-Keep the catalogue fixed at 27 tools. Guide uploads/setup completion and missing
-policy-selector recovery remain outside that inventory;
-do not silently add tools to repair those workflow limits. GitHub permissions
-govern contribution; these technical prerequisites are not another approval system.
+The maintainer subsequently requested broader MCP coverage against the public
+API and explicitly allowed multiple larger PRs to proceed concurrently. Rows
+10 through 14 divide the 100 remaining product operations into five coherent
+batches. `/api/v1/health` is excluded because it is operational liveness, not a
+user capability. Every batch preserves fixed routes, caller-token forwarding,
+selected OpenAPI contracts, no private imports and Workstream-owned authority.
+Release proof follows the assembled 127-tool product catalogue.
 
 ## References
 

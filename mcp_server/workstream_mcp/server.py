@@ -29,10 +29,12 @@ from workstream_mcp.tools import (
     access_reads,
     actor_lifecycle,
     admin_grants,
+    contribution_policies,
     guides,
     policies,
     project_grants,
     projects,
+    workspace_reads,
 )
 from workstream_mcp.tools.context import (
     TOOL_NAME as AUTHORIZATION_CONTEXT_TOOL_NAME,
@@ -119,6 +121,8 @@ def create_app(settings: Settings) -> Starlette:
     project_grant_definitions = project_grants.definitions()
     guide_definitions = guides.definitions()
     policy_definitions = policies.definitions()
+    workspace_read_definitions = workspace_reads.definitions()
+    contribution_policy_definitions = contribution_policies.definitions()
     gateway: WorkstreamGateway | None = None
 
     async def list_tools(
@@ -137,6 +141,8 @@ def create_app(settings: Settings) -> Starlette:
                 *project_grant_definitions,
                 *guide_definitions,
                 *policy_definitions,
+                *workspace_read_definitions,
+                *contribution_policy_definitions,
             ]
         )
 
@@ -154,6 +160,8 @@ def create_app(settings: Settings) -> Starlette:
             *project_grants.TOOL_NAMES,
             *guides.TOOL_NAMES,
             *policies.TOOL_NAMES,
+            *workspace_reads.TOOL_NAMES,
+            *contribution_policies.TOOL_NAMES,
         }:
             return adapter_failure("unknown_tool", status=404)
         arguments = params.arguments if params.arguments is not None else {}
@@ -201,6 +209,14 @@ def create_app(settings: Settings) -> Starlette:
             )
         if params.name in policies.TOOL_NAMES:
             return await policies.invoke(
+                gateway, params.name, bearer, correlation_id, arguments
+            )
+        if params.name in workspace_reads.TOOL_NAMES:
+            return await workspace_reads.invoke(
+                gateway, params.name, bearer, correlation_id, arguments
+            )
+        if params.name in contribution_policies.TOOL_NAMES:
+            return await contribution_policies.invoke(
                 gateway, params.name, bearer, correlation_id, arguments
             )
         return await invoke_context(gateway, bearer, correlation_id, arguments)
