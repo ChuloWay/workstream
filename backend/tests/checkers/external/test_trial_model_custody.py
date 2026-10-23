@@ -10,7 +10,7 @@ import hashlib
 import json
 from pathlib import Path
 import struct
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from sqlalchemy import func, select
 
@@ -38,6 +38,7 @@ from app.interfaces.project_agents import CapabilityParameter, CheckSpecificatio
 from app.modules.actors.api import ServiceIdentity
 from app.modules.artifacts.preparation import HARD_MAXIMUM_ARTIFACT_BYTES
 from app.modules.checkers.api.external import ExternalCheckerSchema, external_checker_json_hash
+from app.modules.checkers.models import CheckerTrialEvidence
 from app.modules.model_usage.api import (
     ProjectModelBudgetConfigurationSpec,
     ProjectModelProfileSpec,
@@ -400,14 +401,44 @@ async def test_trial_receipt_is_art_retained_before_controlled_model_spend(
             read_timeout_seconds=30.0,
             write_timeout_seconds=30.0,
         ):
-            result = await live_executor(
+            executor = live_executor(
                 h,
                 selected_execution=ModelAwareExternalExecution(
                     execution=Driver(), sessions=h.factory
                 ),
-            ).evaluate_post_submission(h.request)
+            )
+            result = await executor.evaluate_post_submission(h.request)
+            replayed_result = await executor.evaluate_post_submission(h.request)
         assert result.outcome == "completed"
+        assert replayed_result == result
         assert len(creates) == 1
-        assert creates[0].resolved_receipts[0].canonical_receipt_utf8
+        provider_prompt = json.loads(creates[0].prompt)
+        assert provider_prompt["schema_version"] == "workstream.model_prompt_with_receipts.v1"
+        assert provider_prompt["prompt"] == "Assess only the retained trial receipt"
+        assert len(provider_prompt["trusted_receipts"]) == 1
+        retained = provider_prompt["trusted_receipts"][0]
+        retained_bytes = json.dumps(
+            retained["receipt"], sort_keys=True, separators=(",", ":"), ensure_ascii=False
+        ).encode()
+        assert retained["receipt_sha256"] == (
+            "sha256:" + hashlib.sha256(retained_bytes).hexdigest()
+        )
+        assert retained["receipt"]["cleanup_confirmed"] is True
+        expected_request_sha256 = external_checker_json_hash(
+            {
+                "schema_version": "workstream.model_session_call.v2",
+                "call_index": 0,
+                "prompt": "Assess only the retained trial receipt",
+                "resolved_receipts": [retained],
+            }
+        )
         async with h.factory() as session:
+            effect = await session.scalar(select(ModelUsageEffect))
+            assert effect is not None
+            assert effect.request_sha256 == expected_request_sha256
+            assert UUID(effect.request_binding_id).version == 7
+            assert UUID(effect.response_binding_id).version == 7
             assert await session.scalar(select(func.count()).select_from(ModelUsageEffect)) == 1
+            evidence = await session.scalar(select(CheckerTrialEvidence))
+            assert evidence is not None
+            assert evidence.content_sha256 == retained["receipt_sha256"]
