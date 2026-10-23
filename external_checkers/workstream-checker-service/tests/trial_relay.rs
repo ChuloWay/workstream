@@ -150,10 +150,16 @@ fn profile() -> TrialProfile {
         maximum_observation_bytes: 32 * 1024,
         maximum_cpu_quota_millis: 2_000,
         maximum_cpu_time_ms: 10_000,
+        maximum_wall_time_overrun_ms: 100,
+        maximum_cpu_time_overrun_ms: 250,
         maximum_memory_bytes: 128 * 1024 * 1024,
+        maximum_memory_overrun_bytes: 1024 * 1024,
         maximum_disk_bytes: 64 * 1024 * 1024,
+        maximum_disk_overrun_bytes: 1024 * 1024,
         maximum_entries: 1_000,
+        maximum_entries_overrun: 16,
         maximum_pids: 32,
+        maximum_pids_overrun: 2,
     }
 }
 
@@ -287,6 +293,52 @@ impl TrialEngine for BuildFailureEngine {
     ) -> Result<TrialExecution, TrialEngineFailure> {
         Ok(build_failure_execution())
     }
+}
+
+struct ObservedEngine(Mutex<Option<TrialExecution>>);
+
+impl TrialEngine for ObservedEngine {
+    fn execute(
+        &self,
+        _context: &TrialEngineContext,
+        _plan: &TrialPlan,
+        _deadline: Instant,
+        _invocation_cancelled: &AtomicBool,
+        _relay_cancelled: &AtomicBool,
+    ) -> Result<TrialExecution, TrialEngineFailure> {
+        Ok(self.0.lock().unwrap().take().unwrap())
+    }
+}
+
+fn assert_observed_limit_is_published(observation: TrialExecution, expected: &str) {
+    let root = TestRoot::new();
+    let relay_root = root.child("relay");
+    let material_root = root.child("material");
+    let scratch_root = root.child("scratch");
+    let metadata = fs::metadata(&root.0).unwrap();
+    let publisher = Arc::new(FakePublisher::default());
+    let relay = TrialRelay::start(
+        &relay_root,
+        &material_root,
+        &scratch_root,
+        &grant(),
+        &identity(),
+        &profile(),
+        publisher.clone(),
+        Arc::new(ObservedEngine(Mutex::new(Some(observation)))),
+        metadata.uid(),
+        metadata.gid(),
+        Instant::now() + Duration::from_secs(2),
+        Arc::new(AtomicBool::new(false)),
+    )
+    .unwrap();
+    let response = exchange(relay.socket_path(), &request(plan()));
+    assert_eq!(response["outcome"], "completed");
+    assert_eq!(
+        publisher.0.lock().unwrap()[0]["execution"]["steps"][0]["outcome"],
+        expected
+    );
+    assert_eq!(relay.finish().failure, None);
 }
 
 struct StartedRelay {
@@ -516,4 +568,21 @@ fn observed_build_failure_publishes_work_evidence_and_skips_dependent_step() {
     );
     drop(publications);
     assert_eq!(relay.finish().failure, None);
+}
+
+#[test]
+fn observed_cpu_and_deadline_overruns_are_preserved_within_enforcement_caps() {
+    let mut cpu = execution(true);
+    cpu.steps[0].outcome = TrialOperationOutcome::CpuExceeded;
+    cpu.steps[0].exit_code = None;
+    cpu.steps[0].signal = Some(9);
+    cpu.steps[0].cpu_time_ms = 5_001;
+    assert_observed_limit_is_published(cpu, "cpu_exceeded");
+
+    let mut deadline = execution(true);
+    deadline.steps[0].outcome = TrialOperationOutcome::DeadlineExceeded;
+    deadline.steps[0].exit_code = None;
+    deadline.steps[0].signal = Some(9);
+    deadline.steps[0].elapsed_ms = 850;
+    assert_observed_limit_is_published(deadline, "deadline_exceeded");
 }

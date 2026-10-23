@@ -92,10 +92,16 @@ pub(crate) struct TrialProfile {
     pub(crate) maximum_observation_bytes: usize,
     pub(crate) maximum_cpu_quota_millis: u64,
     pub(crate) maximum_cpu_time_ms: u64,
+    pub(crate) maximum_wall_time_overrun_ms: u64,
+    pub(crate) maximum_cpu_time_overrun_ms: u64,
     pub(crate) maximum_memory_bytes: u64,
+    pub(crate) maximum_memory_overrun_bytes: u64,
     pub(crate) maximum_disk_bytes: u64,
+    pub(crate) maximum_disk_overrun_bytes: u64,
     pub(crate) maximum_entries: u64,
+    pub(crate) maximum_entries_overrun: u64,
     pub(crate) maximum_pids: u64,
+    pub(crate) maximum_pids_overrun: u64,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -664,10 +670,16 @@ fn valid_profile(profile: &TrialProfile) -> bool {
         && profile.maximum_observation_bytes <= ABSOLUTE_MAXIMUM_FRAME_BYTES
         && profile.maximum_cpu_quota_millis > 0
         && profile.maximum_cpu_time_ms > 0
+        && profile.maximum_wall_time_overrun_ms > 0
+        && profile.maximum_cpu_time_overrun_ms > 0
         && profile.maximum_memory_bytes > 0
+        && profile.maximum_memory_overrun_bytes > 0
         && profile.maximum_disk_bytes > 0
+        && profile.maximum_disk_overrun_bytes > 0
         && profile.maximum_entries > 0
+        && profile.maximum_entries_overrun > 0
         && profile.maximum_pids > 0
+        && profile.maximum_pids_overrun > 0
         && !profile.platform.is_empty()
 }
 
@@ -986,7 +998,19 @@ fn validate_execution(
         .try_fold(execution.build.cpu_time_ms, |total, item| {
             total.checked_add(item.cpu_time_ms)
         });
-    if aggregate_cpu_time_ms.is_none_or(|value| value > plan.resources.cpu_time_ms) {
+    let cpu_exceeded = execution.build.outcome == TrialOperationOutcome::CpuExceeded
+        || execution
+            .steps
+            .iter()
+            .any(|item| item.outcome == TrialOperationOutcome::CpuExceeded);
+    if aggregate_cpu_time_ms.is_none_or(|value| {
+        !measured_limit(
+            value,
+            plan.resources.cpu_time_ms,
+            profile.maximum_cpu_time_overrun_ms,
+            cpu_exceeded,
+        )
+    }) {
         return Err(TrialRelayFailure::ImplementationUnavailable);
     }
     let mut successful_slots = HashSet::new();
@@ -1009,12 +1033,22 @@ fn validate_execution(
                 .len()
                 .saturating_add(observation.stderr.len())
                 > profile.maximum_step_output_bytes
-            || observation.elapsed_ms > step.timeout_ms
-            || observation.cpu_time_ms > plan.resources.cpu_time_ms
-            || observation.peak_memory_bytes > plan.resources.memory_bytes
-            || observation.peak_pids > plan.resources.pids
-            || observation.written_bytes > plan.resources.disk_bytes
-            || observation.written_entries > plan.resources.maximum_entries
+            || !valid_measured_resources(
+                observation.outcome,
+                observation.elapsed_ms,
+                step.timeout_ms,
+                observation.cpu_time_ms,
+                plan.resources.cpu_time_ms,
+                observation.peak_memory_bytes,
+                plan.resources.memory_bytes,
+                observation.peak_pids,
+                plan.resources.pids,
+                observation.written_bytes,
+                plan.resources.disk_bytes,
+                observation.written_entries,
+                plan.resources.maximum_entries,
+                profile,
+            )
             || !valid_role_inventory(
                 &observation.visible_role_inventory_digests,
                 &step.visible_roles,
@@ -1067,12 +1101,22 @@ fn valid_build_observation(
             .candidate_archive_digest
             .as_deref()
             .is_none_or(valid_sha256)
-        && observation.elapsed_ms <= plan.build_timeout_ms
-        && observation.cpu_time_ms <= plan.resources.cpu_time_ms
-        && observation.peak_memory_bytes <= plan.resources.memory_bytes
-        && observation.peak_pids <= plan.resources.pids
-        && observation.written_bytes <= plan.resources.disk_bytes
-        && observation.written_entries <= plan.resources.maximum_entries
+        && valid_measured_resources(
+            observation.outcome,
+            observation.elapsed_ms,
+            plan.build_timeout_ms,
+            observation.cpu_time_ms,
+            plan.resources.cpu_time_ms,
+            observation.peak_memory_bytes,
+            plan.resources.memory_bytes,
+            observation.peak_pids,
+            plan.resources.pids,
+            observation.written_bytes,
+            plan.resources.disk_bytes,
+            observation.written_entries,
+            plan.resources.maximum_entries,
+            profile,
+        )
         && (observation.candidate_image_digest.is_none()
             == observation.candidate_archive_digest.is_none())
         && valid_build_outcome(observation)
@@ -1103,6 +1147,77 @@ fn valid_build_outcome(observation: &TrialBuildObservation) -> bool {
             !has_candidate && observation.exit_code.is_none() && observation.signal.is_some()
         }
         TrialOperationOutcome::DependencySkipped => false,
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn valid_measured_resources(
+    outcome: TrialOperationOutcome,
+    elapsed_ms: u64,
+    timeout_ms: u64,
+    cpu_time_ms: u64,
+    cpu_time_limit_ms: u64,
+    peak_memory_bytes: u64,
+    memory_limit_bytes: u64,
+    peak_pids: u64,
+    pids_limit: u64,
+    written_bytes: u64,
+    disk_limit_bytes: u64,
+    written_entries: u64,
+    entries_limit: u64,
+    profile: &TrialProfile,
+) -> bool {
+    measured_limit(
+        elapsed_ms,
+        timeout_ms,
+        profile.maximum_wall_time_overrun_ms,
+        outcome == TrialOperationOutcome::DeadlineExceeded,
+    ) && upper_with_overrun(
+        cpu_time_ms,
+        cpu_time_limit_ms,
+        profile.maximum_cpu_time_overrun_ms,
+        outcome == TrialOperationOutcome::CpuExceeded,
+    ) && measured_limit(
+        peak_memory_bytes,
+        memory_limit_bytes,
+        profile.maximum_memory_overrun_bytes,
+        outcome == TrialOperationOutcome::MemoryExceeded,
+    ) && measured_limit(
+        peak_pids,
+        pids_limit,
+        profile.maximum_pids_overrun,
+        outcome == TrialOperationOutcome::PidExceeded,
+    ) && measured_limit(
+        written_bytes,
+        disk_limit_bytes,
+        profile.maximum_disk_overrun_bytes,
+        outcome == TrialOperationOutcome::DiskExceeded,
+    ) && measured_limit(
+        written_entries,
+        entries_limit,
+        profile.maximum_entries_overrun,
+        outcome == TrialOperationOutcome::DiskExceeded,
+    )
+}
+
+fn measured_limit(observed: u64, limit: u64, overrun: u64, exceeded: bool) -> bool {
+    if exceeded {
+        observed > limit
+            && limit
+                .checked_add(overrun)
+                .is_some_and(|upper| observed <= upper)
+    } else {
+        observed <= limit
+    }
+}
+
+fn upper_with_overrun(observed: u64, limit: u64, overrun: u64, exceeded: bool) -> bool {
+    if exceeded {
+        limit
+            .checked_add(overrun)
+            .is_some_and(|upper| observed <= upper)
+    } else {
+        observed <= limit
     }
 }
 
