@@ -389,12 +389,18 @@ composition, exact release markers, CI custody and a real Redis/prefork
 concurrency-two/three-task fail-stop discriminator. The durable hard-timeout proof
 retains the fenced attempt as `compilation_provider_uncertain`.
 
+A lead-custodied provider-backed synthetic production-factory run at exact commit
+`d0a14d292ff108a927cfd06fdd956debd92670c9` completed both draft and coverage
+review through the actual OmniCore adapter with four successful provider responses
+and two document reads. Its retained evidence contains only response sizes and JSON
+shape, not response content. It used a synthetic guide without the database, S3 or
+a durable worker, so it establishes neither original-guide nor hosted readiness.
+
 The complete Omni-environment MinIO suite, both selected release-image builds and
-parser isolation runs, and a successful provider-backed synthetic production-
-factory run remain required before this record is complete. The selected-image AWS
-proof remains required before a deployment claim. The repository documents but
-cannot prove OpenRouter account defaults; real original-guide material remains
-behind retained account/organization/workspace/plugin evidence and operator
+parser isolation runs remain required before this record is complete. The selected-
+image AWS proof remains required before a deployment claim. The repository
+documents but cannot prove OpenRouter account defaults; real original-guide material
+remains behind retained account/organization/workspace/plugin evidence and operator
 confirmation. A generated-data provider call does not establish privacy or hosted
 readiness.
 
