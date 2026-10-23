@@ -386,6 +386,7 @@ class _Journey:
     stages: list[str]
     failures: list[BaseException]
     evidence_diagnostics: list[dict[str, object] | None]
+    output_diagnostics: list[dict[str, object] | None]
     fail_completion: list[bool]
     outputs: object
 
@@ -559,9 +560,11 @@ class _ObservedCalls:
 
 
 class _ObservedOutputs:
-    def __init__(self, owner, stages: list[str]) -> None:
+    def __init__(self, owner, sessions, stages: list[str], diagnostics) -> None:
         self.owner = owner
+        self.sessions = sessions
         self.stages = stages
+        self.diagnostics = diagnostics
 
     def __getattr__(self, name):
         return getattr(self.owner, name)
@@ -578,6 +581,28 @@ class _ObservedOutputs:
             f"store_{role}_done:{result.status}:"
             f"receipt={result.verification_receipt_id is not None}"
         )
+        async with self.sessions() as session:
+            diagnostic = await session.scalar(
+                text(
+                    "select jsonb_build_object("
+                    "'attempt_status',attempt.status,"
+                    "'attempt_result',attempt.terminal_result_code,"
+                    "'job_status',job.status,'job_result',job.terminal_result_code,"
+                    "'replica_verification',replica.verification_state,"
+                    "'replica_availability',replica.availability_state,"
+                    "'replica_integrity',replica.integrity_state,"
+                    "'receipt_outcome',receipt.outcome) "
+                    "from artifact_put_attempts attempt "
+                    "left join artifact_verification_jobs job "
+                    "on job.originating_put_attempt_id=attempt.id "
+                    "left join artifact_replicas replica on replica.id=job.replica_id "
+                    "left join artifact_verification_receipts receipt "
+                    "on receipt.verification_job_id=job.id "
+                    "where attempt.id=:attempt order by job.id desc limit 1"
+                ),
+                {"attempt": str(result.put_attempt_id)},
+            )
+        self.diagnostics.append(diagnostic)
         return result
 
 
@@ -630,7 +655,13 @@ async def _journey(storage: _StorageCase, access) -> _Journey:
         owner=setup_model_usage_owner,
     )
     stages: list[str] = []
-    observed_outputs = _ObservedOutputs(outputs, stages)
+    output_diagnostics: list[dict[str, object] | None] = []
+    observed_outputs = _ObservedOutputs(
+        outputs,
+        storage.factory,
+        stages,
+        output_diagnostics,
+    )
     return _Journey(
         storage,
         profile,
@@ -642,6 +673,7 @@ async def _journey(storage: _StorageCase, access) -> _Journey:
         stages,
         [],
         [],
+        output_diagnostics,
         [True],
         observed_outputs,
     )
@@ -777,6 +809,7 @@ async def test_setup_response_recovers_from_verified_minio_after_ledger_loss(
                         "failures": failures,
                         "stages": journey.stages,
                         "evidence": journey.evidence_diagnostics,
+                        "output": journey.output_diagnostics,
                     },
                     sort_keys=True,
                 )
