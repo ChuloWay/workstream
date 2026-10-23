@@ -759,7 +759,7 @@ async def test_production_service_executes_project_trial_under_runsc_with_real_c
                     "ls",
                     "-aq",
                     "--filter",
-                    "label=workstream.trial.deployment=terminal-systems-runsc-qualification",
+                    "label=workstream.trial.deployment-owner=terminal-systems-runsc-qualification",
                 ],
                 text=True,
             )

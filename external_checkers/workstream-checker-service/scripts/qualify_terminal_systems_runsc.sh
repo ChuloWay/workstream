@@ -36,7 +36,7 @@ cleanup() {
         kill "$(cat /workstream-state/terminal-systems-runsc-composition/registry.pid)" 2>/dev/null || true
       fi
       docker container ls -aq --filter label=workstream.external-checker=true | xargs -r docker rm -f >/dev/null
-      docker container ls -aq --filter label=workstream.trial.deployment=terminal-systems-runsc-qualification | xargs -r docker rm -f >/dev/null
+      docker container ls -aq --filter label=workstream.trial.deployment-owner=terminal-systems-runsc-qualification | xargs -r docker rm -f >/dev/null
       docker images --format "{{.Repository}}:{{.Tag}}" --filter reference="workstream-trial:*" \
         | xargs -r docker image rm >/dev/null
     '
