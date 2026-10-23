@@ -19,6 +19,7 @@ from app.adapters.project_agents.omnicore_agent import (
     _LoopbackOpenRouterGuard,
     _MODEL_TOOLS,
     _TEST_UPSTREAM_AUTHORITY,
+    _run_native_agent,
     _unique_object,
     _validated_test_upstream,
     _validate_request_body,
@@ -61,12 +62,14 @@ class _SyntheticOpenRouter:
         final_output: str,
         retry_statuses: tuple[int, ...] = (),
         always_status: int | None = None,
+        error_message: str = "synthetic persistent provider failure",
         hang: bool = False,
     ) -> None:
         self.handle = handle
         self.final_output = final_output
         self.retry_statuses = retry_statuses
         self.always_status = always_status
+        self.error_message = error_message
         self.hang = hang
         self.requests: list[tuple[dict[str, str], dict[str, object]]] = []
         self.received = asyncio.Event()
@@ -118,7 +121,7 @@ class _SyntheticOpenRouter:
                 await self._respond(
                     writer,
                     self.always_status,
-                    {"error": {"message": "synthetic persistent provider failure"}},
+                    {"error": {"message": self.error_message}},
                     extra_headers={"Retry-After": "0"},
                 )
                 return
@@ -592,6 +595,95 @@ async def test_exhausted_native_retries_open_shared_provider_circuit(monkeypatch
     with pytest.raises(ProviderCircuitOpen):
         blocked.admit_execution()
     await blocked.aclose()
+
+
+@pytest.mark.parametrize(("status", "expected_attempts"), [(400, 1), (429, 4), (500, 4)])
+async def test_actual_sdk_provider_error_body_never_reaches_logs_or_exception(
+    caplog,
+    status,
+    expected_attempts,
+):
+    marker = f"private-guide-marker-{status}"
+    compilation_context = _runtime_context()
+    capabilities, _reads, handle = _capabilities(compilation_context)
+    async with _SyntheticOpenRouter(
+        handle=handle,
+        final_output=_provider_output(),
+        always_status=status,
+        error_message=marker,
+    ) as provider:
+        runtime = OmniCoreAgentProjectGuideRuntime._for_test(
+            compilation_context.runtime_configuration,
+            upstream_url=provider.url,
+        )
+        runtime.admit_execution()
+        try:
+            with pytest.raises(ProjectAgentRuntimeError) as caught:
+                await runtime.compile_project_guide(compilation_context, capabilities)
+        finally:
+            await runtime.aclose()
+    assert len(provider.requests) == expected_attempts
+    assert marker not in str(caught.value)
+    assert all(marker not in record.getMessage() for record in caplog.records)
+
+
+async def test_native_cancellation_never_returns_while_sdk_task_remains_live():
+    release = asyncio.Event()
+    started = asyncio.Event()
+
+    class CancellationResistantAgent:
+        task: asyncio.Task[object] | None = None
+        cancellations = 0
+
+        async def run(self, *_args, **_kwargs):
+            self.task = asyncio.current_task()
+            started.set()
+            while not release.is_set():
+                try:
+                    await release.wait()
+                except asyncio.CancelledError:
+                    self.cancellations += 1
+            return {"status": "success", "termination_reason": "stop", "response": "{}"}
+
+    class Guard:
+        transient_failure_exhausted = False
+
+        def begin_logical_request(self):
+            return None
+
+        async def close(self, _timeout):
+            return None
+
+    class Admission:
+        def before_request(self):
+            return None
+
+        def request_failed(self, _transient):
+            return None
+
+        def request_succeeded(self):
+            return None
+
+    agent = CancellationResistantAgent()
+    outer = asyncio.create_task(
+        _run_native_agent(
+            agent,
+            "synthetic",
+            guard=Guard(),
+            admission=Admission(),
+            cleanup_timeout_seconds=0.01,
+        )
+    )
+    await started.wait()
+    outer.cancel()
+    await asyncio.sleep(0.05)
+    assert not outer.done()
+    assert agent.task is not None and not agent.task.done()
+    assert agent.cancellations >= 2
+    release.set()
+    with pytest.raises(ProjectAgentRuntimeError, match="cancellation did not finish"):
+        await outer
+    assert agent.task.done()
 
 
 async def test_actual_sdk_cancellation_closes_forward_and_runtime_lifecycle():

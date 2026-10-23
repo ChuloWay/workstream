@@ -150,6 +150,7 @@ _RETRY_RESPONSE_HEADERS = frozenset(
         "x-ratelimit-reset-tokens",
     }
 )
+_SANITIZED_PROVIDER_ERROR_BODY = b'{"error":{"message":"provider request failed"}}'
 
 
 @dataclass(frozen=True, slots=True)
@@ -566,13 +567,7 @@ async def _run_native_agent(
             await guard.close(cleanup_timeout_seconds)
         except BaseException as error:
             close_error = error
-        native_task.cancel()
-        try:
-            await asyncio.wait_for(asyncio.shield(native_task), timeout=cleanup_timeout_seconds)
-        except asyncio.CancelledError:
-            pass
-        except TimeoutError:
-            native_task.cancel()
+        if await _cancel_and_join_native_task(native_task, cleanup_timeout_seconds):
             raise ProjectAgentRuntimeError(
                 "project guide native cancellation did not finish"
             ) from None
@@ -592,6 +587,31 @@ async def _run_native_agent(
         raise ProjectAgentRuntimeError("project guide native run failed")
     admission.request_succeeded()
     return response["response"]
+
+
+async def _cancel_and_join_native_task(
+    task: asyncio.Task[Any],
+    timeout_seconds: int | float,
+) -> bool:
+    """Never surrender a native task; report whether bounded cancellation expired."""
+    task.cancel()
+    timed_out = False
+    try:
+        await asyncio.wait_for(asyncio.shield(task), timeout=timeout_seconds)
+    except TimeoutError:
+        timed_out = True
+    except asyncio.CancelledError:
+        if task.done():
+            return False
+    while not task.done():
+        task.cancel()
+        try:
+            await asyncio.shield(task)
+        except asyncio.CancelledError:
+            continue
+    with suppress(BaseException):
+        task.result()
+    return timed_out
 
 
 async def _cleanup_agent(agent: Any, timeout_seconds: int) -> None:
@@ -879,7 +899,10 @@ class _LoopbackOpenRouterGuard:
                     if key.lower() in _RETRY_RESPONSE_HEADERS
                     and len(value.encode("ascii", errors="ignore")) <= 256
                 }
-                return response.status_code, returned_headers, b"".join(chunks)
+                response_body = b"".join(chunks)
+                if response.status_code >= 400:
+                    response_body = _SANITIZED_PROVIDER_ERROR_BODY
+                return response.status_code, returned_headers, response_body
         except httpx.TransportError:
             self._last_upstream_transient_failure = True
             raise
