@@ -27,7 +27,10 @@ use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use trial_docker::DockerRuntimeControl;
+use trial_docker::{DockerTrialBackend, DockerTrialConfiguration};
+use trial_engine::{GenericTrialEngine, SandboxBackendIdentity};
 use trial_profiles::TrialProfileCatalog;
+use trial_relay::{TrialEngine, TrialProfile, TrialRequestIdentity};
 use workstream_checker_sdk::{
     canonical_hash, infrastructure_result, parse_request, validate_result, ValidatedRequest,
     MAX_REQUEST_BYTES,
@@ -505,6 +508,123 @@ fn load_trial_runtime(config: &mut ServiceConfig) -> Result<(), String> {
         }
         _ => Err("trial authority/runtime configuration incomplete".into()),
     }
+}
+
+fn trial_engine(
+    config: &ServiceConfig,
+    request: &ValidatedRequest,
+    profile: &TrialProfile,
+) -> Result<Arc<dyn TrialEngine>, String> {
+    let runtime = config
+        .trial_runtime
+        .as_ref()
+        .ok_or("trial runtime unavailable")?;
+    let control = config
+        .trial_control
+        .as_ref()
+        .ok_or("trial runtime unavailable")?
+        .clone();
+    if runtime.outer_runtime_config_digest != profile.outer_runtime_config_digest {
+        return Err("trial outer runtime identity invalid".into());
+    }
+    let identity = request
+        .value
+        .get("identity")
+        .and_then(Value::as_object)
+        .ok_or("trial request identity invalid")?;
+    let attempt_id = identity
+        .get("attempt_id")
+        .and_then(Value::as_str)
+        .ok_or("trial request identity invalid")?;
+    let backend = DockerTrialBackend::new(
+        DockerTrialConfiguration {
+            identity: SandboxBackendIdentity {
+                engine_identity_digest: profile.engine_identity_digest.clone(),
+                child_runtime: profile.child_runtime.clone(),
+                child_runtime_config_digest: profile.child_runtime_config_digest.clone(),
+                child_host_uds: profile.child_host_uds.clone(),
+                platform: profile.platform.clone(),
+                platform_identity_digest: profile.platform_identity_digest.clone(),
+                builder_image_digest: profile.builder_image_digest.clone(),
+                offline_cache_digest: profile.offline_cache_digest.clone(),
+                approved_base_digests: profile.approved_base_digests.clone(),
+            },
+            deployment_owner: runtime.deployment_owner.clone(),
+            request_digest: request.request_digest.clone(),
+            attempt_id: attempt_id.to_owned(),
+            runtime_key: runtime.runtime_key.clone(),
+            builder_image_id: runtime.builder_image_id.clone(),
+            offline_cache_root: runtime.offline_cache_root.clone(),
+            maximum_candidate_archive_bytes: runtime.maximum_candidate_archive_bytes,
+            candidate_uid: runtime.candidate_uid,
+            candidate_gid: runtime.candidate_gid,
+        },
+        control,
+    )
+    .map_err(|_| "trial runtime unavailable")?;
+    Ok(Arc::new(GenericTrialEngine::new(backend)))
+}
+
+fn trial_request_identity(
+    request: &ValidatedRequest,
+    material_binding_digest: &str,
+) -> Result<TrialRequestIdentity, String> {
+    let identity = request
+        .value
+        .get("identity")
+        .and_then(Value::as_object)
+        .ok_or("trial request identity invalid")?;
+    let string = |name: &str| {
+        identity
+            .get(name)
+            .and_then(Value::as_str)
+            .map(str::to_owned)
+            .ok_or("trial request identity invalid")
+    };
+    let number = |name: &str| {
+        identity
+            .get(name)
+            .and_then(Value::as_u64)
+            .ok_or("trial request identity invalid")
+    };
+    let requirement_id = request
+        .value
+        .pointer("/input/requirement_id")
+        .and_then(Value::as_str)
+        .ok_or("trial requirement invalid")?;
+    let input_digest = request
+        .value
+        .get("input_sha256")
+        .and_then(Value::as_str)
+        .ok_or("trial input digest invalid")?;
+    let materials = request
+        .value
+        .get("materials")
+        .ok_or("trial materials invalid")?;
+    Ok(TrialRequestIdentity {
+        request_digest: request.request_digest.clone(),
+        material_binding_digest: material_binding_digest.to_owned(),
+        input_digest: input_digest.to_owned(),
+        materials_digest: canonical_hash(materials).map_err(|_| "trial materials invalid")?,
+        project_id: string("project_id")?,
+        task_id: string("task_id")?,
+        assignment_id: string("assignment_id")?,
+        submission_id: string("submission_id")?,
+        submission_version: number("submission_version")?,
+        requirement_id: requirement_id.to_owned(),
+        registry_entry_id: request.registry_entry_id.clone(),
+        registry_entry_digest: request.registry_entry_digest.clone(),
+        checker_image_digest: request.image_digest.clone(),
+        configuration_sha256: request.configuration_digest.clone(),
+        evaluation_request_id: string("evaluation_request_id")?,
+        evaluation_generation: number("evaluation_generation")?,
+        checker_run_id: string("attempt_id")?,
+        attempt_id: string("attempt_id")?,
+        result_id: string("result_id")?,
+        worker_lease_id: string("lease_id")?,
+        worker_lease_generation: number("lease_generation")?,
+        worker_lease_expires_at: string("lease_expires_at")?,
+    })
 }
 
 fn load_trial_profiles(config: &mut ServiceConfig) -> Result<(), String> {

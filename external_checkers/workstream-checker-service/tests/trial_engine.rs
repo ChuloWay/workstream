@@ -183,6 +183,7 @@ fn profile() -> TrialProfile {
         checker_image_digest: digest('3'),
         configuration_sha256: digest('4'),
         engine_identity_digest: digest('5'),
+        outer_runtime_config_digest: digest('6'),
         child_runtime: "runsc".into(),
         child_runtime_config_digest: digest('5'),
         child_host_uds: "none".into(),

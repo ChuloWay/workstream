@@ -203,6 +203,7 @@ fn profile() -> TrialProfile {
         checker_image_digest: identity.checker_image_digest,
         configuration_sha256: identity.configuration_sha256,
         engine_identity_digest: digest('7'),
+        outer_runtime_config_digest: digest('6'),
         child_runtime: "runsc".into(),
         child_runtime_config_digest: digest('7'),
         child_host_uds: "none".into(),

@@ -185,6 +185,7 @@ impl TrialAuthorityEntry {
             checker_image_digest: self.checker_image_digest,
             configuration_sha256: self.configuration_sha256,
             engine_identity_digest: self.profile.engine_identity_digest,
+            outer_runtime_config_digest: self.profile.outer_runtime_config_digest,
             child_runtime: self.profile.runtime,
             child_runtime_config_digest: self.profile.child_runtime_config_digest,
             child_host_uds: self.profile.child_host_uds,
