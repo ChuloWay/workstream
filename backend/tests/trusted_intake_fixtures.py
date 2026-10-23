@@ -103,3 +103,11 @@ class LocalIntakeAdapter:
 
     async def health(self):
         return LocalIntakeSession().identity
+
+
+def assert_sealed_export(root):
+    """Revoked grants restore sealed modes before another binding can publish."""
+    assert root.stat().st_mode & 0o777 == 0o500
+    for entry in root.rglob("*"):
+        mode = entry.stat().st_mode & 0o777
+        assert mode == 0o500 if entry.is_dir() else mode in {0o400, 0o500}
