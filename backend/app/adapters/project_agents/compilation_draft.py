@@ -8,7 +8,10 @@ from jsonschema import Draft202012Validator
 from jsonschema.exceptions import ValidationError as SchemaValidationError
 from pydantic import ValidationError
 
-from app.interfaces.project_agents import ProjectGuideCompilationResult
+from app.interfaces.project_agents import (
+    GENERATED_REQUIREMENT_DISPOSITIONS,
+    ProjectGuideCompilationResult,
+)
 
 
 def _unique_object(pairs):
@@ -24,6 +27,50 @@ def _unique_object(pairs):
 def _reject_constant(_value):
     """Reject nonstandard JSON numeric constants without copying their text."""
     raise ValueError("nonstandard JSON constant")
+
+
+def generated_compilation_schema(schema: dict) -> dict:
+    """Restrict new model output while retaining immutable historical read schemas."""
+    from copy import deepcopy
+
+    generated = deepcopy(schema)
+    generated["$defs"]["RequirementDisposition"]["enum"] = sorted(
+        item.value for item in GENERATED_REQUIREMENT_DISPOSITIONS
+    )
+    generated["$defs"]["AtomicGuideRequirement"]["properties"]["disposition"]["enum"] = sorted(
+        item.value for item in GENERATED_REQUIREMENT_DISPOSITIONS
+    )
+    generated["$defs"]["AtomicGuideRequirement"]["properties"]["disposition"]["description"] = (
+        "Classify only submission checks: supported or missing PRE/POST capabilities, "
+        "exact default PRE coverage, or guide defects preventing check specification."
+    )
+    del generated["properties"]["setup_notes"]
+    generated["required"].remove("setup_notes")
+    return generated
+
+
+def contextual_output_issue(error: Exception) -> dict:
+    """Map trusted invariant failures to closed codes without forwarding error text."""
+    codes = {
+        "generated requirement is outside PRE and POST checker scope": "checker_scope",
+        "generated setup notes are outside checker specification scope": "unknown_field",
+        "model evaluation requires post-submit background work": "model_requires_post",
+        "pre-submit check specification is not bounded": "pre_duration",
+        "post-submit check specification is not background work": "post_background",
+        "supported check depends on unavailable runtime support": "unavailable_dependency",
+        "supported compilation requirements must have one binding": "binding_count",
+        "capability gaps must have exactly one suggestion": "suggestion_count",
+        "compilation capability suggestion is invalid": "suggestion_reference",
+        "compilation capability binding is invalid": "binding_reference",
+        "compilation capability version is stale": "binding_version",
+        "compilation evidence does not resolve to source lineage": "source_identity",
+        "ready compilation does not account for every assigned document": "source_coverage",
+        "compilation has no opened document evidence": "source_not_opened",
+        "compilation cites unopened source material": "source_not_opened",
+        "platform coverage does not resolve to canonical truth": "platform_coverage",
+        "non-platform requirement cannot claim platform coverage": "platform_coverage",
+    }
+    return {"path": [], "code": codes.get(str(error), "context_constraint")}
 
 
 class CompilationDraftParser:
@@ -49,8 +96,16 @@ class CompilationDraftParser:
         self._validator = Draft202012Validator(schema)
         self._maximum_bytes = maximum_bytes
 
+    def _path(self, parts) -> list:
+        """Return only trusted schema field names and bounded array ordinals."""
+        return [
+            part if type(part) is int or part in self._fields else "<field>"
+            for part in list(parts)[:16]
+        ]
+
     def parse(self, raw: str) -> dict | None:
         """Return only bounded structural data; failed parsing exposes no error object."""
+        self.issues = [{"path": [], "code": "invalid_json"}]
         try:
             if len(raw.encode("utf-8")) > self._maximum_bytes:
                 return None
@@ -61,12 +116,25 @@ class CompilationDraftParser:
             )
             if not isinstance(candidate, dict):
                 return None
-            self._validator.validate(candidate)
+            errors = []
+            for error in self._validator.iter_errors(candidate):
+                errors.append(
+                    {
+                        "path": self._path(error.absolute_path),
+                        "code": "schema_" + str(error.validator),
+                    }
+                )
+                if len(errors) == 20:
+                    break
+            if errors:
+                self.issues = errors
+                return None
             # Escaped lone surrogates and non-finite numeric overflow must not
             # become serialization failures after the provider boundary.
             json.dumps(candidate, ensure_ascii=False, allow_nan=False).encode("utf-8")
         except (ValueError, RecursionError, UnicodeError, SchemaValidationError):
             return None
+        self.issues = []
         return candidate
 
     def canonical_issues(self, candidate: dict) -> list[dict]:

@@ -28,6 +28,7 @@ from app.modules.projects.api.guide_documents import GuideDocumentManifest, Guid
 from app.interfaces.project_agents import (
     AtomicGuideRequirement,
     CheckFailureFinding,
+    PlatformCoverageRef,
     CheckInfrastructureFailure,
     CheckInput,
     CheckNegativeTest,
@@ -242,10 +243,13 @@ def valid_specification() -> CheckSpecification:
 def generated_result() -> ProjectGuideCompilationResult:
     """Return a valid new-generation result without changing retained fixtures."""
     requirement = AtomicGuideRequirement(
-        requirement_id="review_scope",
-        statement="The guide provides background for claim review.",
-        disposition="informational",
-        classification_rationale="This material explains the review scope.",
+        requirement_id="safe_archive",
+        statement="The submitted archive must be safe to open.",
+        disposition="platform_covered",
+        platform_coverage=PlatformCoverageRef(
+            capability_id="workstream.default", capability_version="v1", stage="pre_submit",
+        ),
+        classification_rationale="The default checker enforces bounded archive safety.",
         evidence_refs=(
             GuideEvidenceRef(
                 source_item_id=SOURCE_ITEM_ID,
@@ -254,7 +258,9 @@ def generated_result() -> ProjectGuideCompilationResult:
             ),
         ),
     )
-    return result().model_copy(update={"requirements": (requirement,)})
+    body = result().model_dump(mode="json", exclude={"setup_notes"})
+    body["requirements"] = [requirement.model_dump(mode="json")]
+    return ProjectGuideCompilationResult.model_validate(body)
 
 
 def identity(

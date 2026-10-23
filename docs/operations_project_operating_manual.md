@@ -410,7 +410,8 @@ carry no source filenames and JSON is not an admitted guide media type:
 Besides `format`, the object has exactly the result fields `status`,
 `findings`, `submission_artifact_policy`, `requirements`,
 `pre_submit_bindings`, `post_submit_bindings`, `capability_suggestions` and
-`setup_notes`, with the same meaning and limits as the model result. The
+`setup_notes` in this explicit manager-authored format. Inferred setup output has
+no notes field and cannot classify human-review or project-management requirements. The
 runtime adds `agent_name`, `agent_version` and `schema_version`. Each evidence
 reference names a document by `"document"`: either its `sha256:` digest or its
 manifest filename (`<source_item_id>.<extension>`), plus optional `start_page`,

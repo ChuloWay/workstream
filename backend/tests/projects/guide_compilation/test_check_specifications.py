@@ -109,13 +109,16 @@ def test_generation_admission_does_not_change_retained_result_hashes() -> None:
     assert "check_specification" not in accepted.canonical_result["requirements"][0]
     assert accepted_compilation_result(reparsed) == accepted
     validate_project_guide_compilation_result(context(ids()), legacy)
-    with pytest.raises(ValueError, match="classification rationale"):
+    with pytest.raises(ValueError, match="outside checker specification scope"):
         require_complete_generated_specifications(context(ids()), legacy)
 
 
-def test_ready_generation_requires_a_requirement_inventory() -> None:
-    with pytest.raises(ValueError, match="requirement inventory"):
-        require_complete_generated_specifications(context(ids()), result())
+def test_checkless_guide_does_not_require_invented_management_requirements() -> None:
+    checkless = ProjectGuideCompilationResult.model_validate(
+        result().model_dump(mode="json", exclude={"setup_notes"})
+    )
+    validate_project_guide_compilation_result(context(ids()), checkless)
+    require_complete_generated_specifications(context(ids()), checkless)
 
 
 def test_every_generated_requirement_requires_source_evidence() -> None:
@@ -133,12 +136,12 @@ def test_every_generated_requirement_requires_source_evidence() -> None:
         (
             "human_review",
             valid_specification(),
-            "non-check requirement cannot include",
+            "outside PRE and POST checker scope",
         ),
         (
             "project_lifecycle_policy",
             valid_specification(),
-            "non-check requirement cannot include",
+            "outside PRE and POST checker scope",
         ),
     ],
 )

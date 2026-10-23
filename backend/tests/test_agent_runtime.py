@@ -78,7 +78,7 @@ async def _open_prompt_documents(agent, prompt, count=None):
 
 def _provider_payload(value=None):
     """Include nullable members required by the provider's strict JSON schema."""
-    payload = (result() if value is None else value).model_dump(mode="json")
+    payload = (result() if value is None else value).model_dump(mode="json", exclude={"setup_notes"})
     for requirement in payload["requirements"]:
         requirement.setdefault("classification_rationale", None)
         requirement.setdefault("check_specification", None)
@@ -118,7 +118,7 @@ async def _compile(runtime, compilation_context):
 
 
 def test_unified_compilation_instructions_preserve_untrusted_and_lifecycle_boundaries():
-    for text in ("untrusted", "pre-submit", "post-submit", "ProjectGuideCompilationAgent"):
+    for text in ("untrusted", "PRE", "POST", "ProjectGuideCompilationAgent"):
         assert text in PROJECT_GUIDE_INSTRUCTIONS
 
 
@@ -222,13 +222,11 @@ async def test_unified_compilation_uses_scoped_tools_and_strict_output(monkeypat
         supplied = json.loads(prompt)
         assert "runtime_configuration" not in supplied
         if len(calls) == 1:
-            return _sdk_result(agent, result().model_copy(
-                update={"setup_notes": ("Unchecked candidate.",)}
-            ))
+            return _sdk_result(agent)
         assert supplied["phase"] == "coverage_review"
         assert supplied["guide_setup_context"] == json.loads(calls[0][1])
         assert "runtime_configuration" not in supplied["guide_setup_context"]
-        assert supplied["candidate_proposal"]["setup_notes"] == ["Unchecked candidate."]
+        assert "setup_notes" not in supplied["candidate_proposal"]
         return _sdk_result(agent)
 
     monkeypatch.setattr(Runner, "run", run)
@@ -317,16 +315,16 @@ async def test_review_must_open_every_original_independently(monkeypatch, review
         with pytest.raises(ProjectGuideCompilationInvalidOutputError) as caught:
             await _compile(runtime, compilation)
         assert caught.value.failure_code == "schema_invalid"
-    assert phases == [1, 1]
+    assert phases == ([1, 1] if review_count == 2 else [1, 1, 1, 1])
 
 
 @pytest.mark.parametrize("kind", ["mapping", "json", "model"])
 async def test_unified_runtime_accepts_complete_sdk_output(monkeypatch, kind):
     output = result()
     value = (
-        output.model_dump(mode="json")
+        output.model_dump(mode="json", exclude={"setup_notes"})
         if kind == "mapping"
-        else output.model_dump_json()
+        else output.model_dump_json(exclude={"setup_notes"})
         if kind == "json"
         else output
     )
@@ -489,7 +487,7 @@ async def test_actual_sdk_parser_preserves_known_invalid_output(monkeypatch, kin
         assert caught.value.failure_code == expected
         assert "secret123" not in str(caught.value)
         assert caught.value.__suppress_context__
-    assert calls == ([1, 1] if kind in {"valid", "unsafe"} else [1])
+    assert calls == ([1, 1] if kind == "valid" else [1, 1, 1])
 
 
 @pytest.mark.parametrize("include_dependency", [True, False])
@@ -504,6 +502,7 @@ async def test_sdk_parser_requires_declared_isolated_execution_dependency(
     requirement = payload["requirements"][0]
     requirement["disposition"] = "post_submit_capability_gap"
     requirement["classification_rationale"] = "Repeated trials need background execution."
+    requirement["platform_coverage"] = None
     specification = _provider_specification()
     specification.update(
         evaluation_method="isolated_execution",
@@ -557,7 +556,7 @@ async def test_sdk_parser_requires_declared_isolated_execution_dependency(
         with pytest.raises(ProjectGuideCompilationInvalidOutputError) as caught:
             await _compile(runtime, context(ids()))
         assert caught.value.failure_code == "schema_invalid"
-    assert calls == [1, 1]
+    assert calls == ([1, 1] if include_dependency else [1, 1, 1])
 
 
 async def test_unclassified_sdk_behavior_error_remains_unresolved(monkeypatch):
@@ -598,16 +597,17 @@ async def test_sdk_parser_error_drops_payload_tracebacks(monkeypatch, redacted, 
 
     calls = []
 
-    async def run(agent, *args, **kwargs):
+    async def run(agent, prompt, **kwargs):
         calls.append(1)
         if phase == "review" and len(calls) == 1:
+            await _open_prompt_documents(agent, prompt)
             return _sdk_result(agent)
         return SimpleNamespace(final_output=agent.output_type.validate_json(raw))
 
     monkeypatch.setattr(Runner, "run", run)
     error = await _capture_parser_error(OpenAIAgentSdkProjectGuideRuntime(runtime_configuration()))
     assert error.failure_code == "schema_invalid"
-    assert calls == ([1, 1] if phase == "review" else [1])
+    assert calls == ([1, 1, 1, 1] if phase == "review" else [1, 1, 1])
     pending = [error]
     seen = set()
     while pending:
@@ -713,49 +713,24 @@ def test_default_instructions_advertise_contextual_output_constraints():
 
     instructions = " ".join(PROJECT_GUIDE_INSTRUCTIONS.split())
     for rule in (
-        "Only supported_pre_submit and supported_post_submit have binding proposals",
-        "platform_coverage must be null unless the disposition is platform_covered",
-        "they are not projected or executable while blocked",
-        "return exactly one capability_suggestions item with its requirement_id",
-        "A fully covered project may have no suggestions",
-        "Both pre-submit and post-submit bindings carry parameters",
-        "they do not require an automated judge",
-        "A guide_blocker requirement requires guide_blocked",
-        "Capability gaps alone are not guide deficiencies",
-        "can reliably finish within 60 seconds",
-        "Automation alone does not make a check POST",
-        "Give every atomic requirement a classification_rationale",
-        "evaluation_method isolated_execution requires an entry",
-        "model evaluation always belongs to POST background work",
-        "include its unavailable_code once in infrastructure_failures",
-        "must appear in both inputs and runtime_dependencies, never only one",
-        "Reading short prose does not make a judgment static",
-        "Every mandatory condition needs an error finding",
-        "Disclosure of noncompliance is not a pass unless the guide explicitly makes disclosure sufficient",
-        "Apply correction_feedback to the untrusted correction_predecessor",
-        "preserve valid coverage and original obligations",
-        "enumerate field identifiers, types, values, ranges and exceptions",
-        "Require mandatory content to exist, then check its accuracy",
-        "required_artifacts lists regular files only",
-        "authenticated resolved-check input, or a conservative complete rerun",
-        "permissions and advice remain nonblocking",
-        "current_runner means isolation of the checker image itself",
-        "File presence is structural; whether prose explains that file's role is qualitative",
-        "Guide-required runtime outcomes need isolated_execution",
-        "Put revision change explanations, rerun evidence and objective preservation",
-        "Do not restate budget arithmetic or totals in setup_notes",
-        "Independently enumerate each source obligation before comparing it with the candidate",
-        "requires both the specification and verification materials",
-        "Recording paths in submission_artifact_policy does not prove",
-        "Supply both start_page and end_page together",
-        "for a single page use that same number at both ends",
-        "Paraphrase section headings using the same safe plain-prose rules",
-        "Required and forbidden policy lists must not overlap",
-        "maximum file size must not exceed the maximum package size",
-        "Return null for unspecified project file, expanded-package, compressed-archive and entry-count limits",
-        "Do not block for absent limits",
+        "The PM sets review mode, revision caps/windows",
+        "Ignore administrative clauses when extracting checks",
+        "PRE: static inspection or other bounded work",
+        "60 seconds",
+        "All model evaluation is POST",
+        "File presence is static",
+        "Project layout, required files, metadata",
+        "Missing implementations are same-stage capability gaps",
+        "Each supported/gap PRE/POST requirement needs the complete typed check_specification",
+        "Return exactly one JSON object",
+        "At most two invalid-output corrections",
+        "Reopen the assigned originals",
+        "Leave unspecified project",
+        "source_item_id, document_version_id and sha256",
     ):
         assert rule in instructions
+    assert "setup_notes" not in instructions
+
 
 
 @pytest.mark.parametrize("blocked_phase", ["draft", "review"])

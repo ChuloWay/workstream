@@ -453,12 +453,26 @@ Pre-submit results do not create durable `CheckerRun` records, do not move a
 task to `review_pending`, and do not return review decision values: `accept`,
 `needs_revision`, or `reject`.
 
-The unified `ProjectGuideCompilationAgent` proposes artifact intake, sufficiency
-and both checker-stage bindings in one constrained result. It proposes no
-unrestricted executable code. Each atomic requirement explains its classification
-in `classification_rationale`. Every supported PRE/POST requirement and every
-staged capability gap carries one `check_specification`; human-review,
-platform-covered, lifecycle-policy and guide-blocker requirements do not.
+The `ProjectGuideCompilationAgent` derives only PRE and POST checks. Artifact
+requirements, guide sufficiency, exact default coverage and capability gaps support
+that specification. The PM independently configures review mode, revision caps and
+windows, deadlines, eligibility and compensation. The agent neither recommends nor
+classifies those choices. New inference output rejects human-review, lifecycle and
+informational requirement classifications; it has no free-form notes field.
+Each check explains its classification in `classification_rationale` and carries
+one `check_specification`. Exact default coverage and guide blockers are supporting
+facts, with no checker specification. Retained results and explicitly manager-authored
+rules preserve their existing read and authority contracts.
+
+Both inference phases require one strict JSON object. Malformed JSON, duplicate
+keys, extra fields and schema/canonical/context failures are rejected before the
+candidate can proceed. Up to two corrections across the entire attempt receive
+bounded field paths and closed error codes, never rejected values. Corrections share
+the original timeout, model-turn/tool budgets and cleanup. Generic provider errors
+are not treated as proof of invalid output or replay permission. The successful
+review phase independently reopens the source originals before final admission.
+The complete synthetic PRE/POST example is included in the immutable instruction
+snapshot and hash. See [the setup contract](engineering/guide-checker-specification.md).
 
 The typed specification is the implementation and test handoff. It records the
 evaluation method, `bounded_pre_submit` or `background` execution mode, proposed
