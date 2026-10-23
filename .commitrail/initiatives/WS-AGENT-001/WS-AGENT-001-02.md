@@ -73,8 +73,11 @@ the SDK tool registry and the Workstream tool schemas.
 The guard builds a new upstream object from those validated fields rather than
 forwarding the accepted body. It injects the exact model, exact tool schemas and
 OpenRouter `provider` policy with `allow_fallbacks=false` and
-`data_collection=deny`. It explicitly disables each plugin supported by the
-qualified OpenRouter request profile and rebuilds the captured
+`data_collection=deny`. It uses the shared qualified OpenRouter policy to request
+disablement of `web`, `file-parser`, `response-healing`, `armor`,
+`pareto-router` and `context-compression`. OpenRouter rejects an `enabled` field
+for `alignment`, so alignment must instead be disabled and protected from request
+override in the provider account. The guard rebuilds the captured
 `usage:{"include":true}` without forwarding the inbound object.
 `data_collection=deny` is a provider-routing constraint, not a zero-data-retention
 claim. OpenRouter account or organization defaults can enable plugins and can
@@ -124,9 +127,16 @@ assignment of the exact already-present byte string is permitted only when
 equality is proved before and after construction, execution and cleanup.
 
 Install in a separate locked SDK environment from OpenAI Agents SDK: OmniCore's
-LiteLLM currently requires `openai<3`, whereas the OpenAI environment pins 3.11.0.
+LiteLLM currently requires `openai<3`, whereas the OpenAI environment pins 3.37.0.
 Use the same core source and dependency lock with explicit environment selection,
 not relaxed dependency verification or a parallel Workstream implementation.
+The shared project remains Python >=3.11,<3.13; the mutually exclusive `omnicore`
+extra is Python >=3.12 and conflicts exactly with the `agents` extra. LiteLLM's
+`boto3>=1.43.1` makes the former aiobotocore 3.7.0/botocore 1.43.0 pins
+unsatisfiable, so the bounded dependency integration may lift only those pins to
+aiobotocore 3.8.0/botocore 1.43.3. The existing real MinIO S3 protocol suite must
+pass after that lift, and an AWS smoke remains required before any deployed-image
+claim; this change does not alter the S3 implementation.
 
 ## Acceptance criteria
 
@@ -145,7 +155,8 @@ not relaxed dependency verification or a parallel Workstream implementation.
 - No hosted file/container calls, persistent SDK session, unexpected tool or
   telemetry endpoint. Retention claims match observed/provider-documented behavior.
 - Every captured upstream model request contains the exact enforced OpenRouter
-  provider policy and explicit locked plugin disables. Independent mutations of
+  provider policy and explicit qualified request-level plugin disables; provider
+  account evidence separately covers alignment. Independent mutations of
   every rejected field, duplicate key, header, model and tool form fail before
   upstream contact. A hostile local request cannot change the credential, model,
   tools, upstream URL, plugin, privacy or fallback policy, and cannot make the
