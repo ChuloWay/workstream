@@ -104,9 +104,10 @@ default or POST materialization and per-entry cleanup. A proposed policy that ca
 fit must expose an `execution_capacity` runtime gap with a `capacity_exceeded`
 infrastructure outcome; supported bindings cannot exceed the actual aggregate
 deadline. A stage that fits must not claim a capacity gap. This does not increase
-runtime capacity. Ordinary checker-image
-isolation also does not supply nested task environments, which remain explicit
-runtime gaps until supported.
+runtime capacity. Ordinary checker-image isolation does not supply nested task
+environments. A POST requirement may claim that support only when its exact
+binding selects the typed generic isolated-trial profile described below and
+every required material and runtime dependency is present.
 
 The trusted compiler binds approved requirement identities to exact immutable
 registry entries, image/configuration/schema digests and ordered PRE/POST
@@ -270,6 +271,44 @@ engineering implements gaps before corrected policy approval and activation.
 The runner's existing sandbox contract does not by itself prove that arbitrary
 submitted environments can be built and tested. Any such requirement must have
 a supported, bounded image implementation before the project can activate.
+
+### Invocation-local isolated trial tool
+
+An approved POST image may use the existing service's typed generic trial tool
+through one request-bound `/work/execution.sock`. This socket is an internal
+capability of the already selected invocation; it is not a second runner,
+provider, host socket or final-result variant. The exact administrative profile
+binds the POST registry entry and digest, checker image and configuration hash,
+offline builder/base/cache identities, opaque material roles and visibility,
+generic operation slots, aggregate resource ceilings and current execution
+identity. The image cannot select Docker flags, host paths, mounts, runtime,
+network, devices, credentials or another image. Workload commands remain
+untrusted argument arrays executed only inside the confined candidate image;
+they are never appended as host launcher flags.
+
+ART owns verified read-only inputs and canonical bounded scratch. The service
+projects only profile-authorized build/runtime roles, uses a networkless
+digest-pinned offline builder under the configured sandbox, loads exactly one
+owned candidate image, and runs fresh non-root, capability-free trials with no
+host socket or device. It applies independent CPU, memory/swap, PID, time,
+writable-byte/entry and output bounds to descendants. Missing prepared material,
+launch or cache failure, cancellation, capacity exhaustion and uncertain cleanup
+are infrastructure outcomes, never contributor findings.
+
+Completed observations are published only after owned nested resources and
+scratch are settled. An opaque handle resolves to server-owned, request/material/
+profile/plan/engine-bound facts in the same invocation. When a model assessment
+depends on a trial, the model boundary injects the resolved canonical facts; an
+image-authored copy cannot substitute. Required observations and cleanup also
+guard final result acceptance. Any durable replay claim additionally needs a
+typed CHECKERS/ART evidence owner; invocation memory and isolation metadata are
+not durable ART custody.
+
+This mechanism does not revive the removed output continuation. Shared Rust
+contains no project filename, task identity, rubric, trial sequence or command
+allowlist. Project logic and relative workload commands stay in the approved
+image/profile. An outer `project_private_plan.v1` remains invalid output and
+cannot request host work.
 
 The service holds a nonblocking exclusive lock on the validated private socket
 parent for the listener lifetime. It acquires that custody before Docker

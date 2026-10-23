@@ -44,13 +44,28 @@ for separate runner provisioning and Operator registration; it changes no policy
   normalized result and settles owned resources.
 - The image evaluates the approved project requirements and returns bounded
   findings. It cannot approve a submission, mutate project policy, select another
-  image, mount another project's files or request a private host-side continuation.
+  image, mount another project's files or request a private host-side continuation
+  through its final output.
 
 The service does not interpret project-private build plans. An image that needs
-to compile or test submitted work must implement that behavior within the
-supported isolation and resource contract. Unsupported runtime needs must be
-resolved explicitly before approving that capability; they are not permission
-to add a named-project exception or expose the host Docker socket.
+to compile or test submitted work may use the typed generic invocation-local
+trial tool only when its exact POST binding and administrative profile authorize
+that capability. The image supplies bounded generic operations, safe relative
+selectors and workload argument arrays through `/work/execution.sock`; it never
+selects Docker flags, host paths, mounts, runtime, images, network, devices,
+credentials or resource enlargements. Opaque profile material roles control
+build and runtime visibility. Shared Rust contains no project filenames, task
+allowlists, rubrics or command allowlists.
+
+The service keeps Docker/runsc authority, approved offline material, protected
+role projection, aggregate limits, observation and cleanup custody. Workload
+argv is passed only after the candidate image in the nested sandbox command; it
+is never interpreted as host launcher flags. Trial observations become usable
+only after required operations and cleanup complete. A dependent model call
+resolves server-owned same-invocation receipt facts instead of trusting JSON
+copied by the checker. Unsupported runtime or material remains an explicit gap;
+it is not permission to expose the host Docker socket or add a named-project
+service branch.
 
 ## From guide to an active project
 
@@ -101,6 +116,8 @@ configuration before starting this version; unknown configuration is rejected.
 Retain registry entries, locked policies, submissions and historical evidence.
 Do not rewrite them to point at replacement images. Any replacement needs the
 normal versioned registration, proposal and approval process. A retained image
-that returns a private plan now produces an invalid-output infrastructure failure,
-not a continuation or a contributor-work failure. Do not blindly retry it as if
-the capability still exists.
+that returns `project_private_plan.v1` or another private plan as its outer
+output still produces an invalid-output infrastructure failure, not a
+continuation or a contributor-work failure. The typed invocation tool does not
+parse an outer result to start host work. Do not blindly retry a retired plan as
+if that capability still exists.

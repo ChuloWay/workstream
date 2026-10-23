@@ -1,30 +1,31 @@
-# Terminal Systems project checkers and real contribution rehearsal
+# Terminal Systems project POST checkers and isolated trial runtime
 
 - Initiative: None
 - Durable disposition: Planned
-- Intended merge outcome: Implement the source-backed Terminal Systems checker specifications as project-owned images, with the missing generic runtime capabilities explicitly qualified before policy activation.
+- Intended merge outcome: Implement source-backed Terminal Systems POST checker images and the generic bounded model/trial capabilities they actually need, then hand exact image/runtime evidence to the separately owned live-project journey.
 
 ## Intent
 
-Continue after merged setup PR #651 on main `3ff69e3a8738fc12e7e8bb9d0f37583980409734`.
-The original guide and final reviewed setup proposal define two PRE checks, six
-model POST checks, two execution POST checks, and two lifecycle requirements.
-This is a real guide-driven project, not a fixed task-name fixture. The user
-explicitly resumed the minimal budgeted model runtime required by this project;
-the prior PILOT-05 hold does not prohibit this authorized scope.
+Resume issue #493 from reconciled main `7f6a71a69daf563742b72c706e6d09aa742ac25e`.
+Merged PR #656 already supplies the standalone PRE image. The retained setup
+handoff identifies two PRE checks, six model POST suggestions, two execution
+POST suggestions and two obsolete lifecycle classifications; it is engineering
+reference, not current policy. The unchanged guide and a fresh PRE/POST-only
+proposal remain the sources to reconcile. This is a real guide-driven project,
+not a fixed task-name fixture. Shared model access now covers both POST agents
+and setup under #492's one project account; this change consumes that contract
+without owning its ledger, migrations or provider credentials.
 
 ## Bounded change
 
-Allowed paths are `pilots/terminal_systems/checkers/**`, the project README,
-affected current roadmap/runbook claims, this record and proportionate test/CI
-selection for these project assets. Build a standalone Python standard-library
-PRE image implementing the exact package-layout and metadata specifications.
-One immutable capability with a closed `check` selector serves two separate
-requirement bindings; neither invocation executes submitted commands. Include
-the actual generated handoff and its provenance, positive/negative image samples,
-and process tests independent of named pilot tasks. Shared Workstream/Rust code,
-database, policy authority, guide content and lifecycle outcomes are unchanged
-by this first implementation.
+Allowed project paths are `pilots/terminal_systems/checkers/**`, the project
+README, affected current roadmap/runbook claims, this record and proportionate
+test/CI selection for these project assets. Preserve and reuse the delivered
+Python PRE image, its exact handoff provenance, samples and recorded evidence.
+New project code implements POST rubrics and bounded agent orchestration
+independently of named tasks. Shared runtime changes remain generic and are
+listed separately below. Database schema, policy authority, guide content and
+lifecycle outcomes are unchanged by this change.
 
 `.github/workflows/terminal-systems-checkers.yml` runs the project unit and real
 image samples on project/contract/tool changes. It adds no model calls, cloud
@@ -35,8 +36,9 @@ budgeted, invocation-bound model access with credentials outside the sandbox;
 isolated execution of submitted environments; trusted trial and revision input.
 No claimed passing checker may replace unavailable evaluation with file presence,
 untrusted author claims, fixed answers, or manual reviewer findings. Setup-model
-spend integration is not implicitly included. No merge or hosted deployment is
-authorized by this record.
+budget/effect integration remains owned by #492. No merge, live model spend,
+image publication/registration, activation or hosted deployment is authorized
+by this record.
 
 ### Resumed POST boundary
 
@@ -88,13 +90,26 @@ calls, image publication or registration, deployment, and work in the separate
 human review/revision initiative. The existing PRE image and its recorded
 publication evidence are reused without rebuilding merely to repeat proof.
 
-The intended verification for the first slice is exact handoff/rubric parity,
-focused project-rule tests, adversarial malformed or unsupported model-output
-tests, bounded material-tool tests, and offline composed tests against a fake
-proxy. Those tests are development evidence only. A completion claim requires
-real composed proxy/transport and isolated-sandbox trials with a controlled
-provider, while live spend and the project activation journey remain separately
-authorized phases.
+The intended verification starts with exact handoff/rubric parity, focused
+project-rule tests, adversarial malformed or unsupported model-output tests,
+bounded material-tool tests and offline fakes. Those are development evidence
+only. The reviewable outcome requires the actual generic trial tool plus composed
+#492 model flow to produce substantive project findings, including negative,
+resource, cancellation, cleanup and replay/substitution controls. Controlled
+provider qualification follows the approved shared runtime; live spend and the
+project activation/contribution journey remain separately authorized phases.
+
+This shared-boundary change also owns `external_checkers/README.md`,
+`docs/architecture_checker_framework.md`, `docs/architecture_lockdown.md` and
+`docs/decision_0014_external_service_adapter_convention.md`. Before the relay is
+composed, those canonical documents and ADR distinguish the typed,
+profile-authorized invocation tool from the retired image-output continuation.
+An image may submit bounded workload argv, relative selectors and opaque
+project-profile roles through `/work/execution.sock`; it may not return a
+private plan as its outer result, select a host path, Docker flag, mount,
+runtime, image, credential, network or resource enlargement. Shared Rust knows
+no Terminal Systems filename, task, trial label or command allowlist. Preserve
+the regression that `project_private_plan.v1` outer output is invalid.
 
 ## Acceptance criteria
 
@@ -108,14 +123,14 @@ authorized phases.
 - Use the existing generic image command for real networkless, non-root,
   read-only positive/negative sample execution and exact result identity checks.
   Local Docker evidence is labelled `docker-dev`, never gVisor qualification.
-- Publish only tested content to the selected ECR repository, then separately
-  register exact digests and obtain corrected, approved policy bindings.
-- Before activation, every required POST capability and its material/runtime
-  dependencies must actually be available. Preserve the original guide and
-  immutable earlier proposals.
-- The final public-API/CLI journey records byte custody, pre-check rejection with
-  no Submission, durable post-checking, revision/infrastructure recovery and
-  exact governed contribution evidence. Image samples alone are not that proof.
+- Produce immutable build and configuration metadata for tested POST images,
+  without publishing, registering or activating them in this change.
+- Every claimed POST pass must use actual model/trial evidence through the
+  supported generic capabilities. Preserve the original guide and immutable
+  earlier proposals; keep unsupported revision/prior-work dependencies explicit.
+- Hand exact image/runtime evidence and remaining dependencies to #555's owner.
+  The live public API/CLI activation and contribution journey are not this
+  change's acceptance criterion, and image samples alone are not that proof.
 
 ## Risk and review routing
 
