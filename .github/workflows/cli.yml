@@ -17,6 +17,10 @@ jobs:
   cli-public-contract:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        group: [http, api]
     services:
       postgres:
         image: docker.io/library/postgres:16@sha256:33f923b05f64ca54ac4401c01126a6b92afe839a0aa0a52bc5aeb5cc958e5f20
@@ -118,6 +122,7 @@ jobs:
           exit 1
 
       - name: Exercise built CLI against task HTTP and local file boundaries
+        if: ${{ matrix.group == 'http' }}
         working-directory: backend
         env:
           WORKSTREAM_CLI_EXECUTABLE: ${{ runner.temp }}/workstream-cli
@@ -137,6 +142,7 @@ jobs:
               --ignore=../cli/tests/integration/test_tui_native_proof.py
 
       - name: Exercise native terminal HTTP and proof contracts
+        if: ${{ matrix.group == 'http' }}
         working-directory: backend
         env:
           WORKSTREAM_CLI_EXECUTABLE: ${{ runner.temp }}/workstream-cli
@@ -152,6 +158,7 @@ jobs:
               ../cli/tests/integration/test_tui_native_proof.py
 
       - name: Exercise existing guide HTTP contracts
+        if: ${{ matrix.group == 'http' }}
         working-directory: backend
         env:
           WORKSTREAM_CLI_EXECUTABLE: ${{ runner.temp }}/workstream-cli
@@ -174,6 +181,7 @@ jobs:
             -- uv run --frozen python -m pytest -q "${guide_files[@]}"
 
       - name: Exercise existing native guide API callers
+        if: ${{ matrix.group == 'api' }}
         working-directory: backend
         env:
           WORKSTREAM_CLI_EXECUTABLE: ${{ runner.temp }}/workstream-cli
@@ -195,6 +203,7 @@ jobs:
             -- uv run --frozen python -m pytest -q "${native_files[@]}"
 
       - name: Exercise existing native CLI self-service caller
+        if: ${{ matrix.group == 'api' }}
         working-directory: backend
         env:
           WORKSTREAM_CLI_EXECUTABLE: ${{ runner.temp }}/workstream-cli
@@ -206,6 +215,7 @@ jobs:
             -- uv run --frozen python -m pytest -q ../cli/tests/integration/test_public_self_service.py
 
       - name: Exercise complete native CLI batch journey
+        if: ${{ matrix.group == 'api' }}
         working-directory: backend
         env:
           WORKSTREAM_CLI_EXECUTABLE: ${{ runner.temp }}/workstream-cli

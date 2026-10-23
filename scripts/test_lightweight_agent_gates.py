@@ -228,6 +228,48 @@ class LightweightAgentGateTests(unittest.TestCase):
         self.assertNotIn("continue-on-error", workflow)
         self.assertIn("timeout-minutes: 15", workflow)
 
+    def test_cli_contract_partitions_assign_every_group_once(self) -> None:
+        workflow = Path(".github/workflows/cli.yml").read_text(encoding="utf-8")
+        job = workflow.split("\n  cli-public-contract:\n", 1)[1]
+        self.assertEqual(
+            job.split("    strategy:\n", 1)[1].split("    services:\n", 1)[0],
+            "      fail-fast: false\n      matrix:\n"
+            "        group: [http, api]\n",
+        )
+        self.assertEqual(job.count("    strategy:\n"), 1)
+        self.assertEqual(job.count("        group:"), 1)
+        self.assertNotIn("continue-on-error", job)
+        self.assertNotIn("\n    if:", job)
+        groups = {
+            "Exercise built CLI against task HTTP and local file boundaries": "http",
+            "Exercise native terminal HTTP and proof contracts": "http",
+            "Exercise existing guide HTTP contracts": "http",
+            "Exercise existing native guide API callers": "api",
+            "Exercise existing native CLI self-service caller": "api",
+            "Exercise complete native CLI batch journey": "api",
+        }
+        steps = job.split("\n      - ")[1:]
+        assignments = {"http": [], "api": []}
+        for step in steps:
+            title = step.splitlines()[0]
+            conditions = re.findall(r"^        if: (.+)$", step, re.MULTILINE)
+            name = title.removeprefix("name: ")
+            if name in groups:
+                group = groups[name]
+                self.assertEqual(conditions, ["${{ matrix.group == '" + group + "' }}"])
+                assignments[group].append(name)
+            elif name == "Stop owned CLI artifact provider":
+                self.assertEqual(conditions, ["${{ always() }}"])
+            else:
+                # Checkout, source/build/lint and provider custody run in both jobs.
+                self.assertEqual(conditions, [])
+        for group in assignments:
+            self.assertCountEqual(
+                assignments[group], [name for name, owner in groups.items() if owner == group],
+            )
+        self.assertEqual(job.count("scripts/run_isolated_tests.py"), len(groups))
+        self.assertIn("    timeout-minutes: 15\n", job)
+
     def test_cli_backend_groups_use_the_frozen_backend_lock_environment(self) -> None:
         workflow = Path(".github/workflows/cli.yml").read_text(encoding="utf-8")
         install = workflow.split("      - name: Install API integration tooling\n", 1)[1].split(
