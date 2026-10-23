@@ -330,6 +330,23 @@ async def _migration_resume_custody(database_url: str, snapshot_id) -> dict[str,
         await connection.close()
 
 
+async def _audit_validator_custody(database_url: str) -> list[tuple]:
+    connection = await asyncpg.connect(database_url.replace("+asyncpg", ""))
+    try:
+        rows = await connection.fetch(
+            "SELECT oid,prosrc,provolatile,proisstrict,prosecdef,proparallel,"
+            "proargtypes::text,prorettype::text,proconfig FROM pg_catalog.pg_proc "
+            "WHERE oid IN ("
+            "'public.authority_event_facts_are_safe(text,json,json,text)'::regprocedure,"
+            "'public.authority_grant_facts_are_safe(json,text[],text,boolean,text)'::regprocedure) "
+            "ORDER BY proname"
+        )
+        assert len(rows) == 2
+        return [tuple(row.values()) for row in rows]
+    finally:
+        await connection.close()
+
+
 def test_v01_graph_has_one_root_and_head() -> None:
     config = _alembic_config()
     script = ScriptDirectory.from_config(config)
@@ -337,6 +354,7 @@ def test_v01_graph_has_one_root_and_head() -> None:
 
     assert [revision.revision for revision in revisions] == [
         HEAD_REVISION,
+        "0059_neutral_guide_runtime",
         "0058_compensation_unit_create",
         "0057_roles_anywhere_custody",
         "0056_manager_authored_runtime",
@@ -549,6 +567,7 @@ def test_repeated_upgrade_head_preserves_current_database(
         "0056_manager_authored_runtime",
         "0057_roles_anywhere_custody",
         "0058_compensation_unit_create",
+        "0059_neutral_guide_runtime",
     ],
 )
 def test_preceding_head_upgrades_to_current_without_recreation(
@@ -579,7 +598,16 @@ def test_preceding_head_upgrades_to_current_without_recreation(
         assert retained["sentinel"][0] == "preserve-me"
         before = asyncio.run(_database_snapshot(isolated_database_env))
         assert before["versions"] == [installed_revision]
+        validators = (
+            asyncio.run(_audit_validator_custody(isolated_database_env))
+            if installed_revision == "0059_neutral_guide_runtime"
+            else None
+        )
         command.upgrade(config, HEAD_REVISION)
+        if validators is not None:
+            updated = asyncio.run(_audit_validator_custody(isolated_database_env))
+            assert [row[:-1] for row in updated] == [row[:-1] for row in validators]
+            assert all(row[-1] == ["search_path=pg_catalog, public, pg_temp"] for row in updated)
         after = asyncio.run(_database_snapshot(isolated_database_env))
         command.upgrade(config, "head")
         repeated = asyncio.run(_database_snapshot(isolated_database_env))
@@ -1576,17 +1604,26 @@ def test_downgrade_refuses_without_mutation(
     assert before == after
 
 
-def test_neutral_runtime_one_revision_downgrade_refuses_without_mutation(
+@pytest.mark.parametrize(
+    "revision,predecessor",
+    (
+        ("0059_neutral_guide_runtime", "0058_compensation_unit_create"),
+        ("0060_audit_restore_path", "0059_neutral_guide_runtime"),
+    ),
+)
+def test_runtime_and_audit_one_revision_downgrades_refuse_without_mutation(
     isolated_database_env: str,
     migration_lock,
+    revision: str,
+    predecessor: str,
 ) -> None:
-    """The retained custody rewrite cannot be partially removed from a live schema."""
+    """Retained runtime and audit custody cannot be partially removed from a live schema."""
     config = _alembic_config()
     with migration_lock():
         asyncio.run(
             _execute(isolated_database_env, "drop schema public cascade; create schema public")
         )
-        command.upgrade(config, HEAD_REVISION)
+        command.upgrade(config, revision)
     before = asyncio.run(_database_snapshot(isolated_database_env))
     with (
         migration_lock(),
@@ -1595,7 +1632,7 @@ def test_neutral_runtime_one_revision_downgrade_refuses_without_mutation(
             match="Workstream v0.1 migrations cannot be downgraded; recreate the database",
         ),
     ):
-        command.downgrade(config, "0058_compensation_unit_create")
+        command.downgrade(config, predecessor)
     after = asyncio.run(_database_snapshot(isolated_database_env))
     assert before == after
 
