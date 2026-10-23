@@ -77,6 +77,25 @@ model→trial→retained-receipt→model flow has not yet completed a controlled
 provider qualification, and this POST image has not been published, registered,
 approved or activated.
 
+The project image and production service boundary have a separate explicit
+Docker-development qualifier:
+
+```bash
+python3 external_checkers/workstream-checker-service/tests/terminal_systems_post_composition.py \
+  --service external_checkers/target/debug/workstream-checker-service
+```
+
+On 2026-10-23 it rebuilt the pinned Dockerfile offline from locally verified
+base layers (60.29 KiB context), selected project image ID
+`sha256:cd11dc1125a96527641cf9a1e5c99d947b3566cb07bb51bbae086d369476126d`,
+and passed an assessed v2 model-session request through the production Rust
+service. The qualifier checks exact immutable image selection, verified
+read-only material, network-disabled/read-only/capability-free containment,
+invocation-local socket mounting, and container/relay cleanup. Its result
+deliberately records `durable_art_proven=false`, `trial_proven=false`, and
+`runsc_proven=false`; the PostgreSQL/MinIO custody journey and PILOT-00 runsc
+trial qualification are distinct evidence lanes.
+
 The author-accuracy draft adds `reproduction_procedure_unavailable` for the
 narrow case where an absent or ambiguous exact procedure prevents authenticated
 comparison. It reports incomplete coverage; it does not call healthy runtime
