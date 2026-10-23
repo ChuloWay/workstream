@@ -95,6 +95,9 @@ def _combined_fixture():
     }
     spec = trial_spec.model_copy(
         update={
+            "resources": trial_spec.resources.model_copy(
+                update={"deadline_ms": 120_000}
+            ),
             "configuration_schema": ExternalCheckerSchema(
                 schema_id="trial_model_composition.configuration",
                 schema_version="v1",
