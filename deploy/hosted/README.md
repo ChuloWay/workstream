@@ -369,6 +369,15 @@ Do not repair product rows directly. Record provider backup IDs, restore target,
 source/image/config identities, timestamps and bounded results without document
 bytes, tokens, connection URLs or credentials.
 
+Audit validation uses function-local search paths after
+`0060_audit_restore_path`, so PostgreSQL's empty restore search path does not
+prevent loading retained audit facts. Take a fresh backup after applying this
+migration. Earlier archives retain their earlier function definitions and need
+an operator-reviewed schema correction on the isolated restore target before
+data loading; the two-function correction is defined by
+[the migration](../../backend/alembic/versions/0060_audit_restore_path.py).
+Do not disable validation or edit retained rows to force a restore to finish.
+
 The exact provider commands and completed restore observations belong to the
 approved environment evidence. They are intentionally absent here because no
 database, account or backup system has been authorized for this configuration
