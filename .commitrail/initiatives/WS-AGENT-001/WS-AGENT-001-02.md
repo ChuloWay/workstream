@@ -351,6 +351,10 @@ image claim; synthetic CI does not replace it.
   factory and effective-profile path. The release marker rejects a mismatched SDK
   image before role startup, preserves `manager_authored` in either image and never
   causes both SDK closures to coexist.
+- The parser remains runtime-neutral: its release role validates the immutable SDK
+  image marker and scrubs ambient credentials without requiring runtime, provider or
+  model settings. Inference-capable roles still reject a runtime/SDK mismatch before
+  loading provider secrets.
 - Provider-free `manager_authored` startup proves its exact `none/none/none` tuple
   requires no provider secret, while both inference runtimes validate the immutable
   marker before loading only their matching credential.
@@ -403,6 +407,15 @@ documents but cannot prove OpenRouter account defaults; real original-guide mate
 remains behind retained account/organization/workspace/plugin evidence and operator
 confirmation. A generated-data provider call does not establish privacy or hosted
 readiness.
+
+The first exact-image Omni original-guide attempt reached health but stopped before
+inference because the shared release entrypoint incorrectly required runtime/model
+configuration for the isolated parser role. Its retained failure evidence records
+`parser_exited`, successful cleanup and no inference request. A focused shell
+regression now exercises a parser without runtime configuration in both SDK
+environments, and release-image verification runs the same parser startup plus a
+wrong-SDK worker denial before any provider secret can load. Exact rebuilt-image and
+parser-isolation evidence remain required before retrying the live qualification.
 
 ## Reconciliation
 

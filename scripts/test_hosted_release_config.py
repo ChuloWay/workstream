@@ -1080,7 +1080,9 @@ class HostedReleaseConfigTests(unittest.TestCase):
             "KILL",
             "SETGID",
         ]
-        cases.append(("guide parser missing required capability", missing_parser_capability))
+        cases.append(
+            ("guide parser missing required capability", missing_parser_capability)
+        )
         extra_parser_capability = copy.deepcopy(rendered)
         extra_parser_capability["services"]["guide-document-parser"]["cap_add"].append(
             "SYS_ADMIN"
@@ -1088,7 +1090,9 @@ class HostedReleaseConfigTests(unittest.TestCase):
         cases.append(("guide parser added capability", extra_parser_capability))
         missing_parser_cap_drop = copy.deepcopy(rendered)
         missing_parser_cap_drop["services"]["guide-document-parser"]["cap_drop"] = []
-        cases.append(("guide parser did not drop default capabilities", missing_parser_cap_drop))
+        cases.append(
+            ("guide parser did not drop default capabilities", missing_parser_cap_drop)
+        )
         parser_device = copy.deepcopy(rendered)
         parser_device["services"]["guide-document-parser"]["devices"] = [
             "/dev/null:/dev/foreign"
@@ -1447,6 +1451,7 @@ class ReleaseSecretLoaderTests(unittest.TestCase):
         provider: str = "openrouter",
         runtime: str = "openai_agents_sdk",
         sdk_environment: str = "agents",
+        include_runtime_configuration: bool = True,
     ) -> subprocess.CompletedProcess[str]:
         environment = os.environ.copy()
         file_names = {
@@ -1483,14 +1488,21 @@ class ReleaseSecretLoaderTests(unittest.TestCase):
         if unset_selector is not None:
             environment.pop(unset_selector, None)
         environment["WORKSTREAM_RELEASE_ROLE"] = role
-        environment["WORKSTREAM_PROJECT_AGENT_RUNTIME"] = runtime
-        environment["WORKSTREAM_PROJECT_AGENT_MODEL_PROVIDER"] = provider
-        environment["WORKSTREAM_PROJECT_AGENT_MODEL_API"] = (
-            "none" if runtime == "manager_authored" else "chat_completions"
-        )
-        environment["WORKSTREAM_PROJECT_AGENT_MODEL"] = (
-            "none" if runtime == "manager_authored" else "openai/gpt-5.6-terra"
-        )
+        runtime_variables = {
+            "WORKSTREAM_PROJECT_AGENT_RUNTIME": runtime,
+            "WORKSTREAM_PROJECT_AGENT_MODEL_PROVIDER": provider,
+            "WORKSTREAM_PROJECT_AGENT_MODEL_API": (
+                "none" if runtime == "manager_authored" else "chat_completions"
+            ),
+            "WORKSTREAM_PROJECT_AGENT_MODEL": (
+                "none" if runtime == "manager_authored" else "openai/gpt-5.6-terra"
+            ),
+        }
+        for variable, value in runtime_variables.items():
+            if include_runtime_configuration:
+                environment[variable] = value
+            else:
+                environment.pop(variable, None)
         environment["WORKSTREAM_ARTIFACT_S3_ROLES_ANYWHERE_CERTIFICATE_FILE"] = (
             "/run/private/certificate.pem"
         )
@@ -1630,6 +1642,21 @@ class ReleaseSecretLoaderTests(unittest.TestCase):
             self.assertNotEqual(mismatch.returncode, 0)
             self.assertIn("does not match", mismatch.stderr)
             self.assertNotIn("provider-secret-must-not-load", mismatch.stderr)
+
+    def test_parser_without_runtime_configuration_is_sdk_neutral(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            for sdk_environment in ("agents", "omnicore"):
+                with self.subTest(sdk_environment=sdk_environment):
+                    completed = self._run_loader(
+                        root,
+                        role="parser",
+                        sdk_environment=sdk_environment,
+                        include_runtime_configuration=False,
+                    )
+                    self.assertEqual(completed.returncode, 0, completed.stderr)
+                    self.assertEqual(completed.stdout, "loader-ok\n")
+                    self.assertEqual(completed.stderr, "")
 
     def test_loader_rejects_empty_missing_directory_and_symlink_without_disclosure(
         self,

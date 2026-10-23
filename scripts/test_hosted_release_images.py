@@ -234,6 +234,57 @@ class ReleaseImageProofTests(unittest.TestCase):
             proof.cleanup_containers("")
         commands.assert_not_called()
 
+    def test_backend_entrypoint_accepts_neutral_parser_and_rejects_wrong_sdk(self):
+        parser = SimpleNamespace(returncode=0, stdout=b"", stderr=b"")
+        mismatch = SimpleNamespace(
+            returncode=1,
+            stdout=b"",
+            stderr=(
+                b"project agent runtime does not match the installed SDK environment\n"
+            ),
+        )
+        for sdk_environment, wrong_runtime in (
+            ("agents", "omnicore_agent"),
+            ("omnicore", "openai_agents_sdk"),
+        ):
+            with (
+                self.subTest(sdk_environment=sdk_environment),
+                patch.object(proof, "run", side_effect=[parser, mismatch]) as runs,
+                patch.object(proof, "checked", return_value=b"") as cleanup,
+            ):
+                proof.verify_backend_entrypoint(
+                    "sha256:" + "a" * 64, sdk_environment, "123-1"
+                )
+            parser_command = runs.call_args_list[0].args[0]
+            mismatch_command = runs.call_args_list[1].args[0]
+            self.assertIn("WORKSTREAM_RELEASE_ROLE=parser", parser_command)
+            self.assertFalse(
+                any(
+                    value.startswith("WORKSTREAM_PROJECT_AGENT_RUNTIME=")
+                    for value in parser_command
+                )
+            )
+            self.assertIn("WORKSTREAM_RELEASE_ROLE=worker", mismatch_command)
+            self.assertIn(
+                f"WORKSTREAM_PROJECT_AGENT_RUNTIME={wrong_runtime}",
+                mismatch_command,
+            )
+            self.assertEqual(cleanup.call_count, 2)
+
+    def test_backend_entrypoint_smoke_rejects_changed_outcomes(self):
+        failures = (
+            SimpleNamespace(returncode=1, stdout=b"", stderr=b"private"),
+            SimpleNamespace(returncode=0, stdout=b"private", stderr=b""),
+        )
+        for failure in failures:
+            with (
+                self.subTest(failure=failure),
+                patch.object(proof, "run", return_value=failure),
+                patch.object(proof, "checked", return_value=b""),
+                self.assertRaisesRegex(ValueError, "entrypoint behavior differs"),
+            ):
+                proof.verify_backend_entrypoint("fixture", "agents", "123-1")
+
     def test_loader_must_have_the_exact_nonwritable_executable_mode(self):
         with tempfile.TemporaryDirectory() as directory:
             loader = Path(directory) / "loader"

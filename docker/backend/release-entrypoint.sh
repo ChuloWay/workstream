@@ -8,28 +8,39 @@ if [ ! -f "$sdk_marker" ] || [ -L "$sdk_marker" ] \
     exit 1
 fi
 sdk_environment="$(cat -- "$sdk_marker")"
+case "$sdk_environment" in
+    agents|omnicore)
+        ;;
+    *)
+        echo "project agent SDK environment marker is unavailable or unsafe" >&2
+        exit 1
+        ;;
+esac
+role="${WORKSTREAM_RELEASE_ROLE:-}"
 runtime="${WORKSTREAM_PROJECT_AGENT_RUNTIME:-}"
 provider="${WORKSTREAM_PROJECT_AGENT_MODEL_PROVIDER:-}"
 model_api="${WORKSTREAM_PROJECT_AGENT_MODEL_API:-}"
 model="${WORKSTREAM_PROJECT_AGENT_MODEL:-}"
-case "$runtime:$sdk_environment" in
-    openai_agents_sdk:agents|omnicore_agent:omnicore)
-        ;;
-    manager_authored:agents|manager_authored:omnicore)
-        if [ "$provider:$model_api:$model" != "none:none:none" ]; then
-            echo "manager-authored project agent configuration is invalid" >&2
+if [ "$role" != "parser" ]; then
+    case "$runtime:$sdk_environment" in
+        openai_agents_sdk:agents|omnicore_agent:omnicore)
+            ;;
+        manager_authored:agents|manager_authored:omnicore)
+            if [ "$provider:$model_api:$model" != "none:none:none" ]; then
+                echo "manager-authored project agent configuration is invalid" >&2
+                exit 1
+            fi
+            ;;
+        *)
+            echo "project agent runtime does not match the installed SDK environment" >&2
             exit 1
-        fi
-        ;;
-    *)
-        echo "project agent runtime does not match the installed SDK environment" >&2
+            ;;
+    esac
+    if [ "$runtime" = "omnicore_agent" ] \
+        && [ "$provider:$model_api" != "openrouter:chat_completions" ]; then
+        echo "OmniCoreAgent requires OpenRouter chat completions" >&2
         exit 1
-        ;;
-esac
-if [ "$runtime" = "omnicore_agent" ] \
-    && [ "$provider:$model_api" != "openrouter:chat_completions" ]; then
-    echo "OmniCoreAgent requires OpenRouter chat completions" >&2
-    exit 1
+    fi
 fi
 unset sdk_marker sdk_environment model_api model
 
@@ -75,7 +86,7 @@ unset AWS_SHARED_CREDENTIALS_FILE
 unset AWS_CONFIG_FILE
 unset AWS_WEB_IDENTITY_TOKEN_FILE
 
-case "${WORKSTREAM_RELEASE_ROLE:-}" in
+case "$role" in
     api)
         load_required_secret WORKSTREAM_DATABASE_URL "${WORKSTREAM_DATABASE_URL_FILE:-}"
         load_required_secret WORKSTREAM_CELERY_BROKER_URL "${WORKSTREAM_CELERY_BROKER_URL_FILE:-}"
@@ -129,6 +140,6 @@ unset AWS_SHARED_CREDENTIALS_FILE
 unset AWS_CONFIG_FILE
 unset AWS_WEB_IDENTITY_TOKEN_FILE
 unset WORKSTREAM_RELEASE_ROLE
-unset runtime provider
+unset role runtime provider
 
 exec "$@"
