@@ -321,6 +321,10 @@
       "target": "backend/app/core/s3_validation.py"
     },
     {
+      "target": "backend/app/core/zip_safety.py",
+      "group": "shared"
+    },
+    {
       "group": "shared",
       "target": "backend/app/db/base.py"
     },
@@ -427,6 +431,10 @@
     {
       "group": "shared",
       "target": "backend/app/modules/api_controls/service.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/modules/artifacts/api/operator_authority.py"
     },
     {
       "group": "artifacts",
@@ -569,10 +577,6 @@
       "target": "backend/app/modules/artifacts/task_import_sources.py"
     },
     {
-      "group": "artifacts",
-      "target": "backend/app/modules/artifacts/zip_safety.py"
-    },
-    {
       "group": "shared",
       "target": "backend/app/modules/audit/api.py"
     },
@@ -682,6 +686,10 @@
     },
     {
       "group": "auth",
+      "target": "backend/app/modules/authorization/artifact_operator_authorization.py"
+    },
+    {
+      "group": "auth",
       "target": "backend/app/modules/authorization/artifact_project_authority.py"
     },
     {
@@ -723,6 +731,10 @@
     {
       "group": "auth",
       "target": "backend/app/modules/authorization/domain/adapter_bindings.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/domain/artifact_operator.py"
     },
     {
       "group": "auth",
@@ -2317,7 +2329,7 @@
       "target": "backend/scripts/validate_test_lane_evidence.py"
     }
   ],
-  "authority_digest": "0752941bbb47f96955b6a938aac920f75cdfc2511e0b9e322af1ce16c3e28968",
+  "authority_digest": "4644eecb0ff729f11e4670ee8ce58ae0d4a499930ecb2cdac77a03b8485ab7a5",
   "protected_base_commit": "7676ce4347db0c9694962a9b587a20765e16eac6",
   "schema": "workstream.behavior-ownership-partition.v1"
 }

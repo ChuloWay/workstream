@@ -52,6 +52,10 @@ obligation before claiming the hosted journey recovered.
   the companion change.
 - `docker/backend/`, `deploy/hosted/`, local Compose, canonical environment examples and focused
   deployment tests: worker-only provider credentials and secret-free parser role.
+- Move the existing pure ZIP directory-envelope helper to `backend/app/core/zip_safety.py`,
+  updating its ART and parser consumers together; remove the former private module
+  without an alias. This prevents parser coupling to ART internals while retaining
+  one canonical bounded archive implementation.
 - Focused affected tests, ownership/lane inventories, and current guide/runtime,
   deployment, developer and roadmap documentation. No unrelated inventory edits.
 

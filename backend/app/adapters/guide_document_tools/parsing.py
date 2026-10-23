@@ -15,7 +15,7 @@ from defusedxml import ElementTree
 from defusedxml.common import DefusedXmlException
 
 from app.interfaces.guide_document_tools import GuideTextLocator
-from app.modules.artifacts.zip_safety import zip_directory_facts
+from app.core.zip_safety import zip_directory_facts
 
 from .contracts import (
     GuideDocumentParserRejectionReason,
