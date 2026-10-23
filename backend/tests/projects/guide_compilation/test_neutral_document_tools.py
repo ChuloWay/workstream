@@ -111,6 +111,25 @@ class Parser:
         return response
 
 
+class SizedParser:
+    identity = SimpleNamespace()
+
+    def __init__(self, *sizes: int):
+        self._sizes = iter(sizes)
+        self.calls = 0
+
+    async def parse(self, request: GuideDocumentParserRequest, _source: bytes):
+        self.calls += 1
+        text = "x" * next(self._sizes)
+        return GuideDocumentParserResponse.create(
+            request=request,
+            text=text,
+            locators=(GuideTextLocator(label="document", start=0, end=len(text)),),
+            next_offset=None,
+            total_characters=len(text),
+        )
+
+
 class Custody:
     def __init__(self, *, fail=False):
         self.fail = fail
@@ -157,6 +176,34 @@ async def test_valid_read_commits_exact_receipt_before_returning_text():
     assert len(custody.receipts) == 1
     assert custody.receipts[0].handle == handle
     assert custody.receipts[0].operation == "read"
+
+
+@pytest.mark.asyncio
+async def test_tool_call_budget_allows_exact_limit_and_rejects_the_next_call():
+    parser = Parser()
+    tools, handle, _document, custody = _tools(parser=parser)
+
+    for _ in range(3):
+        assert (await tools.read_document(handle)).text == SOURCE.decode()
+
+    with pytest.raises(ValueError, match="tool call budget exceeded"):
+        await tools.read_document(handle)
+    assert parser.calls == 3
+    assert len(custody.receipts) == 3
+
+
+@pytest.mark.asyncio
+async def test_tool_output_budget_allows_exact_total_and_rejects_the_next_result():
+    parser = SizedParser(32_768, 32_768, 1)
+    tools, handle, _document, custody = _tools(parser=parser)
+
+    assert len((await tools.read_document(handle, limit=32_768)).text) == 32_768
+    assert len((await tools.read_document(handle, limit=32_768)).text) == 32_768
+
+    with pytest.raises(ValueError, match="tool output budget exceeded"):
+        await tools.read_document(handle)
+    assert parser.calls == 3
+    assert len(custody.receipts) == 2
 
 
 @pytest.mark.asyncio
