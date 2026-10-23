@@ -900,7 +900,7 @@ class _LoopbackOpenRouterGuard:
                     and len(value.encode("ascii", errors="ignore")) <= 256
                 }
                 response_body = b"".join(chunks)
-                if response.status_code >= 400:
+                if not 200 <= response.status_code < 300:
                     response_body = _SANITIZED_PROVIDER_ERROR_BODY
                 return response.status_code, returned_headers, response_body
         except httpx.TransportError:
