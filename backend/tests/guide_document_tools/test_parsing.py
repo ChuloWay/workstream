@@ -146,6 +146,7 @@ def _pdf() -> bytes:
         (_pptx("First slide", "Second slide"), PPTX, "First slide\n\nSecond slide", "slide 1"),
         (_pdf(), "application/pdf", "PDF Guide", "page 1"),
     ],
+    ids=("markdown", "docx", "pptx", "pdf"),
 )
 def test_supported_formats_return_stable_bounded_text(
     source: bytes,
@@ -258,6 +259,7 @@ def test_search_is_literal_case_insensitive_and_paged_by_source_offset() -> None
             ]
         ),
     ],
+    ids=("path-traversal", "case-collision", "external-reference", "entity"),
 )
 def test_ooxml_rejects_traversal_collisions_entities_and_external_references(
     source: bytes,
