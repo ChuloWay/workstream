@@ -529,6 +529,30 @@ def test_quit_while_http_read_is_pending_restores_terminal_without_late_redraw()
             release.set()
 
 
+if os.name == "posix":
+
+    def test_posix_sigterm_restores_terminal_after_rendering_private_detail():
+        """OS-signal teardown proof, distinct from injected program-error proof."""
+        import signal
+        import termios
+
+        with (
+            socket_peer(Reads()) as (origin, requests),
+            Terminal(origin, TOKEN) as terminal,
+        ):
+            open_ready(terminal)
+            terminal.send("\r")
+            terminal.wait(SECRET)
+            assert termios.tcgetattr(terminal.slave) != terminal.original
+            assert b"\x1b[?25l" in terminal.raw
+            assert b"\x1b[?1049h" in terminal.raw
+            before = len(requests)
+            terminal.process.send_signal(signal.SIGTERM)
+            terminal.wait_exit(expected=0)
+            assert len(requests) == before
+            assert TOKEN.encode() not in terminal.raw
+
+
 def test_manual_handoffs_name_existing_commands_without_invoking_them(cli):
     with socket_peer(Reads()) as (origin, requests):
         for args in (
