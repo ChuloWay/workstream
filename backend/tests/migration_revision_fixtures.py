@@ -21,9 +21,11 @@ from app.interfaces.artifacts import ArtifactStoreNamespaceClaim, ArtifactStoreN
 from app.modules.artifacts.models import ArtifactStorageNamespace
 from app.modules.artifacts.preparation import ArtifactPreparationService, ArtifactScratchManager
 from app.modules.artifacts.service import ArtifactStorageNamespaceSpec
+from app.modules.artifacts.api.submission_archive import (
+    SubmissionArchiveLimits,
+)
 from app.modules.artifacts.submission_archive import (
     SubmissionArchiveInspector,
-    SubmissionArchiveLimits,
 )
 from app.modules.authorization.runtime import HumanAuthorizationContext
 from app.modules.checkers.api import SelectedPostSubmissionEvaluationRequest

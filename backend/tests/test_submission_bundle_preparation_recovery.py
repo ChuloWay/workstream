@@ -30,7 +30,7 @@ from app.modules.artifacts.submission_admission import (
     PreparedSubmissionBundlePreparationCommand,
     SubmissionBundlePreparationRuntime,
 )
-from app.modules.artifacts.submission_archive import (
+from app.modules.artifacts.api.submission_archive import (
     SubmissionArchiveFailureCode,
     SubmissionArchiveRejectedError,
 )

@@ -48,7 +48,12 @@ async def seed_storage_run(factory, submission_id, *, verdict="passed", state="c
     from app.modules.artifacts.models import ArtifactStorageNamespace
     from app.modules.artifacts.preparation import ArtifactPreparationService, ArtifactScratchManager
     from app.modules.artifacts.service import ArtifactStorageNamespaceSpec
-    from app.modules.artifacts.submission_archive import SubmissionArchiveInspector, SubmissionArchiveLimits
+    from app.modules.artifacts.api.submission_archive import (
+        SubmissionArchiveLimits,
+    )
+    from app.modules.artifacts.submission_archive import (
+        SubmissionArchiveInspector,
+    )
     from tests.checkers.execution.support import ControlledSelectedExecution
     from tests.retained_material_fixtures import retained_archive_store
     from tests.test_checker_materialization import _limits

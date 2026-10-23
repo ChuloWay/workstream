@@ -44,10 +44,12 @@ from app.modules.artifacts.preparation import (
     ExternalMaterialGrantRequest,
     PostExternalMaterialGrantRequest,
 )
-from app.modules.artifacts.submission_archive import (
-    SubmissionArchiveInspector,
+from app.modules.artifacts.api.submission_archive import (
     SubmissionArchiveLimits,
     SubmissionArchiveEntryType,
+)
+from app.modules.artifacts.submission_archive import (
+    SubmissionArchiveInspector,
 )
 from app.modules.artifacts.submission_manifest import build_submission_manifest
 from app.modules.artifacts.submission_manifest import SUBMISSION_MANIFEST_SCHEMA_VERSION

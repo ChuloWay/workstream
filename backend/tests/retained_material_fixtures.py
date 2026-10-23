@@ -50,9 +50,11 @@ from app.modules.artifacts.submission_admission import (
     SubmissionBundlePreparationRuntime,
 )
 from app.modules.artifacts.selected_pre_submit_execution import SelectedPreSubmitExecutionService
+from app.modules.artifacts.api.submission_archive import (
+    SubmissionArchiveLimits,
+)
 from app.modules.artifacts.submission_archive import (
     SubmissionArchiveInspector,
-    SubmissionArchiveLimits,
 )
 from app.modules.artifacts.submission_materialization import PreparedBundleMaterializationService
 from app.modules.authorization.api import ActorIdentityFacts, ActorKind

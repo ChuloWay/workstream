@@ -71,9 +71,11 @@ from app.modules.artifacts.submission_admission import (
     require_revision_preparation_acknowledgement,
 )
 from app.modules.artifacts.api import SubmissionBundlePreparationRejected
+from app.modules.artifacts.api.submission_archive import (
+    SubmissionArchiveLimits,
+)
 from app.modules.artifacts.submission_archive import (
     SubmissionArchiveInspector,
-    SubmissionArchiveLimits,
 )
 from app.modules.artifacts.submission_manifest import (
     SubmissionCanonicalPredecessor,

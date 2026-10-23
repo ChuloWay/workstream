@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import AsyncIterable, AsyncIterator, Iterator
+from collections.abc import AsyncIterable, AsyncIterator, Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 import errno
@@ -2035,6 +2035,8 @@ class ArtifactPreparationService:
         self,
         binding: object,
         inspector: PreparedArtifactInspector[_InspectionResult],
+        *,
+        on_cancel: Callable[[], None] | None = None,
     ) -> _InspectionResult:
         """Run one trusted inspector while retaining scratch lifecycle custody."""
         active = self._active.get(binding)
@@ -2048,10 +2050,23 @@ class ArtifactPreparationService:
             finally:
                 active.reader.seek(0)
 
+        operation = asyncio.create_task(self._run_io(inspect_and_rewind))
         try:
             async with asyncio.timeout_at(active.deadline):
-                return await self._run_io(inspect_and_rewind)
-        except TimeoutError:
+                return await asyncio.shield(operation)
+        except (TimeoutError, asyncio.CancelledError) as failure:
+            # Interrupt socket I/O before draining the retained reader. Merely
+            # cancelling a thread await cannot release its guest or scratch.
+            try:
+                if on_cancel is not None:
+                    on_cancel()
+            finally:
+                try:
+                    await await_cancellation_resistant(operation)
+                except BaseException:
+                    pass
+            if isinstance(failure, asyncio.CancelledError):
+                raise failure from None
             raise ArtifactPreparationDeadlineError(
                 "artifact preparation deadline exceeded"
             ) from None

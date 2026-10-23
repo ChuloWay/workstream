@@ -21,9 +21,11 @@ from app.modules.artifacts.api import SubmissionBundlePreparationRequest
 from app.modules.artifacts.models import SubmissionBundleAdmission
 from app.modules.artifacts.preparation import ArtifactPreparationService, ArtifactScratchManager
 from app.modules.artifacts.service import artifact_storage_namespace_spec
+from app.modules.artifacts.api.submission_archive import (
+    SubmissionArchiveLimits,
+)
 from app.modules.artifacts.submission_archive import (
     SubmissionArchiveInspector,
-    SubmissionArchiveLimits,
 )
 from app.modules.artifacts.submission_manifest import build_submission_manifest
 from app.modules.authorization.api import ActorIdentityFacts, ActorKind

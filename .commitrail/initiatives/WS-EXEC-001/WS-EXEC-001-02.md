@@ -33,15 +33,15 @@ public API/durable-worker drill. A node probe is not completion.
 - ART `api/`, `submission_archive.py`, `submission_admission.py`,
   `submission_materialization.py`, `post_submit_materialization.py` and affected
   imports: canonical structural types, verified raw-file materialization and
-  existing request-scoped preparation. `preparation.py` only if the existing
-  inspector/processor lifetime needs an explicit cancellation hook.
+  existing request-scoped preparation. `preparation.py` and `sources.py` for the explicit inspection cancellation hook;
+  `trusted_intake.py` for the shared PRE/POST preparation lifetime and retained-reader binding.
 - CHECKERS `api/default_checker.py`, `api/materialization.py`,
   `selected_pre_submit_execution.py`: typed default execution/material-view
   consumption; ordered project PRE execution and existing result semantics.
 - `external_checkers/`: private prepared-intake protocol sharing the existing
   Smol machine/guardian engine, trusted intake image using canonical Python
   inspection/default code, controlled guest scratch/streaming and proof fixtures.
-- Focused owner/adapter/conformance tests and affected runtime documentation,
+- Focused owner/adapter/conformance tests, their explicit CI catalogue membership and affected runtime documentation,
   configuration examples, roadmap and initiative records.
 
 ### Not allowed
@@ -84,8 +84,10 @@ managed service or edits to the independently owned model gateway work.
    and exports bounded raw files from the sealed intake session. ART independently
    checks normalized containment, inventory, size, executable mode and every hash;
    it alone creates scratch paths and issues existing external material grants.
-   CHECKERS receives only a callback-scoped material view and a typed default
-   evaluator, removing its current direct `_projected_tree` private call.
+   CHECKERS receives only a callback-scoped material view and the typed default
+   result after ART has invoked its trusted-intake port and confirmed cleanup,
+   removing its current direct `_projected_tree` private call. This keeps the
+   same required default-before-project order with fewer cross-owner callbacks.
 6. The typed default operation binds the exact committed reservation, policy,
    archive, manifest and existing default input. The trusted guest runs the
    canonical evaluator once. After verified export/default, close the intake VM
@@ -163,10 +165,20 @@ Celery journey remain blocking before the overall user goal is complete.
 
 Plan corrections address WS-EXEC-001-02-PLAN-01..04: safe inspect-then-workspace
 custody, distinct Smol readiness cases, discriminating single-slot ordering and
-closed preparation retry policy. Plan replay is required before implementation.
+closed preparation retry policy. Plan replay passed on `4b86aa3054d4fe79e92c7253665b9394fd36bbf8` before implementation.
 
 ## Reconciliation
 
 After this boundary's verified implementation: deployment composition and the
 public PRE -> immutable Submission -> durable POST -> governed outcome drill,
 including failure/retry, both review-policy branches and exact contribution facts.
+
+## Implementation checkpoint
+
+The typed adapter, closed guest worker, prepared Rust session and canonical raw
+export are connected to PRE and POST owners. This remains unverified integration
+work: affected owner fixtures, live KVM intake, single-slot handoff, full suite
+and required implementation reviewers are outstanding. Local focused proof
+currently covers canonical guest rejection/default identity, socket cancellation,
+raw export corruption, and retained-reader cancellation. No completed capability
+or public journey is claimed by this checkpoint.
