@@ -1,19 +1,21 @@
 """Real trial owner and ART custody retain exact bytes across publication replay."""
 
+import asyncio
 import hashlib
 
 import pytest
-from sqlalchemy import select, func
+from sqlalchemy import select, func, text
 
 from app.adapters.artifacts import checker_output_binding, checker_output_storage
 from app.modules.actors.api import ServiceIdentity
 from app.modules.artifacts.models import ArtifactPutAttempt, ArtifactBinding
-from app.modules.artifacts.service import ArtifactAdmissionRelationshipError
+from app.modules.artifacts.preparation import HARD_MAXIMUM_ARTIFACT_BYTES
 from app.modules.checkers.api.output_custody import CheckerOutputUnavailable
 from app.modules.checkers.api.trial_evidence import (
     TrialEvidenceArtifactRequest,
     TrialEvidenceBindingRequest,
     TrialEvidenceSelector,
+    TrialEvidenceUnavailable,
 )
 from app.modules.checkers.models import CheckerTrialEvidence
 from tests.checkers.execution.support import (
@@ -23,6 +25,7 @@ from tests.checkers.execution.support import (
     provision_post_submit_service,
 )
 from tests.checkers.external.test_trial_evidence import _owner, _subject, _trial_fixture
+from tests.checkers.external.test_revision_materialization import DiagnosticMaterialization
 from tests.post_submit_materialization_helpers import material_fixture
 from tests.test_checker_materialization import _limits
 
@@ -67,7 +70,7 @@ class PublishingExecution(ControlledSelectedExecution):
         async with h.factory() as session:
             row = await session.get(CheckerTrialEvidence, str(ticket.trial_evidence_id))
             assert row.content_sha256 is None
-        with pytest.raises(ArtifactAdmissionRelationshipError):
+        with pytest.raises(CheckerOutputUnavailable, match="checker_output_authority_unavailable"):
             await outputs.store_trial_evidence(
                 TrialEvidenceArtifactRequest(selector, _bytes(b"{}"))
             )
@@ -148,6 +151,9 @@ async def test_trial_bytes_use_real_art_custody_and_recover_exact_original(
         post_submit_registry_spec=spec,
         post_submit_binding_setup=parameters,
         scratch_limits=_limits(
+            # Input material remains reserved while ART prepares the output.
+            # Use the production aggregate budget for this composed journey.
+            aggregate_reserved_bytes=4 * HARD_MAXIMUM_ARTIFACT_BYTES,
             maximum_files=4,
             maximum_concurrency=4,
             total_deadline_seconds=120.0,
@@ -156,9 +162,138 @@ async def test_trial_bytes_use_real_art_custody_and_recover_exact_original(
     ) as h:
         await provision_post_submit_service(h.factory, ServiceIdentity.ARTIFACT_CHECKER_OUTPUT)
         await reserve(h)
+        h.service = DiagnosticMaterialization(h.service)
         adapter = PublishingExecution(h, catalog, projected)
         result = await live_executor(h, selected_execution=adapter).evaluate_post_submission(
             h.request
         )
         assert result.outcome == "completed", result.model_dump_json()
         assert adapter.ack is not None
+
+
+class CompetingPublication(ControlledSelectedExecution):
+    """Observe a real lock wait while the first publisher's pin is uncommitted."""
+
+    def __init__(self, harness, catalog, projected, rollback):
+        super().__init__()
+        self.h, self.catalog, self.projected = harness, catalog, projected
+        self.rollback = rollback
+
+    async def execute(self, request, grant):
+        h = self.h
+        pinned, release, contending = asyncio.Event(), asyncio.Event(), asyncio.Event()
+        pids = {}
+        async with h.factory() as session, session.begin():
+            ticket = await _owner(session, request, self.catalog).reserve(
+                _subject(request, self.projected)
+            )
+        first_data, second_data = b'{"trial":"first"}', b'{"trial":"second"}'
+
+        def selector(data):
+            return TrialEvidenceSelector(
+                trial_evidence_id=ticket.trial_evidence_id,
+                project_id=request.identity.project_id,
+                content_sha256="sha256:" + hashlib.sha256(data).hexdigest(),
+            )
+
+        catalog = self.catalog
+
+        class ObservedOwner:
+            def __init__(self, session, label):
+                self.session, self.label = session, label
+                self.owner = _owner(session, request, catalog)
+
+            async def resolve(self, selected):
+                if self.label == "second":
+                    pids[self.label] = await self.session.scalar(text("SELECT pg_backend_pid()"))
+                    contending.set()
+                return await self.owner.resolve(selected)
+
+            async def pin_content(self, selected):
+                resolved = await self.owner.pin_content(selected)
+                if self.label == "first":
+                    pids[self.label] = await self.session.scalar(text("SELECT pg_backend_pid()"))
+                    pinned.set()
+                    await release.wait()
+                return resolved
+
+        def output(label):
+            return checker_output_storage(
+                sessions=h.factory, store=h.store.wrapped, namespace=h.namespace,
+                preparation=h.preparation, settings=h.settings,
+                reservations=lambda session: ObservedOwner(session, label),
+            )
+
+        first = asyncio.create_task(output("first").store_trial_evidence(
+            TrialEvidenceArtifactRequest(
+                selector(first_data), _bytes(b"{}" if self.rollback else first_data),
+            ),
+        ))
+        second = None
+        try:
+            await asyncio.wait_for(pinned.wait(), 15)
+            second = asyncio.create_task(output("second").store_trial_evidence(
+                TrialEvidenceArtifactRequest(selector(second_data), _bytes(second_data)),
+            ))
+            await asyncio.wait_for(contending.wait(), 5)
+            async with asyncio.timeout(10):
+                async with h.factory() as observer:
+                    while not await observer.scalar(text(
+                        "SELECT :holder = ANY(pg_blocking_pids(:contender))"
+                    ), {"holder": pids["first"], "contender": pids["second"]}):
+                        assert not second.done(), "publisher escaped the uncommitted pin"
+                        await asyncio.sleep(0.02)
+            release.set()
+            if self.rollback:
+                with pytest.raises(CheckerOutputUnavailable, match="checker_output_authority_unavailable"):
+                    await asyncio.wait_for(first, 30)
+                stored = await asyncio.wait_for(second, 30)
+                winning_data = second_data
+            else:
+                stored = await asyncio.wait_for(first, 30)
+                with pytest.raises(TrialEvidenceUnavailable, match="trial_content_conflict"):
+                    await asyncio.wait_for(second, 30)
+                winning_data = first_data
+            assert stored.status == "verified"
+            async with h.factory() as session:
+                retained = await session.get(CheckerTrialEvidence, str(ticket.trial_evidence_id))
+                assert retained.content_sha256 == selector(winning_data).content_sha256
+                attempts = (await session.scalars(select(ArtifactPutAttempt).where(
+                    ArtifactPutAttempt.checker_trial_evidence_id == str(ticket.trial_evidence_id),
+                ))).all()
+                assert len(attempts) == 1
+                assert attempts[0].id == str(stored.put_attempt_id)
+        finally:
+            release.set()
+            pending = [item for item in (first, second) if item is not None]
+            for item in pending:
+                if not item.done():
+                    item.cancel()
+            await asyncio.gather(*pending, return_exceptions=True)
+        return await super().execute(request, grant)
+
+
+@pytest.mark.parametrize("rollback", [False, True], ids=["committed-pin", "rolled-back-pin"])
+async def test_competing_trial_publication_observes_pin_commit_or_complete_rollback(
+    tmp_path, isolated_database_env, rollback,
+):
+    """One exact content wins; an aborted first admission leaves no partial effects."""
+    from tests.test_s3_artifact_store import provision_minio_bucket
+
+    await provision_minio_bucket.__wrapped__()
+    spec, parameters, projected, catalog = _trial_fixture()
+    async with material_fixture(
+        tmp_path, isolated_database_env, provider="minio",
+        post_submit_registry_spec=spec, post_submit_binding_setup=parameters,
+        scratch_limits=_limits(
+            aggregate_reserved_bytes=4 * HARD_MAXIMUM_ARTIFACT_BYTES,
+            maximum_files=4, maximum_concurrency=4,
+            total_deadline_seconds=120.0, reservation_ttl_seconds=150.0,
+        ),
+    ) as h:
+        await provision_post_submit_service(h.factory, ServiceIdentity.ARTIFACT_CHECKER_OUTPUT)
+        await reserve(h)
+        h.service = DiagnosticMaterialization(h.service)
+        adapter = CompetingPublication(h, catalog, projected, rollback)
+        result = await live_executor(h, selected_execution=adapter).evaluate_post_submission(h.request)
+        assert result.outcome == "completed", result.model_dump_json()
