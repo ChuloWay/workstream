@@ -52,8 +52,11 @@ contracts: 157 passed (overlaps the scope tests; counts are not additive).
 Backend lint passed. Current docstring check: 80.2%; documentation link check passed.
 New assertions reject the old broad provider enum, forbid the removed notes field,
 and prove error-guided correction, exhaustion, shared budgets and retained hashes.
+Repair suite: 184 passed; a further native SDK Runner probe passed using scripted
+model responses and real SDK tool dispatch/parsing, with no network. It confirms
+invalid-output exception propagation, value-free correction and a fresh review.
 No live provider or deployment qualification claimed. Full CI and independent
-review are required before readiness.
+review remain required before readiness.
 
 ## Reconciliation
 
@@ -68,3 +71,13 @@ identity. Inference scope is conditioned on the recorded runtime; direct manager
 rules remain explicit PM input. The entire example is included in snapshotted
 instructions. Regression testing also caught the SDK inline enum copy; both the
 provider field and referenced enum are now restricted.
+
+Frozen review found that blocked results could omit assigned originals, that the
+example wrapper was not itself valid output JSON, and that the pilot runbook needed
+a historical-scope qualifier. Repairs require all assigned handles in every phase
+and status, append only the valid result JSON after explanatory example context,
+and qualify the retained handoff. Regressions cover blocked drafting/review and
+correction, exact displayed JSON, both enum sites and the absent notes field.
+Hosted preflight also found the added example module outside the tracked behavior
+partition. The static example now lives with its existing instruction owner; no
+partition rule or CI gate changed.

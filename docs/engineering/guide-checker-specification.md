@@ -55,7 +55,7 @@ and infrastructure outcomes. Infrastructure failure is never a contributor failu
 A sufficient guide with missing capabilities remains a warning-ready proposal;
 activation still waits for registered implementations and approved bindings.
 
-The complete [synthetic example](../../backend/app/interfaces/project_guide_example.py)
+The complete [synthetic example](../../backend/app/core/project_guide_instructions.py)
 contains a static report-file PRE check and a POST model review of whether report
 conclusions follow its observations. Neither capability is registered in the
 hypothetical example, so each has a gap specification and suggestion, with empty

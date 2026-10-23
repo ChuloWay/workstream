@@ -423,6 +423,8 @@ def _require_opened_sources(context, result, opened):
         (item.source_item_id, item.ingest_id): context.material.handle_for(item)
         for item in context.material.documents
     }
+    if not set(document_handles.values()) <= opened:
+        raise ValueError("compilation did not open every assigned original")
     references = (
         *(ref for finding in result.findings for ref in finding.evidence_refs),
         *(ref for requirement in result.requirements for ref in requirement.evidence_refs),

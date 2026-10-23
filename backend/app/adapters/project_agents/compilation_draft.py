@@ -67,6 +67,7 @@ def contextual_output_issue(error: Exception) -> dict:
         "ready compilation does not account for every assigned document": "source_coverage",
         "compilation has no opened document evidence": "source_not_opened",
         "compilation cites unopened source material": "source_not_opened",
+        "compilation did not open every assigned original": "source_coverage",
         "platform coverage does not resolve to canonical truth": "platform_coverage",
         "non-platform requirement cannot claim platform coverage": "platform_coverage",
     }

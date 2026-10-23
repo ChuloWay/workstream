@@ -11,14 +11,16 @@ from app.adapters.project_agents.compilation_draft import (
     generated_compilation_schema,
 )
 from app.adapters.project_agents.openai_agent_sdk import OpenAIAgentSdkProjectGuideRuntime
-from app.core.project_guide_instructions import PROJECT_GUIDE_INSTRUCTIONS
+from app.core.project_guide_instructions import (
+    PROJECT_GUIDE_INSTRUCTIONS,
+    PROJECT_GUIDE_OUTPUT_EXAMPLE,
+)
 from app.interfaces.project_agents import (
     ProjectGuideCompilationInvalidOutputError,
     ProjectGuideCompilationResult,
     require_complete_generated_specifications,
     validate_project_guide_compilation_result,
 )
-from app.interfaces.project_guide_example import PROJECT_GUIDE_OUTPUT_EXAMPLE
 from app.modules.projects.guide_compilation.contracts import accepted_compilation_result
 from tests.projects.guide_compilation.helpers import (
     context,
@@ -65,12 +67,26 @@ def test_example_is_complete_valid_and_bound_to_instructions():
     actual = ProjectGuideCompilationResult.model_validate(payload)
     require_complete_generated_specifications(compilation, actual)
     validate_project_guide_compilation_result(compilation, actual)
-    assert (
-        json.dumps(example, ensure_ascii=False, separators=(",", ":")) in PROJECT_GUIDE_INSTRUCTIONS
-    )
+    displayed = PROJECT_GUIDE_INSTRUCTIONS.split("Complete JSON output example:\n", 1)[1]
+    assert CompilationDraftParser(_schema(), 100_000).parse(displayed) == example["result"]
     assert len(PROJECT_GUIDE_INSTRUCTIONS) <= 16_000
     assert "setup_notes" not in PROJECT_GUIDE_INSTRUCTIONS
-    assert "setup_notes" not in _schema()["properties"]
+    schema = _schema()
+    assert "setup_notes" not in schema["properties"]
+    assert "setup_notes" not in schema["required"]
+    allowed = {
+        "platform_covered",
+        "guide_blocker",
+        "supported_pre_submit",
+        "supported_post_submit",
+        "pre_submit_capability_gap",
+        "post_submit_capability_gap",
+    }
+    assert set(schema["$defs"]["RequirementDisposition"]["enum"]) == allowed
+    assert (
+        set(schema["$defs"]["AtomicGuideRequirement"]["properties"]["disposition"]["enum"])
+        == allowed
+    )
 
 
 @pytest.mark.parametrize(
@@ -247,3 +263,116 @@ async def test_corrections_cannot_reset_model_turn_budget(monkeypatch):
         await _compile(OpenAIAgentSdkProjectGuideRuntime(config), compilation)
     assert len(turns) == 2
     assert phases == [2]
+
+
+@pytest.mark.usefixtures("model_credentials", "scripted_workspace")
+@pytest.mark.parametrize("phase", ["draft", "review"])
+@pytest.mark.parametrize("corrected", [True, False])
+async def test_blocked_proposal_must_open_all_originals_even_during_correction(
+    monkeypatch,
+    phase,
+    corrected,
+):
+    """A blocker from one source cannot conceal a second assigned original."""
+    from agents import Runner
+    from uuid import uuid4
+
+    compilation = context(ids())
+    original = compilation.material.documents[0]
+    second = original.model_copy(
+        update={
+            "source_item_id": uuid4(),
+            "ingest_id": uuid4(),
+            "put_attempt_id": uuid4(),
+            "item_order": original.item_order + 1,
+        }
+    )
+    compilation = compilation.model_copy(
+        update={
+            "material": compilation.material.model_copy(update={"documents": (original, second)}),
+        }
+    )
+    blocked = _provider_payload()
+    blocked.update(status="guide_blocked", submission_artifact_policy=None, requirements=[])
+    blocked["findings"][0].update(
+        severity="blocking_gap",
+        code="ambiguous_requirement",
+        message="The guide contradicts the required report format.",
+    )
+    calls = []
+    rejected_call = 1 if phase == "draft" else 2
+
+    async def run(agent, prompt, **kwargs):
+        calls.append(json.loads(prompt))
+        incomplete = len(calls) == rejected_call or (not corrected and len(calls) > rejected_call)
+        await _open_prompt_documents(agent, prompt, count=1 if incomplete else None)
+        if len(calls) == rejected_call + 1:
+            assert calls[-1]["validation_errors"] == [{"path": [], "code": "source_coverage"}]
+        return SimpleNamespace(final_output=agent.output_type.validate_json(json.dumps(blocked)))
+
+    monkeypatch.setattr(Runner, "run", run)
+    runtime = OpenAIAgentSdkProjectGuideRuntime(compilation.runtime_configuration)
+    if corrected:
+        output = await _compile(runtime, compilation)
+        assert output.status == "guide_blocked"
+        assert len(calls) == 3
+    else:
+        with pytest.raises(ProjectGuideCompilationInvalidOutputError):
+            await _compile(runtime, compilation)
+        assert len(calls) == (3 if phase == "draft" else 4)
+
+
+@pytest.mark.usefixtures("model_credentials", "scripted_workspace")
+async def test_real_sdk_runner_corrects_invalid_json_then_performs_fresh_review(monkeypatch):
+    """Exercise SDK tool dispatch and parser-exception propagation without model I/O."""
+    from agents import OpenAIResponsesModel
+    from agents.items import ModelResponse
+    from agents.usage import Usage
+    from openai.types.responses import (
+        ResponseFunctionToolCall,
+        ResponseOutputMessage,
+        ResponseOutputText,
+    )
+
+    compilation = context(ids())
+    handle = compilation.material.handle_for(compilation.material.documents[0])
+    calls = []
+    marker = "private-invalid-sdk-output-521"
+    valid = json.dumps(_provider_payload())
+
+    async def response(self, system_instructions, input, *args, **kwargs):
+        calls.append(input)
+        index = len(calls)
+        if index in {1, 3, 5}:
+            item = ResponseFunctionToolCall(
+                id=f"fc_{index}",
+                call_id=f"call_{index}",
+                name="open_guide_document",
+                type="function_call",
+                arguments=json.dumps({"handle": handle}),
+                status="completed",
+            )
+        else:
+            item = ResponseOutputMessage(
+                id=f"msg_{index}",
+                type="message",
+                role="assistant",
+                status="completed",
+                content=[
+                    ResponseOutputText(
+                        type="output_text",
+                        text=marker if index == 2 else valid,
+                        annotations=[],
+                    )
+                ],
+            )
+        return ModelResponse(output=[item], usage=Usage(), response_id=f"resp_{index}")
+
+    monkeypatch.setattr(OpenAIResponsesModel, "get_response", response)
+    output = await _compile(OpenAIAgentSdkProjectGuideRuntime(runtime_configuration()), compilation)
+    assert output == generated_result()
+    assert len(calls) == 6
+    assert "validation_errors" in json.dumps(calls[2])
+    assert marker not in json.dumps(calls[2])
+    assert "coverage_review" in json.dumps(calls[4])
+    assert "validation_errors" not in json.dumps(calls[4])

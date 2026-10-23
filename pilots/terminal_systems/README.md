@@ -98,14 +98,19 @@ normal task creation; no runtime change or checker allowlist is implied.
 Real provider-backed local setup and explicit PM correction of the unchanged
 guide produced a reviewed engineering handoff: two static PRE specifications
 (layout and metadata), eight background POST specifications, and two lifecycle
-requirements. The ten proposed checks remain capability gaps, with no registered
+classifications. This retained proposal predates the narrowed setup contract.
+It needs a fresh correction containing only PRE/POST check requirements before
+use as the current proposal or any policy approval; PM revision and other
+management choices stay outside inference. Historical proposal bytes and hashes
+remain intact. The ten proposed checks remain capability gaps, with no registered
 bindings. Both independent source-to-proposal reviews passed the final corrected
 generation; stored canonical/component hashes and the public CLI output match.
 
 All four project size/entry limits remain null. This proves nullable proposal
-output, not submission-intake enforcement. The runtime keeps a structurally
-checked draft private, reviews it against the original documents, and applies
-canonical validation only to the final result. PM correction supplies the exact,
+output, not submission-intake enforcement. The runtime validates strict JSON, schema, checker scope and canonical/context
+rules in both private drafting and final review. Known invalid output receives
+bounded error-guided correction within the original attempt budgets. Each phase
+must reopen all assigned originals, including when reporting a blocked guide. PM correction supplies the exact,
 hash-verified predecessor alongside feedback. Earlier proposals remain immutable
 and unapproved; the handoff required human review and explicit corrections, so
 this is not a claim of automatic completeness for other guides.
