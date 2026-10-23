@@ -14,6 +14,7 @@ import tomllib
 PLAN_SCHEMA_VERSION = "terminal_systems.trial_plan_proposal.v1"
 TRIAL_SCHEMA_VERSION = "workstream.checker_trial_plan.v1"
 MAXIMUM_SOURCE_BYTES = 2 * 1024 * 1024
+MAXIMUM_MODEL_PROMPT_BYTES = 1_000_000
 MAXIMUM_PROCEDURES = 24
 MAXIMUM_DOCUMENTED_COMMANDS = MAXIMUM_PROCEDURES - 5
 PURPOSE_ORDER = (
@@ -320,7 +321,10 @@ def build_plan_prompt(
             ],
         },
     }
-    return _canonical(value).decode("utf-8")
+    encoded = _canonical(value)
+    if len(encoded) > MAXIMUM_MODEL_PROMPT_BYTES:
+        raise TrialPlanError("capacity_exceeded")
+    return encoded.decode("utf-8")
 
 
 def validate_plan_proposal(
@@ -752,6 +756,55 @@ def project_slot_templates() -> tuple[dict[str, object], ...]:
     return tuple(templates)
 
 
+def project_trial_execution_projection() -> dict[str, object]:
+    """Return the locked project-owned material and operation projection."""
+    return {
+        "trial_kind": "terminal_systems_runtime_validation",
+        "material_projections": [
+            {
+                "role": "build_context",
+                "source_role": "submission_archive",
+                "projection_kind": "build_context",
+                "source_relative": ".",
+                "destination_relative": ".",
+                "exclusions": ["AUTHOR_NOTES.md", "solution", "tests"],
+            },
+            {
+                "role": "workspace_seed",
+                "source_role": "submission_archive",
+                "projection_kind": "state_seed",
+                "source_relative": "workspace",
+                "destination_relative": ".",
+                "exclusions": [],
+            },
+            {
+                "role": "reference",
+                "source_role": "submission_archive",
+                "projection_kind": "state_overlay",
+                "source_relative": "solution",
+                "destination_relative": "solution",
+                "exclusions": [],
+            },
+            {
+                "role": "verification",
+                "source_role": "submission_archive",
+                "projection_kind": "state_overlay",
+                "source_relative": "tests",
+                "destination_relative": "tests",
+                "exclusions": [],
+            },
+        ],
+        "allowed_material_roles": [
+            "build_context",
+            "workspace_seed",
+            "reference",
+            "verification",
+        ],
+        "build_context_roles": ["build_context"],
+        "slot_templates": list(project_slot_templates()),
+    }
+
+
 def _step(
     slot_id: str,
     slot_kind: str,
@@ -781,5 +834,6 @@ __all__ = (
     "collect_plan_sources",
     "parse_task_metadata",
     "project_slot_templates",
+    "project_trial_execution_projection",
     "validate_plan_proposal",
 )

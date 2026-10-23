@@ -23,6 +23,7 @@ from trial_plan import (  # noqa: E402
     collect_plan_sources,
     parse_task_metadata,
     project_slot_templates,
+    project_trial_execution_projection,
     validate_plan_proposal,
 )
 
@@ -246,6 +247,21 @@ class TrialPlanTests(unittest.TestCase):
             sum(item["maximum_occurrences"] for item in templates),
             35,
         )
+
+    def test_project_projection_excludes_author_only_build_material(self):
+        projection = project_trial_execution_projection()
+        build = projection["material_projections"][0]
+        self.assertEqual(build["source_role"], "submission_archive")
+        self.assertEqual(
+            build["exclusions"], ["AUTHOR_NOTES.md", "solution", "tests"]
+        )
+        by_role = {
+            item["role"]: item for item in projection["material_projections"]
+        }
+        self.assertEqual(by_role["workspace_seed"]["source_relative"], "workspace")
+        self.assertEqual(by_role["reference"]["projection_kind"], "state_overlay")
+        self.assertEqual(by_role["verification"]["projection_kind"], "state_overlay")
+        self.assertEqual(projection["slot_templates"], list(project_slot_templates()))
 
     def test_complete_plan_rejects_missing_reordered_or_invented_procedures(self):
         missing = self.proposal()
