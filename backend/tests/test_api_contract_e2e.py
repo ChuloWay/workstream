@@ -79,8 +79,12 @@ async def test_scripted_guide_runtime_reads_neutral_tools_before_citing_original
 
     assert reads == [(handle, 0, 16000)]
     assert runtime.calls == 1
-    assert result.findings[0].evidence_refs == result.requirements[0].evidence_refs
-    assert result.findings[0].evidence_refs[0].source_item_id == document.source_item_id
+    assert result.requirements == ()
+    assert len(result.findings[0].evidence_refs) == 1
+    reference = result.findings[0].evidence_refs[0]
+    assert reference.source_item_id == document.source_item_id
+    assert reference.document_version_id == document.ingest_id
+    assert reference.sha256 == document.sha256
 
 
 @pytest.mark.asyncio
