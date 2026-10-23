@@ -13,7 +13,8 @@ from app.core.identifiers import new_record_id
 from app.interfaces.project_agents import CapabilityParameter
 from app.modules.checkers.api.external import ExternalCheckerSchema, external_checker_json_hash
 from app.modules.checkers.api.trial_evidence import (
-    TrialEvidenceStableSubject, TrialEvidenceUnavailable,
+    TrialEvidenceStableSubject,
+    TrialEvidenceUnavailable,
 )
 from app.modules.checkers.api.trial_profiles import PinnedTrialExecutionCatalog
 from app.modules.checkers.models import CheckerTrialEvidence
@@ -21,6 +22,7 @@ from app.modules.checkers.trial_evidence import TrialEvidenceReservations
 from tests.checkers.execution.support import ControlledSelectedExecution, live_executor, reserve
 from tests.checkers.external.support import post_registry_spec
 from tests.checkers.external.test_trial_profiles import configuration, digest, profile, projection
+from tests.checkers.external.test_trial_policy import trial_specification
 from tests.checkers.external.test_revision_materialization import DiagnosticMaterialization
 from tests.post_submit_materialization_helpers import material_fixture
 
@@ -28,24 +30,31 @@ from tests.post_submit_materialization_helpers import material_fixture
 def _subject(request, projected):
     identity = request.identity
     return TrialEvidenceStableSubject(
-        project_id=identity.project_id, task_id=identity.task_id,
-        assignment_id=identity.assignment_id, submission_id=identity.submission_id,
+        project_id=identity.project_id,
+        task_id=identity.task_id,
+        assignment_id=identity.assignment_id,
+        submission_id=identity.submission_id,
         submission_version=identity.submission_version,
         requirement_id=request.input["requirement_id"],
         registry_entry_id=request.registry.registry_entry_id,
         registry_entry_digest=request.registry.entry_digest,
         configuration_sha256=request.configuration_sha256,
-        trial_kind=projected.trial_kind, slot_index=0, plan_sha256=digest("1"),
+        trial_kind=projected.trial_kind,
+        slot_index=0,
+        plan_sha256=digest("1"),
         input_digest=request.input_sha256,
-        materials_digest=external_checker_json_hash([
-            item.model_dump(mode="json") for item in request.materials
-        ]),
+        materials_digest=external_checker_json_hash(
+            [item.model_dump(mode="json") for item in request.materials]
+        ),
     )
 
 
 def _owner(session, request, catalog):
     return TrialEvidenceReservations(
-        session, request=request, tasks=evaluation_task_guard(session), profiles=catalog,
+        session,
+        request=request,
+        tasks=evaluation_task_guard(session),
+        profiles=catalog,
         authority=post_submit_execution_authority(session),
     )
 
@@ -55,19 +64,30 @@ def _trial_fixture():
     # The shared artifact/model evidence protocol bounds each receipt to 1 MiB.
     assert selected.limits.maximum_receipt_bytes <= 1_048_576
     projected = projection(selected)
-    config = {key: value for key, value in configuration(selected, projected).items()
-              if key.startswith("trial_")}
+    config = {
+        key: value
+        for key, value in configuration(selected, projected).items()
+        if key.startswith("trial_")
+    }
     document = {
-        "type": "object", "properties": {key: {"const": value} for key, value in config.items()},
-        "required": sorted(config), "additionalProperties": False,
+        "type": "object",
+        "properties": {key: {"const": value} for key, value in config.items()},
+        "required": sorted(config),
+        "additionalProperties": False,
     }
     original = post_registry_spec()
-    spec = type(original).model_validate(original.model_copy(update={
-        "configuration_schema": ExternalCheckerSchema(
-            schema_id="trial_test_configuration", schema_version="v1", document=document,
-            schema_sha256=external_checker_json_hash(document),
-        ),
-    }).model_dump())
+    spec = type(original).model_validate(
+        original.model_copy(
+            update={
+                "configuration_schema": ExternalCheckerSchema(
+                    schema_id="trial_test_configuration",
+                    schema_version="v1",
+                    document=document,
+                    schema_sha256=external_checker_json_hash(document),
+                ),
+            }
+        ).model_dump()
+    )
 
     async def parameters(_factory, _project, _registry):
         return tuple(CapabilityParameter(name=key, value=value) for key, value in config.items())
@@ -78,13 +98,17 @@ def _trial_fixture():
 async def _reject_raw_subject_substitution(factory, ticket):
     """A malformed owner insert must fail its guard, not just its unique key."""
     async with factory() as session:
-        original = await session.scalar(text(
-            "SELECT to_jsonb(e) FROM checker_trial_evidence e WHERE id=:id"
-        ), {"id": ticket.trial_evidence_id})
+        original = await session.scalar(
+            text("SELECT to_jsonb(e) FROM checker_trial_evidence e WHERE id=:id"),
+            {"id": ticket.trial_evidence_id},
+        )
     for key, value, remove in (
-        ("input_digest", None, False), ("input_digest", None, True),
-        ("trial_kind", None, False), ("trial_kind", None, True),
-        ("materials_digest", None, False), ("plan_sha256", None, True),
+        ("input_digest", None, False),
+        ("input_digest", None, True),
+        ("trial_kind", None, False),
+        ("trial_kind", None, True),
+        ("materials_digest", None, False),
+        ("plan_sha256", None, True),
         ("slot_index", 1, False),
     ):
         candidate = dict(original)
@@ -95,16 +119,22 @@ async def _reject_raw_subject_substitution(factory, ticket):
         else:
             subject[key] = value
         candidate["subject"] = subject
-        candidate["address_digest"] = external_checker_json_hash({
-            name: item for name, item in subject.items()
-            if name not in {"plan_sha256", "input_digest", "materials_digest"}
-        })
+        candidate["address_digest"] = external_checker_json_hash(
+            {
+                name: item
+                for name, item in subject.items()
+                if name not in {"plan_sha256", "input_digest", "materials_digest"}
+            }
+        )
         with pytest.raises(IntegrityError) as denied:
             async with factory() as session, session.begin():
-                await session.execute(text(
-                    "INSERT INTO checker_trial_evidence SELECT * FROM "
-                    "jsonb_populate_record(NULL::checker_trial_evidence,CAST(:payload AS jsonb))"
-                ), {"payload": json.dumps(candidate)})
+                await session.execute(
+                    text(
+                        "INSERT INTO checker_trial_evidence SELECT * FROM "
+                        "jsonb_populate_record(NULL::checker_trial_evidence,CAST(:payload AS jsonb))"
+                    ),
+                    {"payload": json.dumps(candidate)},
+                )
         assert denied.value.orig.sqlstate == "23514"
 
 
@@ -129,13 +159,16 @@ class ReservingExecution(ControlledSelectedExecution):
             # the trial row, rather than forming a reverse lock dependency.
             async with self.factory() as verifier, verifier.begin():
                 await verifier.execute(text("SET LOCAL lock_timeout='1s'"))
-                shared = await verifier.scalar(text(
-                    "SELECT id FROM checker_trial_evidence WHERE id=:id FOR KEY SHARE"
-                ), {"id": ticket.trial_evidence_id})
+                shared = await verifier.scalar(
+                    text("SELECT id FROM checker_trial_evidence WHERE id=:id FOR KEY SHARE"),
+                    {"id": ticket.trial_evidence_id},
+                )
                 assert shared == ticket.trial_evidence_id
         for field, value in (
-            ("plan_sha256", digest("2")), ("input_digest", digest("3")),
-            ("materials_digest", digest("4")), ("slot_index", 1),
+            ("plan_sha256", digest("2")),
+            ("input_digest", digest("3")),
+            ("materials_digest", digest("4")),
+            ("slot_index", 1),
             ("assignment_id", new_record_id()),
         ):
             with pytest.raises((TrialEvidenceUnavailable, ValueError)):
@@ -148,17 +181,23 @@ class ReservingExecution(ControlledSelectedExecution):
 
 
 async def test_trial_reservation_is_current_exact_immutable_and_replayed(
-    tmp_path, isolated_database_env,
+    tmp_path,
+    isolated_database_env,
 ):
     spec, parameters, projected, catalog = _trial_fixture()
     async with material_fixture(
-        tmp_path, isolated_database_env, post_submit_registry_spec=spec,
+        tmp_path,
+        isolated_database_env,
+        post_submit_registry_spec=spec,
         post_submit_binding_setup=parameters,
+        post_submit_specification=trial_specification(),
     ) as h:
         await reserve(h)
         h.service = DiagnosticMaterialization(h.service)
         adapter = ReservingExecution(h.factory, catalog, projected)
-        completed = await live_executor(h, selected_execution=adapter).evaluate_post_submission(h.request)
+        completed = await live_executor(h, selected_execution=adapter).evaluate_post_submission(
+            h.request
+        )
         assert completed.outcome == "completed", completed.model_dump_json()
         assert len(adapter.tickets) == 1
         ticket = adapter.tickets[0]
@@ -204,9 +243,10 @@ class RollbackExecution(ControlledSelectedExecution):
                 await asyncio.wait_for(entered.wait(), 5)
                 async with asyncio.timeout(5):
                     async with self.factory() as observer:
-                        while not await observer.scalar(text(
-                            "SELECT :holder = ANY(pg_blocking_pids(:contender))"
-                        ), {"holder": holder_pid, "contender": contender_pid}):
+                        while not await observer.scalar(
+                            text("SELECT :holder = ANY(pg_blocking_pids(:contender))"),
+                            {"holder": holder_pid, "contender": contender_pid},
+                        ):
                             assert not pending.done(), "contender escaped custody wait"
                             await asyncio.sleep(0.02)
                 await transaction.rollback()
@@ -225,15 +265,21 @@ class RollbackExecution(ControlledSelectedExecution):
 
 
 async def test_concurrent_trial_reservation_waits_then_recovers_complete_rollback(
-    tmp_path, isolated_database_env,
+    tmp_path,
+    isolated_database_env,
 ):
     spec, parameters, projected, catalog = _trial_fixture()
     async with material_fixture(
-        tmp_path, isolated_database_env, post_submit_registry_spec=spec,
+        tmp_path,
+        isolated_database_env,
+        post_submit_registry_spec=spec,
         post_submit_binding_setup=parameters,
+        post_submit_specification=trial_specification(),
     ) as h:
         await reserve(h)
         h.service = DiagnosticMaterialization(h.service)
         adapter = RollbackExecution(h.factory, catalog, projected)
-        completed = await live_executor(h, selected_execution=adapter).evaluate_post_submission(h.request)
+        completed = await live_executor(h, selected_execution=adapter).evaluate_post_submission(
+            h.request
+        )
         assert completed.outcome == "completed", completed.model_dump_json()
