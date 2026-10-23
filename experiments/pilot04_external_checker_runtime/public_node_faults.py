@@ -148,7 +148,8 @@ def serve(config_path, root, unit, manifest_path):
     original = config_path.read_bytes()
     config = json.loads(original)
     binding = validate_node(config_path, config, unit, manifest_path)
-    assert not any(owned_resources(config).values()), 'node must be drained'
+    if any(owned_resources(config).values()):
+        raise RuntimeError('node must be drained')
     root.mkdir(mode=0o700, parents=True, exist_ok=True)
     control = PrivateControlDirectory(root)
     if list(root.iterdir()):

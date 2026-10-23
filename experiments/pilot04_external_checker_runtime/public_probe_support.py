@@ -248,4 +248,3 @@ async def _public_project(client, factory, env, *, human_review_required, pre_re
              "public project submitter grant names another actor or role")
 
     return compilation, contributor, manager_token, contributor_token
-

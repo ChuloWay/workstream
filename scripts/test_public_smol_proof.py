@@ -14,6 +14,7 @@ sys.path.insert(0, str(ROOT))
 from experiments.pilot04_external_checker_runtime.public_fault_files import (  # noqa: E402
     PrivateControlDirectory,
 )
+from experiments.pilot04_external_checker_runtime import public_node_faults as faults  # noqa: E402
 from experiments.pilot04_external_checker_runtime.public_node_faults import validate_node  # noqa: E402
 
 
@@ -51,6 +52,34 @@ class PrivateFaultControls(unittest.TestCase):
         alias.symlink_to(self.root, target_is_directory=True)
         with self.assertRaises(ValueError):
             PrivateControlDirectory(alias)
+
+    def test_busy_node_refused_before_control_or_config_mutation(self):
+        config_path = self.root / 'service.json'
+        original = b'{"test": "untouched"}'
+        config_path.write_bytes(original)
+        config_path.chmod(0o600)
+        control_root = self.root / 'control'
+        for resource in ('leases', 'machines', 'disks', 'cgroups'):
+            with self.subTest(resource=resource), patch.object(faults, 'validate_node'), \
+                    patch.object(faults, 'owned_resources', return_value={resource: ['active']}), \
+                    patch.object(faults, 'PrivateControlDirectory') as controls, \
+                    patch.object(faults, 'ForeignControl') as foreign, \
+                    patch.object(subprocess, 'run') as commands:
+                with self.assertRaisesRegex(RuntimeError, 'node must be drained'):
+                    faults.serve(config_path, control_root, 'owned.service', self.root / 'manifest')
+                controls.assert_not_called()
+                foreign.assert_not_called()
+                commands.assert_not_called()
+                self.assertFalse(control_root.exists())
+                self.assertEqual(config_path.read_bytes(), original)
+
+    def test_busy_node_guard_survives_optimized_python(self):
+        result = subprocess.run([
+            sys.executable, '-O', '-m', 'unittest',
+            'scripts.test_public_smol_proof.PrivateFaultControls.'
+            'test_busy_node_refused_before_control_or_config_mutation',
+        ], cwd=ROOT, text=True, capture_output=True, timeout=30)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
     def test_exact_live_unit_binding_rejects_foreign_unit_config_and_binary(self):
         binary, guest, smol = [self.root / name for name in ('service', 'guest', 'smol')]
