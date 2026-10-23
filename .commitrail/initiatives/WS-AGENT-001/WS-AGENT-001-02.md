@@ -29,7 +29,9 @@ no-prefetch startup check; the existing backend Dockerfiles and entrypoint; loca
 composition, preflight, shutdown bounds and release examples;
 backend/CLI/MCP/release-image
 workflows and their test-lane/evidence owners; release-image verification and
-focused tests; and this record. The current initiative overview/index and
+focused tests; `backend/scripts/behavior_ownership.py`, its focused regression
+tests, and `.ci/behavior-ownership/partition.v1.json` for the exact three new
+runtime/topology owner registrations; and this record. The current initiative overview/index and
 `docs/roadmap_status.md` may be reconciled only for the resulting durable
 capability and next boundary. The dependency change may touch only
 `backend/pyproject.toml` and `backend/uv.lock` plus the focused installation tests.
@@ -436,6 +438,17 @@ harness reported `setup_finished_without_draft_outputs`; it retained no terminal
 body, so the record neither attributes a code cause nor erases that failed attempt.
 The later diagnostic run added private observation only and did not change product
 code or image contents.
+
+The first hosted run of the final test/docs candidate failed the behavior-ownership
+validator because the local pre-push command inventory had exercised collection,
+test structure, lint, documentation and focused runtime checks but omitted the
+workflow's standalone `scripts.behavior_ownership validate` command. The repair
+registers only `omnicore_agent.py`, `omnicore_profile.py` and
+`project_setup_topology.py` in the canonical lifecycle partition, updates its
+digest, and adds a closed transition regression that rejects a neighboring
+fallback adapter. The complete Agent Gates command list and complete hosted
+authorization preflight are required on the repaired candidate before another
+push.
 
 ## Reconciliation
 
