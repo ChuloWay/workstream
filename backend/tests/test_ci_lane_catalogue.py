@@ -216,6 +216,7 @@ def test_expanded_lane_families_keep_exact_semantic_owners() -> None:
     assert schema_static_contracts.isdisjoint(partitioned_modules)
     assert {
         "tests/test_alembic.py",
+        "tests/migrations/test_project_catalogue_read.py",
         "tests/migrations/test_contribution_export_snapshots.py",
         "tests/migrations/test_contribution_read_audit.py",
         "tests/test_database_reset.py",
@@ -271,8 +272,8 @@ def test_semantic_family_membership_has_an_independent_fingerprint() -> None:
             "f15a3696526f852c5a872507331d313cac65d04ac1f888a916f078512b4caf29",
         ),
         "project": (
-            210,
-            "9e23ebc7b1631c6e858ae7bdc0425596236cada17b71a12e35afc518da1836b2",
+            211,
+            "7a02542e3b41dfee75e4569cc9f36d2a9da7ece7da1616517d0a8fc6ee1b2cfd",
         ),
         "task": (
             95,
@@ -344,9 +345,9 @@ def test_project_lane_ownership_has_an_independent_fingerprint() -> None:
         )
         + "\n"
     )
-    assert len(catalogue.PROJECT_PARTITIONED_MODULES) == 210
+    assert len(catalogue.PROJECT_PARTITIONED_MODULES) == 211
     assert hashlib.sha256(canonical.encode()).hexdigest() == (
-        "1f75e059d08244a1161dfe053003dee2e0e02268e2340943d4cf825d0b4cd0b4"
+        "9d52700a7b165e8f57b14e89543f85d0353263791f73ffdc5a1cdaa7be01b9db"
     )
 
 

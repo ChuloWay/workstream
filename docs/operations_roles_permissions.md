@@ -81,6 +81,7 @@ or the exact project; own means record-level ownership still applies.
 | Actor/link administration | system | no | no | no | minimal read covered | no | no |
 | Administrative grants | system | no | no | no | history read covered | no | no |
 | Project create | no | no | system only | no | no | no | no |
+| Project catalogue (ID/name/status only) | no | system only | system only | system only | system only | no | no |
 | Project identity read | no | system, full identity | covered, full identity | covered, full identity | covered, full identity | exact project minimal | exact project minimal |
 | Project, guide, submission/checker, review, and revision configuration | no | recovery-only where registered | covered | no | no | no | no |
 | Contribution policy and compensation-adapter binding | no | no | no | covered | no | no | no |
@@ -108,6 +109,16 @@ status, and timestamps to an effective Operator, Project Manager, Finance
 Authority, or Audit Authority grant. An exact-project Submitter or Reviewer
 sees only id, name, and status. Access Administrator alone is
 concealed because that role has no `project.read` permission.
+
+`GET /api/v1/projects` is a separate system project catalogue. Only a current
+system-scoped Project Manager, Operator, Finance Authority or Audit Authority
+grant permits the bounded ID/name/status page. Access Administrator alone,
+exact-project-only grants and contributor grants do not enumerate. The
+catalogue reveals no guide, role, task, payment or other project-management
+facts; in particular it does not give Finance Authority guide access.
+`GET /api/v1/actors/me/projects` remains exact-grant membership, not this
+system catalogue. Catalogue ID order is stable pagination, not creation or
+business order.
 
 `GET /api/v1/actors/me/authorization-context?project_id=...` is self-only. It
 returns effective role names and active route-backed project actions for the
