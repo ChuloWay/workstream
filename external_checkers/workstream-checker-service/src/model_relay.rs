@@ -882,14 +882,14 @@ mod tests {
             grant_id: format!("model_{}", "1".repeat(32)),
             binding_digest: digest.clone(),
         };
-        let first = InvocationRelay::start(
+        let mut first = InvocationRelay::start(
             &root,
             &proxy_path,
             &grant,
             &digest,
             uid,
             gid,
-            Instant::now() + Duration::from_millis(100),
+            Instant::now() + Duration::from_secs(5),
         )
         .unwrap();
         let second = InvocationRelay::start(
@@ -899,7 +899,7 @@ mod tests {
             &digest,
             uid,
             gid,
-            Instant::now() + Duration::from_millis(100),
+            Instant::now() + Duration::from_secs(5),
         )
         .unwrap();
         assert_ne!(first.socket_path(), second.socket_path());
@@ -907,7 +907,17 @@ mod tests {
         attacker
             .write_all(&((MODEL_FRAME_MAXIMUM + 1) as u32).to_be_bytes())
             .unwrap();
-        assert!(first.finish().failed);
+        // Wait for the relay to close its accepted peer before inspecting the
+        // worker result. Calling `finish` immediately would cancel a thread
+        // that had not necessarily accepted the queued connection yet.
+        attacker
+            .set_read_timeout(Some(Duration::from_secs(5)))
+            .unwrap();
+        let mut closed = [0_u8; 1];
+        assert_eq!(attacker.read(&mut closed).unwrap(), 0);
+        let result = first.worker.take().unwrap().join().unwrap();
+        assert_eq!(result, Err("model relay frame unbounded".into()));
+        assert!(!first.finish().cleanup_unsettled);
         assert!(!second.finish().cleanup_unsettled);
         fs::remove_file(proxy_path).unwrap();
         fs::remove_dir(root).unwrap();
