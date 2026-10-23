@@ -133,9 +133,12 @@ BEGIN
      OR NEW.manifest_sha256 IS DISTINCT FROM attempt.guide_material_hash
      OR NEW.access_method IS DISTINCT FROM 'trusted_parser'
      OR NEW.attachment_allocation_id IS NOT NULL
-     OR NEW.operation NOT IN ('read','search')
+     OR NEW.operation IS NULL OR NEW.operation NOT IN ('read','search')
+     OR NEW.parser_request_hash IS NULL
      OR NEW.parser_request_hash !~ '^sha256:[0-9a-f]{64}$'
+     OR NEW.parser_response_hash IS NULL
      OR NEW.parser_response_hash !~ '^sha256:[0-9a-f]{64}$'
+     OR NEW.parser_build_digest IS NULL
      OR NEW.parser_build_digest !~ '^sha256:[0-9a-f]{64}$'
      OR NEW.document_handle IS DISTINCT FROM canonical_guide_document_handle(
        attempt.setup_run_id::uuid, NEW.source_item_id::uuid, NEW.document_version_id::uuid)
@@ -207,9 +210,17 @@ def upgrade() -> None:
         "ADD COLUMN parser_build_digest varchar(71)"
     )
     op.execute(
+        "ALTER TABLE public.project_guide_document_accesses "
+        "DISABLE TRIGGER guide_document_access_guard"
+    )
+    op.execute(
         "UPDATE public.project_guide_document_accesses SET access_method="
         "CASE WHEN attachment_allocation_id IS NULL THEN 'direct_original' "
         "ELSE 'provider_attachment' END"
+    )
+    op.execute(
+        "ALTER TABLE public.project_guide_document_accesses "
+        "ENABLE TRIGGER guide_document_access_guard"
     )
     op.execute(
         "ALTER TABLE public.project_guide_document_accesses "
@@ -225,9 +236,12 @@ def upgrade() -> None:
         "AND operation IS NULL AND parser_request_hash IS NULL "
         "AND parser_response_hash IS NULL AND parser_build_digest IS NULL) OR "
         "(access_method='trusted_parser' AND attachment_allocation_id IS NULL "
-        "AND operation IN ('read','search') "
+        "AND operation IS NOT NULL AND operation IN ('read','search') "
+        "AND parser_request_hash IS NOT NULL "
         "AND parser_request_hash ~ '^sha256:[0-9a-f]{64}$' "
+        "AND parser_response_hash IS NOT NULL "
         "AND parser_response_hash ~ '^sha256:[0-9a-f]{64}$' "
+        "AND parser_build_digest IS NOT NULL "
         "AND parser_build_digest ~ '^sha256:[0-9a-f]{64}$'))"
     )
     op.execute(_INTEGER_HELPER)

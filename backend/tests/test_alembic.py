@@ -144,25 +144,29 @@ async def _seed_retained_guide_runtime_rows(database_url: str, *, status: str) -
         handle = UUID(compilation.material.handle_for(document))
         await connection.execute(
             "insert into project_guide_runtime_allocations("
-            "id,attempt_id,manifest_sha256,runtime_key,kind,state,provider_id,expires_at) "
-            "values($1,$2,$3,'openai_agents_sdk','container','allocated','cntr_retained',"
+            "id,attempt_id,manifest_sha256,runtime_key,kind,state,expires_at) "
+            "values($1,$2,$3,'openai_agents_sdk','container','allocating',"
             "now()+interval '20 minutes')",
             container_id,
             attempt_id,
             compilation.material.sha256,
         )
         await connection.execute(
+            "update project_guide_runtime_allocations set state='allocated',"
+            "provider_id='cntr_retained' where id=$1",
+            container_id,
+        )
+        await connection.execute(
             "insert into project_guide_runtime_allocations("
             "id,attempt_id,manifest_sha256,runtime_key,kind,state,document_handle,provider_id,"
             "source_item_id,document_version_id,put_attempt_id,content_id,replica_id,"
             "storage_namespace_id,namespace_fingerprint,sha256,byte_count,media_type,expires_at) "
-            "values($1,$2,$3,'openai_agents_sdk','file','allocated',$4,$5,$6,$7,$8,$9,$10,"
-            "$11,$12,$13,$14,$15,now()+interval '20 minutes')",
+            "values($1,$2,$3,'openai_agents_sdk','file','allocating',$4,null,$5,$6,$7,$8,$9,"
+            "$10,$11,$12,$13,$14,now()+interval '20 minutes')",
             file_id,
             attempt_id,
             compilation.material.sha256,
             handle,
-            "file-retained",
             document.source_item_id,
             document.ingest_id,
             document.put_attempt_id,
@@ -175,17 +179,27 @@ async def _seed_retained_guide_runtime_rows(database_url: str, *, status: str) -
             document.media_type,
         )
         await connection.execute(
+            "update project_guide_runtime_allocations set state='allocated',"
+            "provider_id='file-retained' where id=$1",
+            file_id,
+        )
+        await connection.execute(
             "insert into project_guide_runtime_allocations("
             "id,attempt_id,manifest_sha256,runtime_key,kind,state,document_handle,provider_id,"
             "parent_provider_id,source_file_allocation_id,container_allocation_id,expires_at) "
-            "values($1,$2,$3,'openai_agents_sdk','attachment','allocated',$4,"
-            "'cfile_retained','cntr_retained',$5,$6,now()+interval '20 minutes')",
+            "values($1,$2,$3,'openai_agents_sdk','attachment','allocating',$4,"
+            "null,'cntr_retained',$5,$6,now()+interval '20 minutes')",
             attachment_id,
             attempt_id,
             compilation.material.sha256,
             handle,
             file_id,
             container_id,
+        )
+        await connection.execute(
+            "update project_guide_runtime_allocations set state='allocated',"
+            "provider_id='cfile_retained' where id=$1",
+            attachment_id,
         )
         await connection.execute(
             "insert into project_guide_document_accesses("
