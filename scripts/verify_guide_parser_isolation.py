@@ -619,37 +619,6 @@ def _prove_sigterm_socket_cleanup(image: str, owner: str) -> None:
     ).decode().strip()
     require(created == volume, "guide parser proof volume creation differs")
     directory = str(SOCKET_PATH.parent)
-    checked(
-        [
-            "docker",
-            "run",
-            "--rm",
-            "--label",
-            label,
-            "--user",
-            "0:0",
-            "--network",
-            "none",
-            "--read-only",
-            "--cap-drop",
-            "ALL",
-            "--cap-add",
-            "CHOWN",
-            "--security-opt",
-            "no-new-privileges",
-            "--mount",
-            f"type=volume,source={volume},target={directory}",
-            "--entrypoint",
-            "python",
-            image,
-            "-B",
-            "-c",
-            (
-                "import os; path='/var/lib/workstream/guide-runtime'; "
-                "os.chown(path,10002,10001); os.chmod(path,0o750)"
-            ),
-        ]
-    )
     container = checked(
         [
             "docker",
