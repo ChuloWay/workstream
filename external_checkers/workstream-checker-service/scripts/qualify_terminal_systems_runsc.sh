@@ -24,12 +24,38 @@ readonly METADATA="${WORKSTREAM_TS_RUNSC_METADATA:-/tmp/ws493-terminal-systems-r
 readonly RESULT_LOG="${WORKSTREAM_TS_RUNSC_LOG:-/tmp/ws493-terminal-systems-runsc.log}"
 readonly EXIT_SIDECAR="${WORKSTREAM_TS_RUNSC_EXIT:-/tmp/ws493-terminal-systems-runsc.exit}"
 readonly EXTRACT_CONTAINER="ws493-runsc-registry-extract-${RUN_ID}"
+readonly CLEANER_CONTAINER="ws493-runsc-workspace-clean-${RUN_ID}"
 
 STARTED=0
 CONFIG_REPLACED=0
 EXTRACT_CREATED=0
 HOST_CHECKER_BUILT=0
 QUALIFIER_CONTAINER_OWNED=0
+
+remove_composition_root() {
+  if docker inspect "${CLEANER_CONTAINER}" >/dev/null 2>&1; then
+    [[ "$(docker inspect --format '{{index .Config.Labels "workstream.qualifier"}}' "${CLEANER_CONTAINER}")" == "terminal-systems-runsc" ]]
+    [[ "$(docker inspect --format '{{index .Config.Labels "org.workstream.pilot00.run"}}' "${CLEANER_CONTAINER}")" == "${RUN_ID}" ]]
+    [[ "$(docker inspect --format '{{.Image}}' "${CLEANER_CONTAINER}")" == "$(docker image inspect --format '{{.Id}}' "${PREPARED_IMAGE}")" ]]
+    docker rm -f "${CLEANER_CONTAINER}" >/dev/null
+  fi
+  docker run --rm \
+    --name "${CLEANER_CONTAINER}" \
+    --label "org.workstream.pilot00.run=${RUN_ID}" \
+    --label "workstream.qualifier=terminal-systems-runsc" \
+    --network none \
+    --read-only \
+    --cap-drop ALL \
+    --cap-add DAC_OVERRIDE \
+    --security-opt no-new-privileges \
+    --pids-limit 16 \
+    --memory 67108864 \
+    --mount "type=bind,src=${SHARED_ROOT},dst=${INNER_ROOT}" \
+    --entrypoint sh \
+    "${PREPARED_IMAGE}" -ceu \
+    'rm -rf /workstream-state/terminal-systems-runsc-composition'
+  [[ ! -e "${COMPOSITION_ROOT}" ]]
+}
 
 cleanup() {
   local status=$?
@@ -73,6 +99,9 @@ cleanup() {
       status=1
     fi
   fi
+  if [[ -n "${PREPARED_IMAGE:-}" ]]; then
+    remove_composition_root || status=1
+  fi
   rm -f -- "${ORIGINAL_CONFIG}" "${BUILD_MESSAGES}"
   printf '%s\n' "${status}" >"${EXIT_SIDECAR}"
   exit "${status}"
@@ -85,8 +114,10 @@ trap cleanup EXIT INT TERM
 [[ "${CONTAINER}" != "${PREPARED_CONTAINER}" ]]
 [[ "${RUN_ID}" =~ ^[a-z0-9][a-z0-9-]{0,30}$ ]]
 [[ "${CONTAINER}" =~ ^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$ ]]
+[[ "${WORKSTREAM_TS_RUNSC_PREFLIGHT_ONLY:-0}" =~ ^[01]$ ]]
 [[ -n "${WORKSTREAM_TEST_ADMIN_DATABASE_URL:-}" ]]
 [[ -n "${WORKSTREAM_TEST_MINIO_ENDPOINT:-}" ]]
+echo "qualification stage=host_identity_preflight"
 if docker inspect "${CONTAINER}" >/dev/null 2>&1; then
   echo "qualification sibling container already exists" >&2
   exit 1
@@ -111,6 +142,16 @@ ORIGINAL_CONFIG_MODE="$(stat -c '%a' "${SHARED_ROOT}/daemon.json")"
 
 readonly PREPARED_IMAGE="$(docker inspect --format '{{.Config.Image}}' "${PREPARED_CONTAINER}")"
 [[ "${PREPARED_IMAGE}" =~ @sha256:[a-f0-9]{64}$ ]]
+remove_composition_root
+(
+  cd "${REPOSITORY_ROOT}/backend"
+  PYTHONPATH=.:tests .venv/bin/pytest --collect-only -q \
+    -p conftest -p tests.checkers.external.conftest \
+    ../external_checkers/workstream-checker-service/tests/terminal_systems_runsc_composition.py \
+    | grep -Fx \
+      'external_checkers/workstream-checker-service/tests/terminal_systems_runsc_composition.py::test_production_service_executes_project_trial_under_runsc_with_real_custody'
+)
+echo "qualification stage=collection_and_workspace_preflight_complete"
 docker create \
   --name "${CONTAINER}" \
   --label "org.workstream.pilot00.run=${RUN_ID}" \
@@ -188,6 +229,7 @@ readonly INNER_CACHE_MANIFEST_SHA="$(docker exec "${CONTAINER}" sha256sum "${INN
 [[ "${HOST_CACHE_MANIFEST_SHA}" == "${INNER_CACHE_MANIFEST_SHA}" ]]
 docker exec "${CONTAINER}" docker info --format '{{json .Runtimes}}' \
   | python3 -c 'import json,sys; assert "runsc" in json.load(sys.stdin)'
+echo "qualification stage=sealed_cache_and_runtime_sentinel_complete"
 docker stop --time 15 "${CONTAINER}" >/dev/null
 STARTED=0
 
@@ -223,7 +265,6 @@ PY
 CONFIG_REPLACED=1
 readonly DUAL_RUNTIME_DIGEST="$(sha256sum "${SHARED_ROOT}/daemon.json" | awk '{print "sha256:" $1}')"
 
-rm -rf -- "${COMPOSITION_ROOT}"
 mkdir -p -- "${COMPOSITION_ROOT}/bin" "${COMPOSITION_ROOT}/input" "${COMPOSITION_ROOT}/registry-data"
 chmod 0700 "${COMPOSITION_ROOT}" "${COMPOSITION_ROOT}/bin" "${COMPOSITION_ROOT}/input" "${COMPOSITION_ROOT}/registry-data"
 
@@ -259,6 +300,7 @@ cp -- "$(readlink -f /lib/x86_64-linux-gnu/libgcc_s.so.1)" "${COMPOSITION_ROOT}/
 cp -- "$(readlink -f /lib/x86_64-linux-gnu/libm.so.6)" "${COMPOSITION_ROOT}/bin/libm.so.6"
 cp -- "$(readlink -f /lib/x86_64-linux-gnu/libc.so.6)" "${COMPOSITION_ROOT}/bin/libc.so.6"
 chmod 0555 "${COMPOSITION_ROOT}/bin/"*
+echo "qualification stage=production_binary_and_project_image_build"
 
 if docker image inspect "${CHECKER_IMAGE}" >/dev/null 2>&1; then
   echo "qualification checker image tag already exists on the host" >&2
@@ -348,6 +390,24 @@ if "--host-uds=none" not in child or any(
 ):
     raise SystemExit("child host UDS policy differs")
 PY
+readonly HOST_SERVICE_SHA="$(sha256sum "${COMPOSITION_ROOT}/bin/workstream-checker-service" | awk '{print $1}')"
+readonly INNER_SERVICE_SHA="$(docker exec "${CONTAINER}" sha256sum "${INNER_COMPOSITION_ROOT}/bin/workstream-checker-service" | awk '{print $1}')"
+readonly HOST_IMAGE_ARCHIVE_SHA="$(sha256sum "${COMPOSITION_ROOT}/input/checker-image.tar" | awk '{print $1}')"
+readonly INNER_IMAGE_ARCHIVE_SHA="$(docker exec "${CONTAINER}" sha256sum "${INNER_COMPOSITION_ROOT}/input/checker-image.tar" | awk '{print $1}')"
+[[ "${HOST_SERVICE_SHA}" == "${INNER_SERVICE_SHA}" ]]
+[[ "${HOST_IMAGE_ARCHIVE_SHA}" == "${INNER_IMAGE_ARCHIVE_SHA}" ]]
+docker exec "${CONTAINER}" test -S /var/run/docker.sock
+docker exec --user "$(id -u):$(id -g)" "${CONTAINER}" sh -ceu '
+  root="$1"
+  test -x "${root}/bin/workstream-checker-service"
+  test -x "${root}/bin/registry"
+  test -r /workstream-state/cache/cache.sha256
+  test -w "${root}"
+  "${root}/bin/ld-linux-x86-64.so.2" --library-path "${root}/bin" \
+    --list "${root}/bin/workstream-checker-service" >/dev/null
+  docker version >/dev/null
+' sh "${INNER_COMPOSITION_ROOT}"
+echo "qualification stage=inner_paths_uid_and_runtime_preflight_complete"
 docker exec "${CONTAINER}" docker load --input "${INNER_COMPOSITION_ROOT}/input/checker-image.tar" >/dev/null
 docker exec "${CONTAINER}" docker tag "${CHECKER_IMAGE}" \
   127.0.0.1:5000/terminal-systems-post:qualification
@@ -378,7 +438,12 @@ export WORKSTREAM_TS_RUNSC_BUILDER_MANIFEST="$(python3 -c 'import json,sys; prin
 export WORKSTREAM_TS_RUNSC_CACHE_DIGEST="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["cache_manifest_sha256"])' "${STATE_ROOT}/prepared-assets.json")"
 export WORKSTREAM_TS_RUNSC_ENGINE_DIGEST="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["runsc_binary_sha256"])' "${STATE_ROOT}/prepared-assets.json")"
 
+if [[ "${WORKSTREAM_TS_RUNSC_PREFLIGHT_ONLY:-0}" == 1 ]]; then
+  echo "qualification stage=preflight_only_complete"
+  exit 0
+fi
 cd "${REPOSITORY_ROOT}/backend"
+echo "qualification stage=postgresql_minio_runsc_composition"
 set +e
 .venv/bin/python scripts/run_isolated_tests.py \
   --metadata-json "${METADATA}" --timeout-seconds 900 --lane trial_composition -- \
