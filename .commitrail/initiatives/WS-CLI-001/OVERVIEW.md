@@ -427,6 +427,7 @@ test setup may use the documented local bootstrap to arrange authority but
 cannot create a private CLI dependency.
 
 The CLI is a separate client package, not an ADR 0014 backend adapter. It does
-not change backend authority or deploy an external provider. A release process,
-installer/signing, and a full contribution journey remain future boundaries;
-source build and CI are not claims of public distribution.
+not change backend authority or deploy an external provider. Protected first CLI
+publication, optional package-manager installers and signing, and a full
+contribution journey remain future boundaries; source build and CI are not
+claims of public distribution.
