@@ -1,6 +1,8 @@
 {
   "socket_path": "/var/lib/workstream/checker-runtime/checker.sock",
   "material_root": "/var/lib/workstream/scratch",
+  "model_proxy_socket": "/var/lib/workstream/model-runtime/model.sock",
+  "model_relay_root": "/var/lib/workstream/model-relays",
   "docker_binary": "/usr/local/bin/docker",
   "runtime": "runsc",
   "isolation_mode": "gvisor",

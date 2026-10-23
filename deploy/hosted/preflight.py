@@ -27,6 +27,7 @@ GUIDE_SOCKET_ROOT = Path("/var/lib/workstream/guide-runtime")
 GUIDE_SOCKET_PATH = GUIDE_SOCKET_ROOT / "guide.sock"
 MODEL_SOCKET_ROOT = Path("/var/lib/workstream/model-runtime")
 MODEL_SOCKET_PATH = MODEL_SOCKET_ROOT / "model.sock"
+MODEL_RELAY_ROOT = Path("/var/lib/workstream/model-relays")
 GUIDE_PARSER_UID = 10002
 GUIDE_PARSER_GID = 10001
 DOCKER_SOCKET = Path("/var/run/docker.sock")
@@ -445,6 +446,11 @@ def validate_checker_config(config: dict[str, Any], values: dict[str, str]) -> N
         "sandbox_uid": _positive_id(values, "WORKSTREAM_RUNTIME_UID"),
         "sandbox_gid": _positive_id(values, "WORKSTREAM_RUNTIME_GID"),
     }
+    model_proxy_enabled = values["WORKSTREAM_MODEL_PROXY_ENABLED"] == "true"
+    expected.update({
+        "model_proxy_socket": str(MODEL_SOCKET_PATH) if model_proxy_enabled else None,
+        "model_relay_root": str(MODEL_RELAY_ROOT) if model_proxy_enabled else None,
+    })
     for key, required in expected.items():
         if config.get(key) != required:
             raise PreflightError(
@@ -521,6 +527,9 @@ def validate_private_host_inputs(values: dict[str, str]) -> None:
         _private_metadata(
             MODEL_SOCKET_ROOT, kind="directory", uid=uid, gid=gid, mode=0o700
         )
+        _private_metadata(
+            MODEL_RELAY_ROOT, kind="directory", uid=uid, gid=gid, mode=0o700
+        )
     _private_metadata(
         GUIDE_SOCKET_ROOT,
         kind="directory",
@@ -574,6 +583,7 @@ def validate_private_host_inputs(values: dict[str, str]) -> None:
         ]
         if model_proxy_enabled:
             shared_roots.append(MODEL_SOCKET_ROOT.resolve(strict=True))
+            shared_roots.append(MODEL_RELAY_ROOT.resolve(strict=True))
         resolved_paths = [path.resolve(strict=True) for path in private_paths]
     except (OSError, RuntimeError) as exc:
         raise PreflightError("private host input identity is unavailable") from exc
@@ -950,7 +960,12 @@ def validate_compose(rendered: dict[str, Any], values: dict[str, str]) -> None:
             str(SCRATCH_ROOT): (str(SCRATCH_ROOT), True),
             str(SOCKET_ROOT): (str(SOCKET_ROOT), False),
             str(DOCKER_SOCKET): (str(DOCKER_SOCKET), False),
-        },
+        } | (
+            {
+                str(MODEL_SOCKET_ROOT): (str(MODEL_SOCKET_ROOT), True),
+                str(MODEL_RELAY_ROOT): (str(MODEL_RELAY_ROOT), False),
+            } if model_proxy_enabled else {}
+        ),
         "api": shared_backend_mounts | runtime_identity_mounts,
         "worker": shared_backend_mounts
         | {str(GUIDE_SOCKET_ROOT): (str(GUIDE_SOCKET_ROOT), True)}
@@ -1117,6 +1132,10 @@ def validate_compose(rendered: dict[str, Any], values: dict[str, str]) -> None:
         "required": True,
     }:
         raise PreflightError("worker must wait for a healthy model proxy")
+    if model_proxy_enabled and services["checker-service"].get("depends_on", {}).get(
+        "model-proxy"
+    ) != {"condition": "service_healthy", "required": True}:
+        raise PreflightError("checker service must wait for a healthy model proxy")
     worker = services["worker"]
     worker_command = worker.get("command")
     if (
@@ -1362,6 +1381,16 @@ def validate_docker_runtime(config: dict[str, Any], values: dict[str, str]) -> N
     )
     if not isinstance(runtimes, dict) or "runsc" not in runtimes:
         raise PreflightError("Docker does not report the required runsc runtime")
+    if values["WORKSTREAM_MODEL_PROXY_ENABLED"] == "true":
+        runtime = runtimes["runsc"]
+        arguments = runtime.get("runtimeArgs", []) if isinstance(runtime, dict) else []
+        if not isinstance(arguments, list) or [
+            argument for argument in arguments
+            if isinstance(argument, str) and argument.startswith("--host-uds")
+        ] != ["--host-uds=open"]:
+            raise PreflightError(
+                "model-enabled checker runsc requires exactly --host-uds=open"
+            )
     for entry in config["cache"]:
         reference = f"{entry['repository']}@{entry['platform_manifest_digest']}"
         inspected = _run_json(

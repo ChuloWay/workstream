@@ -106,7 +106,12 @@ that no smoke container owned by that run remains after inspection or timeout.
 
 Install and configure Docker and gVisor using the approved host process. Confirm
 that Docker reports a `runsc` runtime. Installation and daemon configuration are
-outside this repository configuration.
+outside this repository configuration. When model access is enabled, the outer
+checker runtime must include exactly `--host-uds=open` so its invocation-local
+Unix socket works under gVisor; full preflight checks Docker's reported runtime
+arguments. This permits the mounted socket, not network access or a global proxy
+mount inside the image. A separate trial runtime remains configured with host
+Unix sockets disabled.
 
 The hosted profile fixes backend processes at UID/GID 10001 and the parser broker
 at UID 10002 with the shared client group 10001 after its identity bootstrap.
@@ -117,6 +122,7 @@ create the fixed private directories with these exact identities:
 sudo install -d -m 0700 -o 10001 -g 10001 /var/lib/workstream/scratch
 sudo install -d -m 0700 -o 10001 -g 10001 /var/lib/workstream/checker-runtime
 sudo install -d -m 0700 -o 10001 -g 10001 /var/lib/workstream/model-runtime
+sudo install -d -m 0700 -o 10001 -g 10001 /var/lib/workstream/model-relays
 sudo install -d -m 0750 -o 10002 -g 10001 /var/lib/workstream/guide-runtime
 stat -c '%g' /var/run/docker.sock
 ```
@@ -154,6 +160,15 @@ current artifact-provider activation before scheduling jobs. An absent required 
 startup, and an unrelated secret is neither mounted nor loaded. The loader
 independently requires the running identity and mode `0400`, performs no shell
 evaluation and never prints a value. Do not put AWS static keys in these files.
+
+With the proxy enabled, the trusted checker service also mounts the global
+model socket directory read-only. Its separate writable
+`/var/lib/workstream/model-relays` directory has the same absolute path on the
+Docker host and in the service, owned by the runtime UID/GID with mode `0700`.
+The service waits for the proxy to become healthy and mounts only the current
+invocation's relay into a project image. Project images receive neither the
+global socket nor provider credentials. API, Beat and proof jobs receive
+neither model directory.
 The two provider selectors are trusted release configuration. The proxy loads
 only its dedicated files as `OPENROUTER_API_KEY` and `OPENAI_API_KEY`; this is
 independent of the setup provider because approved POST and setup profiles may
@@ -232,6 +247,11 @@ activation.
 Copy `checker-service.example.json` to the configured private path, mode `0400`
 and the same runtime owner. Replace the example cache with every approved
 single-platform checker image supplied by the project checker/registry work.
+The example includes the exact `model_proxy_socket` and `model_relay_root`
+selectors for a proxy-enabled release. Remove both keys when
+`WORKSTREAM_MODEL_PROXY_ENABLED=false`; preflight rejects partial, substituted
+or disabled-proxy selectors. Rust consumes these paths from the private JSON
+configuration, not environment variables.
 For each entry, preserve the exact repository, platform manifest digest/media
 type/byte count, Linux architecture and Docker config image ID. Pull every
 `repository@sha256:...` identity before preflight. Full preflight checks that
