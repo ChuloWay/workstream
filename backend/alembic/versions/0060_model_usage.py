@@ -25,7 +25,7 @@ def upgrade() -> None:
 
 
 def _upgrade_invocation_grants() -> None:
-    """Create one-use invocation grants after their retained call-ledger parents."""
+    """Create bounded invocation sessions after their retained call-ledger parents."""
     op.execute(
         r"""
 CREATE TABLE public.checker_model_invocation_grants (
@@ -40,24 +40,14 @@ CREATE TABLE public.checker_model_invocation_grants (
  expires_at timestamptz NOT NULL,
  issued_at timestamptz DEFAULT clock_timestamp() NOT NULL,
  authorization_evidence_id uuid NOT NULL,
- selected_request_sha256 varchar(71),
- selected_attempt_id uuid,
- consumed_at timestamptz,
  CONSTRAINT pk_checker_model_invocation_grants PRIMARY KEY(id),
  CONSTRAINT ck_checker_model_invocation_grants_id_uuid7 CHECK (
   (get_byte(uuid_send(id),6)>>4)=7 AND (get_byte(uuid_send(id),8)&192)=128),
  CONSTRAINT ck_checker_model_invocation_grants_digests CHECK (
   token_hash ~ '^sha256:[0-9a-f]{64}$' AND
-  external_request_digest ~ '^sha256:[0-9a-f]{64}$' AND
-  (selected_request_sha256 IS NULL OR
-   selected_request_sha256 ~ '^sha256:[0-9a-f]{64}$')),
+  external_request_digest ~ '^sha256:[0-9a-f]{64}$'),
  CONSTRAINT ck_checker_model_invocation_grants_json CHECK (
   jsonb_typeof(execution_facts)='object' AND jsonb_typeof(paid_slot)='object'),
- CONSTRAINT ck_checker_model_invocation_grants_consumption CHECK (
-  (consumed_at IS NULL AND selected_request_sha256 IS NULL AND
-   selected_attempt_id IS NULL) OR
-  (consumed_at IS NOT NULL AND selected_request_sha256 IS NOT NULL AND
-   selected_attempt_id IS NOT NULL)),
  CONSTRAINT uq_checker_model_invocation_grants_token UNIQUE(token_hash),
  CONSTRAINT uq_checker_model_invocation_grants_authority
   UNIQUE(authorization_evidence_id),
@@ -69,9 +59,7 @@ CREATE TABLE public.checker_model_invocation_grants (
   REFERENCES public.external_checker_registry_entries(id) ON DELETE RESTRICT,
  CONSTRAINT fk_checker_model_invocation_grants_authority
   FOREIGN KEY(authorization_evidence_id)
-  REFERENCES public.audit_events(id) ON DELETE RESTRICT,
- CONSTRAINT fk_checker_model_invocation_grants_attempt FOREIGN KEY(selected_attempt_id)
-  REFERENCES public.model_usage_effects(id) ON DELETE RESTRICT
+  REFERENCES public.audit_events(id) ON DELETE RESTRICT
 )
         """
     )
@@ -93,8 +81,6 @@ DECLARE submission_task uuid;
 DECLARE run public.checker_runs%ROWTYPE;
 DECLARE registry public.external_checker_registry_entries%ROWTYPE;
 DECLARE profile public.model_usage_profiles%ROWTYPE;
-DECLARE attempt public.model_usage_effects%ROWTYPE;
-DECLARE slot public.checker_model_usage_slots%ROWTYPE;
 DECLARE binding_matches integer;
 BEGIN
  IF TG_OP='DELETE' THEN
@@ -102,46 +88,8 @@ BEGIN
    USING ERRCODE='55000';
  END IF;
  IF TG_OP='UPDATE' THEN
-  IF OLD.consumed_at IS NOT NULL OR
-     NEW.selected_request_sha256 IS NULL OR NEW.selected_attempt_id IS NULL OR
-     NEW.consumed_at IS NULL OR
-     (to_jsonb(NEW)-ARRAY['selected_request_sha256','selected_attempt_id','consumed_at'])
-      IS DISTINCT FROM
-     (to_jsonb(OLD)-ARRAY['selected_request_sha256','selected_attempt_id','consumed_at']) THEN
-   RAISE EXCEPTION 'checker model invocation grant facts are immutable'
-    USING ERRCODE='55000';
-  END IF;
-  IF OLD.expires_at<=clock_timestamp() THEN
-   RAISE EXCEPTION 'checker model invocation grant expired'
-    USING ERRCODE='23514';
-  END IF;
-  SELECT value.* INTO attempt FROM public.model_usage_effects value
-   WHERE value.id=NEW.selected_attempt_id FOR SHARE;
-  SELECT value.* INTO slot FROM public.checker_model_usage_slots value
-   WHERE value.id=attempt.checker_slot_id FOR SHARE;
-  IF attempt.id IS NULL OR slot.id IS NULL OR
-     attempt.request_sha256 IS DISTINCT FROM NEW.selected_request_sha256 OR
-     slot.project_id IS DISTINCT FROM NEW.project_id OR
-     slot.task_id IS DISTINCT FROM (NEW.execution_facts->>'task_id')::uuid OR
-     slot.assignment_id IS DISTINCT FROM (NEW.paid_slot->>'assignment_id')::uuid OR
-     slot.submission_id IS DISTINCT FROM (NEW.paid_slot->>'submission_id')::uuid OR
-     slot.submission_version IS DISTINCT FROM
-      (NEW.paid_slot->>'submission_version')::integer OR
-     slot.requirement_id IS DISTINCT FROM NEW.paid_slot->>'requirement_id' OR
-     slot.registry_entry_digest IS DISTINCT FROM
-      NEW.paid_slot->>'registry_entry_digest' OR
-     slot.configuration_sha256 IS DISTINCT FROM
-      NEW.paid_slot->>'configuration_sha256' OR
-     slot.profile_id IS DISTINCT FROM (NEW.paid_slot->>'profile_id')::uuid OR
-     slot.profile_version IS DISTINCT FROM
-      (NEW.paid_slot->>'profile_version')::integer OR
-     slot.profile_digest IS DISTINCT FROM NEW.paid_slot->>'profile_digest' OR
-     slot.slot_index IS DISTINCT FROM (NEW.paid_slot->>'slot_index')::integer THEN
-   RAISE EXCEPTION 'checker model invocation grant attempt ancestry is invalid'
-    USING ERRCODE='23514';
-  END IF;
-  NEW.consumed_at:=clock_timestamp();
-  RETURN NEW;
+  RAISE EXCEPTION 'checker model invocation grant facts are immutable'
+   USING ERRCODE='55000';
  END IF;
 
  IF jsonb_typeof(NEW.execution_facts)<>'object' OR
@@ -237,8 +185,6 @@ BEGIN
    profile_digest=NEW.paid_slot->>'profile_digest' FOR SHARE;
  NEW.issued_at:=clock_timestamp();
  IF NOT isfinite(NEW.expires_at) OR NEW.expires_at<=clock_timestamp() OR
-    NEW.consumed_at IS NOT NULL OR NEW.selected_request_sha256 IS NOT NULL OR
-    NEW.selected_attempt_id IS NOT NULL OR
     (NEW.execution_facts->>'project_id')::uuid IS DISTINCT FROM NEW.project_id OR
     (NEW.paid_slot->>'project_id')::uuid IS DISTINCT FROM NEW.project_id OR
     (NEW.execution_facts->>'checker_run_id')::uuid IS DISTINCT FROM NEW.checker_run_id OR
@@ -314,6 +260,92 @@ CREATE TRIGGER checker_model_invocation_grants_guard
         r"""
 CREATE TRIGGER checker_model_invocation_grants_no_truncate
  BEFORE TRUNCATE ON public.checker_model_invocation_grants
+ FOR EACH STATEMENT EXECUTE FUNCTION public.guard_model_usage_no_truncate()
+        """
+    )
+    op.execute(
+        r"""
+CREATE TABLE public.checker_model_invocation_grant_calls (
+ grant_id uuid NOT NULL,
+ call_index integer NOT NULL,
+ attempt_id uuid NOT NULL,
+ request_sha256 varchar(71) NOT NULL,
+ bound_at timestamptz DEFAULT clock_timestamp() NOT NULL,
+ CONSTRAINT pk_checker_model_invocation_grant_calls PRIMARY KEY(grant_id,call_index),
+ CONSTRAINT uq_checker_model_invocation_grant_calls_attempt UNIQUE(attempt_id),
+ CONSTRAINT ck_checker_model_invocation_grant_calls_facts CHECK (
+  call_index BETWEEN 0 AND 99 AND request_sha256 ~ '^sha256:[0-9a-f]{64}$'),
+ CONSTRAINT fk_checker_model_invocation_grant_calls_grant FOREIGN KEY(grant_id)
+  REFERENCES public.checker_model_invocation_grants(id) ON DELETE RESTRICT,
+ CONSTRAINT fk_checker_model_invocation_grant_calls_attempt FOREIGN KEY(attempt_id)
+  REFERENCES public.model_usage_effects(id) ON DELETE RESTRICT
+)
+        """
+    )
+    op.execute(
+        r"""
+CREATE FUNCTION public.guard_checker_model_invocation_grant_call() RETURNS trigger
+LANGUAGE plpgsql SET search_path=pg_catalog,public,pg_temp AS $$
+DECLARE grant_row public.checker_model_invocation_grants%ROWTYPE;
+DECLARE attempt public.model_usage_effects%ROWTYPE;
+DECLARE slot public.checker_model_usage_slots%ROWTYPE;
+DECLARE profile public.model_usage_profiles%ROWTYPE;
+DECLARE prior_calls bigint;
+BEGIN
+ IF TG_OP<>'INSERT' THEN
+  RAISE EXCEPTION 'checker model invocation grant calls are immutable'
+   USING ERRCODE='55000';
+ END IF;
+ SELECT * INTO grant_row FROM public.checker_model_invocation_grants
+  WHERE id=NEW.grant_id FOR UPDATE;
+ SELECT * INTO attempt FROM public.model_usage_effects
+  WHERE id=NEW.attempt_id FOR SHARE;
+ SELECT * INTO slot FROM public.checker_model_usage_slots
+  WHERE id=attempt.checker_slot_id FOR SHARE;
+ SELECT * INTO profile FROM public.model_usage_profiles
+  WHERE id=slot.profile_id AND profile_version=slot.profile_version AND
+   profile_digest=slot.profile_digest FOR SHARE;
+ SELECT count(*) INTO prior_calls FROM public.checker_model_invocation_grant_calls
+  WHERE grant_id=NEW.grant_id;
+ IF grant_row.id IS NULL OR grant_row.expires_at<=clock_timestamp() OR
+    attempt.id IS NULL OR slot.id IS NULL OR profile.id IS NULL OR
+    NEW.call_index<>prior_calls OR NEW.call_index>=profile.maximum_calls OR
+    attempt.request_sha256 IS DISTINCT FROM NEW.request_sha256 OR
+    slot.slot_index IS DISTINCT FROM NEW.call_index OR
+    slot.project_id IS DISTINCT FROM grant_row.project_id OR
+    slot.task_id IS DISTINCT FROM (grant_row.execution_facts->>'task_id')::uuid OR
+    slot.assignment_id IS DISTINCT FROM (grant_row.paid_slot->>'assignment_id')::uuid OR
+    slot.submission_id IS DISTINCT FROM (grant_row.paid_slot->>'submission_id')::uuid OR
+    slot.submission_version IS DISTINCT FROM
+     (grant_row.paid_slot->>'submission_version')::integer OR
+    slot.requirement_id IS DISTINCT FROM grant_row.paid_slot->>'requirement_id' OR
+    slot.registry_entry_digest IS DISTINCT FROM
+     grant_row.paid_slot->>'registry_entry_digest' OR
+    slot.configuration_sha256 IS DISTINCT FROM
+     grant_row.paid_slot->>'configuration_sha256' OR
+    slot.profile_id IS DISTINCT FROM (grant_row.paid_slot->>'profile_id')::uuid OR
+    slot.profile_version IS DISTINCT FROM
+     (grant_row.paid_slot->>'profile_version')::integer OR
+    slot.profile_digest IS DISTINCT FROM grant_row.paid_slot->>'profile_digest' THEN
+  RAISE EXCEPTION 'checker model invocation grant call ancestry is invalid'
+   USING ERRCODE='23514';
+ END IF;
+ NEW.bound_at:=clock_timestamp();
+ RETURN NEW;
+END $$
+        """
+    )
+    op.execute(
+        r"""
+CREATE TRIGGER checker_model_invocation_grant_calls_guard
+ BEFORE INSERT OR UPDATE OR DELETE ON public.checker_model_invocation_grant_calls
+ FOR EACH ROW EXECUTE FUNCTION public.guard_checker_model_invocation_grant_call()
+        """
+    )
+    op.execute(
+        r"""
+CREATE TRIGGER checker_model_invocation_grant_calls_no_truncate
+ BEFORE TRUNCATE ON public.checker_model_invocation_grant_calls
  FOR EACH STATEMENT EXECUTE FUNCTION public.guard_model_usage_no_truncate()
         """
     )
@@ -1139,6 +1171,8 @@ CREATE TABLE public.setup_model_usage_envelopes (
  CONSTRAINT uq_setup_model_usage_envelopes_stable_identity UNIQUE(
   compilation_attempt_id,runtime_configuration_hash,profile_id,profile_version,
   profile_digest),
+ CONSTRAINT uq_setup_model_usage_envelopes_one_per_attempt UNIQUE(
+  compilation_attempt_id),
  CONSTRAINT fk_setup_model_usage_envelopes_attempt FOREIGN KEY(
   compilation_attempt_id,project_id,guide_id,source_snapshot_id,setup_run_id,
   setup_generation,runtime_configuration_hash)
@@ -1673,6 +1707,16 @@ BEGIN
     attempt.setup_run_id IS DISTINCT FROM NEW.setup_run_id OR
     attempt.setup_generation IS DISTINCT FROM NEW.setup_generation OR
     attempt.runtime_configuration_hash IS DISTINCT FROM NEW.runtime_configuration_hash OR
+    jsonb_typeof(attempt.runtime_configuration::jsonb) IS DISTINCT FROM 'object' OR
+    attempt.runtime_configuration->>'model_profile_id' IS DISTINCT FROM
+     NEW.profile_id::text OR
+    (attempt.runtime_configuration->>'model_profile_version')::integer IS DISTINCT FROM
+     NEW.profile_version OR
+    attempt.runtime_configuration->>'model_profile_digest' IS DISTINCT FROM
+     NEW.profile_digest OR
+    attempt.runtime_configuration->>'model_provider' IS DISTINCT FROM profile.provider OR
+    attempt.runtime_configuration->>'model_api' IS DISTINCT FROM profile.api OR
+    attempt.runtime_configuration->>'model' IS DISTINCT FROM profile.model_snapshot OR
     profile.project_id::text IS DISTINCT FROM NEW.project_id::text THEN
   RAISE EXCEPTION 'invalid setup model usage envelope ownership' USING ERRCODE='23514';
  END IF;
@@ -1703,6 +1747,16 @@ BEGIN
     attempt.setup_run_id IS DISTINCT FROM NEW.setup_run_id OR
     attempt.setup_generation IS DISTINCT FROM NEW.setup_generation OR
     attempt.runtime_configuration_hash IS DISTINCT FROM NEW.runtime_configuration_hash OR
+    jsonb_typeof(attempt.runtime_configuration::jsonb) IS DISTINCT FROM 'object' OR
+    attempt.runtime_configuration->>'model_profile_id' IS DISTINCT FROM
+     NEW.profile_id::text OR
+    (attempt.runtime_configuration->>'model_profile_version')::integer IS DISTINCT FROM
+     NEW.profile_version OR
+    attempt.runtime_configuration->>'model_profile_digest' IS DISTINCT FROM
+     NEW.profile_digest OR
+    attempt.runtime_configuration->>'model_provider' IS DISTINCT FROM profile.provider OR
+    attempt.runtime_configuration->>'model_api' IS DISTINCT FROM profile.api OR
+    attempt.runtime_configuration->>'model' IS DISTINCT FROM profile.model_snapshot OR
     ROW(envelope.compilation_attempt_id,envelope.project_id,envelope.guide_id,
         envelope.source_snapshot_id,envelope.setup_run_id,envelope.setup_generation,
         envelope.runtime_configuration_hash,envelope.profile_id,

@@ -24,6 +24,7 @@ from app.interfaces.checker_model_proxy import ModelProxyRequest, ModelProxyRepl
 from app.modules.model_usage.api import (
     ModelCallEffectAuthorityFacts,
     ModelCallEvidence,
+    ModelCallBudgetUnavailable,
     ModelCallUsage,
     ModelCallUnavailable,
     ModelProfileSelector,
@@ -51,8 +52,20 @@ def _sha(value: bytes) -> str:
     return "sha256:" + hashlib.sha256(value).hexdigest()
 
 
-def _unavailable(code: str) -> ModelProxyReply:
-    return ModelProxyReply("unavailable", None, None, code)
+def _unavailable(
+    code: str,
+    call_index: int,
+    *,
+    session_exhausted: bool = True,
+) -> ModelProxyReply:
+    return ModelProxyReply(
+        outcome="unavailable",
+        output=None,
+        receipt_digest=None,
+        failure_code=code,
+        call_index=call_index,
+        session_exhausted=session_exhausted,
+    )
 
 
 class CheckerModelProxy:
@@ -80,26 +93,49 @@ class CheckerModelProxy:
         """Consume one invocation capability; failed infrastructure never becomes a verdict."""
         try:
             return await self._handle(request)
+        except ModelCallBudgetUnavailable:
+            return _unavailable("model_budget_unavailable", request.call_index)
         except (ModelCallUnavailable, CheckerOutputUnavailable):
-            return _unavailable("model_call_unavailable")
+            return _unavailable("model_call_unavailable", request.call_index)
 
     async def _handle(self, request: ModelProxyRequest) -> ModelProxyReply:
-        # Reject malformed bytes before consuming invocation custody or reserving spend.
-        try:
-            provider_request = CheckerModelRequest(request.prompt)
-        except ValueError:
-            return _unavailable("model_request_invalid")
+        resolved_receipts = [
+            {
+                "receipt_sha256": receipt.receipt_sha256,
+                "receipt": json.loads(receipt.canonical_receipt_utf8),
+            }
+            for receipt in request.resolved_receipts
+        ]
         data = _canonical_bytes(
             {
-                "schema_version": "workstream.checker_model_request.v1",
+                "schema_version": "workstream.model_session_call.v2",
+                "call_index": request.call_index,
                 "prompt": request.prompt,
+                "resolved_receipts": resolved_receipts,
             }
         )
+        # The trusted relay resolves opaque handles; providers receive the exact retained
+        # facts, never image-authored receipt claims.  Keep the ordinary prompt unchanged
+        # for calls without tools while using one closed envelope when receipts are present.
+        provider_prompt = request.prompt
+        if resolved_receipts:
+            provider_prompt = _canonical_bytes(
+                {
+                    "schema_version": "workstream.model_prompt_with_receipts.v1",
+                    "prompt": request.prompt,
+                    "trusted_receipts": resolved_receipts,
+                }
+            ).decode("utf-8")
+        try:
+            provider_request = CheckerModelRequest(provider_prompt)
+        except ValueError:
+            return _unavailable("model_request_invalid", request.call_index)
         request_sha = _sha(data)
         async with self._sessions() as session, session.begin():
             authority = await self._authorization(session, uuid4())
             grants = self._grants(session, authority)
             facts = await grants.resolve(request.grant_id, request.request_digest)
+            paid_slot = facts.slot.model_copy(update={"slot_index": request.call_index})
             profile = await self._profiles(session).read_exact(
                 ModelProfileSelector(
                     profile_id=facts.slot.profile_id,
@@ -107,19 +143,30 @@ class CheckerModelProxy:
                     profile_digest=facts.slot.profile_digest,
                 ),
                 project_id=facts.slot.project_id,
-                registry_entry_id=facts.registry_entry_id,
-                registry_entry_digest=facts.slot.registry_entry_digest,
             )
-            if len(data) > profile.spec.maximum_request_bytes:
-                return _unavailable("model_request_too_large")
+            receipt_bytes = sum(
+                len(receipt.canonical_receipt_utf8.encode("utf-8"))
+                for receipt in request.resolved_receipts
+            )
+            if (
+                request.call_index >= profile.spec.maximum_calls
+                or len(request.resolved_receipts) > profile.spec.maximum_tool_calls
+                or receipt_bytes > profile.spec.maximum_tool_output_bytes
+            ):
+                return _unavailable("model_session_exhausted", request.call_index)
+            if max(len(data), len(provider_prompt.encode("utf-8"))) > (
+                profile.spec.maximum_request_bytes
+            ):
+                return _unavailable("model_request_too_large", request.call_index)
             attached = await self._calls(session, authority).prepare_attempt(
                 facts.execution,
-                facts.slot,
+                paid_slot,
                 registry_entry_id=facts.registry_entry_id,
                 request_sha256=request_sha,
             )
             await grants.consume_prepared(
                 facts,
+                call_index=request.call_index,
                 request_sha256=request_sha,
                 prepared_attempt_id=attached.attempt_id,
             )
@@ -132,9 +179,9 @@ class CheckerModelProxy:
             internal_call_request_id=attached.internal_call_request_id,
         )
         if attached.state == "completed":
-            return await self._cached(facts, effect)
+            return await self._cached(facts, effect, profile, request.call_index)
         if attached.state in {"known_failed", "known_no_effect"}:
-            return _unavailable("model_call_operator_recovery_required")
+            return _unavailable("model_call_operator_recovery_required", request.call_index)
         async with self._provider(profile) as provider:
             dispatch = None
             if attached.state == "prepared":
@@ -150,7 +197,7 @@ class CheckerModelProxy:
                         request_evidence,
                     )
                 if dispatch.state == "completed":
-                    return await self._cached(facts, effect)
+                    return await self._cached(facts, effect, profile, request.call_index)
             deadline = asyncio.get_running_loop().time() + profile.spec.deadline_ms / 1000
             if dispatch is not None and not dispatch.replayed:
                 try:
@@ -160,7 +207,7 @@ class CheckerModelProxy:
                     )
                 except TimeoutError:
                     await self._record_reference(effect, None)
-                    return _unavailable("model_provider_delivery_uncertain")
+                    return _unavailable("model_provider_delivery_uncertain", request.call_index)
                 if created.outcome is CheckerModelCreateOutcome.NO_EFFECT:
                     async with self._sessions() as session, session.begin():
                         authority = await self._authorization(
@@ -178,11 +225,11 @@ class CheckerModelProxy:
                             observed_at=await session.scalar(select(func.clock_timestamp())),
                         )
                         await self._calls(session, authority).mark_known_no_effect(effect, proof)
-                    return _unavailable("model_provider_no_effect")
+                    return _unavailable("model_provider_no_effect", request.call_index)
                 reference = created.known_response
                 await self._record_reference(effect, reference)
                 if created.outcome is CheckerModelCreateOutcome.UNCERTAIN:
-                    return _unavailable("model_provider_delivery_uncertain")
+                    return _unavailable("model_provider_delivery_uncertain", request.call_index)
                 observation = created.observation
             else:
                 async with self._sessions() as session, session.begin():
@@ -200,11 +247,13 @@ class CheckerModelProxy:
                     CheckerModelProviderStatus.IN_PROGRESS,
                 }:
                     if observation.usage is None:
-                        return _unavailable("model_provider_usage_unavailable")
-                    return await self._complete(facts, effect, profile, observation)
+                        return _unavailable("model_provider_usage_unavailable", request.call_index)
+                    return await self._complete(
+                        facts, effect, profile, observation, request.call_index
+                    )
                 remaining = deadline - asyncio.get_running_loop().time()
                 if remaining <= 0:
-                    return _unavailable("model_provider_pending")
+                    return _unavailable("model_provider_pending", request.call_index)
                 await asyncio.sleep(min(1, remaining))
                 try:
                     recovered = await asyncio.wait_for(
@@ -212,9 +261,11 @@ class CheckerModelProxy:
                         timeout=max(0.001, deadline - asyncio.get_running_loop().time()),
                     )
                 except TimeoutError:
-                    return _unavailable("model_provider_pending")
+                    return _unavailable("model_provider_pending", request.call_index)
                 if recovered.outcome is not CheckerModelRecoveryOutcome.OBSERVED:
-                    return _unavailable("model_provider_recovery_unavailable")
+                    return _unavailable(
+                        "model_provider_recovery_unavailable", request.call_index
+                    )
                 observation = recovered.observation
 
     async def _record_reference(self, effect, reference) -> None:
@@ -263,7 +314,9 @@ class CheckerModelProxy:
             byte_count=len(data),
         )
 
-    async def _complete(self, facts, effect, profile, observation) -> ModelProxyReply:
+    async def _complete(
+        self, facts, effect, profile, observation, call_index: int
+    ) -> ModelProxyReply:
         """Record authenticated terminal evidence before settling once, including late results."""
         data = _canonical_bytes(
             {
@@ -272,7 +325,7 @@ class CheckerModelProxy:
             }
         )
         if len(data) > profile.spec.maximum_response_bytes:
-            return _unavailable("model_response_too_large")
+            return _unavailable("model_response_too_large", call_index)
         evidence = await self._store(facts, effect, "model_response", data)
         raw_usage = observation.usage
         usage = ModelCallUsage(
@@ -296,11 +349,11 @@ class CheckerModelProxy:
                 usage=usage,
             )
         if not usable:
-            return _unavailable("model_provider_failed")
+            return _unavailable("model_provider_failed", call_index)
         # Fresh current-run attachment gates image access; late completion itself remains retained.
-        return await self._cached(facts, effect)
+        return await self._cached(facts, effect, profile, call_index)
 
-    async def _cached(self, facts, effect) -> ModelProxyReply:
+    async def _cached(self, facts, effect, profile, call_index: int) -> ModelProxyReply:
         """Reauthorize current invocation before releasing the original verified response."""
         async with self._sessions() as session, session.begin():
             authority = await self._authorization(session, facts.execution.evaluation_request_id)
@@ -324,4 +377,11 @@ class CheckerModelProxy:
             raise ModelCallUnavailable("model_call_response_unavailable")
         output = body["observation"]["output_text"]
         receipt = canonical_json_hash(completed.model_dump(mode="json", exclude={"replayed"}))
-        return ModelProxyReply("completed", output, receipt, None)
+        return ModelProxyReply(
+            outcome="completed",
+            output=output,
+            receipt_digest=receipt,
+            failure_code=None,
+            call_index=call_index,
+            session_exhausted=call_index + 1 >= profile.spec.maximum_calls,
+        )

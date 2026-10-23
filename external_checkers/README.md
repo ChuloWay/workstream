@@ -82,23 +82,30 @@ service branch.
 ## Optional model socket
 
 An entitled post-submit invocation may receive one invocation-local Unix socket
-at `/work/model.sock`. The image opens one connection and sends exactly
-`{"prompt":"<string>"}` as UTF-8 JSON, prefixed by a four-byte unsigned
-big-endian body length. The JSON body must be non-empty and no larger than 1 MiB.
-The image then reads one frame in the same format. Its body is one closed
-`workstream.checker_model_proxy.v1` result object:
+at `/work/model.sock`. The image opens one connection and sends sequential
+closed `workstream.model_session.v2` call objects as UTF-8 JSON, each prefixed
+by a four-byte unsigned big-endian body length. A call supplies its exact
+zero-based `call_index`, a non-empty `prompt` and a bounded unique
+`required_receipt_handles` array. Each frame is at most 1 MiB. The reply echoes
+the call index and is one closed session result object:
 
 - A completed result has `outcome: "completed"`, a non-empty string `output`, a
   lowercase `sha256:` `receipt_digest` and a null `failure_code`.
 - An unavailable result has `outcome: "unavailable"`, null `output` and
   `receipt_digest`, and a bounded lowercase-identifier `failure_code`.
 
-Both results also contain the exact `protocol_version`; extra or missing fields
-are invalid. This image-facing protocol is project-agnostic. The image needs no
+Both results also contain the exact `protocol_version` and `session_exhausted`;
+extra or missing fields are invalid. The locked model profile bounds calls,
+prompt/response bytes, tokens, trusted receipt count/bytes, deadline and the
+whole session budget. Receipt handles resolve only inside the current invocation;
+the relay injects their ART-verified canonical bytes before spend and hashes
+those retained facts rather than the transient handles. This image-facing
+protocol is project-agnostic. The image needs no
 Workstream project code, provider SDK, provider credential, model coordinate or
 access to the global proxy endpoint. The service wraps the prompt with the
-invocation's private grant and request digest. It offers one call slot and keeps
-the checker container on `--network none`.
+invocation's private grant and request digest. Setup and POST sessions share one
+project-lifetime metered account while retaining distinct typed setup-attempt and
+checker-invocation lineage. The checker container remains on `--network none`.
 
 The dedicated singleton model-proxy worker is optional. Add `model-proxy` to
 the existing backend and agent-loop Compose profiles to enable it. That profile

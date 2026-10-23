@@ -20,6 +20,7 @@ from app.modules.model_usage.api import (
 )
 from app.modules.model_usage.models import (
     CheckerModelInvocationGrant,
+    CheckerModelInvocationGrantCall,
     CheckerModelUsageSlot,
     ModelUsageEffect,
 )
@@ -85,9 +86,12 @@ class ModelRecoverySources:
         slot_row = await self._repo.slot(slot)
         parent = await self._repo.attempt(parent_attempt_id)
         grant = await self._session.scalar(
-            select(CheckerModelInvocationGrant).where(
-                CheckerModelInvocationGrant.selected_attempt_id == str(parent_attempt_id)
+            select(CheckerModelInvocationGrant)
+            .join(
+                CheckerModelInvocationGrantCall,
+                CheckerModelInvocationGrantCall.grant_id == CheckerModelInvocationGrant.id,
             )
+            .where(CheckerModelInvocationGrantCall.attempt_id == str(parent_attempt_id))
         )
         if (
             slot_row is None
@@ -95,8 +99,8 @@ class ModelRecoverySources:
             or parent.checker_slot_id != slot_row.id
             or grant is None
             or grant.project_id != str(slot.project_id)
-            or grant.paid_slot != slot.model_dump(mode="json")
-            or grant.selected_request_sha256 != parent.request_sha256
+            or ModelPaidSlotKey.model_validate(grant.paid_slot).envelope_digest
+            != slot.envelope_digest
         ):
             raise ModelCallUnavailable("model_recovery_source_unavailable")
         try:
@@ -127,8 +131,13 @@ class ModelRecoverySources:
                     CheckerModelInvocationGrant.registry_entry_id,
                 )
                 .join(
+                    CheckerModelInvocationGrantCall,
+                    CheckerModelInvocationGrantCall.grant_id
+                    == CheckerModelInvocationGrant.id,
+                )
+                .join(
                     ModelUsageEffect,
-                    ModelUsageEffect.id == CheckerModelInvocationGrant.selected_attempt_id,
+                    ModelUsageEffect.id == CheckerModelInvocationGrantCall.attempt_id,
                 )
                 .join(
                     CheckerModelUsageSlot,

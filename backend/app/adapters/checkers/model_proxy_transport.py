@@ -16,6 +16,7 @@ from app.interfaces.checker_model_proxy import (
     ModelProxyHandler,
     ModelProxyReply,
     ModelProxyRequest,
+    ModelProxyResolvedReceipt,
 )
 
 
@@ -291,7 +292,14 @@ def _decode_request(payload: bytes) -> ModelProxyRequest:
         parse_constant=_reject_json_constant,
         object_pairs_hook=_closed_json_object,
     )
-    expected = {"protocol_version", "grant_id", "request_digest", "prompt"}
+    expected = {
+        "protocol_version",
+        "grant_id",
+        "request_digest",
+        "call_index",
+        "prompt",
+        "resolved_receipts",
+    }
     if type(value) is not dict or set(value) != expected:
         raise ValueError("model proxy request root is invalid")
     if value["protocol_version"] != MODEL_PROXY_PROTOCOL:
@@ -299,8 +307,26 @@ def _decode_request(payload: bytes) -> ModelProxyRequest:
     return ModelProxyRequest(
         grant_id=value["grant_id"],
         request_digest=value["request_digest"],
+        call_index=value["call_index"],
         prompt=value["prompt"],
+        resolved_receipts=tuple(
+            ModelProxyResolvedReceipt(
+                receipt_sha256=item["receipt_sha256"],
+                canonical_receipt_utf8=item["canonical_receipt_utf8"],
+            )
+            for item in _resolved_receipt_values(value["resolved_receipts"])
+        ),
     )
+
+
+def _resolved_receipt_values(value: object) -> list[dict[str, object]]:
+    """Reject open or duplicate receipt objects before constructing trusted values."""
+    if type(value) is not list:
+        raise ValueError("model proxy resolved receipts are invalid")
+    expected = {"receipt_sha256", "canonical_receipt_utf8"}
+    if any(type(item) is not dict or set(item) != expected for item in value):
+        raise ValueError("model proxy resolved receipts are invalid")
+    return value
 
 
 def _closed_json_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:

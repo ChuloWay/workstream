@@ -40,7 +40,9 @@ development names or introduce a second meter.
 - CHECKERS selected POST integration and existing AUTH, PROJECTS and TASK ports
   for fresh owner currentness and Operator provisioning.
 - Existing ART generated checker-output custody to retain bounded private
-  request/response evidence, with matching authority and read concealment.
+  request/response evidence, with matching authority and read concealment; the
+  same put/verify/bind/recover pipeline accepts one typed CHECKERS-owned trial
+  evidence subject so trusted observations are durable before a paid assessment.
 - Typed provider capability under `backend/app/interfaces/`, concrete adapter
   and explicit ADR-0014 composition; fixed settings outside images.
 - One linear Alembic continuation with preflight, intermediate upgrade and
@@ -156,6 +158,19 @@ same ART put/verify/bind lifecycle, not a parallel artifact store. The unused
 run-only write selector and deny-only producer composition are replaced; retained
 historical rows keep their immutable ancestry. Private call bindings remain
 retained independently of the original checker run.
+
+Execution tools use a separate immutable `checker_trial_evidence` owner selected
+after a canonical plan is validated and before its engine runs. Its replay key is
+the stable project/task/assignment/Submission, requirement, registry/configuration,
+trial kind/slot, exact plan and input/material digests. The originating run, lease
+and external-request digest are retained provenance but never the replay key.
+The first completed canonical receipt pins its content digest through the same
+ART put, independent verification and immutable binding path; later workers may
+only recover those exact bytes. An invocation-local opaque handle is minted only
+after the ART binding acknowledgement and may be replaced on retry. Handles and
+lease identities never enter the paid request hash; the exact verified canonical
+receipt bytes and digest do. CHECKERS owns trial reservation/currentness and the
+0061 strong owner schema; MODEL-USAGE owns only the bounded resolver/session seam.
 
 The local relay root must be mounted at the same Docker-daemon-visible path,
 with private same-UID socket custody. gVisor requires the administrator-provided

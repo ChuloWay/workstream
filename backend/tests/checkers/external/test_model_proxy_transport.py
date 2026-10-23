@@ -30,13 +30,15 @@ REQUEST_DIGEST = "sha256:" + "b" * 64
 RECEIPT_DIGEST = "sha256:" + "c" * 64
 
 
-def request_value(*, prompt: str = "Judge this bounded artifact.") -> dict[str, str]:
+def request_value(*, prompt: str = "Judge this bounded artifact.") -> dict[str, object]:
     """Build the exact Rust relay request root."""
     return {
         "protocol_version": MODEL_PROXY_PROTOCOL,
         "grant_id": GRANT_ID,
         "request_digest": REQUEST_DIGEST,
+        "call_index": 0,
         "prompt": prompt,
+        "resolved_receipts": [],
     }
 
 
@@ -87,6 +89,8 @@ async def test_real_socket_round_trip_has_exact_contract_and_private_custody(tmp
             output="bounded result",
             receipt_digest=RECEIPT_DIGEST,
             failure_code=None,
+            call_index=0,
+            session_exhausted=False,
         )
 
     transport = ModelProxyTransport(socket_path=path, handler=handle)
@@ -104,19 +108,22 @@ async def test_real_socket_round_trip_has_exact_contract_and_private_custody(tmp
                 "output": "bounded result",
                 "receipt_digest": RECEIPT_DIGEST,
                 "failure_code": None,
+                "call_index": 0,
+                "session_exhausted": False,
             }
 
     assert received == [
         ModelProxyRequest(
             grant_id=GRANT_ID,
             request_digest=REQUEST_DIGEST,
+            call_index=0,
             prompt="Judge this bounded artifact.",
         )
     ]
     assert GRANT_ID not in repr(received[0])
     assert received[0].prompt not in repr(received[0])
     assert "bounded result" not in repr(
-        ModelProxyReply("completed", "bounded result", RECEIPT_DIGEST, None)
+        ModelProxyReply("completed", "bounded result", RECEIPT_DIGEST, None, 0, False)
     )
     assert not path.exists()
 
@@ -131,9 +138,10 @@ async def test_real_socket_round_trip_has_exact_contract_and_private_custody(tmp
             {key: value for key, value in request_value().items() if key != "prompt"}
         ).encode(),
         (
-            b'{"protocol_version":"workstream.checker_model_proxy.v1",'
+            b'{"protocol_version":"workstream.model_session.v2",'
             b'"grant_id":"model_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",'
-            b'"request_digest":"sha256:' + b"b" * 64 + b'","prompt":"first","prompt":"second"}'
+            b'"request_digest":"sha256:' + b"b" * 64 + b'","call_index":0,'
+            b'"prompt":"first","prompt":"second","resolved_receipts":[]}'
         ),
         json.dumps({**request_value(), "grant_id": "model_" + "A" * 32}).encode(),
         json.dumps({**request_value(), "protocol_version": "model_proxy.v0"}).encode(),
@@ -147,7 +155,7 @@ async def test_malformed_or_open_request_is_closed_without_dispatch(tmp_path, pa
     async def handle(_: ModelProxyRequest) -> ModelProxyReply:
         nonlocal calls
         calls += 1
-        return ModelProxyReply("unavailable", None, None, "provider_unavailable")
+        return ModelProxyReply("unavailable", None, None, "provider_unavailable", 0, True)
 
     async with ModelProxyTransport(socket_path=path, handler=handle):
         async with connection(path) as (reader, writer):
@@ -190,6 +198,8 @@ async def test_oversize_handler_reply_is_closed_without_writing_a_frame(tmp_path
             "x" * MODEL_PROXY_MAXIMUM_FRAME_BYTES,
             RECEIPT_DIGEST,
             None,
+            0,
+            False,
         )
 
     async with ModelProxyTransport(socket_path=path, handler=handle):
@@ -211,7 +221,7 @@ async def test_connection_bound_rejects_another_dispatch(tmp_path):
         calls += 1
         entered.set()
         await release.wait()
-        return ModelProxyReply("unavailable", None, None, "budget_unavailable")
+        return ModelProxyReply("unavailable", None, None, "budget_unavailable", 0, True)
 
     async with ModelProxyTransport(
         socket_path=path,
@@ -234,6 +244,8 @@ async def test_connection_bound_rejects_another_dispatch(tmp_path):
                 "output": None,
                 "receipt_digest": None,
                 "failure_code": "budget_unavailable",
+                "call_index": 0,
+                "session_exhausted": True,
             }
 
     assert calls == 1
@@ -258,7 +270,7 @@ async def test_client_disconnect_does_not_cancel_or_reissue_dispatched_handler(t
             cancelled = True
             raise
         completed.set()
-        return ModelProxyReply("unavailable", None, None, "provider_unavailable")
+        return ModelProxyReply("unavailable", None, None, "provider_unavailable", 0, True)
 
     transport = ModelProxyTransport(
         socket_path=path,
@@ -292,7 +304,7 @@ async def test_start_refuses_nonprivate_symlink_and_occupied_paths(tmp_path):
     public_parent.mkdir(mode=0o755)
 
     async def handle(_: ModelProxyRequest) -> ModelProxyReply:
-        return ModelProxyReply("unavailable", None, None, "provider_unavailable")
+        return ModelProxyReply("unavailable", None, None, "provider_unavailable", 0, True)
 
     with pytest.raises(ModelProxyCustodyError, match="parent custody"):
         await ModelProxyTransport(socket_path=public_parent / "proxy.sock", handler=handle).start()
@@ -324,7 +336,7 @@ async def test_cleanup_refuses_replaced_socket_and_leaves_it_in_place(tmp_path):
     path = private_socket_path(tmp_path)
 
     async def handle(_: ModelProxyRequest) -> ModelProxyReply:
-        return ModelProxyReply("unavailable", None, None, "provider_unavailable")
+        return ModelProxyReply("unavailable", None, None, "provider_unavailable", 0, True)
 
     transport = ModelProxyTransport(socket_path=path, handler=handle)
     await transport.start()
@@ -344,11 +356,11 @@ async def test_cleanup_refuses_replaced_socket_and_leaves_it_in_place(tmp_path):
 @pytest.mark.parametrize(
     "reply",
     [
-        ("completed", "", RECEIPT_DIGEST, None),
-        ("completed", "output", None, None),
-        ("unavailable", "output", None, "provider_unavailable"),
-        ("unavailable", None, None, "Provider-Unavailable"),
-        ("unavailable", None, None, "a" * 65),
+        ("completed", "", RECEIPT_DIGEST, None, 0, False),
+        ("completed", "output", None, None, 0, False),
+        ("unavailable", "output", None, "provider_unavailable", 0, True),
+        ("unavailable", None, None, "Provider-Unavailable", 0, True),
+        ("unavailable", None, None, "a" * 65, 0, True),
     ],
 )
 def test_reply_rejects_invalid_closed_outcomes(reply):

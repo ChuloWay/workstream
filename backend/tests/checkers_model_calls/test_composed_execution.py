@@ -246,9 +246,10 @@ async def test_public_profile_to_private_model_call_and_completed_checker(
                 self.invocations += 1
                 assert model_grant is not None
                 callback = ModelProxyRequest(
-                    model_grant.grant_id,
-                    request.request_digest,
-                    "Evaluate the verified work",
+                    grant_id=model_grant.grant_id,
+                    request_digest=request.request_digest,
+                    call_index=0,
+                    prompt="Evaluate the verified work",
                 )
                 if concurrent_callback:
                     replies = await asyncio.gather(proxy.handle(callback), proxy.handle(callback))

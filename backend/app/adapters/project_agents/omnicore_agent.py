@@ -15,7 +15,11 @@ from dataclasses import dataclass
 from typing import Any
 from urllib.parse import urlparse
 
-from app.adapters.project_agents.compilation_draft import CompilationDraftParser
+from app.adapters.project_agents.compilation_draft import (
+    CompilationDraftParser,
+    contextual_output_issue,
+    generated_compilation_schema,
+)
 from app.adapters.project_agents.omnicore_profile import (
     LITELLM_VERSION,
     OMNICORE_MAX_TOKENS,
@@ -29,10 +33,7 @@ from app.adapters.project_agents.openrouter_policy import (
     require_direct_openrouter_model,
 )
 from app.adapters.project_agents.provider_resilience import ModelCircuitAdmission
-from app.adapters.project_agents.result_validation import (
-    require_result_sources_opened,
-    validate_project_guide_runtime_result,
-)
+from app.adapters.project_agents.result_validation import validate_project_guide_runtime_result
 from app.interfaces.external_services import ExternalServiceAdapterIdentity
 from app.interfaces.project_agents import (
     ProjectAgentRuntimeConfigurationError,
@@ -47,7 +48,6 @@ from app.interfaces.project_guide_runtime import ProjectGuideRuntimeConfiguratio
 from app.modules.projects.api.guide_documents import GuideRuntimeCapabilities
 
 
-_INVALID_SCHEMA_OUTPUT = object()
 _OPENROUTER_CHAT_COMPLETIONS_URL = "https://openrouter.ai/api/v1/chat/completions"
 _READ_DESCRIPTION = "Read bounded text from an assigned original using its exact opaque handle."
 _SEARCH_DESCRIPTION = "Search bounded text in an assigned original using its exact opaque handle."
@@ -296,8 +296,6 @@ class OmniCoreAgentProjectGuideRuntime:
             raise ProjectAgentRuntimeError(runtime_failure) from None
         if invalid_failure is not None:
             raise ProjectGuideCompilationInvalidOutputError(invalid_failure) from None
-        if output is _INVALID_SCHEMA_OUTPUT:
-            raise ProjectGuideCompilationInvalidOutputError("schema_invalid") from None
         try:
             opened = await capabilities.tools.opened_handles()
             return validate_project_guide_runtime_result(context, output, opened)
@@ -327,6 +325,7 @@ class OmniCoreAgentProjectGuideRuntime:
             profile=profile,
             admission=admission,
             maximum_requests=maximum_requests,
+            maximum_logical_turns=configuration.maximum_turns,
             io_timeout_seconds=max(1, min(300, configuration.timeout_seconds)),
             upstream=self._test_upstream,
         )
@@ -335,8 +334,7 @@ class OmniCoreAgentProjectGuideRuntime:
         try:
             draft_steps = max(1, configuration.maximum_turns // 2)
             review_steps = configuration.maximum_turns - draft_steps
-            review_opened: set[str] = set()
-            phase = "draft"
+            run_opened: set[str] = set()
             registry = ToolRegistry()
 
             @registry.register_tool(
@@ -347,8 +345,8 @@ class OmniCoreAgentProjectGuideRuntime:
             )
             async def read_document(handle: str, offset: int = 0, limit: int = 16000) -> str:
                 value = await capabilities.tools.read_document(handle, offset=offset, limit=limit)
-                if phase == "review":
-                    review_opened.add(handle)
+                if offset == 0 and (value.text or value.total_characters == 0):
+                    run_opened.add(handle)
                 return value.model_dump_json()
 
             @registry.register_tool(
@@ -369,45 +367,85 @@ class OmniCoreAgentProjectGuideRuntime:
                     offset=offset,
                     limit=limit,
                 )
-                if phase == "review":
-                    review_opened.add(handle)
                 return value.model_dump_json()
 
-            schema = ProjectGuideCompilationResult.model_json_schema()
+            schema = generated_compilation_schema(ProjectGuideCompilationResult.model_json_schema())
             draft_parser = CompilationDraftParser(schema, configuration.maximum_manifest_bytes)
-            draft_agent = _build_agent(
-                OmniCoreAgent=OmniCoreAgent,
-                MemoryRouter=MemoryRouter,
-                configuration=configuration,
-                credential=self._credential,
-                base_url=guard.base_url,
-                registry=registry,
-                maximum_steps=draft_steps,
-                phase_instruction=(
-                    "Produce a private draft. Return only one JSON object matching "
-                    "this exact schema: "
-                    + json.dumps(schema, separators=(",", ":"), ensure_ascii=True)
-                ),
-            )
-            agents.append(draft_agent)
-            await _require_exact_tool_inventory(draft_agent)
-            draft_output = await _run_native_agent(
-                draft_agent,
-                prompt,
-                guard=guard,
-                admission=admission,
-                cleanup_timeout_seconds=profile.cleanup_timeout_seconds,
-            )
-            candidate = draft_parser.parse(draft_output)
-            draft_output = None
-            if candidate is None:
-                return _INVALID_SCHEMA_OUTPUT
+            corrections = 0
+
+            async def run_phase(phase: str, phase_prompt: str, turn_ceiling: int) -> dict:
+                nonlocal corrections
+                guard.phase_turn_ceiling = turn_ceiling
+                while True:
+                    remaining = turn_ceiling - guard.logical_turns
+                    if remaining <= 0:
+                        raise ProjectGuideCompilationInvalidOutputError("schema_invalid")
+                    run_opened.clear()
+                    agent = _build_agent(
+                        OmniCoreAgent=OmniCoreAgent,
+                        MemoryRouter=MemoryRouter,
+                        configuration=configuration,
+                        credential=self._credential,
+                        base_url=guard.base_url,
+                        registry=registry,
+                        maximum_steps=remaining,
+                        phase_instruction=(
+                            "Return only one complete JSON object matching this exact "
+                            "checker-specification schema: "
+                            + json.dumps(schema, separators=(",", ":"), ensure_ascii=True)
+                        ),
+                    )
+                    agents.append(agent)
+                    await _require_exact_tool_inventory(agent)
+                    output = await _run_native_agent(
+                        agent,
+                        phase_prompt,
+                        guard=guard,
+                        admission=admission,
+                        cleanup_timeout_seconds=profile.cleanup_timeout_seconds,
+                    )
+                    candidate = draft_parser.parse(output)
+                    output = None
+                    issues = draft_parser.issues
+                    if candidate is not None:
+                        try:
+                            validate_project_guide_runtime_result(context, candidate, run_opened)
+                        except (TypeError, ValueError) as error:
+                            issues = [contextual_output_issue(error)]
+                        else:
+                            return candidate
+                    # A correction must have a turn to reopen originals and a
+                    # second turn to return the corrected result.
+                    if corrections >= 2 or turn_ceiling - guard.logical_turns < 2:
+                        raise ProjectGuideCompilationInvalidOutputError("schema_invalid")
+                    corrections += 1
+                    phase_prompt = json.dumps(
+                        {
+                            "phase": phase,
+                            "guide_setup_context": json.loads(prompt),
+                            "validation_errors": issues,
+                            "correction_instruction": (
+                                "The previous completed output was rejected. Reopen the assigned "
+                                "originals and return a complete corrected JSON proposal matching "
+                                "the schema, source identities, enabled capabilities and PRE/POST scope."
+                            ),
+                        },
+                        ensure_ascii=False,
+                        allow_nan=False,
+                        separators=(",", ":"),
+                    )
+                    if len(phase_prompt.encode("utf-8")) > configuration.maximum_manifest_bytes:
+                        raise ProjectGuideCompilationInvalidOutputError("schema_invalid")
+                    await _cleanup_agent(agent, profile.cleanup_timeout_seconds)
+                    agents.remove(agent)
+
+            candidate = await run_phase("checker_specification", prompt, draft_steps)
             review_input = json.dumps(
                 {
                     "phase": "coverage_review",
                     "guide_setup_context": json.loads(prompt),
                     "candidate_proposal": candidate,
-                    "candidate_validation_issues": draft_parser.canonical_issues(candidate),
+                    "candidate_validation_issues": [],
                 },
                 ensure_ascii=False,
                 allow_nan=False,
@@ -416,41 +454,8 @@ class OmniCoreAgentProjectGuideRuntime:
             candidate = None
             if len(review_input.encode("utf-8")) > configuration.maximum_manifest_bytes:
                 raise ProjectGuideCompilationInvalidOutputError("schema_invalid")
-            await _cleanup_agent(draft_agent, profile.cleanup_timeout_seconds)
-            agents.remove(draft_agent)
-            phase = "review"
-            review_agent = _build_agent(
-                OmniCoreAgent=OmniCoreAgent,
-                MemoryRouter=MemoryRouter,
-                configuration=configuration,
-                credential=self._credential,
-                base_url=guard.base_url,
-                registry=registry,
-                maximum_steps=review_steps,
-                phase_instruction=(
-                    "Independently review source coverage, reopen every source cited "
-                    "by the final proposal, repair the candidate, and return only one "
-                    "complete JSON object matching this exact schema: "
-                    + json.dumps(schema, separators=(",", ":"), ensure_ascii=True)
-                ),
-            )
-            agents.append(review_agent)
-            await _require_exact_tool_inventory(review_agent)
-            final_output = await _run_native_agent(
-                review_agent,
-                review_input,
-                guard=guard,
-                admission=admission,
-                cleanup_timeout_seconds=profile.cleanup_timeout_seconds,
-            )
-            if len(final_output.encode("utf-8")) > configuration.maximum_manifest_bytes:
-                return _INVALID_SCHEMA_OUTPUT
-            try:
-                provisional = ProjectGuideCompilationResult.model_validate_json(final_output)
-                require_result_sources_opened(context, provisional, review_opened)
-            except (TypeError, ValueError):
-                return _INVALID_SCHEMA_OUTPUT
-            return final_output
+            await _cleanup_agent(agents.pop(), profile.cleanup_timeout_seconds)
+            return await run_phase("coverage_review", review_input, draft_steps + review_steps)
         finally:
             cleanup_error: BaseException | None = None
             try:
@@ -648,6 +653,7 @@ class _LoopbackOpenRouterGuard:
         profile: OmniCoreAgentProfile,
         admission: ModelCircuitAdmission,
         maximum_requests: int,
+        maximum_logical_turns: int,
         io_timeout_seconds: int,
         upstream: _UpstreamTarget | None,
     ) -> None:
@@ -657,6 +663,8 @@ class _LoopbackOpenRouterGuard:
         self._profile = profile
         self._admission = admission
         self._maximum_requests = maximum_requests
+        self._maximum_logical_turns = maximum_logical_turns
+        self.phase_turn_ceiling = maximum_logical_turns
         self._io_timeout_seconds = io_timeout_seconds
         self._upstream_url = (upstream or _PRODUCTION_UPSTREAM).url
         self._path_token = secrets.token_urlsafe(32)
@@ -666,6 +674,7 @@ class _LoopbackOpenRouterGuard:
         self._client: Any = None
         self._port: int | None = None
         self._requests = 0
+        self._logical_turns = 0
         self._active = False
         self._last_upstream_transient_failure = False
         self._logical_request_active = False
@@ -683,6 +692,11 @@ class _LoopbackOpenRouterGuard:
     def transient_failure_exhausted(self) -> bool:
         """Report only the last upstream outcome after the SDK's native retries."""
         return self._last_upstream_transient_failure
+
+    @property
+    def logical_turns(self) -> int:
+        """Count model requests, excluding SDK retries of one logical request."""
+        return self._logical_turns
 
     async def start(self) -> None:
         """Open the bounded loopback listener and proxy-free upstream client."""
@@ -876,8 +890,11 @@ class _LoopbackOpenRouterGuard:
         import httpx
 
         if not self._logical_request_active:
+            if self._logical_turns >= min(self.phase_turn_ceiling, self._maximum_logical_turns):
+                raise _GuardRejection(422)
             self._admission.before_request()
             self._logical_request_active = True
+            self._logical_turns += 1
             self._last_upstream_transient_failure = False
         outbound = _rebuild_openrouter_body(request.body, model=self._model)
         request_body = json.dumps(
