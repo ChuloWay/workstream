@@ -10,9 +10,10 @@ PROJECT before and after byte receipt. It currently starts checking only after
 host-side `SubmissionArchiveInspector.inspect`. Selected PRE uses the canonical
 ART projected tree, default checker and exact callback grants; POST already has
 durable execution/lease/outbox custody. `ExternalCheckerExecutionAdapter` and its
-explicit factory compose a Rust Unix-socket service. That service currently
-serializes connections, supports Docker/runsc or Docker development isolation,
-and has exact-owner startup cleanup. No prepared-environment capability exists.
+explicit factory compose a Rust Unix-socket service. That service now supports bounded concurrent Smol microVM execution alongside
+its Docker/runsc and Docker development engines, with exact-owner cleanup and
+independent Smol guardians. The remaining missing capability is typed ART
+preparation and trusted guest intake during upload.
 
 The Smol 1.31.4 qualification (PR #672) proves fresh VM overlap, real Python checker
 execution, cancellation/deadlines and request-process recovery, but not production
