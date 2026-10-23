@@ -1,5 +1,6 @@
 """Retained provider cleanup remains exact-ID only after inference cutover."""
 
+import asyncio
 from contextlib import asynccontextmanager
 from types import SimpleNamespace
 from uuid import uuid4
@@ -65,23 +66,31 @@ async def _retained_history(database_url, migration_lock, *, include_unknown=Fal
         _seed_retained_guide_runtime_rows,
     )
 
-    with migration_lock():
-        await _execute(database_url, "drop schema public cascade; create schema public")
-        config = _alembic_config()
-        command.upgrade(config, "0058_compensation_unit_create")
-        seeded = await _seed_retained_guide_runtime_rows(
-            database_url,
-            status="compilation_provider_uncertain",
-            include_unknown=include_unknown,
-        )
-        command.upgrade(config, "head")
-    engine = create_async_engine(database_url)
-    sessions = async_sessionmaker(engine, expire_on_commit=False)
-    grant = SimpleNamespace(_sessions=sessions, _attempt_id=seeded["attempt_id"])
+    config = _alembic_config()
+    prepared = False
+    engine = None
     try:
+        with migration_lock():
+            await _execute(database_url, "drop schema public cascade; create schema public")
+            await asyncio.to_thread(command.upgrade, config, "0058_compensation_unit_create")
+            seeded = await _seed_retained_guide_runtime_rows(
+                database_url,
+                status="compilation_provider_uncertain",
+                include_unknown=include_unknown,
+            )
+            await asyncio.to_thread(command.upgrade, config, "head")
+        prepared = True
+        engine = create_async_engine(database_url)
+        sessions = async_sessionmaker(engine, expire_on_commit=False)
+        grant = SimpleNamespace(_sessions=sessions, _attempt_id=seeded["attempt_id"])
         yield grant, seeded["context"], seeded["allocation_ids"], seeded["unknown_id"]
     finally:
-        await engine.dispose()
+        if engine is not None:
+            await engine.dispose()
+        if not prepared:
+            with migration_lock():
+                await _execute(database_url, "drop schema public cascade; create schema public")
+                await asyncio.to_thread(command.upgrade, config, "head")
 
 
 @pytest.fixture
