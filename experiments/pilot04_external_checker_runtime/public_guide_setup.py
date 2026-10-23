@@ -140,12 +140,23 @@ async def _source_evidence(factory, guide, setup, package):
             "WHERE g.id=:guide AND s.id=:source"
         ), {"guide": guide["id"], "source": setup["source_snapshot_id"]})).one()
         attempt = (await session.execute(text(
-            "SELECT canonical_input_hash,canonical_result,status FROM project_guide_compilation_attempts "
-            "WHERE setup_run_id=:setup"
+            "SELECT a.id,a.canonical_input_hash,a.source_snapshot_hash,a.source_snapshot_id,"
+            "a.guide_material_hash,a.status,c.canonical_input_hash AS compiled_input_hash "
+            "FROM project_guide_compilation_attempts a "
+            "JOIN project_guide_compilations c ON c.id=a.persisted_compilation_id AND c.attempt_id=a.id "
+            "WHERE a.setup_run_id=:setup"
         ), {"setup": setup["id"]})).one()
+        accesses = (await session.execute(text(
+            "SELECT i.source_snapshot_id,d.sha256,d.manifest_sha256,d.access_method,d.operation "
+            "FROM project_guide_document_accesses d "
+            "JOIN guide_source_snapshot_items i ON i.id=d.source_item_id "
+            "WHERE d.attempt_id=:attempt"
+        ), {"attempt": attempt.id})).mappings().all()
     verify_source_commitment(
         source._mapping, attempt._mapping, examples=expected_examples,
         examples_hash=examples_hash, source_hash=package["target"]["source_snapshot_hash"],
+        source_id=setup["source_snapshot_id"], accesses=accesses,
+        original_sha256="sha256:" + hashlib.sha256(GUIDE_BYTES).hexdigest(),
     )
     return {"guide_id": guide["id"], "setup_run_id": setup["id"],
             "setup_generation": setup["setup_generation"],

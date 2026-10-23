@@ -532,7 +532,7 @@ cannot be reused as post-submission review-gate evidence. See the
 | Contribution evidence reads | **Public fixed-membership REST and complete CLI export** | PILOT-10A exposes current human self-read and one-project JSON/CSV export for covering Project Managers or exact-project Finance Authorities. Each page has fresh authority and one repeatable-read response transaction; selections through 100,000 contributions retain page-one membership behind signed scope/filter/format/limit-bound cursors, with complete zero/one/two immutable awards, exact decimals, recorded-time filters and formula-neutralized CSV. The CLI follows JSON or CSV continuation internally with unchanged filters, validates cross-page order/identity, and publishes only the complete JSON result or one private no-overwrite CSV | No recognition mutation, fulfillment, payout, deployed-service or published-binary claim |
 | Fulfillment, reconciliation, and audit | **Planned** | Shared audit foundations, provider-neutral adapter convention, AUTH-OUTBOX-02 live dispatcher authority, retained phase audit decisions, Celery delivery/recovery scans and CON-02B custody | Feature-specific handlers and authority, conditional award fulfillment, callbacks, idempotent recovery, reconciliation, bounded operational reads, and release controls |
 | Runtime diagnostics | **Implemented foundation; release configuration prepared** | Closed structured logging, explicit API/Celery tracing, bounded metrics, safe correlation and optional typed OTLP export; hosted composition accepts only an optional HTTPS collector origin and keeps exporter outage outside product correctness | Restrict broker publishers; configure and secure collector/log access, egress, encryption and finite deletion; prove privacy, correlation and collector outage during the deployed release drill; no deployed monitoring claim |
-| Frontend and pilot | **Local runtime foundation; release configuration prepared; project inputs prepared** | An original [Terminal Systems guide, example and five task briefs](../pilots/terminal_systems/README.md) provide inputs for fresh project onboarding. The fixed five-task sample, its checker, private runtime continuation and sample-only proof workflow are retired. Checkout-isolated Docker Compose API, prefork Celery, Beat, PostgreSQL, Redis and MinIO remain available, alongside digest-only hosted release composition and the generic external image service. The generic image command tests project samples and publishes a verified digest to ECR without registering or activating it. The opt-in [local agent-loop overlay](engineering/local-agent-loop.md) adds that service, a separately built networkless proof checker and operator scripts; Docker Desktop (Apple Silicon) proof covers registration, checker execution and lifecycle activation, not this project’s requirements. Setup supports inference and explicitly manager-authored rules through the same governed proposal path. The corrected real Terminal Systems proposal preserves null project limits on the unchanged guide; independent review qualified its checker specifications and classifications, with ten explicit implementation/runtime gaps and no bindings in that retained proposal. The [project-owned PRE image](../pilots/terminal_systems/checkers/README.md) now implements layout and metadata intake with local rule and networkless container samples; it has no task-name allowlist or shared-runner project code. The independent offline gVisor feasibility spike remains historical mechanism evidence | Implement the eight POST checks and resolve model, isolated-execution and authenticated-material gaps; register the required images, obtain corrected policy bindings and separate approvals, then activate, import, screen and release tasks. Then prove the real contribution journey, runtime limits and interruption recovery on the intended local/hosted stack. Guide assets, image builds and former sample results are not live-project evidence. Hosted identity/AWS configuration, isolation, diagnostics, backup/restore and broader macOS runtime proof remain; the agent-loop overlay still needs approved guide bindings and a persistent-stack FinalAcceptance drill |
+| Frontend and pilot | **Local runtime foundation; release configuration prepared; project inputs prepared** | An original [Terminal Systems guide, example and five task briefs](../pilots/terminal_systems/README.md) provide inputs for fresh project onboarding. The fixed five-task sample, its checker, private runtime continuation and sample-only proof workflow are retired. Checkout-isolated Docker Compose API, prefork Celery, Beat, PostgreSQL, Redis and MinIO remain available, alongside digest-only hosted release composition and the generic external image service. The generic image command tests project samples and publishes a verified digest to ECR without registering or activating it. The opt-in [local agent-loop overlay](engineering/local-agent-loop.md) adds that service, a separately built networkless proof checker and operator scripts; Docker Desktop (Apple Silicon) proof covers registration, checker execution and lifecycle activation, not this project’s requirements. Setup supports inference and explicitly manager-authored rules through the same governed proposal path. Inference is limited to PRE/POST specifications, with strict JSON and bounded correction; PM policy choices remain separate. The retained real Terminal Systems proposal preserves null project limits on the unchanged guide; its independent review predates the PRE/POST-only scope, with ten explicit implementation/runtime gaps and no bindings in that retained proposal. The [project-owned PRE image](../pilots/terminal_systems/checkers/README.md) now implements layout and metadata intake with local rule and networkless container samples; it has no task-name allowlist or shared-runner project code. The independent offline gVisor feasibility spike remains historical mechanism evidence | Obtain a fresh PRE/POST-only correction of the retained proposal, then reconcile the implemented PRE image, implement the remaining POST checks and resolve their runtime/material gaps; register the required images, obtain corrected policy bindings and separate approvals, then activate, import, screen and release tasks. Then prove the real contribution journey, runtime limits and interruption recovery on the intended local/hosted stack. Guide assets, image builds and former sample results are not live-project evidence. Hosted identity/AWS configuration, isolation, diagnostics, backup/restore and broader macOS runtime proof remain; the agent-loop overlay still needs approved guide bindings and a persistent-stack FinalAcceptance drill |
 
 ## What Has Been Completed
 
@@ -954,14 +954,16 @@ cannot be reused as post-submission review-gate evidence. See the
   reliably finish within 60 seconds before Submission, including durable/polled
   execution; longer and model work belongs to background POST. POL-05B exposes the complete POL-05A review package;
   AUTH-12F4 supplies exact manager authority; suggestions cannot register or activate a checker. Runtime, model/provider and instructions are independently
-  configured and bound to the attempt. The agent opens assigned files on demand
-  in an isolated workspace and assesses them with every supplied task example;
+  configured and bound to the attempt. The agent reads assigned originals with bounded trusted read/search tools
+  through the isolated parser and assesses them with every supplied task example;
   exact grants exclude other projects and runs. The provider-free
   `manager_authored` runtime instead converts one manager-uploaded rules
   document into the same untrusted result; it reads every original through the
   same grant, records those reads without provider resources, and stores
-  provider, API and model `none` on the attempt. Known
-  invalid output ends terminally, and replay never starts a second inference.
+  provider, API and model `none` on the attempt. Known invalid inference output
+  receives at most two value-free corrections across drafting and review within
+  the original execution budget; exhaustion ends terminally. Exact replay never
+  starts a second inference.
   The model-facing default capability names exactly four platform guarantees:
   bounded safe ZIP handling, received-byte/manifest identity, high-confidence
   secret detection and unchanged-work detection. Required project files, layout,
@@ -1557,14 +1559,20 @@ public journey. The [live setup qualification](../.commitrail/changes/terminal-s
 includes real provider drafts from unchanged guide bytes with all project size/entry
 limits null. Typed proposals expose engineering specifications; the final corrected
 proposal has passed independent source-to-proposal review. Draft path and material-linkage
-errors also exposed a review-boundary problem: canonical draft rejection prevented
-the planned correction phase. Setup now uses a private structurally checked draft,
-then reviews it against the originals under the same attempt budget; only the final
-result can pass canonical validation and become a proposal. PM correction now
+errors exposed a need for bounded output correction. Every draft, review and
+correction now passes strict schema, canonical, context and source checks; only
+the final review can become a proposal. Up to two value-free corrections share
+the original attempt budgets. Each phase must initially read every assigned
+original, including for blocked proposals; searches cannot substitute for those
+reads. PM correction now
 supplies the exact hash-verified predecessor as bounded, untrusted context rather
 than only its identity and feedback. The final real correction successor was
 independently qualified against the unchanged guide as a usable engineering handoff:
-two PRE specifications, eight POST specifications and two lifecycle requirements.
+two PRE specifications, eight POST specifications and two lifecycle classifications.
+That retained handoff predates the narrowed setup contract: newly inferred proposals
+contain only PRE/POST check requirements and supporting default coverage/guide blockers.
+The PM configures review/revision and other project policies separately. The historical
+handoff needs a fresh correction before it is used as the current proposal.
 Exact stored/public result and component hashes and CLI rendering passed; all 57
 accumulated provider resources were deleted. Earlier proposals remain immutable
 and unapproved. This qualification required explicit PM corrections and establishes

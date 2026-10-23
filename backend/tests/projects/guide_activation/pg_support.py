@@ -167,13 +167,14 @@ async def readiness_read(factory, project_id, guide_id):
 @asynccontextmanager
 async def activation_case(
     url, *, human_review_required=True, compensated=False, contribution_awards=(),
-    post_submit_registry_spec=None, compilation_outcome=None,
+    post_submit_registry_spec=None, compilation_outcome=None, configuration=None,
 ):
     from .source_fixtures import source_case
 
     async with source_case(
         url, post_submit_registry_spec=post_submit_registry_spec,
         compilation_outcome=compilation_outcome,
+        configuration=configuration,
     ) as (values, factory, finalization, actor, grant):
         await seed_selected_review_revision_inputs(
             factory, finalization, actor, human_review_required=human_review_required

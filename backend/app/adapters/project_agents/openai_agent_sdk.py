@@ -6,7 +6,11 @@ import asyncio
 import json
 import os
 
-from app.adapters.project_agents.compilation_draft import CompilationDraftParser
+from app.adapters.project_agents.compilation_draft import (
+    CompilationDraftParser,
+    generated_compilation_schema,
+    contextual_output_issue,
+)
 from app.adapters.project_agents.openai_profile import (
     require_openai_agents_sdk_adapter_profile,
 )
@@ -155,45 +159,54 @@ class OpenAIAgentSdkProjectGuideRuntime:
         from agents.exceptions import ModelBehaviorError
         from openai import AsyncOpenAI, DefaultAsyncHttpx2Client
 
-        parser_rejected = False
-        draft_rejected = False
         configuration = self._configuration
         profile = self._profile
         admission = self._admission
         assert admission is not None
 
+        phase_opened: set[str] = set()
+
+        class RejectedOutput(ModelBehaviorError):
+            """A completed response failed trusted checks; only safe diagnostics survive."""
+
+            def __init__(self, issues):
+                super().__init__("Guide output rejected by validation")
+                self.issues = issues
+
         class CompilationOutputSchema(AgentOutputSchema):
-            """Preserve native SDK parser redaction while identifying known rejection."""
+            """Expose and enforce the same restricted schema in both inference phases."""
+
+            def __init__(self, *, draft=False):
+                super().__init__(ProjectGuideCompilationResult, strict_json_schema=True)
+                self.draft = draft
+                self.schema = generated_compilation_schema(super().json_schema())
+                self.parser = CompilationDraftParser(
+                    self.schema,
+                    configuration.maximum_manifest_bytes,
+                )
+
+            def json_schema(self):
+                return self.schema
 
             def validate_json(self, json_str: str):
-                nonlocal parser_rejected
-                try:
-                    return super().validate_json(json_str)
-                except ModelBehaviorError:
-                    parser_rejected = True
-                    raise
-
-        class DraftOutputSchema(AgentOutputSchema):
-            """Keep draft structure strict without rejecting correctable private content."""
-
-            def validate_json(self, json_str: str):
-                nonlocal draft_rejected
-                candidate = draft_parser.parse(json_str)
-                if candidate is not None:
-                    return candidate
-                draft_rejected = True
+                candidate = self.parser.parse(json_str)
                 json_str = None
-                raise ModelBehaviorError("Guide candidate has invalid structure") from None
+                if candidate is None:
+                    raise RejectedOutput(self.parser.issues) from None
+                issues = self.parser.canonical_issues(candidate)
+                if not issues:
+                    try:
+                        result = ProjectGuideCompilationResult.model_validate(candidate)
+                        validate_project_guide_runtime_result(context, result, phase_opened)
+                    except (TypeError, ValueError) as error:
+                        issues = [contextual_output_issue(error)]
+                if issues:
+                    candidate = None
+                    raise RejectedOutput(issues) from None
+                return candidate if self.draft else result
 
-        canonical_schema = CompilationOutputSchema(
-            ProjectGuideCompilationResult, strict_json_schema=True
-        )
-        draft_schema = DraftOutputSchema(
-            ProjectGuideCompilationResult, strict_json_schema=True
-        )
-        draft_parser = CompilationDraftParser(
-            canonical_schema.json_schema(), configuration.maximum_manifest_bytes
-        )
+        canonical_schema = CompilationOutputSchema()
+        draft_schema = CompilationOutputSchema(draft=True)
 
         base_model_class = (
             OpenAIChatCompletionsModel
@@ -266,8 +279,6 @@ class OpenAIAgentSdkProjectGuideRuntime:
                 )
             else:
                 model = BoundedModel(model=configuration.model, openai_client=client)
-            review_opened: set[str] = set()
-            reviewing = False
 
             @function_tool(failure_error_function=None)
             async def read_document(
@@ -279,8 +290,9 @@ class OpenAIAgentSdkProjectGuideRuntime:
                     offset=offset,
                     limit=limit,
                 )
-                if reviewing:
-                    review_opened.add(handle)
+                # Audit access alone is not proof that this phase observed an original.
+                if offset == 0 and (value.text or value.total_characters == 0):
+                    phase_opened.add(handle)
                 return value.model_dump_json()
 
             @function_tool(failure_error_function=None)
@@ -294,8 +306,6 @@ class OpenAIAgentSdkProjectGuideRuntime:
                     offset=offset,
                     limit=limit,
                 )
-                if reviewing:
-                    review_opened.add(handle)
                 return value.model_dump_json()
 
             extra_body = None
@@ -321,58 +331,81 @@ class OpenAIAgentSdkProjectGuideRuntime:
                 tracing_disabled=True,
                 trace_include_sensitive_data=False,
             )
-            try:
-                draft = await Runner.run(
-                    agent,
-                    prompt,
-                    max_turns=max(1, configuration.maximum_turns // 2),
-                    run_config=run_config,
-                )
-                candidate = draft.final_output
-                draft = None
-                if not isinstance(candidate, dict):
-                    return _INVALID_SCHEMA_OUTPUT
-                review_input = json.dumps(
-                    {
-                        "phase": "coverage_review",
-                        "guide_setup_context": json.loads(prompt),
-                        "candidate_proposal": candidate,
-                        "candidate_validation_issues": draft_parser.canonical_issues(
-                            candidate
-                        ),
-                    },
-                    ensure_ascii=False,
-                    allow_nan=False,
-                    separators=(",", ":"),
-                )
-                candidate = None
-                if len(review_input.encode("utf-8")) > configuration.maximum_manifest_bytes:
-                    raise ProjectGuideCompilationInvalidOutputError("schema_invalid")
-                remaining_turns = configuration.maximum_turns - model.model_turns
-                if remaining_turns <= 0:
-                    raise RuntimeError("guide review turn budget exhausted")
-                reviewing = True
-                agent.output_type = canonical_schema
-                result = await Runner.run(
-                    agent,
-                    review_input,
-                    max_turns=remaining_turns,
-                    run_config=run_config,
-                )
-            except ModelBehaviorError:
-                if not (parser_rejected or draft_rejected):
-                    raise
-            else:
-                try:
-                    require_result_sources_opened(
-                        context, result.final_output, review_opened
+            corrections = 0
+
+            async def run_phase(phase, phase_prompt, turn_limit):
+                """Correct known invalid responses without replaying uncertain requests."""
+                nonlocal corrections
+                while True:
+                    remaining = turn_limit - agent.model.model_turns
+                    if remaining <= 0:
+                        raise ProjectGuideCompilationInvalidOutputError("schema_invalid")
+                    phase_opened.clear()
+                    issues = None
+                    try:
+                        response = await Runner.run(
+                            agent,
+                            phase_prompt,
+                            max_turns=remaining,
+                            run_config=run_config,
+                        )
+                    except RejectedOutput as error:
+                        issues = error.issues
+                    else:
+                        return response.final_output
+                    if corrections >= 2:
+                        raise ProjectGuideCompilationInvalidOutputError("schema_invalid")
+                    corrections += 1
+                    phase_prompt = json.dumps(
+                        {
+                            "phase": phase,
+                            "guide_setup_context": json.loads(prompt),
+                            "validation_errors": issues,
+                            "correction_instruction": (
+                                "The previous completed output was rejected. Reopen the assigned "
+                                "originals and return a complete corrected JSON proposal matching "
+                                "the schema, source identities, enabled capabilities and PRE/POST scope."
+                            ),
+                        },
+                        ensure_ascii=False,
+                        allow_nan=False,
+                        separators=(",", ":"),
                     )
-                except ValueError:
-                    raise ProjectGuideCompilationInvalidOutputError(
-                        "schema_invalid"
-                    ) from None
-                return result.final_output
-            return _INVALID_SCHEMA_OUTPUT
+                    if len(phase_prompt.encode("utf-8")) > configuration.maximum_manifest_bytes:
+                        raise ProjectGuideCompilationInvalidOutputError("schema_invalid")
+
+            candidate = await run_phase(
+                "checker_specification",
+                prompt,
+                configuration.maximum_turns // 2,
+            )
+            if not isinstance(candidate, dict):
+                return _INVALID_SCHEMA_OUTPUT
+            review_input = json.dumps(
+                {
+                    "phase": "coverage_review",
+                    "guide_setup_context": json.loads(prompt),
+                    "candidate_proposal": candidate,
+                    "candidate_validation_issues": [],
+                },
+                ensure_ascii=False,
+                allow_nan=False,
+                separators=(",", ":"),
+            )
+            candidate = None
+            if len(review_input.encode("utf-8")) > configuration.maximum_manifest_bytes:
+                raise ProjectGuideCompilationInvalidOutputError("schema_invalid")
+            agent.output_type = canonical_schema
+            result = await run_phase(
+                "coverage_review",
+                review_input,
+                configuration.maximum_turns,
+            )
+            try:
+                require_result_sources_opened(context, result, phase_opened)
+            except ValueError:
+                raise ProjectGuideCompilationInvalidOutputError("schema_invalid") from None
+            return result
         finally:
             await client.close()
 

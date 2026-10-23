@@ -88,6 +88,7 @@ SHARED_FOUNDATION_MODULES = (
     "tests/guide_document_tools/test_transport.py",
     "tests/test_guide_coverage_review.py",
     "tests/test_guide_runtime_workspace.py",
+    "tests/test_setup_checker_scope.py",
     "tests/test_project_agent_resilience.py",
     "tests/test_guide_document_api_contract.py",
     "tests/test_api_contract_e2e.py",
