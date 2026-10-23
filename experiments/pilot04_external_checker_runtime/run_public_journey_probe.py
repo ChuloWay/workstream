@@ -937,18 +937,15 @@ async def _late_revocation_trial(client, factory, env, *, project_id: UUID,
             "outbox_state": "dead_letter", "routing_authority": "revoked_after_post_result"}
 
 
-async def _one_mode(client, factory, env, *,
-                    human_review_required: bool, operator_id: UUID | None,
-                    stop_worker: Callable[[], None] | None = None,
-                    start_worker: Callable[[], Awaitable[None]] | None = None) -> dict:
-    awards = () if human_review_required else ("project_points",)
+async def _public_project(client, factory, env, *, human_review_required, pre_requirements=1):
+    """Public guide activation and submitter grant shared by every runtime trial."""
     compilation = await public_guide_setup(
         client, factory, human_review_required, _json, lambda actor: _token(env, actor),
+        pre_requirements=pre_requirements,
     )
     manager = compilation.manager
     guide_id = str(compilation.guide_id)
     contributor = await _seed_contributor(factory)
-    from app.workers.outbox import deliver_event
 
     manager_token, contributor_token = _token(env, manager), _token(env, contributor)
     project_id = str(compilation.project_id)
@@ -1001,6 +998,20 @@ async def _one_mode(client, factory, env, *,
              and role_grant["actor_profile_id"] == str(contributor.actor_profile_id),
              "public project submitter grant names another actor or role")
 
+    return compilation, contributor, manager_token, contributor_token
+
+
+async def _one_mode(client, factory, env, *,
+                    human_review_required: bool, operator_id: UUID | None,
+                    stop_worker: Callable[[], None] | None = None,
+                    start_worker: Callable[[], Awaitable[None]] | None = None) -> dict:
+    awards = () if human_review_required else ("project_points",)
+    from app.workers.outbox import deliver_event
+
+    compilation, contributor, manager_token, contributor_token = await _public_project(
+        client, factory, env, human_review_required=human_review_required,
+    )
+    project_id = str(compilation.project_id)
     task_id, assignment_id = await _started_public_task(
         client, project_id=project_id, manager_token=manager_token,
         contributor_token=contributor_token, source_ref="local-ticket-1",
