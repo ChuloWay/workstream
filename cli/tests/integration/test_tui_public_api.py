@@ -32,9 +32,12 @@ from tests.authentication.fixtures import (
     rsa_signing_material as rsa_signing_material,
 )
 from tests.authentication.support import issue_asymmetric_token
-from tests.authorization.admin_access.fixtures import signed_access as _signed_access
+from tests.authorization.admin_access.fixtures import (
+    admin_access as _admin_access,
+    signed_access as _signed_access,
+)
 from tests.authorization.admin_access.support import SignedActor
-from tests.authorization.task_authority.test_postgresql import grant
+from tests.authorization.task_authority.test_postgresql import grant, project_manager
 from tests.authorization.task_reads.support import create_task
 from tests.conftest import (
     pagination_cursor_hmac_secret as pagination_cursor_hmac_secret,
@@ -42,13 +45,14 @@ from tests.conftest import (
 from tests.tasks.test_submission_lineage import _prepared_packet
 
 signed_access = pytest_asyncio.fixture(_signed_access.__wrapped__)
+admin_access = pytest_asyncio.fixture(_admin_access.__wrapped__)
 
 
 @pytest.mark.asyncio
 async def test_tui_real_signed_owner_positive_reads_then_fresh_grant_revocation(
-    tmp_path, auth_database_env, signed_access
+    tmp_path, auth_database_env, admin_access
 ):
-    signed = signed_access
+    signed = admin_access.signed
     async with _prepared_packet(auth_database_env, tmp_path) as h:
         # Bind the actual stored identity link, not intake_client's actor override.
         subject = f"human-{h.context.actor_profile_id}"
@@ -115,6 +119,10 @@ async def test_tui_real_signed_owner_positive_reads_then_fresh_grant_revocation(
         for name in ("submission", "context"):
             response = await client.get(paths[name], headers=foreign.headers)
             assert response.status_code == 404, (name, response.text)
+        # The real role-grant owner forbids self revocation. Use a distinct
+        # signed manager whose exact project grant was issued by the actual
+        # bootstrapped administrator, rather than bypassing that guard.
+        manager = await project_manager(admin_access, h.project_id)
 
         models = (
             WorkstreamTask,
@@ -190,7 +198,7 @@ async def test_tui_real_signed_owner_positive_reads_then_fresh_grant_revocation(
                 assert grant_id is not None
                 revoked = await client.post(
                     f"/api/v1/projects/{project}/role-grants/{grant_id}/revoke",
-                    headers=owner.headers | {"Idempotency-Key": str(uuid4())},
+                    headers=manager.headers | {"Idempotency-Key": str(uuid4())},
                     json={"reason": "Prove TUI observes fresh grant revocation"},
                 )
                 assert revoked.status_code == 200, revoked.text
