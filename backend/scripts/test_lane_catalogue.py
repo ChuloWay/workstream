@@ -437,6 +437,7 @@ PROJECT_MODULES = (
     "tests/projects/guide_compilation/test_document_access_postgresql.py",
     "tests/projects/guide_compilation/test_neutral_document_tools.py",
     "tests/projects/guide_compilation/test_document_file_custody_postgresql.py",
+    "tests/projects/guide_compilation/test_runtime_cleanup_postgresql.py",
     "tests/projects/guide_compilation/test_document_scope_contracts.py",
     "tests/projects/guide_compilation/test_task_examples_postgresql.py",
     "tests/projects/guide_compilation/test_database_guards.py",
@@ -734,7 +735,6 @@ LANES = (
         "schema_contracts",
         (
             SCHEMA_MODULE,
-            "tests/projects/guide_compilation/test_runtime_cleanup_postgresql.py",
             "tests/migrations/test_contribution_read_audit.py",
             "tests/migrations/test_contribution_export_snapshots.py",
             "tests/authorization/post_submit/test_receipt_custody.py",
