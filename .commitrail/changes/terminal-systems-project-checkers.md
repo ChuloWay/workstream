@@ -133,6 +133,14 @@ uses the closed `post_submit_current_result_reference` discriminator, after
 which the existing three-role MinIO regression must replay against the corrected
 schema hash. This is retained validation evidence, not a second test surface.
 
+`backend/tests/test_checker_evidence_migrations.py` qualifies retained checker,
+checker-model and setup-model ART rows across 0061 to the current head. Current
+ORM fixtures may use only nullable projection columns during arrangement; those
+columns must remain null and be removed before the exact canonical 0061 schema
+is checked and upgraded. Existing constraints stay active. Compare all retained
+fields after upgrade and the new null projections. This is database preservation
+proof; public recovery and byte reads remain separate integration checks.
+
 This shared-boundary change also owns `external_checkers/README.md`,
 `docs/architecture_checker_framework.md`, `docs/architecture_lockdown.md` and
 `docs/decision_0014_external_service_adapter_convention.md`. Before the relay is
