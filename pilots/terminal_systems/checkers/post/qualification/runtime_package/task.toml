@@ -17,7 +17,7 @@ working_directory = "."
 
 [resources]
 cpu_millis = 1000
-memory_bytes = 134217728
+memory_bytes = 1073741824
 disk_bytes = 134217728
 build_timeout_seconds = 30
 reference_timeout_seconds = 10
