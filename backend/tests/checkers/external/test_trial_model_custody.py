@@ -76,7 +76,7 @@ async def _exchange(path: Path, payload: dict) -> dict:
 
 
 def _combined_fixture():
-    trial_spec, _, projected, catalog = _trial_fixture()
+    trial_spec, _, projected, catalog_for = _trial_fixture()
     selected_profile = trial_profile()
     trial_values = {
         key: value
@@ -108,7 +108,7 @@ def _combined_fixture():
             ),
         }
     )
-    return spec, trial_values, selected_profile, projected, catalog
+    return spec, trial_values, selected_profile, projected, catalog_for
 
 
 def _trial_model_specification() -> CheckSpecification:
@@ -191,7 +191,7 @@ async def test_trial_receipt_is_art_retained_before_controlled_model_spend(
 ):
     """Driver boundary: production transport/owners, no fake custody ack or provider call."""
     await admin_access.signed.grant(admin_access.admin, admin_access.target, role="operator")
-    spec, trial_values, selected_trial_profile, projected, catalog = _combined_fixture()
+    spec, trial_values, selected_trial_profile, projected, catalog_for = _combined_fixture()
     profiles = []
 
     async def parameters(_factory, project_id, registry):
@@ -251,6 +251,7 @@ async def test_trial_receipt_is_art_retained_before_controlled_model_spend(
             reservation_ttl_seconds=150.0,
         ),
     ) as h:
+        catalog = catalog_for(h.request)
         await provision_post_submit_service(h.factory, ServiceIdentity.ARTIFACT_CHECKER_OUTPUT)
         h.service = DiagnosticMaterialization(h.service)
         creates = []

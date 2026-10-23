@@ -14,6 +14,8 @@ from app.modules.checkers.api.external import external_checker_json_hash
 from app.modules.checkers.api.trial_profiles import (
     PinnedTrialExecutionCatalog,
     PinnedTrialProfileCatalog,
+    TrialAuthorityBinding,
+    TrialAuthorityContext,
     TrialExecutionProjection,
     TrialMaterialProjection,
     TrialProfileError,
@@ -134,6 +136,19 @@ def configuration(selected=None, projected=None) -> dict[str, object]:
     }
 
 
+def authority_binding(selected=None, projected=None, *, configuration_sha256=None):
+    selected = selected or profile()
+    projected = projected or projection(selected)
+    return TrialAuthorityBinding(
+        registry_entry_id=UUID("018f6f49-66b8-7d2a-bf4d-0e2eeaa00003"),
+        registry_entry_digest=digest("a"),
+        checker_image_digest=digest("b"),
+        configuration_sha256=configuration_sha256 or digest("c"),
+        profile=selected,
+        projection=projected,
+    )
+
+
 def test_profile_digest_is_derived_and_catalog_requires_exact_selector():
     selected = profile()
     assert selected.selector.profile_digest != digest("0")
@@ -168,8 +183,9 @@ def test_locked_configuration_parses_trial_and_model_selectors_independently():
     assert selector is not None
     assert selector.profile == selected.selector
     assert selector.projection == projected.selector
-    catalog = PinnedTrialExecutionCatalog(((selected, projected),))
-    assert catalog.read(selector) == (selected, projected)
+    binding = authority_binding(selected, projected)
+    catalog = PinnedTrialExecutionCatalog((binding,))
+    assert catalog.read(binding.context, selector) == (selected, projected)
 
     without_trial = {
         key: value for key, value in configuration(selected).items() if not key.startswith("trial_")
@@ -268,15 +284,70 @@ def test_operator_manifest_loader_is_digest_bound_strict_and_shared(tmp_path):
         "profile": asdict(selected),
         "projection": asdict(projected),
     }
-    value = {"protocol_version": "workstream.trial_authority_manifest.v1", "entries": [entry]}
+    other = {**entry, "configuration_sha256": digest("d")}
+    value = {"protocol_version": "workstream.trial_authority_manifest.v1", "entries": [entry, other]}
     value = json.loads(json.dumps(value, default=str))
     path = tmp_path / "trial-authority.json"
     path.write_text(json.dumps(value, default=str), encoding="utf-8")
     catalog = load_trial_authority_manifest(path, external_checker_json_hash(value))
     selector = trial_selector_from_configuration(configuration(selected, projected))
     assert selector is not None
-    assert catalog.read(selector) == (selected, projected)
+    first_context = authority_binding(selected, projected).context
+    second_context = TrialAuthorityContext(
+        registry_entry_id=first_context.registry_entry_id,
+        registry_entry_digest=first_context.registry_entry_digest,
+        checker_image_digest=first_context.checker_image_digest,
+        configuration_sha256=digest("d"),
+    )
+    assert catalog.read(first_context, selector) == (selected, projected)
+    assert catalog.read(second_context, selector) == (selected, projected)
+    substituted_selector = replace(
+        selector,
+        projection=replace(selector.projection, projection_digest=digest("e")),
+    )
+    assert catalog.read(first_context, substituted_selector) is None
+    for field, replacement in (
+        ("registry_entry_id", UUID("018f6f49-66b8-7d2a-bf4d-0e2eeaa00004")),
+        ("registry_entry_digest", digest("e")),
+        ("checker_image_digest", digest("e")),
+        ("configuration_sha256", digest("e")),
+    ):
+        assert catalog.read(replace(first_context, **{field: replacement}), selector) is None
 
+    canonical_entry = value["entries"][0]
+    duplicate = {
+        "protocol_version": value["protocol_version"],
+        "entries": [canonical_entry, canonical_entry],
+    }
+    path.write_text(json.dumps(duplicate, default=str), encoding="utf-8")
+    with pytest.raises(TrialProfileError, match="binding is duplicated"):
+        load_trial_authority_manifest(path, external_checker_json_hash(duplicate))
+
+    conflicting = {
+        **entry,
+        "projection": asdict(
+            make_trial_execution_projection(
+                selector=TrialProjectionSelector(
+                    UUID("018f6f49-66b8-7d2a-bf4d-0e2eeaa00005"), 1, digest("0")
+                ),
+                trial_kind=projected.trial_kind,
+                material_projections=projected.material_projections,
+                allowed_material_roles=projected.allowed_material_roles,
+                build_context_roles=projected.build_context_roles,
+                slot_templates=projected.slot_templates,
+            )
+        ),
+    }
+    conflict_value = {
+        "protocol_version": value["protocol_version"],
+        "entries": [entry, conflicting],
+    }
+    conflict_value = json.loads(json.dumps(conflict_value, default=str))
+    path.write_text(json.dumps(conflict_value), encoding="utf-8")
+    with pytest.raises(TrialProfileError, match="binding is duplicated"):
+        load_trial_authority_manifest(path, external_checker_json_hash(conflict_value))
+
+    path.write_text(json.dumps(value), encoding="utf-8")
     with pytest.raises(TrialProfileError, match="invalid"):
         load_trial_authority_manifest(path, digest("f"))
 

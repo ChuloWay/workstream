@@ -15,7 +15,11 @@ from app.modules.checkers.api.trial_evidence import (
     TrialEvidenceArtifactRequest, TrialEvidenceBindingRequest, TrialEvidenceSelector,
     TrialEvidenceStableSubject, TrialEvidenceUnavailable,
 )
-from app.modules.checkers.api.trial_profiles import TrialProfileError, trial_selector_from_configuration
+from app.modules.checkers.api.trial_profiles import (
+    TrialAuthorityContext,
+    TrialProfileError,
+    trial_selector_from_configuration,
+)
 
 
 def _closed_json_pairs(pairs):
@@ -207,7 +211,14 @@ class CheckerTrialProxy:
             if ticket.content_sha256 not in {None, request.content_sha256}:
                 raise TrialEvidenceUnavailable("trial_content_conflict")
             selected = trial_selector_from_configuration(request.external_request.configuration)
-            bundle = self._profiles.read(selected) if selected is not None else None
+            external = request.external_request
+            context = TrialAuthorityContext(
+                registry_entry_id=external.registry.registry_entry_id,
+                registry_entry_digest=external.registry.entry_digest,
+                checker_image_digest=external.registry.image_digest,
+                configuration_sha256=external.configuration_sha256,
+            )
+            bundle = self._profiles.read(context, selected) if selected is not None else None
             if bundle is None:
                 raise TrialEvidenceUnavailable("trial_profile_unavailable")
             _validate_receipt(value, ticket, request.external_request, bundle[0])

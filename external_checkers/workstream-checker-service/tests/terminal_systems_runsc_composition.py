@@ -81,6 +81,7 @@ from tests.checkers_model_calls.test_composed_execution import (
 from tests.checkers_model_calls.test_public_api import profile_spec
 import tests.post_submit_materialization_helpers as material_helpers
 from tests.post_submit_materialization_helpers import material_fixture
+from tests.projects.guide_activation.source_fixtures import PostSubmitBindingCase
 from tests.test_checker_materialization import _limits
 
 
@@ -97,6 +98,7 @@ from trial_plan import (  # noqa: E402
     project_trial_execution_projection,
     project_trial_projection_selector,
 )
+from author_checker import AUTHOR_REQUIREMENT  # noqa: E402
 
 
 REQUIREMENT = "runtime_environment_and_verification_trials"
@@ -250,7 +252,6 @@ def _trial_authority(env: dict[str, str], *, revision: bool = False):
 
 def _registry_spec(image_digest: str, profile, projection):
     values = {
-        "check": REQUIREMENT,
         "trial_profile_id": str(profile.selector.profile_id),
         "trial_profile_version": profile.selector.profile_version,
         "trial_profile_digest": profile.selector.profile_digest,
@@ -259,6 +260,7 @@ def _registry_spec(image_digest: str, profile, projection):
         "trial_projection_digest": projection.selector.projection_digest,
     }
     properties = {key: {"const": value} for key, value in values.items()}
+    properties["check"] = {"enum": [AUTHOR_REQUIREMENT, REQUIREMENT]}
     properties.update(
         model_profile_id={"type": "string"},
         model_profile_version={"type": "integer"},
@@ -313,7 +315,7 @@ def _trial_model_specification() -> CheckSpecification:
     )
 
 
-def _manifest(binding, profile, projection) -> dict[str, object]:
+def _manifest(bindings, profile, projection) -> dict[str, object]:
     value = {
         "protocol_version": "workstream.trial_authority_manifest.v1",
         "entries": [
@@ -325,6 +327,7 @@ def _manifest(binding, profile, projection) -> dict[str, object]:
                 "profile": asdict(profile),
                 "projection": asdict(projection),
             }
+            for binding in bindings
         ],
     }
     return json.loads(json.dumps(value, default=str))
@@ -346,7 +349,7 @@ def _procedure(identifier, purpose, command, state_source, evidence_id, line):
 
 def _provider_output(prompt: str, index: int, observations: list[dict]) -> str:
     value = json.loads(prompt)
-    if index == 0:
+    if value.get("schema_version") == "terminal_systems.trial_plan_proposal.v1":
         observations.append({"planner_prompt": value})
         procedures = [
             _procedure(
@@ -469,7 +472,7 @@ async def test_production_service_executes_project_trial_under_runsc_with_real_c
     )
     model_profiles = []
 
-    async def parameters(_factory, project_id, registry):
+    async def binding_cases(_factory, project_id, registry):
         selected = ProjectModelProfileSpec.model_validate(
             profile_spec(project_id)
             .model_copy(
@@ -514,12 +517,31 @@ async def test_production_service_executes_project_trial_under_runsc_with_real_c
             json=budget_spec.model_dump(mode="json"),
         )
         assert budget.status_code == 201, budget.text
-        values = trial_values | {
+        shared = trial_values | {
             "model_profile_id": response.json()["profile_id"],
             "model_profile_version": response.json()["spec"]["profile_version"],
             "model_profile_digest": response.json()["profile_digest"],
         }
-        return tuple(CapabilityParameter(name=key, value=value) for key, value in values.items())
+        specification = _trial_model_specification()
+        return tuple(
+            PostSubmitBindingCase(
+                requirement_id=requirement_id,
+                statement=statement,
+                classification_rationale=(
+                    "A project image evaluates immutable material through bounded model and "
+                    "isolated trial dependencies."
+                ),
+                specification=specification,
+                parameters=tuple(
+                    CapabilityParameter(name=key, value=value)
+                    for key, value in (shared | {"check": requirement_id}).items()
+                ),
+            )
+            for requirement_id, statement in (
+                (AUTHOR_REQUIREMENT, "Compare author claims with authenticated trial evidence."),
+                (REQUIREMENT, "Evaluate runtime and verification behavior in isolated trials."),
+            )
+        )
 
     post_scratch = root / "post-scratch"
     post_scratch.mkdir(mode=0o700)
@@ -528,8 +550,7 @@ async def test_production_service_executes_project_trial_under_runsc_with_real_c
         isolated_database_env,
         provider="minio",
         post_submit_registry_spec=registry_spec,
-        post_submit_binding_setup=parameters,
-        post_submit_specification=_trial_model_specification(),
+        post_submit_bindings_setup=binding_cases,
         post_scratch_root=post_scratch,
         scratch_limits=_limits(
             aggregate_reserved_bytes=5 * HARD_MAXIMUM_ARTIFACT_BYTES,
@@ -540,8 +561,22 @@ async def test_production_service_executes_project_trial_under_runsc_with_real_c
         ),
     ) as h:
         await provision_post_submit_service(h.factory, ServiceIdentity.ARTIFACT_CHECKER_OUTPUT)
-        assert len(h.request.policy.entries) == 1
-        manifest = _manifest(h.request.policy.entries[0], profile, projection)
+        assert len(h.request.policy.entries) == 2
+        assert {
+            entry.requirement_id: entry.configuration["check"]
+            for entry in h.request.policy.entries
+        } == {AUTHOR_REQUIREMENT: AUTHOR_REQUIREMENT, REQUIREMENT: REQUIREMENT}
+        assert len(
+            {
+                (
+                    entry.configuration["trial_profile_digest"],
+                    entry.configuration["trial_projection_digest"],
+                )
+                for entry in h.request.policy.entries
+            }
+        ) == 1
+        assert len({entry.configuration_sha256 for entry in h.request.policy.entries}) == 2
+        manifest = _manifest(h.request.policy.entries, profile, projection)
         manifest_bytes = json.dumps(
             manifest, sort_keys=True, separators=(",", ":"), ensure_ascii=False
         ).encode()
@@ -728,46 +763,64 @@ async def test_production_service_executes_project_trial_under_runsc_with_real_c
                 )
                 result = await executor.evaluate_post_submission(h.request)
             assert result.outcome == "completed"
-            assert len(result.execution.external_members) == 1
-            member = result.execution.external_members[0]
-            assert (member.outcome, member.verdict) == ("completed", "passed")
-            assert len(creates) == 2
-            receipt = observations[1]["receipt"]
-            assert receipt["plan_completed"] is True
-            assert receipt["cleanup_confirmed"] is True
-            assert receipt["engine_identity_digest"] == env["WORKSTREAM_TS_RUNSC_ENGINE_DIGEST"]
-            execution = receipt["execution"]
-            assert (
-                execution["platform_identity_digest"]
-                == env["WORKSTREAM_TS_RUNSC_PLATFORM_IDENTITY"]
-            )
-            assert execution["builder_image_digest"] == env["WORKSTREAM_TS_RUNSC_BUILDER_ID"]
-            assert execution["offline_cache_digest"] == env["WORKSTREAM_TS_RUNSC_CACHE_DIGEST"]
-            assert execution["base_image_digests"] == [ALPINE_DIGEST]
-            assert execution["build"]["outcome"] == "succeeded"
-            assert execution["build"]["candidate_image_digest"].startswith("sha256:")
-            outcomes = {item["slot_id"]: item["outcome"] for item in execution["steps"]}
-            assert len(outcomes) == 17
-            assert outcomes["starter_verification"] == "exit_nonzero"
-            assert outcomes["reference_verify_1"] == "succeeded"
-            assert outcomes["reference_verify_2"] == "succeeded"
-            assert outcomes["reference_verify_3"] == "succeeded"
-            assert outcomes["apply_incomplete_verification"] == "exit_nonzero"
-            assert outcomes["remove_output_verification"] == "exit_nonzero"
-            assert outcomes["fabricate_output_verification"] == "exit_nonzero"
-            assert outcomes["interrupt_work"] == "signalled"
-            assert outcomes["restart_work_verification"] == "succeeded"
+            assert len(result.execution.external_members) == 2
+            assert {
+                member.requirement_id: (member.result.outcome, member.result.verdict)
+                for member in result.execution.external_members
+            } == {
+                AUTHOR_REQUIREMENT: ("completed", "passed"),
+                REQUIREMENT: ("completed", "passed"),
+            }
+            assert len(creates) == 4
+            receipts = [item["receipt"] for item in observations if "receipt" in item]
+            assert len(receipts) == 2
+            assert {
+                receipt["originating_identity"]["requirement_id"] for receipt in receipts
+            } == {AUTHOR_REQUIREMENT, REQUIREMENT}
+            for receipt in receipts:
+                assert receipt["plan_completed"] is True
+                assert receipt["cleanup_confirmed"] is True
+                assert (
+                    receipt["engine_identity_digest"]
+                    == env["WORKSTREAM_TS_RUNSC_ENGINE_DIGEST"]
+                )
+                execution = receipt["execution"]
+                assert (
+                    execution["platform_identity_digest"]
+                    == env["WORKSTREAM_TS_RUNSC_PLATFORM_IDENTITY"]
+                )
+                assert (
+                    execution["builder_image_digest"]
+                    == env["WORKSTREAM_TS_RUNSC_BUILDER_ID"]
+                )
+                assert execution["offline_cache_digest"] == env["WORKSTREAM_TS_RUNSC_CACHE_DIGEST"]
+                assert execution["base_image_digests"] == [ALPINE_DIGEST]
+                assert execution["build"]["outcome"] == "succeeded"
+                assert execution["build"]["candidate_image_digest"].startswith("sha256:")
+                outcomes = {item["slot_id"]: item["outcome"] for item in execution["steps"]}
+                assert len(outcomes) == 17
+                assert outcomes["starter_verification"] == "exit_nonzero"
+                assert outcomes["reference_verify_1"] == "succeeded"
+                assert outcomes["reference_verify_2"] == "succeeded"
+                assert outcomes["reference_verify_3"] == "succeeded"
+                assert outcomes["apply_incomplete_verification"] == "exit_nonzero"
+                assert outcomes["remove_output_verification"] == "exit_nonzero"
+                assert outcomes["fabricate_output_verification"] == "exit_nonzero"
+                assert outcomes["interrupt_work"] == "signalled"
+                assert outcomes["restart_work_verification"] == "succeeded"
             assert await executor.evaluate_post_submission(h.request) == result
-            assert len(creates) == 2
+            assert len(creates) == 4
             async with h.factory() as session:
                 effects = tuple(await session.scalars(select(ModelUsageEffect)))
-                assert len(effects) == 2
+                assert len(effects) == 4
                 assert all(item.state == "completed" for item in effects)
                 assert all(UUID(item.request_binding_id).version == 7 for item in effects)
                 assert all(UUID(item.response_binding_id).version == 7 for item in effects)
                 retained = tuple(await session.scalars(select(CheckerTrialEvidence)))
-                assert len(retained) == 1
-                assert retained[0].content_sha256 == external_checker_json_hash(receipt)
+                assert len(retained) == 2
+                assert {item.content_sha256 for item in retained} == {
+                    external_checker_json_hash(receipt) for receipt in receipts
+                }
             for directory in ("trial-relay", "trial-scratch", "trial-runtime"):
                 assert list((root / directory).iterdir()) == []
             checkers = subprocess.check_output(

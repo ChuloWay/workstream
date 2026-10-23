@@ -442,6 +442,28 @@ class TrialExecutionSelector:
 
 
 @dataclass(frozen=True, slots=True)
+class TrialAuthorityContext:
+    """Exact locked checker binding that may select one trial bundle."""
+
+    registry_entry_id: UUID
+    registry_entry_digest: Sha256
+    checker_image_digest: Sha256
+    configuration_sha256: Sha256
+
+    def __post_init__(self) -> None:
+        """Reject incomplete or malformed request-binding identities."""
+        if type(self.registry_entry_id) is not UUID or any(
+            type(value) is not str or _DIGEST.fullmatch(value) is None
+            for value in (
+                self.registry_entry_digest,
+                self.checker_image_digest,
+                self.configuration_sha256,
+            )
+        ):
+            raise TrialProfileError("trial authority context is invalid")
+
+
+@dataclass(frozen=True, slots=True)
 class TrialAuthorityBinding:
     """One operator-provisioned binding of runtime authority to locked policy."""
 
@@ -464,6 +486,16 @@ class TrialAuthorityBinding:
         ):
             raise TrialProfileError("trial authority binding is invalid")
         self.projection.validate_profile(self.profile)
+
+    @property
+    def context(self) -> TrialAuthorityContext:
+        """Return the exact request binding independently from reused selectors."""
+        return TrialAuthorityContext(
+            registry_entry_id=self.registry_entry_id,
+            registry_entry_digest=self.registry_entry_digest,
+            checker_image_digest=self.checker_image_digest,
+            configuration_sha256=self.configuration_sha256,
+        )
 
 
 def trial_selector_from_configuration(
@@ -571,42 +603,35 @@ class PinnedTrialExecutionCatalog:
 
     def __init__(
         self,
-        entries: tuple[tuple[TrialExecutionProfile, TrialExecutionProjection], ...],
+        entries: tuple[TrialAuthorityBinding, ...],
     ) -> None:
-        """Freeze exact profile/projection pairs after checking each authority subset."""
+        """Freeze exact request-bound bundles while permitting selector reuse."""
         values: dict[
-            tuple[UUID, int, str, UUID, int, str],
-            tuple[TrialExecutionProfile, TrialExecutionProjection],
+            TrialAuthorityContext,
+            TrialAuthorityBinding,
         ] = {}
-        for profile, projection in entries:
-            projection.validate_profile(profile)
-            key = (
-                profile.selector.profile_id,
-                profile.selector.profile_version,
-                profile.selector.profile_digest,
-                projection.selector.projection_id,
-                projection.selector.projection_version,
-                projection.selector.projection_digest,
-            )
+        for binding in entries:
+            if not isinstance(binding, TrialAuthorityBinding):
+                raise TrialProfileError("trial authority binding is invalid")
+            key = binding.context
             if key in values:
-                raise TrialProfileError("trial execution bundle is duplicated")
-            values[key] = (profile, projection)
+                raise TrialProfileError("trial authority binding is duplicated")
+            values[key] = binding
         self._entries = MappingProxyType(values)
 
     def read(
-        self, selector: TrialExecutionSelector
+        self,
+        context: TrialAuthorityContext,
+        selector: TrialExecutionSelector,
     ) -> tuple[TrialExecutionProfile, TrialExecutionProjection] | None:
-        """Resolve only one exact trusted profile/projection pair."""
-        return self._entries.get(
-            (
-                selector.profile.profile_id,
-                selector.profile.profile_version,
-                selector.profile.profile_digest,
-                selector.projection.projection_id,
-                selector.projection.projection_version,
-                selector.projection.projection_digest,
-            )
-        )
+        """Resolve selectors only inside their exact locked checker binding."""
+        binding = self._entries.get(context)
+        if binding is None or (
+            binding.profile.selector != selector.profile
+            or binding.projection.selector != selector.projection
+        ):
+            return None
+        return binding.profile, binding.projection
 
 
 def load_trial_authority_manifest(path: Path, expected_digest: str) -> PinnedTrialExecutionCatalog:
@@ -637,18 +662,7 @@ def load_trial_authority_manifest(path: Path, expected_digest: str) -> PinnedTri
     ):
         raise TrialProfileError("trial authority manifest is invalid")
     bindings = tuple(_parse_authority_binding(item) for item in value["entries"])
-    binding_keys = {
-        (
-            item.registry_entry_id,
-            item.registry_entry_digest,
-            item.checker_image_digest,
-            item.configuration_sha256,
-        )
-        for item in bindings
-    }
-    if len(binding_keys) != len(bindings):
-        raise TrialProfileError("trial authority binding is duplicated")
-    return PinnedTrialExecutionCatalog(tuple((item.profile, item.projection) for item in bindings))
+    return PinnedTrialExecutionCatalog(bindings)
 
 
 def _read_bounded_manifest(path: Path) -> bytes:
@@ -851,6 +865,7 @@ __all__ = (
     "TrialExecutionProfile",
     "TrialExecutionProjection",
     "TrialExecutionSelector",
+    "TrialAuthorityContext",
     "TrialAuthorityBinding",
     "TrialMaterialProjection",
     "TrialProfileError",

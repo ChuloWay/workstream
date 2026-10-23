@@ -267,13 +267,10 @@ impl TrialProfileCatalog {
             return Err("trial authority manifest invalid");
         }
         let mut entries = Vec::with_capacity(manifest.entries.len());
-        let mut selectors = HashSet::new();
         let mut bindings = HashSet::new();
         for entry in manifest.entries {
             let profile = entry.into_profile()?;
-            let selector = selector_from_profile(&profile);
             if !valid_profile(&profile)
-                || !selectors.insert(selector)
                 || !bindings.insert((
                     profile.registry_entry_id.clone(),
                     profile.registry_entry_digest.clone(),
@@ -399,6 +396,188 @@ fn selector_from_configuration(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn digest(character: char) -> String {
+        format!("sha256:{}", character.to_string().repeat(64))
+    }
+
+    fn authority_entry(configuration_sha256: &str) -> TrialAuthorityEntry {
+        let mut profile = RuntimeProfile {
+            schema_version: "workstream.trial_execution_profile.v1".into(),
+            selector: ProfileSelector {
+                profile_id: "018f6f49-66b8-7d2a-bf4d-0e2eeaa00001".into(),
+                profile_version: 1,
+                profile_digest: digest('0'),
+            },
+            runtime: "runsc".into(),
+            isolation_mode: "gvisor".into(),
+            outer_host_uds: "open".into(),
+            child_host_uds: "none".into(),
+            outer_runtime_config_digest: digest('1'),
+            child_runtime_config_digest: digest('2'),
+            engine_identity_digest: digest('3'),
+            platform: "linux/amd64".into(),
+            platform_identity_digest: digest('4'),
+            builder_image_digest: digest('5'),
+            offline_cache_digest: digest('6'),
+            approved_base_digests: vec![digest('7')],
+            permitted_source_roles: vec!["submission_archive".into()],
+            permitted_material_roles: vec!["candidate_source".into()],
+            permitted_operations: vec!["run".into()],
+            permitted_state_retention_outcomes: vec!["succeeded".into()],
+            builder_capabilities: vec![
+                "CHOWN".into(),
+                "DAC_OVERRIDE".into(),
+                "FOWNER".into(),
+                "SYS_CHROOT".into(),
+            ],
+            child_capabilities: Vec::new(),
+            child_network: "none".into(),
+            child_runs_as_non_root: true,
+            limits: RuntimeLimits {
+                maximum_total_timeout_ms: 30_000,
+                maximum_build_timeout_ms: 10_000,
+                maximum_step_timeout_ms: 5_000,
+                maximum_steps: 1,
+                maximum_cpu_quota_millis: 1_000,
+                maximum_cpu_time_ms: 20_000,
+                maximum_wall_time_overrun_ms: 100,
+                maximum_cpu_time_overrun_ms: 250,
+                maximum_memory_bytes: 134_217_728,
+                maximum_swap_bytes: 134_217_728,
+                maximum_memory_overrun_bytes: 1_048_576,
+                maximum_pids: 32,
+                maximum_pids_overrun: 2,
+                maximum_disk_bytes: 134_217_728,
+                maximum_disk_overrun_bytes: 1_048_576,
+                maximum_entries: 10_000,
+                maximum_entries_overrun: 16,
+                maximum_step_output_bytes: 65_536,
+                maximum_observation_bytes: 262_144,
+                maximum_receipt_bytes: 524_288,
+                maximum_frame_bytes: 262_144,
+                maximum_response_bytes: 16_384,
+            },
+        };
+        profile.selector.profile_digest = payload_digest(&profile, "profile_digest").unwrap();
+        let mut projection = ExecutionProjection {
+            selector: ProjectionSelector {
+                projection_id: "018f6f49-66b8-7d2a-bf4d-0e2eeaa00002".into(),
+                projection_version: 1,
+                projection_digest: digest('0'),
+            },
+            trial_kind: "generic_build_run".into(),
+            material_projections: vec![TrialMaterialProjectionProfile {
+                role: "candidate_source".into(),
+                source_role: "submission_archive".into(),
+                projection_kind: "build_context".into(),
+                source_relative: ".".into(),
+                destination_relative: ".".into(),
+                exclusions: Vec::new(),
+            }],
+            allowed_material_roles: vec!["candidate_source".into()],
+            build_context_roles: vec!["candidate_source".into()],
+            slot_templates: vec![TrialSlotProfile {
+                slot_kind: "generic_run".into(),
+                minimum_occurrences: 1,
+                maximum_occurrences: 1,
+                seed_roles: Vec::new(),
+                visible_roles: Vec::new(),
+                fresh_workspace: true,
+                retain_state_after: vec!["succeeded".into()],
+            }],
+        };
+        projection.selector.projection_digest =
+            payload_digest(&projection, "projection_digest").unwrap();
+        TrialAuthorityEntry {
+            registry_entry_id: "018f6f49-66b8-7d2a-bf4d-0e2eeaa00003".into(),
+            registry_entry_digest: digest('a'),
+            checker_image_digest: digest('b'),
+            configuration_sha256: configuration_sha256.into(),
+            profile,
+            projection,
+        }
+    }
+
+    fn catalog(entries: Vec<TrialAuthorityEntry>) -> Result<TrialProfileCatalog, &'static str> {
+        let value = serde_json::json!({
+            "protocol_version": MANIFEST_PROTOCOL,
+            "entries": entries,
+        });
+        let digest = canonical_hash(&value).unwrap();
+        TrialProfileCatalog::from_bytes(&serde_json::to_vec(&value).unwrap(), &digest)
+    }
+
+    fn request(entry: &TrialAuthorityEntry) -> ValidatedRequest {
+        ValidatedRequest {
+            value: serde_json::json!({
+                "configuration": {
+                    "trial_profile_id": entry.profile.selector.profile_id,
+                    "trial_profile_version": entry.profile.selector.profile_version,
+                    "trial_profile_digest": entry.profile.selector.profile_digest,
+                    "trial_projection_id": entry.projection.selector.projection_id,
+                    "trial_projection_version": entry.projection.selector.projection_version,
+                    "trial_projection_digest": entry.projection.selector.projection_digest,
+                }
+            }),
+            request_digest: digest('f'),
+            registry_entry_id: entry.registry_entry_id.clone(),
+            registry_entry_digest: entry.registry_entry_digest.clone(),
+            image_digest: entry.checker_image_digest.clone(),
+            configuration_digest: entry.configuration_sha256.clone(),
+            phase: "post_submit".into(),
+            post_material_roles: vec!["submission_archive".into()],
+            evaluation_context_sha256: None,
+            cpu_millis: 1_000,
+            memory_bytes: 134_217_728,
+            deadline_ms: 30_000,
+            maximum_output_bytes: 65_536,
+        }
+    }
+
+    #[test]
+    fn shared_selectors_resolve_only_with_their_exact_binding_context() {
+        let first = authority_entry(&digest('c'));
+        let second = authority_entry(&digest('d'));
+        let selected = catalog(vec![first.clone(), second.clone()]).unwrap();
+        assert_eq!(
+            selected
+                .resolve(&request(&first))
+                .unwrap()
+                .unwrap()
+                .configuration_sha256,
+            digest('c')
+        );
+        assert_eq!(
+            selected
+                .resolve(&request(&second))
+                .unwrap()
+                .unwrap()
+                .configuration_sha256,
+            digest('d')
+        );
+        let mut foreign = request(&first);
+        foreign.configuration_digest = digest('e');
+        assert_eq!(
+            selected.resolve(&foreign),
+            Err("trial authority unavailable")
+        );
+
+        assert_eq!(
+            catalog(vec![first.clone(), first]).err(),
+            Some("trial authority manifest entry invalid")
+        );
+        let mut conflicting = second.clone();
+        conflicting.configuration_sha256 = digest('c');
+        conflicting.projection.selector.projection_id =
+            "018f6f49-66b8-7d2a-bf4d-0e2eeaa00004".into();
+        conflicting.projection.selector.projection_digest =
+            payload_digest(&conflicting.projection, "projection_digest").unwrap();
+        assert_eq!(
+            catalog(vec![authority_entry(&digest('c')), conflicting]).err(),
+            Some("trial authority manifest entry invalid")
+        );
+    }
 
     #[test]
     fn flat_selector_parser_rejects_partial_nested_and_wrong_types() {

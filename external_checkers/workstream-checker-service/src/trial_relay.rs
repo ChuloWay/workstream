@@ -1012,7 +1012,7 @@ fn validate_plan(plan: &TrialPlan, profile: &TrialProfile) -> Result<(), TrialRe
         let expected_roles: HashSet<_> = expected.visible_roles.iter().collect();
         let actual_roles: HashSet<_> = step.visible_roles.iter().collect();
         if !valid_identifier(&step.slot_id)
-            || !completed_ids.insert(step.slot_id.clone())
+            || completed_ids.contains(&step.slot_id)
             || !valid_identifier(&step.slot_kind)
             || template_index < previous_template
             || counts[template_index] >= expected.maximum_occurrences
@@ -1034,6 +1034,7 @@ fn validate_plan(plan: &TrialPlan, profile: &TrialProfile) -> Result<(), TrialRe
         {
             return Err(TrialRelayFailure::InvalidRequest);
         }
+        completed_ids.insert(step.slot_id.clone());
         counts[template_index] += 1;
         previous_template = template_index;
     }

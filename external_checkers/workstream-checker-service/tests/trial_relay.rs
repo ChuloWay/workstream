@@ -570,6 +570,24 @@ fn host_runtime_fields_and_profile_slot_substitution_are_rejected_before_engine(
 }
 
 #[test]
+fn state_source_must_reference_an_earlier_completed_slot() {
+    let mut selected = profile();
+    selected.slot_templates[0].fresh_workspace = false;
+    let started = start_with_profile(true, selected);
+    let mut self_referential = plan();
+    self_referential["steps"][0]["state_source"] = json!("slot_a");
+    let response = exchange(started.relay.socket_path(), &request(self_referential));
+    assert_eq!(response["outcome"], "unavailable");
+    assert_eq!(response["failure_code"], "invalid_request");
+    assert_eq!(started.engine.calls.load(Ordering::Relaxed), 0);
+    assert!(started.publisher.0.lock().unwrap().is_empty());
+    assert_eq!(
+        started.relay.finish().failure,
+        Some(TrialRelayFailure::InvalidRequest)
+    );
+}
+
+#[test]
 fn profile_whole_run_timeout_rejects_aggregate_plan_before_engine() {
     let mut selected = profile();
     selected.maximum_total_timeout_ms = 2_000;

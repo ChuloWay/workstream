@@ -16,7 +16,10 @@ from app.modules.checkers.api.trial_evidence import (
     TrialEvidenceStableSubject,
     TrialEvidenceUnavailable,
 )
-from app.modules.checkers.api.trial_profiles import PinnedTrialExecutionCatalog
+from app.modules.checkers.api.trial_profiles import (
+    PinnedTrialExecutionCatalog,
+    TrialAuthorityBinding,
+)
 from app.modules.checkers.models import CheckerTrialEvidence
 from app.modules.checkers.trial_evidence import TrialEvidenceReservations
 from tests.checkers.execution.support import ControlledSelectedExecution, live_executor, reserve
@@ -92,7 +95,21 @@ def _trial_fixture():
     async def parameters(_factory, _project, _registry):
         return tuple(CapabilityParameter(name=key, value=value) for key, value in config.items())
 
-    return spec, parameters, projected, PinnedTrialExecutionCatalog(((selected, projected),))
+    def catalog_for(request):
+        return PinnedTrialExecutionCatalog(
+            (
+                TrialAuthorityBinding(
+                    registry_entry_id=request.registry.registry_entry_id,
+                    registry_entry_digest=request.registry.entry_digest,
+                    checker_image_digest=request.registry.image_digest,
+                    configuration_sha256=request.configuration_sha256,
+                    profile=selected,
+                    projection=projected,
+                ),
+            )
+        )
+
+    return spec, parameters, projected, catalog_for
 
 
 async def _reject_raw_subject_substitution(factory, ticket):
@@ -184,7 +201,7 @@ async def test_trial_reservation_is_current_exact_immutable_and_replayed(
     tmp_path,
     isolated_database_env,
 ):
-    spec, parameters, projected, catalog = _trial_fixture()
+    spec, parameters, projected, catalog_for = _trial_fixture()
     async with material_fixture(
         tmp_path,
         isolated_database_env,
@@ -192,6 +209,7 @@ async def test_trial_reservation_is_current_exact_immutable_and_replayed(
         post_submit_binding_setup=parameters,
         post_submit_specification=trial_specification(),
     ) as h:
+        catalog = catalog_for(h.request)
         await reserve(h)
         h.service = DiagnosticMaterialization(h.service)
         adapter = ReservingExecution(h.factory, catalog, projected)
@@ -268,7 +286,7 @@ async def test_concurrent_trial_reservation_waits_then_recovers_complete_rollbac
     tmp_path,
     isolated_database_env,
 ):
-    spec, parameters, projected, catalog = _trial_fixture()
+    spec, parameters, projected, catalog_for = _trial_fixture()
     async with material_fixture(
         tmp_path,
         isolated_database_env,
@@ -276,6 +294,7 @@ async def test_concurrent_trial_reservation_waits_then_recovers_complete_rollbac
         post_submit_binding_setup=parameters,
         post_submit_specification=trial_specification(),
     ) as h:
+        catalog = catalog_for(h.request)
         await reserve(h)
         h.service = DiagnosticMaterialization(h.service)
         adapter = RollbackExecution(h.factory, catalog, projected)

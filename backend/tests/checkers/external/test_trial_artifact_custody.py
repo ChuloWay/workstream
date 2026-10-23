@@ -145,7 +145,7 @@ async def test_trial_bytes_use_real_art_custody_and_recover_exact_original(
     from tests.test_s3_artifact_store import provision_minio_bucket
 
     await provision_minio_bucket.__wrapped__()
-    spec, parameters, projected, catalog = _trial_fixture()
+    spec, parameters, projected, catalog_for = _trial_fixture()
     async with material_fixture(
         tmp_path,
         isolated_database_env,
@@ -163,6 +163,7 @@ async def test_trial_bytes_use_real_art_custody_and_recover_exact_original(
             reservation_ttl_seconds=150.0,
         ),
     ) as h:
+        catalog = catalog_for(h.request)
         await provision_post_submit_service(h.factory, ServiceIdentity.ARTIFACT_CHECKER_OUTPUT)
         await reserve(h)
         h.service = DiagnosticMaterialization(h.service)
@@ -316,7 +317,7 @@ async def test_competing_trial_publication_observes_pin_commit_or_complete_rollb
     from tests.test_s3_artifact_store import provision_minio_bucket
 
     await provision_minio_bucket.__wrapped__()
-    spec, parameters, projected, catalog = _trial_fixture()
+    spec, parameters, projected, catalog_for = _trial_fixture()
     async with material_fixture(
         tmp_path,
         isolated_database_env,
@@ -332,6 +333,7 @@ async def test_competing_trial_publication_observes_pin_commit_or_complete_rollb
             reservation_ttl_seconds=150.0,
         ),
     ) as h:
+        catalog = catalog_for(h.request)
         await provision_post_submit_service(h.factory, ServiceIdentity.ARTIFACT_CHECKER_OUTPUT)
         await reserve(h)
         h.service = DiagnosticMaterialization(h.service)

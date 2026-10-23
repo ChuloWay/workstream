@@ -21,7 +21,10 @@ from app.modules.checkers.api.trial_evidence import (
     TrialEvidenceSlot, TrialEvidenceStableSubject, TrialEvidenceTicket,
     TrialEvidenceUnavailable,
 )
-from app.modules.checkers.api.trial_profiles import trial_selector_from_configuration
+from app.modules.checkers.api.trial_profiles import (
+    TrialAuthorityContext,
+    trial_selector_from_configuration,
+)
 from app.modules.checkers.execution_repository import (
     ExecutionRepository, require_transaction, reservation, stored_request,
 )
@@ -96,7 +99,13 @@ class TrialEvidenceReservations:
     def _slot(self, subject: TrialEvidenceStableSubject) -> TrialEvidenceSlot:
         """Resolve the selected exact trusted profile; the current protocol has one plan."""
         selector = trial_selector_from_configuration(self._request.configuration)
-        bundle = self._profiles.read(selector) if selector is not None else None
+        context = TrialAuthorityContext(
+            registry_entry_id=self._request.registry.registry_entry_id,
+            registry_entry_digest=self._request.registry.entry_digest,
+            checker_image_digest=self._request.registry.image_digest,
+            configuration_sha256=self._request.configuration_sha256,
+        )
+        bundle = self._profiles.read(context, selector) if selector is not None else None
         if bundle is None:
             raise TrialEvidenceUnavailable("trial_profile_unavailable")
         profile, projection = bundle

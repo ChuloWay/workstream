@@ -483,6 +483,20 @@ The final controlled-provider qualification owns
 `external_checkers/workstream-checker-service/scripts/qualify_terminal_systems_runsc.sh`
 and
 `external_checkers/workstream-checker-service/tests/terminal_systems_runsc_composition.py`.
+Its AR-RD-001 regression may extend only the reusable test-fixture plumbing in
+`backend/tests/projects/guide_activation/source_fixtures.py`,
+`backend/tests/projects/unified_policy_fixtures.py`,
+`backend/tests/selected_policy_fixtures.py`, and
+`backend/tests/post_submit_materialization_helpers.py` so one project can
+create two genuinely approved POST bindings against the same registered
+capability. Default single-binding callers and production proposal APIs remain
+unchanged.
+Architecture replay also requires exact binding context during catalog
+resolution: immutable profile/projection selectors may be reused by different
+locked configurations, while a duplicate or conflicting full registry/image/
+configuration envelope remains invalid. Trial plans may retain state only from
+an earlier completed slot; a slot cannot name itself as its state source, and
+that rejection occurs before the engine is called.
 The wrapper may reuse only the explicitly prepared PILOT-00 owned DIND state,
 temporarily replacing and then byte-for-byte restoring that stopped harness's
 daemon configuration. The temporary exact configuration exposes two separately
