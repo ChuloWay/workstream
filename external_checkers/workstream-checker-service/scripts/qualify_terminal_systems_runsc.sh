@@ -25,6 +25,7 @@ readonly EXTRACT_CONTAINER="ws493-runsc-registry-extract-${RUN_ID}"
 
 STARTED=0
 CONFIG_REPLACED=0
+EXTRACT_CREATED=0
 
 cleanup() {
   local status=$?
@@ -39,11 +40,11 @@ cleanup() {
       docker container ls -aq --filter label=workstream.trial.deployment-owner=terminal-systems-runsc-qualification | xargs -r docker rm -f >/dev/null
       docker images --format "{{.Repository}}:{{.Tag}}" --filter reference="workstream-trial:*" \
         | xargs -r docker image rm >/dev/null
-    '
+    ' || status=1
     docker exec "${CONTAINER}" docker image rm \
       127.0.0.1:5000/terminal-systems-post:qualification \
       "${CHECKER_IMAGE}" \
-      >/dev/null 2>&1 || true
+      >/dev/null 2>&1 || status=1
     if [[ -n "${WORKSTREAM_TS_RUNSC_CHECKER_DIGEST:-}" ]]; then
       docker exec "${CONTAINER}" docker image rm \
         "127.0.0.1:5000/terminal-systems-post@${WORKSTREAM_TS_RUNSC_CHECKER_DIGEST}" \
@@ -51,10 +52,12 @@ cleanup() {
     fi
     docker stop --time 15 "${CONTAINER}" >/dev/null 2>&1 || status=1
   fi
-  docker rm -f "${EXTRACT_CONTAINER}" >/dev/null 2>&1 || true
+  if [[ "${EXTRACT_CREATED}" == 1 ]]; then
+    docker rm -f "${EXTRACT_CONTAINER}" >/dev/null 2>&1 || status=1
+  fi
   if [[ "${CONFIG_REPLACED}" == 1 ]]; then
-    cp -- "${ORIGINAL_CONFIG}" "${STATE_ROOT}/daemon.json"
-    chmod "${ORIGINAL_CONFIG_MODE}" "${STATE_ROOT}/daemon.json"
+    cp -- "${ORIGINAL_CONFIG}" "${STATE_ROOT}/daemon.json" || status=1
+    chmod "${ORIGINAL_CONFIG_MODE}" "${STATE_ROOT}/daemon.json" || status=1
     if ! cmp -s -- "${ORIGINAL_CONFIG}" "${STATE_ROOT}/daemon.json"; then
       status=1
     fi
@@ -174,8 +177,10 @@ docker image inspect "${CHECKER_IMAGE}" >/dev/null
 docker image inspect "${REGISTRY_IMAGE}" >/dev/null
 docker save --output "${COMPOSITION_ROOT}/input/checker-image.tar" "${CHECKER_IMAGE}"
 docker create --name "${EXTRACT_CONTAINER}" "${REGISTRY_IMAGE}" >/dev/null
+EXTRACT_CREATED=1
 docker cp "${EXTRACT_CONTAINER}:/bin/registry" "${COMPOSITION_ROOT}/bin/registry"
 docker rm "${EXTRACT_CONTAINER}" >/dev/null
+EXTRACT_CREATED=0
 chmod 0555 "${COMPOSITION_ROOT}/bin/registry"
 cat >"${COMPOSITION_ROOT}/registry.yml" <<'YAML'
 version: 0.1
@@ -202,6 +207,8 @@ if docker exec "${CONTAINER}" docker image inspect "${CHECKER_IMAGE}" >/dev/null
   echo "qualification checker image unexpectedly preexists in owned DIND" >&2
   exit 1
 fi
+test -z "$(docker exec "${CONTAINER}" docker container ls -aq --filter label=workstream.external-checker=true)"
+test -z "$(docker exec "${CONTAINER}" docker container ls -aq --filter label=workstream.trial=true)"
 test -z "$(docker exec "${CONTAINER}" docker images -q --filter reference='workstream-trial:*')"
 docker exec "${CONTAINER}" sh -ceu '
   chgrp 1000 /var/run/docker.sock
