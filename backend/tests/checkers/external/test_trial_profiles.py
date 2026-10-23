@@ -336,12 +336,16 @@ def test_operator_manifest_loader_rejects_fifo_without_blocking(tmp_path):
             sys.executable,
             "-c",
             (
-                "from pathlib import Path; "
+                "from pathlib import Path; import signal; "
                 "from app.modules.checkers.api.trial_profiles import "
                 "load_trial_authority_manifest, TrialProfileError; "
+                "signal.signal(signal.SIGALRM, lambda *_: "
+                "(_ for _ in ()).throw(TimeoutError('fifo open blocked'))); "
+                "signal.setitimer(signal.ITIMER_REAL, 2.0); "
                 "\ntry: load_trial_authority_manifest(Path(__import__('sys').argv[1]), "
                 "'sha256:' + 'f' * 64)"
                 "\nexcept TrialProfileError: raise SystemExit(0)"
+                "\nexcept TimeoutError: raise SystemExit(2)"
                 "\nraise SystemExit(1)"
             ),
             str(path),
@@ -349,6 +353,8 @@ def test_operator_manifest_loader_rejects_fifo_without_blocking(tmp_path):
         cwd=backend_root,
         capture_output=True,
         check=False,
-        timeout=2,
+        # Interpreter/Pydantic startup is intentionally outside the two-second
+        # action timer armed immediately before the loader call above.
+        timeout=30,
     )
     assert completed.returncode == 0, completed.stderr.decode("utf-8", errors="replace")
