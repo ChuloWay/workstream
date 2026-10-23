@@ -7,8 +7,11 @@ from contextlib import asynccontextmanager
 from dataclasses import asdict, dataclass, replace
 import json
 import os
+from types import SimpleNamespace
 from uuid import UUID, uuid4
 
+from asyncpg.pgproto.pgproto import UUID as AsyncpgUUID
+import pytest
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
@@ -37,6 +40,7 @@ from app.adapters.project_agents.setup_model_handler import (
     SetupProviderResponse,
 )
 from app.adapters.projects import setup_model_usage_owner
+from app.core.identifiers import new_record_id
 from app.interfaces.artifacts import ArtifactStoreNamespaceClaim
 from app.interfaces.setup_model_proxy import (
     SetupModelProxyRequest,
@@ -58,8 +62,13 @@ from app.modules.authorization.api import (
 from app.modules.model_usage.api import (
     ModelCallUnavailable,
     ModelCallUsage,
+    ModelUsageEffectInspection,
     ProjectModelProfile,
     ProjectModelProfileSpec,
+)
+from app.modules.projects.guide_compilation.orchestrator import _setup_model_subject
+from app.modules.projects.guide_compilation.service import (
+    load_compilation_execution_state,
 )
 from tests.artifact_store_helpers import (
     artifact_admission_limit_settings,
@@ -201,6 +210,73 @@ def _provider_request(profile: ProjectModelProfile) -> str:
             **openrouter_request_options(),
         }
     )
+
+
+def test_setup_subject_normalizes_database_uuid_subclasses_at_owner_projection() -> None:
+    """Keep the wire exact while accepting UUID values returned by asyncpg."""
+    configuration_type = type(runtime_configuration())
+    configuration = configuration_type.model_validate(
+        runtime_configuration().model_dump(mode="json")
+        | {
+            "model_profile_id": str(new_record_id()),
+            "model_profile_version": 1,
+            "model_profile_digest": "sha256:" + "1" * 64,
+        }
+    )
+    database_ids = {
+        name: AsyncpgUUID(str(new_record_id()))
+        for name in (
+            "attempt",
+            "project",
+            "guide",
+            "snapshot",
+            "setup",
+        )
+    }
+    raw = dict(
+        compilation_attempt_id=database_ids["attempt"],
+        project_id=database_ids["project"],
+        guide_id=database_ids["guide"],
+        source_snapshot_id=database_ids["snapshot"],
+        setup_run_id=database_ids["setup"],
+        setup_generation=1,
+        runtime_configuration_hash=configuration.sha256,
+        profile_id=configuration.model_profile_id,
+        profile_version=configuration.model_profile_version,
+        profile_digest=configuration.model_profile_digest,
+        provider=configuration.model_provider,
+        api=configuration.model_api,
+        model=configuration.model,
+    )
+    assert all(isinstance(value, UUID) and type(value) is not UUID for value in database_ids.values())
+    with pytest.raises(ValueError, match="subject is invalid"):
+        SetupModelProxySubject(**raw)
+
+    state = SimpleNamespace(
+        preflight_facts=SimpleNamespace(attempt_id=database_ids["attempt"]),
+        identity=SimpleNamespace(
+            project_id=database_ids["project"],
+            guide_id=database_ids["guide"],
+            source_snapshot_id=database_ids["snapshot"],
+            setup_run_id=database_ids["setup"],
+            setup_generation=1,
+        ),
+    )
+    subject = _setup_model_subject(state, configuration)
+
+    assert subject is not None
+    assert all(
+        type(getattr(subject, name)) is UUID
+        for name in (
+            "compilation_attempt_id",
+            "project_id",
+            "guide_id",
+            "source_snapshot_id",
+            "setup_run_id",
+            "profile_id",
+        )
+    )
+    assert str(subject.compilation_attempt_id) == str(database_ids["attempt"])
 
 
 @dataclass(slots=True)
@@ -383,21 +459,12 @@ async def _journey(storage: _StorageCase, access) -> _Journey:
     requested = await _fence_setup_attempt(
         storage.database_url, storage.values, configuration
     )
-    subject = SetupModelProxySubject(
-        compilation_attempt_id=requested.attempt_id,
-        project_id=storage.values["project"],
-        guide_id=storage.values["guide"],
-        source_snapshot_id=storage.values["snapshot"],
-        setup_run_id=storage.values["setup_1"],
-        setup_generation=1,
-        runtime_configuration_hash=configuration.sha256,
-        profile_id=profile.profile_id,
-        profile_version=profile.spec.profile_version,
-        profile_digest=profile.profile_digest,
-        provider=profile.spec.provider,
-        api=profile.spec.api,
-        model=profile.spec.model_snapshot,
-    )
+    async with storage.factory() as session:
+        state = await load_compilation_execution_state(session, requested.attempt_id)
+    assert state.runtime_configuration == configuration
+    subject = _setup_model_subject(state, configuration)
+    assert subject is not None
+    assert subject.profile_id == profile.profile_id
     request = SetupModelProxyRequest(
         subject, "draft", 0, _provider_request(profile)
     )
@@ -427,7 +494,12 @@ async def _state(journey: _Journey):
             await session.execute(
                 text(
                     "select effect.id,effect.state,effect.request_binding_id,"
-                    "effect.response_binding_id,effect.settled_nanodollars,"
+                    "effect.request_content_id,effect.request_put_attempt_id,"
+                    "effect.request_verification_receipt_id,effect.request_content_sha256,"
+                    "effect.request_byte_count,effect.response_binding_id,"
+                    "effect.response_content_id,effect.response_put_attempt_id,"
+                    "effect.response_verification_receipt_id,effect.response_content_sha256,"
+                    "effect.response_byte_count,effect.settled_nanodollars,"
                     "account.lifetime_reserved_nanodollars,"
                     "account.lifetime_settled_nanodollars "
                     "from model_usage_effects effect "
@@ -477,6 +549,53 @@ async def _assert_bound_private_art(journey: _Journey, state) -> None:
             assert leaked is False, table
 
 
+def _assert_evidence_identity(observed, state, role: str) -> None:
+    assert observed is not None
+    for field in ("binding_id", "content_id", "put_attempt_id", "verification_receipt_id"):
+        assert str(getattr(observed, field)) == str(getattr(state, f"{role}_{field}"))
+    assert observed.content_sha256 == getattr(state, f"{role}_content_sha256")
+    assert observed.byte_count == getattr(state, f"{role}_byte_count")
+
+
+async def _assert_operator_inspection(journey: _Journey, state, access) -> None:
+    endpoint = (
+        f"/api/v1/operations/projects/{journey.request.subject.project_id}"
+        f"/model-usage/effects/{state.id}"
+    )
+    response = await access.signed.client.get(endpoint, headers=access.target.headers)
+    assert response.status_code == 200, response.text
+    observed = ModelUsageEffectInspection.model_validate_json(response.text)
+    assert observed.project_id == journey.request.subject.project_id
+    assert observed.effect_id == UUID(str(state.id))
+    assert observed.owner_kind == "setup"
+    assert observed.owner.compilation_attempt_id == journey.request.subject.compilation_attempt_id
+    assert observed.state == "completed"
+    assert observed.provider_response_known is True
+    assert observed.usage == ModelCallUsage(
+        input_tokens=1,
+        cached_input_tokens=0,
+        output_tokens=1,
+        reasoning_tokens=0,
+    )
+    assert observed.settled_nanodollars == 23_000
+    _assert_evidence_identity(observed.request_evidence, state, "request")
+    _assert_evidence_identity(observed.response_evidence, state, "response")
+    assert journey.response_marker not in response.text
+    assert "setup-response-1" not in response.text
+    assert "provider_response_id" not in response.json()
+
+    wrong_project = await access.signed.client.get(
+        endpoint.replace(str(journey.request.subject.project_id), str(new_record_id())),
+        headers=access.target.headers,
+    )
+    assert wrong_project.status_code == 404, wrong_project.text
+    missing = await access.signed.client.get(
+        endpoint.rsplit("/", 1)[0] + f"/{new_record_id()}",
+        headers=access.target.headers,
+    )
+    assert missing.status_code == 404, missing.text
+
+
 async def test_setup_response_recovers_from_verified_minio_after_ledger_loss(
     tmp_path,
     isolated_database_env,
@@ -503,8 +622,10 @@ async def test_setup_response_recovers_from_verified_minio_after_ledger_loss(
         assert completed.request_binding_id is not None
         assert completed.response_binding_id is not None
         assert completed.lifetime_reserved_nanodollars == 0
-        assert completed.lifetime_settled_nanodollars == completed.settled_nanodollars
+        assert completed.settled_nanodollars == 23_000
+        assert completed.lifetime_settled_nanodollars == 23_000
         await _assert_bound_private_art(journey, completed)
+        await _assert_operator_inspection(journey, completed, admin_access)
 
         replay = await journey.handler().handle(journey.request)
         assert replay == recovered
