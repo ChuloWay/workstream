@@ -18,6 +18,7 @@ The instructions explicitly invite lifecycle and human-review classifications; g
 
 - `backend/app/core/project_guide_instructions.py`, setup contracts in `backend/app/interfaces/`, and `backend/app/adapters/project_agents/`: scope, provider schemas, bounded validation/correction and examples.
 - Affected setup tests, shared fixture callers, current setup documentation and roadmap; this record.
+- `experiments/pilot04_external_checker_runtime/{guide_runtime,guide_evidence,public_guide_setup}.py` and `scripts/test_public_guide_journey.py`: reconcile recorded inference and trusted source evidence, without changing project checker logic.
 - `backend/scripts/guide_compilation_e2e.py`: align scripted inference with the strict output contract; preserve real source reads, worker delivery, finalization and replay assertions.
 - `cli/tests/integration/test_guide_approval_public_api.py`: keep its newly inferred proposal fixture within the same removed-field boundary; preserve real approval/replay/authority assertions.
 - `backend/scripts/test_lane_catalogue.py`: register the new setup regression module in the existing complete CI inventory; no execution or gate changes.
@@ -154,3 +155,15 @@ requirement. The fixture now leaves project checks empty and keeps source covera
 in its findings; artifact-policy values, real ART reads and worker/finalization
 replay assertions are unchanged. A regression applies trusted generation and
 context validation to the actual drill runtime output.
+
+The recorded prefork journey had the same removed-notes defect and incomplete
+supported-check specifications. It now emits complete typed fixture specifications;
+its source oracle uses persisted attempt/compilation lineage and exact original-read
+receipts instead of generated prose. The actual runtime regression fails against
+the previous fixture at trusted generation admission. The source-evidence tests
+continue to reject example substitution, mismatched input hashes and missing or
+foreign original-read custody. No production validation or checker logic changed.
+The API contract drill passed against isolated PostgreSQL and MinIO at `6377d03da`,
+with database, role and storage cleanup verified; later edits affect only the
+separate recorded journey fixture and its regression. This scripted-model drill
+covers guide compilation through task claim/start, not live POST model evaluation.

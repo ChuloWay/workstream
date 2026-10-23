@@ -435,3 +435,36 @@ async def test_public_api_drill_runtime_emits_admissible_inference():
     opened = {compilation.material.handle_for(item) for item in compilation.material.documents}
     assert validate_project_guide_runtime_result(compilation, output, opened) == output
     assert runtime.calls == 1
+
+
+async def test_recorded_public_journey_runtime_emits_admissible_inference(monkeypatch):
+    """The prefork drill must generate complete specs and omit removed notes."""
+    import hashlib
+    from pathlib import Path
+
+    monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[2]))
+    from experiments.pilot04_external_checker_runtime.guide_runtime import RecordedGuideRuntime
+    from experiments.pilot04_external_checker_runtime.guide_inputs import GUIDE_BYTES, TASK_EXAMPLES
+    from app.adapters.project_agents.result_validation import validate_project_guide_runtime_result
+    from app.interfaces.project_agents import PROJECT_GUIDE_COMPILATION_AGENT_VERSION
+    from app.modules.projects.api.task_examples import validate_task_examples
+    from tests.checkers.external.support import capability_projection, registry_entry
+
+    compilation = context(ids(), checker_capabilities=capability_projection(
+        registry_entry("pre_submit"), registry_entry("post_submit"),
+    ))
+    document = compilation.material.documents[0].model_copy(update={
+        "sha256": "sha256:" + hashlib.sha256(GUIDE_BYTES).hexdigest(),
+        "byte_count": len(GUIDE_BYTES), "media_type": "text/markdown",
+    })
+    compilation = compilation.model_copy(update={
+        "agent_version": PROJECT_GUIDE_COMPILATION_AGENT_VERSION,
+        "task_examples": validate_task_examples(TASK_EXAMPLES),
+        "material": compilation.material.model_copy(update={"documents": (document,)}),
+    })
+    runtime = RecordedGuideRuntime(compilation.runtime_configuration)
+    output = await _compile(runtime, compilation, document_text=GUIDE_BYTES.decode())
+    opened = {compilation.material.handle_for(document)}
+    assert validate_project_guide_runtime_result(compilation, output, opened) == output
+    assert len(output.pre_submit_bindings) == len(output.post_submit_bindings) == 1
+    assert runtime.calls == 1
