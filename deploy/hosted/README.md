@@ -307,6 +307,18 @@ full preflight, pull, and start with `up --detach --wait`. Exercise an interrupt
 job and verify the existing exact retry/reconciliation operations rather than
 editing rows or replaying unknown work blindly.
 
+Before upgrading through `0059_neutral_guide_runtime`, inspect retained guide
+attempts using the currently deployed release's supported diagnostics and
+recovery operations. The migration refuses an inferred attempt without
+`adapter_profile` in `compilation_reserved` or `provider_result_accepted`, with
+`old inferred guide attempt requires removed runtime recovery before upgrade`.
+Finish supported recovery under the existing image and its compatible schema
+before retrying the upgrade. API startup applies migrations, so this refusal also
+prevents the new API from starting. If recovery cannot complete, keep the upgrade
+blocked; do not edit the attempt, delete evidence, or redispatch uncertain work
+under the new runtime. The new image preserves retained evidence and exact-ID
+cleanup, not the removed inference implementation.
+
 Database migrations are forward-only. Never downgrade a protected migration or
 delete immutable rows/objects to force a code rollback. An older application
 image may be restored only when its reviewed release evidence says it supports

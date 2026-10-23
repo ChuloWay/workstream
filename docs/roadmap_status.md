@@ -1186,7 +1186,7 @@ The broader v0.1 sequence below retains later scope:
    through #554; preserve
    prior attempts and reviewer economic evidence. Finish remaining recovery,
    fulfillment, reconciliation, audit, release controls, and legacy cleanup.
-7. **Release proof.** The isolated six-service local stack is available; use it
+7. **Release proof.** The isolated seven-service local stack is available; use it
     to expose stable APIs and frontend surfaces, exercise the complete path
     through real database, durable-job, storage, security, failure, and recovery
     tests, then run the internal pilot. Compose health alone is not journey proof.
@@ -1398,7 +1398,8 @@ v0.1 is not ready until all of the following are true:
   publication, activation and both policy outcomes. It does not establish live
   model quality or deployment readiness. See the [connected proof](../.commitrail/changes/public-guide-to-contribution-proof.md).
   The provider-free `manager_authored` runtime removes the inference dependency
-  from local setup (the hosted release still requires its OpenAI key file) and
+  from local setup (this hosted release still requires the selected provider's
+  `WORKSTREAM_PROJECT_AGENT_API_KEY_FILE`, supplied only to the worker) and
   proves nothing about model quality.
 - Publish the reviewed backend and checker-service source builds, substitute
   their registry digests and the approved exact checker cache into the prepared
