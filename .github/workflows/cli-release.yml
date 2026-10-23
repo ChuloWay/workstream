@@ -85,7 +85,7 @@ jobs:
           python3 scripts/test_cli_release_controls.py
           python3 scripts/check_cli_release_controls.py --tag "$TAG"
 
-  native-proof:
+  native_proof:
     needs: [prepare, release_guard]
     if: always() && !cancelled() && needs.prepare.result == 'success' && (github.event_name == 'pull_request' || needs.release_guard.result == 'success')
     strategy:
@@ -167,7 +167,8 @@ jobs:
           retention-days: 7
 
   assemble:
-    needs: [prepare, native-proof]
+    needs: [prepare, native_proof]
+    if: always() && !cancelled() && needs.prepare.result == 'success' && needs.native_proof.result == 'success'
     runs-on: ubuntu-24.04
     outputs:
       artifact_id: ${{ steps.upload.outputs.artifact-id }}
