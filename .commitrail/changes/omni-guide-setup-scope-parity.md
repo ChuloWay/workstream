@@ -33,9 +33,9 @@ The first SDK run exposed a shape difference: OpenAI's strict SDK schema require
 
 ## Evidence and review
 
-The actual Omni SDK loopback tests exercise valid draft/review, exact restricted schema presentation in both initial phase prompts, native provider retries, malformed output, correction of draft and final output including a schema-valid contextual rejection, historical-scope rejection, cross-phase correction exhaustion, per-run source reopening, and retained tool quotas. A pre-existing foreign-source fixture now terminates after the first failed draft read; the second review read is no longer reached because every draft is context validated before review.
+The actual Omni SDK loopback tests exercise valid draft/review, exact restricted schema presentation in both initial phase prompts, native provider retries, malformed output, correction of draft and final output including a schema-valid contextual rejection, historical-scope rejection, cross-phase correction and logical-turn exhaustion, per-run source reopening, and retained tool quotas. A pre-existing foreign-source fixture now terminates after the first failed draft read; the second review read is no longer reached because every draft is context validated before review.
 
-- Omni SDK test file: 54 passed after the focused review repair, with one upstream Pydantic warning. An earlier concurrent rerun crashed inside the installed `tiktoken` native extension after 30 passing cases; the final complete file rerun passed.
+- Omni SDK test file: 55 passed after the focused review repair, with one upstream Pydantic warning. An earlier concurrent rerun crashed inside the installed `tiktoken` native extension after 30 passing cases; the final complete file rerun passed.
 - Shared draft/parser suite in the mutually exclusive OpenAI SDK environment: 24 passed. Its initial execution in the Omni environment could not import the intentionally absent `agents` package; this is an environment extra boundary, not a test failure of the helper.
 - Ruff lint and format checks passed for changed Python files. `git diff --check`, stale wording, and changed Markdown link checks passed.
 - No paid model inference, remote product mutation, or hosted proof was performed.

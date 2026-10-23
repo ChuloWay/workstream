@@ -1021,6 +1021,36 @@ async def test_actual_sdk_corrections_remain_aggregate_across_phases():
     assert "correction_instruction" in str(provider.requests[6][1]["messages"])
 
 
+async def test_actual_sdk_review_correction_keeps_aggregate_turn_ceiling():
+    base = _runtime_context()
+    compilation_context = base.model_copy(
+        update={
+            "runtime_configuration": base.runtime_configuration.model_copy(
+                update={"maximum_turns": 6}
+            )
+        }
+    )
+    capabilities, reads, handle = _capabilities(compilation_context)
+    async with _SyntheticOpenRouter(
+        handle=handle,
+        final_output=_provider_output(),
+        final_outputs=(_provider_output(), "not-json", "not-json", _provider_output()),
+    ) as provider:
+        runtime = OmniCoreAgentProjectGuideRuntime._for_test(
+            compilation_context.runtime_configuration,
+            upstream_url=provider.url,
+        )
+        runtime.admit_execution()
+        try:
+            with pytest.raises(ProjectGuideCompilationInvalidOutputError) as caught:
+                await runtime.compile_project_guide(compilation_context, capabilities)
+        finally:
+            await runtime.aclose()
+    assert caught.value.failure_code == "schema_invalid"
+    assert reads == [handle] * 3
+    assert len(provider.requests) == 6
+
+
 async def test_actual_sdk_correction_keeps_aggregate_tool_quota():
     base = _runtime_context()
     compilation_context = base.model_copy(
