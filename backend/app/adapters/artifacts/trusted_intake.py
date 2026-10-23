@@ -62,6 +62,7 @@ def _entry(value: object) -> SubmissionArchiveEntry:
     body = _object(value, {field.name for field in fields(SubmissionArchiveEntry)})
     if (type(body["normalized_path"]) is not str
             or type(body["byte_count"]) is not int or body["byte_count"] < 0
+            or type(body["entry_type"]) is not str
             or body["entry_type"] not in {"file", "directory"}):
         raise ExternalServiceProtocolError()
     if body["entry_type"] == "file":
@@ -162,7 +163,10 @@ class _Session:
         remaining = self._deadline + (_CLEANUP_SECONDS if cleanup else 0) - time.monotonic()
         if remaining <= 0 or self._aborted.is_set():
             raise ExternalServiceUnavailableError(self._adapter.identity)
-        self._socket.settimeout(remaining)
+        try:
+            self._socket.settimeout(remaining)
+        except OSError as exc:
+            raise ExternalServiceUnavailableError(self._adapter.identity) from exc
 
     def _send(self, data: bytes, *, cleanup: bool = False) -> None:
         self._timeout(cleanup=cleanup)
@@ -207,6 +211,8 @@ class _Session:
             raise ExternalServiceProtocolError(self._adapter.identity)
         if body["status"] == "error":
             code = _object(body["payload"], {"code"})["code"]
+            if type(code) is not str:
+                raise ExternalServiceProtocolError(self._adapter.identity)
             if operation == "inspect" and code in {value.value for value in SubmissionArchiveFailureCode}:
                 raise SubmissionArchiveRejectedError(SubmissionArchiveFailureCode(code))
             if code in {"runtime_unavailable", "capacity_unavailable", "deadline_exceeded"}:
@@ -322,7 +328,10 @@ class _Session:
                 self._state = "evaluating"
                 self._command("default", {"binding": {**asdict(binding), "attempt_id": str(binding.attempt_id)},
                                           "input": _INPUT.dump_python(value, mode="json")})
-                result = WorkstreamDefaultCheckerResult.model_validate(self._response("default"))
+                try:
+                    result = WorkstreamDefaultCheckerResult.model_validate(self._response("default"))
+                except (TypeError, ValueError) as exc:
+                    raise ExternalServiceProtocolError(self._adapter.identity) from exc
                 self._state = "evaluated"
                 return result
         return await self._async(evaluate)

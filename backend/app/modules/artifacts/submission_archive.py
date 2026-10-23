@@ -740,7 +740,9 @@ def exported_submission_tree(
     if (expected.entry_count > limits.maximum_entries
             or expected.total_expanded_bytes > limits.maximum_expanded_bytes):
         raise SubmissionArchiveRejectedError(SubmissionArchiveFailureCode.LIMIT_EXCEEDED)
-    root = os.open(workspace, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    # ART supplies a retained /proc/self/fd directory capability here. Child
+    # traversal remains descriptor-relative with O_NOFOLLOW at every component.
+    root = os.open(workspace, os.O_RDONLY | os.O_DIRECTORY)
     descriptor: int | None = None
     tree: SealedSubmissionTree | None = None
     files = tuple(entry for entry in expected.entries if entry.entry_type is SubmissionArchiveEntryType.FILE)

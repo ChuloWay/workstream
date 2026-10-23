@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+from tests.trusted_intake_fixtures import LocalIntakeSession
+from app.modules.artifacts.trusted_intake import TrustedArchiveInspector
+from app.modules.artifacts.submission_materialization import _TrustedPreSubmitProcessor
+
 from contextlib import contextmanager, nullcontext
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
@@ -367,7 +371,8 @@ async def _request(
     prepared = await preparation.prepare(
         _bytes(_archive(primary_bytes)), media_type="application/zip"
     )
-    inspection = await prepared.inspect(inspector)
+    intake = LocalIntakeSession(inspector)
+    inspection = await prepared.inspect(TrustedArchiveInspector(intake, prepared.commitment))
     manifest = build_submission_manifest(inspection)
     policy = _policy()
     packet = SubmissionPacketView(
@@ -414,9 +419,24 @@ async def _request(
             predecessor=None, predecessor_exists=False,
         ),
         packet=packet, external_policy=policy, default_checker_input=default_input,
-        selected_reservation=reservation,
+        selected_reservation=reservation, intake=intake,
     )
     return request, inspector, manager, preparation
+
+
+def _processor(*, request, policy, default_input, identity, material, grants, execution):
+    checker = SelectedPreSubmitProcessor(
+        policy=policy, default_input=default_input, identity=identity,
+        material=material, execution=execution,
+    )
+    request = replace(request, default_checker_input=default_input, external_policy=policy,
+                      selected_reservation=replace(request.selected_reservation,
+                          policy_sha256=policy.policy_sha256,
+                          admission_lineage=replace(request.selected_reservation.admission_lineage,
+                              effective_plan_sha256=policy.policy_sha256, packet_sha256=default_input.packet.sha256),
+                          default_input_sha256=workstream_default_input_sha256(default_input)))
+    return _TrustedPreSubmitProcessor(request=request, checker=checker,
+                                      limits=SubmissionArchiveLimits(), grants=grants)
 
 
 def _open_input_schema() -> ExternalCheckerSchema:
@@ -665,9 +685,8 @@ async def test_selected_pre_runs_default_then_locked_external_image(
     policy = _policy()
     identity, material, default_input = _execution_context(request, policy)
     grants, execution = _GrantIssuer(), _Execution(verdict)
-    processor = SelectedPreSubmitProcessor(
-        archive_inspector=inspector,
-        inspection=request.inspection,
+    processor = _processor(
+        request=request,
         policy=policy,
         default_input=default_input,
         identity=identity,
@@ -701,16 +720,15 @@ async def test_selected_pre_runs_default_then_locked_external_image(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("external", [False, True])
-async def test_selected_pre_only_requires_runtime_for_locked_external_images(
+async def test_selected_pre_only_requires_project_runtime_for_locked_external_images(
     tmp_path, external: bool
 ) -> None:
     request, inspector, manager, preparation = await _request(tmp_path)
     policy = _policy() if external else _empty_policy()
     identity, material, default_input = _execution_context(request, policy)
     grants = _GrantIssuer()
-    processor = SelectedPreSubmitProcessor(
-        archive_inspector=inspector,
-        inspection=request.inspection,
+    processor = _processor(
+        request=request,
         policy=policy,
         default_input=default_input,
         identity=identity,
@@ -909,9 +927,8 @@ async def test_selected_pre_default_secret_blocker_precedes_external_image(
     )
     execution = _Execution("passed")
     grants = _GrantIssuer()
-    processor = SelectedPreSubmitProcessor(
-        archive_inspector=inspector,
-        inspection=request.inspection,
+    processor = _processor(
+        request=request,
         policy=policy,
         default_input=WorkstreamDefaultCheckerInput(
             archive_sha256=material.archive_sha256,
@@ -1113,10 +1130,9 @@ async def test_selected_factory_uses_request_bound_art_grant(tmp_path) -> None:
         authorization=authority,
         preparation=preparation,
         checker_execution=SelectedPreSubmitCheckerExecutionAdapter(
-            archive_inspector=inspector,
             external_execution=execution,
         ),
-        storage_scheme="s3",
+        storage_scheme="s3", archive_limits=SubmissionArchiveLimits(),
     )
     try:
         await service.authorize_inspected(request)

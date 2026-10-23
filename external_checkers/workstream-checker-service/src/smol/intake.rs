@@ -282,8 +282,32 @@ pub(crate) fn serve(
             &encoded("close", Some(&lease), "ok", json!({}))?,
             Instant::now() + SOCKET_IO_TIMEOUT,
         ),
-        Err(_) => Ok(()), // Lost/invalid sessions cannot claim confirmed cleanup.
+        Err(error) => {
+            // Error values are fixed controller codes, never archive contents.
+            eprintln!("trusted intake session failed: {error}");
+            Ok(()) // Lost/invalid sessions cannot claim confirmed cleanup.
+        }
     }
+}
+
+fn session_client_connected(stream: &UnixStream) -> bool {
+    // Unlike the one-shot execute protocol, this session legitimately has ZIP
+    // bytes and later commands waiting on its socket while guest I/O runs.
+    let mut byte = 0u8;
+    let result = unsafe {
+        libc::recv(
+            stream.as_raw_fd(),
+            (&mut byte as *mut u8).cast(),
+            1,
+            libc::MSG_PEEK | libc::MSG_DONTWAIT,
+        )
+    };
+    result > 0
+        || (result < 0
+            && matches!(
+                std::io::Error::last_os_error().raw_os_error(),
+                Some(libc::EAGAIN)
+            ))
 }
 
 struct GuestIo {
@@ -330,7 +354,7 @@ impl GuestIo {
         Ok(guest)
     }
     fn tick(&mut self, client: &UnixStream, deadline: Instant) -> Result<(), String> {
-        if Instant::now() >= deadline || !client_is_connected(client) {
+        if Instant::now() >= deadline || !session_client_connected(client) {
             return Err("intake interrupted".into());
         }
         read_available(&mut self.errors, &mut self.error_bytes, 64 * 1024)?;
@@ -611,5 +635,24 @@ fn session(
             }
             _ => return Err("intake operation out of sequence".into()),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn pending_upload_bytes_are_not_a_disconnected_intake_client() {
+        let (mut sender, mut receiver) = UnixStream::pair().unwrap();
+        assert!(session_client_connected(&receiver));
+        sender.write_all(b"zip input").unwrap();
+        assert!(session_client_connected(&receiver));
+        // The project execute helper must still reject unsolicited trailing data.
+        assert!(!client_is_connected(&receiver));
+        let mut bytes = [0; 9];
+        receiver.read_exact(&mut bytes).unwrap();
+        assert_eq!(&bytes, b"zip input");
+        drop(sender);
+        assert!(!session_client_connected(&receiver));
     }
 }

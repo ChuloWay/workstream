@@ -7,6 +7,7 @@ import hashlib
 import importlib.util
 from io import BytesIO
 import json
+import os
 from pathlib import Path
 import socket
 import struct
@@ -245,10 +246,18 @@ def test_raw_guest_export_requires_exact_inventory_and_content(tmp_path, failure
             sink(entry, b"finished work")
 
     def consume():
-        with exported_submission_tree(export, root, expected=inspection,
-                                      limits=SubmissionArchiveLimits()) as tree:
+        descriptor = os.open(root, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            projection = exported_submission_tree(export, Path(f"/proc/self/fd/{descriptor}"),
+                                                  expected=inspection, limits=SubmissionArchiveLimits())
+            tree = projection.__enter__()
+        finally:
+            os.close(descriptor)
+        try:
             assert tree.read_file("folder/work.txt", maximum_bytes=13) == b"finished work"
             assert (root / "folder/work.txt").stat().st_mode & 0o777 == 0o400
+        finally:
+            projection.__exit__(None, None, None)
         with pytest.raises(RuntimeError, match="closed"):
             tree.read_file("folder/work.txt", maximum_bytes=13)
 

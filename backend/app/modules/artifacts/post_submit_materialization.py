@@ -14,7 +14,7 @@ from app.interfaces.artifacts import (
 from app.interfaces.external_checker_execution import ExternalCheckerMaterialGrant
 from app.interfaces.trusted_submission_intake import TrustedIntakePreparation, TrustedSubmissionIntakeAdapter
 from app.interfaces.external_services import ExternalServiceAdapterError
-from app.modules.artifacts.trusted_intake import prepared_trusted_intake, TrustedArchiveInspector
+from app.modules.artifacts.trusted_intake import prepared_trusted_intake, TrustedArchiveInspector, prepare_bytes_with_intake
 from app.modules.checkers.api.materialization import (
     PostSubmissionMaterialConsumer, PostSubmissionMaterializationResult,
     PostSubmissionMaterializationUnavailable, PostSubmissionMaterializationFailure,
@@ -342,11 +342,12 @@ class PostSubmissionMaterializer:
                             limits=self._archive_limits, deadline_ms=self._artifact_deadline_ms,
                         ),
                     ))
-                    prepared = await self._preparation.prepare(
-                        self._store.open(selected.provider_object_ref), media_type=selected.media_type,
-                        expected_sha256=selected.sha256, expected_size=selected.byte_count,
+                    prepared, intake = await prepare_bytes_with_intake(pending_intake,
+                        self._preparation.prepare(
+                            self._store.open(selected.provider_object_ref), media_type=selected.media_type,
+                            expected_sha256=selected.sha256, expected_size=selected.byte_count,
+                        ),
                     )
-                    intake = await asyncio.shield(pending_intake)
                     inspection = await prepared.inspect(TrustedArchiveInspector(intake, prepared.commitment),
                                                         on_cancel=intake.abort)
                     manifest = build_submission_manifest(inspection)

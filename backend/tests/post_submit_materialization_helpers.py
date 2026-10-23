@@ -1,5 +1,7 @@
 """Real verified admission/Submission fixtures and controlled post-submit authority."""
 
+from tests.trusted_intake_fixtures import LocalIntakeAdapter
+
 from contextlib import asynccontextmanager
 from io import BytesIO
 from types import SimpleNamespace
@@ -306,7 +308,7 @@ async def _material_fixture(
             store=counted,
             namespace=namespace,
             preparation=preparation,
-            inspector=inspector,
+            intake=LocalIntakeAdapter(inspector), archive_limits=SubmissionArchiveLimits(), artifact_deadline_ms=120_000,
         )
         yield SimpleNamespace(
             replica_id=replica_id,

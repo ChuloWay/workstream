@@ -182,3 +182,11 @@ and required implementation reviewers are outstanding. Local focused proof
 currently covers canonical guest rejection/default identity, socket cancellation,
 raw export corruption, and retained-reader cancellation. No completed capability
 or public journey is claimed by this checkpoint.
+
+The first real KVM intake probe now completes pinned-image preparation, canonical
+ZIP inspection, exact raw export, default evaluation and cleanup acknowledgment
+through the Python adapter. A streaming defect reused the one-shot project's
+trailing-byte rejection as a disconnect check; a focused socket-pair regression
+now distinguishes legitimate pending ZIP input while retaining the project rule.
+The ART raw exporter also now accepts the scratch owner's retained directory-FD
+path, with a regression retaining descriptor-relative child containment.

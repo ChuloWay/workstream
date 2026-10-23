@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 from collections.abc import Callable
 from contextlib import AbstractAsyncContextManager, AsyncExitStack
 from dataclasses import dataclass, field, replace
@@ -51,7 +50,7 @@ from app.modules.artifacts.service import (
     ArtifactStorageOrchestrator,
 )
 from app.modules.artifacts.sources import PreparedArtifact
-from app.modules.artifacts.trusted_intake import prepared_trusted_intake, TrustedArchiveInspector
+from app.modules.artifacts.trusted_intake import prepared_trusted_intake, TrustedArchiveInspector, prepare_bytes_with_intake
 from app.modules.artifacts.api.submission_archive import (
     SubmissionArchiveRejectedError,
     SubmissionArchiveLimits,
@@ -695,12 +694,10 @@ class PreparedSubmissionBundlePreparationCommand:
                         limits=runtime.archive_limits, deadline_ms=runtime.artifact_deadline_ms,
                     ),
                 ))
-                prepared = await runtime.preparation.prepare(
-                    request.byte_source,
-                    media_type="application/zip",
+                prepared, intake = await prepare_bytes_with_intake(pending_intake,
+                    runtime.preparation.prepare(request.byte_source, media_type="application/zip"),
                 )
                 scratch_cleanup.push_async_callback(prepared.close)
-                intake = await asyncio.shield(pending_intake)
                 async with self._session.begin():
                     task_context, project_context = await self._lock_authorized_context(request)
                     if task_context.checker_remediation_manifest_id != remediation_manifest_id:
