@@ -716,8 +716,17 @@ async def test_production_service_executes_project_trial_under_runsc_with_real_c
             receipt = observations[1]["receipt"]
             assert receipt["plan_completed"] is True
             assert receipt["cleanup_confirmed"] is True
+            assert receipt["engine_identity_digest"] == env["WORKSTREAM_TS_RUNSC_ENGINE_DIGEST"]
             execution = receipt["execution"]
+            assert (
+                execution["platform_identity_digest"]
+                == env["WORKSTREAM_TS_RUNSC_PLATFORM_IDENTITY"]
+            )
+            assert execution["builder_image_digest"] == env["WORKSTREAM_TS_RUNSC_BUILDER_ID"]
+            assert execution["offline_cache_digest"] == env["WORKSTREAM_TS_RUNSC_CACHE_DIGEST"]
+            assert execution["base_image_digests"] == [ALPINE_DIGEST]
             assert execution["build"]["outcome"] == "succeeded"
+            assert execution["build"]["candidate_image_digest"].startswith("sha256:")
             outcomes = {item["slot_id"]: item["outcome"] for item in execution["steps"]}
             assert len(outcomes) == 17
             assert outcomes["starter_verification"] == "exit_nonzero"
