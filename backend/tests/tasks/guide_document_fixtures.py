@@ -11,6 +11,7 @@ from sqlalchemy import select
 
 from app.core.config import get_settings
 from app.db import session as db_session
+from app.modules.actors.api import ServiceIdentity
 from app.modules.artifacts.models import (
     ArtifactPutAttempt,
     ArtifactOperationReceipt,
@@ -172,16 +173,20 @@ async def guide_world(task_client, monkeypatch):
         await grant_fixture_admin_role(
             session, manager.actor_profile_id, role="access_administrator", scope="system"
         )
-    provision = await task_client.post(
-        "/api/v1/service-actors",
-        headers=auth_headers(),
-        json={
-            "service_identity": "workstream.artifact.put_resolver",
-            "subject": "pilot13-put-resolver",
-            "reason": "Real original read integration proof",
-        },
-    )
-    assert provision.status_code == 201, provision.text
+    for identity, subject in (
+        (ServiceIdentity.ARTIFACT_PUT_RESOLVER, "pilot13-put-resolver"),
+        (ServiceIdentity.ARTIFACT_GUIDE_READER, "pilot13-guide-reader"),
+    ):
+        provision = await task_client.post(
+            "/api/v1/service-actors",
+            headers=auth_headers(),
+            json={
+                "service_identity": identity.value,
+                "subject": subject,
+                "reason": "Real original read integration proof",
+            },
+        )
+        assert provision.status_code == 201, provision.text
     project = await task_client.post(
         "/api/v1/projects",
         headers=auth_headers(),
