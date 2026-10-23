@@ -4,6 +4,7 @@ Storage/provider calls are scripted. Request, execution, access custody and repo
 projection use their real owners, so policy tests cannot bypass those gates.
 """
 
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from uuid import UUID, uuid4
 import hashlib
@@ -294,6 +295,20 @@ async def create_compiled_report_fixture(
         status, findings = diagnostic.status, diagnostic.findings
     manifest = await create_committed_document_fixture(source_snapshot_id)
     configuration = runtime_configuration()
+    execution_errors = []
+    selected_document_access_factory = document_access_factory
+    if document_access_factory is not None:
+
+        @asynccontextmanager
+        async def observed_document_access(*args):
+            try:
+                async with document_access_factory(*args) as grant:
+                    yield grant
+            except Exception as exc:
+                execution_errors.append(("document_access", exc))
+                raise
+
+        selected_document_access_factory = observed_document_access
     async with sessions() as session, session.begin():
         capabilities = await external_checker_capability_projection(session)
     async with sessions() as session:
@@ -324,7 +339,11 @@ async def create_compiled_report_fixture(
             pass
 
         async def compile_project_guide(self, context, capabilities):
-            await record_scripted_document_access(context, capabilities)
+            try:
+                await record_scripted_document_access(context, capabilities)
+            except Exception as exc:
+                execution_errors.append(("runtime_compile", exc))
+                raise
             refs = tuple(
                 GuideEvidenceRef(
                     source_item_id=item.source_item_id,
@@ -383,7 +402,7 @@ async def create_compiled_report_fixture(
         sessions,
         material_factory=guide_document_manifest_port,
         document_tools_factory=document_tools(
-            sessions, document_access_factory=document_access_factory
+            sessions, document_access_factory=selected_document_access_factory
         ),
         checker_capabilities=capabilities,
         authorization_context=guide_compilation_execution_authority,
@@ -392,9 +411,20 @@ async def create_compiled_report_fixture(
     receipt = await execution.execute(
         ProjectGuideCompilationExecutionCommand(attempt_id=request.attempt_id)
     )
+    safe_errors = []
+    for phase, exc in execution_errors:
+        parts = [phase, type(exc).__name__]
+        code = getattr(exc, "code", None)
+        if (
+            isinstance(code, str)
+            and len(code) <= 80
+            and code.replace("_", "").isalnum()
+        ):
+            parts.append(code)
+        safe_errors.append(":".join(parts))
     assert (
         receipt.classification is ProjectGuideCompilationExecutionClassification.PERSISTED
-    ), receipt.classification.value
+    ), (receipt.classification.value, tuple(safe_errors))
     projections = GuideCompilationProjectionService(
         sessions,
         material_factory=guide_document_manifest_port,
