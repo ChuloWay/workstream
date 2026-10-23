@@ -110,7 +110,8 @@ claims. Revision checks additionally require an owner-supplied typed first-versu
 revision context, exact prior material identity and feedback. Missing owner ports
 remain explicit infrastructure gaps; project code does not read product tables.
 
-Prohibited changes are migrations, project-named rules in shared Rust, task-name
+Prohibited changes are migrations outside the two owner additions explicitly
+listed below, project-named rules in shared Rust, task-name
 allowlists, restoration of the removed private continuation, guide/policy
 approval or activation, task import, lifecycle outcome rehearsal, live model
 calls, image publication or registration, deployment, and work in the separate
@@ -323,7 +324,6 @@ This extension owns `backend/app/modules/checkers/models.py`,
 `backend/alembic/env.py`, `backend/tests/test_alembic.py`,
 `backend/scripts/schema_baseline_manifest.py`,
 `backend/tests/conftest.py` (expected public-schema fingerprint only),
-`backend/alembic/baseline/v01_baseline_manifest.json`,
 `backend/tests/checkers/external/test_revision_materialization.py` and affected
 schema fingerprints. Migration 0062 follows PILOT-05's shared model owner 0061;
 integrate the committed dependency before migration qualification. No competing
@@ -423,3 +423,16 @@ Trial storage integration and private transport qualification own
 `backend/tests/checkers/external/test_model_proxy_transport.py`. Prove rollback
 of the first content pin, exact replay/read, private protocol routing and
 separate model/trial frame ceilings without a live provider call.
+
+The final provider-free process composition proof owns the new focused test
+`backend/tests/checkers/external/test_trial_model_rust_composition.py`. It may
+reuse the existing PostgreSQL/MinIO material fixture, production private proxy
+transport, real CHECKERS/ART trial handler, real model grant/ledger owner, and a
+controlled provider from the existing model-call tests. It launches the built
+Rust checker service as the process under test and must exercise one generic
+trial publication followed by receipt-resolved model assessment, plus exact
+retained-byte replay without a second trial or paid effect. It introduces no
+live provider call, deployment setting, image publication, policy activation,
+or alternative durable acknowledgment. Real runsc engine qualification remains
+the separately recorded PILOT-00 harness proof until the same process journey
+is executed with its existing pinned cache and runtime identities.
