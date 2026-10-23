@@ -22,6 +22,7 @@ from app.modules.model_usage.api import (
     PreparedSetupModelUsageEffect,
     SetupModelDispatchReservation,
     SetupModelEffectAuthorityFacts,
+    SetupModelOwnerProfile,
     SetupModelUsageAuthorityPort,
     SetupModelUsageEvidencePort,
     SetupModelUsageOwnerPort,
@@ -127,14 +128,32 @@ class SetupModelUsageService:
         self._evidence = evidence
         self._owner = owner
 
-    async def _profile(self, key: SetupModelUsageSlotKey):
+    async def _profile(
+        self,
+        key: SetupModelUsageSlotKey,
+        owner_profile: SetupModelOwnerProfile | None = None,
+    ):
         row = await self._repo.profile_exact(
             key.profile_id, key.profile_version, key.profile_digest
         )
         if row is None:
             raise ModelCallUnavailable("model_profile_unavailable")
         profile = stored_model_profile(row)
-        if profile.spec.project_id != key.project_id:
+        if (
+            profile.spec.project_id != key.project_id
+            or (
+                owner_profile is not None
+                and (
+                    profile.selector != owner_profile.selector
+                    or (profile.spec.provider, profile.spec.api, profile.spec.model_snapshot)
+                    != (
+                        owner_profile.provider,
+                        owner_profile.api,
+                        owner_profile.model_snapshot,
+                    )
+                )
+            )
+        ):
             raise ModelCallUnavailable("model_profile_unavailable")
         return profile
 
@@ -147,8 +166,8 @@ class SetupModelUsageService:
         facts = {"slot": key.model_dump(mode="json"), "request_sha256": request_sha256}
         authority = await self._authority.authorize_setup_prepare(key, request_sha256)
         _require_authority("setup_prepare", facts, authority)
-        await self._owner.require_setup_current(key)
-        profile = await self._profile(key)
+        owner_profile = await self._owner.require_setup_current(key)
+        profile = await self._profile(key, owner_profile)
         if key.call_index >= profile.spec.maximum_calls:
             raise ModelCallConflict("setup_model_call_index_conflict")
 
@@ -201,9 +220,9 @@ class SetupModelUsageService:
         authority = await self._authority.authorize_setup_dispatch(prepared, request_evidence)
         _require_authority("setup_dispatch", facts, authority)
         key = prepared.slot_key
-        await self._owner.require_setup_current(key)
+        owner_profile = await self._owner.require_setup_current(key)
         await self._evidence.require_setup_request(prepared, request_evidence)
-        profile = await self._profile(key)
+        profile = await self._profile(key, owner_profile)
         if (
             request_evidence.content_sha256 != prepared.request_sha256
             or request_evidence.byte_count > profile.spec.maximum_request_bytes

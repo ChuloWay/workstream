@@ -1,20 +1,20 @@
 """Deny-by-default request-scoped authorization kernel."""
-
 from __future__ import annotations
 from app.modules.authorization.domain.guide_proposals import GUIDE_PROPOSAL_RESOURCE_BY_ACTION
 from app.modules.authorization.catalogue import POST_POLICY_ACTION_IDS
 from app.modules.authorization.domain.post_policy import PostPolicyResourceContext
-
 from collections.abc import Awaitable, Callable
 from types import MappingProxyType
 from typing import NoReturn
 from uuid import UUID
 from app.core.identifiers import new_record_id
-
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
-
-from app.modules.audit.schemas import ActorReferenceKind, AuthorityAuditEventInput, AuthorityEventType
+from app.modules.audit.schemas import (
+    ActorReferenceKind,
+    AuthorityAuditEventInput,
+    AuthorityEventType,
+)
 from app.modules.audit.service import AuditService
 from app.modules.authorization.catalogue import (
     ACTION_BY_ID,
@@ -24,7 +24,16 @@ from app.modules.authorization.catalogue import (
     PermissionId,
 )
 from app.modules.authorization.domain.guide_manager_resources import guide_manager_resource_denial
-from app.modules.authorization.domain import adapter_bindings, artifact_operator, model_usage as checker_models, checker_registry, checker_retry, contribution_policies, guide_compilation as compilation, post_submit_deliveries
+from app.modules.authorization.domain import (
+    adapter_bindings,
+    artifact_operator,
+    model_usage as checker_models,
+    checker_registry,
+    checker_retry,
+    contribution_policies,
+    guide_compilation as compilation,
+    post_submit_deliveries,
+)
 from app.modules.authorization.domain.action_groups import (
     GUIDE_BOUND_PROJECT_MANAGER_ACTIONS as _GUIDE_BOUND_PROJECT_MANAGER_ACTIONS,
     CONTEXT_DIGEST_ACTIONS,
@@ -35,12 +44,14 @@ from app.modules.authorization.domain.audit import CONTEXT_DIGEST_RESOURCE_TYPES
 from app.modules.authorization.domain.audit_targets import project_authority_audit_target
 from app.modules.authorization.domain.lifecycle import ReviewLifecycleActivationContract
 from app.modules.authorization.domain.prepared_service import (
-    fixed_service_scope_project, fixed_service_resource_matches,
+    fixed_service_scope_project,
+    fixed_service_resource_matches,
 )
 from app.modules.authorization.policy import ACTIVE_GUIDE_ADMIN_ROLES
 from app.modules.authorization.domain.read_dispatch import READ_ACTIONS, read_denial
 from app.modules.authorization.prepared_admin_authority import (
-    lock_admin_mutation_authority, lock_project_create_authority,
+    lock_admin_mutation_authority,
+    lock_project_create_authority,
     lock_project_manager_authority,
     project_create_prelocked_denial,
 )
@@ -103,83 +114,99 @@ from app.modules.authorization.artifact_project_authority import (
     evaluate_project_authority,
     lock_project_authority,
 )
-
 ContextRevalidator = Callable[
     [
         HumanAuthorizationContext,
-        ActorSelfResourceContext
-        | ActorAuthorizationContextResourceContext
-        | ProjectReadResourceContext,
+        ActorSelfResourceContext | ActorAuthorizationContextResourceContext | ProjectReadResourceContext,
     ],
     Awaitable[HumanAuthorizationContext],
 ]
-
-
 ServiceContextRevalidator = Callable[
     [ServiceAuthorizationContext, ActionId],
     Awaitable[ServiceAuthorizationContext | None],
 ]
-
-_ADMIN_ACTIONS = frozenset(
-    {
-        ActionId.REVIEW_LIFECYCLE_ACTIVATION_MANAGE,
-        ActionId.AUTHORIZATION_PERMISSION_CATALOGUE_READ,
-        ActionId.AUTHORIZATION_ADMIN_ROLE_DEFINITIONS_READ,
-        ActionId.ADMIN_ROLE_GRANT_LIST,
-        ActionId.ACTOR_ADMIN_ROLE_GRANT_HISTORY_READ,
-        ActionId.ADMIN_ROLE_GRANT_ISSUE,
-        ActionId.ADMIN_ROLE_GRANT_REVOKE,
-        ActionId.ADMIN_ROLE_GRANT_BOOTSTRAP,
-        ActionId.ACTOR_SERVICE_PROVISION,
-        ActionId.ACTOR_PROFILE_READ,
-        ActionId.ACTOR_IDENTITY_LINK_READ,
-        ActionId.ACTOR_PROFILE_SUSPEND,
-        ActionId.ACTOR_PROFILE_REACTIVATE,
-        ActionId.ACTOR_PROFILE_DEACTIVATE,
-        ActionId.ACTOR_IDENTITY_LINK_REVOKE,
-        ActionId.ACTOR_IDENTITY_LINK_REACTIVATE,
-        ActionId.PROJECT_ROLE_GRANT_ISSUE,
-        ActionId.PROJECT_ROLE_GRANT_REVOKE,
-        ActionId.PROJECT_CONTRIBUTOR_CANDIDATE_LIST,
-        ActionId.PROJECT_ROLE_GRANT_LIST,
-        ActionId.PROJECT_ROLE_GRANT_READ,
-        ActionId.PROJECT_SETUP_RUN_READ,
-        ActionId.PROJECT_GUIDE_SUFFICIENCY_REPORT_LIST,
-        ActionId.PROJECT_GUIDE_SUFFICIENCY_REPORT_READ,
-        ActionId.PROJECT_SUBMISSION_ARTIFACT_POLICY_LIST,
-        ActionId.PROJECT_SUBMISSION_ARTIFACT_POLICY_READ,
-        ActionId.PROJECT_EFFECTIVE_SUBMISSION_ARTIFACT_POLICY_READ,
-        ActionId.PROJECT_PRE_SUBMIT_CHECKER_POLICY_READ,
-        ActionId.PROJECT_ACTIVE_GUIDE_READ,
-    }
-) | adapter_bindings.ADAPTER_BINDING_READ_ACTIONS | contribution_policies.CONTRIBUTION_POLICY_READ_ACTIONS | checker_registry.CHECKER_REGISTRY_ACTIONS | checker_models.MODEL_ADMIN_ACTIONS | checker_retry.CHECKER_RETRY_ACTIONS | post_submit_deliveries.POST_SUBMIT_DELIVERY_MUTATION_ACTIONS | artifact_operator.ARTIFACT_OPERATOR_ACTIONS
-_SERIALIZED_ADMIN_READS = frozenset(
-    {
-        ActionId.ACTOR_PROFILE_READ,
-        ActionId.ACTOR_IDENTITY_LINK_READ,
-        ActionId.PROJECT_SETUP_RUN_READ,
-        ActionId.PROJECT_GUIDE_SUFFICIENCY_REPORT_LIST,
-        ActionId.PROJECT_GUIDE_SUFFICIENCY_REPORT_READ,
-        ActionId.PROJECT_SUBMISSION_ARTIFACT_POLICY_LIST,
-        ActionId.PROJECT_SUBMISSION_ARTIFACT_POLICY_READ,
-        ActionId.PROJECT_EFFECTIVE_SUBMISSION_ARTIFACT_POLICY_READ,
-        ActionId.PROJECT_PRE_SUBMIT_CHECKER_POLICY_READ,
-        ActionId.PROJECT_ACTIVE_GUIDE_READ,
-    }
-) | adapter_bindings.ADAPTER_BINDING_READ_ACTIONS | contribution_policies.CONTRIBUTION_POLICY_READ_ACTIONS | checker_registry.CHECKER_REGISTRY_READ_ACTIONS | artifact_operator.ARTIFACT_OPERATOR_READ_ACTIONS
-_ADMIN_MUTATIONS = frozenset(
-    {
-        ActionId.REVIEW_LIFECYCLE_ACTIVATION_MANAGE,
-        ActionId.ADMIN_ROLE_GRANT_REVOKE,
-        ActionId.ACTOR_SERVICE_PROVISION,
-        ActionId.ACTOR_PROFILE_SUSPEND,
-        ActionId.ACTOR_PROFILE_REACTIVATE,
-        ActionId.ACTOR_PROFILE_DEACTIVATE,
-        ActionId.ACTOR_IDENTITY_LINK_REVOKE,
-        ActionId.ACTOR_IDENTITY_LINK_REACTIVATE,
-    }
-) | PROJECT_SCOPED_ADMIN_MUTATIONS | checker_registry.CHECKER_REGISTRY_MUTATION_ACTIONS | checker_models.MODEL_ADMIN_ACTIONS | checker_retry.CHECKER_RETRY_ACTIONS | post_submit_deliveries.POST_SUBMIT_DELIVERY_MUTATION_ACTIONS | {ActionId.ARTIFACT_VERIFICATION_JOB_RETRY}
-
+_ADMIN_ACTIONS = (
+    frozenset(
+        {
+            ActionId.REVIEW_LIFECYCLE_ACTIVATION_MANAGE,
+            ActionId.AUTHORIZATION_PERMISSION_CATALOGUE_READ,
+            ActionId.AUTHORIZATION_ADMIN_ROLE_DEFINITIONS_READ,
+            ActionId.ADMIN_ROLE_GRANT_LIST,
+            ActionId.ACTOR_ADMIN_ROLE_GRANT_HISTORY_READ,
+            ActionId.ADMIN_ROLE_GRANT_ISSUE,
+            ActionId.ADMIN_ROLE_GRANT_REVOKE,
+            ActionId.ADMIN_ROLE_GRANT_BOOTSTRAP,
+            ActionId.ACTOR_SERVICE_PROVISION,
+            ActionId.ACTOR_PROFILE_READ,
+            ActionId.ACTOR_IDENTITY_LINK_READ,
+            ActionId.ACTOR_PROFILE_SUSPEND,
+            ActionId.ACTOR_PROFILE_REACTIVATE,
+            ActionId.ACTOR_PROFILE_DEACTIVATE,
+            ActionId.ACTOR_IDENTITY_LINK_REVOKE,
+            ActionId.ACTOR_IDENTITY_LINK_REACTIVATE,
+            ActionId.PROJECT_ROLE_GRANT_ISSUE,
+            ActionId.PROJECT_ROLE_GRANT_REVOKE,
+            ActionId.PROJECT_CONTRIBUTOR_CANDIDATE_LIST,
+            ActionId.PROJECT_ROLE_GRANT_LIST,
+            ActionId.PROJECT_ROLE_GRANT_READ,
+            ActionId.PROJECT_SETUP_RUN_READ,
+            ActionId.PROJECT_GUIDE_SUFFICIENCY_REPORT_LIST,
+            ActionId.PROJECT_GUIDE_SUFFICIENCY_REPORT_READ,
+            ActionId.PROJECT_SUBMISSION_ARTIFACT_POLICY_LIST,
+            ActionId.PROJECT_SUBMISSION_ARTIFACT_POLICY_READ,
+            ActionId.PROJECT_EFFECTIVE_SUBMISSION_ARTIFACT_POLICY_READ,
+            ActionId.PROJECT_PRE_SUBMIT_CHECKER_POLICY_READ,
+            ActionId.PROJECT_ACTIVE_GUIDE_READ,
+        }
+    )
+    | adapter_bindings.ADAPTER_BINDING_READ_ACTIONS
+    | contribution_policies.CONTRIBUTION_POLICY_READ_ACTIONS
+    | checker_registry.CHECKER_REGISTRY_ACTIONS
+    | checker_models.MODEL_ADMIN_ACTIONS
+    | checker_retry.CHECKER_RETRY_ACTIONS
+    | post_submit_deliveries.POST_SUBMIT_DELIVERY_MUTATION_ACTIONS
+    | artifact_operator.ARTIFACT_OPERATOR_ACTIONS
+)
+_SERIALIZED_ADMIN_READS = (
+    frozenset(
+        {
+            ActionId.ACTOR_PROFILE_READ,
+            ActionId.ACTOR_IDENTITY_LINK_READ,
+            ActionId.PROJECT_SETUP_RUN_READ,
+            ActionId.PROJECT_GUIDE_SUFFICIENCY_REPORT_LIST,
+            ActionId.PROJECT_GUIDE_SUFFICIENCY_REPORT_READ,
+            ActionId.PROJECT_SUBMISSION_ARTIFACT_POLICY_LIST,
+            ActionId.PROJECT_SUBMISSION_ARTIFACT_POLICY_READ,
+            ActionId.PROJECT_EFFECTIVE_SUBMISSION_ARTIFACT_POLICY_READ,
+            ActionId.PROJECT_PRE_SUBMIT_CHECKER_POLICY_READ,
+            ActionId.PROJECT_ACTIVE_GUIDE_READ,
+        }
+    )
+    | adapter_bindings.ADAPTER_BINDING_READ_ACTIONS
+    | contribution_policies.CONTRIBUTION_POLICY_READ_ACTIONS
+    | checker_registry.CHECKER_REGISTRY_READ_ACTIONS
+    | artifact_operator.ARTIFACT_OPERATOR_READ_ACTIONS
+)
+_ADMIN_MUTATIONS = (
+    frozenset(
+        {
+            ActionId.REVIEW_LIFECYCLE_ACTIVATION_MANAGE,
+            ActionId.ADMIN_ROLE_GRANT_REVOKE,
+            ActionId.ACTOR_SERVICE_PROVISION,
+            ActionId.ACTOR_PROFILE_SUSPEND,
+            ActionId.ACTOR_PROFILE_REACTIVATE,
+            ActionId.ACTOR_PROFILE_DEACTIVATE,
+            ActionId.ACTOR_IDENTITY_LINK_REVOKE,
+            ActionId.ACTOR_IDENTITY_LINK_REACTIVATE,
+        }
+    )
+    | PROJECT_SCOPED_ADMIN_MUTATIONS
+    | checker_registry.CHECKER_REGISTRY_MUTATION_ACTIONS
+    | checker_models.MODEL_ADMIN_ACTIONS
+    | checker_retry.CHECKER_RETRY_ACTIONS
+    | post_submit_deliveries.POST_SUBMIT_DELIVERY_MUTATION_ACTIONS
+    | {ActionId.ARTIFACT_VERIFICATION_JOB_RETRY}
+)
 def _prepared_admin_role_locker(action_id):
     """Select the only supported prepared admin-role authority locker."""
     if action_id in _ADMIN_MUTATIONS:
@@ -188,9 +215,7 @@ def _prepared_admin_role_locker(action_id):
         return lock_project_manager_authority
     raise ValueError("unsupported prepared admin-role action")
 
-async def prelock_serialized_admin_read_actor(
-    authorization: AuthorizationService, action_id: ActionId
-) -> None:
+async def prelock_serialized_admin_read_actor(authorization: AuthorizationService, action_id: ActionId) -> None:
     """Order caller custody before product rows; final require still decides access."""
     if action_id not in _SERIALIZED_ADMIN_READS:
         raise ValueError("unsupported serialized administrative read")
@@ -202,8 +227,14 @@ async def prelock_serialized_admin_read_actor(
 
 _ARTIFACT_INTERNAL_RESOURCES = {
     ActionId.ARTIFACT_GUIDE_SOURCE_READ: ("guide_source_read", GuideSourceReadResourceContext),
-    ActionId.ARTIFACT_PRE_SUBMIT_CHECKER_INPUT_MATERIALIZE: ("pre_submit_checker_input", PreSubmitCheckerInputResourceContext),
-    ActionId.ARTIFACT_SUBMISSION_BINDING_CREATE: ("submission_binding", SubmissionBindingResourceContext),
+    ActionId.ARTIFACT_PRE_SUBMIT_CHECKER_INPUT_MATERIALIZE: (
+        "pre_submit_checker_input",
+        PreSubmitCheckerInputResourceContext,
+    ),
+    ActionId.ARTIFACT_SUBMISSION_BINDING_CREATE: (
+        "submission_binding",
+        SubmissionBindingResourceContext,
+    ),
     ActionId.ARTIFACT_PUT_ATTEMPT_RESOLVE: (
         "artifact_put_attempt",
         ArtifactPutAttemptResourceContext,
@@ -235,9 +266,7 @@ _ADMIN_EXPECTED_RESOURCES = MappingProxyType(
         ActionId.ACTOR_PROFILE_DEACTIVATE: ActorProfileLifecycleResourceContext,
         ActionId.ACTOR_IDENTITY_LINK_REVOKE: ActorIdentityLinkLifecycleResourceContext,
         ActionId.ACTOR_IDENTITY_LINK_REACTIVATE: ActorIdentityLinkLifecycleResourceContext,
-        ActionId.PROJECT_CONTRIBUTOR_CANDIDATE_LIST: (
-            ProjectContributorCandidateCollectionResourceContext
-        ),
+        ActionId.PROJECT_CONTRIBUTOR_CANDIDATE_LIST: (ProjectContributorCandidateCollectionResourceContext),
         ActionId.PROJECT_ROLE_GRANT_LIST: ProjectRoleGrantCollectionResourceContext,
         ActionId.PROJECT_ROLE_GRANT_READ: ProjectRoleGrantReadResourceContext,
         ActionId.PROJECT_ROLE_GRANT_ISSUE: ProjectRoleGrantIssueResourceContext,
@@ -251,14 +280,17 @@ _ADMIN_EXPECTED_RESOURCES = MappingProxyType(
         ActionId.PROJECT_PRE_SUBMIT_CHECKER_POLICY_READ: ProjectPolicyReadResourceContext,
         ActionId.PROJECT_ACTIVE_GUIDE_READ: ProjectActiveGuideReadResourceContext,
         **adapter_bindings.ADAPTER_BINDING_RESOURCE_BY_ACTION,
-        **contribution_policies.CONTRIBUTION_POLICY_RESOURCE_BY_ACTION, **checker_registry.CHECKER_REGISTRY_RESOURCE_BY_ACTION,
+        **contribution_policies.CONTRIBUTION_POLICY_RESOURCE_BY_ACTION,
+        **checker_registry.CHECKER_REGISTRY_RESOURCE_BY_ACTION,
         **checker_models.MODEL_ADMIN_RESOURCE_BY_ACTION,
-        ActionId.OPERATIONS_CHECKER_RETRY: checker_retry.CheckerRetryResourceContext, **post_submit_deliveries.POST_SUBMIT_DELIVERY_RESOURCE_BY_ACTION,
+        ActionId.OPERATIONS_CHECKER_RETRY: checker_retry.CheckerRetryResourceContext,
+        **post_submit_deliveries.POST_SUBMIT_DELIVERY_RESOURCE_BY_ACTION,
         **artifact_operator.ARTIFACT_OPERATOR_RESOURCE_BY_ACTION,
         **PROJECT_MUTATION_RESOURCE_BY_ACTION,
         **GUIDE_PROPOSAL_RESOURCE_BY_ACTION,
     }
 )
+
 def project_action_available_for_status(action_id: ActionId, project_status: str) -> bool:
     """Apply project-only lifecycle guards shared by decisions and projections."""
     if action_id in {
@@ -365,12 +397,7 @@ class AuthorizationService:
         """Issue one opaque kernel token only to an exactly composed PREP service."""
         from app.modules.authorization.prepared import PreparedAuthorizationService
 
-        if (
-            type(owner) is not PreparedAuthorizationService
-            or session is not self._session
-            or repository is not self._admin
-            or context != self._context
-        ):
+        if type(owner) is not PreparedAuthorizationService or session is not self._session or repository is not self._admin or context != self._context:
             raise TypeError("invalid prepared authorization composition")
         token = object()
         self._prepared_consumers[token] = owner
@@ -408,9 +435,7 @@ class AuthorizationService:
                 raise PreparedAuthorizationUnsupported(AuthorizationDenialCode.ACTION_UNAVAILABLE)
             expected_resource = _ARTIFACT_INTERNAL_RESOURCES.get(action_id)
             project_id = fixed_service_scope_project(action_id, scope, expected_resource)
-            locked = await self._admin.lock_request_actor(
-                context.identity_link_id, context.actor_profile_id
-            )
+            locked = await self._admin.lock_request_actor(context.identity_link_id, context.actor_profile_id)
             context = self._locked_service_context(locked, context)
             lifecycle = self._lifecycle_denial(context)
             if lifecycle is not None:
@@ -434,40 +459,39 @@ class AuthorizationService:
         if action.availability is not ActionAvailability.ACTIVE:
             raise PreparedAuthorizationUnsupported(AuthorizationDenialCode.ACTION_UNAVAILABLE)
         if action_id is ActionId.ACTOR_PROFILE_UPDATE_SELF:
-            if (
-                scope.kind is not PreparedAuthorityScopeKind.ACTOR_SELF
-                or scope.actor_profile_id != context.actor_profile_id
-            ):
-                raise PreparedAuthorizationUnsupported(
-                    AuthorizationDenialCode.RESOURCE_GUARD_DENIED
-                )
-            locked = await self._admin.lock_actor_self(
-                context.actor_profile_id, context.identity_link_id
-            )
+            if scope.kind is not PreparedAuthorityScopeKind.ACTOR_SELF or scope.actor_profile_id != context.actor_profile_id:
+                raise PreparedAuthorizationUnsupported(AuthorizationDenialCode.RESOURCE_GUARD_DENIED)
+            locked = await self._admin.lock_actor_self(context.actor_profile_id, context.identity_link_id)
             context = self._locked_human_context(locked, context)
         elif action_id in _ADMIN_MUTATIONS | _GUIDE_BOUND_PROJECT_MANAGER_ACTIONS:
             context, grant = await _prepared_admin_role_locker(action_id)(
-                self._admin, context, scope, action_id, action.permission_id, self._locked_human_context,
+                self._admin,
+                context,
+                scope,
+                action_id,
+                action.permission_id,
+                self._locked_human_context,
             )
         elif action_id is ActionId.PROJECT_CREATE:
             context, grant = await lock_project_create_authority(
-                self._admin, context, scope, self._locked_human_context,
+                self._admin,
+                context,
+                scope,
+                self._locked_human_context,
             )
         elif action_id in PROJECT_AUTHORITY_ACTIONS:
             context, grant = await lock_project_authority(
-                self._admin, context, scope, action, self._locked_human_context,
+                self._admin,
+                context,
+                scope,
+                action,
+                self._locked_human_context,
             )
         else:
-            raise PreparedAuthorizationUnsupported(
-                AuthorizationDenialCode.PERMISSION_NOT_GRANTED
-                if action_id in _ARTIFACT_INTERNAL_RESOURCES
-                else AuthorizationDenialCode.ACTION_UNAVAILABLE
-            )
+            raise PreparedAuthorizationUnsupported(AuthorizationDenialCode.PERMISSION_NOT_GRANTED if action_id in _ARTIFACT_INTERNAL_RESOURCES else AuthorizationDenialCode.ACTION_UNAVAILABLE)
         lifecycle = self._lifecycle_denial(context)
         if lifecycle is not None or context.actor_kind is not ActorKind.HUMAN:
-            raise PreparedAuthorizationUnsupported(
-                lifecycle or AuthorizationDenialCode.PERMISSION_NOT_GRANTED
-            )
+            raise PreparedAuthorizationUnsupported(lifecycle or AuthorizationDenialCode.PERMISSION_NOT_GRANTED)
         authority = _PrelockedAuthority(
             _PRELOCKED_CONSTRUCTOR_TOKEN,
             issuer=self,
@@ -476,11 +500,7 @@ class AuthorizationService:
             action_id=action_id,
             scope_project_id=scope.project_id,
             matched_grant_id=UUID(str(grant.id)) if grant is not None else None,
-            matched_grant_scope_project_id=(
-                UUID(str(grant.scope_project_id))
-                if grant is not None and getattr(grant, "scope_project_id", None) is not None
-                else None
-            ),
+            matched_grant_scope_project_id=(UUID(str(grant.scope_project_id)) if grant is not None and getattr(grant, "scope_project_id", None) is not None else None),
             matched_grant_status=grant.status if grant is not None else None,
             permission_id=action.permission_id,
         )
@@ -492,11 +512,7 @@ class AuthorizationService:
         if locked is None:
             raise PreparedAuthorizationUnsupported(AuthorizationDenialCode.IDENTITY_LINK_REVOKED)
         link, profile = locked
-        if (
-            profile.id != str(original.actor_profile_id)
-            or link.id != str(original.identity_link_id)
-            or link.actor_profile_id != profile.id
-        ):
+        if profile.id != str(original.actor_profile_id) or link.id != str(original.identity_link_id) or link.actor_profile_id != profile.id:
             raise PreparedAuthorizationUnsupported(AuthorizationDenialCode.PERMISSION_NOT_GRANTED)
         return HumanAuthorizationContext(
             actor_profile_id=UUID(profile.id),
@@ -513,13 +529,7 @@ class AuthorizationService:
         if locked is None:
             raise PreparedAuthorizationUnsupported(AuthorizationDenialCode.IDENTITY_LINK_REVOKED)
         link, profile = locked
-        if (
-            profile.id != str(original.actor_profile_id)
-            or link.id != str(original.identity_link_id)
-            or link.actor_profile_id != profile.id
-            or profile.actor_kind != ActorKind.SERVICE.value
-            or profile.service_identity != original.service_identity.value
-        ):
+        if profile.id != str(original.actor_profile_id) or link.id != str(original.identity_link_id) or link.actor_profile_id != profile.id or profile.actor_kind != ActorKind.SERVICE.value or profile.service_identity != original.service_identity.value:
             raise PreparedAuthorizationUnsupported(AuthorizationDenialCode.PERMISSION_NOT_GRANTED)
         return ServiceAuthorizationContext(
             actor_profile_id=UUID(profile.id),
@@ -590,16 +600,24 @@ class AuthorizationService:
             if denial is None:
                 matched_kind = MatchedAuthorityKind.ADMIN_ROLE_GRANT
         elif action is not None and action.action_id in READ_ACTIONS:
-            denial, context, matched_kind, matched_grant_id, matched_project_id, revalidated = await read_denial(
-                action, resource_context, context, self._admin,
-                self._locked_human_context, self._lifecycle_denial, self._revalidate_actor_self,
+            (
+                denial,
+                context,
+                matched_kind,
+                matched_grant_id,
+                matched_project_id,
+                revalidated,
+            ) = await read_denial(
+                action,
+                resource_context,
+                context,
+                self._admin,
+                self._locked_human_context,
+                self._lifecycle_denial,
+                self._revalidate_actor_self,
             )
         elif action is not None and action.action_id is ActionId.ACTOR_AUTHORIZATION_CONTEXT_READ:
-            if (
-                isinstance(context, HumanAuthorizationContext)
-                and isinstance(resource_context, ActorAuthorizationContextResourceContext)
-                and self._revalidate_actor_self is not None
-            ):
+            if isinstance(context, HumanAuthorizationContext) and isinstance(resource_context, ActorAuthorizationContextResourceContext) and self._revalidate_actor_self is not None:
                 context = await self._revalidate_actor_self(context, resource_context)
                 revalidated = True
             (
@@ -607,9 +625,7 @@ class AuthorizationService:
                 matched_kind,
                 matched_grant_id,
                 matched_project_id,
-            ) = await self._authorization_context_denial(
-                action, resource_context, context, revalidated
-            )
+            ) = await self._authorization_context_denial(action, resource_context, context, revalidated)
         else:
             if (
                 action is not None
@@ -650,12 +666,7 @@ class AuthorizationService:
         UUID | None,
     ]:
         """Authorize a caller-owned context projection for one exact project."""
-        if (
-            not isinstance(context, HumanAuthorizationContext)
-            or not isinstance(resource, ActorAuthorizationContextResourceContext)
-            or resource.resource_id != context.actor_profile_id
-            or not revalidated
-        ):
+        if not isinstance(context, HumanAuthorizationContext) or not isinstance(resource, ActorAuthorizationContextResourceContext) or resource.resource_id != context.actor_profile_id or not revalidated:
             return AuthorizationDenialCode.RESOURCE_GUARD_DENIED, None, None, None
         if action.availability is not ActionAvailability.ACTIVE:
             return AuthorizationDenialCode.ACTION_UNAVAILABLE, None, None, None
@@ -686,13 +697,9 @@ class AuthorizationService:
             for_update=True,
         )
         if project_grant is None:
-            out_of_scope = await self._admin.has_effective_permission_any_scope(
-                context.actor_profile_id, PermissionId.PROJECT_READ
-            ) or await self._admin.has_active_project_role_any_project(context.actor_profile_id)
+            out_of_scope = await self._admin.has_effective_permission_any_scope(context.actor_profile_id, PermissionId.PROJECT_READ) or await self._admin.has_active_project_role_any_project(context.actor_profile_id)
             return (
-                AuthorizationDenialCode.SCOPE_NOT_AUTHORIZED
-                if out_of_scope
-                else AuthorizationDenialCode.PERMISSION_NOT_GRANTED,
+                AuthorizationDenialCode.SCOPE_NOT_AUTHORIZED if out_of_scope else AuthorizationDenialCode.PERMISSION_NOT_GRANTED,
                 None,
                 None,
                 None,
@@ -714,15 +721,7 @@ class AuthorizationService:
         """Evaluate final facts using exact authority already locked by AUTH."""
         self._validate_prepared_consumer(consumer_token)
         transaction = self._session.sync_session.get_transaction()
-        if (
-            type(authority) is not _PrelockedAuthority
-            or authority not in self._sealed_prelocked
-            or authority.issuer is not self
-            or transaction is None
-            or not transaction.is_active
-            or transaction is not authority.transaction
-            or self._session.in_nested_transaction()
-        ):
+        if type(authority) is not _PrelockedAuthority or authority not in self._sealed_prelocked or authority.issuer is not self or transaction is None or not transaction.is_active or transaction is not authority.transaction or self._session.in_nested_transaction():
             raise TypeError("invalid prelocked authority")
         self._sealed_prelocked.remove(authority)
         self._pending_denial = None
@@ -730,8 +729,7 @@ class AuthorizationService:
         action = ACTION_BY_ID.get(action_id) if isinstance(action_id, ActionId) else None
         context = authority.context
         denial: AuthorizationDenialCode | None
-        matched_kind = None
-        matched_grant_id = None
+        matched_kind, matched_grant_id = None, None
         matched_project_id = None
         if action is None or authority.action_id is not action_id:
             denial = AuthorizationDenialCode.UNKNOWN_ACTION
@@ -745,7 +743,12 @@ class AuthorizationService:
             if denial is None and action_id not in SERVICE_ACTIONS_BY_IDENTITY.get(context.service_identity, ()):
                 denial = AuthorizationDenialCode.PERMISSION_NOT_GRANTED
             if denial is None and not fixed_service_resource_matches(
-                action_id, resource_context, authority.scope_project_id, authority.artifact_resource_type, authority.artifact_resource_id, expected_resource,
+                action_id,
+                resource_context,
+                authority.scope_project_id,
+                authority.artifact_resource_type,
+                authority.artifact_resource_id,
+                expected_resource,
             ):
                 denial = AuthorizationDenialCode.RESOURCE_GUARD_DENIED
             if denial is None:
@@ -763,9 +766,7 @@ class AuthorizationService:
             final_scope = self._resource_project_id(resource_context)
             if denial is None and final_scope != authority.scope_project_id:
                 denial = AuthorizationDenialCode.SCOPE_NOT_AUTHORIZED
-            if denial is None and (
-                authority.matched_grant_id is None or authority.matched_grant_status != "active"
-            ):
+            if denial is None and (authority.matched_grant_id is None or authority.matched_grant_status != "active"):
                 denial = AuthorizationDenialCode.PERMISSION_NOT_GRANTED
             if denial is None:
                 denial = await self._admin_guard(action_id, resource_context, context)
@@ -779,9 +780,7 @@ class AuthorizationService:
                 denial = AuthorizationDenialCode.ACTION_UNAVAILABLE
             if denial is None:
                 denial = guide_manager_resource_denial(action_id, resource_context, authority.scope_project_id)
-            if denial is None and (
-                authority.matched_grant_id is None or authority.matched_grant_status != "active"
-            ):
+            if denial is None and (authority.matched_grant_id is None or authority.matched_grant_status != "active"):
                 denial = AuthorizationDenialCode.PERMISSION_NOT_GRANTED
             if denial is None:
                 matched_kind = MatchedAuthorityKind.ADMIN_ROLE_GRANT
@@ -789,14 +788,21 @@ class AuthorizationService:
                 matched_project_id = authority.matched_grant_scope_project_id
         elif action_id is ActionId.PROJECT_CREATE:
             denial = project_create_prelocked_denial(
-                action, resource_context, authority, self._lifecycle_denial(context),
+                action,
+                resource_context,
+                authority,
+                self._lifecycle_denial(context),
             )
             if denial is None:
                 matched_kind = MatchedAuthorityKind.ADMIN_ROLE_GRANT
                 matched_grant_id = authority.matched_grant_id
         elif action_id in PROJECT_AUTHORITY_ACTIONS:
             denial, matched_kind, matched_grant_id, matched_project_id = evaluate_project_authority(
-                action, context, authority, resource_context, self._lifecycle_denial(context),
+                action,
+                context,
+                authority,
+                resource_context,
+                self._lifecycle_denial(context),
             )
         else:
             denial = AuthorizationDenialCode.ACTION_UNAVAILABLE
@@ -882,11 +888,7 @@ class AuthorizationService:
         lifecycle = self._lifecycle_denial(refreshed)
         if lifecycle is not None:
             return lifecycle, refreshed, True
-        if (
-            refreshed.service_identity is not context.service_identity
-            or action.action_id not in SERVICE_ACTIONS_BY_IDENTITY.get(refreshed.service_identity, ())
-            or ACTION_BY_ID[action.action_id].availability is not ActionAvailability.ACTIVE
-        ):
+        if refreshed.service_identity is not context.service_identity or action.action_id not in SERVICE_ACTIONS_BY_IDENTITY.get(refreshed.service_identity, ()) or ACTION_BY_ID[action.action_id].availability is not ActionAvailability.ACTIVE:
             return AuthorizationDenialCode.PERMISSION_NOT_GRANTED, refreshed, True
         return AuthorizationDenialCode.RESOURCE_GUARD_DENIED, refreshed, True
 
@@ -946,10 +948,13 @@ class AuthorizationService:
         if action.action_id is ActionId.PROJECT_ACTIVE_GUIDE_READ:
             grant_filters["allowed_roles"] = ACTIVE_GUIDE_ADMIN_ROLES
         else:
-            grant_filters.update(
-                adapter_bindings.finance_authority_grant_filters(action.action_id)
-            )
-        grant_filters.update({**contribution_policies.policy_finance_grant_filters(action.action_id), **checker_registry.checker_registry_grant_filters(action.action_id)})
+            grant_filters.update(adapter_bindings.finance_authority_grant_filters(action.action_id))
+        grant_filters.update(
+            {
+                **contribution_policies.policy_finance_grant_filters(action.action_id),
+                **checker_registry.checker_registry_grant_filters(action.action_id),
+            }
+        )
         if action.action_id in checker_retry.CHECKER_RETRY_ACTIONS | post_submit_deliveries.POST_SUBMIT_DELIVERY_MUTATION_ACTIONS | checker_models.MODEL_ADMIN_ACTIONS | artifact_operator.ARTIFACT_OPERATOR_ACTIONS:
             grant_filters["allowed_roles"] = (AdminRole.OPERATOR,)
         matched = await self._admin.find_effective_grant(
@@ -991,7 +996,14 @@ class AuthorizationService:
         context: AuthorizationContext,
     ) -> AuthorizationDenialCode | None:
         """Apply target existence and self-authority guards after permission match."""
-        if type(resource) in (artifact_operator.ArtifactOperatorReadResourceContext, artifact_operator.ArtifactOperatorRetryResourceContext) and resource.identity_link_id != context.identity_link_id:
+        if (
+            type(resource)
+            in (
+                artifact_operator.ArtifactOperatorReadResourceContext,
+                artifact_operator.ArtifactOperatorRetryResourceContext,
+            )
+            and resource.identity_link_id != context.identity_link_id
+        ):
             return AuthorizationDenialCode.RESOURCE_GUARD_DENIED
         if isinstance(resource, AdminRoleGrantIssueResourceContext):
             if resource.resource_id == context.actor_profile_id:
@@ -1005,9 +1017,7 @@ class AuthorizationService:
                 return AuthorizationDenialCode.RESOURCE_NOT_FOUND
         elif isinstance(resource, AdminRoleGrantResourceContext):
             grant = await self._admin.get_grant(resource.resource_id, for_update=True)
-            if grant is None or (
-                grant.status != "active" and not resource.existing_idempotency_record
-            ):
+            if grant is None or (grant.status != "active" and not resource.existing_idempotency_record):
                 return AuthorizationDenialCode.GRANT_NOT_FOUND
             if grant.target_actor_profile_id == str(context.actor_profile_id):
                 return AuthorizationDenialCode.SELF_ROLE_REVOKE_FORBIDDEN
@@ -1045,13 +1055,9 @@ class AuthorizationService:
             resource,
             (AdminRoleGrantCollectionResourceContext, ActorAdminRoleGrantHistoryResourceContext),
         ):
-            if resource.scope_project_id is not None and not await self._admin.project_exists(
-                resource.scope_project_id
-            ):
+            if resource.scope_project_id is not None and not await self._admin.project_exists(resource.scope_project_id):
                 return AuthorizationDenialCode.RESOURCE_NOT_FOUND
-            if isinstance(
-                resource, ActorAdminRoleGrantHistoryResourceContext
-            ) and not await self._admin.actor_exists(resource.resource_id):
+            if isinstance(resource, ActorAdminRoleGrantHistoryResourceContext) and not await self._admin.actor_exists(resource.resource_id):
                 return AuthorizationDenialCode.ACTOR_NOT_FOUND
         elif isinstance(resource, ProjectContributorCandidateCollectionResourceContext):
             if not project_action_available_for_status(action_id, resource.project_status):
@@ -1118,12 +1124,7 @@ class AuthorizationService:
 
     async def restage_denial(self, decision: AuthorizationDecision) -> None:
         """Restage the exact pending denial after composition-root rollback."""
-        if (
-            decision.allowed
-            or decision is not self._pending_denial
-            or decision.request_id != self._context.request_id
-            or decision.correlation_id != self._context.correlation_id
-        ):
+        if decision.allowed or decision is not self._pending_denial or decision.request_id != self._context.request_id or decision.correlation_id != self._context.correlation_id:
             raise TypeError("invalid authorization denial evidence")
         resource_context = self._pending_denial_resource_context
         if resource_context is None:
@@ -1208,18 +1209,23 @@ class AuthorizationService:
         audit_resource_id = None
         target_ref_kind = None
         target_ref_id = None
-        audit_project_id = (
-            str(decision.matched_scope_project_id)
-            if decision.matched_scope_project_id is not None
-            else None
-        )
+        audit_project_id = str(decision.matched_scope_project_id) if decision.matched_scope_project_id is not None else None
         if target_is_actor:
             audit_resource_type = "actor_profile"
         elif decision.resource_type in {"actor_identity_link", "admin_role_grant"}:
             audit_resource_type = decision.resource_type
-        if exact_project_target := project_authority_audit_target(resource_context, decision.action_id, matched_scope_project_id=decision.matched_scope_project_id):
-            (target_project_id, audit_resource_type, audit_resource_id,
-             target_ref_kind, target_ref_id) = exact_project_target
+        if exact_project_target := project_authority_audit_target(
+            resource_context,
+            decision.action_id,
+            matched_scope_project_id=decision.matched_scope_project_id,
+        ):
+            (
+                target_project_id,
+                audit_resource_type,
+                audit_resource_id,
+                target_ref_kind,
+                target_ref_id,
+            ) = exact_project_target
             if target_project_id is not None:
                 audit_project_id = target_project_id
         default_resource_id = str(decision.resource_id) if audit_resource_type else None
@@ -1233,26 +1239,16 @@ class AuthorizationService:
             await self._audit.add_authority_event(
                 AuthorityAuditEventInput(
                     event_id=decision.decision_id,
-                    event_type=(
-                        AuthorityEventType.SENSITIVE_AUTHORIZATION_ALLOWED
-                        if decision.allowed
-                        else AuthorityEventType.SENSITIVE_AUTHORIZATION_DENIED
-                    ),
+                    event_type=(AuthorityEventType.SENSITIVE_AUTHORIZATION_ALLOWED if decision.allowed else AuthorityEventType.SENSITIVE_AUTHORIZATION_DENIED),
                     entity_type="authorization_decision",
                     entity_id=str(decision.decision_id),
                     actor_ref_kind=ActorReferenceKind.ACTOR_PROFILE,
                     actor_ref=str(actor_profile_id),
                     request_id=decision.request_id,
                     correlation_id=decision.correlation_id,
-                    target_actor_ref_kind=(
-                        ActorReferenceKind.ACTOR_PROFILE if target_is_actor else None
-                    ),
+                    target_actor_ref_kind=(ActorReferenceKind.ACTOR_PROFILE if target_is_actor else None),
                     target_actor_ref=str(decision.resource_id) if target_is_actor else None,
-                    matched_grant_id=(
-                        str(decision.matched_grant_id)
-                        if decision.matched_grant_id is not None
-                        else None
-                    ),
+                    matched_grant_id=(str(decision.matched_grant_id) if decision.matched_grant_id is not None else None),
                     permission_id=decision.permission_id,
                     action_id=decision.action_id,
                     project_id=audit_project_id,

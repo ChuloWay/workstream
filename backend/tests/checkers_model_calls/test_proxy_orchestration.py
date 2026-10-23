@@ -257,9 +257,10 @@ class Harness:
     async def invoke(self, prompt="Evaluate this work"):
         return await self.proxy().handle(
             ModelProxyRequest(
-                "model_" + uuid4().hex,
-                canonical_json_hash({"request": 1}),
-                prompt,
+                grant_id="model_" + uuid4().hex,
+                request_digest=canonical_json_hash({"request": 1}),
+                call_index=0,
+                prompt=prompt,
             )
         )
 
@@ -276,8 +277,8 @@ async def test_completed_effect_is_reused_across_proxy_restart():
 
 async def test_invalid_prompt_cannot_consume_grant_store_bytes_or_reserve_spend():
     h = Harness()
-    reply = await h.invoke("")
-    assert reply.failure_code == "model_request_invalid"
+    with pytest.raises(ValueError, match="model proxy request is invalid"):
+        await h.invoke("")
     assert h.state == "prepared"
     assert h.request_sha is None
     assert h.events == []

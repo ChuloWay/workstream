@@ -87,12 +87,14 @@ class ModelAwareExternalExecution:
                     authority = await checker_model_service_authorization(
                         session, facts.evaluation_request_id
                     )
-                    effect = await model_invocation_grants(session, authority).completed_effect(
+                    effects = await model_invocation_grants(session, authority).completed_effects(
                         callback.grant_id,
                         request.request_digest,
                         facts,
                     )
-                    await model_call_service(session, authority).attach_completed(facts, effect)
+                    calls = model_call_service(session, authority)
+                    for effect in effects:
+                        await calls.attach_completed(facts, effect)
             return response
         except ModelCallUnavailable as error:
             raise ExternalServiceUnavailableError(self.identity) from error

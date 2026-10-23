@@ -390,6 +390,10 @@ class SetupModelUsageEnvelope(Base):
             "profile_digest",
             name="setup_model_usage_envelopes_stable_identity",
         ),
+        UniqueConstraint(
+            "compilation_attempt_id",
+            name="setup_model_usage_envelopes_one_per_attempt",
+        ),
         ForeignKeyConstraint(
             [
                 "compilation_attempt_id",
@@ -712,7 +716,7 @@ class CheckerModelUsageRecovery(Base):
 
 
 class CheckerModelInvocationGrant(Base):
-    """No plaintext capability or transcript; exact immutable callback custody only."""
+    """No plaintext capability or transcript; bounded session custody only."""
 
     __tablename__ = "checker_model_invocation_grants"
     __table_args__ = (
@@ -722,14 +726,8 @@ class CheckerModelInvocationGrant(Base):
         ),
         CheckConstraint(
             "token_hash ~ '^sha256:[0-9a-f]{64}$' and "
-            "external_request_digest ~ '^sha256:[0-9a-f]{64}$' and "
-            "(selected_request_sha256 is null or selected_request_sha256 ~ '^sha256:[0-9a-f]{64}$')",
+            "external_request_digest ~ '^sha256:[0-9a-f]{64}$'",
             name="digests",
-        ),
-        CheckConstraint(
-            "(consumed_at is null and selected_request_sha256 is null and selected_attempt_id is null) or "
-            "(consumed_at is not null and selected_request_sha256 is not null and selected_attempt_id is not null)",
-            name="consumption",
         ),
     )
     id: Mapped[str] = mapped_column(Uuid(as_uuid=False), primary_key=True)
@@ -758,12 +756,35 @@ class CheckerModelInvocationGrant(Base):
         nullable=False,
         unique=True,
     )
-    selected_request_sha256: Mapped[str | None] = mapped_column(String(71))
-    selected_attempt_id: Mapped[str | None] = mapped_column(
+
+
+class CheckerModelInvocationGrantCall(Base):
+    """One canonical call index bound to one durable paid effect under a session grant."""
+
+    __tablename__ = "checker_model_invocation_grant_calls"
+    __table_args__ = (
+        CheckConstraint(
+            "call_index between 0 and 99 and request_sha256 ~ '^sha256:[0-9a-f]{64}$'",
+            name="facts",
+        ),
+        UniqueConstraint("grant_id", "call_index", name="uq_checker_model_grant_call_index"),
+        UniqueConstraint("attempt_id", name="uq_checker_model_grant_call_attempt"),
+    )
+    grant_id: Mapped[str] = mapped_column(
+        Uuid(as_uuid=False),
+        ForeignKey("checker_model_invocation_grants.id", ondelete="RESTRICT"),
+        primary_key=True,
+    )
+    call_index: Mapped[int] = mapped_column(Integer, primary_key=True)
+    attempt_id: Mapped[str] = mapped_column(
         Uuid(as_uuid=False),
         ForeignKey("model_usage_effects.id", ondelete="RESTRICT"),
+        nullable=False,
     )
-    consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    request_sha256: Mapped[str] = mapped_column(String(71), nullable=False)
+    bound_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.clock_timestamp(), nullable=False
+    )
 
 
 __all__ = (
@@ -776,5 +797,6 @@ __all__ = (
     "SetupModelUsageEnvelope",
     "SetupModelUsageSlot",
     "CheckerModelInvocationGrant",
+    "CheckerModelInvocationGrantCall",
     "ModelUsageProfile",
 )

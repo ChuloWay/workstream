@@ -3,7 +3,13 @@
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.modules.model_usage.api import ModelCallUnavailable, SetupModelUsageSlotKey
+from app.interfaces.project_guide_runtime import ProjectGuideRuntimeConfiguration
+from app.modules.model_usage.api import (
+    ModelCallUnavailable,
+    ModelProfileSelector,
+    SetupModelOwnerProfile,
+    SetupModelUsageSlotKey,
+)
 from app.modules.projects.guide_compilation.models import ProjectGuideCompilationAttempt
 
 
@@ -13,10 +19,10 @@ class SetupModelUsageCurrent:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
-    async def require_setup_current(self, key: SetupModelUsageSlotKey) -> None:
+    async def require_setup_current(self, key: SetupModelUsageSlotKey) -> SetupModelOwnerProfile:
         key = SetupModelUsageSlotKey.model_validate(key)
-        attempt_id = await self._session.scalar(
-            select(ProjectGuideCompilationAttempt.id)
+        attempt = await self._session.scalar(
+            select(ProjectGuideCompilationAttempt)
             .where(
                 ProjectGuideCompilationAttempt.id == key.compilation_attempt_id,
                 ProjectGuideCompilationAttempt.project_id == str(key.project_id),
@@ -31,8 +37,31 @@ class SetupModelUsageCurrent:
             .with_for_update()
             .execution_options(populate_existing=True)
         )
-        if attempt_id is None:
+        if attempt is None:
             raise ModelCallUnavailable("setup_model_owner_unavailable")
+        try:
+            configuration = ProjectGuideRuntimeConfiguration.model_validate(
+                attempt.runtime_configuration
+            )
+            selector = ModelProfileSelector(
+                profile_id=configuration.model_profile_id,
+                profile_version=configuration.model_profile_version,
+                profile_digest=configuration.model_profile_digest,
+            )
+        except ValueError as exc:
+            raise ModelCallUnavailable("setup_model_owner_unavailable") from exc
+        if selector != ModelProfileSelector(
+            profile_id=key.profile_id,
+            profile_version=key.profile_version,
+            profile_digest=key.profile_digest,
+        ):
+            raise ModelCallUnavailable("setup_model_owner_unavailable")
+        return SetupModelOwnerProfile(
+            selector=selector,
+            provider=configuration.model_provider,
+            api=configuration.model_api,
+            model_snapshot=configuration.model,
+        )
 
 
 __all__ = ("SetupModelUsageCurrent",)

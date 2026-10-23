@@ -1,4 +1,4 @@
-"""Real PostgreSQL proof for one-use checker model invocation grants."""
+"""Real PostgreSQL proof for bounded multi-call checker model invocation grants."""
 
 from __future__ import annotations
 
@@ -18,6 +18,7 @@ from app.core.identifiers import new_record_id
 from app.modules.model_usage.api import (
     ModelActionEvidence,
     ModelCallExecutionFacts,
+    ModelCallUnavailable,
     ModelPaidSlotKey,
     model_action_digest,
 )
@@ -146,7 +147,18 @@ async def grant_database(ledger_database_fixture: DatabaseFacts) -> GrantDatabas
         for statement in capture.statements:
             await connection.execute(text(_isolated(statement, schema)))
 
-    profile = await provision(ledger_database, BoundaryPorts(), limit=100_000)
+    profile = await provision(
+        ledger_database,
+        BoundaryPorts(),
+        limit=100_000,
+        profile_changes={
+            "maximum_calls": 3,
+            "maximum_total_request_bytes": 30_000,
+            "maximum_total_response_bytes": 90_000,
+            "maximum_total_input_tokens": 300,
+            "maximum_total_output_tokens": 150,
+        },
+    )
     current = execution(ledger_database)
     paid_slot = slot(ledger_database, profile, "model_judge")
     request_sha256 = sha("prepared request")
@@ -235,7 +247,7 @@ async def _issue(
     )
 
 
-async def test_grant_round_trip_consumes_once_and_becomes_immutable(
+async def test_grant_round_trip_binds_exact_calls_and_becomes_immutable(
     grant_database: GrantDatabase,
 ) -> None:
     async with AsyncSession(grant_database.facts.engine, expire_on_commit=False) as session:
@@ -254,6 +266,14 @@ async def test_grant_round_trip_consumes_once_and_becomes_immutable(
             facts = await owner.resolve(grant.grant_id, grant.binding_digest)
             await owner.consume_prepared(
                 facts,
+                call_index=0,
+                request_sha256=grant_database.prepared_request_sha256,
+                prepared_attempt_id=grant_database.prepared_attempt_id,
+            )
+            # An exact transport replay is idempotent and does not mint another binding.
+            await owner.consume_prepared(
+                facts,
+                call_index=0,
                 request_sha256=grant_database.prepared_request_sha256,
                 prepared_attempt_id=grant_database.prepared_attempt_id,
             )
@@ -261,25 +281,53 @@ async def test_grant_round_trip_consumes_once_and_becomes_immutable(
                 (
                     await session.execute(
                         text(
-                            "select selected_request_sha256,selected_attempt_id,consumed_at,"
-                            "issued_at,expires_at,token_hash from "
-                            "checker_model_invocation_grants"
+                            "select c.request_sha256,c.attempt_id,c.bound_at,"
+                            "g.issued_at,g.expires_at,g.token_hash,g.id as grant_id from "
+                            "checker_model_invocation_grant_calls c join "
+                            "checker_model_invocation_grants g on g.id=c.grant_id"
                         )
                     )
                 )
                 .mappings()
                 .one()
             )
-            assert row.selected_request_sha256 == grant_database.prepared_request_sha256
-            assert row.selected_attempt_id == grant_database.prepared_attempt_id
-            assert row.issued_at < row.consumed_at < row.expires_at
+            assert row.request_sha256 == grant_database.prepared_request_sha256
+            assert row.attempt_id == grant_database.prepared_attempt_id
+            assert row.issued_at < row.bound_at < row.expires_at
             assert row.token_hash != grant.grant_id
+
+            second_request = sha("second prepared request")
+            second_slot = grant_database.slot.model_copy(update={"slot_index": 1})
+            second_attempt = await service(session, BoundaryPorts()).prepare_attempt(
+                grant_database.execution,
+                second_slot,
+                registry_entry_id=grant_database.facts.registry_entry_id,
+                request_sha256=second_request,
+            )
+            await owner.consume_prepared(
+                facts,
+                call_index=1,
+                request_sha256=second_request,
+                prepared_attempt_id=second_attempt.attempt_id,
+            )
+            assert await session.scalar(
+                text(
+                    "select count(*) from checker_model_invocation_grant_calls "
+                    "where grant_id=:grant"
+                ),
+                {"grant": row.grant_id},
+            ) == 2
 
     for mutation in (
         "update checker_model_invocation_grants set external_request_digest="
         "'sha256:" + "d" * 64 + "'",
         "delete from checker_model_invocation_grants",
         "truncate checker_model_invocation_grants",
+        "update checker_model_invocation_grant_calls set request_sha256='sha256:"
+        + "e" * 64
+        + "'",
+        "delete from checker_model_invocation_grant_calls",
+        "truncate checker_model_invocation_grant_calls",
     ):
         async with AsyncSession(grant_database.facts.engine) as session:
             with pytest.raises(DBAPIError):
@@ -332,7 +380,7 @@ async def test_grant_rejects_reused_or_wrong_authority_and_stale_db_clock(
                 )
 
 
-async def test_grant_rejects_locked_binding_and_consumption_substitution(
+async def test_grant_rejects_locked_binding_and_call_substitution_or_gaps(
     grant_database: GrantDatabase,
 ) -> None:
     async with AsyncSession(grant_database.facts.engine, expire_on_commit=False) as session:
@@ -357,21 +405,35 @@ async def test_grant_rejects_locked_binding_and_consumption_substitution(
                 )
 
     async with AsyncSession(grant_database.facts.engine) as session:
-        with pytest.raises(DBAPIError):
+        async with session.begin():
+            owner = ModelInvocationGrants(
+                session,
+                authority=GrantBoundaries(session),
+                current=GrantBoundaries(session),
+            )
+            await owner.consume_prepared(
+                facts,
+                call_index=0,
+                request_sha256=grant_database.prepared_request_sha256,
+                prepared_attempt_id=grant_database.prepared_attempt_id,
+            )
+
+    # A call index is an immutable replay key, not permission to replace its request.
+    async with AsyncSession(grant_database.facts.engine) as session:
+        with pytest.raises(ModelCallUnavailable):
             async with session.begin():
-                await session.execute(
-                    text(
-                        "update checker_model_invocation_grants set "
-                        "selected_request_sha256=:request,selected_attempt_id=:attempt,"
-                        "consumed_at=clock_timestamp()"
-                    ),
-                    {
-                        "request": sha("substituted request"),
-                        "attempt": grant_database.prepared_attempt_id,
-                    },
+                await ModelInvocationGrants(
+                    session,
+                    authority=GrantBoundaries(session),
+                    current=GrantBoundaries(session),
+                ).consume_prepared(
+                    facts,
+                    call_index=0,
+                    request_sha256=sha("substituted request"),
+                    prepared_attempt_id=grant_database.prepared_attempt_id,
                 )
 
-    other_slot = grant_database.slot.model_copy(update={"requirement_id": "other_judge"})
+    other_slot = grant_database.slot.model_copy(update={"slot_index": 1})
     other_request = sha("other prepared request")
     async with AsyncSession(grant_database.facts.engine, expire_on_commit=False) as session:
         async with session.begin():
@@ -384,13 +446,24 @@ async def test_grant_rejects_locked_binding_and_consumption_substitution(
     async with AsyncSession(grant_database.facts.engine) as session:
         with pytest.raises(DBAPIError):
             async with session.begin():
+                grant_id = await session.scalar(
+                    text(
+                        "select id from checker_model_invocation_grants "
+                        "where token_hash=:token_hash"
+                    ),
+                    {"token_hash": facts.token_hash},
+                )
                 await session.execute(
                     text(
-                        "update checker_model_invocation_grants set "
-                        "selected_request_sha256=:request,selected_attempt_id=:attempt,"
-                        "consumed_at=clock_timestamp()"
+                        "insert into checker_model_invocation_grant_calls"
+                        "(grant_id,call_index,attempt_id,request_sha256) "
+                        "values (:grant,2,:attempt,:request)"
                     ),
-                    {"request": other_request, "attempt": other_attempt.attempt_id},
+                    {
+                        "grant": grant_id,
+                        "request": other_request,
+                        "attempt": other_attempt.attempt_id,
+                    },
                 )
 
     foreign_registry = new_record_id()

@@ -515,10 +515,21 @@ class SetupModelUsageEvidencePort(Protocol):
         ...
 
 
+class SetupModelOwnerProfile(ModelCallValue):
+    """Exact profile and provider identity frozen by the PROJECTS attempt owner."""
+
+    selector: ModelProfileSelector
+    provider: ProviderIdentifier
+    api: ProviderIdentifier
+    model_snapshot: ProviderIdentifier
+
+
 class SetupModelUsageOwnerPort(Protocol):
     """Require the exact current PROJECTS compilation attempt before MODEL locks."""
 
-    async def require_setup_current(self, slot: SetupModelUsageSlotKey) -> None:
+    async def require_setup_current(
+        self, slot: SetupModelUsageSlotKey
+    ) -> SetupModelOwnerProfile:
         """Lock and validate the complete setup attempt ancestry."""
         ...
 
@@ -1046,6 +1057,7 @@ __all__ = (
     "SetupModelEffectAuthorityFacts",
     "SetupModelUsageAuthorityPort",
     "SetupModelUsageEvidencePort",
+    "SetupModelOwnerProfile",
     "SetupModelUsageOwnerPort",
     "SetupModelUsageSlotKey",
     "model_usage_cost",
