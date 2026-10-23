@@ -132,6 +132,15 @@ acknowledgements; neither approves policy nor activates a guide.
 | `workstream task context TASK_ID` | `GET /api/v1/tasks/TASK_ID/work-context` |
 | `workstream task guide TASK_ID [--download DIR]` | Work context, then assigned-task `GET /api/v1/tasks/TASK_ID/guide/documents/DOCUMENT_ID/content` for downloads |
 | `workstream task requirements TASK_ID` | `GET /api/v1/tasks/TASK_ID/submission-requirements` |
+| `workstream operations artifact bindings RESOURCE_TYPE RESOURCE_ID` | `GET /api/v1/operator/artifacts/bindings` |
+| `workstream operations artifact replicas CONTENT_ID` | `GET /api/v1/operator/artifacts/contents/CONTENT_ID/replicas` |
+| `workstream operations artifact receipts REPLICA_ID` | `GET /api/v1/operator/artifacts/replicas/REPLICA_ID/receipts` |
+| `workstream operations artifact verification-job JOB_ID` | `GET /api/v1/operator/artifacts/verification-jobs/JOB_ID` |
+| `workstream operations artifact recovery-attempt ATTEMPT_ID` | `GET /api/v1/operator/artifacts/recovery-attempts/ATTEMPT_ID` |
+| `workstream operations artifact audit-events RESOURCE_TYPE RESOURCE_ID` | `GET /api/v1/operator/artifacts/audit-events` |
+| `workstream operations artifact admission-usage PROJECT_ID` | `GET /api/v1/operator/artifacts/admission-usage` |
+| `workstream operations artifact readiness` | `GET /api/v1/operator/artifacts/readiness` |
+| `workstream operations artifact retry JOB_ID` (explicit scope, reason, key and CAS) | `POST /api/v1/operator/artifacts/verification-jobs/JOB_ID/retry` |
 
 Workstream verifies the caller's Flow bearer and owns identity resolution,
 authorization and lifecycle decisions. Reading a profile can admit a first-time
@@ -1854,6 +1863,27 @@ is required even for replay. A successful upload is not a failed verification
 job and should not be retried through this operation.
 
 ## Verification
+
+### Public API handoff for MCP and other clients
+
+The command-to-operation table above is a navigation aid for the existing
+public API, not a second contract. Use the running API's `/docs` and
+`/openapi.json` for exact request/response fields, required headers and error
+schemas. Compare against the same backend commit: later API changes can make a
+static inventory stale.
+
+For each operation, the corresponding files in `internal/api/` show the CLI's
+wire mapping and response checks. The built-process tests in `tests/integration/`
+show valid input, malformed responses, denial and replay cases; files ending
+`_public_api.py` exercise the real backend with isolated prerequisites. These
+focused tests do not all establish a connected user journey; the separate
+journey below does that for its stated policy branch.
+
+An MCP tool should call that same public REST operation directly, forwarding
+the caller's bearer. Do not invoke the CLI binary, import backend internals,
+copy authorization decisions or infer permission from a previous read. Keep
+opaque pagination and explicit unchanged-payload mutation replay. The CLI is
+an implementation and test reference, not an additional service dependency.
 
 Behavior tests invoke the built executable from outside the repository, with
 no import of Go internals. One suite uses a controlled HTTP server to exercise
