@@ -22,23 +22,10 @@ func writeArtifactObservation(w io.Writer, output, label string, raw json.RawMes
 	return err
 }
 
-func artifactPageFlags(cmd *cobra.Command, limit *int, cursor *string) {
-	cmd.Flags().IntVar(limit, "limit", 50, "Page size (1–100; keep unchanged when continuing)")
-	cmd.Flags().StringVar(cursor, "cursor", "", "Opaque continuation for this exact resource and page size")
-}
-
-func artifactContinuation(cmd *cobra.Command, cursor string) *string {
-	if cmd.Flags().Changed("cursor") {
-		return &cursor
-	}
-	return nil
-}
-
 func addArtifactOperator(operations *cobra.Command, client func() (*api.Client, error), output *string, stdout io.Writer) {
 	artifact := &cobra.Command{Use: "artifact", Short: "Inspect public artifact custody and explicitly retry one verification job"}
 
-	var bindingsLimit int
-	var bindingsCursor string
+	var bindingsPage pageFlags
 	bindings := &cobra.Command{
 		Use: "bindings RESOURCE_TYPE RESOURCE_ID", Short: "List exact-resource artifact bindings", Args: cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -46,18 +33,18 @@ func addArtifactOperator(operations *cobra.Command, client func() (*api.Client, 
 			if err != nil {
 				return err
 			}
-			result, err := apiClient.ArtifactBindings(cmd.Context(), args[0], args[1], bindingsLimit, artifactContinuation(cmd, bindingsCursor))
+			page := bindingsPage.query(cmd)
+			result, err := apiClient.ArtifactBindings(cmd.Context(), args[0], args[1], page.Limit, page.Cursor)
 			if err != nil {
 				return err
 			}
 			return writeArtifactObservation(stdout, *output, "Artifact bindings", result.Raw)
 		},
 	}
-	artifactPageFlags(bindings, &bindingsLimit, &bindingsCursor)
+	bindingsPage.bind(bindings, 50)
 	artifact.AddCommand(bindings)
 
-	var replicasLimit int
-	var replicasCursor string
+	var replicasPage pageFlags
 	replicas := &cobra.Command{
 		Use: "replicas CONTENT_ID", Short: "List replicas for one content record without provider coordinates", Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -65,18 +52,18 @@ func addArtifactOperator(operations *cobra.Command, client func() (*api.Client, 
 			if err != nil {
 				return err
 			}
-			result, err := apiClient.ArtifactReplicas(cmd.Context(), args[0], replicasLimit, artifactContinuation(cmd, replicasCursor))
+			page := replicasPage.query(cmd)
+			result, err := apiClient.ArtifactReplicas(cmd.Context(), args[0], page.Limit, page.Cursor)
 			if err != nil {
 				return err
 			}
 			return writeArtifactObservation(stdout, *output, "Artifact replicas", result.Raw)
 		},
 	}
-	artifactPageFlags(replicas, &replicasLimit, &replicasCursor)
+	replicasPage.bind(replicas, 50)
 	artifact.AddCommand(replicas)
 
-	var receiptsLimit int
-	var receiptsCursor string
+	var receiptsPage pageFlags
 	receipts := &cobra.Command{
 		Use: "receipts REPLICA_ID", Short: "List bounded put, observation and verification receipts", Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -84,14 +71,15 @@ func addArtifactOperator(operations *cobra.Command, client func() (*api.Client, 
 			if err != nil {
 				return err
 			}
-			result, err := apiClient.ArtifactReceipts(cmd.Context(), args[0], receiptsLimit, artifactContinuation(cmd, receiptsCursor))
+			page := receiptsPage.query(cmd)
+			result, err := apiClient.ArtifactReceipts(cmd.Context(), args[0], page.Limit, page.Cursor)
 			if err != nil {
 				return err
 			}
 			return writeArtifactObservation(stdout, *output, "Artifact receipts", result.Raw)
 		},
 	}
-	artifactPageFlags(receipts, &receiptsLimit, &receiptsCursor)
+	receiptsPage.bind(receipts, 50)
 	artifact.AddCommand(receipts)
 
 	artifact.AddCommand(&cobra.Command{
@@ -124,8 +112,7 @@ func addArtifactOperator(operations *cobra.Command, client func() (*api.Client, 
 		},
 	})
 
-	var auditLimit int
-	var auditCursor string
+	var auditPage pageFlags
 	audit := &cobra.Command{
 		Use: "audit-events RESOURCE_TYPE RESOURCE_ID", Short: "List audit facts for one exact artifact resource", Args: cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -133,18 +120,19 @@ func addArtifactOperator(operations *cobra.Command, client func() (*api.Client, 
 			if err != nil {
 				return err
 			}
-			result, err := apiClient.ArtifactAuditEvents(cmd.Context(), args[0], args[1], auditLimit, artifactContinuation(cmd, auditCursor))
+			page := auditPage.query(cmd)
+			result, err := apiClient.ArtifactAuditEvents(cmd.Context(), args[0], args[1], page.Limit, page.Cursor)
 			if err != nil {
 				return err
 			}
 			return writeArtifactObservation(stdout, *output, "Artifact audit events", result.Raw)
 		},
 	}
-	artifactPageFlags(audit, &auditLimit, &auditCursor)
+	auditPage.bind(audit, 50)
 	artifact.AddCommand(audit)
 
-	var usageLimit int
-	var usageCursor, usageTask string
+	var usagePage pageFlags
+	var usageTask string
 	usage := &cobra.Command{
 		Use: "admission-usage PROJECT_ID", Short: "Inspect bounded admission usage for one project and optional task", Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -156,14 +144,15 @@ func addArtifactOperator(operations *cobra.Command, client func() (*api.Client, 
 			if err != nil {
 				return err
 			}
-			result, err := apiClient.ArtifactAdmissionUsage(cmd.Context(), args[0], taskID, usageLimit, artifactContinuation(cmd, usageCursor))
+			page := usagePage.query(cmd)
+			result, err := apiClient.ArtifactAdmissionUsage(cmd.Context(), args[0], taskID, page.Limit, page.Cursor)
 			if err != nil {
 				return err
 			}
 			return writeArtifactObservation(stdout, *output, "Artifact admission usage", result.Raw)
 		},
 	}
-	artifactPageFlags(usage, &usageLimit, &usageCursor)
+	usagePage.bind(usage, 50)
 	usage.Flags().StringVar(&usageTask, "task-id", "", "Optional exact task in the selected project")
 	artifact.AddCommand(usage)
 

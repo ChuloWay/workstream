@@ -124,6 +124,10 @@ async def test_signed_operator_cli_retry_exact_replay_and_revocation(
         assert created["replayed"] is False
         assert created["recovery_attempt_id"] != key
         assert created["retry_verification_job_id"] != source_id
+        assert created["recovery_attempt_id"] not in {
+            source_id,
+            created["retry_verification_job_id"],
+        }
         recovery = await call(
             operator, "recovery-attempt", created["recovery_attempt_id"]
         )

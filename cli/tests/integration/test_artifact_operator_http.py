@@ -322,6 +322,7 @@ def test_invalid_inputs_never_send_or_infer_authority(cli):
             ("retry", JOB),
             (*retry_args(), "--submission-id", "bad"),
             (*retry_args(), "--reason", " "),
+            (*retry_args(), "--reason", "r" * 1001),
             (*retry_args(), "--expected-source-job-cas-version", "-1"),
             (*retry_args(), "--idempotency-key", "bad"),
         )
@@ -402,3 +403,30 @@ def test_retry_response_rejects_hidden_fields_and_bad_replay_flag(cli):
             response["body"] = json.dumps(body).encode()
             assert_failure(invoke(cli, origin, *retry_args()), "invalid_api_response")
         assert len(requests) == 3
+
+
+def test_recovery_lineage_rejects_pairwise_colliding_ids(cli):
+    with http_fixture() as (origin, response, requests):
+        response["status"] = 202
+        for body in (
+            RETRY | {"recovery_attempt_id": JOB},
+            RETRY | {"recovery_attempt_id": RETRY_JOB},
+            RETRY | {"retry_verification_job_id": JOB},
+        ):
+            response["body"] = json.dumps(body).encode()
+            result = invoke(cli, origin, *retry_args())
+            assert_failure(result, "invalid_api_response")
+            assert json.loads(result.stderr)["error"]["outcome_unknown"] is True
+
+        response["status"] = 200
+        for body in (
+            RECOVERY_ROW | {"source_verification_job_id": RECOVERY},
+            RECOVERY_ROW | {"retry_verification_job_id": RECOVERY},
+            RECOVERY_ROW | {"retry_verification_job_id": JOB},
+        ):
+            response["body"] = json.dumps(body).encode()
+            assert_failure(
+                invoke(cli, origin, "recovery-attempt", RECOVERY),
+                "invalid_api_response",
+            )
+        assert len(requests) == 6

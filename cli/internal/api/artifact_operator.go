@@ -171,18 +171,12 @@ func artifactPageQuery(limit int, cursor *string, extra url.Values) (string, err
 
 func artifactPageRead[T any](c *Client, ctx context.Context, path, query string, limit int, validate func(json.RawMessage, *T) bool) (Result[ArtifactPage[T]], error) {
 	var result Result[ArtifactPage[T]]
-	raw, err := c.request(ctx, http.MethodGet, path, query, nil)
+	raw, _, items, err := c.readPage(ctx, path, query, limit)
 	if err != nil {
 		return result, err
 	}
 	var page ArtifactPage[T]
-	fields, err := contextObject(raw, &page, []string{"items"}, nil)
-	if err != nil || !requiredNullable(fields, "next_cursor") || page.Items == nil || len(page.Items) > limit ||
-		(page.NextCursor != nil && (!validTaskCursor(*page.NextCursor) || len(page.Items) == 0)) || !c.safeMutationResponse(raw) {
-		return result, invalidArtifactResponse()
-	}
-	var items []json.RawMessage
-	if jsonv2.Unmarshal(fields["items"], &items) != nil || len(items) != len(page.Items) {
+	if jsonv2.Unmarshal(raw, &page, jsonv2.RejectUnknownMembers(true)) != nil || len(page.Items) != len(items) {
 		return result, invalidArtifactResponse()
 	}
 	for index := range page.Items {
@@ -206,17 +200,6 @@ func artifactObject[T any](c *Client, ctx context.Context, path string, validate
 	return Result[T]{Raw: raw, Value: value}, nil
 }
 
-func artifactOptionalUUID(value *string) bool { return value == nil || validUUID(*value) }
-func artifactOptionalTime(value *string) bool { return value == nil || validTime(*value) }
-func artifactNonNegative(values ...*big.Int) bool {
-	for _, value := range values {
-		if value == nil || value.Sign() < 0 {
-			return false
-		}
-	}
-	return true
-}
-
 func artifactText(value string) bool { return value != "" && utf8.ValidString(value) }
 
 var artifactBindingTypes = []string{"project", "project_guide", "guide_source_snapshot", "guide_source_snapshot_item", "task", "submission", "checker_run"}
@@ -238,8 +221,8 @@ func (c *Client) ArtifactBindings(ctx context.Context, resourceType, resourceID 
 		fields, err := contextObject(raw, value, []string{"id", "content_id", "project_id", "resource_type", "resource_id", "logical_role", "scope_version", "created_at"}, nil)
 		return err == nil && requiredNullable(fields, "supersedes_binding_id") && validUUID(value.ID) && validUUID(value.ContentID) && validUUID(value.ProjectID) &&
 			value.ResourceType == resourceType && sameUUID(value.ResourceID, resourceID) && (resourceType != "project" || sameUUID(value.ProjectID, resourceID)) &&
-			artifactText(value.LogicalRole) && artifactNonNegative(value.ScopeVersion) && value.ScopeVersion.Sign() > 0 &&
-			artifactOptionalUUID(value.SupersedesBindingID) && validTime(value.CreatedAt)
+			artifactText(value.LogicalRole) && nonNegative(value.ScopeVersion) && value.ScopeVersion.Sign() > 0 &&
+			optionalUUID(value.SupersedesBindingID) && validTime(value.CreatedAt)
 	})
 }
 
@@ -257,7 +240,7 @@ func (c *Client) ArtifactReplicas(ctx context.Context, contentID string, limit i
 		fields, err := contextObject(raw, value, []string{"id", "content_id", "verification_state", "availability_state", "integrity_state", "created_at", "updated_at"}, nil)
 		return err == nil && requiredNullable(fields, "last_reconciled_at") && validUUID(value.ID) && sameUUID(value.ContentID, contentID) &&
 			artifactText(value.VerificationState) && artifactText(value.AvailabilityState) && artifactText(value.IntegrityState) &&
-			artifactOptionalTime(value.LastReconciledAt) && validTime(value.CreatedAt) && validTime(value.UpdatedAt)
+			optionalTime(value.LastReconciledAt) && validTime(value.CreatedAt) && validTime(value.UpdatedAt)
 	})
 }
 
@@ -274,7 +257,7 @@ func (c *Client) ArtifactReceipts(ctx context.Context, replicaID string, limit i
 	return artifactPageRead(c, ctx, artifactOperatorPath+"/replicas/"+selector+"/receipts", query, limit, func(raw json.RawMessage, value *ArtifactReceipt) bool {
 		_, err := contextObject(raw, value, []string{"id", "receipt_type", "replica_id", "outcome", "created_at"}, nil)
 		return err == nil && validUUID(value.ID) && sameUUID(value.ReplicaID, replicaID) && oneOf(value.ReceiptType, "put", "put_observation", "verification") &&
-			artifactText(value.Outcome) && validTime(value.CreatedAt) && artifactOptionalUUID(value.VerificationJobID) &&
+			artifactText(value.Outcome) && validTime(value.CreatedAt) && optionalUUID(value.VerificationJobID) &&
 			(value.AttemptNumber == nil || value.AttemptNumber.Sign() >= 0) &&
 			(value.ExecutionGeneration == nil || value.ExecutionGeneration.Sign() >= 0)
 	})
@@ -289,9 +272,9 @@ func (c *Client) ArtifactVerificationJob(ctx context.Context, jobID string) (Res
 	return artifactObject(c, ctx, artifactOperatorPath+"/verification-jobs/"+selector, func(raw json.RawMessage, value *ArtifactVerificationJob) bool {
 		fields, err := contextObject(raw, value, []string{"id", "replica_id", "status", "attempt_count", "maximum_attempts", "cas_version", "created_at", "updated_at"}, nil)
 		return err == nil && requiredNullable(fields, "parent_verification_job_id", "next_run_at", "terminal_result_code", "terminal_at", "receipt_id") &&
-			sameUUID(value.ID, jobID) && validUUID(value.ReplicaID) && artifactOptionalUUID(value.ParentVerificationJobID) && artifactOptionalUUID(value.ReceiptID) &&
-			artifactText(value.Status) && artifactNonNegative(value.AttemptCount, value.MaximumAttempts, value.CASVersion) &&
-			value.MaximumAttempts.Sign() > 0 && artifactOptionalTime(value.NextRunAt) && artifactOptionalTime(value.TerminalAt) &&
+			sameUUID(value.ID, jobID) && validUUID(value.ReplicaID) && optionalUUID(value.ParentVerificationJobID) && optionalUUID(value.ReceiptID) &&
+			artifactText(value.Status) && nonNegative(value.AttemptCount, value.MaximumAttempts, value.CASVersion) &&
+			value.MaximumAttempts.Sign() > 0 && optionalTime(value.NextRunAt) && optionalTime(value.TerminalAt) &&
 			validTime(value.CreatedAt) && validTime(value.UpdatedAt)
 	})
 }
@@ -306,10 +289,12 @@ func (c *Client) ArtifactRecoveryAttempt(ctx context.Context, attemptID string) 
 		fields, err := contextObject(raw, value, []string{"id", "project_id", "source_verification_job_id", "source_verification_job_status", "retry_verification_job_id", "retry_verification_job_status", "status", "initiation_audit_event_id", "cas_version", "created_at", "updated_at"}, nil)
 		return err == nil && requiredNullable(fields, "task_id", "submission_id", "parent_recovery_attempt_id", "terminal_result_code", "terminal_audit_event_id", "terminal_at") &&
 			sameUUID(value.ID, attemptID) && validUUID(value.ProjectID) && validUUID(value.SourceVerificationJobID) && validUUID(value.RetryVerificationJobID) &&
-			validUUID(value.InitiationAuditEventID) && artifactOptionalUUID(value.TaskID) && artifactOptionalUUID(value.SubmissionID) &&
-			artifactOptionalUUID(value.ParentRecoveryAttemptID) && artifactOptionalUUID(value.TerminalAuditEventID) &&
+			!sameUUID(value.ID, value.SourceVerificationJobID) && !sameUUID(value.ID, value.RetryVerificationJobID) &&
+			!sameUUID(value.SourceVerificationJobID, value.RetryVerificationJobID) &&
+			validUUID(value.InitiationAuditEventID) && optionalUUID(value.TaskID) && optionalUUID(value.SubmissionID) &&
+			optionalUUID(value.ParentRecoveryAttemptID) && optionalUUID(value.TerminalAuditEventID) &&
 			artifactText(value.SourceVerificationJobStatus) && artifactText(value.RetryVerificationJobStatus) && artifactText(value.Status) &&
-			artifactNonNegative(value.CASVersion) && validTime(value.CreatedAt) && validTime(value.UpdatedAt) && artifactOptionalTime(value.TerminalAt)
+			nonNegative(value.CASVersion) && validTime(value.CreatedAt) && validTime(value.UpdatedAt) && optionalTime(value.TerminalAt)
 	})
 }
 
@@ -329,7 +314,7 @@ func (c *Client) ArtifactAuditEvents(ctx context.Context, resourceType, resource
 		fields, err := contextObject(raw, value, []string{"id", "entity_type", "entity_id", "event_type", "created_at"}, nil)
 		return err == nil && requiredNullable(fields, "from_status", "to_status", "reason", "occurred_at", "request_id", "correlation_id") &&
 			validUUID(value.ID) && value.EntityType == resourceType && sameUUID(value.EntityID, resourceID) && artifactText(value.EventType) &&
-			validTime(value.CreatedAt) && artifactOptionalTime(value.OccurredAt) && artifactOptionalUUID(value.RequestID) && artifactOptionalUUID(value.CorrelationID)
+			validTime(value.CreatedAt) && optionalTime(value.OccurredAt) && optionalUUID(value.RequestID) && optionalUUID(value.CorrelationID)
 	})
 }
 
@@ -354,7 +339,7 @@ func (c *Client) ArtifactAdmissionUsage(ctx context.Context, projectID string, t
 	return artifactPageRead(c, ctx, artifactOperatorPath+"/admission-usage", query, limit, func(raw json.RawMessage, value *ArtifactAdmissionUsage) bool {
 		fields, err := contextObject(raw, value, []string{"scope_type", "scope_id", "counted_bytes", "limit_bytes", "remaining_bytes", "unbound_ready_count", "unbound_ready_bytes", "stale_count", "stale_bytes", "cas_version", "updated_at"}, nil)
 		if err != nil || !requiredNullable(fields, "configured_limit_bytes") || !oneOf(value.ScopeType, "deployment", "project", "task") || !artifactText(value.ScopeID) ||
-			!artifactNonNegative(value.CountedBytes, value.LimitBytes, value.RemainingBytes, value.UnboundReadyCount, value.UnboundReadyBytes, value.StaleCount, value.StaleBytes, value.CASVersion) ||
+			!nonNegative(value.CountedBytes, value.LimitBytes, value.RemainingBytes, value.UnboundReadyCount, value.UnboundReadyBytes, value.StaleCount, value.StaleBytes, value.CASVersion) ||
 			(value.ConfiguredLimitBytes != nil && value.ConfiguredLimitBytes.Sign() < 0) || !validTime(value.UpdatedAt) {
 			return false
 		}
@@ -443,7 +428,9 @@ func (c *Client) RetryArtifactVerification(ctx context.Context, jobID string, in
 	var value ArtifactRetryReceipt
 	_, err = contextObject(raw, &value, []string{"recovery_attempt_id", "source_verification_job_id", "retry_verification_job_id", "replayed"}, nil)
 	if err != nil || !validUUID(value.RecoveryAttemptID) || !sameUUID(value.SourceVerificationJobID, jobID) ||
-		!validUUID(value.RetryVerificationJobID) || value.Replayed == nil || !c.safeMutationResponse(raw) {
+		!validUUID(value.RetryVerificationJobID) || sameUUID(value.RecoveryAttemptID, value.SourceVerificationJobID) ||
+		sameUUID(value.RecoveryAttemptID, value.RetryVerificationJobID) || sameUUID(value.SourceVerificationJobID, value.RetryVerificationJobID) ||
+		value.Replayed == nil || !c.safeMutationResponse(raw) {
 		return result, artifactRetryFailure(&Failure{Code: "invalid_api_response", OutcomeUnknown: true})
 	}
 	return Result[ArtifactRetryReceipt]{Raw: raw, Value: value}, nil
