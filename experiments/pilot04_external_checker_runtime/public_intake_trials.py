@@ -122,9 +122,10 @@ async def public_intake_trials(client, factory, env, trace: Path):
                    "X-Contributor-Attestation": "rights_confirmed; no confidential data or credentials."}
         if count == 0:
             start = len(_events(trace))
-            response = await client.post(route, headers=headers, content=archive)
-            _require(response.status_code == 401 and len(_events(trace)) == start,
-                     "unauthenticated upload allocated an intake session")
+            response = await client.post(route, headers=headers | {"Idempotency-Key": str(uuid4())}, content=archive)
+            _require(response.status_code == 401,
+                     f"unauthenticated upload returned {response.status_code}; expected 401")
+            _require(len(_events(trace)) == start, "unauthenticated upload allocated an intake session")
             evidence.append(await _cancel_upload(
                 client, factory, route, headers, contributor, archive, trace, task,
             ))
