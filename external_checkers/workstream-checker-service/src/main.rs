@@ -10,7 +10,8 @@ mod trial_relay;
 
 use model_relay::{
     deserialize_required_model_grant, valid_model_grant, validate_proxy_socket,
-    validate_relay_root, InvocationRelay, ModelGrant, RequiredModelGrant,
+    validate_relay_root, InvocationReceiptRegistry, InvocationRelay, ModelGrant,
+    ModelReceiptResolver, RequiredModelGrant,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -29,8 +30,11 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use trial_docker::DockerRuntimeControl;
 use trial_docker::{DockerTrialBackend, DockerTrialConfiguration};
 use trial_engine::{GenericTrialEngine, SandboxBackendIdentity};
+use trial_evidence_proxy::{
+    DurableTrialReceiptPublisher, InvocationReceiptRegistrar, TrialEvidenceProxyClient,
+};
 use trial_profiles::TrialProfileCatalog;
-use trial_relay::{TrialEngine, TrialProfile, TrialRequestIdentity};
+use trial_relay::{TrialEngine, TrialProfile, TrialRelay, TrialRequestIdentity};
 use workstream_checker_sdk::{
     canonical_hash, infrastructure_result, parse_request, validate_result, ValidatedRequest,
     MAX_REQUEST_BYTES,
@@ -97,6 +101,24 @@ struct TrialRuntimeConfiguration {
     candidate_gid: u32,
 }
 
+impl InvocationReceiptRegistrar for InvocationReceiptRegistry {
+    fn register(
+        &self,
+        request_digest: &str,
+        canonical_receipt_utf8: String,
+        receipt_sha256: String,
+        _custody: &trial_relay::TrialReceiptCustodyAck,
+    ) -> Result<String, ()> {
+        InvocationReceiptRegistry::register(
+            self,
+            request_digest,
+            &canonical_receipt_utf8,
+            &receipt_sha256,
+        )
+        .map_err(|_| ())
+    }
+}
+
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct CacheEntry {
@@ -147,6 +169,7 @@ struct GrantManifest {
 }
 
 struct VerifiedGrant {
+    binding_digest: String,
     input: PathBuf,
     input_inventory: WorkspaceInventory,
     predecessor: Option<PathBuf>,
@@ -1257,6 +1280,7 @@ fn verify_grant(
                 return Err("grant material differs".into());
             }
             Ok(VerifiedGrant {
+                binding_digest: reference.binding_digest.clone(),
                 input,
                 input_inventory: observed,
                 predecessor: None,
@@ -1459,6 +1483,7 @@ fn verify_post_grant(
         return Err("POST grant predecessor inventory missing".into());
     }
     Ok(VerifiedGrant {
+        binding_digest: reference.binding_digest.clone(),
         input,
         input_inventory,
         predecessor,
@@ -1828,7 +1853,81 @@ fn execute_container(
 ) -> Result<ExecutedChecker, ExecutionFailure> {
     container_owner(config)
         .map_err(|_| ExecutionFailure::ordinary("implementation_unavailable", false))?;
-    let relay = match model_grant {
+    let selected_trial = match config.trial_profiles.as_ref() {
+        Some(catalog) => catalog
+            .resolve(request)
+            .map_err(|_| ExecutionFailure::ordinary("implementation_unavailable", false))?,
+        None => {
+            let has_trial_selector = request
+                .value
+                .get("configuration")
+                .and_then(Value::as_object)
+                .is_some_and(|configuration| {
+                    configuration.keys().any(|key| key.starts_with("trial_"))
+                });
+            if has_trial_selector {
+                return Err(ExecutionFailure::ordinary(
+                    "implementation_unavailable",
+                    false,
+                ));
+            }
+            None
+        }
+    };
+    let receipt_registry = Arc::new(InvocationReceiptRegistry::default());
+    let invocation_cancelled = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let mut trial_relay =
+        match selected_trial {
+            Some(profile) => {
+                let runtime = config.trial_runtime.as_ref().ok_or_else(|| {
+                    ExecutionFailure::ordinary("implementation_unavailable", false)
+                })?;
+                let proxy_path = config.model_proxy_socket.as_ref().ok_or_else(|| {
+                    ExecutionFailure::ordinary("implementation_unavailable", false)
+                })?;
+                let identity = trial_request_identity(request, &grant.binding_digest)
+                    .map_err(|_| ExecutionFailure::ordinary("implementation_unavailable", false))?;
+                let engine = trial_engine(config, request, profile)
+                    .map_err(|_| ExecutionFailure::ordinary("implementation_unavailable", false))?;
+                let publisher = DurableTrialReceiptPublisher::new(
+                    TrialEvidenceProxyClient::new(proxy_path.clone(), request.value.clone()),
+                    Arc::clone(&receipt_registry),
+                    request.request_digest.clone(),
+                    profile.maximum_receipt_bytes,
+                    budget.deadline,
+                    Arc::clone(&invocation_cancelled),
+                )
+                .map_err(|_| ExecutionFailure::ordinary("implementation_unavailable", false))?;
+                let material_root = grant
+                    .input
+                    .parent()
+                    .ok_or_else(|| ExecutionFailure::ordinary("material_unavailable", false))?;
+                Some(
+                    TrialRelay::start(
+                        &runtime.relay_root,
+                        material_root,
+                        &runtime.scratch_root,
+                        &identity,
+                        profile,
+                        Arc::new(publisher),
+                        engine,
+                        config.sandbox_uid,
+                        config.sandbox_gid,
+                        budget.deadline,
+                        Arc::clone(&invocation_cancelled),
+                    )
+                    .map_err(|failure| {
+                        if failure.cleanup_unsettled {
+                            ExecutionFailure::unsettled(false)
+                        } else {
+                            ExecutionFailure::ordinary("implementation_unavailable", false)
+                        }
+                    })?,
+                )
+            }
+            None => None,
+        };
+    let model_relay = match model_grant {
         Some(grant) => {
             let Some(proxy_path) = config.model_proxy_socket.as_deref() else {
                 return Err(ExecutionFailure::ordinary(
@@ -1842,49 +1941,63 @@ fn execute_container(
                     false,
                 ));
             };
-            Some(
-                InvocationRelay::start(
-                    relay_root,
-                    proxy_path,
-                    grant,
-                    &request.request_digest,
-                    config.sandbox_uid,
-                    config.sandbox_gid,
-                    budget.deadline,
-                )
-                .map_err(|failure| {
-                    if failure.cleanup_unsettled {
+            match InvocationRelay::start_with_resolver(
+                relay_root,
+                proxy_path,
+                grant,
+                &request.request_digest,
+                Arc::clone(&receipt_registry) as Arc<dyn ModelReceiptResolver>,
+                config.sandbox_uid,
+                config.sandbox_gid,
+                budget.deadline,
+            ) {
+                Ok(relay) => Some(relay),
+                Err(failure) => {
+                    let trial_cleanup_unsettled = trial_relay
+                        .take()
+                        .is_some_and(|relay| relay.finish().cleanup_unsettled);
+                    return Err(if failure.cleanup_unsettled || trial_cleanup_unsettled {
                         ExecutionFailure::unsettled(false)
                     } else {
                         ExecutionFailure::ordinary("implementation_unavailable", false)
-                    }
-                })?,
-            )
+                    });
+                }
+            }
         }
         None => None,
     };
-    let model_mount = relay.as_ref().map(InvocationRelay::mount_spec);
+    let model_mount = model_relay.as_ref().map(InvocationRelay::mount_spec);
+    let trial_mount = trial_relay.as_ref().map(TrialRelay::mount_spec);
     let result = execute_container_inner(
         config,
         cache,
         request,
         grant,
         model_mount.as_deref(),
+        trial_mount.as_deref(),
         client,
         budget,
     );
-    let Some(relay) = relay else {
-        return result;
-    };
-    let relay_result = relay.finish();
     let launched = match &result {
         Ok(_) => true,
         Err(failure) => failure.launched,
     };
-    if relay_result.cleanup_unsettled {
+    let model_finish = model_relay.map(InvocationRelay::finish);
+    let trial_finish = trial_relay.map(TrialRelay::finish);
+    if model_finish
+        .as_ref()
+        .is_some_and(|finish| finish.cleanup_unsettled)
+        || trial_finish
+            .as_ref()
+            .is_some_and(|finish| finish.cleanup_unsettled)
+    {
         return Err(ExecutionFailure::unsettled(launched));
     }
-    if relay_result.failed {
+    if model_finish.as_ref().is_some_and(|finish| finish.failed)
+        || trial_finish
+            .as_ref()
+            .is_some_and(|finish| finish.failure.is_some())
+    {
         return Err(ExecutionFailure::ordinary(
             "implementation_unavailable",
             launched,
@@ -1899,6 +2012,7 @@ fn execute_container_inner(
     request: &ValidatedRequest,
     grant: &VerifiedGrant,
     model_mount: Option<&str>,
+    trial_mount: Option<&str>,
     client: &UnixStream,
     budget: &mut RequestExecutionBudget,
 ) -> Result<ExecutedChecker, ExecutionFailure> {
@@ -1954,6 +2068,7 @@ fn execute_container_inner(
         &input_mount,
         predecessor_mount.as_deref(),
         model_mount,
+        trial_mount,
         &image,
     );
     let create_argument_refs: Vec<_> = create_arguments.iter().map(String::as_str).collect();
@@ -2038,6 +2153,7 @@ fn container_create_arguments(
     material_mount: &str,
     predecessor_mount: Option<&str>,
     model_mount: Option<&str>,
+    trial_mount: Option<&str>,
     image: &str,
 ) -> Vec<String> {
     let mut arguments = vec![
@@ -2079,6 +2195,10 @@ fn container_create_arguments(
     if let Some(model_mount) = model_mount {
         arguments.push("--mount".into());
         arguments.push(model_mount.into());
+    }
+    if let Some(trial_mount) = trial_mount {
+        arguments.push("--mount".into());
+        arguments.push(trial_mount.into());
     }
     arguments.extend(["-i".into(), image.into()]);
     arguments
@@ -3408,10 +3528,11 @@ exit 2
     }
 
     #[test]
-    fn container_arguments_mount_only_the_invocation_model_socket() {
+    fn container_arguments_mount_only_the_invocation_capability_sockets() {
         let material = "type=bind,src=/private/material,dst=/work/input,readonly";
         let invocation =
             "type=bind,src=/private/runtime/.model-123/model.sock,dst=/work/model.sock,readonly";
+        let trial = "type=bind,src=/private/runtime/.trial-123/execution.sock,dst=/work/execution.sock,readonly";
         let arguments = container_create_arguments(
             "candidate",
             "workstream.external-checker-attempt=a",
@@ -3424,6 +3545,7 @@ exit 2
             material,
             None,
             Some(invocation),
+            Some(trial),
             "registry.example/checker@sha256:123",
         );
         assert!(arguments
@@ -3434,7 +3556,7 @@ exit 2
             .filter(|pair| pair[0] == "--mount")
             .map(|pair| pair[1].as_str())
             .collect();
-        assert_eq!(mounts, [material, invocation]);
+        assert_eq!(mounts, [material, invocation, trial]);
         assert!(!arguments.iter().any(|value| {
             value.contains("proxy.sock")
                 || value.contains("model_0123456789abcdef0123456789abcdef")
@@ -3452,6 +3574,7 @@ exit 2
             "16777216",
             "1.000",
             material,
+            None,
             None,
             None,
             "registry.example/checker@sha256:123",
@@ -3801,6 +3924,7 @@ exit 2
         fs::set_permissions(&workspace, fs::Permissions::from_mode(0o500)).unwrap();
         let request = parse_request(include_bytes!("../../fixtures/request.json")).unwrap();
         let grant = VerifiedGrant {
+            binding_digest: request.request_digest.clone(),
             input: workspace.clone(),
             input_inventory: WorkspaceInventory {
                 directories: Vec::new(),
@@ -3936,6 +4060,7 @@ exit 2
         fs::set_permissions(&workspace, fs::Permissions::from_mode(0o500)).unwrap();
         let request = parse_request(include_bytes!("../../fixtures/request.json")).unwrap();
         let grant = VerifiedGrant {
+            binding_digest: request.request_digest.clone(),
             input: workspace.clone(),
             input_inventory: WorkspaceInventory {
                 directories: Vec::new(),
@@ -3981,6 +4106,7 @@ exit 2
         fs::set_permissions(&workspace, fs::Permissions::from_mode(0o500)).unwrap();
         let request = parse_request(include_bytes!("../../fixtures/request.json")).unwrap();
         let grant = VerifiedGrant {
+            binding_digest: request.request_digest.clone(),
             input: workspace.clone(),
             input_inventory: WorkspaceInventory {
                 directories: Vec::new(),
@@ -4355,6 +4481,7 @@ exit 2
             request.maximum_output_bytes,
         );
         let hidden = VerifiedGrant {
+            binding_digest: request.request_digest.clone(),
             input: current.clone(),
             input_inventory: WorkspaceInventory {
                 directories: Vec::new(),
@@ -4405,6 +4532,7 @@ exit 2
         fs::set_permissions(&current, fs::Permissions::from_mode(0o500)).unwrap();
 
         let visible = VerifiedGrant {
+            binding_digest: request.request_digest.clone(),
             input: current.clone(),
             input_inventory: WorkspaceInventory {
                 directories: Vec::new(),
