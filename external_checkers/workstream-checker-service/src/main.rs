@@ -1116,26 +1116,45 @@ fn verify_post_grant(
         return Err("POST grant material roles invalid".into());
     }
     if let Some(prior) = available.get(PREDECESSOR_ARCHIVE_ROLE) {
-        let expected = request
-            .value
-            .pointer("/input/evaluation_context/predecessor")
-            .and_then(Value::as_object)
-            .ok_or("POST grant predecessor context missing")?;
         let actual = prior
             .material
             .as_object()
             .ok_or("POST grant predecessor material invalid")?;
-        if [
-            "submission_id",
-            "submission_version",
-            "content_sha256",
-            "byte_count",
-            "semantic_manifest_sha256",
-        ]
-        .iter()
-        .any(|field| actual.get(*field) != expected.get(*field))
+        let current = available[CURRENT_ARCHIVE_ROLE]
+            .material
+            .as_object()
+            .ok_or("POST grant current material invalid")?;
+        if actual.get("submission_id") == current.get("submission_id")
+            || actual
+                .get("submission_version")
+                .and_then(Value::as_u64)
+                .and_then(|version| version.checked_add(1))
+                != current.get("submission_version").and_then(Value::as_u64)
         {
-            return Err("POST grant predecessor context differs".into());
+            return Err("POST grant predecessor lineage differs".into());
+        }
+        if manifest
+            .visible_roles
+            .iter()
+            .any(|role| role == PREDECESSOR_ARCHIVE_ROLE)
+        {
+            let expected = request
+                .value
+                .pointer("/input/evaluation_context/predecessor")
+                .and_then(Value::as_object)
+                .ok_or("POST grant predecessor context missing")?;
+            if [
+                "submission_id",
+                "submission_version",
+                "content_sha256",
+                "byte_count",
+                "semantic_manifest_sha256",
+            ]
+            .iter()
+            .any(|field| actual.get(*field) != expected.get(*field))
+            {
+                return Err("POST grant predecessor context differs".into());
+            }
         }
     }
     for material in requested {
@@ -3574,6 +3593,7 @@ exit 2
     fn post_grant_fixture(
         include_prior: bool,
         prior_visible: bool,
+        context_enabled: bool,
     ) -> (ValidatedRequest, PostGrantManifest) {
         let digest = |byte: char| format!("sha256:{}", byte.to_string().repeat(64));
         let id = |byte: char| format!("{0}{0}{0}{0}{0}{0}{0}{0}-0000-4000-8000-000000000000", byte);
@@ -3623,7 +3643,7 @@ exit 2
                 files: Vec::new(),
             });
         }
-        let context = include_prior.then(|| {
+        let context = context_enabled.then(|| {
             serde_json::json!({
                 "schema_version": "workstream.post_submit_evaluation_context.v1",
                 "kind": "checker_remediation",
@@ -3705,7 +3725,11 @@ exit 2
     #[test]
     fn post_grant_v2_binds_context_roles_and_all_aggregate_inventories() {
         let (root, config) = test_config();
-        let (request, manifest) = post_grant_fixture(true, false);
+        let (request, manifest) = post_grant_fixture(true, false, false);
+        assert!(request.value["input"].get("evaluation_context").is_none());
+        assert_eq!(request.evaluation_context_sha256, None);
+        assert_eq!(request.post_material_roles, [CURRENT_ARCHIVE_ROLE]);
+        assert_eq!(manifest.materials.len(), 2);
         let reference = publish_post_grant(&config, &manifest);
         let verified = verify_grant(&config, &request, &reference).unwrap();
         assert!(verified.input.ends_with(CURRENT_ARCHIVE_ROLE));
@@ -3713,6 +3737,22 @@ exit 2
             verified.predecessor, None,
             "hidden prior must not be mounted"
         );
+        let (unauthorized_request, unauthorized_manifest) = post_grant_fixture(true, true, false);
+        let unauthorized_reference = GrantReference {
+            grant_id: unauthorized_manifest.grant_id.clone(),
+            binding_digest: unauthorized_manifest.binding_digest.clone(),
+        };
+        assert!(verify_post_grant(
+            &config,
+            &unauthorized_request,
+            &unauthorized_reference,
+            &config
+                .material_root
+                .join("workspaces")
+                .join(&unauthorized_manifest.grant_id),
+            &unauthorized_manifest,
+        )
+        .is_err());
 
         let manifest_path = config
             .material_root
@@ -3721,7 +3761,7 @@ exit 2
             .join(".external-checker-grant.json");
         fs::set_permissions(&manifest_path, fs::Permissions::from_mode(0o600)).unwrap();
         fs::remove_file(&manifest_path).unwrap();
-        let (visible_request, visible_manifest) = post_grant_fixture(true, true);
+        let (visible_request, visible_manifest) = post_grant_fixture(true, true, true);
         let visible_reference = publish_post_grant(&config, &visible_manifest);
         let visible = verify_grant(&config, &visible_request, &visible_reference).unwrap();
         assert!(visible.predecessor.is_some());
@@ -3815,7 +3855,7 @@ exit 2
         fs::create_dir(&prior).unwrap();
         fs::set_permissions(&current, fs::Permissions::from_mode(0o500)).unwrap();
         fs::set_permissions(&prior, fs::Permissions::from_mode(0o500)).unwrap();
-        let (request, _) = post_grant_fixture(true, false);
+        let (request, _) = post_grant_fixture(true, false, false);
         let (_peer, client) = UnixStream::pair().unwrap();
         let mut budget = RequestExecutionBudget::new(
             Instant::now() + Duration::from_secs(2),
