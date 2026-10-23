@@ -19,7 +19,10 @@ use workstream_checker_sdk::{
 };
 
 const PROTOCOL: &str = "external_checker_service.v1";
-const GRANT_PROTOCOL: &str = "workstream.external_checker_material_grant.v1";
+const PRE_GRANT_PROTOCOL: &str = "workstream.external_checker_material_grant.v1";
+const POST_GRANT_PROTOCOL: &str = "workstream.external_checker_material_grant.v2";
+const CURRENT_ARCHIVE_ROLE: &str = "submission_archive";
+const PREDECESSOR_ARCHIVE_ROLE: &str = "predecessor_submission_archive";
 const MAX_ENVELOPE_BYTES: usize = MAX_REQUEST_BYTES + 16_384;
 const MAX_RESPONSE_BYTES: usize = 65_536 + 16_384;
 const SOCKET_IO_TIMEOUT: Duration = Duration::from_secs(2);
@@ -95,7 +98,10 @@ struct GrantManifest {
 }
 
 struct VerifiedGrant {
-    workspace: PathBuf,
+    input: PathBuf,
+    input_inventory: WorkspaceInventory,
+    predecessor: Option<PathBuf>,
+    predecessor_inventory: Option<WorkspaceInventory>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -115,30 +121,28 @@ enum GrantIdentity {
         archive_byte_count: u64,
         semantic_manifest_sha256: String,
     },
-    #[serde(rename = "post_submit")]
-    PostSubmit {
-        submission_id: String,
-        submission_version: u64,
-        evaluation_request_id: String,
-        evaluation_request_digest: String,
-        evaluation_generation: u64,
-        attempt_id: String,
-        result_id: String,
-        lease_id: String,
-        lease_generation: u64,
-        lease_expires_at: String,
-        binding_id: String,
-        content_id: String,
-        replica_id: String,
-        content_sha256: String,
-        byte_count: u64,
-        evidence_id: String,
-        verification_receipt_id: String,
-        verification_job_id: String,
-        verification_generation: u64,
-        namespace_fingerprint: String,
-        semantic_manifest_sha256: String,
-    },
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct PostGrantManifest {
+    protocol_version: String,
+    grant_id: String,
+    request_digest: String,
+    phase: String,
+    identity: Value,
+    evaluation_context_sha256: Option<String>,
+    materials: Vec<PostGrantMaterial>,
+    visible_roles: Vec<String>,
+    binding_digest: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct PostGrantMaterial {
+    material: Value,
+    directories: Vec<String>,
+    files: Vec<GrantFile>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
@@ -693,14 +697,8 @@ fn handle_frame(
     );
     let (result, isolation) = match verify_grant(config, &request, &envelope.grant) {
         Ok(grant) => match inspect_image(config, cache, stream, &mut budget) {
-            Ok(()) => match execute_container(
-                config,
-                cache,
-                &request,
-                &grant.workspace,
-                stream,
-                &mut budget,
-            ) {
+            Ok(()) => match execute_container(config, cache, &request, &grant, stream, &mut budget)
+            {
                 Ok(output) if validate_result(&output.value, &request).is_ok() => {
                     (output.value, Some(isolation))
                 }
@@ -972,27 +970,45 @@ fn verify_grant(
     if raw.contains(&0) {
         return Err("grant manifest invalid".into());
     }
-    let manifest: GrantManifest =
-        serde_json::from_slice(&raw).map_err(|_| "grant manifest invalid")?;
     let value: Value = serde_json::from_slice(&raw).map_err(|_| "grant manifest invalid")?;
     let mut body = value.as_object().cloned().ok_or("grant manifest invalid")?;
     body.remove("binding_digest");
     let binding = canonical_hash(&Value::Object(body)).map_err(|_| "grant binding invalid")?;
-    if manifest.protocol_version != GRANT_PROTOCOL
-        || manifest.grant_id != reference.grant_id
-        || manifest.request_digest != request.request_digest
-        || manifest.binding_digest != binding
-        || manifest.binding_digest != reference.binding_digest
-        || !grant_matches_request(&manifest, request)
+    if value.get("binding_digest").and_then(Value::as_str) != Some(binding.as_str())
+        || binding != reference.binding_digest
     {
         return Err("grant binding differs".into());
     }
-    let workspace = grant_root.join("workspace");
-    let observed = inspect_workspace(&workspace, config.sandbox_uid, config.sandbox_gid)?;
-    if observed.files != manifest.files || observed.directories != manifest.directories {
-        return Err("grant material differs".into());
+    match value.get("protocol_version").and_then(Value::as_str) {
+        Some(PRE_GRANT_PROTOCOL) => {
+            let manifest: GrantManifest =
+                serde_json::from_value(value).map_err(|_| "grant manifest invalid")?;
+            if manifest.grant_id != reference.grant_id
+                || manifest.request_digest != request.request_digest
+                || manifest.binding_digest != reference.binding_digest
+                || !grant_matches_request(&manifest, request)
+            {
+                return Err("grant binding differs".into());
+            }
+            let input = grant_root.join("workspace");
+            let observed = inspect_workspace(&input, config.sandbox_uid, config.sandbox_gid)?;
+            if observed.files != manifest.files || observed.directories != manifest.directories {
+                return Err("grant material differs".into());
+            }
+            Ok(VerifiedGrant {
+                input,
+                input_inventory: observed,
+                predecessor: None,
+                predecessor_inventory: None,
+            })
+        }
+        Some(POST_GRANT_PROTOCOL) => {
+            let manifest: PostGrantManifest =
+                serde_json::from_value(value).map_err(|_| "grant manifest invalid")?;
+            verify_post_grant(config, request, reference, &grant_root, &manifest)
+        }
+        _ => Err("grant protocol invalid".into()),
     }
-    Ok(VerifiedGrant { workspace })
 }
 
 fn grant_matches_request(manifest: &GrantManifest, request: &ValidatedRequest) -> bool {
@@ -1048,91 +1064,283 @@ fn grant_matches_request(manifest: &GrantManifest, request: &ValidatedRequest) -
                     == Some(expected_manifest)
                 && semantic_manifest_sha256.as_deref() == Some(expected_manifest)
         }
-        GrantIdentity::PostSubmit {
-            submission_id,
-            submission_version,
-            evaluation_request_id,
-            evaluation_request_digest,
-            evaluation_generation,
-            attempt_id,
-            result_id,
-            lease_id,
-            lease_generation,
-            lease_expires_at,
-            binding_id,
-            content_id,
-            replica_id,
-            content_sha256,
-            byte_count,
-            evidence_id,
-            verification_receipt_id,
-            verification_job_id,
-            verification_generation,
-            namespace_fingerprint,
-            semantic_manifest_sha256: expected_manifest,
-        } => {
-            request.phase == "post_submit"
-                && identity.get("submission_id").and_then(Value::as_str) == Some(submission_id)
-                && identity.get("submission_version").and_then(Value::as_u64)
-                    == Some(*submission_version)
-                && identity
-                    .get("evaluation_request_id")
-                    .and_then(Value::as_str)
-                    == Some(evaluation_request_id)
-                && identity
-                    .get("evaluation_request_digest")
-                    .and_then(Value::as_str)
-                    == Some(evaluation_request_digest)
-                && identity
-                    .get("evaluation_generation")
-                    .and_then(Value::as_u64)
-                    == Some(*evaluation_generation)
-                && identity.get("attempt_id").and_then(Value::as_str) == Some(attempt_id)
-                && identity.get("result_id").and_then(Value::as_str) == Some(result_id)
-                && identity.get("lease_id").and_then(Value::as_str) == Some(lease_id)
-                && identity.get("lease_generation").and_then(Value::as_u64)
-                    == Some(*lease_generation)
-                && identity.get("lease_expires_at").and_then(Value::as_str)
-                    == Some(lease_expires_at)
-                && archive.get("submission_id").and_then(Value::as_str) == Some(submission_id)
-                && archive.get("submission_version").and_then(Value::as_u64)
-                    == Some(*submission_version)
-                && archive.get("binding_id").and_then(Value::as_str) == Some(binding_id)
-                && archive.get("content_id").and_then(Value::as_str) == Some(content_id)
-                && archive.get("replica_id").and_then(Value::as_str) == Some(replica_id)
-                && archive.get("content_sha256").and_then(Value::as_str) == Some(content_sha256)
-                && archive.get("byte_count").and_then(Value::as_u64) == Some(*byte_count)
-                && archive.get("evidence_id").and_then(Value::as_str) == Some(evidence_id)
-                && archive
-                    .get("verification_receipt_id")
-                    .and_then(Value::as_str)
-                    == Some(verification_receipt_id)
-                && archive.get("verification_job_id").and_then(Value::as_str)
-                    == Some(verification_job_id)
-                && archive
-                    .get("verification_generation")
-                    .and_then(Value::as_u64)
-                    == Some(*verification_generation)
-                && archive.get("namespace_fingerprint").and_then(Value::as_str)
-                    == Some(namespace_fingerprint)
-                && archive
-                    .get("semantic_manifest_sha256")
-                    .and_then(Value::as_str)
-                    == Some(expected_manifest)
-                && semantic_manifest_sha256.as_deref() == Some(expected_manifest)
-        }
     }
 }
 
+fn verify_post_grant(
+    config: &ServiceConfig,
+    request: &ValidatedRequest,
+    reference: &GrantReference,
+    grant_root: &Path,
+    manifest: &PostGrantManifest,
+) -> Result<VerifiedGrant, String> {
+    if request.phase != "post_submit"
+        || manifest.protocol_version != POST_GRANT_PROTOCOL
+        || manifest.grant_id != reference.grant_id
+        || manifest.request_digest != request.request_digest
+        || manifest.binding_digest != reference.binding_digest
+        || manifest.phase != "post_submit"
+        || manifest.identity != request.value["identity"]
+        || manifest.evaluation_context_sha256 != request.evaluation_context_sha256
+        || manifest.visible_roles != request.post_material_roles
+    {
+        return Err("POST grant binding differs".into());
+    }
+    let requested = request
+        .value
+        .get("materials")
+        .and_then(Value::as_array)
+        .ok_or("request materials missing")?;
+    if requested.len() != manifest.visible_roles.len() || manifest.materials.is_empty() {
+        return Err("POST grant material selection differs".into());
+    }
+    let mut available = std::collections::BTreeMap::new();
+    let mut available_roles = Vec::with_capacity(manifest.materials.len());
+    for item in &manifest.materials {
+        let role = validate_post_grant_material(item)?;
+        available_roles.push(role);
+        if available.insert(role.to_owned(), item).is_some() {
+            return Err("POST grant material role duplicated".into());
+        }
+    }
+    if !matches!(
+        available_roles.as_slice(),
+        [CURRENT_ARCHIVE_ROLE] | [CURRENT_ARCHIVE_ROLE, PREDECESSOR_ARCHIVE_ROLE]
+    ) || !available.contains_key(CURRENT_ARCHIVE_ROLE)
+        || available.len() > 2
+        || !manifest
+            .visible_roles
+            .iter()
+            .all(|role| available.contains_key(role))
+    {
+        return Err("POST grant material roles invalid".into());
+    }
+    if let Some(prior) = available.get(PREDECESSOR_ARCHIVE_ROLE) {
+        let expected = request
+            .value
+            .pointer("/input/evaluation_context/predecessor")
+            .and_then(Value::as_object)
+            .ok_or("POST grant predecessor context missing")?;
+        let actual = prior
+            .material
+            .as_object()
+            .ok_or("POST grant predecessor material invalid")?;
+        if [
+            "submission_id",
+            "submission_version",
+            "content_sha256",
+            "byte_count",
+            "semantic_manifest_sha256",
+        ]
+        .iter()
+        .any(|field| actual.get(*field) != expected.get(*field))
+        {
+            return Err("POST grant predecessor context differs".into());
+        }
+    }
+    for material in requested {
+        let role = material
+            .get("role")
+            .and_then(Value::as_str)
+            .ok_or("request material role missing")?;
+        if available.get(role).map(|item| &item.material) != Some(material) {
+            return Err("POST grant visible material differs".into());
+        }
+    }
+    let materials_root = grant_root.join("materials");
+    verify_materials_root(
+        &materials_root,
+        available.keys().map(String::as_str),
+        config.sandbox_uid,
+        config.sandbox_gid,
+    )?;
+    let mut inventories = std::collections::BTreeMap::new();
+    for (role, item) in &available {
+        let root = materials_root.join(role);
+        let observed = inspect_workspace(&root, config.sandbox_uid, config.sandbox_gid)?;
+        if observed.files != item.files || observed.directories != item.directories {
+            return Err("POST grant material inventory differs".into());
+        }
+        inventories.insert(role.to_owned(), observed);
+    }
+    let input = materials_root.join(CURRENT_ARCHIVE_ROLE);
+    let input_inventory = inventories
+        .remove(CURRENT_ARCHIVE_ROLE)
+        .ok_or("POST grant current inventory missing")?;
+    let predecessor = manifest
+        .visible_roles
+        .iter()
+        .any(|role| role == PREDECESSOR_ARCHIVE_ROLE)
+        .then(|| materials_root.join(PREDECESSOR_ARCHIVE_ROLE));
+    let predecessor_inventory = predecessor
+        .as_ref()
+        .and_then(|_| inventories.remove(PREDECESSOR_ARCHIVE_ROLE));
+    if predecessor.is_some() != predecessor_inventory.is_some() {
+        return Err("POST grant predecessor inventory missing".into());
+    }
+    Ok(VerifiedGrant {
+        input,
+        input_inventory,
+        predecessor,
+        predecessor_inventory,
+    })
+}
+
+fn validate_post_grant_material(item: &PostGrantMaterial) -> Result<&str, String> {
+    let material = item
+        .material
+        .as_object()
+        .ok_or("POST grant material invalid")?;
+    let expected: std::collections::BTreeSet<_> = [
+        "phase",
+        "role",
+        "submission_id",
+        "submission_version",
+        "binding_id",
+        "content_id",
+        "replica_id",
+        "content_sha256",
+        "byte_count",
+        "media_type",
+        "evidence_id",
+        "verification_receipt_id",
+        "verification_job_id",
+        "verification_generation",
+        "namespace_fingerprint",
+        "semantic_manifest_sha256",
+    ]
+    .into_iter()
+    .collect();
+    if material
+        .keys()
+        .map(String::as_str)
+        .collect::<std::collections::BTreeSet<_>>()
+        != expected
+        || material.get("phase").and_then(Value::as_str) != Some("post_submit")
+    {
+        return Err("POST grant material invalid".into());
+    }
+    let role = material
+        .get("role")
+        .and_then(Value::as_str)
+        .ok_or("POST grant material role invalid")?;
+    if !matches!(role, CURRENT_ARCHIVE_ROLE | PREDECESSOR_ARCHIVE_ROLE)
+        || material.get("submission_version").and_then(Value::as_u64) == Some(0)
+        || material
+            .get("verification_generation")
+            .and_then(Value::as_u64)
+            == Some(0)
+        || !material
+            .get("byte_count")
+            .and_then(Value::as_u64)
+            .is_some_and(|value| value <= i64::MAX as u64)
+        || !material
+            .get("media_type")
+            .and_then(Value::as_str)
+            .is_some_and(|value| value.contains('/'))
+    {
+        return Err("POST grant material invalid".into());
+    }
+    for field in [
+        "submission_id",
+        "binding_id",
+        "content_id",
+        "replica_id",
+        "evidence_id",
+        "verification_receipt_id",
+        "verification_job_id",
+    ] {
+        if !material
+            .get(field)
+            .and_then(Value::as_str)
+            .is_some_and(|value| !value.is_empty())
+        {
+            return Err("POST grant material identity invalid".into());
+        }
+    }
+    for field in [
+        "content_sha256",
+        "namespace_fingerprint",
+        "semantic_manifest_sha256",
+    ] {
+        if !material
+            .get(field)
+            .and_then(Value::as_str)
+            .is_some_and(valid_digest)
+        {
+            return Err("POST grant material digest invalid".into());
+        }
+    }
+    if semantic_manifest_hash_parts(&item.directories, &item.files)
+        .ok()
+        .as_deref()
+        != material
+            .get("semantic_manifest_sha256")
+            .and_then(Value::as_str)
+    {
+        return Err("POST grant semantic manifest differs".into());
+    }
+    Ok(role)
+}
+
+fn verify_materials_root<'a>(
+    root: &Path,
+    expected_roles: impl Iterator<Item = &'a str>,
+    expected_uid: u32,
+    expected_gid: u32,
+) -> Result<(), String> {
+    if fs::canonicalize(root).map_err(|_| "POST grant materials missing")? != root {
+        return Err("POST grant materials path differs".into());
+    }
+    let metadata = fs::symlink_metadata(root).map_err(|_| "POST grant materials missing")?;
+    if !metadata.file_type().is_dir()
+        || metadata.file_type().is_symlink()
+        || metadata.mode() & 0o077 != 0
+        || metadata.uid() != expected_uid
+        || metadata.gid() != expected_gid
+    {
+        return Err("POST grant materials identity differs".into());
+    }
+    let expected: std::collections::BTreeSet<_> = expected_roles.collect();
+    let actual: std::collections::BTreeSet<_> = fs::read_dir(root)
+        .map_err(|_| "POST grant materials unreadable")?
+        .map(|entry| {
+            entry
+                .map_err(|_| "POST grant materials unreadable".to_owned())?
+                .file_name()
+                .into_string()
+                .map_err(|_| "POST grant material role invalid".to_owned())
+        })
+        .collect::<Result<Vec<_>, _>>()?
+        .into_iter()
+        .collect();
+    if actual
+        .iter()
+        .map(String::as_str)
+        .collect::<std::collections::BTreeSet<_>>()
+        != expected
+    {
+        return Err("POST grant material roots differ".into());
+    }
+    Ok(())
+}
+
 fn semantic_manifest_hash(manifest: &GrantManifest) -> Result<String, String> {
-    let mut entries = Vec::with_capacity(manifest.directories.len() + manifest.files.len());
-    for path in &manifest.directories {
+    semantic_manifest_hash_parts(&manifest.directories, &manifest.files)
+}
+
+fn semantic_manifest_hash_parts(
+    directories: &[String],
+    files: &[GrantFile],
+) -> Result<String, String> {
+    let mut entries = Vec::with_capacity(directories.len() + files.len());
+    for path in directories {
         entries.push(serde_json::json!({
             "normalized_path": path,
             "entry_type": "directory",
         }));
     }
-    for file in &manifest.files {
+    for file in files {
         entries.push(serde_json::json!({
             "normalized_path": file.normalized_path,
             "entry_type": "file",
@@ -1333,15 +1541,28 @@ fn execute_container(
     config: &ServiceConfig,
     cache: &CacheEntry,
     request: &ValidatedRequest,
-    workspace: &Path,
+    grant: &VerifiedGrant,
     client: &UnixStream,
     budget: &mut RequestExecutionBudget,
 ) -> Result<ExecutedChecker, ExecutionFailure> {
     let owner = container_owner(config)
         .map_err(|_| ExecutionFailure::ordinary("implementation_unavailable", false))?;
     // Revalidate immediately before handing the path to Docker.
-    inspect_workspace(workspace, config.sandbox_uid, config.sandbox_gid)
+    let observed_input = inspect_workspace(&grant.input, config.sandbox_uid, config.sandbox_gid)
         .map_err(|_| ExecutionFailure::ordinary("material_unavailable", false))?;
+    if observed_input != grant.input_inventory {
+        return Err(ExecutionFailure::ordinary("material_unavailable", false));
+    }
+    if let (Some(predecessor), Some(expected)) = (&grant.predecessor, &grant.predecessor_inventory)
+    {
+        let observed = inspect_workspace(predecessor, config.sandbox_uid, config.sandbox_gid)
+            .map_err(|_| ExecutionFailure::ordinary("material_unavailable", false))?;
+        if observed != *expected {
+            return Err(ExecutionFailure::ordinary("material_unavailable", false));
+        }
+    } else if grant.predecessor.is_some() || grant.predecessor_inventory.is_some() {
+        return Err(ExecutionFailure::ordinary("material_unavailable", false));
+    }
     let nonce = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_err(|_| ExecutionFailure::ordinary("implementation_unavailable", false))?
@@ -1354,47 +1575,56 @@ fn execute_container(
     let cpus = format!("{:.3}", request.cpu_millis as f64 / 1000.0);
     let memory = request.memory_bytes.to_string();
     let pids = ((request.memory_bytes / (16 * 1024 * 1024)).clamp(16, 256)).to_string();
-    let mount = format!(
+    let input_mount = format!(
         "type=bind,src={},dst=/work/input,readonly",
-        workspace.display()
+        grant.input.display()
     );
-    let create_arguments = [
-        "create",
-        "--name",
-        &name,
-        "--label",
-        "workstream.external-checker=true",
-        "--label",
-        &attempt_label,
-        "--label",
-        &owner_label,
-        "--runtime",
-        &config.runtime,
-        "--network",
-        "none",
-        "--read-only",
-        "--user",
-        &sandbox_user,
-        "--cap-drop",
-        "ALL",
-        "--security-opt",
-        "no-new-privileges",
-        "--pids-limit",
-        &pids,
-        "--memory",
-        &memory,
-        "--cpus",
-        &cpus,
-        "--tmpfs",
-        "/tmp:rw,noexec,nosuid,nodev,size=16777216",
-        "--mount",
-        &mount,
-        "-i",
-        &image,
+    let predecessor_mount = grant.predecessor.as_ref().map(|path| {
+        format!(
+            "type=bind,src={},dst=/work/context/predecessor,readonly",
+            path.display()
+        )
+    });
+    let mut create_arguments = vec![
+        "create".to_owned(),
+        "--name".to_owned(),
+        name.clone(),
+        "--label".to_owned(),
+        "workstream.external-checker=true".to_owned(),
+        "--label".to_owned(),
+        attempt_label.clone(),
+        "--label".to_owned(),
+        owner_label.clone(),
+        "--runtime".to_owned(),
+        config.runtime.clone(),
+        "--network".to_owned(),
+        "none".to_owned(),
+        "--read-only".to_owned(),
+        "--user".to_owned(),
+        sandbox_user,
+        "--cap-drop".to_owned(),
+        "ALL".to_owned(),
+        "--security-opt".to_owned(),
+        "no-new-privileges".to_owned(),
+        "--pids-limit".to_owned(),
+        pids,
+        "--memory".to_owned(),
+        memory,
+        "--cpus".to_owned(),
+        cpus,
+        "--tmpfs".to_owned(),
+        "/tmp:rw,noexec,nosuid,nodev,size=16777216".to_owned(),
+        "--mount".to_owned(),
+        input_mount,
     ];
+    if let Some(mount) = predecessor_mount {
+        create_arguments.extend(["--mount".to_owned(), mount]);
+    }
+    create_arguments.extend(["-i".to_owned(), image]);
+    let create_argument_refs: Vec<_> = create_arguments.iter().map(String::as_str).collect();
     let created = match run_bounded_command_cancellable(
         &config.docker_binary,
-        &create_arguments,
+        &create_argument_refs,
         budget.deadline,
         budget.output.remaining,
         client,
@@ -2169,7 +2399,7 @@ mod tests {
         let mut request: Value =
             serde_json::from_slice(include_bytes!("../../fixtures/request.json")).unwrap();
         let mut manifest = GrantManifest {
-            protocol_version: GRANT_PROTOCOL.into(),
+            protocol_version: PRE_GRANT_PROTOCOL.into(),
             grant_id: grant_id.into(),
             request_digest: String::new(),
             identity: GrantIdentity::PreSubmit {
@@ -2199,10 +2429,7 @@ mod tests {
         let GrantIdentity::PreSubmit {
             semantic_manifest_sha256,
             ..
-        } = &mut manifest.identity
-        else {
-            unreachable!()
-        };
+        } = &mut manifest.identity;
         *semantic_manifest_sha256 = semantic.clone();
         request["materials"][0]["semantic_manifest_sha256"] = Value::String(semantic);
         let mut request_body = request.as_object().unwrap().clone();
@@ -3064,6 +3291,15 @@ exit 2
         fs::create_dir(&workspace).unwrap();
         fs::set_permissions(&workspace, fs::Permissions::from_mode(0o500)).unwrap();
         let request = parse_request(include_bytes!("../../fixtures/request.json")).unwrap();
+        let grant = VerifiedGrant {
+            input: workspace.clone(),
+            input_inventory: WorkspaceInventory {
+                directories: Vec::new(),
+                files: Vec::new(),
+            },
+            predecessor: None,
+            predecessor_inventory: None,
+        };
         let (_peer, client) = UnixStream::pair().unwrap();
         let mut budget = RequestExecutionBudget::new(Instant::now() + Duration::from_secs(2), 4);
 
@@ -3072,7 +3308,7 @@ exit 2
                 &config,
                 &config.cache[0],
                 &request,
-                &workspace,
+                &grant,
                 &client,
                 &mut budget,
             ),
@@ -3189,6 +3425,15 @@ exit 2
         fs::create_dir(&workspace).unwrap();
         fs::set_permissions(&workspace, fs::Permissions::from_mode(0o500)).unwrap();
         let request = parse_request(include_bytes!("../../fixtures/request.json")).unwrap();
+        let grant = VerifiedGrant {
+            input: workspace.clone(),
+            input_inventory: WorkspaceInventory {
+                directories: Vec::new(),
+                files: Vec::new(),
+            },
+            predecessor: None,
+            predecessor_inventory: None,
+        };
         let (_peer, client) = UnixStream::pair().unwrap();
         let mut budget = RequestExecutionBudget::new(
             Instant::now() + Duration::from_secs(2),
@@ -3200,7 +3445,7 @@ exit 2
                 &config,
                 &config.cache[0],
                 &request,
-                &workspace,
+                &grant,
                 &client,
                 &mut budget,
             ),
@@ -3224,6 +3469,15 @@ exit 2
         fs::create_dir(&workspace).unwrap();
         fs::set_permissions(&workspace, fs::Permissions::from_mode(0o500)).unwrap();
         let request = parse_request(include_bytes!("../../fixtures/request.json")).unwrap();
+        let grant = VerifiedGrant {
+            input: workspace.clone(),
+            input_inventory: WorkspaceInventory {
+                directories: Vec::new(),
+                files: Vec::new(),
+            },
+            predecessor: None,
+            predecessor_inventory: None,
+        };
         let (_peer, client) = UnixStream::pair().unwrap();
         let mut budget = RequestExecutionBudget::new(
             Instant::now() + Duration::from_secs(2),
@@ -3235,7 +3489,7 @@ exit 2
                 &config,
                 &config.cache[0],
                 &request,
-                &workspace,
+                &grant,
                 &client,
                 &mut budget,
             ),
@@ -3254,7 +3508,7 @@ exit 2
     fn grant_lineage_matches_the_normalized_pre_submit_request() {
         let mut request = parse_request(include_bytes!("../../fixtures/request.json")).unwrap();
         let mut manifest = GrantManifest {
-            protocol_version: GRANT_PROTOCOL.into(),
+            protocol_version: PRE_GRANT_PROTOCOL.into(),
             grant_id: "extract_0123456789abcdef0123456789abcdef".into(),
             request_digest: request.request_digest.clone(),
             identity: GrantIdentity::PreSubmit {
@@ -3287,33 +3541,28 @@ exit 2
         let GrantIdentity::PreSubmit {
             semantic_manifest_sha256,
             ..
-        } = &mut manifest.identity
-        else {
-            unreachable!()
-        };
+        } = &mut manifest.identity;
         *semantic_manifest_sha256 = semantic;
         request.value["materials"][0]["semantic_manifest_sha256"] =
             Value::String(semantic_manifest_sha256.clone());
         assert!(grant_matches_request(&manifest, &request));
         for field in 0..6 {
             let original = manifest.identity.clone();
-            if let GrantIdentity::PreSubmit {
+            let GrantIdentity::PreSubmit {
                 prepared_generation_id,
                 attempt_id,
                 attempt_request_digest,
                 archive_sha256,
                 archive_byte_count,
                 semantic_manifest_sha256,
-            } = &mut manifest.identity
-            {
-                match field {
-                    0 => *prepared_generation_id = "00000000-0000-4000-8000-000000000000".into(),
-                    1 => *attempt_id = "00000000-0000-4000-8000-000000000000".into(),
-                    2 => *attempt_request_digest = format!("sha256:{}", "8".repeat(64)),
-                    3 => *archive_sha256 = format!("sha256:{}", "8".repeat(64)),
-                    4 => *archive_byte_count += 1,
-                    _ => *semantic_manifest_sha256 = format!("sha256:{}", "8".repeat(64)),
-                }
+            } = &mut manifest.identity;
+            match field {
+                0 => *prepared_generation_id = "00000000-0000-4000-8000-000000000000".into(),
+                1 => *attempt_id = "00000000-0000-4000-8000-000000000000".into(),
+                2 => *attempt_request_digest = format!("sha256:{}", "8".repeat(64)),
+                3 => *archive_sha256 = format!("sha256:{}", "8".repeat(64)),
+                4 => *archive_byte_count += 1,
+                _ => *semantic_manifest_sha256 = format!("sha256:{}", "8".repeat(64)),
             }
             assert!(!grant_matches_request(&manifest, &request));
             manifest.identity = original;
@@ -3322,8 +3571,10 @@ exit 2
         assert!(!grant_matches_request(&manifest, &request));
     }
 
-    #[test]
-    fn grant_lineage_matches_every_normalized_post_submit_fact() {
+    fn post_grant_fixture(
+        include_prior: bool,
+        prior_visible: bool,
+    ) -> (ValidatedRequest, PostGrantManifest) {
         let digest = |byte: char| format!("sha256:{}", byte.to_string().repeat(64));
         let id = |byte: char| format!("{0}{0}{0}{0}{0}{0}{0}{0}-0000-4000-8000-000000000000", byte);
         let identity = serde_json::json!({
@@ -3334,136 +3585,325 @@ exit 2
             "lease_id": id('8'), "lease_generation": 4,
             "lease_expires_at": "2026-10-11T12:00:00+00:00"
         });
-        let material = serde_json::json!({
-            "phase": "post_submit", "role": "submission_archive",
-            "submission_id": identity["submission_id"], "submission_version": 2,
-            "binding_id": id('9'), "content_id": "aaaaaaaa-0000-4000-8000-000000000000",
-            "replica_id": "bbbbbbbb-0000-4000-8000-000000000000",
-            "content_sha256": digest('c'), "byte_count": 0, "media_type": "application/zip",
-            "evidence_id": "cccccccc-0000-4000-8000-000000000000",
-            "verification_receipt_id": "dddddddd-0000-4000-8000-000000000000",
-            "verification_job_id": "eeeeeeee-0000-4000-8000-000000000000",
-            "verification_generation": 5, "namespace_fingerprint": digest('d'),
-            "semantic_manifest_sha256": ""
-        });
-        let mut manifest = GrantManifest {
-            protocol_version: GRANT_PROTOCOL.into(),
-            grant_id: "extract_0123456789abcdef0123456789abcdef".into(),
-            request_digest: digest('f'),
-            identity: GrantIdentity::PostSubmit {
-                submission_id: identity["submission_id"].as_str().unwrap().into(),
-                submission_version: 2,
-                evaluation_request_id: identity["evaluation_request_id"].as_str().unwrap().into(),
-                evaluation_request_digest: digest('5'),
-                evaluation_generation: 3,
-                attempt_id: identity["attempt_id"].as_str().unwrap().into(),
-                result_id: identity["result_id"].as_str().unwrap().into(),
-                lease_id: identity["lease_id"].as_str().unwrap().into(),
-                lease_generation: 4,
-                lease_expires_at: identity["lease_expires_at"].as_str().unwrap().into(),
-                binding_id: material["binding_id"].as_str().unwrap().into(),
-                content_id: material["content_id"].as_str().unwrap().into(),
-                replica_id: material["replica_id"].as_str().unwrap().into(),
-                content_sha256: digest('c'),
-                byte_count: 0,
-                evidence_id: material["evidence_id"].as_str().unwrap().into(),
-                verification_receipt_id: material["verification_receipt_id"]
-                    .as_str()
-                    .unwrap()
-                    .into(),
-                verification_job_id: material["verification_job_id"].as_str().unwrap().into(),
-                verification_generation: 5,
-                namespace_fingerprint: digest('d'),
-                semantic_manifest_sha256: String::new(),
-            },
+        let semantic = semantic_manifest_hash_parts(&[], &[]).unwrap();
+        let material = |role: &str, submission_id: String, version: u64, marker: char| {
+            serde_json::json!({
+                "phase": "post_submit", "role": role,
+                "submission_id": submission_id, "submission_version": version,
+                "binding_id": id(marker), "content_id": id('a'), "replica_id": id('b'),
+                "content_sha256": digest(marker), "byte_count": 0,
+                "media_type": "application/zip", "evidence_id": id('c'),
+                "verification_receipt_id": id('d'), "verification_job_id": id('e'),
+                "verification_generation": 5, "namespace_fingerprint": digest('d'),
+                "semantic_manifest_sha256": semantic
+            })
+        };
+        let current = material(
+            CURRENT_ARCHIVE_ROLE,
+            identity["submission_id"].as_str().unwrap().into(),
+            2,
+            '9',
+        );
+        let prior = material(PREDECESSOR_ARCHIVE_ROLE, id('0'), 1, '8');
+        let mut requested = vec![current.clone()];
+        let mut visible_roles = vec![CURRENT_ARCHIVE_ROLE.to_owned()];
+        if prior_visible {
+            requested.push(prior.clone());
+            visible_roles.push(PREDECESSOR_ARCHIVE_ROLE.to_owned());
+        }
+        let mut available = vec![PostGrantMaterial {
+            material: current,
             directories: Vec::new(),
             files: Vec::new(),
-            binding_digest: digest('9'),
-        };
-        let semantic = semantic_manifest_hash(&manifest).unwrap();
-        let GrantIdentity::PostSubmit {
-            semantic_manifest_sha256,
-            ..
-        } = &mut manifest.identity
-        else {
-            unreachable!()
-        };
-        *semantic_manifest_sha256 = semantic.clone();
-        let encoded = serde_json::to_vec(&manifest).unwrap();
-        let decoded: GrantManifest = serde_json::from_slice(&encoded).unwrap();
-        assert!(matches!(decoded.identity, GrantIdentity::PostSubmit { .. }));
-        let mut substituted = serde_json::to_value(&manifest).unwrap();
-        substituted["unexpected"] = Value::Bool(true);
-        assert!(serde_json::from_value::<GrantManifest>(substituted).is_err());
-        let mut material = material;
-        material["semantic_manifest_sha256"] = Value::String(semantic);
+        }];
+        if include_prior {
+            available.push(PostGrantMaterial {
+                material: prior,
+                directories: Vec::new(),
+                files: Vec::new(),
+            });
+        }
+        let context = include_prior.then(|| {
+            serde_json::json!({
+                "schema_version": "workstream.post_submit_evaluation_context.v1",
+                "kind": "checker_remediation",
+                "source": {},
+                "predecessor": {
+                    "submission_id": id('0'), "submission_version": 1,
+                    "content_sha256": digest('8'), "byte_count": 0,
+                    "semantic_manifest_sha256": semantic,
+                },
+                "feedback": null,
+            })
+        });
+        let context_sha256 = context.as_ref().map(|value| canonical_hash(value).unwrap());
+        let request_digest = digest('7');
+        let input = context
+            .as_ref()
+            .map(|value| serde_json::json!({"evaluation_context": value}))
+            .unwrap_or_else(|| serde_json::json!({}));
         let request = ValidatedRequest {
-            value: serde_json::json!({"identity": identity, "materials": [material]}),
-            request_digest: manifest.request_digest.clone(),
+            value: serde_json::json!({
+                "identity": identity, "input": input, "materials": requested
+            }),
+            request_digest: request_digest.clone(),
             registry_entry_id: id('f'),
             registry_entry_digest: digest('1'),
             image_digest: digest('2'),
             configuration_digest: digest('3'),
             phase: "post_submit".into(),
-            cpu_millis: 1,
-            memory_bytes: 1,
+            post_material_roles: visible_roles.clone(),
+            evaluation_context_sha256: context_sha256.clone(),
+            cpu_millis: 100,
+            memory_bytes: 16 * 1024 * 1024,
             deadline_ms: 100,
             maximum_output_bytes: 256,
         };
-        assert!(grant_matches_request(&manifest, &request));
-
-        let (root, config) = test_config();
-        let bind = |manifest: &mut GrantManifest| {
-            let mut binding_body = serde_json::to_value(&*manifest).unwrap();
-            binding_body
-                .as_object_mut()
-                .unwrap()
-                .remove("binding_digest");
-            manifest.binding_digest = canonical_hash(&binding_body).unwrap();
+        let mut manifest = PostGrantManifest {
+            protocol_version: POST_GRANT_PROTOCOL.into(),
+            grant_id: "extract_0123456789abcdef0123456789abcdef".into(),
+            request_digest,
+            phase: "post_submit".into(),
+            identity: request.value["identity"].clone(),
+            evaluation_context_sha256: context_sha256,
+            materials: available,
+            visible_roles,
+            binding_digest: digest('0'),
         };
-        let mut conventional_manifest = manifest.clone();
-        bind(&mut conventional_manifest);
+        let mut body = serde_json::to_value(&manifest).unwrap();
+        body.as_object_mut().unwrap().remove("binding_digest");
+        manifest.binding_digest = canonical_hash(&body).unwrap();
+        (request, manifest)
+    }
+
+    fn publish_post_grant(config: &ServiceConfig, manifest: &PostGrantManifest) -> GrantReference {
         let grant_root = config
             .material_root
             .join("workspaces")
-            .join(&conventional_manifest.grant_id);
-        let workspace = grant_root.join("workspace");
-        fs::create_dir_all(&workspace).unwrap();
+            .join(&manifest.grant_id);
+        let materials = grant_root.join("materials");
+        fs::create_dir_all(&materials).unwrap();
+        for item in &manifest.materials {
+            let role = item.material["role"].as_str().unwrap();
+            let root = materials.join(role);
+            if !root.exists() {
+                fs::create_dir(&root).unwrap();
+            }
+            fs::set_permissions(&root, fs::Permissions::from_mode(0o500)).unwrap();
+        }
+        fs::set_permissions(&materials, fs::Permissions::from_mode(0o500)).unwrap();
         fs::set_permissions(&grant_root, fs::Permissions::from_mode(0o700)).unwrap();
-        fs::set_permissions(&workspace, fs::Permissions::from_mode(0o500)).unwrap();
-        let manifest_path = grant_root.join(".external-checker-grant.json");
+        let path = grant_root.join(".external-checker-grant.json");
+        fs::write(&path, serde_json::to_vec(manifest).unwrap()).unwrap();
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o400)).unwrap();
+        GrantReference {
+            grant_id: manifest.grant_id.clone(),
+            binding_digest: manifest.binding_digest.clone(),
+        }
+    }
+
+    #[test]
+    fn post_grant_v2_binds_context_roles_and_all_aggregate_inventories() {
+        let (root, config) = test_config();
+        let (request, manifest) = post_grant_fixture(true, false);
+        let reference = publish_post_grant(&config, &manifest);
+        let verified = verify_grant(&config, &request, &reference).unwrap();
+        assert!(verified.input.ends_with(CURRENT_ARCHIVE_ROLE));
+        assert_eq!(
+            verified.predecessor, None,
+            "hidden prior must not be mounted"
+        );
+
+        let manifest_path = config
+            .material_root
+            .join("workspaces")
+            .join(&manifest.grant_id)
+            .join(".external-checker-grant.json");
+        fs::set_permissions(&manifest_path, fs::Permissions::from_mode(0o600)).unwrap();
+        fs::remove_file(&manifest_path).unwrap();
+        let (visible_request, visible_manifest) = post_grant_fixture(true, true);
+        let visible_reference = publish_post_grant(&config, &visible_manifest);
+        let visible = verify_grant(&config, &visible_request, &visible_reference).unwrap();
+        assert!(visible.predecessor.is_some());
+
+        let mut substituted = visible_manifest.clone();
+        substituted.evaluation_context_sha256 = Some(format!("sha256:{}", "a".repeat(64)));
+        assert!(verify_post_grant(
+            &config,
+            &visible_request,
+            &visible_reference,
+            &config
+                .material_root
+                .join("workspaces")
+                .join(&substituted.grant_id),
+            &substituted,
+        )
+        .is_err());
+        let mut substituted_prior = visible_manifest.clone();
+        substituted_prior.materials[1].material["content_sha256"] =
+            Value::String(format!("sha256:{}", "a".repeat(64)));
+        assert!(verify_post_grant(
+            &config,
+            &visible_request,
+            &visible_reference,
+            &config
+                .material_root
+                .join("workspaces")
+                .join(&substituted_prior.grant_id),
+            &substituted_prior,
+        )
+        .is_err());
+        let mut extra = serde_json::to_value(&visible_manifest).unwrap();
+        extra["unexpected"] = Value::Bool(true);
+        assert!(serde_json::from_value::<PostGrantManifest>(extra).is_err());
+        let mut legacy_shape = serde_json::to_value(&visible_manifest).unwrap();
+        legacy_shape["protocol_version"] = Value::String(PRE_GRANT_PROTOCOL.into());
+        assert!(serde_json::from_value::<GrantManifest>(legacy_shape).is_err());
+        let mut unknown_role = visible_manifest.materials[1].clone();
+        unknown_role.material["role"] = Value::String("foreign_archive".into());
+        assert!(validate_post_grant_material(&unknown_role).is_err());
+        let mut reordered = visible_manifest.clone();
+        reordered.materials.reverse();
+        assert!(verify_post_grant(
+            &config,
+            &visible_request,
+            &visible_reference,
+            &config
+                .material_root
+                .join("workspaces")
+                .join(&reordered.grant_id),
+            &reordered,
+        )
+        .is_err());
+        let substituted_reference = GrantReference {
+            grant_id: visible_reference.grant_id.clone(),
+            binding_digest: format!("sha256:{}", "0".repeat(64)),
+        };
+        assert!(verify_grant(&config, &visible_request, &substituted_reference).is_err());
+        let material_root = config
+            .material_root
+            .join("workspaces")
+            .join(&visible_manifest.grant_id)
+            .join("materials");
+        let current_root = material_root.join(CURRENT_ARCHIVE_ROLE);
+        fs::set_permissions(&current_root, fs::Permissions::from_mode(0o700)).unwrap();
+        fs::write(current_root.join("drift"), b"changed").unwrap();
+        fs::set_permissions(&current_root, fs::Permissions::from_mode(0o500)).unwrap();
+        assert!(verify_grant(&config, &visible_request, &visible_reference).is_err());
+        fs::set_permissions(&current_root, fs::Permissions::from_mode(0o700)).unwrap();
+        fs::remove_file(current_root.join("drift")).unwrap();
+        for role in [CURRENT_ARCHIVE_ROLE, PREDECESSOR_ARCHIVE_ROLE] {
+            fs::set_permissions(material_root.join(role), fs::Permissions::from_mode(0o700))
+                .unwrap();
+        }
+        fs::set_permissions(&material_root, fs::Permissions::from_mode(0o700)).unwrap();
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn container_mounts_only_server_verified_visible_roles() {
+        let (root, config) = test_config();
         fs::write(
-            &manifest_path,
-            serde_json::to_vec(&conventional_manifest).unwrap(),
+            &config.docker_binary,
+            b"#!/bin/sh\nroot=$(dirname \"$0\")\ncase \"$1\" in\n  create) printf '%s\\n' \"$@\" > \"$root/args\"; exit 17;;\n  rm|container) exit 0;;\nesac\nexit 2\n",
         )
         .unwrap();
-        fs::set_permissions(&manifest_path, fs::Permissions::from_mode(0o400)).unwrap();
-        let conventional_reference = GrantReference {
-            grant_id: conventional_manifest.grant_id.clone(),
-            binding_digest: conventional_manifest.binding_digest.clone(),
+        fs::set_permissions(&config.docker_binary, fs::Permissions::from_mode(0o700)).unwrap();
+        let current = config.material_root.join("visible-current");
+        let prior = config.material_root.join("hidden-prior");
+        fs::create_dir(&current).unwrap();
+        fs::create_dir(&prior).unwrap();
+        fs::set_permissions(&current, fs::Permissions::from_mode(0o500)).unwrap();
+        fs::set_permissions(&prior, fs::Permissions::from_mode(0o500)).unwrap();
+        let (request, _) = post_grant_fixture(true, false);
+        let (_peer, client) = UnixStream::pair().unwrap();
+        let mut budget = RequestExecutionBudget::new(
+            Instant::now() + Duration::from_secs(2),
+            request.maximum_output_bytes,
+        );
+        let hidden = VerifiedGrant {
+            input: current.clone(),
+            input_inventory: WorkspaceInventory {
+                directories: Vec::new(),
+                files: Vec::new(),
+            },
+            predecessor: None,
+            predecessor_inventory: None,
         };
+        assert_eq!(
+            execute_container(
+                &config,
+                &config.cache[0],
+                &request,
+                &hidden,
+                &client,
+                &mut budget,
+            ),
+            Err(ExecutionFailure::ordinary(
+                "implementation_unavailable",
+                false
+            ))
+        );
+        let arguments = fs::read_to_string(root.join("args")).unwrap();
+        assert!(arguments.contains("dst=/work/input,readonly"));
+        assert!(!arguments.contains("/work/context/predecessor"));
+        fs::set_permissions(&current, fs::Permissions::from_mode(0o700)).unwrap();
+        fs::write(current.join("late-drift"), b"changed").unwrap();
+        fs::set_permissions(&current, fs::Permissions::from_mode(0o500)).unwrap();
+        let mut budget = RequestExecutionBudget::new(
+            Instant::now() + Duration::from_secs(2),
+            request.maximum_output_bytes,
+        );
+        assert_eq!(
+            execute_container(
+                &config,
+                &config.cache[0],
+                &request,
+                &hidden,
+                &client,
+                &mut budget,
+            ),
+            Err(ExecutionFailure::ordinary("material_unavailable", false))
+        );
+        fs::set_permissions(&current, fs::Permissions::from_mode(0o700)).unwrap();
+        fs::remove_file(current.join("late-drift")).unwrap();
+        fs::set_permissions(&current, fs::Permissions::from_mode(0o500)).unwrap();
 
-        let verified = verify_grant(&config, &request, &conventional_reference).unwrap();
-        assert_eq!(verified.workspace, workspace);
-        fs::set_permissions(&workspace, fs::Permissions::from_mode(0o700)).unwrap();
+        let visible = VerifiedGrant {
+            input: current.clone(),
+            input_inventory: WorkspaceInventory {
+                directories: Vec::new(),
+                files: Vec::new(),
+            },
+            predecessor: Some(prior.clone()),
+            predecessor_inventory: Some(WorkspaceInventory {
+                directories: Vec::new(),
+                files: Vec::new(),
+            }),
+        };
+        let mut budget = RequestExecutionBudget::new(
+            Instant::now() + Duration::from_secs(2),
+            request.maximum_output_bytes,
+        );
+        assert_eq!(
+            execute_container(
+                &config,
+                &config.cache[0],
+                &request,
+                &visible,
+                &client,
+                &mut budget,
+            ),
+            Err(ExecutionFailure::ordinary(
+                "implementation_unavailable",
+                false
+            ))
+        );
+        let arguments = fs::read_to_string(root.join("args")).unwrap();
+        assert!(arguments.contains("dst=/work/input,readonly"));
+        assert!(arguments.contains("dst=/work/context/predecessor,readonly"));
+        fs::set_permissions(&current, fs::Permissions::from_mode(0o700)).unwrap();
+        fs::set_permissions(&prior, fs::Permissions::from_mode(0o700)).unwrap();
         fs::remove_dir_all(root).unwrap();
-
-        let original = manifest.identity.clone();
-        if let GrantIdentity::PostSubmit {
-            verification_generation,
-            ..
-        } = &mut manifest.identity
-        {
-            *verification_generation += 1;
-        }
-        assert!(!grant_matches_request(&manifest, &request));
-        manifest.identity = original;
-        manifest.files.push(GrantFile {
-            normalized_path: "foreign.txt".into(),
-            byte_count: 0,
-            sha256: digest('a'),
-            executable: false,
-        });
-        assert!(!grant_matches_request(&manifest, &request));
     }
 }
