@@ -253,7 +253,17 @@ class Terminal:
 
     def _assert_restored(self):
         restored = termios.tcgetattr(self.slave)
-        assert restored == self.original, "terminal settings were not restored"
+        # Only bounded OS terminal fields reach this diagnostic, never output,
+        # credentials, or server text. Keep the exact restoration comparison.
+        assert restored == self.original, (
+            "terminal settings were not restored; "
+            f"before_flags_speeds={self.original[:6]}; "
+            f"after_flags_speeds={restored[:6]}; "
+            f"before_cc={[v if isinstance(v, int) else ord(v) for v in self.original[6]]}; "
+            f"after_cc={[v if isinstance(v, int) else ord(v) for v in restored[6]]}; "
+            f"before_int_cc={[i for i, v in enumerate(self.original[6]) if isinstance(v, int)]}; "
+            f"after_int_cc={[i for i, v in enumerate(restored[6]) if isinstance(v, int)]}"
+        )
         self._assert_cursor_and_screen_restored()
 
     def _assert_cursor_and_screen_restored(self):
