@@ -9,6 +9,9 @@ from pathlib import Path
 import stat
 import struct
 from typing import Any
+from collections.abc import Awaitable, Callable
+
+from app.interfaces.checker_trial_proxy import TRIAL_PROXY_PROTOCOL, TRIAL_PROXY_MAXIMUM_FRAME_BYTES
 
 from app.interfaces.checker_model_proxy import (
     MODEL_PROXY_MAXIMUM_FRAME_BYTES,
@@ -40,6 +43,7 @@ class ModelProxyTransport:
         *,
         socket_path: Path,
         handler: ModelProxyHandler,
+        trial_handler: Callable[[dict], Awaitable[dict]] | None = None,
         maximum_connections: int = 16,
         read_timeout_seconds: float = 2.0,
         write_timeout_seconds: float = 2.0,
@@ -48,6 +52,7 @@ class ModelProxyTransport:
         if (
             not isinstance(socket_path, Path)
             or not callable(handler)
+            or (trial_handler is not None and not callable(trial_handler))
             or type(maximum_connections) is not int
             or not 1 <= maximum_connections <= 256
             or type(read_timeout_seconds) is not float
@@ -60,13 +65,19 @@ class ModelProxyTransport:
             raise ValueError("model proxy transport configuration is invalid")
         self._socket_path = socket_path
         self._handler = handler
+        self._trial_handler = trial_handler
+        self._maximum_frame_bytes = (
+            TRIAL_PROXY_MAXIMUM_FRAME_BYTES
+            if trial_handler is not None
+            else MODEL_PROXY_MAXIMUM_FRAME_BYTES
+        )
         self._maximum_connections = maximum_connections
         self._read_timeout_seconds = read_timeout_seconds
         self._write_timeout_seconds = write_timeout_seconds
         self._shutdown_timeout_seconds = shutdown_timeout_seconds
         self._server: asyncio.AbstractServer | None = None
         self._connection_tasks: set[asyncio.Task[None]] = set()
-        self._handler_tasks: set[asyncio.Task[ModelProxyReply]] = set()
+        self._handler_tasks: set[asyncio.Task[Any]] = set()
         self._parent_identity: tuple[int, int] | None = None
         self._socket_identity: tuple[int, int] | None = None
         self._closing = False
@@ -94,7 +105,7 @@ class ModelProxyTransport:
                 self._admit_connection,
                 path=self._socket_path,
                 backlog=self._maximum_connections,
-                limit=MODEL_PROXY_MAXIMUM_FRAME_BYTES + 4,
+                limit=self._maximum_frame_bytes + 4,
             )
             metadata = os.lstat(self._socket_path)
             created_identity = (metadata.st_dev, metadata.st_ino)
@@ -200,7 +211,7 @@ class ModelProxyTransport:
         if not task.cancelled():
             task.exception()
 
-    def _handler_finished(self, task: asyncio.Task[ModelProxyReply]) -> None:
+    def _handler_finished(self, task: asyncio.Task[Any]) -> None:
         self._handler_tasks.discard(task)
         if not task.cancelled():
             task.exception()
@@ -214,14 +225,10 @@ class ModelProxyTransport:
             async with asyncio.timeout(self._read_timeout_seconds):
                 header = await reader.readexactly(4)
                 size = struct.unpack(">I", header)[0]
-                if size == 0 or size > MODEL_PROXY_MAXIMUM_FRAME_BYTES:
+                if size == 0 or size > self._maximum_frame_bytes:
                     return
                 payload = await reader.readexactly(size)
-            request = _decode_request(payload)
-            try:
-                awaitable = self._handler(request)
-            except BaseException:
-                return
+            awaitable, is_trial = self._dispatch(payload)
             handler_task = asyncio.create_task(
                 awaitable,
                 name="checker-model-proxy-handler",
@@ -232,15 +239,20 @@ class ModelProxyTransport:
                 reply = await asyncio.shield(handler_task)
             except BaseException:
                 return
-            if type(reply) is not ModelProxyReply:
+            if (is_trial and type(reply) is not dict) or (
+                not is_trial and type(reply) is not ModelProxyReply
+            ):
                 return
             body = json.dumps(
-                reply.wire_value(),
+                reply if is_trial else reply.wire_value(),
                 ensure_ascii=False,
                 allow_nan=False,
                 separators=(",", ":"),
             ).encode("utf-8")
-            if not body or len(body) > MODEL_PROXY_MAXIMUM_FRAME_BYTES:
+            reply_limit = (
+                TRIAL_PROXY_MAXIMUM_FRAME_BYTES if is_trial else MODEL_PROXY_MAXIMUM_FRAME_BYTES
+            )
+            if not body or len(body) > reply_limit:
                 return
             frame = struct.pack(">I", len(body)) + body
             writer.write(frame)
@@ -262,6 +274,23 @@ class ModelProxyTransport:
                     await writer.wait_closed()
             except (TimeoutError, OSError):
                 pass
+
+    def _dispatch(self, payload: bytes) -> tuple[Awaitable[Any], bool]:
+        """Route only the two closed protocols while retaining each frame ceiling."""
+        value = json.loads(
+            payload.decode("utf-8"),
+            parse_constant=_reject_json_constant,
+            object_pairs_hook=_closed_json_object,
+        )
+        if type(value) is not dict:
+            raise ValueError("checker proxy request root is invalid")
+        if value.get("protocol_version") == TRIAL_PROXY_PROTOCOL:
+            if self._trial_handler is None:
+                raise ValueError("trial proxy is not configured")
+            return self._trial_handler(value), True
+        if len(payload) > MODEL_PROXY_MAXIMUM_FRAME_BYTES:
+            raise ValueError("model proxy frame exceeds its limit")
+        return self._handler(_decode_request(payload)), False
 
     def _unlink_owned(
         self,

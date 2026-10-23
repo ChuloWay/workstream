@@ -69,7 +69,7 @@ class CheckerArtifactOutputService:
         """Commit checked output bytes before I/O, never a CHECKERS completion."""
         if type(request) is not CheckerOutputArtifactRequest:
             raise TypeError("invalid checker output request")
-        return await self._store(request)
+        return await self._store_output(request)
 
     async def store_trial_evidence(
         self,
@@ -78,9 +78,9 @@ class CheckerArtifactOutputService:
         """Use the same bounded put and verification workflow for a trial receipt."""
         if type(request) is not TrialEvidenceArtifactRequest:
             raise TypeError("invalid trial evidence artifact request")
-        return await self._store(request)
+        return await self._store_output(request)
 
-    async def _store(
+    async def _store_output(
         self,
         request: CheckerOutputArtifactRequest | TrialEvidenceArtifactRequest,
     ) -> CheckerOutputArtifactResult:

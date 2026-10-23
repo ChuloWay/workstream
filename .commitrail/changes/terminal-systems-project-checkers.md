@@ -417,3 +417,9 @@ Generated-output composition also updates the existing model caller in
 model owner explicitly. Trial integration proof extends
 `backend/tests/checkers/external/test_trial_evidence.py`; both use the same
 ART services and independent verification worker.
+
+Trial storage integration and private transport qualification own
+`backend/tests/checkers/external/test_trial_artifact_custody.py` and
+`backend/tests/checkers/external/test_model_proxy_transport.py`. Prove rollback
+of the first content pin, exact replay/read, private protocol routing and
+separate model/trial frame ceilings without a live provider call.

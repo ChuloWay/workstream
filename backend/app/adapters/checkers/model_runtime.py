@@ -1,7 +1,5 @@
 """Compose the private model listener with the existing AUTH, CHECKERS and ART owners."""
 
-from app.adapters.checkers import checker_output_reservations
-
 from contextlib import asynccontextmanager
 import os
 
@@ -18,15 +16,19 @@ from app.adapters.artifacts import (
 from app.adapters.auth import checker_model_service_authorization
 from app.adapters.checkers import (
     checker_model_proxy,
+    checker_output_reservations,
     create_checker_model_provider,
     model_call_service,
     model_invocation_grants,
     model_profile_reader,
+    trial_evidence_reservations,
 )
 from app.adapters.checkers.model_provider import (
     OpenAIResponsesSettings,
 )
 from app.adapters.checkers.model_proxy_transport import ModelProxyTransport
+from app.adapters.checkers.trial_proxy import CheckerTrialProxy
+from app.modules.checkers.api.trial_profiles import load_trial_authority_manifest
 from app.modules.model_usage.api import ModelCallUnavailable, ProjectModelProfile
 
 
@@ -93,12 +95,43 @@ async def configured_model_proxy_runtime(settings, sessions):
             calls=model_call_service,
             profiles=model_profile_reader,
             outputs=outputs,
-            bindings=lambda session: checker_output_binding(session, namespace=namespace, reservations=checker_output_reservations(session)),
+            bindings=lambda session: checker_output_binding(
+                session, namespace=namespace, reservations=checker_output_reservations(session)
+            ),
             provider=configured_model_provider,
         )
+        trial_proxy = None
+        if settings.checker_trial_authority_manifest_path is not None:
+            profiles = load_trial_authority_manifest(
+                settings.checker_trial_authority_manifest_path,
+                settings.checker_trial_authority_manifest_digest,
+            )
+
+            def reservations(session, request):
+                return trial_evidence_reservations(session, request, profiles)
+
+            trial_proxy = CheckerTrialProxy(
+                sessions=sessions,
+                reservations=reservations,
+                profiles=profiles,
+                outputs=lambda request: checker_output_storage(
+                    sessions=sessions,
+                    store=store,
+                    namespace=namespace,
+                    preparation=artifact_preparation_service(manager),
+                    settings=settings,
+                    reservations=lambda session: reservations(session, request),
+                ),
+                bindings=lambda session, request: checker_output_binding(
+                    session,
+                    namespace=namespace,
+                    reservations=reservations(session, request),
+                ),
+            )
         async with ModelProxyTransport(
             socket_path=settings.checker_model_proxy_socket,
             handler=proxy.handle,
+            trial_handler=trial_proxy.handle if trial_proxy is not None else None,
             shutdown_timeout_seconds=7200.0,
         ):
             yield

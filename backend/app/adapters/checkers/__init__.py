@@ -682,3 +682,15 @@ def selected_pre_submit_run_reader(session):
     from app.modules.checkers.selected_pre_submit_reads import SelectedPreSubmitRunReader
 
     return SelectedPreSubmitRunReader(session)
+
+
+def trial_evidence_reservations(session, request, profiles):
+    """Bind trial evidence to the exact current external execution and trusted profile."""
+    from app.adapters.auth import post_submit_execution_authority
+    from app.adapters.tasks import evaluation_task_guard
+    from app.modules.checkers.trial_evidence import TrialEvidenceReservations
+
+    return TrialEvidenceReservations(
+        session, request=request, profiles=profiles,
+        tasks=evaluation_task_guard(session), authority=post_submit_execution_authority(session),
+    )
