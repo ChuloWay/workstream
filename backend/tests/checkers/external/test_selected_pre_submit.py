@@ -1173,3 +1173,60 @@ async def test_selected_factory_uses_request_bound_art_grant(tmp_path) -> None:
     finally:
         await request.prepared_artifact.close()
         manager.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("cleanup_confirmed", [True, False])
+async def test_intake_cleanup_precedes_both_project_bindings(tmp_path, cleanup_confirmed):
+    from app.interfaces.external_services import ExternalServiceUnavailableError
+
+    request, _, manager, preparation = await _request(tmp_path)
+    first = _policy()
+    bindings = (first.entries[0], first.entries[0].model_copy(update={"requirement_id": "project.second_rule"}))
+    body = {"schema_version": "external_pre_submit_policy.v1",
+            "workstream_default": first.workstream_default.model_dump(mode="json"),
+            "entries": [binding.model_dump(mode="json") for binding in bindings]}
+    policy = LockedExternalPreSubmitPolicy(workstream_default=first.workstream_default,
+                                          entries=bindings, policy_sha256=canonical_json_hash(body))
+    identity, material, default_input = _execution_context(request, policy)
+    events = []
+    close = request.intake.close
+
+    async def confirm_cleanup():
+        assert request.intake.events[-1] == "default"
+        events.append("cleanup")
+        if not cleanup_confirmed:
+            raise ExternalServiceUnavailableError()
+        await close()
+
+    request.intake.close = confirm_cleanup
+
+    class OrderedExecution(_Execution):
+        async def execute(self, command, grant):
+            assert request.intake.closed
+            assert events[0] == "cleanup"
+            events.append(command.input["requirement_id"])
+            return await super().execute(command, grant)
+
+    grants, execution = _GrantIssuer(), OrderedExecution("passed")
+    processor = _processor(request=request, policy=policy, default_input=default_input,
+                           identity=identity, material=material, grants=grants, execution=execution)
+    try:
+        operation = preparation._process_prepared_submission(
+            request.prepared_artifact, processor, reserved_bytes=request.manifest.total_expanded_bytes,
+            maximum_entries=request.manifest.entry_count)
+        if cleanup_confirmed:
+            result = await operation
+            assert result.eligible
+            assert [member.requirement_id for member in result.external_members] == [binding.requirement_id for binding in bindings]
+            assert events == ["cleanup", "project.archive_rules", "project.second_rule"]
+        else:
+            with pytest.raises(SelectedPreSubmitInfrastructureUnavailable):
+                await operation
+            assert events == ["cleanup"]
+            assert grants.requests == execution.requests == []
+        assert list((tmp_path / "scratch" / "workspaces").iterdir()) == []
+    finally:
+        await request.prepared_artifact.close()
+        await close()
+        manager.close()
