@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+from hashlib import sha256
 from io import BytesIO
 from types import SimpleNamespace
 from uuid import uuid4
@@ -14,6 +15,7 @@ from app.adapters.guide_document_tools import (
     GuideDocumentParserResponse,
 )
 from app.adapters.guide_document_tools.contracts import MAXIMUM_SOURCE_BYTES
+from app.adapters.guide_document_tools.parsing import parse_document
 from app.adapters.projects.guide_document_tools import TrustedGuideDocumentTools
 from app.interfaces.guide_document_tools import GuideTextLocator
 from app.interfaces.project_guide_runtime import (
@@ -28,10 +30,9 @@ from app.modules.projects.api.guide_documents import (
 )
 
 SOURCE = b"# Rules\nSubmit one archive.\n"
-SHA = "sha256:c014b3b6b7ae3a886ee0ba5693afbccc82ec640b1a7a0636549fafc61383c0ad"
 
 
-def _case():
+def _case(source=SOURCE):
     document = GuideDocumentVersion(
         source_item_id=uuid4(),
         ingest_id=uuid4(),
@@ -41,8 +42,8 @@ def _case():
         replica_id=uuid4(),
         storage_namespace_id="primary",
         namespace_fingerprint="sha256:" + "a" * 64,
-        sha256=SHA,
-        byte_count=len(SOURCE),
+        sha256="sha256:" + sha256(source).hexdigest(),
+        byte_count=len(source),
         media_type="text/markdown",
     )
     manifest = GuideDocumentManifest(
@@ -56,8 +57,6 @@ def _case():
         documents=(document,),
     )
     instructions = "Inspect assigned originals."
-    import hashlib
-
     configuration = ProjectGuideRuntimeConfiguration(
         runtime_key="test_runtime",
         model_provider="test_provider",
@@ -66,10 +65,10 @@ def _case():
         adapter_profile=canonical_adapter_profile({"profile_key": "test_runtime.v1"}),
         instruction_version="v1",
         instructions=instructions,
-        instructions_sha256="sha256:" + hashlib.sha256(instructions.encode()).hexdigest(),
+        instructions_sha256="sha256:" + sha256(instructions.encode()).hexdigest(),
         timeout_seconds=30,
-        maximum_document_bytes=1024,
-        maximum_total_document_bytes=1024,
+        maximum_document_bytes=max(1024, len(source)),
+        maximum_total_document_bytes=max(1024, len(source)),
         maximum_tool_calls=3,
         maximum_tool_output_characters=65_536,
     )
@@ -128,6 +127,19 @@ class SizedParser:
             next_offset=None,
             total_characters=len(text),
         )
+
+
+class FixedParser:
+    """Invoke the production fixed parser without socket transport."""
+
+    identity = SimpleNamespace()
+
+    def __init__(self):
+        self.calls = 0
+
+    async def parse(self, request: GuideDocumentParserRequest, source: bytes):
+        self.calls += 1
+        return parse_document(request, source)
 
 
 class Custody:
@@ -193,15 +205,59 @@ async def test_tool_call_budget_allows_exact_limit_and_rejects_the_next_call():
 
 
 @pytest.mark.asyncio
-async def test_tool_output_budget_allows_exact_total_and_rejects_the_next_result():
-    parser = SizedParser(32_768, 32_768, 1)
+async def test_tool_output_budget_rejects_a_result_that_exceeds_the_aggregate():
+    parser = SizedParser(32_000, 32_000, 1_000)
     tools, handle, _document, custody = _tools(parser=parser)
 
-    assert len((await tools.read_document(handle, limit=32_768)).text) == 32_768
-    assert len((await tools.read_document(handle, limit=32_768)).text) == 32_768
+    assert len((await tools.read_document(handle, limit=32_768)).text) == 32_000
+    assert len((await tools.read_document(handle, limit=32_768)).text) == 32_000
 
     with pytest.raises(ValueError, match="tool output budget exceeded"):
         await tools.read_document(handle)
+    assert parser.calls == 3
+    assert len(custody.receipts) == 2
+
+
+@pytest.mark.asyncio
+async def test_locator_heavy_serialized_results_consume_the_exact_output_budget():
+    source = b"locator-heavy-line\n" * 512
+    manifest, document, configuration = _case(source)
+    handle = manifest.handle_for(document)
+    probe = TrustedGuideDocumentTools(
+        grant=Grant(document, source),
+        parser=FixedParser(),
+        custody=Custody(),
+        manifest=manifest,
+        configuration=configuration.model_copy(
+            update={"maximum_tool_output_characters": 16 * 1024 * 1024}
+        ),
+    )
+    probe_result = await probe.read_document(handle, limit=65_536)
+    serialized_characters = len(probe_result.model_dump_json())
+    assert len(probe_result.locators) == 512
+    assert serialized_characters > len(probe_result.text)
+
+    parser = FixedParser()
+    custody = Custody()
+    exact_configuration = configuration.model_copy(
+        update={"maximum_tool_output_characters": serialized_characters * 2}
+    )
+    tools = TrustedGuideDocumentTools(
+        grant=Grant(document, source),
+        parser=parser,
+        custody=custody,
+        manifest=manifest,
+        configuration=exact_configuration,
+    )
+
+    first = await tools.read_document(handle, limit=65_536)
+    second = await tools.read_document(handle, limit=65_536)
+    assert len(first.model_dump_json()) + len(second.model_dump_json()) == (
+        exact_configuration.maximum_tool_output_characters
+    )
+
+    with pytest.raises(ValueError, match="tool output budget exceeded"):
+        await tools.read_document(handle, limit=65_536)
     assert parser.calls == 3
     assert len(custody.receipts) == 2
 
