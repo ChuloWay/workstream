@@ -4,7 +4,7 @@
 - Durable disposition: Planned
 - Intended merge outcome: OmniCoreAgent guide setup generates only the supported checker specification fields and can correct known invalid model output within one bounded attempt, matching the OpenAI SDK runtime's behavior.
 
-## Intent and current gap
+## Intent
 
 The first hosted guide setup drill needs useful PRE/POST checker proposals from either registered inference runtime. The merged OpenAI SDK adapter restricts generated output and permits bounded correction, while the Omni adapter still prompts with the historical result schema and terminalizes malformed draft or final output immediately. Shared final validation rejects out-of-scope output; this change does not alter acceptance authority.
 
@@ -12,7 +12,13 @@ The first hosted guide setup drill needs useful PRE/POST checker proposals from 
 
 - Allowed: `backend/app/adapters/project_agents/omnicore_agent.py`, the existing restricted-schema helper in `backend/app/adapters/project_agents/compilation_draft.py` only to accept the native Pydantic schema shape, focused actual-SDK tests in `backend/tests/test_omnicore_agent_sdk.py`, this record, and factual current setup documentation if a capability claim changes.
 - Prohibited: project-agent contract or storage changes, authorization/approval changes, checker execution changes, provider route or retry changes, live inference, credentials, and remote product mutations.
+
+## Acceptance criteria
+
 - Acceptance: Omni presents the restricted generated schema in draft and review; a known invalid draft or final response receives safe bounded correction in the same attempt; corrected output must satisfy the shared contextual validation and reopen assigned originals in its phase; exhausted corrections fail closed; total timeout, model turns, tool quotas, provider attempts, circuit facts, and native cleanup stay bounded. Actual SDK boundary tests demonstrate correction, scope rejection, and failure exhaustion.
+
+## Risk and review routing
+
 - Risk class: L1, untrusted model output and guarded external runtime behavior.
 - Verification: focused actual SDK tests with loopback synthetic provider; relevant guide runtime tests, format/lint/type checks as available; diff, stale wording, markdown links, roadmap impact inspection.
 - Required review: architecture, security, QA, test delta. Plan review precedes product code.
@@ -31,7 +37,7 @@ Initial L1 review blocked on explicit aggregate-turn and per-run source proof. T
 
 The first SDK run exposed a shape difference: OpenAI's strict SDK schema requires `setup_notes`, while Pydantic's native schema leaves it optional. The existing restriction helper unconditionally removed that field from `required`. Its scoped repair will remove it only when present, preserving identical output restriction for both schema sources.
 
-## Evidence and review
+## Evidence
 
 The actual Omni SDK loopback tests exercise valid draft/review, exact restricted schema presentation in both initial phase prompts, native provider retries, malformed output, correction of draft and final output including a schema-valid contextual rejection, historical-scope rejection, cross-phase correction and logical-turn exhaustion, per-run source reopening, and retained tool quotas. A pre-existing foreign-source fixture now terminates after the first failed draft read; the second review read is no longer reached because every draft is context validated before review.
 
