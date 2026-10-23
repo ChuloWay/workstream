@@ -3,13 +3,14 @@
 ## Guide document runtime
 
 Guide uploads preserve original files in ArtifactStore. Bounded PDF/OOXML and
-UTF-8 Markdown format admission runs locally; the agent reads documents in its
-isolated provider workspace. Markdown is not parsed, rendered or rewritten.
-There is no local guide extractor or Pillow/PDF
-parser dependency. Use the [Developer Setup](engineering/developer-setup.md) guide
-for the supported backend environment. Scripted runtime tests prove contracts;
-real-provider document reading requires the explicit live probe and credentials
-from the ignored backend `.env`.
+UTF-8 Markdown format admission runs locally. Trusted ART grants and bounded
+read/search tools expose verified text through an isolated fixed parser, including
+PDF parsing with `pypdf`; Markdown is read as text, never executed or rendered.
+Current inference creates no provider workspace or file allocation. Use the
+[Developer Setup](engineering/developer-setup.md) guide for the supported backend
+and parser environment. Scripted runtime tests prove contracts; parser isolation
+and real storage require their integration proofs. Live model qualification is a
+separate explicit probe with credentials, not a prerequisite for document parsing.
 
 Workstream's application tests run against a new local Postgres database per
 invocation. Provisioning and cleanup use the admin database; the application

@@ -142,3 +142,7 @@ The final current-spec scan also reconciled the operating manual, developer setu
 roadmap history and ART guide-binding specification: every phase receives strict
 validation and fresh source observation; neutral inference creates no provider
 file/workspace resources. Historical exact-ID cleanup remains separately owned.
+
+The related testing runbook, data model and authority specification now distinguish
+current parser access from historical provider allocations and credential-free
+manager-authored execution from inference. No authority behavior changed.
