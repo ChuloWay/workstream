@@ -135,6 +135,25 @@ def _write_material(root: Path) -> None:
             path.chmod(0o444)
 
 
+def _owned_container_ids(name: str) -> str:
+    completed = subprocess.run(
+        [
+            "docker",
+            "container",
+            "ls",
+            "--all",
+            "--quiet",
+            "--filter",
+            f"name=^/{name}$",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    return completed.stdout.strip()
+
+
 def qualify(image: str) -> None:
     name = "ws-terminal-systems-post-smoke-" + uuid4().hex
     with tempfile.TemporaryDirectory(prefix="ws-terminal-systems-post-") as temporary:
@@ -152,10 +171,11 @@ def qualify(image: str) -> None:
             raise RuntimeError("controlled model socket did not become ready") from (
                 errors[0] if errors else None
             )
-        created = False
+        create_attempted = False
         primary_error: BaseException | None = None
         cleanup_error: BaseException | None = None
         try:
+            create_attempted = True
             subprocess.run(
                 [
                     "docker",
@@ -191,7 +211,6 @@ def qualify(image: str) -> None:
                 stderr=subprocess.PIPE,
                 timeout=30,
             )
-            created = True
             completed = subprocess.run(
                 ["docker", "start", "--attach", "--interactive", name],
                 input=_request(),
@@ -221,17 +240,20 @@ def qualify(image: str) -> None:
         except BaseException as exc:
             primary_error = exc
         finally:
-            if created:
+            if create_attempted:
                 try:
-                    removed = subprocess.run(
-                        ["docker", "rm", "--force", name],
-                        check=True,
-                        capture_output=True,
-                        text=True,
-                        timeout=15,
-                    )
-                    if removed.stdout.strip() != name:
-                        raise RuntimeError("Docker did not confirm the owned container removal")
+                    if _owned_container_ids(name):
+                        removed = subprocess.run(
+                            ["docker", "rm", "--force", name],
+                            check=True,
+                            capture_output=True,
+                            text=True,
+                            timeout=15,
+                        )
+                        if removed.stdout.strip() != name:
+                            raise RuntimeError(
+                                "Docker did not confirm the owned container removal"
+                            )
                 except BaseException as exc:
                     cleanup_error = RuntimeError(
                         "POST smoke container removal failed"
@@ -244,22 +266,7 @@ def qualify(image: str) -> None:
             primary_error = RuntimeError("controlled model exchange failed")
             primary_error.__cause__ = errors[0]
         try:
-            remaining = subprocess.run(
-                [
-                    "docker",
-                    "container",
-                    "ls",
-                    "--all",
-                    "--quiet",
-                    "--filter",
-                    f"name=^/{name}$",
-                ],
-                check=True,
-                capture_output=True,
-                text=True,
-                timeout=10,
-            )
-            if remaining.stdout.strip():
+            if _owned_container_ids(name):
                 raise RuntimeError("POST smoke container cleanup is incomplete")
         except BaseException as exc:
             if cleanup_error is None:
