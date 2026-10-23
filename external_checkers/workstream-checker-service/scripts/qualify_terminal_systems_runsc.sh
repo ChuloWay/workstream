@@ -149,7 +149,7 @@ remove_composition_root
     -p conftest -p tests.checkers.external.conftest \
     ../external_checkers/workstream-checker-service/tests/terminal_systems_runsc_composition.py \
     | grep -Fx \
-      'external_checkers/workstream-checker-service/tests/terminal_systems_runsc_composition.py::test_production_service_executes_project_trial_under_runsc_with_real_custody'
+      '::test_production_service_executes_project_trial_under_runsc_with_real_custody'
 )
 echo "qualification stage=collection_and_workspace_preflight_complete"
 docker create \
