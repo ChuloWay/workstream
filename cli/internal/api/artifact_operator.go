@@ -169,9 +169,30 @@ func artifactPageQuery(limit int, cursor *string, extra url.Values) (string, err
 	return values.Encode(), nil
 }
 
-func artifactPageRead[T any](c *Client, ctx context.Context, path, query string, limit int, validate func(json.RawMessage, *T) bool) (Result[ArtifactPage[T]], error) {
+func artifactPageRead[T any](c *Client, ctx context.Context, path, query string, limit int, cursorMayBeOmitted bool, validate func(json.RawMessage, *T) bool) (Result[ArtifactPage[T]], error) {
 	var result Result[ArtifactPage[T]]
-	raw, _, items, err := c.readPage(ctx, path, query, limit)
+	var raw json.RawMessage
+	var items []json.RawMessage
+	var err error
+	if cursorMayBeOmitted {
+		// The receipts route alone excludes null response fields. Its final page
+		// omits next_cursor, while every other ART list retains the canonical key.
+		raw, err = c.requestWithResponseLimit(ctx, http.MethodGet, path, query, nil, "", http.StatusOK, maxSubmissionReadBytes)
+		if err == nil {
+			var envelope struct {
+				Items      []json.RawMessage `json:"items"`
+				NextCursor *string           `json:"next_cursor"`
+			}
+			_, err = contextObject(raw, &envelope, []string{"items"}, nil)
+			if err != nil || envelope.Items == nil || len(envelope.Items) > limit ||
+				(envelope.NextCursor != nil && (!validTaskCursor(*envelope.NextCursor) || len(envelope.Items) == 0)) || !c.safeMutationResponse(raw) {
+				err = invalidArtifactResponse()
+			}
+			items = envelope.Items
+		}
+	} else {
+		raw, _, items, err = c.readPage(ctx, path, query, limit)
+	}
 	if err != nil {
 		return result, err
 	}
@@ -217,7 +238,7 @@ func (c *Client) ArtifactBindings(ctx context.Context, resourceType, resourceID 
 	if err != nil {
 		return result, err
 	}
-	return artifactPageRead(c, ctx, artifactOperatorPath+"/bindings", query, limit, func(raw json.RawMessage, value *ArtifactBinding) bool {
+	return artifactPageRead(c, ctx, artifactOperatorPath+"/bindings", query, limit, false, func(raw json.RawMessage, value *ArtifactBinding) bool {
 		fields, err := contextObject(raw, value, []string{"id", "content_id", "project_id", "resource_type", "resource_id", "logical_role", "scope_version", "created_at"}, nil)
 		return err == nil && requiredNullable(fields, "supersedes_binding_id") && validUUID(value.ID) && validUUID(value.ContentID) && validUUID(value.ProjectID) &&
 			value.ResourceType == resourceType && sameUUID(value.ResourceID, resourceID) && (resourceType != "project" || sameUUID(value.ProjectID, resourceID)) &&
@@ -236,7 +257,7 @@ func (c *Client) ArtifactReplicas(ctx context.Context, contentID string, limit i
 	if err != nil {
 		return result, err
 	}
-	return artifactPageRead(c, ctx, artifactOperatorPath+"/contents/"+selector+"/replicas", query, limit, func(raw json.RawMessage, value *ArtifactReplica) bool {
+	return artifactPageRead(c, ctx, artifactOperatorPath+"/contents/"+selector+"/replicas", query, limit, false, func(raw json.RawMessage, value *ArtifactReplica) bool {
 		fields, err := contextObject(raw, value, []string{"id", "content_id", "verification_state", "availability_state", "integrity_state", "created_at", "updated_at"}, nil)
 		return err == nil && requiredNullable(fields, "last_reconciled_at") && validUUID(value.ID) && sameUUID(value.ContentID, contentID) &&
 			artifactText(value.VerificationState) && artifactText(value.AvailabilityState) && artifactText(value.IntegrityState) &&
@@ -254,7 +275,7 @@ func (c *Client) ArtifactReceipts(ctx context.Context, replicaID string, limit i
 	if err != nil {
 		return result, err
 	}
-	return artifactPageRead(c, ctx, artifactOperatorPath+"/replicas/"+selector+"/receipts", query, limit, func(raw json.RawMessage, value *ArtifactReceipt) bool {
+	return artifactPageRead(c, ctx, artifactOperatorPath+"/replicas/"+selector+"/receipts", query, limit, true, func(raw json.RawMessage, value *ArtifactReceipt) bool {
 		_, err := contextObject(raw, value, []string{"id", "receipt_type", "replica_id", "outcome", "created_at"}, nil)
 		return err == nil && validUUID(value.ID) && sameUUID(value.ReplicaID, replicaID) && oneOf(value.ReceiptType, "put", "put_observation", "verification") &&
 			artifactText(value.Outcome) && validTime(value.CreatedAt) && optionalUUID(value.VerificationJobID) &&
@@ -310,7 +331,7 @@ func (c *Client) ArtifactAuditEvents(ctx context.Context, resourceType, resource
 	if err != nil {
 		return result, err
 	}
-	return artifactPageRead(c, ctx, artifactOperatorPath+"/audit-events", query, limit, func(raw json.RawMessage, value *ArtifactAuditEvent) bool {
+	return artifactPageRead(c, ctx, artifactOperatorPath+"/audit-events", query, limit, false, func(raw json.RawMessage, value *ArtifactAuditEvent) bool {
 		fields, err := contextObject(raw, value, []string{"id", "entity_type", "entity_id", "event_type", "created_at"}, nil)
 		return err == nil && requiredNullable(fields, "from_status", "to_status", "reason", "occurred_at", "request_id", "correlation_id") &&
 			validUUID(value.ID) && value.EntityType == resourceType && sameUUID(value.EntityID, resourceID) && artifactText(value.EventType) &&
@@ -336,7 +357,7 @@ func (c *Client) ArtifactAdmissionUsage(ctx context.Context, projectID string, t
 	if err != nil {
 		return result, err
 	}
-	return artifactPageRead(c, ctx, artifactOperatorPath+"/admission-usage", query, limit, func(raw json.RawMessage, value *ArtifactAdmissionUsage) bool {
+	return artifactPageRead(c, ctx, artifactOperatorPath+"/admission-usage", query, limit, false, func(raw json.RawMessage, value *ArtifactAdmissionUsage) bool {
 		fields, err := contextObject(raw, value, []string{"scope_type", "scope_id", "counted_bytes", "limit_bytes", "remaining_bytes", "unbound_ready_count", "unbound_ready_bytes", "stale_count", "stale_bytes", "cas_version", "updated_at"}, nil)
 		if err != nil || !requiredNullable(fields, "configured_limit_bytes") || !oneOf(value.ScopeType, "deployment", "project", "task") || !artifactText(value.ScopeID) ||
 			!nonNegative(value.CountedBytes, value.LimitBytes, value.RemainingBytes, value.UnboundReadyCount, value.UnboundReadyBytes, value.StaleCount, value.StaleBytes, value.CASVersion) ||

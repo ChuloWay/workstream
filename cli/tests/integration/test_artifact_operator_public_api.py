@@ -94,6 +94,18 @@ async def test_signed_operator_cli_retry_exact_replay_and_revocation(
         assert observed["id"] == source_id
         assert observed["cas_version"] == source_cas
         assert observed["status"] == "provider_unavailable"
+        receipt_path = (
+            f"/api/v1/operator/artifacts/replicas/{observed['replica_id']}/receipts"
+        )
+        signed_receipts = await signed_access.client.get(
+            receipt_path, headers=operator.headers
+        )
+        assert signed_receipts.status_code == 200, signed_receipts.text
+        signed_receipt_page = signed_receipts.json()
+        assert "next_cursor" not in signed_receipt_page
+        receipt_page = await call(operator, "receipts", observed["replica_id"])
+        assert receipt_page == signed_receipt_page
+        assert receipt_page["items"]
         await call(outsider, "verification-job", source_id, status=404)
 
         reason = "Provider-read failure investigated; explicitly retry source"

@@ -160,7 +160,7 @@ def test_exact_eight_read_routes_and_safe_text(cli):
         ),
         (
             ("receipts", REPLICA),
-            {"items": [RECEIPT_ROW], "next_cursor": None},
+            {"items": [RECEIPT_ROW]},
             f"/api/v1/operator/artifacts/replicas/{REPLICA}/receipts?limit=50",
         ),
         (
@@ -237,6 +237,25 @@ def test_bounded_page_continuations_are_one_exact_request(cli):
                 "Bearer " + TOKEN,
             )
         ]
+
+
+def test_receipts_keep_present_continuation_and_reject_malformed_page(cli):
+    with http_fixture() as (origin, response, requests):
+        response["body"] = json.dumps(
+            {"items": [RECEIPT_ROW], "next_cursor": f"verification:{RECEIPT}"}
+        ).encode()
+        result = invoke(cli, origin, "receipts", REPLICA, "--limit", "1")
+        assert result.returncode == 0
+        assert json.loads(result.stdout)["next_cursor"] == f"verification:{RECEIPT}"
+        assert requests == [
+            (
+                "GET",
+                f"/api/v1/operator/artifacts/replicas/{REPLICA}/receipts?limit=1",
+                "Bearer " + TOKEN,
+            )
+        ]
+        response["body"] = json.dumps({"items": None}).encode()
+        assert_failure(invoke(cli, origin, "receipts", REPLICA), "invalid_api_response")
 
 
 def test_all_read_successes_reject_selected_resource_substitution(cli):
