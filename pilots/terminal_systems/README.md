@@ -110,9 +110,15 @@ hash-verified predecessor alongside feedback. Earlier proposals remain immutable
 and unapproved; the handoff required human review and explicit corrections, so
 this is not a claim of automatic completeness for other guides.
 
-All 57 accumulated provider resources were deleted. No new checker image,
-approved policy, activated guide or contribution outcome is claimed. Engineering
-must implement the proposed checks and resolve their runtime/material gaps,
+All 57 accumulated provider resources were deleted. The project-owned
+[PRE image](checkers/README.md) now implements the two structural specifications;
+local rule tests and networkless container samples qualify its intake behavior.
+Its samples are structural fixtures, not completed authoring submissions.
+The eight POST checks and their model, isolated execution and authenticated
+material dependencies remain unavailable. The PRE image is published by digest
+and registered in the local rehearsal; no approved binding, activated guide or
+contribution outcome is claimed. Engineering
+must implement the remaining eight POST checks and resolve their runtime/material gaps,
 register the exact images, and obtain corrected bindings and PM approval before
 activation and the contributor journey.
 See the [live setup record](../../.commitrail/changes/terminal-systems-live-setup.md)
@@ -127,7 +133,7 @@ its documented fresh-guide procedure when replacing rules. This input package
 does not supply a prewritten rules result or select that alternative.
 
 
-No checker is claimed to implement this guide yet. In particular, the previous
+No complete checker set is claimed to implement this guide yet. In particular, the previous
 fixed five-task sample is not an implementation of these requirements. Required
 semantic judgments, metadata tooling, environment support and execution needs
 must appear in setup's capability assessment; do not weaken the guide to hide a

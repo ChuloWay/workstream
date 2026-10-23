@@ -1,0 +1,26 @@
+# Shape example only: these paths and allowances are not a runnable task.
+# Each author supplies real files, appropriate commands and measured trial notes.
+format_version = 1
+id = "portable-intake-example"
+title = "Repair a documented local tool"
+
+[environment]
+dockerfile = "environment/Dockerfile"
+context = "."
+platform = "linux/amd64"
+
+[reference]
+command = ["sh", "solution/apply.sh"]
+working_directory = "."
+
+[verification]
+command = "sh tests/run.sh"
+working_directory = "."
+
+[resources]
+cpu_millis = 1000
+memory_bytes = 536870912
+disk_bytes = 1073741824
+build_timeout_seconds = 300
+reference_timeout_seconds = 120
+verification_timeout_seconds = 120
