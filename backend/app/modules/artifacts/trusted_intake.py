@@ -25,9 +25,11 @@ class TrustedArchiveInspector:
     """Bind PreparedArtifact's retained reader to its exact server commitment."""
 
     def __init__(self, intake: TrustedIntakeSession, commitment: ArtifactCommitment) -> None:
+        """Retain the session and sealed commitment owned by this preparation."""
         self._intake, self._commitment = intake, commitment
 
     def inspect(self, reader: BinaryIO) -> SubmissionArchiveInspectionResult:
+        """Inspect the retained reader against its server-computed size and digest."""
         return self._intake.inspect(
             reader,
             archive_sha256=self._commitment.sha256,

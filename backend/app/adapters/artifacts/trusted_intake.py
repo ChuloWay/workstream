@@ -54,12 +54,14 @@ _INPUT = TypeAdapter(WorkstreamDefaultCheckerInput)
 
 
 def _object(value: object, keys: set[str]) -> dict:
+    """Require the exact wire object shape before interpreting any fields."""
     if type(value) is not dict or set(value) != keys:
         raise ExternalServiceProtocolError()
     return value
 
 
 def _entry(value: object) -> SubmissionArchiveEntry:
+    """Validate one bounded exported-file descriptor from the trusted guest."""
     body = _object(value, {field.name for field in fields(SubmissionArchiveEntry)})
     if (
         type(body["normalized_path"]) is not str
@@ -87,6 +89,7 @@ class UnixSocketTrustedIntakeAdapter:
     """Construct one local session; the node owns all preparation retry decisions."""
 
     def __init__(self, *, socket_path: Path, image_digest: str, config_digest: str) -> None:
+        """Bind an absolute private socket to operator-pinned image and config identities."""
         if (
             not socket_path.is_absolute()
             or socket_path.is_symlink()
@@ -102,9 +105,11 @@ class UnixSocketTrustedIntakeAdapter:
 
     @property
     def identity(self) -> ExternalServiceAdapterIdentity:
+        """Identify this typed capability and its explicitly registered provider."""
         return ExternalServiceAdapterIdentity(CAPABILITY, PROVIDER)
 
     def _validate_identity(self, raw: object) -> TrustedIntakeIdentity:
+        """Reject image, configuration, behavior or isolation identity drift."""
         try:
             identity = TrustedIntakeIdentity(
                 **_object(
@@ -119,6 +124,7 @@ class UnixSocketTrustedIntakeAdapter:
         return identity
 
     async def health(self) -> TrustedIntakeIdentity:
+        """Check the pinned node identity without reserving a VM."""
         session = _Session(self, time.monotonic() + 10)
         try:
             return await session._async(session._health)
@@ -126,6 +132,7 @@ class UnixSocketTrustedIntakeAdapter:
             session.abort()
 
     async def prepare(self, request: TrustedIntakePreparation) -> _Session:
+        """Acquire one lease within the original deadline and abort failed preparation."""
         if type(request) is not TrustedIntakePreparation:
             raise ExternalServiceProtocolError(self.identity)
         session = _Session(self, time.monotonic() + request.deadline_ms / 1000, request)
@@ -146,6 +153,7 @@ class _Session:
         deadline: float,
         request: TrustedIntakePreparation | None = None,
     ) -> None:
+        """Own one socket, deadline and serialized state machine for this lease."""
         self._adapter = adapter
         self._deadline = deadline
         self._request = request
@@ -159,15 +167,18 @@ class _Session:
         self._archive: tuple[str, int] | None = None
 
     def __reduce__(self):
+        """Forbid transferring the process-local lease by serialization."""
         raise TypeError("trusted intake session is process-local")
 
     @property
     def identity(self) -> TrustedIntakeIdentity:
+        """Expose only the identity acknowledged by successful preparation."""
         if self._identity is None:
             raise ExternalServiceProtocolError()
         return self._identity
 
     async def _async(self, operation: Callable[[], _T]) -> _T:
+        """Drain blocking transport work before propagating caller cancellation."""
         task = asyncio.create_task(asyncio.to_thread(operation))
         try:
             return await asyncio.shield(task)
@@ -180,6 +191,7 @@ class _Session:
             raise
 
     def _timeout(self, *, cleanup: bool = False) -> None:
+        """Charge I/O to the original deadline with a bounded cleanup allowance."""
         remaining = self._deadline + (_CLEANUP_SECONDS if cleanup else 0) - time.monotonic()
         if remaining <= 0 or self._aborted.is_set():
             raise ExternalServiceUnavailableError(self._adapter.identity)
@@ -189,6 +201,7 @@ class _Session:
             raise ExternalServiceUnavailableError(self._adapter.identity) from exc
 
     def _send(self, data: bytes, *, cleanup: bool = False) -> None:
+        """Send bytes within the current lease deadline or report unavailability."""
         self._timeout(cleanup=cleanup)
         try:
             self._socket.sendall(data)
@@ -196,6 +209,7 @@ class _Session:
             raise ExternalServiceUnavailableError(self._adapter.identity) from exc
 
     def _read(self, size: int, *, cleanup: bool = False) -> bytes:
+        """Read exactly the framed byte count without unbounded receive allocation."""
         data = bytearray()
         while len(data) < size:
             self._timeout(cleanup=cleanup)
@@ -209,6 +223,7 @@ class _Session:
         return bytes(data)
 
     def _command(self, operation: str, payload: dict, *, cleanup: bool = False) -> None:
+        """Send a bounded command carrying this connection’s exact lease nonce."""
         data = json.dumps(
             {
                 "protocol_version": _PROTOCOL,
@@ -224,6 +239,7 @@ class _Session:
         self._send(struct.pack(">I", len(data)) + data, cleanup=cleanup)
 
     def _response(self, operation: str, *, cleanup: bool = False) -> dict:
+        """Validate framing, operation and lease before accepting guest results."""
         length = struct.unpack(">I", self._read(4, cleanup=cleanup))[0]
         if not 0 < length <= _MAX_FRAME:
             raise ExternalServiceProtocolError(self._adapter.identity)
@@ -264,6 +280,7 @@ class _Session:
         return body["payload"]
 
     def _connect(self) -> None:
+        """Connect only to the configured private socket within the lease deadline."""
         self._timeout()
         try:
             self._socket.connect(str(self._adapter._path))
@@ -271,11 +288,13 @@ class _Session:
             raise ExternalServiceUnavailableError(self._adapter.identity) from exc
 
     def _health(self) -> TrustedIntakeIdentity:
+        """Read and verify the node identity on a temporary health connection."""
         self._connect()
         self._command("health", {})
         return self._adapter._validate_identity(self._response("health"))
 
     def _prepare(self) -> None:
+        """Accept the boot-scoped lease only after the node confirms readiness."""
         with self._lock:
             self._connect()
             self._command("prepare", asdict(self._request))
@@ -285,6 +304,7 @@ class _Session:
     def inspect(
         self, reader: BinaryIO, *, archive_sha256: str, archive_byte_count: int
     ) -> SubmissionArchiveInspectionResult:
+        """Stream the sealed archive and verify its returned digest and bounded manifest."""
         with self._lock:
             if (
                 self._state != "prepared"
@@ -349,6 +369,7 @@ class _Session:
             return self._inspection
 
     def export(self, sink: Callable[[SubmissionArchiveEntry, bytes], None]) -> None:
+        """Verify each inspected file while streaming into the owner-provided sink."""
         with self._lock:
             if self._state != "inspected":
                 raise ExternalServiceProtocolError(self._adapter.identity)
@@ -376,7 +397,9 @@ class _Session:
     async def evaluate_default(
         self, binding: TrustedDefaultBinding, value: WorkstreamDefaultCheckerInput
     ) -> WorkstreamDefaultCheckerResult:
+        """Bind default evaluation to exact committed PRE custody and exported bytes."""
         def evaluate() -> WorkstreamDefaultCheckerResult:
+            """Serialize the single default invocation and validate its typed result."""
             with self._lock:
                 if (
                     self._state != "exported"
@@ -408,6 +431,7 @@ class _Session:
         return await self._async(evaluate)
 
     def abort(self) -> None:
+        """Interrupt transport immediately without claiming remote cleanup confirmation."""
         self._aborted.set()
         try:
             self._socket.shutdown(socket.SHUT_RDWR)
@@ -416,7 +440,9 @@ class _Session:
         self._socket.close()
 
     async def close(self) -> None:
+        """Await the node’s cleanup acknowledgement before releasing local transport."""
         def finish() -> None:
+            """Mark the lease closed only after a valid cleanup acknowledgement."""
             with self._lock:
                 if self._state == "closed":
                     return

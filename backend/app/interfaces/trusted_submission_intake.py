@@ -22,6 +22,7 @@ from app.modules.checkers.api.default_checker import (
 
 
 def _digest(value: str) -> bool:
+    """Recognize a complete canonical SHA-256 identity without coercion."""
     return type(value) is str and re.fullmatch(r"sha256:[0-9a-f]{64}", value) is not None
 
 
@@ -35,6 +36,7 @@ class TrustedIntakePreparation:
     deadline_ms: int
 
     def __post_init__(self) -> None:
+        """Reject invalid phases, limits and deadlines before a lease can be requested."""
         if (
             self.phase not in {"pre_submit", "post_submit"}
             or not _digest(self.policy_sha256)
@@ -58,6 +60,7 @@ class TrustedIntakeIdentity:
     memory_bytes: int
 
     def __post_init__(self) -> None:
+        """Require the supported behavior, Smol isolation and positive resource limits."""
         if (
             not _digest(self.image_digest)
             or not _digest(self.config_digest)
@@ -82,6 +85,7 @@ class TrustedDefaultBinding:
     default_input_sha256: str
 
     def __post_init__(self) -> None:
+        """Require exact record identity and complete hashes for committed default custody."""
         if type(self.attempt_id) is not UUID or not all(
             _digest(value)
             for value in (
