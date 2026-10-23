@@ -11,6 +11,7 @@ from sqlalchemy import select
 
 from app.core.config import get_settings
 from app.db import session as db_session
+from app.adapters.artifacts.internal_workers import shutdown_artifact_internal_runtime
 from app.modules.actors.api import ServiceIdentity
 from app.modules.artifacts.models import (
     ArtifactPutAttempt,
@@ -38,6 +39,7 @@ base_task_database_env = _base_task_database_env
 
 @pytest.fixture
 def task_database_env(base_task_database_env, monkeypatch, tmp_path):
+    shutdown_artifact_internal_runtime()
     values = {
         "ARTIFACT_STORE_BACKEND": "s3_compatible",
         "ARTIFACT_S3_PROVIDER_PROFILE": "minio",
@@ -58,8 +60,11 @@ def task_database_env(base_task_database_env, monkeypatch, tmp_path):
     for name, value in values.items():
         monkeypatch.setenv("WORKSTREAM_" + name, value)
     get_settings.cache_clear()
-    yield base_task_database_env
-    get_settings.cache_clear()
+    try:
+        yield base_task_database_env
+    finally:
+        shutdown_artifact_internal_runtime()
+        get_settings.cache_clear()
 
 
 @dataclass
