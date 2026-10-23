@@ -169,6 +169,21 @@ class RuntimeAssessmentTests(unittest.TestCase):
         )
 
     def test_runtime_rubric_is_exact_retained_execution_rule(self):
+        retained = json.loads((HERE.parents[1] / "setup-handoff.json").read_text())
+        expected = {
+            "source": retained["source"],
+            "requirements": [
+                item
+                for item in retained["requirements"]
+                if item["requirement_id"]
+                in {
+                    RUNTIME_REQUIREMENT,
+                    "revision_rerun_evidence",
+                }
+            ],
+        }
+        bundled = json.loads((HERE / "execution-rubrics.json").read_text())
+        self.assertEqual(bundled, expected)
         source, rubric = load_runtime_rubric()
         self.assertEqual(rubric.requirement_id, RUNTIME_REQUIREMENT)
         self.assertEqual(len(rubric.pass_conditions), 11)

@@ -16,7 +16,7 @@ from trial_transport import CompletedTrial
 
 RUNTIME_REQUIREMENT = "runtime_environment_and_verification_trials"
 REVISION_RERUN_REQUIREMENT = "revision_rerun_evidence"
-_LOCAL_HANDOFF_PATH = Path(__file__).with_name("setup-handoff.json")
+_LOCAL_HANDOFF_PATH = Path(__file__).with_name("execution-rubrics.json")
 _SOURCE_HANDOFF_PATH = Path(__file__).parents[2] / "setup-handoff.json"
 HANDOFF_PATH = (
     _LOCAL_HANDOFF_PATH if _LOCAL_HANDOFF_PATH.is_file() else _SOURCE_HANDOFF_PATH
@@ -94,11 +94,10 @@ def _load_execution_rubric(
         root = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, UnicodeError, json.JSONDecodeError) as exc:
         raise RubricError("rubric_unavailable") from exc
-    if type(root) is not dict or set(root) != {
-        "source",
-        "requirements",
-        "capability_suggestions",
-    }:
+    if type(root) is not dict or set(root) not in (
+        {"source", "requirements"},
+        {"source", "requirements", "capability_suggestions"},
+    ):
         raise RubricError("rubric_invalid")
     source = root["source"]
     if type(source) is not dict or set(source) != {
