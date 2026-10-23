@@ -264,6 +264,39 @@ class TrialPlanTests(unittest.TestCase):
             ):
                 self.validated(value)
 
+    def test_noncanonical_paths_and_wrong_typed_model_fields_fail_closed(self):
+        for alias in ("a//b", "a/./b", "./a"):
+            value = self.proposal()
+            value["procedures"][0]["working_directory"] = alias
+            with self.subTest(alias=alias), self.assertRaisesRegex(
+                TrialPlanError, "invalid_output"
+            ):
+                self.validated(value)
+        for field, invalid in (
+            ("purpose", []),
+            ("evidence_id", {}),
+            ("state_source", []),
+        ):
+            value = self.proposal()
+            value["procedures"][0][field] = invalid
+            with self.subTest(field=field), self.assertRaisesRegex(
+                TrialPlanError, "invalid_output"
+            ):
+                self.validated(value)
+        incomplete = self.proposal()
+        incomplete["coverage_complete"] = False
+        incomplete["procedures"] = incomplete["procedures"][:-1]
+        incomplete["coverage_gaps"] = [
+            {
+                "purpose": "restart",
+                "evidence_id": [],
+                "start_line": 1,
+                "end_line": 1,
+            }
+        ]
+        with self.assertRaisesRegex(TrialPlanError, "invalid_output"):
+            self.validated(incomplete)
+
     def test_duplicate_keys_and_non_json_constants_are_rejected(self):
         encoded = json.dumps(self.proposal())
         duplicate = encoded.replace(
@@ -316,6 +349,9 @@ class TrialPlanTests(unittest.TestCase):
             TASK_METADATA + "\nunknown = 1\n",
             TASK_METADATA.replace('platform = "linux/amd64"', 'platform = "amd64"'),
             TASK_METADATA.replace("cpu_millis = 1000", "cpu_millis = true"),
+            TASK_METADATA.replace('context = "."', 'context = "a//b"'),
+            TASK_METADATA.replace('context = "."', 'context = "a/./b"'),
+            TASK_METADATA.replace('context = "."', 'context = "./a"'),
         )
         for content in invalid_values:
             with self.subTest(content=content):

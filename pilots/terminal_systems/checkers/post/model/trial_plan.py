@@ -101,7 +101,11 @@ def _safe_relative(value: object, *, allow_dot: bool) -> bool:
     if value == ".":
         return allow_dot
     path = PurePosixPath(value)
-    return not path.is_absolute() and all(part not in {"", ".", ".."} for part in path.parts)
+    return (
+        not path.is_absolute()
+        and value == path.as_posix()
+        and all(part not in {"", ".", ".."} for part in path.parts)
+    )
 
 
 def collect_plan_sources(root: Path) -> tuple[str, tuple[SourceEvidence, ...]]:
@@ -374,7 +378,8 @@ def validate_plan_proposal(
         command_text = procedure["command_text"]
         command = procedure["command"]
         source = procedure["state_source"]
-        cited = by_id.get(procedure["evidence_id"])
+        evidence_id = procedure["evidence_id"]
+        cited = by_id.get(evidence_id) if type(evidence_id) is str else None
         start = procedure["start_line"]
         end = procedure["end_line"]
         if (
@@ -383,6 +388,7 @@ def validate_plan_proposal(
             or len(identifier) > 100
             or _IDENTIFIER.fullmatch(identifier) is None
             or identifier in ids
+            or type(purpose) is not str
             or purpose not in PURPOSES
             or type(command_text) is not str
             or not command_text
@@ -394,7 +400,8 @@ def validate_plan_proposal(
             or any(type(item) is not str or not item or len(item) > 4096 or "\x00" in item for item in command)
             or not _safe_relative(procedure["working_directory"], allow_dot=True)
             or type(source) is not str
-            or source != "fresh"
+            or type(source) is str
+            and source != "fresh"
             and source != "reference_baseline"
             and source not in ids
             or cited is None
@@ -481,11 +488,13 @@ def validate_plan_proposal(
         }:
             raise TrialPlanError("invalid_output")
         purpose = gap["purpose"]
-        cited = by_id.get(gap["evidence_id"])
+        evidence_id = gap["evidence_id"]
+        cited = by_id.get(evidence_id) if type(evidence_id) is str else None
         start = gap["start_line"]
         end = gap["end_line"]
         if (
-            purpose not in PURPOSES
+            type(purpose) is not str
+            or purpose not in PURPOSES
             or cited is None
             or type(start) is not int
             or type(end) is not int
