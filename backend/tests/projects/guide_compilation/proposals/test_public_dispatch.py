@@ -10,6 +10,8 @@ from app.modules.projects.api.guide_compilation import ProjectGuideCompilationDe
 from app.modules.projects.api.setup_identity import project_guide_compilation_task_id
 from tests.projects.guide_compilation.runtime_fixtures import (
     ScriptedGuideRuntime,
+    configure_scripted_model_transport,
+    publish_scripted_model_profile,
     scripted_document_access_runtime,
     scripted_guide_document_parser_factory,
     scripted_runtime_configuration,
@@ -38,7 +40,7 @@ async def assert_other_actors_cannot_recover(factory, creator, latest_path, endp
 @pytest.mark.parametrize("broker_failure", [False, True])
 @pytest.mark.parametrize("manager_handoff", [False, True])
 async def test_manual_dispatch_retains_one_human_request_and_one_execution(
-    isolated_database_env, monkeypatch, broker_failure, manager_handoff,
+    isolated_database_env, monkeypatch, tmp_path, broker_failure, manager_handoff,
 ):
     from app.core.config import get_settings
     from app.core import project_agents
@@ -46,6 +48,7 @@ async def test_manual_dispatch_retains_one_human_request_and_one_execution(
 
     monkeypatch.setenv("WORKSTREAM_CELERY_BROKER_URL", "memory://")
     monkeypatch.setenv("WORKSTREAM_CELERY_RESULT_BACKEND_URL", "cache+memory://")
+    configure_scripted_model_transport(monkeypatch, tmp_path / "unused-model-proxy.sock")
     get_settings.cache_clear()
     from app.workers import project_setup as worker
     monkeypatch.setattr(project_agents, "project_guide_runtime_configuration", scripted_runtime_configuration)
@@ -64,6 +67,12 @@ async def test_manual_dispatch_retains_one_human_request_and_one_execution(
         return values["task_id"]
     monkeypatch.setattr(setup_queue, "enqueue_project_guide_compilation", enqueue)
     async with proposal_case(isolated_database_env) as (_, factory, command, actor, grant):
+        from tests.project_create_fixtures import grant_fixture_admin_role
+
+        async with factory() as session, session.begin():
+            await grant_fixture_admin_role(
+                session, actor.actor_profile_id, role="operator", scope="system"
+            )
         path = proposal_path(command)
         latest_path = f"/api/v1/projects/{command.project_id}/guides/{command.guide_id}/setup-runs/latest"
         async def predecessor_record():
@@ -73,6 +82,12 @@ async def test_manual_dispatch_retains_one_human_request_and_one_execution(
                 ), {"id": command.compilation_id})
         original_finalization = await predecessor_record()
         async with proposal_client(factory, actor) as client:
+            configuration = scripted_runtime_configuration(
+                get_settings(), adapter_profile_builder=lambda value: value
+            )
+            await publish_scripted_model_profile(
+                client, command.project_id, configuration
+            )
             package = await client.get(path+"/proposal")
             assert package.status_code == 200, package.text
             correction = await client.post(path+"/corrections", headers={"Idempotency-Key":str(uuid4())}, json={
