@@ -21,9 +21,11 @@ from app.modules.tasks.revision.service import select_candidate
 from tests.checkers.execution.support import service_link_state
 from tests.migration_fixtures import current_schema_revision
 from tests.migration_revision_fixtures import (
-    enter_predecessor_owner_shape, leave_predecessor_owner_shape, insert_0047_preparation, retained_revision_rows,
+    assert_historical_revision_guards, enter_predecessor_owner_shape,
+    historical_revision_source, leave_predecessor_owner_shape, insert_0047_preparation,
+    retained_revision_rows,
 )
-from tests.tasks.post_submit_routing.remediation_support import remediation_source
+from tests.tasks.post_submit_routing.outcome_support import invoked_completion
 from tests.tasks.post_submit_routing.support import revision_archive
 from tests.tasks.submission_dispatch.test_replacement_creation import (
     _create, _creation_request, _ready_replacement,
@@ -80,7 +82,15 @@ async def _retained_cap_source(tmp_path, database_url, monkeypatch):
         assert candidate.max_revision_rounds == 1
         return source.model_copy(update={"exhaustion": None, "revision_candidate": candidate})
 
-    async with remediation_source(tmp_path, database_url, max_revision_rounds=1) as h:
+    async with historical_revision_source(
+        tmp_path,
+        database_url,
+        monkeypatch,
+        "0047_revision_source_cap_one",
+    ) as h:
+        await assert_historical_revision_guards(h.factory, "0047_revision_recovery")
+        h.envelope = await invoked_completion(h)
+        await assert_historical_revision_guards(h.factory, "0047_revision_recovery")
         with monkeypatch.context() as patch:
             patch.setattr(TaskRoutingSourcePreparer, "prepare", old_source)
             patch.setattr("app.modules.tasks.post_submit_routing.outcome.prepare_revision", insert_0047_preparation)
@@ -220,7 +230,15 @@ async def test_upgrade_backfills_assignments_around_a_retained_exhausted_assignm
     await asyncio.to_thread(command.upgrade, _alembic_config(), "0048_revision_exhaustion")
     shape = pytest.MonkeyPatch()
     await enter_predecessor_owner_shape(_execute, database_url, shape)
-    async with remediation_source(tmp_path, database_url, max_revision_rounds=0) as h:
+    async with historical_revision_source(
+        tmp_path,
+        database_url,
+        monkeypatch,
+        "0048_revision_source_cap_zero",
+    ) as h:
+        await assert_historical_revision_guards(h.factory, "0048_revision_exhaustion")
+        h.envelope = await invoked_completion(h)
+        await assert_historical_revision_guards(h.factory, "0048_revision_exhaustion")
         exhausted = await _apply(h)
         async with h.factory() as session:
             receipt = await session.scalar(select(TaskRevisionExhaustion).where(

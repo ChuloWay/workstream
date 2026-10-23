@@ -31,6 +31,9 @@ RUN if ! getent group "${LOCAL_GID}" >/dev/null; then \
     fi \
     && useradd --non-unique --uid "${LOCAL_UID}" --gid "${LOCAL_GID}" --create-home --shell /bin/bash workstream
 
+# The fixed guide parser owns this socket directory; workers only connect.
+RUN install -d -m 0750 -o 10002 -g 10001 /var/lib/workstream/guide-runtime
+
 WORKDIR /workspace/backend
 
 RUN mkdir --parents /workspace/scratch \

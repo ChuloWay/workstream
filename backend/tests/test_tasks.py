@@ -620,6 +620,7 @@ async def create_policy_bundle_for_guide(
     artifact_proposal=None,
     *,
     post_submit_registry_spec=None,
+    document_access_factory=None,
 ) -> dict:
     for kind, body in (
         (
@@ -666,6 +667,7 @@ async def create_policy_bundle_for_guide(
         artifact_proposal=artifact_proposal or task_artifact_proposal(),
         request_headers=auth_headers(),
         post_submit_registry_spec=post_submit_registry_spec,
+        document_access_factory=document_access_factory,
     )
 
 

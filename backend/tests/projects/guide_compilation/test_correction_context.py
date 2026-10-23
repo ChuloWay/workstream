@@ -74,8 +74,8 @@ def test_correction_rejects_uncommitted_material_even_after_unvalidated_copy(cha
         ProjectGuideCompilationContext.model_validate({**compilation.model_dump(), **updates})
 
 
-@pytest.mark.parametrize("provider_free", [False, True])
-def test_context_prompt_bound_applies_only_when_a_provider_will_receive_it(provider_free):
+@pytest.mark.parametrize("no_inference", [False, True])
+def test_context_prompt_bound_applies_only_when_inference_will_run(no_inference):
     """Manager-authored rules keep their own document bound without a hosted prompt."""
     from types import SimpleNamespace
     from app.modules.projects.guide_compilation.context import compilation_context_from_material
@@ -88,7 +88,7 @@ def test_context_prompt_bound_applies_only_when_a_provider_will_receive_it(provi
     )
 
     configuration = (
-        manager_runtime_configuration() if provider_free else runtime_configuration()
+        manager_runtime_configuration() if no_inference else runtime_configuration()
     ).model_copy(update={"maximum_manifest_bytes": 1024})
     original = context(ids(), configuration=configuration)
     material = original.material
@@ -114,7 +114,7 @@ def test_context_prompt_bound_applies_only_when_a_provider_will_receive_it(provi
         runtime_configuration=configuration,
     )
     assert len(project_guide_compilation_prompt_bytes(original)) > 1024
-    if provider_free:
+    if no_inference:
         assert compilation_context_from_material(**arguments) == original
     else:
         with pytest.raises(GuideCompilationIntegrityError, match="context exceeds"):

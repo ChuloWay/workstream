@@ -323,3 +323,22 @@ def test_guide_api_denial_is_safe(adapter: Adapter, call: Call) -> None:
     assert "private guide" not in serialized
     assert "private-token" not in serialized
     assert len(received) == 1
+
+
+def test_guide_create_accepts_backend_canonical_document_label(
+    adapter: Adapter, call: Call
+) -> None:
+    client, received, upstream = adapter
+    arguments = _create_arguments()
+    arguments["body"]["documents"][0]["label"] = "  Guide   document  "
+    response = _created()
+    response["documents"][0]["label"] = "Guide document"
+    upstream.update(status=201, json=response)
+    result = call(
+        client,
+        name="workstream_guides_create",
+        arguments=arguments,
+    ).json()["result"]
+    assert result["isError"] is False
+    assert result["structuredContent"] == response
+    assert len(received) == 1

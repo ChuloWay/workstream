@@ -12,11 +12,10 @@ from tests.projects.client_fixtures import (
     project_client as project_client, project_database_env as project_database_env,
 )
 from .test_automatic_request import automatic_source as automatic_source
-from .runtime_fixtures import ScriptedGuideRuntime
+from .runtime_fixtures import ScriptedGuideRuntime, scripted_runtime_configuration
 from .test_live_cutover_postgresql import (
     _delivery, scripted_document_port as scripted_document_port,
 )
-from .helpers import runtime_configuration
 from .test_capability_growth import growth_report
 from .test_compilation_storage_limit import boundary_reports
 
@@ -58,7 +57,7 @@ async def test_handoff_persistence_and_terminal_replay(automatic_source, monkeyp
     else:
         runtime.outcome = growth_report()
     monkeypatch.setattr(worker, "create_project_guide_runtime", lambda configuration: runtime)
-    monkeypatch.setattr(worker, "project_guide_runtime_configuration", lambda settings: runtime_configuration())
+    monkeypatch.setattr(worker, "project_guide_runtime_configuration", scripted_runtime_configuration)
     first = await (await worker._coordinator(factory)).run(delivery)
     assert first["status"] == (
         "compilation_invalid_terminal" if oversized else "policy_draft_ready"
@@ -91,11 +90,16 @@ async def test_handoff_persistence_and_terminal_replay(automatic_source, monkeyp
                 0 if oversized else expected
             )
 
-    def forbidden(*args):
+    def forbidden_runtime(_configuration):
         pytest.fail("terminal replay constructed a provider runtime")
 
-    monkeypatch.setattr(worker, "create_project_guide_runtime", forbidden)
-    monkeypatch.setattr(worker, "project_guide_runtime_configuration", forbidden)
+    def forbidden_configuration(_settings, *, adapter_profile_builder):
+        pytest.fail("terminal replay constructed a provider runtime")
+
+    monkeypatch.setattr(worker, "create_project_guide_runtime", forbidden_runtime)
+    monkeypatch.setattr(
+        worker, "project_guide_runtime_configuration", forbidden_configuration
+    )
     assert await (await worker._coordinator(factory)).run(delivery) == first
     assert runtime.calls == 1
     async with factory() as session:

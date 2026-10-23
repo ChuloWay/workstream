@@ -42,8 +42,8 @@ Edit it before startup:
   for the API rate-limit and pagination keys;
 - generate a separate local Flow HMAC secret with `openssl rand -hex 32`.
 
-Set `OPENAI_API_KEY` only when running genuine guide compilation. Keep the
-real key in this ignored file. Without it, the six services and artifact
+Set `OPENROUTER_API_KEY` (for the default OpenRouter provider) only when running genuine guide compilation. Keep the
+real key in this ignored file. Without it, the seven services and artifact
 upload can run, but provider-backed guide setup cannot complete successfully.
 
 Compose rejects a missing project name or required secret instead of silently
@@ -51,7 +51,7 @@ sharing defaults. All published ports bind to `127.0.0.1`. Containers use the
 internal names `postgres:5432`, `redis:6379` and `minio:9000`; host-port changes
 do not alter service-to-service URLs.
 
-## Start and inspect the six services
+## Start and inspect the seven services
 
 ```bash
 docker compose --profile backend up --build --wait
@@ -60,8 +60,9 @@ docker compose --profile backend exec -T worker celery -A app.workers.celery_app
 docker compose --profile backend exec -T backend python scripts/ensure_local_minio_bucket.py
 ```
 
-`ps` must show `backend`, the Celery service, `beat`, `postgres`, `redis` and `minio`
-healthy. The Celery command must report `pong`. The bucket command must report
+`ps` must show `backend`, the Celery service, `beat`, `postgres`, `redis`, `minio`
+and `guide-document-parser` healthy. The Celery service waits for parser health before
+starting. The Celery command must report `pong`. The bucket command must report
 the configured bucket as ready. API, Celery process and beat receive the same
 `s3_compatible` MinIO configuration and share the Compose-project scratch
 volume; only the API performs idempotent bucket provisioning before startup.
@@ -272,7 +273,7 @@ curl_with_token "$MANAGER_TOKEN" --fail --silent --show-error \
 docker compose --profile backend logs --since 10m worker beat
 ```
 
-With a valid `OPENAI_API_KEY`, poll that endpoint until `finished_at` is set and
+With a valid `OPENROUTER_API_KEY` (for the default OpenRouter provider), poll that endpoint until `finished_at` is set and
 confirm `output_sufficiency_report_id` is non-null. A failure or unresolved
 provider outcome is evidence to diagnose, not acceptance. Restart the Celery process
 during a pending run and observe the same setup ID afterward to exercise the
@@ -328,7 +329,7 @@ From the first checkout, stop only its project without deleting volumes:
 docker compose --profile backend down
 ```
 
-In the second checkout, all six services must remain healthy, its project must
+In the second checkout, all seven services must remain healthy, its project must
 still be readable, and its bucket must still be present:
 
 ```bash

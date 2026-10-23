@@ -14,8 +14,13 @@ from tests.projects.client_fixtures import (
     project_database_env as project_database_env,
 )
 from .test_automatic_request import automatic_source as automatic_source
-from .helpers import generated_result, runtime_configuration
-from .runtime_fixtures import document_access, ScriptedGuideRuntime
+from .helpers import generated_result
+from .runtime_fixtures import (
+    ScriptedGuideRuntime,
+    scripted_document_access_runtime,
+    scripted_guide_document_parser_factory,
+    scripted_runtime_configuration,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -25,8 +30,12 @@ def scripted_document_port(monkeypatch):
     from app.core.config import get_settings
     get_settings.cache_clear()
     from app.workers import project_setup as worker
-    monkeypatch.setattr(worker, "guide_document_access_runtime",
-                        lambda sessions, *args: document_access(*args))
+    monkeypatch.setattr(
+        worker, "guide_document_access_runtime", scripted_document_access_runtime
+    )
+    monkeypatch.setattr(
+        worker, "guide_document_parser_factory", scripted_guide_document_parser_factory
+    )
 
 
 async def _delivery(factory, setup_id):
@@ -93,7 +102,7 @@ async def test_pending_exact_delivery_compiles_once_and_replays_finalization(
         )
     monkeypatch.setattr(worker, "create_project_guide_runtime", lambda configuration: runtime)
     monkeypatch.setattr(
-        worker, "project_guide_runtime_configuration", lambda settings: runtime_configuration()
+        worker, "project_guide_runtime_configuration", scripted_runtime_configuration
     )
     coordinator = await worker._coordinator(factory)
     first = await coordinator.run(delivery)
@@ -137,11 +146,16 @@ async def test_pending_exact_delivery_compiles_once_and_replays_finalization(
             ]:
                 assert await session.scalar(text("select count(*) from " + table)) == 0
 
-    def forbidden(*args):
+    def forbidden_runtime(_configuration):
         pytest.fail("finalized replay reached request configuration or runtime construction")
 
-    monkeypatch.setattr(worker, "create_project_guide_runtime", forbidden)
-    monkeypatch.setattr(worker, "project_guide_runtime_configuration", forbidden)
+    def forbidden_configuration(_settings, *, adapter_profile_builder):
+        pytest.fail("finalized replay reached request configuration or runtime construction")
+
+    monkeypatch.setattr(worker, "create_project_guide_runtime", forbidden_runtime)
+    monkeypatch.setattr(
+        worker, "project_guide_runtime_configuration", forbidden_configuration
+    )
     replay = await (await worker._coordinator(factory)).run(delivery)
     assert replay == first
     assert runtime.calls == 1
@@ -187,7 +201,7 @@ async def test_compilation_phase_and_public_setup_read_share_parent_lock_order(
     delivery = await _delivery(factory, setup_id)
     runtime = ScriptedGuideRuntime()
     monkeypatch.setattr(worker, "create_project_guide_runtime", lambda configuration: runtime)
-    monkeypatch.setattr(worker, "project_guide_runtime_configuration", lambda settings: runtime_configuration())
+    monkeypatch.setattr(worker, "project_guide_runtime_configuration", scripted_runtime_configuration)
     coordinator = await worker._coordinator(factory)
     target = {"compilation": ProjectGuideCompilation, "sufficiency": GuideSufficiencyReport,
               "finalization": ProjectGuideSetupFinalization}[phase]
@@ -260,11 +274,16 @@ async def test_stale_delivery_rejects_before_any_compilation_effect(
     await create_committed_document_fixture(snapshot["id"])
     delivery = await _delivery(factory, setup_id)
 
-    def forbidden(*args):
+    def forbidden_runtime(_configuration):
         pytest.fail("stale delivery reached configuration or runtime")
 
-    monkeypatch.setattr(worker, "create_project_guide_runtime", forbidden)
-    monkeypatch.setattr(worker, "project_guide_runtime_configuration", forbidden)
+    def forbidden_configuration(_settings, *, adapter_profile_builder):
+        pytest.fail("stale delivery reached configuration or runtime")
+
+    monkeypatch.setattr(worker, "create_project_guide_runtime", forbidden_runtime)
+    monkeypatch.setattr(
+        worker, "project_guide_runtime_configuration", forbidden_configuration
+    )
     changed = delivery.model_copy(update={field: 2 if field == "setup_generation" else uuid4()})
     async with factory() as session:
         before = await session.scalar(text("select count(*) from audit_events"))
@@ -308,7 +327,7 @@ async def test_invalid_or_uncertain_attempt_reports_durable_diagnostics_without_
     )
     monkeypatch.setattr(worker, "create_project_guide_runtime", lambda configuration: runtime)
     monkeypatch.setattr(
-        worker, "project_guide_runtime_configuration", lambda settings: runtime_configuration()
+        worker, "project_guide_runtime_configuration", scripted_runtime_configuration
     )
     coordinator = await worker._coordinator(factory)
     # Beat selects the exact delivery before terminal provider custody exists.
@@ -378,7 +397,7 @@ async def test_finalized_receipt_excludes_every_recovery_shape(automatic_source,
     runtime = ScriptedGuideRuntime()
     monkeypatch.setattr(worker, "create_project_guide_runtime", lambda configuration: runtime)
     monkeypatch.setattr(
-        worker, "project_guide_runtime_configuration", lambda settings: runtime_configuration()
+        worker, "project_guide_runtime_configuration", scripted_runtime_configuration
     )
     await _select_stale_delivery(factory, delivery)
     receipt = await (await worker._coordinator(factory)).run(delivery)
@@ -496,7 +515,7 @@ async def test_publisher_acknowledgement_cannot_overwrite_worker_finalization(
     runtime = ScriptedGuideRuntime()
     monkeypatch.setattr(worker, "create_project_guide_runtime", lambda configuration: runtime)
     monkeypatch.setattr(
-        worker, "project_guide_runtime_configuration", lambda settings: runtime_configuration()
+        worker, "project_guide_runtime_configuration", scripted_runtime_configuration
     )
 
     async def dispatch():
@@ -554,7 +573,7 @@ async def test_phase_crash_recovers_same_attempt_without_reinference(
     runtime = ScriptedGuideRuntime()
     monkeypatch.setattr(worker, "create_project_guide_runtime", lambda configuration: runtime)
     monkeypatch.setattr(
-        worker, "project_guide_runtime_configuration", lambda settings: runtime_configuration()
+        worker, "project_guide_runtime_configuration", scripted_runtime_configuration
     )
     coordinator = await worker._coordinator(factory)
     projections = coordinator._projections
@@ -651,7 +670,7 @@ async def test_each_phase_rechecks_service_authority_and_restoration_reuses_atte
     runtime = ScriptedGuideRuntime()
     monkeypatch.setattr(worker, "create_project_guide_runtime", lambda configuration: runtime)
     monkeypatch.setattr(
-        worker, "project_guide_runtime_configuration", lambda settings: runtime_configuration()
+        worker, "project_guide_runtime_configuration", scripted_runtime_configuration
     )
     coordinator = await worker._coordinator(factory)
 
@@ -752,7 +771,7 @@ async def test_concurrent_live_deliveries_share_one_provider_and_finalization(
     monkeypatch.setattr(runtime, "compile_project_guide", blocked_provider)
     monkeypatch.setattr(worker, "create_project_guide_runtime", lambda config: runtime)
     monkeypatch.setattr(
-        worker, "project_guide_runtime_configuration", lambda settings: runtime_configuration()
+        worker, "project_guide_runtime_configuration", scripted_runtime_configuration
     )
     first = asyncio.create_task((await worker._coordinator(factory)).run(delivery))
     try:
@@ -804,11 +823,16 @@ async def test_dirty_setup_rejects_before_request_or_provider(
         setup = await session.get(ProjectSetupRun, str(setup_id))
         setattr(setup, field, datetime.fromisoformat(value) if field.endswith("_at") and value else value)
 
-    def forbidden(*args):
+    def forbidden_runtime(_configuration):
         pytest.fail("dirty setup reached configuration or provider")
 
-    monkeypatch.setattr(worker, "create_project_guide_runtime", forbidden)
-    monkeypatch.setattr(worker, "project_guide_runtime_configuration", forbidden)
+    def forbidden_configuration(_settings, *, adapter_profile_builder):
+        pytest.fail("dirty setup reached configuration or provider")
+
+    monkeypatch.setattr(worker, "create_project_guide_runtime", forbidden_runtime)
+    monkeypatch.setattr(
+        worker, "project_guide_runtime_configuration", forbidden_configuration
+    )
     with pytest.raises(ProjectGuideCompilationDeliveryError):
         await (await worker._coordinator(factory)).run(delivery)
     async with factory() as session:
@@ -834,7 +858,7 @@ async def test_stale_queued_configuration_failure_is_reclaimed_and_finishes_same
     await create_committed_document_fixture(snapshot["id"])
     delivery = await _delivery(factory, setup_id)
 
-    def unavailable(settings):
+    def unavailable(_settings, *, adapter_profile_builder):
         raise ValueError("missing runtime configuration")
 
     monkeypatch.setattr(worker, "project_guide_runtime_configuration", unavailable)
@@ -849,7 +873,7 @@ async def test_stale_queued_configuration_failure_is_reclaimed_and_finishes_same
     await _reclaim_exact_delivery(factory, delivery, monkeypatch)
     runtime = ScriptedGuideRuntime()
     monkeypatch.setattr(
-        worker, "project_guide_runtime_configuration", lambda settings: runtime_configuration()
+        worker, "project_guide_runtime_configuration", scripted_runtime_configuration
     )
     monkeypatch.setattr(worker, "create_project_guide_runtime", lambda configuration: runtime)
     first = await (await worker._coordinator(factory)).run(delivery)

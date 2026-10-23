@@ -31,21 +31,18 @@ from app.interfaces.project_agents import (
     ProjectGuideCompilationInvalidOutputError,
     ProjectGuideCompilationResult,
     invalid_compilation_failure_code,
-    require_complete_generated_specifications,
-    require_complete_project_guide_compilation_result,
-    require_ready_result_cites_every_document,
-    validate_project_guide_compilation_result,
 )
-from app.interfaces.project_guide_runtime import (
-    MANAGER_AUTHORED_RUNTIME_KEY,
-    ProjectGuideRuntimeConfiguration,
+from app.adapters.project_agents.result_validation import (
+    validate_project_guide_runtime_result,
 )
+from app.interfaces.project_guide_runtime import ProjectGuideRuntimeConfiguration
 from app.modules.projects.api.guide_documents import (
     GuideDocumentVersion,
     GuideRuntimeCapabilities,
 )
 
 RULES_DOCUMENT_FORMAT = "workstream.project_guide_rules.v1"
+MANAGER_AUTHORED_RUNTIME_KEY = "manager_authored"
 MAXIMUM_RULES_DOCUMENT_BYTES = MAXIMUM_COMPILATION_RESULT_STORAGE_BYTES
 _RESULT_FIELDS = frozenset({
     "status", "findings", "submission_artifact_policy", "requirements",
@@ -60,8 +57,11 @@ class ManagerAuthoredProjectGuideRuntime:
 
     def __init__(self, configuration: ProjectGuideRuntimeConfiguration) -> None:
         """Accept only the exact provider-free configuration recorded for this runtime."""
-        if (configuration.runtime_key != MANAGER_AUTHORED_RUNTIME_KEY
-                or not configuration.provider_free):
+        if (
+            configuration.runtime_key != MANAGER_AUTHORED_RUNTIME_KEY
+            or configuration.uses_inference
+            or configuration.adapter_profile_values()
+        ):
             raise ProjectAgentRuntimeConfigurationError("project guide runtime is unsupported")
         self._configuration = configuration
         self._admitted = False
@@ -76,13 +76,6 @@ class ManagerAuthoredProjectGuideRuntime:
         if self._admitted:
             raise ProjectAgentRuntimeError("project guide runtime admission already acquired")
         self._admitted = True
-
-    async def cleanup_resources(self, custody) -> bool:
-        """Report clean custody; this runtime never records provider resources."""
-        try:
-            return not await custody.cleanup_resources()
-        except Exception:
-            return False
 
     async def aclose(self) -> None:
         """Nothing to release: no admission lease, client or workspace exists."""
@@ -123,7 +116,9 @@ class ManagerAuthoredProjectGuideRuntime:
             raise ProjectAgentRuntimeError(runtime_failure) from None
         invalid_failure = None
         try:
-            return _compile_rules(context, rules)
+            result = _compile_rules(context, rules)
+            opened = await capabilities.tools.opened_handles()
+            return validate_project_guide_runtime_result(context, result, opened)
         except (TypeError, ValueError) as error:
             invalid_failure = invalid_compilation_failure_code(error)
         rules = None
@@ -143,13 +138,39 @@ async def _read_rules_documents(
     candidates: list[tuple[GuideDocumentVersion, object | None]] = []
     for document in manifest.documents:
         handle = manifest.handle_for(document)
-        # The ART grant authorizes and checksum-verifies bytes before yielding a reader.
-        async with capabilities.documents.open(handle) as opened:
-            if opened.document != document:
-                raise RuntimeError("guide document version mismatch")
-            body = (opened.reader.read(MAXIMUM_RULES_DOCUMENT_BYTES + 1)
-                    if document.media_type == "text/markdown" else b"")
-            await capabilities.resources.record_direct_document_open(handle)
+        body_parts: list[str] = []
+        body_bytes = 0
+        collect_rules = document.media_type == "text/markdown"
+        offset = 0
+        total_characters = None
+        while True:
+            opened = await capabilities.tools.read_document(
+                handle, offset=offset, limit=65_536
+            )
+            if (
+                opened.handle != handle
+                or opened.source_item_id != document.source_item_id
+                or opened.document_version_id != document.ingest_id
+                or opened.sha256 != document.sha256
+                or opened.operation != "read"
+                or (total_characters is not None
+                    and opened.total_characters != total_characters)
+            ):
+                raise RuntimeError("guide document tool result is invalid")
+            total_characters = opened.total_characters
+            if collect_rules:
+                body_bytes += len(opened.text.encode("utf-8"))
+                if body_bytes > MAXIMUM_RULES_DOCUMENT_BYTES:
+                    body_parts = []
+                    collect_rules = False
+                else:
+                    body_parts.append(opened.text)
+            if opened.next_offset is None:
+                break
+            if opened.next_offset <= offset:
+                raise RuntimeError("guide document pagination is invalid")
+            offset = opened.next_offset
+        body = "".join(body_parts).encode("utf-8")
         parsed = _rules_candidate(body)
         body = b""
         if parsed is not None:
@@ -194,12 +215,7 @@ def _compile_rules(
         agent_version=context.agent_version,
         schema_version=PROJECT_GUIDE_COMPILATION_SCHEMA_VERSION,
     )
-    result = ProjectGuideCompilationResult.model_validate(body)
-    require_complete_project_guide_compilation_result(result)
-    validate_project_guide_compilation_result(context, result)
-    require_complete_generated_specifications(context, result)
-    require_ready_result_cites_every_document(context, result)
-    return result
+    return ProjectGuideCompilationResult.model_validate(body)
 
 
 def _with_resolved_evidence(

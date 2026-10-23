@@ -59,22 +59,35 @@ async def test_incomplete_or_inconsistent_source_never_yields_document_lineage(f
 
 
 async def test_cleanup_selection_rejects_invalid_retained_configuration_without_leaking_it(caplog):
-    from app.modules.projects.guide_compilation.runtime_resources import pending_runtime_resource_cleanup
+    from app.modules.projects.guide_compilation.runtime_resources import (
+        RetainedGuideRuntimeCleanupCandidate,
+        pending_runtime_resource_cleanup,
+    )
     from .helpers import runtime_configuration
 
     config = runtime_configuration()
     valid_id, invalid_id, mismatch_id = uuid4(), uuid4(), uuid4()
     marker = 'untrusted-retained-instructions-must-not-be-logged'
     rows = [SimpleNamespace(id=valid_id, guide_material_hash='sha256:'+'a'*64,
-        runtime_configuration=config.model_dump(mode='json'), runtime_configuration_hash=config.sha256),
+        runtime_configuration=config.model_dump(mode='json'), runtime_configuration_hash=config.sha256,
+        status='compilation_persisted', latest_created_at=datetime.now(timezone.utc)),
         SimpleNamespace(id=invalid_id, guide_material_hash='sha256:'+'b'*64,
             runtime_configuration={'instructions': marker}, runtime_configuration_hash=config.sha256),
         SimpleNamespace(id=mismatch_id, guide_material_hash='sha256:'+'c'*64,
             runtime_configuration=config.model_dump(mode='json'), runtime_configuration_hash='sha256:'+'d'*64)]
     session = SimpleNamespace(execute=AsyncMock(return_value=SimpleNamespace(all=lambda: rows)))
-    assert await pending_runtime_resource_cleanup(session) == ((valid_id, 'sha256:'+'a'*64, config),)
+    selected = await pending_runtime_resource_cleanup(
+        session, retained_runtime_key=config.runtime_key
+    )
+    assert selected == (
+        RetainedGuideRuntimeCleanupCandidate(
+            attempt_id=valid_id,
+            manifest_sha256='sha256:'+'a'*64,
+            runtime_key=config.runtime_key,
+        ),
+    )
     assert marker not in caplog.text
-    assert [record.attempt_id for record in caplog.records] == [str(invalid_id), str(mismatch_id)]
+    assert caplog.records == []
 
 
 @pytest.mark.parametrize("fault", ["missing", "changed", "foreign_snapshot", "wrong_count"])
