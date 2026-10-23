@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+from collections import Counter
 from importlib.util import resolve_name
 from pathlib import Path
 
@@ -34,6 +35,7 @@ RETIRED_ARTIFACT_MATERIALIZATION_API = (
 COMPOSITION_ROOT = APP_ROOT / "adapters" / "artifacts" / "__init__.py"
 CHECKER_COMPOSITION_ROOT = APP_ROOT / "adapters" / "checkers" / "__init__.py"
 AGENT_COMPOSITION_ROOT = APP_ROOT / "adapters/project_agents/__init__.py"
+GUIDE_PARSER_COMPOSITION_ROOT = APP_ROOT / "adapters/guide_document_tools/__init__.py"
 OBSERVABILITY_COMPOSITION_ROOT = APP_ROOT / "adapters" / "observability.py"
 AGENT_ADAPTER_MODULE = "app.adapters.project_agents.openai_agent_sdk"
 S3_ADAPTER_MODULE = APP_ROOT / "adapters" / "artifacts" / "s3_compatible.py"
@@ -347,13 +349,14 @@ def _assert_concrete_adapter_composition(
             for name in calls
             if name in {"OTLPMetricExporter", "OTLPSpanExporter", "PeriodicExportingMetricReader"}
         )
-    assert set(factory_calls) == {
-        COMPOSITION_ROOT,
-        CHECKER_COMPOSITION_ROOT,
-        AGENT_COMPOSITION_ROOT,
-        OBSERVABILITY_COMPOSITION_ROOT,
+    assert Counter(factory_calls) == {
+        COMPOSITION_ROOT: 1,
+        CHECKER_COMPOSITION_ROOT: 1,
+        # Inference and retained-resource cleanup are distinct typed capabilities.
+        AGENT_COMPOSITION_ROOT: 2,
+        OBSERVABILITY_COMPOSITION_ROOT: 1,
+        GUIDE_PARSER_COMPOSITION_ROOT: 1,
     }
-    assert len(factory_calls) == 4
     assert adapter_calls == [COMPOSITION_ROOT, S3_ADAPTER_MODULE, CHECKER_COMPOSITION_ROOT]
     assert set(concrete_imports) == {
         COMPOSITION_ROOT,
@@ -361,7 +364,9 @@ def _assert_concrete_adapter_composition(
         AWS_LIVE_PROOF_MODULE,
     }
     assert agent_imports == [AGENT_COMPOSITION_ROOT]
-    assert agent_calls == [AGENT_COMPOSITION_ROOT]
+    # Constructors are values in the one explicit registration map, invoked only
+    # by the typed factory. Any additional direct construction is forbidden.
+    assert agent_calls == []
     assert observability_imports == [OBSERVABILITY_COMPOSITION_ROOT]
     assert observability_calls == [OBSERVABILITY_COMPOSITION_ROOT] * 3
 
@@ -862,7 +867,7 @@ def test_guide_original_runtime_keeps_provider_sdk_out_of_product_modules() -> N
             assert not any(module.split(".")[0] in {"openai", "agents", "pypdf", "PIL"} for module in modules), str(path)
 
 
-def test_safe_xml_dependency_has_one_ingress_consumer() -> None:
+def test_safe_xml_dependency_is_limited_to_ingress_and_isolated_parser() -> None:
     importers = set()
     for path in APP_ROOT.rglob("*.py"):
         for node in ast.walk(_tree(path)):
@@ -870,4 +875,7 @@ def test_safe_xml_dependency_has_one_ingress_consumer() -> None:
                        else [alias.name for alias in node.names] if isinstance(node, ast.Import) else [])
             if any(module.split(".")[0] == "defusedxml" for module in modules):
                 importers.add(path.relative_to(APP_ROOT).as_posix())
-    assert importers == {"modules/artifacts/guide_formats.py"}
+    assert importers == {
+        "modules/artifacts/guide_formats.py",
+        "adapters/guide_document_tools/parsing.py",
+    }

@@ -58,10 +58,9 @@ from .service import (
 )
 from app.interfaces.project_guide_runtime import ProjectGuideRuntimeConfiguration
 from app.modules.projects.api.guide_documents import (
-    GuideDocumentAccessFactory,
+    GuideDocumentToolsFactory,
     GuideRuntimeCapabilities,
 )
-from .runtime_resources import SqlAlchemyGuideRuntimeCustody
 from app.interfaces.external_services import ExternalServiceAdapterError
 from app.interfaces.project_agents import (
     ProjectAgentRuntimeError,
@@ -95,32 +94,24 @@ class SqlAlchemyGuideCompilationExecutionBackend:
         material_factory: Callable[[AsyncSession], GuideDocumentManifestPort],
         checker_capabilities: ExternalCheckerCapabilityProjection,
         authorization_context: GuideCompilationAuthorizationContext,
-        document_access_factory: GuideDocumentAccessFactory,
+        document_tools_factory: GuideDocumentToolsFactory,
     ) -> None:
         """Store the owner-supplied ports used by each short transaction."""
         self._session_factory = session_factory
         self._material_factory = material_factory
         self._checker_capabilities = checker_capabilities
         self._authorization_context = authorization_context
-        self._document_access_factory = document_access_factory
+        self._document_tools_factory = document_tools_factory
 
     @asynccontextmanager
     async def capabilities(self, state, context):
         """Issue resources only from the orchestrator's winning dispatch branch."""
-        async with self._document_access_factory(
+        async with self._document_tools_factory(
             state.preflight_facts.attempt_id,
             context.material,
             context.runtime_configuration,
-        ) as documents:
-            yield GuideRuntimeCapabilities(
-                documents=documents,
-                resources=SqlAlchemyGuideRuntimeCustody(
-                    self._session_factory,
-                    state.preflight_facts.attempt_id,
-                    context.material,
-                    context.runtime_configuration.runtime_key,
-                ),
-            )
+        ) as tools:
+            yield GuideRuntimeCapabilities(tools=tools)
 
     async def load(self, attempt_id: UUID) -> CompilationExecutionState:
         """Load one exact attempt and translate storage failures safely."""
@@ -156,12 +147,12 @@ class SqlAlchemyGuideCompilationExecutionBackend:
         async with self._authorized_service(state) as (service, actor):
             return await service.fence_dispatch(actor=actor, facts=state.preflight_facts)
 
-    async def release_provider_free(
+    async def release_no_inference(
         self, state: CompilationExecutionState, *, stale_before: datetime | None = None
     ) -> bool:
-        """Reopen a provider-free fence so a transient failure stays retryable."""
+        """Reopen a no-inference fence so a transient failure stays retryable."""
         async with self._authorized_service(state) as (service, actor):
-            return await service.release_provider_free_dispatch(
+            return await service.release_no_inference_dispatch(
                 actor=actor, facts=state.preflight_facts, stale_before=stale_before
             )
 
@@ -233,7 +224,7 @@ def project_guide_compilation_execution_port(
     checker_capabilities: ExternalCheckerCapabilityProjection,
     authorization_context: GuideCompilationAuthorizationContext,
     runtime_factory: Callable[[ProjectGuideRuntimeConfiguration], ProjectGuideAgentRuntime],
-    document_access_factory: GuideDocumentAccessFactory,
+    document_tools_factory: GuideDocumentToolsFactory,
 ) -> ProjectGuideCompilationExecutionPort:
     """Compose the hidden port from existing owner-supplied dependencies."""
     backend = SqlAlchemyGuideCompilationExecutionBackend(
@@ -241,7 +232,7 @@ def project_guide_compilation_execution_port(
         material_factory=material_factory,
         checker_capabilities=checker_capabilities,
         authorization_context=authorization_context,
-        document_access_factory=document_access_factory,
+        document_tools_factory=document_tools_factory,
     )
     return GuideCompilationOrchestrator(backend, runtime_factory)
 
@@ -259,7 +250,7 @@ class GuideCompilationExecutionBackend(Protocol):
 
     async def fence(self, state: CompilationExecutionState) -> CompilationDispatchReceipt: ...
 
-    async def release_provider_free(
+    async def release_no_inference(
         self, state: CompilationExecutionState, *, stale_before: datetime | None = None
     ) -> bool: ...
 
@@ -304,11 +295,11 @@ class GuideCompilationOrchestrator(ProjectGuideCompilationExecutionPort):
         runtime = None
         try:
             if (
-                not context.runtime_configuration.provider_free
+                context.runtime_configuration.uses_inference
                 and len(project_guide_compilation_prompt_bytes(context))
                 > context.runtime_configuration.maximum_manifest_bytes
             ):
-                # The hosted prompt limit; a provider-free runtime builds no prompt.
+                # The model prompt limit does not apply when no inference request is built.
                 raise ValueError("configured prompt limit exceeded")
             runtime = self._runtime_factory(context.runtime_configuration)
             if runtime.identity != context.runtime_configuration.adapter_identity:
@@ -347,20 +338,21 @@ class GuideCompilationOrchestrator(ProjectGuideCompilationExecutionPort):
                             await self._backend.record_accepted(state, context, result)
                             accepted = True
             except asyncio.CancelledError:
-                if (terminal_receipt is None and not accepted
-                        and context.runtime_configuration.provider_free):
+                if (
+                    terminal_receipt is None
+                    and not accepted
+                    and not context.runtime_configuration.uses_inference
+                ):
                     # Reopen before propagating so cancellation cannot strand the attempt.
                     with suppress(Exception):
-                        await asyncio.shield(self._backend.release_provider_free(state))
+                        await asyncio.shield(self._backend.release_no_inference(state))
                 raise
             except Exception:  # noqa: BLE001 - preserve known evidence across cleanup failure
                 if terminal_receipt is None and not accepted:
-                    if context.runtime_configuration.provider_free:
-                        # No provider call exists to be uncertain about; reopen and retry.
-                        await self._backend.release_provider_free(state)
-                        raise ProjectGuideCompilationExecutionError(
-                            "runtime_unavailable"
-                        ) from None
+                    if not context.runtime_configuration.uses_inference:
+                        # No model call exists to be uncertain about; reopen and retry.
+                        await self._backend.release_no_inference(state)
+                        raise ProjectGuideCompilationExecutionError("runtime_unavailable") from None
                     return _receipt_result(dispatch)
             if terminal_receipt is not None:
                 return _receipt_result(terminal_receipt)
@@ -374,14 +366,12 @@ class GuideCompilationOrchestrator(ProjectGuideCompilationExecutionPort):
         """Return a durable result without provider I/O, or select dispatch."""
         if state.classification is CompilationRecoveryClassification.PROVIDER_UNCERTAIN and (
             (configuration := state.runtime_configuration) is not None
-            and configuration.provider_free
+            and not configuration.uses_inference
         ):
-            # A provider-free fence left by a crashed or cancelled worker guards no
-            # provider call. Reopen it once its run deadline has passed.
-            stale_before = datetime.now(UTC) - timedelta(
-                seconds=configuration.timeout_seconds + configuration.cleanup_timeout_seconds
-            )
-            if await self._backend.release_provider_free(state, stale_before=stale_before):
+            # A no-inference fence left by a crashed or cancelled worker guards no
+            # model call. Reopen it once its run deadline has passed.
+            stale_before = datetime.now(UTC) - timedelta(seconds=configuration.timeout_seconds)
+            if await self._backend.release_no_inference(state, stale_before=stale_before):
                 return None
         if state.classification in {
             CompilationRecoveryClassification.PERSISTED,

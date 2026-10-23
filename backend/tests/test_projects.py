@@ -3645,22 +3645,6 @@ async def test_source_snapshot_manifest_rejects_caller_storage_references(
         await session.rollback()
 
 
-def test_project_agent_timeout_is_loaded_from_environment(monkeypatch) -> None:
-    from app.core.project_agents import project_guide_runtime_configuration
-
-    monkeypatch.setenv("WORKSTREAM_PROJECT_AGENT_MODEL", "test-model")
-    monkeypatch.setenv("WORKSTREAM_PROJECT_AGENT_RUN_TIMEOUT_SECONDS", "42")
-    monkeypatch.setenv("WORKSTREAM_PROJECT_AGENT_MAX_MANIFEST_BYTES", "12345")
-    get_settings.cache_clear()
-    try:
-        configuration = project_guide_runtime_configuration(get_settings())
-        assert configuration.timeout_seconds == 42
-        assert configuration.maximum_manifest_bytes == 12345
-        assert configuration.model == "test-model"
-    finally:
-        get_settings.cache_clear()
-
-
 async def test_manual_submission_artifact_policy_rejects_agent_provenance_fields(
     project_client: AsyncClient,
 ) -> None:

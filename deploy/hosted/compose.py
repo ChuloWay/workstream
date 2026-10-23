@@ -14,6 +14,7 @@ from preflight import (
     parse_environment,
     render_compose,
     run_compose,
+    run_shutdown,
     validate_checker_config,
     validate_compose,
     validate_docker_runtime,
@@ -38,18 +39,29 @@ def main() -> int:
         validate_compose(render_compose(args.env_file, values), values)
         launch = args.compose_arguments and args.compose_arguments[0] in {"up", "proof"}
         if launch:
-            checker_config = load_checker_config(Path(values["WORKSTREAM_CHECKER_CONFIG_FILE"]))
+            checker_config = load_checker_config(
+                Path(values["WORKSTREAM_CHECKER_CONFIG_FILE"])
+            )
             validate_checker_config(checker_config, values)
             validate_private_host_inputs(values)
             validate_docker_runtime(checker_config, values)
         if args.compose_arguments and args.compose_arguments[0] == "proof":
-            if len(args.compose_arguments) != 3 or args.compose_arguments[1] != "--group-nonce":
+            if (
+                len(args.compose_arguments) != 3
+                or args.compose_arguments[1] != "--group-nonce"
+            ):
                 raise PreflightError("proof requires one explicit group nonce")
             try:
                 group_nonce = UUID(args.compose_arguments[2])
             except ValueError as exc:
                 raise PreflightError("proof group nonce is invalid") from exc
             return run_proof_group(args.env_file, values, group_nonce)
+        if args.compose_arguments and args.compose_arguments[0] == "stop":
+            if args.compose_arguments != ["stop"]:
+                raise PreflightError(
+                    "stop uses the fixed producer, worker, parser/checker sequence"
+                )
+            return run_shutdown(args.env_file, values)
         return run_compose(args.env_file, values, args.compose_arguments)
     except PreflightError as exc:
         print(f"hosted Compose command failed: {exc}", file=sys.stderr)
