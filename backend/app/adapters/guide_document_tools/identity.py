@@ -38,10 +38,14 @@ CHILD_IDENTITIES = (ChildIdentity(10_003, 10_003), ChildIdentity(10_004, 10_004)
 
 
 class _CapabilityHeader(ctypes.Structure):
+    """Linux capability ABI header targeting the current process."""
+
     _fields_ = (("version", ctypes.c_uint32), ("pid", ctypes.c_int))
 
 
 class _CapabilityData(ctypes.Structure):
+    """One 32-bit half of the Linux effective, permitted, and inheritable sets."""
+
     _fields_ = (
         ("effective", ctypes.c_uint32),
         ("permitted", ctypes.c_uint32),
@@ -71,6 +75,8 @@ _LIBC.capset.restype = ctypes.c_int
 
 
 def _checked(result: int, operation: str) -> int:
+    """Raise a bounded error when one libc identity operation fails."""
+
     if result == -1:
         error = ctypes.get_errno()
         raise RuntimeError(f"guide parser identity operation failed: {operation}:{error}")
@@ -78,10 +84,14 @@ def _checked(result: int, operation: str) -> int:
 
 
 def _prctl(option: int, argument: int = 0) -> int:
+    """Invoke the fixed two-argument prctl forms used by parser hardening."""
+
     return _checked(_LIBC.prctl(option, argument, 0, 0, 0), "prctl")
 
 
 def _capability_masks() -> tuple[int, int, int]:
+    """Read complete 64-bit effective, permitted, and inheritable masks."""
+
     header = _CapabilityHeader(_LINUX_CAPABILITY_VERSION_3, 0)
     data = (_CapabilityData * 2)()
     _checked(_LIBC.capget(ctypes.byref(header), data), "capget")
@@ -92,6 +102,8 @@ def _capability_masks() -> tuple[int, int, int]:
 
 
 def _set_capability_masks(*, effective: int, permitted: int, inheritable: int) -> None:
+    """Replace all three current-process capability masks exactly."""
+
     header = _CapabilityHeader(_LINUX_CAPABILITY_VERSION_3, 0)
     data = (_CapabilityData * 2)()
     for index, shift in enumerate((0, 32)):
@@ -102,6 +114,8 @@ def _set_capability_masks(*, effective: int, permitted: int, inheritable: int) -
 
 
 def _ambient_capability_mask() -> int:
+    """Read the ambient mask from the kernel status view or fail closed."""
+
     value = _status_fields().get("CapAmb")
     if value is None:
         raise RuntimeError("guide parser ambient capability state is unavailable")
@@ -109,6 +123,8 @@ def _ambient_capability_mask() -> int:
 
 
 def _status_fields() -> dict[str, str]:
+    """Read non-secret process security fields from procfs."""
+
     values: dict[str, str] = {}
     with open("/proc/self/status", encoding="ascii") as status:
         for line in status:
@@ -119,11 +135,15 @@ def _status_fields() -> dict[str, str]:
 
 
 def _require_no_new_privileges() -> None:
+    """Require the kernel to prohibit privilege gains across exec."""
+
     if _prctl(PR_GET_NO_NEW_PRIVS) != 1:
         raise RuntimeError("guide parser no-new-privileges state is invalid")
 
 
 def _require_ids(uid: int, gid: int) -> None:
+    """Require exact real, effective, and saved IDs with no extra groups."""
+
     if os.getresuid() != (uid, uid, uid) or os.getresgid() != (gid, gid, gid):
         raise RuntimeError("guide parser process identity is invalid")
     if os.getgroups():
@@ -131,6 +151,8 @@ def _require_ids(uid: int, gid: int) -> None:
 
 
 def _require_capabilities(mask: int) -> None:
+    """Require exact effective/permitted masks and empty inheritable/ambient sets."""
+
     effective, permitted, inheritable = _capability_masks()
     if (
         effective != mask
@@ -142,15 +164,21 @@ def _require_capabilities(mask: int) -> None:
 
 
 def _require_dumpable_zero() -> None:
+    """Require ptrace and core-dump exposure to remain disabled."""
+
     if _prctl(PR_GET_DUMPABLE) != 0:
         raise RuntimeError("guide parser dumpable state is invalid")
 
 
 def _clear_ambient_capabilities() -> None:
+    """Clear every ambient capability before continuing an identity transition."""
+
     _prctl(PR_CAP_AMBIENT, PR_CAP_AMBIENT_CLEAR_ALL)
 
 
 def _require_privileged_bootstrap() -> None:
+    """Validate the narrow root bootstrap state before dropping identities."""
+
     _require_no_new_privileges()
     if os.getresuid() != (0, 0, 0) or os.getresgid() != (0, 0, 0):
         raise RuntimeError("guide parser privileged bootstrap identity is invalid")

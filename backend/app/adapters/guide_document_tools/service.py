@@ -63,6 +63,8 @@ class GuideDocumentParserService:
         request_read_timeout_seconds: float = 5.0,
         child_timeout_seconds: float = 8.0,
     ) -> None:
+        """Validate fixed bounds and initialize the closed child-identity pool."""
+
         if (
             not socket_path.is_absolute()
             or type(maximum_concurrency) is not int
@@ -150,6 +152,8 @@ class GuideDocumentParserService:
         self._remove_own_socket()
 
     def _validate_directory(self) -> None:
+        """Require the socket parent to have the fixed owner and directory mode."""
+
         parent = self._socket_path.parent
         info = os.lstat(parent)
         if (
@@ -165,6 +169,8 @@ class GuideDocumentParserService:
         reader: asyncio.StreamReader,
         writer: asyncio.StreamWriter,
     ) -> None:
+        """Admit one bounded frame, verify source identity, and return one response."""
+
         current = asyncio.current_task()
         if current is not None:
             self._connection_tasks.add(current)
@@ -245,6 +251,8 @@ class GuideDocumentParserService:
         request: GuideDocumentParserRequest,
         disconnect_reader: asyncio.StreamReader,
     ) -> dict[str, object]:
+        """Run one request under an exclusive child identity and reap it before reuse."""
+
         identity = await self._available_identities.get()
         process: asyncio.subprocess.Process | None = None
         child: asyncio.Task[tuple[bytes, bytes]] | None = None
@@ -312,6 +320,8 @@ class GuideDocumentParserService:
         return body
 
     def _remove_own_socket(self) -> None:
+        """Unlink only the exact socket inode created by this service instance."""
+
         if self._socket_inode is None:
             return
         try:
@@ -335,6 +345,8 @@ def _service_socket_identity() -> tuple[int, int]:
 
 
 def _child_environment(identity: ChildIdentity) -> dict[str, str]:
+    """Build the minimal deterministic environment for one assigned child slot."""
+
     return _CHILD_ENVIRONMENT | {
         "WORKSTREAM_GUIDE_PARSER_CHILD_UID": str(identity.uid),
         "WORKSTREAM_GUIDE_PARSER_CHILD_GID": str(identity.gid),
@@ -342,11 +354,15 @@ def _child_environment(identity: ChildIdentity) -> dict[str, str]:
 
 
 def _prepare_child_process(identity: ChildIdentity) -> None:
+    """Drop to the assigned identity and apply hard limits before child exec."""
+
     prepare_child_identity(identity)
     _apply_child_limits()
 
 
 def _apply_child_limits() -> None:
+    """Bound child CPU, memory, output, descriptors, processes, and core dumps."""
+
     resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
     resource.setrlimit(resource.RLIMIT_CPU, (4, 5))
     resource.setrlimit(resource.RLIMIT_AS, (512 * 1024 * 1024, 512 * 1024 * 1024))
@@ -357,6 +373,8 @@ def _apply_child_limits() -> None:
 
 
 async def _stop_child(process: asyncio.subprocess.Process) -> None:
+    """Terminate and reap a child process group, escalating after a short grace."""
+
     if process.returncode is not None:
         await process.wait()
         return
@@ -375,6 +393,8 @@ async def _stop_child(process: asyncio.subprocess.Process) -> None:
 
 
 def _remove_owned_stale_socket(path: Path, *, expected_uid: int, expected_gid: int) -> None:
+    """Remove an unchanged owned socket only after proving no listener is live."""
+
     try:
         before = os.lstat(path)
     except FileNotFoundError:
@@ -410,6 +430,8 @@ def _remove_owned_stale_socket(path: Path, *, expected_uid: int, expected_gid: i
 
 
 async def _read_frame(reader: asyncio.StreamReader, *, maximum: int) -> bytes:
+    """Read one nonempty length-prefixed frame within the caller's bound."""
+
     size = struct.unpack(">I", await reader.readexactly(4))[0]
     if size == 0 or size > maximum:
         raise ValueError("guide parser frame is invalid")
@@ -417,6 +439,8 @@ async def _read_frame(reader: asyncio.StreamReader, *, maximum: int) -> bytes:
 
 
 async def _write_frame(writer: asyncio.StreamWriter, raw: bytes) -> None:
+    """Write one bounded response frame and wait for transport backpressure."""
+
     if not raw or len(raw) > MAXIMUM_RESPONSE_BYTES:
         raise ValueError("guide parser response frame is invalid")
     writer.write(struct.pack(">I", len(raw)) + raw)
@@ -424,6 +448,8 @@ async def _write_frame(writer: asyncio.StreamWriter, raw: bytes) -> None:
 
 
 def _decode_single_frame(raw: bytes, *, maximum: int) -> bytes:
+    """Require a child output buffer to contain exactly one bounded frame."""
+
     if len(raw) < 4:
         raise ValueError("guide parser child response is truncated")
     size = struct.unpack(">I", raw[:4])[0]
@@ -433,6 +459,8 @@ def _decode_single_frame(raw: bytes, *, maximum: int) -> bytes:
 
 
 def _json_bytes(value: object) -> bytes:
+    """Encode deterministic finite JSON for the private framing protocol."""
+
     return json.dumps(
         value,
         ensure_ascii=False,
@@ -443,6 +471,8 @@ def _json_bytes(value: object) -> bytes:
 
 
 async def _healthcheck(path: Path) -> int:
+    """Verify the exact protocol/build response through the unprivileged socket."""
+
     metadata = _json_bytes(
         {"protocol_version": GUIDE_DOCUMENT_PARSER_PROTOCOL, "operation": "health"}
     )
@@ -469,6 +499,8 @@ async def _healthcheck(path: Path) -> int:
 
 
 def main() -> int:
+    """Run either the capability-free healthcheck or the hardened parser broker."""
+
     parser = argparse.ArgumentParser(description="Workstream fixed guide-document parser")
     parser.add_argument("--socket", required=True, type=Path)
     parser.add_argument("--healthcheck", action="store_true")
