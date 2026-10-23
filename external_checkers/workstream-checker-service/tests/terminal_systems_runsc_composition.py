@@ -21,7 +21,7 @@ import time
 from uuid import UUID, uuid4
 import zipfile
 
-from sqlalchemy import func, select
+from sqlalchemy import select
 
 from app.adapters.artifacts import checker_output_binding, checker_output_storage
 from app.adapters.auth import checker_model_service_authorization
@@ -66,6 +66,7 @@ from app.modules.model_usage.api import (
     ProjectModelProfileSpec,
 )
 from app.modules.model_usage.models import ModelUsageEffect
+from app.modules.checkers.models import CheckerTrialEvidence
 from tests.checkers.execution.support import (
     live_executor,
     provision_post_submit_service,
@@ -85,8 +86,7 @@ from tests.test_checker_materialization import _limits
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 PROJECT_MODEL = REPOSITORY_ROOT / "pilots/terminal_systems/checkers/post/model"
 PACKAGE_ROOT = (
-    REPOSITORY_ROOT
-    / "pilots/terminal_systems/checkers/post/qualification/runtime_package"
+    REPOSITORY_ROOT / "pilots/terminal_systems/checkers/post/qualification/runtime_package"
 )
 sys.path.insert(0, str(PROJECT_MODEL))
 from trial_plan import (  # noqa: E402
@@ -100,9 +100,7 @@ from trial_plan import (  # noqa: E402
 
 REQUIREMENT = "runtime_environment_and_verification_trials"
 PROFILE_ID = UUID("018f6f49-66b8-7d2a-bf4d-0e2eeaa00493")
-ALPINE_DIGEST = (
-    "sha256:c64c687cbea9300178b30c95835354e34c4e4febc4badfe27102879de0483b5e"
-)
+ALPINE_DIGEST = "sha256:c64c687cbea9300178b30c95835354e34c4e4febc4badfe27102879de0483b5e"
 
 
 def _required_environment() -> dict[str, str]:
@@ -418,9 +416,7 @@ def _provider_output(prompt: str, index: int, observations: list[dict]) -> str:
     )
 
 
-def _wait_for_socket(
-    path: Path, process: subprocess.Popen, timeout: float = 30.0
-) -> None:
+def _wait_for_socket(path: Path, process: subprocess.Popen, timeout: float = 30.0) -> None:
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         if process.poll() is not None:
@@ -446,9 +442,7 @@ async def test_production_service_executes_project_trial_under_runsc_with_real_c
     inner = env["WORKSTREAM_TS_RUNSC_INNER_COMPOSITION_ROOT"]
     assert root.name == "terminal-systems-runsc-composition"
     monkeypatch.setattr(material_helpers, "archive_with_modes", _qualification_archive)
-    await admin_access.signed.grant(
-        admin_access.admin, admin_access.target, role="operator"
-    )
+    await admin_access.signed.grant(admin_access.admin, admin_access.target, role="operator")
     profile, projection = _trial_authority(env)
     _trial_authority(env, revision=True)
     registry_spec, trial_values = _registry_spec(
@@ -506,9 +500,7 @@ async def test_production_service_executes_project_trial_under_runsc_with_real_c
             "model_profile_version": response.json()["spec"]["profile_version"],
             "model_profile_digest": response.json()["profile_digest"],
         }
-        return tuple(
-            CapabilityParameter(name=key, value=value) for key, value in values.items()
-        )
+        return tuple(CapabilityParameter(name=key, value=value) for key, value in values.items())
 
     post_scratch = root / "post-scratch"
     post_scratch.mkdir(mode=0o700)
@@ -528,9 +520,7 @@ async def test_production_service_executes_project_trial_under_runsc_with_real_c
             reservation_ttl_seconds=750.0,
         ),
     ) as h:
-        await provision_post_submit_service(
-            h.factory, ServiceIdentity.ARTIFACT_CHECKER_OUTPUT
-        )
+        await provision_post_submit_service(h.factory, ServiceIdentity.ARTIFACT_CHECKER_OUTPUT)
         assert len(h.request.policy.entries) == 1
         manifest = _manifest(h.request.policy.entries[0], profile, projection)
         manifest_bytes = json.dumps(
@@ -564,9 +554,7 @@ async def test_production_service_executes_project_trial_under_runsc_with_real_c
                 )
 
             async def recover(self, _reference):
-                raise AssertionError(
-                    "completed controlled calls must use retained responses"
-                )
+                raise AssertionError("completed controlled calls must use retained responses")
 
         @asynccontextmanager
         async def provider(_profile):
@@ -661,9 +649,7 @@ async def test_production_service_executes_project_trial_under_runsc_with_real_c
             "cache": [
                 {
                     "repository": env["WORKSTREAM_TS_RUNSC_CHECKER_REPOSITORY"],
-                    "platform_manifest_digest": env[
-                        "WORKSTREAM_TS_RUNSC_CHECKER_DIGEST"
-                    ],
+                    "platform_manifest_digest": env["WORKSTREAM_TS_RUNSC_CHECKER_DIGEST"],
                     "platform_manifest_media_type": "application/vnd.docker.distribution.manifest.v2+json",
                     "platform_manifest_byte_count": 1,
                     "operating_system": "linux",
@@ -715,12 +701,13 @@ async def test_production_service_executes_project_trial_under_runsc_with_real_c
                 health = await adapter.health()
                 assert (health.runtime, health.isolation_mode) == ("runsc", "gvisor")
                 await reserve(h)
-                result = await live_executor(
+                executor = live_executor(
                     h,
                     selected_execution=ModelAwareExternalExecution(
                         execution=adapter, sessions=h.factory
                     ),
-                ).evaluate_post_submission(h.request)
+                )
+                result = await executor.evaluate_post_submission(h.request)
             assert result.outcome == "completed"
             assert len(result.execution.external_members) == 1
             member = result.execution.external_members[0]
@@ -742,13 +729,19 @@ async def test_production_service_executes_project_trial_under_runsc_with_real_c
             assert outcomes["fabricate_output_verification"] == "exit_nonzero"
             assert outcomes["interrupt_work"] == "signalled"
             assert outcomes["restart_work_verification"] == "succeeded"
+            assert await executor.evaluate_post_submission(h.request) == result
+            assert len(creates) == 2
             async with h.factory() as session:
-                assert (
-                    await session.scalar(
-                        select(func.count()).select_from(ModelUsageEffect)
-                    )
-                    == 2
-                )
+                effects = tuple(await session.scalars(select(ModelUsageEffect)))
+                assert len(effects) == 2
+                assert all(item.state == "completed" for item in effects)
+                assert all(UUID(item.request_binding_id).version == 7 for item in effects)
+                assert all(UUID(item.response_binding_id).version == 7 for item in effects)
+                retained = tuple(await session.scalars(select(CheckerTrialEvidence)))
+                assert len(retained) == 1
+                assert retained[0].content_sha256 == external_checker_json_hash(receipt)
+            for directory in ("trial-relay", "trial-scratch", "trial-runtime"):
+                assert list((root / directory).iterdir()) == []
             inventory = subprocess.check_output(
                 [
                     "docker",
@@ -788,6 +781,4 @@ async def test_production_service_executes_project_trial_under_runsc_with_real_c
                     service.wait(timeout=15)
             service_log.close()
             if service is not None and service.returncode not in {0, -15, 143}:
-                raise AssertionError(
-                    (root / "service.stderr").read_text(encoding="utf-8")
-                )
+                raise AssertionError((root / "service.stderr").read_text(encoding="utf-8"))
