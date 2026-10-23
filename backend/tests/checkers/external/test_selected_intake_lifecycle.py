@@ -6,6 +6,8 @@ from types import SimpleNamespace
 
 import pytest
 
+from tests.trusted_intake_fixtures import assert_sealed_export
+
 from app.adapters.checkers import SelectedPreSubmitCheckerExecutionAdapter
 from app.core.hashing import canonical_json_hash
 from app.core.identifiers import new_record_id
@@ -70,6 +72,7 @@ async def test_intake_cleanup_precedes_both_project_bindings(tmp_path, cleanup_c
             self.requests.append(command)
             with issuer.issue(command, workspace) as grant:
                 yield grant
+            assert_sealed_export(workspace)
 
     grants, execution = RealGrants(), OrderedExecution("passed")
     processor = _processor(request=request, policy=policy, default_input=default_input,

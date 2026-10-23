@@ -14,6 +14,8 @@ from uuid import uuid4
 import zipfile
 
 import pytest
+
+from tests.trusted_intake_fixtures import assert_sealed_export
 from pydantic import ValidationError
 
 from app.adapters.checkers import (
@@ -737,6 +739,7 @@ def test_post_external_grant_preserves_submitted_reserved_names(
                     item.name.startswith(".external-material-")
                     for item in grant_root.iterdir()
                 )
+            assert_sealed_export(extraction)
 
     assert list((tmp_path / "scratch" / "workspaces").iterdir()) == []
     manager.close()
