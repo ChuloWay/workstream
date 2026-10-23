@@ -426,7 +426,7 @@ async def broker_main() -> int:
     service = service_module.GuideDocumentParserService(
         socket_path=SOCKET_PATH,
         maximum_concurrency=1,
-        child_timeout_seconds=0.2,
+        child_timeout_seconds=2.0,
     )
     await service.start()
     try:
