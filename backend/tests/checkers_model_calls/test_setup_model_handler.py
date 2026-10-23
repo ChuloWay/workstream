@@ -9,6 +9,7 @@ import pytest
 
 from app.adapters.project_agents.openrouter_policy import openrouter_request_options
 from app.adapters.project_agents.setup_model_handler import (
+    OpenAISetupProvider,
     OpenRouterSetupProvider,
     SetupModelProxyHandler,
     SetupProviderResponse,
@@ -139,6 +140,65 @@ async def test_provider_body_reader_stops_before_accumulating_over_profile():
 
     with pytest.raises(ValueError, match="exceeds profile"):
         await _bounded_response_bytes(Response(), 8)
+
+
+async def test_openai_count_includes_every_semantic_input_field():
+    recorded = []
+
+    class Counter:
+        async def count(self, **kwargs):
+            recorded.append(kwargs)
+            return SimpleNamespace(input_tokens=73)
+
+    provider = object.__new__(OpenAISetupProvider)
+    provider._counter = SimpleNamespace(
+        responses=SimpleNamespace(input_tokens=Counter())
+    )
+    schema = {
+        "type": "object",
+        "properties": {f"field_{index}": {"type": "string"} for index in range(200)},
+    }
+    body = {
+        "model": "gpt-exact",
+        "input": "bounded",
+        "instructions": "bounded",
+        "parallel_tool_calls": False,
+        "reasoning": {"effort": "medium"},
+        "text": {
+            "verbosity": "low",
+            "format": {
+                "type": "json_schema",
+                "name": "result",
+                "strict": True,
+                "schema": schema,
+            },
+        },
+        "tool_choice": "auto",
+        "tools": _tools(),
+        "truncation": "disabled",
+        "max_output_tokens": 128_000,
+        "store": False,
+    }
+
+    assert await provider.count_input(body) == 73
+    assert recorded == [
+        {
+            key: value
+            for key, value in body.items()
+            if key
+            in {
+                "input",
+                "instructions",
+                "model",
+                "parallel_tool_calls",
+                "reasoning",
+                "text",
+                "tool_choice",
+                "tools",
+                "truncation",
+            }
+        }
+    ]
 
 
 @pytest.mark.parametrize("mutation", ["context", "pricing", "alias", "parameters"])
