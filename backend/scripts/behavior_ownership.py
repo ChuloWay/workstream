@@ -405,6 +405,7 @@ NEUTRAL_GUIDE_RUNTIME_REMOVED_TARGETS = frozenset({
 })
 
 NEUTRAL_GUIDE_RUNTIME_TARGETS = frozenset({
+    "backend/app/adapters/project_agents/openrouter_policy.py",
     "backend/app/core/zip_safety.py",
     "backend/app/adapters/guide_document_tools/child.py",
     "backend/app/adapters/guide_document_tools/client.py",

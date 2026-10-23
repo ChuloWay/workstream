@@ -198,7 +198,7 @@ def test_adapter_profile_is_closed_effective_sdk_configuration():
     assert profile["tracing_disabled"] is True
     assert profile["provider_fallbacks_allowed"] is False
     assert profile["data_collection"] == "deny"
-    assert profile["provider_plugins_disabled"] is True
+    assert profile["provider_plugin_disable_requests"] is True
     assert require_openai_agents_sdk_adapter_profile(profile).request_timeout_seconds == 25
     with pytest.raises(ProjectAgentRuntimeConfigurationError, match="unsupported"):
         build_project_guide_adapter_profile("openai_agents_sdk", {"base_url": "https://evil"})
@@ -373,9 +373,9 @@ async def test_actual_sdk_tool_loop_uses_only_openrouter_chat_and_neutral_tools(
                 "web",
                 "file-parser",
                 "response-healing",
-                "alignment",
                 "armor",
-                "pareto",
+                "pareto-router",
+                "context-compression",
             )
         ]
         assert [tool["function"]["name"] for tool in body["tools"]] == [

@@ -97,6 +97,10 @@
       "target": "backend/app/adapters/project_agents/openai_workspace.py"
     },
     {
+      "target": "backend/app/adapters/project_agents/openrouter_policy.py",
+      "group": "lifecycle"
+    },
+    {
       "group": "lifecycle",
       "target": "backend/app/adapters/project_agents/provider_resilience.py"
     },
@@ -2329,7 +2333,7 @@
       "target": "backend/scripts/validate_test_lane_evidence.py"
     }
   ],
-  "authority_digest": "4644eecb0ff729f11e4670ee8ce58ae0d4a499930ecb2cdac77a03b8485ab7a5",
+  "authority_digest": "89f7b7c9195a5b5500f07152c97e82cb6275762d38913307e99eb735f7d3a162",
   "protected_base_commit": "7676ce4347db0c9694962a9b587a20765e16eac6",
   "schema": "workstream.behavior-ownership-partition.v1"
 }

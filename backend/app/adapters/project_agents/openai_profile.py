@@ -29,7 +29,7 @@ _DEFAULTS: dict[str, AdapterProfileValue] = {
     "tracing_disabled": True,
     "provider_fallbacks_allowed": False,
     "data_collection": "deny",
-    "provider_plugins_disabled": True,
+    "provider_plugin_disable_requests": True,
 }
 _CONFIGURABLE = frozenset(
     {
