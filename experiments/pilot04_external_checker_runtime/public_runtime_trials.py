@@ -12,7 +12,7 @@ from experiments.pilot04_external_checker_runtime.public_intake_trials import (
     _assert_no_submission_after_intake_failure, _selected,
 )
 from experiments.pilot04_external_checker_runtime.public_node_faults import node_command
-from experiments.pilot04_external_checker_runtime.run_public_journey_probe import (
+from experiments.pilot04_external_checker_runtime.public_probe_support import (
     _assert_task_has_no_effects, _json, _public_project, _require, _started_public_task,
     _wait_outbox_acknowledged, _with_fixture_file,
 )
@@ -55,15 +55,29 @@ async def public_runtime_trials(client, factory, env, root: Path):
             ('project_fail_all', 503, 3, 0),
             ('project_kill', 503, 1, 1),
         ):
-            await node_command(root, action)
+            control = await node_command(root, action)
             start = len(trace_events(root))
             key = str(uuid4())
             content = _with_fixture_file(archive, 'runtime-wait.txt') if action == 'project_kill' else archive
             began = time.monotonic()
             result = await _json(client, 'POST', route, contributor, expected,
                                  headers=headers | {'Idempotency-Key': key}, content=content)
-            await node_command(root, 'drained')
+            drained = await node_command(root, 'drained')
+            _require(bool(drained['foreign_preserved']) and not any(drained['resources'].values()),
+                     'exact cleanup or foreign preservation is absent')
             names = assert_launches(root, start, creates=creates, executions=executions)
+            if action == 'project_kill':
+                events = [e for e in trace_events(root)[start:] if e['project']]
+                killed = [e for e in events if e['operation'] == 'controller_kill']
+                _require(len(killed) == 1 and killed[0]['controller_pid'] == control['controller_pid'],
+                         'controller-death trial did not record the exact kill target')
+                restarted = await node_command(root, 'restarted')
+                _require(restarted['controller_pid'] != control['controller_pid'],
+                         'controller-death trial retained the original controller')
+                leases = [e['lease'] for e in events if e.get('lease')]
+                _require(leases and len({lease['epoch'] for lease in leases}) == 1
+                         and len({lease['expires_ms'] for lease in leases}) == 1,
+                         'interrupted execution changed its original lease epoch/deadline')
             row = await _selected(factory, key)
             if expected == 503:
                 _require(row.status == 'infrastructure_failed' and row.terminal_json['execution'] is None,
@@ -79,15 +93,21 @@ async def public_runtime_trials(client, factory, env, root: Path):
                 repeated = await _selected(factory, key)
                 _require((repeated.id, repeated.terminal_digest) == (row.id, row.terminal_digest),
                          'same-key replay replaced terminal failure custody')
+                recovery_start = len(trace_events(root))
                 fresh_key = str(uuid4())
                 await _json(client, 'POST', route, contributor, 202,
                             headers=headers | {'Idempotency-Key': fresh_key}, content=archive)
                 fresh = await _selected(factory, fresh_key)
+                if action == 'project_kill':
+                    new_leases = [e['lease'] for e in trace_events(root)[recovery_start:]
+                                  if e['project'] and e.get('lease')]
+                    _require(new_leases and all(lease['epoch'] != leases[0]['epoch'] for lease in new_leases),
+                             'fresh execution did not use the restarted controller epoch')
                 _require(fresh.id != row.id and fresh.eligible is True,
                          'fresh request did not repeat intake successfully after recovery')
             evidence.append({'case': action, 'run_id': row.id, 'machines': names,
                              'elapsed_seconds': round(time.monotonic() - began, 3),
-                             'status': row.status})
+                             'status': row.status, 'cleanup': drained})
     finally:
         await node_command(root, 'clear')
         await node_command(root, 'drained')

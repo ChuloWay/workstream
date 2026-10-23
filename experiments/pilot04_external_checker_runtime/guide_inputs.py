@@ -29,6 +29,7 @@ def guide_bytes(pre_requirements: int = 1) -> bytes:
         return GUIDE_BYTES
     return GUIDE_BYTES + (
         f"\nRecorded intake variant: {pre_requirements} project PRE requirements.\n"
-        "Workstream default intake remains required. Two project requirements use\n"
-        "distinct ordered IDs; the rejection marker applies only to the first.\n"
+        "Workstream default intake remains required.\n"
+        + ("Two project requirements use distinct ordered IDs; the rejection marker applies only to the first.\n"
+           if pre_requirements == 2 else "No project PRE image is required.\n")
     ).encode()

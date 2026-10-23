@@ -1,0 +1,108 @@
+"""Destructive proof commands reject foreign units and unsafe control files."""
+
+import hashlib
+import json
+from pathlib import Path
+import subprocess
+import sys
+import tempfile
+import unittest
+from unittest.mock import patch
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+from experiments.pilot04_external_checker_runtime.public_fault_files import (  # noqa: E402
+    PrivateControlDirectory,
+)
+from experiments.pilot04_external_checker_runtime.public_node_faults import validate_node  # noqa: E402
+
+
+def digest(path):
+    return 'sha256:' + hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+class PrivateFaultControls(unittest.TestCase):
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory(prefix='.ws-proof-', dir=Path.home())
+        self.addCleanup(self.temporary.cleanup)
+        self.root = Path(self.temporary.name)
+
+    def test_private_control_roundtrip_rejects_links_and_mode_widening(self):
+        control = PrivateControlDirectory(self.root)
+        self.addCleanup(control.close)
+        control.write('request', {'action': 'clear'})
+        self.assertEqual(control.read('request'), {'action': 'clear'})
+        (self.root / 'alias').symlink_to(self.root / 'request')
+        with self.assertRaises(OSError):
+            control.read('alias')
+        (self.root / 'request').chmod(0o644)
+        with self.assertRaises(ValueError):
+            control.read('request')
+        with self.assertRaises(ValueError):
+            control.write('../escaped', {})
+        self.assertFalse((self.root.parent / 'escaped').exists())
+
+    def test_preexisting_broad_or_aliased_control_directory_is_refused(self):
+        self.root.chmod(0o777)
+        with self.assertRaises(ValueError):
+            PrivateControlDirectory(self.root)
+        self.root.chmod(0o700)
+        alias = self.root / 'alias'
+        alias.symlink_to(self.root, target_is_directory=True)
+        with self.assertRaises(ValueError):
+            PrivateControlDirectory(alias)
+
+    def test_exact_live_unit_binding_rejects_foreign_unit_config_and_binary(self):
+        binary, guest, smol = [self.root / name for name in ('service', 'guest', 'smol')]
+        for path in (binary, guest, smol):
+            path.write_bytes(path.name.encode())
+        socket_root = self.root / 'socket'
+        socket_root.mkdir(mode=0o700)
+        owner = socket_root / '.workstream-checker-owner'
+        owner.write_text('a' * 64)
+        owner.chmod(0o600)
+        config_path = self.root / 'service.json'
+        config = {'socket_path': str(socket_root / 'checker.sock'), 'smol': {
+            'binary': str(smol), 'guest_binary': str(guest),
+            'cgroup_root': '/sys/fs/cgroup/system.slice/ws-proof.service'}}
+        config_path.write_text(json.dumps(config))
+        config_path.chmod(0o600)
+        manifest = {'unit': 'ws-proof.service', 'config': str(config_path),
+                    'socket': config['socket_path'], 'executable': str(binary), 'owner': 'a' * 64,
+                    'config_sha256': digest(config_path), 'node_config': config,
+                    'service_sha256': digest(binary), 'smol_sha256': digest(smol), 'guest_sha256': digest(guest),
+                    'wrapper_sha256': digest(ROOT / 'experiments/pilot04_external_checker_runtime/public_runtime_wrapper.py'),
+                    'source_tree': 'independent-source'}
+        manifest_path = self.root / 'custody.json'
+        manifest_path.write_text(json.dumps(manifest))
+        manifest_path.chmod(0o600)
+        original_resolve, original_read = Path.resolve, Path.read_bytes
+        argv = [str(binary), str(config_path)]
+
+        def resolve(path, *args, **kwargs):
+            return binary if str(path) == '/proc/123456/exe' else original_resolve(path, *args, **kwargs)
+
+        def read(path):
+            return ('\0'.join(argv) + '\0').encode() if str(path) == '/proc/123456/cmdline' else original_read(path)
+
+        def output(command, **kwargs):
+            if command[0] == 'systemctl':
+                return 'MainPID=123456\nControlGroup=/system.slice/ws-proof.service\n'
+            self.assertEqual(command[:2], ['git', 'rev-parse'])
+            return 'independent-source\n'
+
+        with patch.object(Path, 'resolve', resolve), patch.object(Path, 'read_bytes', read), patch.object(subprocess, 'check_output', output):
+            self.assertEqual(validate_node(config_path, config, 'ws-proof.service', manifest_path), manifest)
+            with self.assertRaises(ValueError):
+                validate_node(config_path, config, 'foreign.service', manifest_path)
+            argv[1] = str(self.root / 'foreign-config.json')
+            with self.assertRaises(ValueError):
+                validate_node(config_path, config, 'ws-proof.service', manifest_path)
+            argv[1] = str(config_path)
+            binary.write_bytes(b'substituted-controller')
+            with self.assertRaises(ValueError):
+                validate_node(config_path, config, 'ws-proof.service', manifest_path)
+
+
+if __name__ == '__main__':
+    unittest.main()

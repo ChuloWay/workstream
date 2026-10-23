@@ -24,8 +24,12 @@ if len(arguments) >= 2 and arguments[0] == 'machine':
                    if operation == 'create' else any(
                        event['name'] == name and event['project'] for event in prior))
         if operation in {'create', 'start', 'exec', 'delete'}:
+            lease_path = Path(settings['socket']).parent / 'smol-leases' / (str(name) + '.json')
+            lease = json.loads(lease_path.read_text()) if lease_path.exists() else None
             output.write(json.dumps({'operation': operation, 'name': name, 'project': project,
-                                     'monotonic': time.monotonic()}) + '\n')
+                                     'monotonic': time.monotonic(),
+                                     'lease': {k: lease[k] for k in ('name', 'owner', 'epoch', 'expires_ms', 'lifetime_ms')}
+                                     if lease else None}) + '\n')
             output.flush()
             os.fsync(output.fileno())
     if project and operation in {'start', 'exec'}:
@@ -51,6 +55,15 @@ if len(arguments) >= 2 and arguments[0] == 'machine':
                 # The sleeping project fixture has begun execution before controller loss.
                 def kill_controller():
                     time.sleep(1)
+                    if child.poll() is not None:
+                        return
+                    with Path(settings['trace']).open('a') as proof:
+                        fcntl.flock(proof, fcntl.LOCK_EX)
+                        proof.write(json.dumps({'operation': 'controller_kill', 'name': name,
+                                                'project': True, 'controller_pid': pid,
+                                                'monotonic': time.monotonic()}) + '\n')
+                        proof.flush()
+                        os.fsync(proof.fileno())
                     os.kill(pid, signal.SIGKILL)
                 threading.Thread(target=kill_controller, daemon=True).start()
                 sys.exit(child.wait())

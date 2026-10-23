@@ -11,7 +11,7 @@ from sqlalchemy import func, select
 from app.modules.artifacts.models import SubmissionBundleAdmission, SubmissionBundleDurableIntent
 from app.modules.checkers.models import SelectedPreSubmitRun
 from app.modules.tasks.models import Submission
-from experiments.pilot04_external_checker_runtime.run_public_journey_probe import (
+from experiments.pilot04_external_checker_runtime.public_probe_support import (
     _json, _public_project, _require, _started_public_task, _with_fixture_file,
 )
 from tests.post_submit_materialization_helpers import archive_with_modes
