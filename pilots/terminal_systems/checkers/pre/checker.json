@@ -84,6 +84,30 @@
         "check": "metadata_contract"
       },
       "input": {}
+    },
+    {
+      "name": "metadata-path-alias",
+      "directory": "samples/path-alias",
+      "expected": "failed",
+      "expected_codes": [
+        "metadata_unsafe_path"
+      ],
+      "configuration": {
+        "check": "metadata_contract"
+      },
+      "input": {}
+    },
+    {
+      "name": "metadata-nested-field",
+      "directory": "samples/nested-field",
+      "expected": "failed",
+      "expected_codes": [
+        "metadata_invalid_format"
+      ],
+      "configuration": {
+        "check": "metadata_contract"
+      },
+      "input": {}
     }
   ]
 }

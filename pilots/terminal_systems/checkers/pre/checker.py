@@ -119,7 +119,7 @@ def contained_path(root: Path, value: object, expected: str) -> bool:
     if value == ".":
         return expected == "directory"
     parts = value.split("/")
-    if value.startswith("/") or ":" in parts[0] or ".." in parts:
+    if ":" in parts[0] or any(part in ("", ".", "..") for part in parts):
         return False
     return entry_type(root, value) == expected
 
@@ -195,10 +195,23 @@ def metadata(root: Path) -> list[dict]:
     required(isinstance(data.get("title"), str) and bool(data["title"]), "title")
 
     tables = {}
-    for name in ("environment", "reference", "verification", "resources"):
+    fields_by_table = {
+        "environment": {"dockerfile", "context", "platform"},
+        "reference": {"command", "working_directory"},
+        "verification": {"command", "working_directory"},
+        "resources": set(RESOURCE_FIELDS),
+    }
+    for name, fields in fields_by_table.items():
         value = data.get(name)
         required(isinstance(value, dict), name)
         tables[name] = value if isinstance(value, dict) else {}
+        if set(tables[name]) - fields:
+            findings.append(
+                issue(
+                    "metadata_invalid_format",
+                    f"Use only documented fields in {name}; put supplementary metadata under extensions.",
+                )
+            )
     platform = tables["environment"].get("platform")
     required(
         isinstance(platform, str)

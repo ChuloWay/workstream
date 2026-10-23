@@ -4,7 +4,7 @@
 - Durable disposition: Planned
 - Intended merge outcome: Implement the source-backed Terminal Systems checker specifications as project-owned images, with the missing generic runtime capabilities explicitly qualified before policy activation.
 
-## Intent and source
+## Intent
 
 Continue after merged setup PR #651 on main `3ff69e3a8738fc12e7e8bb9d0f37583980409734`.
 The original guide and final reviewed setup proposal define two PRE checks, six
@@ -13,7 +13,7 @@ This is a real guide-driven project, not a fixed task-name fixture. The user
 explicitly resumed the minimal budgeted model runtime required by this project;
 the prior PILOT-05 hold does not prohibit this authorized scope.
 
-## First bounded implementation
+## Bounded change
 
 Allowed paths are `pilots/terminal_systems/checkers/**`, the project README,
 affected current roadmap/runbook claims, this record and proportionate test/CI
@@ -38,7 +38,7 @@ untrusted author claims, fixed answers, or manual reviewer findings. Setup-model
 spend integration is not implicitly included. No merge or hosted deployment is
 authorized by this record.
 
-## Acceptance and verification
+## Acceptance criteria
 
 - PRE layout checks required regular files and directories at the package root,
   accepting arbitrary task subjects and additional useful directories.
@@ -59,6 +59,8 @@ authorized by this record.
   no Submission, durable post-checking, revision/infrastructure recovery and
   exact governed contribution evidence. Image samples alone are not that proof.
 
+## Risk and review routing
+
 Risk class: L1. Required focused reviews: architecture/plan, security and QA/test
 delta; CI review only for changes to CI selection. Human focus: real rule coverage,
 generic runtime boundaries, exact cost/custody, and honest qualification limits.
@@ -70,3 +72,17 @@ requirement identity. The same registered capability can safely serve the two
 requirements with distinct locked configurations and separately counted budgets.
 The initial PRE plan has no architecture blocker. Generic POST prerequisites
 remain under design review; missing runtime support blocks activation.
+
+## Evidence
+
+Independent review identified noncanonical metadata path aliases and undeclared
+fields in the four fixed metadata tables. Two regression cases reproduced eight
+incorrect passes before repair. Paths now preserve exact manifest spelling and
+supplementary metadata belongs under `extensions`; arbitrary nested extension
+data remains supported. The image sample suite includes both rejection cases.
+The affected roadmap and project documentation distinguish the retained ten
+unbound suggestions, implemented PRE rules, and remaining eight POST rules.
+
+Seventeen rule tests pass. Image qualification uses the actual networkless Docker
+runner and strict public request/result contracts; it does not establish gVisor,
+registration, policy approval or a completed contribution journey.

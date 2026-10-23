@@ -109,6 +109,31 @@ class IntakeTests(unittest.TestCase):
         (self.root / "task.toml").symlink_to(outside / "Dockerfile")
         self.assertEqual(self.codes(), {"metadata_invalid_format"})
 
+    def test_metadata_rejects_noncanonical_path_aliases(self):
+        path = self.root / "task.toml"
+        original = path.read_text()
+        for alias in (
+            "./environment/Dockerfile",
+            "environment/./Dockerfile",
+            "environment//Dockerfile",
+            "environment/Dockerfile/",
+        ):
+            with self.subTest(alias=alias):
+                path.write_text(original.replace("environment/Dockerfile", alias))
+                self.assertEqual(self.codes(), {"metadata_unsafe_path"})
+
+    def test_metadata_rejects_undeclared_nested_fields(self):
+        path = self.root / "task.toml"
+        original = path.read_text()
+        for table in ("environment", "reference", "verification", "resources"):
+            with self.subTest(table=table):
+                path.write_text(
+                    original.replace(f"[{table}]", f'[{table}]\nundeclared = "value"')
+                )
+                self.assertEqual(self.codes(), {"metadata_invalid_format"})
+        path.write_text(original + '\n[extensions.custom]\nextra = "allowed"\n')
+        self.assertEqual(checker.metadata(self.root), [])
+
     def test_version_bool_and_zero_resource_are_not_integers(self):
         self.change("format_version = 1", "format_version = true")
         self.change("cpu_millis = 1000", "cpu_millis = 0")

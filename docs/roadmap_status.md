@@ -1524,10 +1524,12 @@ Exact stored/public result and component hashes and CLI rendering passed; all 57
 accumulated provider resources were deleted. Earlier proposals remain immutable
 and unapproved. This qualification required explicit PM corrections and establishes
 one reviewed handoff, not automatic completeness for arbitrary guides. Ten required
-checks remain capability gaps with no bindings. Their images and runtime/material
-dependencies, registration, corrected policy binding and approval are the next
-boundary; no new image, approved binding, guide activation or contribution outcome
-for these inputs is established.
+checks remain unbound suggestions in that immutable proposal. The project-owned
+PRE image now implements both PRE specifications and is locally qualified; it is
+not yet published, registered or bound. The eight POST checks and their model,
+execution and authenticated-material dependencies remain to be implemented.
+Registration, corrected policy binding and approval must precede activation;
+no approved binding, activated guide or contribution outcome is established.
 
 The [offline gVisor build spike](engineering/pilot00-gvisor-offline-build-spike.md)
 selects a sealed-cache Kaniko builder plus a separate gVisor oracle sandbox for
