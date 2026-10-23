@@ -24,6 +24,7 @@ from tests.authorization.admin_access.fixtures import (
     admin_access as admin_access,
     signed_access as signed_access,
 )
+from tests.authorization.admin_access.support import create_project
 
 from app.adapters.artifacts import (
     create_artifact_store_bootstrap,
@@ -248,7 +249,9 @@ def test_setup_subject_normalizes_database_uuid_subclasses_at_owner_projection()
         api=configuration.model_api,
         model=configuration.model,
     )
-    assert all(isinstance(value, UUID) and type(value) is not UUID for value in database_ids.values())
+    assert all(
+        isinstance(value, UUID) and type(value) is not UUID for value in database_ids.values()
+    )
     with pytest.raises(ValueError, match="subject is invalid"):
         SetupModelProxySubject(**raw)
 
@@ -456,18 +459,14 @@ class _ObservedCalls:
 async def _journey(storage: _StorageCase, access) -> _Journey:
     profile = await _publish_profile(access, storage.values["project"])
     configuration = _runtime(profile)
-    requested = await _fence_setup_attempt(
-        storage.database_url, storage.values, configuration
-    )
+    requested = await _fence_setup_attempt(storage.database_url, storage.values, configuration)
     async with storage.factory() as session:
         state = await load_compilation_execution_state(session, requested.attempt_id)
     assert state.runtime_configuration == configuration
     subject = _setup_model_subject(state, configuration)
     assert subject is not None
     assert subject.profile_id == profile.profile_id
-    request = SetupModelProxyRequest(
-        subject, "draft", 0, _provider_request(profile)
-    )
+    request = SetupModelProxyRequest(subject, "draft", 0, _provider_request(profile))
     marker = f"private-setup-response-{uuid4()}"
     response = canonical_provider_json(
         {
@@ -584,8 +583,9 @@ async def _assert_operator_inspection(journey: _Journey, state, access) -> None:
     assert "setup-response-1" not in response.text
     assert "provider_response_id" not in response.json()
 
+    foreign_project_id = await create_project("setup model inspection foreign project")
     wrong_project = await access.signed.client.get(
-        endpoint.replace(str(journey.request.subject.project_id), str(new_record_id())),
+        endpoint.replace(str(journey.request.subject.project_id), str(foreign_project_id)),
         headers=access.target.headers,
     )
     assert wrong_project.status_code == 404, wrong_project.text
