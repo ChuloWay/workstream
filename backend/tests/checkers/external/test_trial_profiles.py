@@ -1,8 +1,11 @@
 from dataclasses import asdict, replace
 import json
+import os
 from uuid import UUID
 
 import pytest
+
+import app.modules.checkers.api.trial_profiles as trial_profiles
 
 from app.modules.checkers.api.external import external_checker_json_hash
 from app.modules.checkers.api.trial_profiles import (
@@ -277,4 +280,43 @@ def test_operator_manifest_loader_is_digest_bound_strict_and_shared(tmp_path):
         encoding="utf-8",
     )
     with pytest.raises(TrialProfileError, match="invalid"):
+        load_trial_authority_manifest(path, digest("f"))
+
+
+def test_operator_manifest_loader_rejects_growth_during_bounded_read(tmp_path, monkeypatch):
+    path = tmp_path / "trial-authority.json"
+    path.write_bytes(b"{}")
+    original_read = os.read
+    grew = False
+
+    def grow_then_read(descriptor, count):
+        nonlocal grew
+        if not grew:
+            with path.open("ab") as stream:
+                stream.write(b"x")
+            grew = True
+        return original_read(descriptor, count)
+
+    monkeypatch.setattr(trial_profiles.os, "read", grow_then_read)
+    with pytest.raises(TrialProfileError, match="changed"):
+        load_trial_authority_manifest(path, digest("f"))
+
+
+def test_operator_manifest_loader_rejects_path_replacement_during_read(tmp_path, monkeypatch):
+    path = tmp_path / "trial-authority.json"
+    replacement = tmp_path / "replacement.json"
+    path.write_bytes(b"{}")
+    replacement.write_bytes(b"{}")
+    original_read = os.read
+    replaced = False
+
+    def replace_then_read(descriptor, count):
+        nonlocal replaced
+        if not replaced:
+            os.replace(replacement, path)
+            replaced = True
+        return original_read(descriptor, count)
+
+    monkeypatch.setattr(trial_profiles.os, "read", replace_then_read)
+    with pytest.raises(TrialProfileError, match="changed"):
         load_trial_authority_manifest(path, digest("f"))

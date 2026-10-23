@@ -4,8 +4,10 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 import json
+import os
 from pathlib import Path, PurePosixPath
 import re
+import stat
 from types import MappingProxyType
 from typing import Literal, Mapping
 from uuid import UUID
@@ -466,11 +468,7 @@ def trial_selector_from_configuration(
         "trial_projection_digest",
     }
     present = selector_keys & configuration.keys()
-    reserved = {
-        key
-        for key in configuration
-        if type(key) is str and key.startswith("trial_")
-    }
+    reserved = {key for key in configuration if type(key) is str and key.startswith("trial_")}
     if reserved - selector_keys:
         raise TrialProfileError("trial execution selector is invalid")
     if not present:
@@ -600,17 +598,7 @@ def load_trial_authority_manifest(path: Path, expected_digest: str) -> PinnedTri
         or _DIGEST.fullmatch(expected_digest) is None
     ):
         raise TrialProfileError("trial authority manifest configuration is invalid")
-    try:
-        metadata = path.lstat()
-        if (
-            not path.is_file()
-            or path.is_symlink()
-            or not (0 < metadata.st_size <= _MAXIMUM_MANIFEST_BYTES)
-        ):
-            raise TrialProfileError("trial authority manifest is invalid")
-        raw = path.read_bytes()
-    except OSError as exc:
-        raise TrialProfileError("trial authority manifest is unavailable") from exc
+    raw = _read_bounded_manifest(path)
     try:
         value = json.loads(
             raw.decode("utf-8"),
@@ -641,6 +629,48 @@ def load_trial_authority_manifest(path: Path, expected_digest: str) -> PinnedTri
     if len(binding_keys) != len(bindings):
         raise TrialProfileError("trial authority binding is duplicated")
     return PinnedTrialExecutionCatalog(tuple((item.profile, item.projection) for item in bindings))
+
+
+def _read_bounded_manifest(path: Path) -> bytes:
+    try:
+        if path.resolve(strict=True) != path:
+            raise TrialProfileError("trial authority manifest is invalid")
+        descriptor = os.open(path, os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW)
+    except OSError as exc:
+        raise TrialProfileError("trial authority manifest is unavailable") from exc
+    try:
+        before = os.fstat(descriptor)
+        if (
+            not stat.S_ISREG(before.st_mode)
+            or before.st_nlink != 1
+            or not (0 < before.st_size <= _MAXIMUM_MANIFEST_BYTES)
+        ):
+            raise TrialProfileError("trial authority manifest is invalid")
+        chunks: list[bytes] = []
+        remaining = _MAXIMUM_MANIFEST_BYTES + 1
+        while remaining:
+            chunk = os.read(descriptor, min(64 * 1024, remaining))
+            if not chunk:
+                break
+            chunks.append(chunk)
+            remaining -= len(chunk)
+        raw = b"".join(chunks)
+        after = os.fstat(descriptor)
+        current = os.stat(path, follow_symlinks=False)
+        if (
+            len(raw) != before.st_size
+            or len(raw) > _MAXIMUM_MANIFEST_BYTES
+            or (after.st_dev, after.st_ino, after.st_size)
+            != (before.st_dev, before.st_ino, before.st_size)
+            or (current.st_dev, current.st_ino, current.st_size)
+            != (before.st_dev, before.st_ino, before.st_size)
+        ):
+            raise TrialProfileError("trial authority manifest changed")
+        return raw
+    except OSError as exc:
+        raise TrialProfileError("trial authority manifest is unavailable") from exc
+    finally:
+        os.close(descriptor)
 
 
 def _closed_manifest_object(pairs: list[tuple[str, object]]) -> dict[str, object]:

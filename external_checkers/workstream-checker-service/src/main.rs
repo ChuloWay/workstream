@@ -657,26 +657,7 @@ fn load_trial_profiles(config: &mut ServiceConfig) -> Result<(), String> {
     ) {
         (None, None) => Ok(()),
         (Some(path), Some(digest)) => {
-            if !path.is_absolute() {
-                return Err("trial authority manifest path invalid".into());
-            }
-            let metadata =
-                fs::symlink_metadata(path).map_err(|_| "trial authority manifest unavailable")?;
-            if !metadata.file_type().is_file()
-                || metadata.file_type().is_symlink()
-                || metadata.len() == 0
-                || metadata.len() > 4 * 1024 * 1024
-                || fs::canonicalize(path).map_err(|_| "trial authority manifest path invalid")?
-                    != path
-            {
-                return Err("trial authority manifest path invalid".into());
-            }
-            let mut bytes = Vec::with_capacity(metadata.len() as usize);
-            File::open(path)
-                .map_err(|_| "trial authority manifest unavailable")?
-                .take(4 * 1024 * 1024 + 1)
-                .read_to_end(&mut bytes)
-                .map_err(|_| "trial authority manifest unavailable")?;
+            let bytes = read_trial_authority_manifest(path)?;
             config.trial_profiles = Some(
                 TrialProfileCatalog::from_bytes(&bytes, digest)
                     .map_err(|error| error.to_owned())?,
@@ -685,6 +666,57 @@ fn load_trial_profiles(config: &mut ServiceConfig) -> Result<(), String> {
         }
         _ => Err("trial authority manifest configuration incomplete".into()),
     }
+}
+
+fn read_trial_authority_manifest(path: &Path) -> Result<Vec<u8>, String> {
+    read_trial_authority_manifest_after_open(path, || {})
+}
+
+fn read_trial_authority_manifest_after_open(
+    path: &Path,
+    after_open: impl FnOnce(),
+) -> Result<Vec<u8>, String> {
+    const MAXIMUM_BYTES: u64 = 4 * 1024 * 1024;
+    if !path.is_absolute()
+        || fs::canonicalize(path).map_err(|_| "trial authority manifest unavailable")? != path
+    {
+        return Err("trial authority manifest path invalid".into());
+    }
+    let mut file = OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC)
+        .open(path)
+        .map_err(|_| "trial authority manifest unavailable")?;
+    let before = file
+        .metadata()
+        .map_err(|_| "trial authority manifest unavailable")?;
+    if !before.file_type().is_file()
+        || before.file_type().is_symlink()
+        || before.nlink() != 1
+        || before.len() == 0
+        || before.len() > MAXIMUM_BYTES
+    {
+        return Err("trial authority manifest path invalid".into());
+    }
+    after_open();
+    let mut bytes = Vec::with_capacity(before.len() as usize);
+    file.by_ref()
+        .take(MAXIMUM_BYTES + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|_| "trial authority manifest unavailable")?;
+    let after = file
+        .metadata()
+        .map_err(|_| "trial authority manifest unavailable")?;
+    let current = fs::symlink_metadata(path).map_err(|_| "trial authority manifest unavailable")?;
+    if bytes.len() as u64 != before.len()
+        || bytes.len() as u64 > MAXIMUM_BYTES
+        || (after.dev(), after.ino(), after.len()) != (before.dev(), before.ino(), before.len())
+        || (current.dev(), current.ino(), current.len())
+            != (before.dev(), before.ino(), before.len())
+    {
+        return Err("trial authority manifest changed".into());
+    }
+    Ok(bytes)
 }
 
 fn serve_connections<I>(
@@ -2913,6 +2945,33 @@ mod tests {
             }],
         };
         (root, config)
+    }
+
+    #[test]
+    fn trial_manifest_reader_rejects_growth_and_path_replacement() {
+        let (root, _) = test_config();
+        let path = root.join("trial-authority.json");
+        fs::write(&path, b"{}").unwrap();
+        assert_eq!(
+            read_trial_authority_manifest_after_open(&path, || {
+                let mut file = OpenOptions::new().append(true).open(&path).unwrap();
+                file.write_all(b"x").unwrap();
+            })
+            .unwrap_err(),
+            "trial authority manifest changed"
+        );
+
+        fs::write(&path, b"{}").unwrap();
+        let replacement = root.join("replacement.json");
+        fs::write(&replacement, b"{}").unwrap();
+        assert_eq!(
+            read_trial_authority_manifest_after_open(&path, || {
+                fs::rename(&replacement, &path).unwrap();
+            })
+            .unwrap_err(),
+            "trial authority manifest changed"
+        );
+        fs::remove_dir_all(root).unwrap();
     }
 
     fn pre_submit_envelope_with_grant(config: &ServiceConfig) -> Value {
