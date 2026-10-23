@@ -1,6 +1,6 @@
 # WS-EXEC-001 — Managed lifecycle for self-hosted checker microVMs
 
-- Durable disposition: Planned
+- Disposition: Planned
 - Intent: finish the real upload -> isolated intake -> pre-check -> immutable Submission -> durable post-check -> governed outcome path through Workstream's typed adapters. Preparation begins after authorization while the same request uploads its ZIP. Success, rejection, disconnect, deadline, runtime failure and controller restart must release exactly owned resources. User explicitly authorized continuing through all implementation boundaries and live EC2 proof; the standalone qualification is not completion.
 
 ## Observed owners and concrete gaps
@@ -94,4 +94,6 @@ results and governed outcome. Test CPU/memory/PID/output enforcement rather than
 inferring limits from vCPU count. Resource exhaustion, cancellation and unknown
 execution outcomes must not become failed-work verdicts or unsafe execution retries.
 
-Next usable boundary: WS-EXEC-001-01, production node lifecycle and adapter contract.
+Next usable boundary: WS-EXEC-001-02, upload-overlapped trusted ART intake.
+Boundary 1 supplies the production node lifecycle and existing execution adapter;
+its synthetic-grant proof does not complete the public contributor journey.

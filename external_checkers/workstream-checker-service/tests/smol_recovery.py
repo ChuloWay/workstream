@@ -45,6 +45,8 @@ class Recovery:
         self.disks = set()
         self.flag = config_path.parent / 'recovery-delete-fault'
         self.wrapper = config_path.parent / 'recovery-smol-wrapper'
+        self.trace = config_path.parent / 'recovery-runtime-trace.jsonl'
+        self.mode = config_path.parent / 'recovery-prepare-failures'
 
     def runtime(self, *args):
         s = self.config['smol']
@@ -104,6 +106,39 @@ class Recovery:
         subprocess.run(['sudo', 'systemctl', 'restart', self.unit], check=True, timeout=30)
         wait_until(self.ready, 'node failed to become ready')
 
+    def retry_proof(self):
+        for remaining, expected_creates, case in (
+            (1, 2, 'retry_after_confirmed_cleanup'),
+            (-1, 3, 'preparation_retry_limit'),
+            (0, 1, 'launched_deadline_never_retried'),
+        ):
+            self.trace.write_text('')
+            self.mode.write_text(str(remaining))
+            if remaining == -1:
+                envelope = self.proof.request(self.image, 'pre_submit', 'pass')
+                response = exchange(self.config['socket_path'], envelope)
+                assert response['result']['request_digest'] == envelope['request']['request_digest']
+                assert response['result']['outcome'] == 'infrastructure_failed'
+                assert response['result']['infrastructure_failure_code'] == 'implementation_unavailable'
+                assert response['isolation'] is None
+            elif remaining:
+                self.proof.execute(self.image, 'pre_submit', 'pass')
+            else:
+                self.proof.execute(self.image, 'pre_submit', 'sleep',
+                                   expected='deadline_exceeded', deadline_ms=5000)
+            wait_until(self.clean, 'retry test leaked resources')
+            events = [json.loads(line) for line in self.trace.read_text().splitlines()]
+            creates = [e for e in events if e['operation'] == 'create']
+            executions = [e for e in events if e['operation'] == 'exec']
+            assert len(creates) == expected_creates, events
+            assert len({e['name'] for e in creates}) == expected_creates, events
+            assert all(e['prior_resources'] == [] for e in creates), events
+            assert len(executions) == (0 if remaining == -1 else 1), events
+            assert len([e for e in events if e['operation'] == 'start']) == expected_creates, events
+            assert len([e for e in events if e['operation'] == 'delete']) == expected_creates, events
+            self.report(case)
+        self.mode.write_text('0')
+
     def run(self):
         assert self.clean() and self.ready(), 'isolated node must start drained and ready'
         self.runtime('machine', 'create', '--name', self.foreign, '--image', self.image['smol']['archive'],
@@ -147,17 +182,20 @@ class Recovery:
 
             # Signed/pinned wrapper is test-only configuration, not a production
             # fault switch. A failed exact-name delete must leave custody durable.
-            binary = self.config['smol']['binary']
-            wrapper = ('#!/bin/sh\nif [ "$1" = machine ] && [ "$2" = delete ] && [ -e '
-                       + shlex.quote(str(self.flag)) + ' ]; then exit 93; fi\nexec '
-                       + shlex.quote(binary) + ' "$@"\n')
-            self.wrapper.write_text(wrapper)
+            source = Path(__file__).parent / 'smol_fixture/runtime_wrapper.py'
+            self.wrapper.write_bytes(source.read_bytes())
+            self.mode.write_text('0')
+            self.wrapper.with_suffix('.json').write_text(json.dumps({
+                'binary': self.config['smol']['binary'], 'trace': str(self.trace),
+                'mode': str(self.mode), 'cgroups': str(self.groups), 'delete_fault': str(self.flag),
+            }))
             self.wrapper.chmod(0o700)
             changed = json.loads(self.original)
             changed['smol']['binary'] = str(self.wrapper)
             changed['smol']['binary_sha256'] = 'sha256:' + hashlib.sha256(self.wrapper.read_bytes()).hexdigest()
             self.path.write_text(json.dumps(changed))
             self.restart()
+            self.retry_proof()
             self.start()
             wait_until(lambda: self.running(1), 'cleanup fault target never started')
             self.flag.touch()
@@ -183,6 +221,8 @@ class Recovery:
             self.foreign_process.wait(timeout=10)
             group.rmdir()
             self.wrapper.unlink(missing_ok=True)
+            self.wrapper.with_suffix('.json').unlink(missing_ok=True)
+            self.mode.unlink(missing_ok=True)
             self.proof.close()
 
 

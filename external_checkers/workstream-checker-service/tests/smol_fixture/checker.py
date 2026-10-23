@@ -6,14 +6,17 @@ import os
 from pathlib import Path
 import signal
 import socket
+import stat
 import sys
 import time
 
 
-def denied(operation):
+def denied(operation, *, expected_errno=None):
     try:
         value = operation()
-    except OSError:
+    except OSError as error:
+        if expected_errno is not None:
+            assert error.errno == expected_errno, error
         return
     if hasattr(value, "close"):
         value.close()
@@ -84,7 +87,10 @@ def evaluate(request):
         assert Path("/work/input/material.txt").read_bytes() == b"verified material"
         denied(lambda: open("/work/input/material.txt", "wb"))
         denied(lambda: open("/etc/passwd", "ab"))
-        denied(lambda: open("/image-owned-device", "rb"))
+        device = Path("/image-owned-device").lstat()
+        assert stat.S_ISCHR(device.st_mode)
+        assert os.major(device.st_rdev) == 1 and os.minor(device.st_rdev) == 3
+        denied(lambda: open("/image-owned-device", "rb"), expected_errno=errno.EACCES)
         denied(lambda: socket.socket(socket.AF_VSOCK, socket.SOCK_STREAM))
         denied(lambda: socket.create_connection(("1.1.1.1", 443), timeout=0.3))
         with open("/tmp/private", "wb") as temporary:

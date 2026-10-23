@@ -130,9 +130,11 @@ keep it operator-controlled. Build `workstream-checker-guest` for
 `x86_64-unknown-linux-musl`; the node and bootstrap must come from the same source.
 Each existing cache entry additionally has `smol.archive`,
 `smol.archive_sha256` and `smol.image_config`. The
-[cache preparation command](tools/smol_cache.py) checks an already local
+[cache preparation command](../backend/scripts/checker_smol_cache.py) checks an already local
 Docker-save archive against its platform manifest, config and rootfs identities.
-It emits cache configuration; it neither registers the image nor activates a
+Run it from `backend/` with `uv run python -m scripts.checker_smol_cache`.
+It shares platform-manifest validation with the image publisher and verifies
+every declared layer blob and its uncompressed identity. It emits cache configuration; it neither registers the image nor activates a
 policy. Runtime execution needs no Docker daemon, registry credentials or image
 pull. Smol retains private hard links to imported archives; link count alone is
 not an image-integrity check.
