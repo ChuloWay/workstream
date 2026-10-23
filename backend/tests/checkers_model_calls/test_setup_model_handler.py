@@ -23,6 +23,7 @@ from app.interfaces.setup_model_proxy import SetupModelProxyRequest, SetupModelP
 from app.modules.model_usage.api import (
     ModelCallUnavailable,
     ModelCallUsage,
+    ObservedSetupModelUsageEffect,
     ProjectModelProfile,
     SetupModelEffectAuthorityFacts,
     SetupModelUsageSlotKey,
@@ -408,10 +409,12 @@ async def test_handler_persists_observation_before_response_art_and_replays_with
 
     class Calls:
         completed = None
+        observed = None
+        fail_completion = True
 
-        async def recover_completed(self, *_args):
+        async def recover_existing(self, *_args):
             events.append("recover")
-            return self.completed
+            return self.completed or self.observed
 
         async def prepare(self, *_args):
             events.append("prepare")
@@ -421,15 +424,26 @@ async def test_handler_persists_observation_before_response_art_and_replays_with
             events.append("reserve")
             return dispatch
 
-        async def mark_uncertain(self, *_args, provider_response_id=None):
+        async def mark_uncertain(self, supplied, digest, *, provider_response_id=None):
             events.append(("observe", provider_response_id))
+            self.observed = ObservedSetupModelUsageEffect(
+                effect=supplied,
+                uncertainty_digest=digest,
+                provider_response_id=provider_response_id,
+                replayed=False,
+            )
 
         async def complete(self, *_args, response_evidence, **_kwargs):
             events.append("complete")
+            if self.fail_completion:
+                self.fail_completion = False
+                raise ModelCallUnavailable("simulated_response_commit_loss")
             self.completed = SimpleNamespace(
                 effect=effect,
                 response_evidence=response_evidence,
+                state="completed",
             )
+            self.observed = None
             return self.completed
 
     calls = Calls()
@@ -442,7 +456,20 @@ async def test_handler_persists_observation_before_response_art_and_replays_with
             return SimpleNamespace(
                 status="verified",
                 put_attempt_id=new_record_id(),
+                content_id=new_record_id(),
                 verification_receipt_id=new_record_id(),
+            )
+
+        async def recover_setup_output(self, selector):
+            events.append("recover_response_art")
+            data = stored["model_response"]
+            return SimpleNamespace(
+                status="verified",
+                put_attempt_id=new_record_id(),
+                content_id=new_record_id(),
+                verification_receipt_id=new_record_id(),
+                content_sha256=selector.content_sha256,
+                byte_count=len(data),
             )
 
         async def read_setup_response(self, *_args):
@@ -506,12 +533,22 @@ async def test_handler_persists_observation_before_response_art_and_replays_with
         provider=provider,
     )
 
-    assert (await handler.handle(request)).outcome == "completed"
+    assert (await handler.handle(request)).outcome == "unavailable"
     first_events = list(events)
     assert first_events.index(("observe", "response-1")) < first_events.index(
         "store_model_response"
     )
     assert first_events[-1] == "complete"
+
+    assert (await handler.handle(request)).outcome == "completed"
+    assert provider_calls == 1
+    assert events[-5:] == [
+        "recover",
+        "recover_response_art",
+        "bind_model_response",
+        "read_response",
+        "complete",
+    ]
 
     assert (await handler.handle(request)).outcome == "completed"
     assert provider_calls == 1

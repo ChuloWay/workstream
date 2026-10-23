@@ -24,6 +24,7 @@ from app.modules.model_usage.api import (
     ModelCallUnavailable,
     ModelCallUsage,
     ModelProfileSelector,
+    ObservedSetupModelUsageEffect,
     PreparedSetupModelUsageEffect,
     ProjectModelProfile,
     SetupModelOutputArtifactRequest,
@@ -182,24 +183,7 @@ class OpenAISetupProvider:
                     ),
                     provider_id if isinstance(provider_id, str) else None,
                 )
-            canonical = _canonical_bytes(value).decode("utf-8")
-            provider_model = value.get("model")
-            usage = _usage(value.get("usage"))
-            if (
-                not isinstance(provider_id, str)
-                or not provider_id
-                or provider_model != self._profile.spec.model_snapshot
-            ):
-                raise ValueError("provider response identity is invalid")
-            return SetupProviderResponse(
-                status_code=response.status_code,
-                response_json=canonical,
-                provider_response_id=provider_id,
-                provider_model=provider_model,
-                usage=usage,
-                usable=_model_output_bytes(value)
-                <= self._profile.spec.maximum_output_bytes,
-            )
+            return _openai_response(self._profile, response.status_code, value)
         except SetupProviderUncertain:
             raise
         except BaseException as exc:
@@ -288,23 +272,7 @@ class OpenRouterSetupProvider:
                     ),
                     provider_id if isinstance(provider_id, str) else None,
                 )
-            provider_model = value.get("model")
-            usage = _chat_usage(value.get("usage"))
-            if (
-                not isinstance(provider_id, str)
-                or not provider_id
-                or provider_model != self._profile.spec.model_snapshot
-            ):
-                raise ValueError("provider response identity is invalid")
-            return SetupProviderResponse(
-                status_code=response.status_code,
-                response_json=_canonical_bytes(value).decode("utf-8"),
-                provider_response_id=provider_id,
-                provider_model=provider_model,
-                usage=usage,
-                usable=_chat_output_bytes(value)
-                <= self._profile.spec.maximum_output_bytes,
-            )
+            return _openrouter_response(self._profile, response.status_code, value)
         except SetupProviderUncertain:
             raise
         except BaseException as exc:
@@ -391,9 +359,13 @@ class SetupModelProxyHandler:
         async with self._sessions() as session, session.begin():
             authority = await self._authorization(session, subject.compilation_attempt_id)
             calls = self._calls(session, authority)
-            completed = await calls.recover_completed(key, request_sha)
-        if completed is not None:
-            return await self._cached(request, completed, profile)
+            existing = await calls.recover_existing(key, request_sha)
+        if isinstance(existing, ObservedSetupModelUsageEffect):
+            return await self._recover_observed(request, existing, profile)
+        if existing is not None:
+            if existing.state != "completed":
+                return _unavailable(request, "model_call_unavailable")
+            return await self._cached(request, existing, profile)
 
         async with self._provider(profile) as provider:
             input_tokens = await provider.count_input(body)
@@ -428,12 +400,7 @@ class SetupModelProxyHandler:
             authority = await self._authorization(session, dispatch.internal_call_request_id)
             await self._calls(session, authority).mark_uncertain(
                 dispatch.effect,
-                canonical_json_hash(
-                    {
-                        "outcome": "provider_response_received",
-                        "response_sha256": _sha(response_data),
-                    }
-                ),
+                _sha(response_data),
                 provider_response_id=response.provider_response_id,
             )
         response_evidence = await self._store(prepared, "model_response", response_data)
@@ -448,6 +415,71 @@ class SetupModelProxyHandler:
                 usable=response.usable,
             )
         if not response.usable:
+            return _unavailable(request, "model_response_too_large")
+        return _completed_reply(
+            request,
+            profile,
+            status_code=response.status_code,
+            response_json=response.response_json,
+        )
+
+    async def _recover_observed(
+        self,
+        request: SetupModelProxyRequest,
+        observed: ObservedSetupModelUsageEffect,
+        profile: ProjectModelProfile,
+    ) -> SetupModelProxyReply:
+        """Complete only exact response bytes already verified by ART."""
+        if observed.provider_response_id is None:
+            return _unavailable(request, "model_provider_delivery_uncertain")
+        effect = observed.effect
+        selector = SetupModelOutputSelector(
+            slot_key=effect.slot_key,
+            model_call_slot_id=effect.slot_id,
+            model_call_attempt_id=effect.effect_id,
+            role="model_response",
+            content_sha256=observed.uncertainty_digest,
+        )
+        recovered = await self._outputs.recover_setup_output(selector)
+        if (
+            recovered is None
+            or recovered.status != "verified"
+            or recovered.content_id is None
+            or recovered.verification_receipt_id is None
+            or recovered.content_sha256 != selector.content_sha256
+        ):
+            return _unavailable(request, "model_provider_delivery_uncertain")
+        async with self._sessions() as session, session.begin():
+            binding = await self._bindings(session).bind_setup_output(
+                SetupModelOutputBindingRequest(
+                    selector,
+                    recovered.put_attempt_id,
+                    recovered.verification_receipt_id,
+                )
+            )
+        evidence = ModelCallEvidence(
+            binding_id=binding.binding_id,
+            content_id=binding.content_id,
+            put_attempt_id=binding.put_attempt_id,
+            verification_receipt_id=binding.verification_receipt_id,
+            content_sha256=recovered.content_sha256,
+            byte_count=recovered.byte_count,
+        )
+        data = await self._outputs.read_setup_response(selector, evidence)
+        response = _retained_provider_response(profile, data)
+        if response.provider_response_id != observed.provider_response_id:
+            raise ModelCallUnavailable("setup_model_recovery_identity_mismatch")
+        async with self._sessions() as session, session.begin():
+            authority = await self._authorization(session, effect.internal_call_request_id)
+            completed = await self._calls(session, authority).complete(
+                effect,
+                provider_response_id=response.provider_response_id,
+                provider_model_snapshot=response.provider_model,
+                response_evidence=evidence,
+                usage=response.usage,
+                usable=response.usable,
+            )
+        if completed.state != "completed" or not response.usable:
             return _unavailable(request, "model_response_too_large")
         return _completed_reply(
             request,
@@ -727,6 +759,66 @@ def _nanodollars(value: object) -> int:
     if converted > 9_000_000_000_000_000_000:
         raise ModelCallUnavailable("model_profile_provider_unavailable")
     return int(converted)
+
+
+def _openai_response(
+    profile: ProjectModelProfile, status_code: int, value: dict[str, object]
+) -> SetupProviderResponse:
+    provider_id = value.get("id")
+    provider_model = value.get("model")
+    if (
+        not isinstance(provider_id, str)
+        or not provider_id
+        or provider_model != profile.spec.model_snapshot
+    ):
+        raise ValueError("provider response identity is invalid")
+    return SetupProviderResponse(
+        status_code=status_code,
+        response_json=_canonical_bytes(value).decode("utf-8"),
+        provider_response_id=provider_id,
+        provider_model=provider_model,
+        usage=_usage(value.get("usage")),
+        usable=_model_output_bytes(value) <= profile.spec.maximum_output_bytes,
+    )
+
+
+def _openrouter_response(
+    profile: ProjectModelProfile, status_code: int, value: dict[str, object]
+) -> SetupProviderResponse:
+    provider_id = value.get("id")
+    provider_model = value.get("model")
+    if (
+        not isinstance(provider_id, str)
+        or not provider_id
+        or provider_model != profile.spec.model_snapshot
+    ):
+        raise ValueError("provider response identity is invalid")
+    return SetupProviderResponse(
+        status_code=status_code,
+        response_json=_canonical_bytes(value).decode("utf-8"),
+        provider_response_id=provider_id,
+        provider_model=provider_model,
+        usage=_chat_usage(value.get("usage")),
+        usable=_chat_output_bytes(value) <= profile.spec.maximum_output_bytes,
+    )
+
+
+def _retained_provider_response(
+    profile: ProjectModelProfile, data: bytes
+) -> SetupProviderResponse:
+    """Re-validate exact retained ART bytes without another provider request."""
+    try:
+        value = json.loads(data, parse_constant=_reject_constant)
+        if not isinstance(value, dict) or _canonical_bytes(value) != data:
+            raise ValueError("retained response is not canonical")
+        identity = profile.spec.provider, profile.spec.api
+        if identity == ("openai", "responses"):
+            return _openai_response(profile, 200, value)
+        if identity == ("openrouter", "chat_completions"):
+            return _openrouter_response(profile, 200, value)
+    except (TypeError, ValueError, UnicodeError, RecursionError) as exc:
+        raise ModelCallUnavailable("setup_model_recovery_response_invalid") from exc
+    raise ModelCallUnavailable("model_profile_provider_unavailable")
 
 
 def _usage(value: object) -> ModelCallUsage:

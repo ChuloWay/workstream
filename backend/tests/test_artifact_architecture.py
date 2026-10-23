@@ -8,12 +8,11 @@ from importlib.util import resolve_name
 from pathlib import Path
 
 import pytest
-from tests.architecture_ast import imported_symbols_and_calls
 
-from app.interfaces import artifact_operations
 from app.db.base import Base
+from app.interfaces import artifact_operations
 from app.main import create_app
-
+from tests.architecture_ast import imported_symbols_and_calls
 
 BACKEND_ROOT = Path(__file__).parents[1]
 APP_ROOT = BACKEND_ROOT / "app"
@@ -754,6 +753,7 @@ def _assert_checker_custody_consumers(
     expected = {
         "app.modules.checkers.api.output_custody": {
             "app/adapters/artifacts/__init__.py",
+                "app/adapters/checkers/model_proxy.py",
             "app/modules/artifacts/api/checker_output_authority.py",
             "app/modules/artifacts/checker_output_bindings.py",
             "app/modules/artifacts/checker_output_custody.py",
@@ -762,8 +762,7 @@ def _assert_checker_custody_consumers(
             "app/modules/artifacts/service.py",
             "app/modules/authorization/checker_output_authorization.py",
             "app/modules/authorization/domain/checker_outputs.py",
-            "app/modules/checkers/model_calls/custody.py",
-            "app/modules/checkers/model_calls/proxy.py",
+                "app/modules/checkers/model_usage_custody.py",
             "app/modules/tasks/post_submit_routing/evaluation_guard.py",
         },
         "app.modules.checkers.api.materialization": {
