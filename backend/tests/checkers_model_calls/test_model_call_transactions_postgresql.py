@@ -15,13 +15,13 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engin
 
 from app.core.hashing import canonical_json_hash
 from app.core.identifiers import new_record_id
-from app.modules.authorization.domain.checker_models import (
+from app.modules.authorization.domain.model_usage import (
     BUDGET_CONFIGURE,
     PROFILE_PROVISION,
     project_model_admin_resource,
 )
 from app.modules.authorization.domain.resource_digest import authorization_resource_digest
-from app.modules.checkers.api.model_calls import (
+from app.modules.model_usage.api import (
     KnownNoEffectProof,
     ModelActionEvidence,
     ModelBudgetProvisioningFacts,
@@ -37,13 +37,14 @@ from app.modules.checkers.api.model_calls import (
     ModelProfileProvisioningFacts,
     ProjectModelBudgetConfigurationSpec,
     ProjectModelProfileSpec,
+    SetupModelUsageSlotKey,
     model_action_digest,
     model_retry_terminal_digest,
 )
-from app.modules.checkers.model_calls.models import CheckerModelBudgetAccount
-from app.modules.checkers.model_calls.profiles import ModelProfileReader
-from app.modules.checkers.model_calls.repository import ModelCallRepository
-from app.modules.checkers.model_calls.service import ModelCallService
+from app.modules.model_usage.models import ModelUsageBudgetAccount, ModelUsageEffect
+from app.modules.model_usage.profiles import ModelProfileReader
+from app.modules.model_usage.service import ModelCallService
+from app.modules.model_usage.setup import SetupModelUsageService
 
 
 def sha(label: str) -> str:
@@ -75,7 +76,7 @@ async def model_database(postgres_database_url: str):
     registry_entry_id = new_record_id()
     registry_entry_digest = sha("registry")
     migration = runpy.run_path(
-        str(Path(__file__).resolve().parents[2] / "alembic/versions/0060_checker_model_runtime.py")
+        str(Path(__file__).resolve().parents[2] / "alembic/versions/0060_model_usage.py")
     )
 
     def isolated(statement: str) -> str:
@@ -104,6 +105,10 @@ async def model_database(postgres_database_url: str):
             "create table artifact_contents(id uuid primary key)",
             "create table artifact_put_attempts(id uuid primary key)",
             "create table artifact_verification_receipts(id uuid primary key)",
+            "create table project_guide_compilation_attempts("
+            "id uuid primary key,project_id uuid not null,guide_id uuid not null,"
+            "source_snapshot_id uuid not null,setup_run_id uuid not null,"
+            "setup_generation bigint not null,runtime_configuration_hash text,status text)",
         ):
             await connection.execute(text(statement))
         for statement in migration["_TABLES"]:
@@ -240,6 +245,51 @@ class BoundaryPorts:
             },
         )
 
+    async def authorize_setup_prepare(self, slot, request_sha256):
+        return self._decision(
+            "setup_prepare",
+            {"slot": slot.model_dump(mode="json"), "request_sha256": request_sha256},
+        )
+
+    async def authorize_setup_dispatch(self, prepared, request_evidence):
+        return self._decision(
+            "setup_dispatch",
+            {
+                "prepared": prepared.model_dump(mode="json"),
+                "request_evidence": request_evidence.model_dump(mode="json"),
+            },
+        )
+
+    async def authorize_setup_observe(self, effect, provider_response_id, observation_digest):
+        return self._decision(
+            "setup_observe",
+            {
+                "effect": effect.model_dump(mode="json"),
+                "provider_response_id": provider_response_id,
+                "observation_digest": observation_digest,
+            },
+        )
+
+    async def authorize_setup_complete(self, effect, response_evidence, terminal_digest):
+        return self._decision(
+            "setup_complete",
+            {
+                "effect": effect.model_dump(mode="json"),
+                "response_evidence": (
+                    response_evidence.model_dump(mode="json")
+                    if response_evidence is not None
+                    else None
+                ),
+                "terminal_digest": terminal_digest,
+            },
+        )
+
+    async def require_setup_request(self, prepared, evidence):
+        self.request_checks += 1
+
+    async def require_setup_response(self, effect_id, evidence):
+        self.response_checks += 1
+
     async def require_current(self, facts, slot):
         self.current_checks += 1
         self.events.append("current")
@@ -354,9 +404,7 @@ class DatabaseBoundaryPorts:
         )
 
     async def authorize_child(self, project_id, parent_attempt_id, terminal_digest):
-        evidence = await self._ports.authorize_child(
-            project_id, parent_attempt_id, terminal_digest
-        )
+        evidence = await self._ports.authorize_child(project_id, parent_attempt_id, terminal_digest)
         return await self._authority(
             evidence,
             action="project.model_call.recovery_child.authorize",
@@ -364,14 +412,78 @@ class DatabaseBoundaryPorts:
         )
 
     async def authorize_complete(self, effect, response_evidence, terminal_digest):
-        evidence = await self._ports.authorize_complete(
-            effect, response_evidence, terminal_digest
-        )
+        evidence = await self._ports.authorize_complete(effect, response_evidence, terminal_digest)
         return await self._authority(
             evidence,
             action="checker.model_call.complete",
             permission="checker.model_call.complete",
         )
+
+    async def authorize_setup_prepare(self, slot, request_sha256):
+        evidence = await self._ports.authorize_setup_prepare(slot, request_sha256)
+        return await self._authority(
+            evidence,
+            action="project.guide_compilation.model.prepare",
+            permission="project.guide_compilation.model.prepare",
+        )
+
+    async def authorize_setup_dispatch(self, prepared, request_evidence):
+        evidence = await self._ports.authorize_setup_dispatch(prepared, request_evidence)
+        return await self._authority(
+            evidence,
+            action="project.guide_compilation.model.dispatch",
+            permission="project.guide_compilation.model.dispatch",
+        )
+
+    async def authorize_setup_observe(self, effect, provider_response_id, observation_digest):
+        evidence = await self._ports.authorize_setup_observe(
+            effect, provider_response_id, observation_digest
+        )
+        return await self._authority(
+            evidence,
+            action="project.guide_compilation.model.observe",
+            permission="project.guide_compilation.model.observe",
+        )
+
+    async def authorize_setup_complete(self, effect, response_evidence, terminal_digest):
+        evidence = await self._ports.authorize_setup_complete(
+            effect, response_evidence, terminal_digest
+        )
+        return await self._authority(
+            evidence,
+            action="project.guide_compilation.model.complete",
+            permission="project.guide_compilation.model.complete",
+        )
+
+    async def require_setup_request(self, prepared, evidence):
+        await self._ports.require_setup_request(prepared, evidence)
+        await self._artifact(evidence)
+
+    async def require_setup_response(self, effect_id, evidence):
+        await self._ports.require_setup_response(effect_id, evidence)
+        await self._artifact(evidence)
+
+    async def require_setup_current(self, slot):
+        attempt_id = await self._session.scalar(
+            text(
+                "select id from project_guide_compilation_attempts "
+                "where id=:id and project_id=:project and guide_id=:guide "
+                "and source_snapshot_id=:snapshot and setup_run_id=:run "
+                "and setup_generation=:generation and runtime_configuration_hash=:runtime "
+                "and status='compilation_reserved' for update"
+            ),
+            {
+                "id": slot.compilation_attempt_id,
+                "project": slot.project_id,
+                "guide": slot.guide_id,
+                "snapshot": slot.source_snapshot_id,
+                "run": slot.setup_run_id,
+                "generation": slot.setup_generation,
+                "runtime": slot.runtime_configuration_hash,
+            },
+        )
+        if attempt_id is None:
+            raise ModelCallUnavailable("setup_model_owner_unavailable")
 
     async def require_current(self, facts, slot):
         await self._ports.require_current(facts, slot)
@@ -410,6 +522,60 @@ def service(session: AsyncSession, ports: BoundaryPorts) -> ModelCallService:
     )
 
 
+def setup_service(session: AsyncSession, ports: BoundaryPorts) -> SetupModelUsageService:
+    boundaries = DatabaseBoundaryPorts(session, ports)
+    return SetupModelUsageService(
+        session,
+        authority=boundaries,
+        evidence=boundaries,
+        owner=boundaries,
+    )
+
+
+async def setup_slot_key(
+    facts: DatabaseFacts,
+    profile,
+    *,
+    call_index: int = 0,
+) -> SetupModelUsageSlotKey:
+    attempt_id = new_record_id()
+    guide_id = new_record_id()
+    snapshot_id = new_record_id()
+    setup_run_id = new_record_id()
+    runtime_hash = sha("setup-runtime")
+    async with facts.engine.begin() as connection:
+        await connection.execute(
+            text(
+                "insert into project_guide_compilation_attempts("
+                "id,project_id,guide_id,source_snapshot_id,setup_run_id,"
+                "setup_generation,runtime_configuration_hash,status) values("
+                ":id,:project,:guide,:snapshot,:run,1,:runtime,'compilation_reserved')"
+            ),
+            {
+                "id": attempt_id,
+                "project": facts.project_id,
+                "guide": guide_id,
+                "snapshot": snapshot_id,
+                "run": setup_run_id,
+                "runtime": runtime_hash,
+            },
+        )
+    return SetupModelUsageSlotKey(
+        compilation_attempt_id=attempt_id,
+        project_id=facts.project_id,
+        guide_id=guide_id,
+        source_snapshot_id=snapshot_id,
+        setup_run_id=setup_run_id,
+        setup_generation=1,
+        runtime_configuration_hash=runtime_hash,
+        profile_id=profile.profile_id,
+        profile_version=profile.spec.profile_version,
+        profile_digest=profile.profile_digest,
+        phase="draft",
+        call_index=call_index,
+    )
+
+
 async def provision(
     facts: DatabaseFacts,
     ports: BoundaryPorts,
@@ -421,8 +587,6 @@ async def provision(
     profile_spec = ProjectModelProfileSpec(
         project_id=facts.project_id,
         profile_version=1,
-        registry_entry_id=facts.registry_entry_id,
-        registry_entry_digest=facts.registry_entry_digest,
         provider="openai_responses",
         api="responses.v1",
         model_snapshot="gpt-example-2026-10-01",
@@ -432,6 +596,14 @@ async def provision(
         maximum_response_bytes=30_000,
         maximum_input_tokens=100,
         maximum_output_tokens=50,
+        maximum_calls=1,
+        maximum_total_request_bytes=10_000,
+        maximum_total_response_bytes=30_000,
+        maximum_total_input_tokens=100,
+        maximum_total_output_tokens=50,
+        allowed_tools=(),
+        maximum_tool_calls=0,
+        maximum_tool_output_bytes=0,
         deadline_ms=30_000,
         pricing=ModelPricing(
             pricing_policy_id=new_record_id(),
@@ -453,6 +625,8 @@ async def provision(
     budget_spec = ProjectModelBudgetConfigurationSpec(
         project_id=facts.project_id,
         configuration_version=1,
+        authorized_total_nanodollars=10_000_000_000,
+        externally_reconciled_prior_spend_nanodollars=0,
         lifetime_limit_nanodollars=limit,
     )
     budget_facts = ModelBudgetProvisioningFacts(
@@ -495,58 +669,16 @@ async def test_profile_publication_rejects_substituted_authority_digest(
         )
 
 
-async def test_profile_publication_requires_exact_post_submit_registry(
+async def test_profile_publication_is_not_owned_by_a_checker_registry_entry(
     model_database: DatabaseFacts,
 ) -> None:
-    with pytest.raises(ModelCallConflict, match="model_profile_registry_conflict"):
-        await provision(
-            model_database,
-            BoundaryPorts(),
-            limit=10_000,
-            profile_changes={"registry_entry_digest": sha("substituted-registry")},
-        )
-
-    pre_entry_id = new_record_id()
-    pre_digest = sha("pre-registry")
     async with model_database.engine.begin() as connection:
         await connection.execute(
-            text(
-                "insert into external_checker_registry_entries(id,entry_digest,phase) "
-                "values (:id,:digest,'pre_submit')"
-            ),
-            {"id": pre_entry_id, "digest": pre_digest},
+            text("update external_checker_registry_entries set phase='pre_submit' where id=:id"),
+            {"id": model_database.registry_entry_id},
         )
-    with pytest.raises(ModelCallConflict, match="model_profile_registry_conflict"):
-        await provision(
-            model_database,
-            BoundaryPorts(),
-            limit=10_000,
-            profile_changes={
-                "registry_entry_id": pre_entry_id,
-                "registry_entry_digest": pre_digest,
-            },
-        )
-
-
-async def test_database_profile_guard_rechecks_registry_digest(
-    model_database: DatabaseFacts,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    async def substituted_registry(*_args, **_kwargs):
-        return True
-
-    monkeypatch.setattr(
-        ModelCallRepository,
-        "is_exact_post_submit_registry_entry",
-        substituted_registry,
-    )
-    with pytest.raises(DBAPIError, match="profile registry binding"):
-        await provision(
-            model_database,
-            BoundaryPorts(),
-            limit=10_000,
-            profile_changes={"registry_entry_digest": sha("substituted-registry")},
-        )
+    profile = await provision(model_database, BoundaryPorts(), limit=10_000)
+    assert profile.spec.project_id == model_database.project_id
 
 
 async def test_database_guards_recompute_profile_and_budget_digests(
@@ -558,14 +690,17 @@ async def test_database_guards_recompute_profile_and_budget_digests(
             async with session.begin():
                 await session.execute(
                     text(
-                        "insert into checker_model_profiles select "
-                        ":id,project_id,2,:digest,registry_entry_id,registry_entry_digest,"
-                        "provider,api,model_snapshot,generation_settings,maximum_request_bytes,"
+                        "insert into model_usage_profiles select "
+                        ":id,project_id,2,:digest,provider,api,model_snapshot,"
+                        "generation_settings,maximum_request_bytes,"
                         "maximum_output_bytes,maximum_response_bytes,maximum_input_tokens,"
-                        "maximum_output_tokens,deadline_ms,call_slots,pricing_policy_id,"
+                        "maximum_output_tokens,maximum_calls,maximum_total_request_bytes,"
+                        "maximum_total_response_bytes,maximum_total_input_tokens,"
+                        "maximum_total_output_tokens,allowed_tools,maximum_tool_calls,"
+                        "maximum_tool_output_bytes,deadline_ms,pricing_policy_id,"
                         "pricing_policy_version,pricing_policy_digest,uncached_input_rate,"
                         "cached_input_rate,output_rate,:operation,actor_profile_id,:authority,"
-                        "clock_timestamp() from checker_model_profiles where profile_version=1"
+                        "clock_timestamp() from model_usage_profiles where profile_version=1"
                     ),
                     {
                         "id": new_record_id(),
@@ -580,10 +715,12 @@ async def test_database_guards_recompute_profile_and_budget_digests(
             async with session.begin():
                 await session.execute(
                     text(
-                        "insert into checker_model_budget_configurations select "
-                        ":id,project_id,2,:digest,lifetime_limit_nanodollars,:operation,"
+                        "insert into model_usage_budget_configurations select "
+                        ":id,project_id,2,:digest,authorized_total_nanodollars,"
+                        "externally_reconciled_prior_spend_nanodollars,"
+                        "lifetime_limit_nanodollars,:operation,"
                         "actor_profile_id,:authority,clock_timestamp() "
-                        "from checker_model_budget_configurations where configuration_version=1"
+                        "from model_usage_budget_configurations where configuration_version=1"
                     ),
                     {
                         "id": new_record_id(),
@@ -634,6 +771,24 @@ def evidence(label: str, content_sha256: str) -> ModelCallEvidence:
         content_sha256=content_sha256,
         byte_count=100,
     )
+
+
+async def wait_until_blocked_by(
+    engine: AsyncEngine,
+    *,
+    blocked_pid: int,
+    blocker_pid: int,
+) -> None:
+    """Observe an actual PostgreSQL lock wait instead of inferring final totals."""
+    for _ in range(200):
+        async with engine.connect() as connection:
+            blockers = await connection.scalar(
+                text("select pg_blocking_pids(:pid)"), {"pid": blocked_pid}
+            )
+        if blocker_pid in blockers:
+            return
+        await asyncio.sleep(0.01)
+    raise AssertionError(f"backend {blocked_pid} did not block behind backend {blocker_pid}")
 
 
 async def prepare_and_reserve(
@@ -692,9 +847,343 @@ async def test_concurrent_dispatch_reserves_one_lifetime_budget(
     assert sum(not isinstance(result, BaseException) for result in results) == 1
     assert sum(isinstance(result, ModelCallBudgetUnavailable) for result in results) == 1
     async with AsyncSession(model_database.engine) as session:
-        account = await session.get(CheckerModelBudgetAccount, str(model_database.project_id))
+        account = await session.get(ModelUsageBudgetAccount, str(model_database.project_id))
         assert account.lifetime_reserved_nanodollars == reservation
         assert account.lifetime_settled_nanodollars == 0
+
+
+async def test_setup_and_checker_dispatches_share_one_account_and_both_win(
+    model_database: DatabaseFacts,
+) -> None:
+    ports = BoundaryPorts()
+    per_dispatch = 100 * 11 + 50 * 29
+    profile = await provision(
+        model_database,
+        ports,
+        limit=per_dispatch * 2,
+        profile_changes={
+            "maximum_calls": 2,
+            "maximum_total_request_bytes": 20_000,
+            "maximum_total_response_bytes": 60_000,
+            "maximum_total_input_tokens": 200,
+            "maximum_total_output_tokens": 100,
+        },
+    )
+    checker_run = execution(model_database)
+    checker_slot = slot(model_database, profile, "shared_budget_checker")
+    checker_sha = sha("shared-budget-checker")
+    checker_evidence = evidence("shared-budget-checker", checker_sha)
+    setup_key = await setup_slot_key(model_database, profile)
+    setup_sha = sha("shared-budget-setup")
+    setup_evidence = evidence("shared-budget-setup", setup_sha)
+
+    async with AsyncSession(model_database.engine, expire_on_commit=False) as session:
+        async with session.begin():
+            checker_prepared = await service(session, ports).prepare_attempt(
+                checker_run,
+                checker_slot,
+                registry_entry_id=model_database.registry_entry_id,
+                request_sha256=checker_sha,
+            )
+    async with AsyncSession(model_database.engine, expire_on_commit=False) as session:
+        async with session.begin():
+            setup_prepared = await setup_service(session, ports).prepare(setup_key, setup_sha)
+
+    async def reserve_checker():
+        async with AsyncSession(model_database.engine, expire_on_commit=False) as session:
+            async with session.begin():
+                return await service(session, ports).reserve_dispatch(
+                    checker_run, checker_prepared, checker_evidence
+                )
+
+    async def reserve_setup():
+        async with AsyncSession(model_database.engine, expire_on_commit=False) as session:
+            async with session.begin():
+                return await setup_service(session, ports).reserve_dispatch(
+                    setup_prepared, setup_evidence
+                )
+
+    checker_reserved, setup_reserved = await asyncio.gather(reserve_checker(), reserve_setup())
+    assert checker_reserved.reserved_nanodollars == per_dispatch
+    assert setup_reserved.reserved_nanodollars == per_dispatch
+    async with AsyncSession(model_database.engine) as session:
+        account = await session.get(ModelUsageBudgetAccount, str(model_database.project_id))
+        assert account.lifetime_reserved_nanodollars == per_dispatch * 2
+        assert account.lifetime_settled_nanodollars == 0
+
+
+async def test_cheap_completed_call_reserves_remaining_aggregate_before_next_dispatch(
+    model_database: DatabaseFacts,
+) -> None:
+    """A cheap first result cannot defer an aggregate-token failure until after I/O."""
+    ports = BoundaryPorts()
+    per_dispatch = 100 * 11 + 50 * 29
+    profile = await provision(
+        model_database,
+        ports,
+        limit=per_dispatch * 2,
+        profile_changes={
+            "maximum_calls": 2,
+            "maximum_total_request_bytes": 20_000,
+            "maximum_total_response_bytes": 60_000,
+            "maximum_total_input_tokens": 100,
+            "maximum_total_output_tokens": 100,
+        },
+    )
+    run = execution(model_database)
+    first_slot = slot(model_database, profile, "aggregate_pre_dispatch")
+    second_slot = first_slot.model_copy(update={"slot_index": 1})
+    first_sha = sha("aggregate-pre-dispatch-first")
+    second_sha = sha("aggregate-pre-dispatch-second")
+
+    async with AsyncSession(model_database.engine, expire_on_commit=False) as session:
+        async with session.begin():
+            owner = service(session, ports)
+            first_prepared = await owner.prepare_attempt(
+                run,
+                first_slot,
+                registry_entry_id=model_database.registry_entry_id,
+                request_sha256=first_sha,
+            )
+            first_dispatched = await owner.reserve_dispatch(
+                run,
+                first_prepared,
+                evidence("aggregate-pre-dispatch-first", first_sha),
+            )
+            await owner.complete(
+                first_dispatched.effect,
+                provider_response_id="resp_cheap_cached",
+                provider_model_snapshot=profile.spec.model_snapshot,
+                response_evidence=evidence(
+                    "aggregate-pre-dispatch-response",
+                    sha("aggregate-pre-dispatch-response"),
+                ),
+                usage=ModelCallUsage(
+                    input_tokens=10,
+                    cached_input_tokens=10,
+                    output_tokens=0,
+                    reasoning_tokens=0,
+                ),
+            )
+            second_prepared = await owner.prepare_attempt(
+                run,
+                second_slot,
+                registry_entry_id=model_database.registry_entry_id,
+                request_sha256=second_sha,
+            )
+            with pytest.raises(ModelCallBudgetUnavailable, match="run_envelope"):
+                await owner.reserve_dispatch(
+                    run,
+                    second_prepared,
+                    evidence("aggregate-pre-dispatch-second", second_sha),
+                )
+
+    async with AsyncSession(model_database.engine) as session:
+        account = await session.get(ModelUsageBudgetAccount, str(model_database.project_id))
+        second = await session.get(ModelUsageEffect, str(second_prepared.attempt_id))
+        assert account.lifetime_reserved_nanodollars == 0
+        assert account.lifetime_settled_nanodollars == 10 * 2
+        assert second is not None and second.state == "prepared"
+
+
+async def test_setup_draft_review_correction_settle_three_shared_calls(
+    model_database: DatabaseFacts,
+) -> None:
+    """One exact setup attempt can run a finite three-call owner-controlled loop."""
+    ports = BoundaryPorts()
+    per_dispatch = 100 * 11 + 50 * 29
+    profile = await provision(
+        model_database,
+        ports,
+        limit=per_dispatch * 3,
+        profile_changes={
+            "maximum_calls": 3,
+            "maximum_total_request_bytes": 30_000,
+            "maximum_total_response_bytes": 90_000,
+            "maximum_total_input_tokens": 300,
+            "maximum_total_output_tokens": 150,
+        },
+    )
+    base = await setup_slot_key(model_database, profile)
+    settled = 0
+    for index, phase in enumerate(("draft", "review", "correction")):
+        key = base.model_copy(update={"phase": phase, "call_index": index})
+        request_sha = sha(f"setup-loop-{phase}-request")
+        response_sha = sha(f"setup-loop-{phase}-response")
+        usage = ModelCallUsage(
+            input_tokens=10 + index,
+            cached_input_tokens=index,
+            output_tokens=5 + index,
+            reasoning_tokens=index,
+        )
+        async with AsyncSession(model_database.engine, expire_on_commit=False) as session:
+            async with session.begin():
+                owner = setup_service(session, ports)
+                prepared = await owner.prepare(key, request_sha)
+                dispatched = await owner.reserve_dispatch(
+                    prepared, evidence(f"setup-loop-{phase}-request", request_sha)
+                )
+                completed = await owner.complete(
+                    dispatched.effect,
+                    provider_response_id=f"resp_setup_{phase}",
+                    provider_model_snapshot=profile.spec.model_snapshot,
+                    response_evidence=evidence(f"setup-loop-{phase}-response", response_sha),
+                    usage=usage,
+                )
+                assert completed.effect.slot_key == key
+                assert completed.state == "completed"
+                assert completed.replayed is False
+                settled += completed.settled_nanodollars
+
+    async with AsyncSession(model_database.engine) as session:
+        account = await session.get(ModelUsageBudgetAccount, str(model_database.project_id))
+        states = (
+            (
+                await session.execute(
+                    text(
+                        "select effect.state from model_usage_effects effect "
+                        "join setup_model_usage_slots slot on slot.id=effect.setup_slot_id "
+                        "where slot.compilation_attempt_id=:attempt order by slot.call_index"
+                    ),
+                    {"attempt": base.compilation_attempt_id},
+                )
+            )
+            .scalars()
+            .all()
+        )
+        assert states == ["completed", "completed", "completed"]
+        assert account.lifetime_reserved_nanodollars == 0
+        assert account.lifetime_settled_nanodollars == settled
+
+
+async def test_uncertain_setup_effect_replay_never_reauthorizes_dispatch(
+    model_database: DatabaseFacts,
+) -> None:
+    ports = BoundaryPorts()
+    reservation = 100 * 11 + 50 * 29
+    profile = await provision(model_database, ports, limit=reservation)
+    key = await setup_slot_key(model_database, profile)
+    request_sha = sha("setup-uncertain-request")
+    request_evidence = evidence("setup-uncertain-request", request_sha)
+    async with AsyncSession(model_database.engine, expire_on_commit=False) as session:
+        async with session.begin():
+            owner = setup_service(session, ports)
+            prepared = await owner.prepare(key, request_sha)
+            dispatched = await owner.reserve_dispatch(prepared, request_evidence)
+            observed = await owner.mark_uncertain(
+                dispatched.effect,
+                sha("setup-uncertain-observation"),
+            )
+            assert observed.state == "uncertain"
+
+    async with AsyncSession(model_database.engine, expire_on_commit=False) as session:
+        async with session.begin():
+            owner = setup_service(session, ports)
+            replayed = await owner.prepare(key, request_sha)
+            with pytest.raises(ModelCallConflict, match="not_dispatchable"):
+                await owner.reserve_dispatch(replayed, request_evidence)
+            account = await session.get(ModelUsageBudgetAccount, str(model_database.project_id))
+            assert account.lifetime_reserved_nanodollars == reservation
+            assert account.lifetime_settled_nanodollars == 0
+
+
+async def test_setup_and_checker_dispatches_share_one_account_cap(
+    model_database: DatabaseFacts,
+) -> None:
+    ports = BoundaryPorts()
+    per_dispatch = 100 * 11 + 50 * 29
+    profile = await provision(
+        model_database,
+        ports,
+        limit=per_dispatch,
+        profile_changes={
+            "maximum_calls": 2,
+            "maximum_total_request_bytes": 20_000,
+            "maximum_total_response_bytes": 60_000,
+            "maximum_total_input_tokens": 200,
+            "maximum_total_output_tokens": 100,
+        },
+    )
+    checker_run = execution(model_database)
+    checker_slot = slot(model_database, profile, "shared_cap_checker")
+    checker_sha = sha("shared-cap-checker")
+    checker_evidence = evidence("shared-cap-checker", checker_sha)
+    setup_key = await setup_slot_key(model_database, profile)
+    setup_sha = sha("shared-cap-setup")
+    setup_evidence = evidence("shared-cap-setup", setup_sha)
+
+    async with AsyncSession(model_database.engine, expire_on_commit=False) as session:
+        async with session.begin():
+            checker_prepared = await service(session, ports).prepare_attempt(
+                checker_run,
+                checker_slot,
+                registry_entry_id=model_database.registry_entry_id,
+                request_sha256=checker_sha,
+            )
+    async with AsyncSession(model_database.engine, expire_on_commit=False) as session:
+        async with session.begin():
+            setup_prepared = await setup_service(session, ports).prepare(setup_key, setup_sha)
+
+    async def reserve_checker():
+        async with AsyncSession(model_database.engine, expire_on_commit=False) as session:
+            async with session.begin():
+                return await service(session, ports).reserve_dispatch(
+                    checker_run, checker_prepared, checker_evidence
+                )
+
+    async def reserve_setup():
+        async with AsyncSession(model_database.engine, expire_on_commit=False) as session:
+            async with session.begin():
+                return await setup_service(session, ports).reserve_dispatch(
+                    setup_prepared, setup_evidence
+                )
+
+    results = await asyncio.gather(reserve_checker(), reserve_setup(), return_exceptions=True)
+    assert sum(not isinstance(result, BaseException) for result in results) == 1
+    assert sum(isinstance(result, ModelCallBudgetUnavailable) for result in results) == 1
+    async with AsyncSession(model_database.engine) as session:
+        account = await session.get(ModelUsageBudgetAccount, str(model_database.project_id))
+        assert account.lifetime_reserved_nanodollars == per_dispatch
+        assert account.lifetime_settled_nanodollars == 0
+
+
+async def test_setup_reservation_rollback_releases_shared_account(
+    model_database: DatabaseFacts,
+) -> None:
+    ports = BoundaryPorts()
+    per_dispatch = 100 * 11 + 50 * 29
+    profile = await provision(model_database, ports, limit=per_dispatch)
+    setup_key = await setup_slot_key(model_database, profile)
+    setup_sha = sha("rollback-shared-setup")
+    setup_evidence = evidence("rollback-shared-setup", setup_sha)
+    async with AsyncSession(model_database.engine, expire_on_commit=False) as session:
+        async with session.begin():
+            setup_prepared = await setup_service(session, ports).prepare(setup_key, setup_sha)
+        with pytest.raises(RuntimeError, match="force setup rollback"):
+            async with session.begin():
+                await setup_service(session, ports).reserve_dispatch(setup_prepared, setup_evidence)
+                raise RuntimeError("force setup rollback")
+
+    checker_run = execution(model_database)
+    checker_slot = slot(model_database, profile, "after_setup_rollback")
+    checker_sha = sha("after-setup-rollback")
+    async with AsyncSession(model_database.engine, expire_on_commit=False) as session:
+        async with session.begin():
+            checker_prepared = await service(session, ports).prepare_attempt(
+                checker_run,
+                checker_slot,
+                registry_entry_id=model_database.registry_entry_id,
+                request_sha256=checker_sha,
+            )
+            reserved = await service(session, ports).reserve_dispatch(
+                checker_run,
+                checker_prepared,
+                evidence("after-setup-rollback", checker_sha),
+            )
+            assert reserved.reserved_nanodollars == per_dispatch
+            account = await session.get(ModelUsageBudgetAccount, str(model_database.project_id))
+            assert account.lifetime_reserved_nanodollars == per_dispatch
+            assert account.lifetime_settled_nanodollars == 0
 
 
 async def test_fresh_execution_authority_precedes_currentness_and_owner_locks(
@@ -801,7 +1290,7 @@ async def test_reservation_rollback_and_completion_settle_exactly_once(
                 response_evidence=response_art,
                 usage=usage,
             )
-            account = await session.get(CheckerModelBudgetAccount, str(model_database.project_id))
+            account = await session.get(ModelUsageBudgetAccount, str(model_database.project_id))
             assert account.lifetime_reserved_nanodollars == 0
             assert account.lifetime_settled_nanodollars == completed.settled_nanodollars
             assert replay.replayed
@@ -816,6 +1305,155 @@ async def test_reservation_rollback_and_completion_settle_exactly_once(
             attached = await service(session, ports).attach_completed(run, dispatched.effect)
             assert attached.replayed is False
             assert ports.events == ["recover", "current"]
+
+
+@pytest.mark.parametrize("terminal_kind", ["complete", "known_no_effect"])
+async def test_terminal_holds_envelope_before_other_slot_and_account(
+    model_database: DatabaseFacts,
+    terminal_kind: str,
+) -> None:
+    ports = BoundaryPorts()
+    reservation = 100 * 11 + 50 * 29
+    profile = await provision(
+        model_database,
+        ports,
+        limit=reservation * 2,
+        profile_changes={
+            "maximum_calls": 2,
+            "maximum_total_request_bytes": 20_000,
+            "maximum_total_response_bytes": 60_000,
+            "maximum_total_input_tokens": 200,
+            "maximum_total_output_tokens": 100,
+        },
+    )
+    run = execution(model_database)
+    first_slot = slot(model_database, profile, f"terminal_order_{terminal_kind}")
+    second_slot = first_slot.model_copy(update={"slot_index": 1})
+    first_sha = sha(f"terminal-order-{terminal_kind}-first")
+    second_sha = sha(f"terminal-order-{terminal_kind}-second")
+    async with AsyncSession(model_database.engine, expire_on_commit=False) as session:
+        async with session.begin():
+            owner = service(session, ports)
+            first_prepared = await owner.prepare_attempt(
+                run,
+                first_slot,
+                registry_entry_id=model_database.registry_entry_id,
+                request_sha256=first_sha,
+            )
+            first_dispatched = await owner.reserve_dispatch(
+                run,
+                first_prepared,
+                evidence("terminal-order-first", first_sha),
+            )
+            second_prepared = await owner.prepare_attempt(
+                run,
+                second_slot,
+                registry_entry_id=model_database.registry_entry_id,
+                request_sha256=second_sha,
+            )
+
+    holder = AsyncSession(model_database.engine, expire_on_commit=False)
+    terminal = AsyncSession(model_database.engine, expire_on_commit=False)
+    contender = AsyncSession(model_database.engine, expire_on_commit=False)
+    terminal_task = None
+    contender_task = None
+    try:
+        await holder.begin()
+        await terminal.begin()
+        await contender.begin()
+        holder_pid = await holder.scalar(text("select pg_backend_pid()"))
+        terminal_pid = await terminal.scalar(text("select pg_backend_pid()"))
+        contender_pid = await contender.scalar(text("select pg_backend_pid()"))
+        await holder.execute(
+            text(
+                "select project_id from model_usage_budget_accounts "
+                "where project_id=:project_id for update"
+            ),
+            {"project_id": model_database.project_id},
+        )
+
+        if terminal_kind == "complete":
+            terminal_task = asyncio.create_task(
+                service(terminal, ports).complete(
+                    first_dispatched.effect,
+                    provider_response_id="resp_lock_order",
+                    provider_model_snapshot=profile.spec.model_snapshot,
+                    response_evidence=evidence(
+                        "terminal-order-response", sha("terminal-order-response")
+                    ),
+                    usage=ModelCallUsage(
+                        input_tokens=40,
+                        cached_input_tokens=10,
+                        output_tokens=12,
+                        reasoning_tokens=7,
+                    ),
+                )
+            )
+        else:
+            terminal_task = asyncio.create_task(
+                service(terminal, ports).mark_known_no_effect(
+                    first_dispatched.effect,
+                    KnownNoEffectProof(
+                        proof_id=new_record_id(),
+                        proof_digest=sha("terminal-order-no-effect"),
+                        observed_at=datetime.now(UTC),
+                    ),
+                )
+            )
+        await wait_until_blocked_by(
+            model_database.engine,
+            blocked_pid=terminal_pid,
+            blocker_pid=holder_pid,
+        )
+
+        contender_task = asyncio.create_task(
+            service(contender, ports).reserve_dispatch(
+                run,
+                second_prepared,
+                evidence("terminal-order-second", second_sha),
+            )
+        )
+        await wait_until_blocked_by(
+            model_database.engine,
+            blocked_pid=contender_pid,
+            blocker_pid=terminal_pid,
+        )
+
+        # The contender is waiting at the run envelope; it owns neither child row.
+        async with AsyncSession(model_database.engine) as observer:
+            async with observer.begin():
+                await observer.execute(
+                    text("select id from checker_model_usage_slots where id=:id for update nowait"),
+                    {"id": second_prepared.slot_id},
+                )
+                await observer.execute(
+                    text("select id from model_usage_effects where id=:id for update nowait"),
+                    {"id": second_prepared.attempt_id},
+                )
+
+        await holder.commit()
+        await terminal_task
+        await terminal.commit()
+        await contender_task
+        await contender.commit()
+    finally:
+        for task in (terminal_task, contender_task):
+            if task is not None and not task.done():
+                task.cancel()
+                with pytest.raises(asyncio.CancelledError):
+                    await task
+        for session in (holder, terminal, contender):
+            if session.in_transaction():
+                await session.rollback()
+            await session.close()
+
+    async with AsyncSession(model_database.engine) as session:
+        account = await session.get(ModelUsageBudgetAccount, str(model_database.project_id))
+        assert account.lifetime_reserved_nanodollars == reservation
+        if terminal_kind == "complete":
+            assert account.lifetime_settled_nanodollars == 30 * 11 + 10 * 2 + 12 * 29
+        else:
+            assert account.lifetime_settled_nanodollars == 0
 
 
 async def test_uncertain_holds_budget_and_only_proven_no_effect_allows_child(
@@ -851,7 +1489,7 @@ async def test_uncertain_holds_budget_and_only_proven_no_effect_allows_child(
                     terminal_digest=uncertainty,
                     request_sha256=prepared.request_sha256,
                 )
-            account = await session.get(CheckerModelBudgetAccount, str(model_database.project_id))
+            account = await session.get(ModelUsageBudgetAccount, str(model_database.project_id))
             assert account.lifetime_reserved_nanodollars == reservation
 
     # A distinct call proves the only zero-cost child path: authenticated no effect.
@@ -884,7 +1522,7 @@ async def test_uncertain_holds_budget_and_only_proven_no_effect_allows_child(
                     terminal_digest=sha("substituted-terminal"),
                     request_sha256=prepared2.request_sha256,
                 )
-            account = await session.get(CheckerModelBudgetAccount, str(model_database.project_id))
+            account = await session.get(ModelUsageBudgetAccount, str(model_database.project_id))
             assert account.lifetime_reserved_nanodollars == reservation
 
 
@@ -893,13 +1531,15 @@ async def test_budget_adjustment_preserves_reserved_and_settles_old_snapshot(
 ) -> None:
     ports = BoundaryPorts()
     reservation = 100 * 11 + 50 * 29
-    profile = await provision(model_database, ports, limit=reservation * 2)
-    run, paid_slot, prepared, dispatched, _ = await prepare_and_reserve(
+    profile = await provision(model_database, ports, limit=reservation)
+    _run, _paid_slot, _prepared, dispatched, _ = await prepare_and_reserve(
         model_database, ports, profile, "model_budget_adjustment"
     )
     adjusted_spec = ProjectModelBudgetConfigurationSpec(
         project_id=model_database.project_id,
         configuration_version=2,
+        authorized_total_nanodollars=20_000_000_000,
+        externally_reconciled_prior_spend_nanodollars=123,
         lifetime_limit_nanodollars=reservation * 3,
     )
     adjusted_facts = ModelBudgetProvisioningFacts(
@@ -914,10 +1554,18 @@ async def test_budget_adjustment_preserves_reserved_and_settles_old_snapshot(
             assert adjusted.lifetime_reserved_nanodollars == reservation
             assert adjusted.lifetime_settled_nanodollars == 0
 
+    # The explicitly increased ceiling admits another dispatch without resetting
+    # the first reservation or counting ledger usage as external prior spend.
+    _second = await prepare_and_reserve(
+        model_database, ports, profile, "model_budget_adjustment_second"
+    )
+
     too_low_spec = ProjectModelBudgetConfigurationSpec(
         project_id=model_database.project_id,
         configuration_version=3,
-        lifetime_limit_nanodollars=reservation - 1,
+        authorized_total_nanodollars=20_000_000_000,
+        externally_reconciled_prior_spend_nanodollars=123,
+        lifetime_limit_nanodollars=reservation * 2 - 1,
     )
     too_low_facts = ModelBudgetProvisioningFacts(
         operation_id=uuid4(),
@@ -945,10 +1593,55 @@ async def test_budget_adjustment_preserves_reserved_and_settles_old_snapshot(
                 response_evidence=evidence("response", sha("budget-adjustment-response")),
                 usage=usage,
             )
-            account = await session.get(CheckerModelBudgetAccount, str(model_database.project_id))
+            account = await session.get(ModelUsageBudgetAccount, str(model_database.project_id))
             assert account.current_configuration_id == str(adjusted.configuration_id)
-            assert account.lifetime_reserved_nanodollars == 0
+            assert account.lifetime_reserved_nanodollars == reservation
             assert account.lifetime_settled_nanodollars == completed.settled_nanodollars
+
+    next_spec = ProjectModelBudgetConfigurationSpec(
+        project_id=model_database.project_id,
+        configuration_version=3,
+        authorized_total_nanodollars=30_000_000_000,
+        externally_reconciled_prior_spend_nanodollars=456,
+        lifetime_limit_nanodollars=reservation * 4,
+    )
+    next_facts = ModelBudgetProvisioningFacts(
+        operation_id=uuid4(),
+        actor_profile_id=new_record_id(),
+        spec=next_spec,
+        configuration_digest=canonical_json_hash(next_spec.model_dump(mode="json")),
+    )
+    async with AsyncSession(model_database.engine, expire_on_commit=False) as session:
+        async with session.begin():
+            next_budget = await service(session, ports).provision_budget(next_facts)
+            replayed_old = await service(session, ports).provision_budget(adjusted_facts)
+            account = await session.get(ModelUsageBudgetAccount, str(model_database.project_id))
+            assert replayed_old.configuration_id == adjusted.configuration_id
+            assert account.current_configuration_id == str(next_budget.configuration_id)
+            assert account.lifetime_reserved_nanodollars == reservation
+            assert account.lifetime_settled_nanodollars == completed.settled_nanodollars
+
+    for authorized_total, reconciled_prior in (
+        (29_000_000_000, 456),
+        (30_000_000_000, 455),
+    ):
+        shrinking_spec = ProjectModelBudgetConfigurationSpec(
+            project_id=model_database.project_id,
+            configuration_version=4,
+            authorized_total_nanodollars=authorized_total,
+            externally_reconciled_prior_spend_nanodollars=reconciled_prior,
+            lifetime_limit_nanodollars=reservation * 4,
+        )
+        shrinking_facts = ModelBudgetProvisioningFacts(
+            operation_id=uuid4(),
+            actor_profile_id=new_record_id(),
+            spec=shrinking_spec,
+            configuration_digest=canonical_json_hash(shrinking_spec.model_dump(mode="json")),
+        )
+        async with AsyncSession(model_database.engine, expire_on_commit=False) as session:
+            with pytest.raises(ModelCallConflict, match="reconciliation_conflict"):
+                async with session.begin():
+                    await service(session, ports).provision_budget(shrinking_facts)
 
 
 async def test_known_failed_settles_once_and_allows_authorized_child(
@@ -993,7 +1686,7 @@ async def test_known_failed_settles_once_and_allows_authorized_child(
                 request_sha256=prepared.request_sha256,
             )
             assert child.attempt_number == 2
-            account = await session.get(CheckerModelBudgetAccount, str(model_database.project_id))
+            account = await session.get(ModelUsageBudgetAccount, str(model_database.project_id))
             assert account.lifetime_reserved_nanodollars == 0
             assert account.lifetime_settled_nanodollars == failed.settled_nanodollars
 
@@ -1013,7 +1706,7 @@ async def test_database_guards_reject_ledger_mutation_and_counter_substitution(
             async with session.begin():
                 await session.execute(
                     text(
-                        "update checker_model_call_slots set first_request_sha256=:digest "
+                        "update checker_model_usage_slots set first_request_sha256=:digest "
                         "where id=:slot_id"
                     ),
                     {"digest": sha("substituted"), "slot_id": dispatched.slot_id},
@@ -1024,7 +1717,7 @@ async def test_database_guards_reject_ledger_mutation_and_counter_substitution(
             async with session.begin():
                 await session.execute(
                     text(
-                        "update checker_model_budget_accounts "
+                        "update model_usage_budget_accounts "
                         "set lifetime_reserved_nanodollars=lifetime_reserved_nanodollars-1 "
                         "where project_id=:project_id"
                     ),
@@ -1032,7 +1725,7 @@ async def test_database_guards_reject_ledger_mutation_and_counter_substitution(
                 )
 
     async with AsyncSession(model_database.engine) as session:
-        account = await session.get(CheckerModelBudgetAccount, str(model_database.project_id))
+        account = await session.get(ModelUsageBudgetAccount, str(model_database.project_id))
         assert account.lifetime_reserved_nanodollars == reservation
         assert account.lifetime_settled_nanodollars == 0
 
@@ -1062,7 +1755,7 @@ async def test_database_ancestry_prevents_receipt_and_artifact_deletion(
                     await session.execute(text(statement), {"id": identifier})
 
 
-async def test_profile_reader_requires_exact_project_registry_and_selector(
+async def test_profile_reader_requires_exact_project_and_selector(
     model_database: DatabaseFacts,
 ) -> None:
     ports = BoundaryPorts()
@@ -1074,21 +1767,15 @@ async def test_profile_reader_requires_exact_project_registry_and_selector(
                 await reader.read_exact(
                     profile.selector,
                     project_id=model_database.project_id,
-                    registry_entry_id=model_database.registry_entry_id,
-                    registry_entry_digest=model_database.registry_entry_digest,
                 )
                 == profile
             )
-            for changes in (
-                {"project_id": new_record_id()},
-                {"registry_entry_id": new_record_id()},
-                {"registry_entry_digest": sha("substituted-registry")},
-            ):
-                scope = {
-                    "project_id": model_database.project_id,
-                    "registry_entry_id": model_database.registry_entry_id,
-                    "registry_entry_digest": model_database.registry_entry_digest,
-                }
-                scope.update(changes)
-                with pytest.raises(ModelCallUnavailable, match="model_profile_unavailable"):
-                    await reader.read_exact(profile.selector, **scope)
+            with pytest.raises(ModelCallUnavailable, match="model_profile_unavailable"):
+                await reader.read_exact(profile.selector, project_id=new_record_id())
+            with pytest.raises(ModelCallUnavailable, match="model_profile_unavailable"):
+                await reader.read_exact(
+                    profile.selector.model_copy(
+                        update={"profile_digest": sha("substituted-profile")}
+                    ),
+                    project_id=model_database.project_id,
+                )

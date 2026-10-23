@@ -3,10 +3,11 @@
 from uuid import UUID
 
 from app.modules.authorization.catalogue import ActionId
-from app.modules.authorization.domain.checker_models import (
+from app.modules.authorization.domain.model_usage import (
     CHECKER_MODEL_ACTIONS,
     CheckerModelCallResourceContext,
     ProjectModelAdministrationResourceContext,
+    SetupModelUsageResourceContext,
     checker_model_prepare_matches,
     parse_checker_model_prepare,
 )
@@ -45,6 +46,8 @@ def checker_runtime_binding_matches(
 def checker_runtime_project_id(action: ActionId, resource: object) -> UUID | None:
     """Extract project scope only from the exact checker-runtime resource type."""
     if action in CHECKER_MODEL_ACTIONS and isinstance(resource, CheckerModelCallResourceContext):
+        return resource.scope_project_id
+    if action in CHECKER_MODEL_ACTIONS and isinstance(resource, SetupModelUsageResourceContext):
         return resource.scope_project_id
     # Project model administration deliberately consumes system-scoped Operator
     # authority.  The project identifier remains an exact guarded target inside

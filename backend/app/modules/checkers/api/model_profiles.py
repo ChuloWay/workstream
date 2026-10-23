@@ -11,7 +11,7 @@ from app.modules.checkers.api.external import (
     ExternalCheckerPhase,
     ExternalCheckerRegistryEntry,
 )
-from app.modules.checkers.api.model_calls import (
+from app.modules.model_usage.api import (
     ModelCallUnavailable,
     ModelProfileReaderPort,
     ModelProfileSelector,
@@ -78,8 +78,6 @@ async def require_model_profile_configuration(
         profile = await profiles.read_exact(
             selector,
             project_id=project_id,
-            registry_entry_id=registry.registry_entry_id,
-            registry_entry_digest=registry.entry_digest,
         )
     except ModelCallUnavailable as exc:
         # Registry/persistence details remain concealed at the policy boundary.
@@ -87,8 +85,6 @@ async def require_model_profile_configuration(
     if (
         profile.selector != selector
         or profile.spec.project_id != project_id
-        or profile.spec.registry_entry_id != registry.registry_entry_id
-        or profile.spec.registry_entry_digest != registry.entry_digest
     ):
         raise ModelProfileConfigurationError("model profile is unavailable")
     return selector

@@ -1444,7 +1444,7 @@ class ArtifactPutAttempt(Base):
         ForeignKey("checker_runs.id", ondelete="RESTRICT"), index=True
     )
     model_call_attempt_id: Mapped[str | None] = mapped_column(
-        Uuid(as_uuid=False), ForeignKey("checker_model_call_attempts.id", ondelete="RESTRICT"), index=True
+        Uuid(as_uuid=False), ForeignKey("model_usage_effects.id", ondelete="RESTRICT"), index=True
     )
     submission_id: Mapped[str | None] = mapped_column(Uuid(as_uuid=False), index=True)
     submission_version: Mapped[int | None] = mapped_column(Integer)
@@ -1878,7 +1878,7 @@ class ArtifactOperationReceipt(Base):
         ForeignKey("checker_runs.id", ondelete="RESTRICT"), index=True
     )
     model_call_attempt_id: Mapped[str | None] = mapped_column(
-        Uuid(as_uuid=False), ForeignKey("checker_model_call_attempts.id", ondelete="RESTRICT"), index=True
+        Uuid(as_uuid=False), ForeignKey("model_usage_effects.id", ondelete="RESTRICT"), index=True
     )
     logical_role: Mapped[str | None] = mapped_column(String(100))
     replica_id: Mapped[str] = mapped_column(

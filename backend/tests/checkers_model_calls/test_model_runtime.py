@@ -11,7 +11,7 @@ from pydantic import ValidationError
 
 from app.adapters.checkers import model_runtime
 from app.core.config import Settings
-from app.modules.checkers.api.model_calls import ModelCallUnavailable
+from app.modules.model_usage.api import ModelCallUnavailable
 from app.workers import checker_model_proxy
 from tests.artifact_store_helpers import artifact_admission_limit_settings
 from tests.checkers_model_calls.test_proxy_orchestration import Harness

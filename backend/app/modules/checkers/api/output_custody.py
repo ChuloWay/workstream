@@ -7,7 +7,7 @@ from uuid import UUID
 
 from pydantic import Field, StrictInt, model_validator
 
-from app.modules.checkers.api.model_calls import (
+from app.modules.model_usage.api import (
     ModelCallExecutionFacts,
     ModelPaidSlotKey,
     ModelCallEvidence,

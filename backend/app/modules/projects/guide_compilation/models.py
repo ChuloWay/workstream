@@ -100,6 +100,16 @@ class ProjectGuideCompilationAttempt(Base):
             "setup_generation",
             name="uq_compilation_attempt_exact_request",
         ),
+        UniqueConstraint(
+            "id",
+            "project_id",
+            "guide_id",
+            "source_snapshot_id",
+            "setup_run_id",
+            "setup_generation",
+            "runtime_configuration_hash",
+            name="uq_compilation_attempt_model_usage_owner",
+        ),
         CheckConstraint(
             "status in ('compilation_reserved','compilation_provider_uncertain',"
             "'provider_result_accepted','compilation_invalid_terminal',"

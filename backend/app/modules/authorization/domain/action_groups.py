@@ -5,7 +5,7 @@ from app.modules.authorization.domain.task_authority import TASK_IMPORT_BATCH_AC
 from app.modules.authorization.catalogue import ActionId
 from app.modules.authorization.domain import (
     adapter_bindings,
-    checker_models,
+    model_usage as checker_models,
     checker_outputs,
     checker_registry,
     contribution_policies,

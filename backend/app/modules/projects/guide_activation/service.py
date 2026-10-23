@@ -14,7 +14,7 @@ from app.modules.checkers.api.external_policy import (
     validate_stored_external_checker_policies,
 )
 from app.modules.checkers.api.external import ExternalCheckerRegistryPort
-from app.modules.checkers.api.model_calls import ModelProfileReaderPort
+from app.modules.model_usage.api import ModelProfileReaderPort
 from app.modules.projects.api.guide_activation import (
     GuideActivationCommand,
     GuideActivationCondition,

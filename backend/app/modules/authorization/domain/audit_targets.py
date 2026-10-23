@@ -67,7 +67,7 @@ def _compensation_unit_target(resource):
 
 def _model_administration_target(resource):
     """Audit project model administration against its exact owning project."""
-    from app.modules.authorization.domain.checker_models import (
+    from app.modules.authorization.domain.model_usage import (
         ProjectModelAdministrationResourceContext,
     )
 

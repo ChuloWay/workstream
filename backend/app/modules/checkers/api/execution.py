@@ -25,7 +25,7 @@ from app.modules.checkers.api.canonical_values import (
 from app.modules.checkers.api.delivery_reconciliation import (
     PostSubmitRequestDeliveryFacts,
 )
-from app.modules.checkers.api.model_calls import ModelRecoveryCandidate
+from app.modules.model_usage.api import ModelRecoveryCandidate
 
 REQUEST_EVENT = "PostSubmissionEvaluationRequested"
 COMPLETION_EVENT = "PostSubmissionEvaluationCompleted"

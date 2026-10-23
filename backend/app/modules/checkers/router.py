@@ -57,7 +57,7 @@ from app.modules.checkers.api.delivery_reconciliation import (
     PostSubmitDeliveryRequest,
     PostSubmitDeliveryResult,
 )
-from app.modules.checkers.api.model_calls import (
+from app.modules.model_usage.api import (
     ModelRecoveryChildRequest,
     PreparedModelCallAttempt,
     ProjectModelBudgetConfiguration,

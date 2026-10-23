@@ -9,7 +9,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.modules.authorization.catalogue import ActionId
-from app.modules.checkers.api.model_calls import (
+from app.modules.model_usage.api import (
     ModelBudgetProvisioningFacts,
     ModelCallEffectAuthorityFacts,
     ModelCallEvidence,
@@ -17,6 +17,9 @@ from app.modules.checkers.api.model_calls import (
     ModelPaidSlotKey,
     ModelProfileProvisioningFacts,
     PreparedModelCallAttempt,
+    PreparedSetupModelUsageEffect,
+    SetupModelEffectAuthorityFacts,
+    SetupModelUsageSlotKey,
     model_action_digest,
 )
 
@@ -30,10 +33,17 @@ RECOVER = ActionId.CHECKER_MODEL_CALL_RECOVER
 OBSERVE = ActionId.CHECKER_MODEL_CALL_OBSERVE
 COMPLETE = ActionId.CHECKER_MODEL_CALL_COMPLETE
 GRANT = ActionId.CHECKER_MODEL_CALL_GRANT
+SETUP_PREPARE = ActionId.PROJECT_GUIDE_COMPILATION_MODEL_PREPARE
+SETUP_DISPATCH = ActionId.PROJECT_GUIDE_COMPILATION_MODEL_DISPATCH
+SETUP_OBSERVE = ActionId.PROJECT_GUIDE_COMPILATION_MODEL_OBSERVE
+SETUP_COMPLETE = ActionId.PROJECT_GUIDE_COMPILATION_MODEL_COMPLETE
 
 MODEL_ADMIN_ACTIONS = frozenset({PROFILE_PROVISION, BUDGET_CONFIGURE, RECOVERY_CHILD_AUTHORIZE})
 CHECKER_MODEL_CALL_ACTIONS = frozenset({PREPARE, DISPATCH, RECOVER, OBSERVE, COMPLETE, GRANT})
-CHECKER_MODEL_ACTIONS = MODEL_ADMIN_ACTIONS | CHECKER_MODEL_CALL_ACTIONS
+SETUP_MODEL_USAGE_ACTIONS = frozenset(
+    {SETUP_PREPARE, SETUP_DISPATCH, SETUP_OBSERVE, SETUP_COMPLETE}
+)
+CHECKER_MODEL_ACTIONS = MODEL_ADMIN_ACTIONS | CHECKER_MODEL_CALL_ACTIONS | SETUP_MODEL_USAGE_ACTIONS
 
 _STRICT_FROZEN = ConfigDict(extra="forbid", frozen=True, strict=True, revalidate_instances="always")
 _Sha256 = str
@@ -98,6 +108,45 @@ class ModelCallCompleteAuthorityFacts(BaseModel):
     terminal_digest: _Sha256 = Field(pattern=r"^sha256:[0-9a-f]{64}$")
 
 
+class SetupModelPrepareAuthorityFacts(BaseModel):
+    """Exact setup call slot and canonical first request commitment."""
+
+    model_config = _STRICT_FROZEN
+    slot: SetupModelUsageSlotKey
+    request_sha256: _Sha256 = Field(pattern=r"^sha256:[0-9a-f]{64}$")
+
+
+class SetupModelDispatchAuthorityFacts(BaseModel):
+    """Exact prepared setup effect and verified request evidence."""
+
+    model_config = _STRICT_FROZEN
+    prepared: PreparedSetupModelUsageEffect
+    request_evidence: ModelCallEvidence
+
+
+class SetupModelObserveAuthorityFacts(BaseModel):
+    """Lease-independent uncertain setup-effect observation."""
+
+    model_config = _STRICT_FROZEN
+    effect: SetupModelEffectAuthorityFacts
+    provider_response_id: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=256,
+        pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+    )
+    observation_digest: _Sha256 = Field(pattern=r"^sha256:[0-9a-f]{64}$")
+
+
+class SetupModelCompleteAuthorityFacts(BaseModel):
+    """Lease-independent terminal setup effect and optional response evidence."""
+
+    model_config = _STRICT_FROZEN
+    effect: SetupModelEffectAuthorityFacts
+    response_evidence: ModelCallEvidence | None
+    terminal_digest: _Sha256 = Field(pattern=r"^sha256:[0-9a-f]{64}$")
+
+
 class ModelCallRecoveryChildAuthorityFacts(BaseModel):
     """Operator-authorized child after one exact terminal parent effect."""
 
@@ -114,6 +163,12 @@ RuntimeFacts = (
     | ModelCallObserveAuthorityFacts
     | ModelCallCompleteAuthorityFacts
     | ModelCallGrantAuthorityFacts
+)
+SetupRuntimeFacts = (
+    SetupModelPrepareAuthorityFacts
+    | SetupModelDispatchAuthorityFacts
+    | SetupModelObserveAuthorityFacts
+    | SetupModelCompleteAuthorityFacts
 )
 AdminFacts = (
     ModelProfileProvisioningFacts
@@ -189,8 +244,40 @@ class ProjectModelAdministrationResourceContext(BaseModel):
         return self
 
 
+class SetupModelUsageResourceContext(BaseModel):
+    """One exact PROJECT_SETUP model-use phase in a project scope."""
+
+    model_config = _STRICT_FROZEN
+    resource_type: Literal["setup_model_usage"] = "setup_model_usage"
+    resource_id: UUID
+    scope_project_id: UUID
+    action_id: ActionId
+    facts: SetupRuntimeFacts
+    facts_digest: _Sha256 = Field(pattern=r"^sha256:[0-9a-f]{64}$")
+
+    @model_validator(mode="after")
+    def exact_phase(self) -> Self:
+        expected = {
+            SETUP_PREPARE: SetupModelPrepareAuthorityFacts,
+            SETUP_DISPATCH: SetupModelDispatchAuthorityFacts,
+            SETUP_OBSERVE: SetupModelObserveAuthorityFacts,
+            SETUP_COMPLETE: SetupModelCompleteAuthorityFacts,
+        }.get(self.action_id)
+        if expected is None or type(self.facts) is not expected:
+            raise ValueError("invalid setup model usage authority phase")
+        project_id, resource_id = _setup_runtime_identity(self.facts)
+        if (
+            self.scope_project_id != project_id
+            or self.resource_id != resource_id
+            or self.facts_digest != model_action_digest(self.action_id.value, self.facts)
+        ):
+            raise ValueError("invalid setup model usage authority resource")
+        return self
+
+
 CHECKER_MODEL_RESOURCE_BY_ACTION = {
     **{action: CheckerModelCallResourceContext for action in CHECKER_MODEL_CALL_ACTIONS},
+    **{action: SetupModelUsageResourceContext for action in SETUP_MODEL_USAGE_ACTIONS},
     **{action: ProjectModelAdministrationResourceContext for action in MODEL_ADMIN_ACTIONS},
 }
 MODEL_ADMIN_RESOURCE_BY_ACTION = {
@@ -230,9 +317,28 @@ def project_model_admin_resource(
     )
 
 
+def setup_model_usage_resource(
+    action: ActionId, facts: SetupRuntimeFacts
+) -> SetupModelUsageResourceContext:
+    """Build the only valid PROJECT_SETUP resource for one model-use phase."""
+    project_id, resource_id = _setup_runtime_identity(facts)
+    return SetupModelUsageResourceContext(
+        resource_id=resource_id,
+        scope_project_id=project_id,
+        action_id=action,
+        facts=facts,
+        facts_digest=model_action_digest(action.value, facts),
+    )
+
+
 def parse_checker_model_prepare(
     action: ActionId, value: object, invalid_error: type[Exception]
-) -> CheckerModelCallResourceContext | ProjectModelAdministrationResourceContext | None:
+) -> (
+    CheckerModelCallResourceContext
+    | SetupModelUsageResourceContext
+    | ProjectModelAdministrationResourceContext
+    | None
+):
     """Parse the exact resource committed before AUTH locks product owners."""
     expected = CHECKER_MODEL_RESOURCE_BY_ACTION.get(action)
     if expected is None:
@@ -250,7 +356,12 @@ def parse_checker_model_prepare(
 
 
 def checker_model_prepare_matches(
-    prepared: CheckerModelCallResourceContext | ProjectModelAdministrationResourceContext | None,
+    prepared: (
+        CheckerModelCallResourceContext
+        | SetupModelUsageResourceContext
+        | ProjectModelAdministrationResourceContext
+        | None
+    ),
     resource: object,
 ) -> bool:
     """Require final facts to equal the resource committed at preparation."""
@@ -299,6 +410,18 @@ def _execution_matches_slot(execution: ModelCallExecutionFacts, slot: ModelPaidS
     )
 
 
+def _setup_runtime_identity(facts: SetupRuntimeFacts) -> tuple[UUID, UUID]:
+    if type(facts) is SetupModelPrepareAuthorityFacts:
+        return facts.slot.project_id, facts.slot.compilation_attempt_id
+    if type(facts) is SetupModelDispatchAuthorityFacts:
+        return facts.prepared.slot_key.project_id, facts.prepared.effect_id
+    if type(facts) in {SetupModelObserveAuthorityFacts, SetupModelCompleteAuthorityFacts}:
+        if facts.effect.project_id != facts.effect.slot_key.project_id:
+            raise ValueError("setup model project mismatch")
+        return facts.effect.project_id, facts.effect.effect_id
+    raise ValueError("invalid setup model runtime facts")
+
+
 def _admin_identity(facts: AdminFacts, actor_profile_id: UUID) -> tuple[UUID, UUID, UUID]:
     if type(facts) in {ModelProfileProvisioningFacts, ModelBudgetProvisioningFacts}:
         return facts.spec.project_id, facts.operation_id, facts.actor_profile_id
@@ -331,8 +454,19 @@ __all__ = (
     "ProjectModelAdministrationResourceContext",
     "RECOVER",
     "RECOVERY_CHILD_AUTHORIZE",
+    "SETUP_COMPLETE",
+    "SETUP_DISPATCH",
+    "SETUP_MODEL_USAGE_ACTIONS",
+    "SETUP_OBSERVE",
+    "SETUP_PREPARE",
+    "SetupModelCompleteAuthorityFacts",
+    "SetupModelDispatchAuthorityFacts",
+    "SetupModelObserveAuthorityFacts",
+    "SetupModelPrepareAuthorityFacts",
+    "SetupModelUsageResourceContext",
     "checker_model_call_resource",
     "checker_model_prepare_matches",
     "parse_checker_model_prepare",
     "project_model_admin_resource",
+    "setup_model_usage_resource",
 )

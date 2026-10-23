@@ -35,7 +35,7 @@ from app.modules.checkers.api.output_custody import (
     CheckerOutputBindingRequest,
     CheckerOutputUnavailable,
 )
-from app.modules.checkers.model_calls.models import CheckerModelCallAttempt
+from app.modules.model_usage.models import ModelUsageEffect
 from tests.checker_output_custody_helpers import (
     byte_stream,
     output_custody_harness,
@@ -466,8 +466,8 @@ async def test_authority_revocation_during_put_prevents_return_and_binding(
         await asyncio.wait_for(harness.store.put_entered.wait(), timeout=10)
         async with harness.factory() as probe, probe.begin():
             locked_effect = await probe.scalar(
-                select(CheckerModelCallAttempt)
-                .where(CheckerModelCallAttempt.id == str(harness.selector.model_call_attempt_id))
+                select(ModelUsageEffect)
+                .where(ModelUsageEffect.id == str(harness.selector.model_call_attempt_id))
                 .with_for_update(nowait=True)
             )
             locked_attempt = await probe.scalar(

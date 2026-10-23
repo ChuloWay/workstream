@@ -32,7 +32,7 @@ from app.modules.checkers.api.external_policy import (
     selected_post_submit_execution_budget_ms,
     selected_pre_submit_execution_budget_ms,
 )
-from app.modules.checkers.api.model_calls import (
+from app.modules.model_usage.api import (
     ModelGenerationSettings,
     ModelPricing,
     ProjectModelProfile,
@@ -141,8 +141,6 @@ def _model_profile(project_id, entry) -> ProjectModelProfile:
     spec = ProjectModelProfileSpec(
         project_id=project_id,
         profile_version=1,
-        registry_entry_id=entry.registry_entry_id,
-        registry_entry_digest=entry.entry_digest,
         provider="openai_responses",
         api="responses.v1",
         model_snapshot="gpt-example-2026-10-01",
@@ -152,6 +150,14 @@ def _model_profile(project_id, entry) -> ProjectModelProfile:
         maximum_response_bytes=30_000,
         maximum_input_tokens=100,
         maximum_output_tokens=50,
+        maximum_calls=1,
+        maximum_total_request_bytes=10_000,
+        maximum_total_response_bytes=30_000,
+        maximum_total_input_tokens=100,
+        maximum_total_output_tokens=50,
+        allowed_tools=(),
+        maximum_tool_calls=0,
+        maximum_tool_output_bytes=0,
         deadline_ms=30_000,
         pricing=pricing,
     )
@@ -290,8 +296,6 @@ async def test_model_configuration_requires_exact_post_profile_scope():
     assert selector == profile.selector
     assert scope == {
         "project_id": project_id,
-        "registry_entry_id": post.registry_entry_id,
-        "registry_entry_digest": post.entry_digest,
     }
 
 

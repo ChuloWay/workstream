@@ -39,6 +39,10 @@ FIXED_SERVICE_ACTION_EXPECTATIONS = {
     ServiceIdentity.PROJECT_SETUP: {
         "project.guide_compilation.request_automatic",
         "project.guide_compilation.execute",
+        "project.guide_compilation.model.prepare",
+        "project.guide_compilation.model.dispatch",
+        "project.guide_compilation.model.observe",
+        "project.guide_compilation.model.complete",
         "project.guide_sufficiency.run",
         "project.submission_artifact_policy.derive",
         "project.post_submit_checker_policy.derive",
@@ -274,6 +278,10 @@ new_permissions = frozenset(
     review.queue.override project.guide_compilation.request project.guide_compilation.execute
     checker.model_call.prepare checker.model_call.dispatch checker.model_call.recover
     checker.model_call.observe checker.model_call.complete checker.model_call.grant
+    project.guide_compilation.model.prepare
+    project.guide_compilation.model.dispatch
+    project.guide_compilation.model.observe
+    project.guide_compilation.model.complete
     project.model_profile.manage project.model_budget.manage
     project.model_call.recovery_child.authorize""".split()
 )
@@ -308,6 +316,22 @@ expected = {
     "checker.model_call.observe": ("checker.model_call.observe", "PILOT-05"),
     "checker.model_call.complete": ("checker.model_call.complete", "PILOT-05"),
     "checker.model_call.grant": ("checker.model_call.grant", "PILOT-05"),
+    "project.guide_compilation.model.prepare": (
+        "project.guide_compilation.model.prepare",
+        "PILOT-05",
+    ),
+    "project.guide_compilation.model.dispatch": (
+        "project.guide_compilation.model.dispatch",
+        "PILOT-05",
+    ),
+    "project.guide_compilation.model.observe": (
+        "project.guide_compilation.model.observe",
+        "PILOT-05",
+    ),
+    "project.guide_compilation.model.complete": (
+        "project.guide_compilation.model.complete",
+        "PILOT-05",
+    ),
     "project.model_profile.provision": ("project.model_profile.manage", "PILOT-05"),
     "project.model_budget.configure": ("project.model_budget.manage", "PILOT-05"),
     "project.model_call.recovery_child.authorize": (

@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.identifiers import new_record_id
 from app.interfaces.external_checker_execution import ExternalCheckerModelGrant
-from app.modules.checkers.api.model_calls import (
+from app.modules.model_usage.api import (
     ModelCallCurrentExecutionPort,
     ModelCallExecutionFacts,
     ModelCallEffectAuthorityFacts,
@@ -19,12 +19,12 @@ from app.modules.checkers.api.model_calls import (
     ModelPaidSlotKey,
     model_action_digest,
 )
-from app.modules.checkers.api.model_grants import (
+from app.modules.model_usage.api import (
     ModelInvocationGrantAuthorityPort,
     ModelInvocationGrantFacts,
 )
-from app.modules.checkers.model_calls.repository import require_model_call_transaction
-from app.modules.checkers.model_calls.models import CheckerModelInvocationGrant
+from app.modules.model_usage.repository import require_model_call_transaction
+from app.modules.model_usage.models import CheckerModelInvocationGrant
 
 
 def model_grant_token_hash(token: str) -> str:
@@ -123,7 +123,11 @@ class ModelInvocationGrants:
         ):
             raise ModelCallUnavailable("model_grant_unavailable")
         return ModelInvocationGrantFacts(
-            token_hash, request_digest, execution, slot, UUID(row.registry_entry_id)
+            token_hash=token_hash,
+            external_request_digest=request_digest,
+            execution=execution,
+            slot=slot,
+            registry_entry_id=UUID(row.registry_entry_id),
         )
 
     async def consume_prepared(
@@ -134,18 +138,22 @@ class ModelInvocationGrants:
         prepared_attempt_id: UUID,
     ) -> None:
         """Consume after ledger preparation in the same AUTH/TASK/slot transaction."""
-        from app.modules.checkers.model_calls.repository import ModelCallRepository
+        from app.modules.model_usage.repository import ModelCallRepository
 
         require_model_call_transaction(self._session)
         if re.fullmatch(r"sha256:[0-9a-f]{64}", request_sha256) is None:
             raise ModelCallUnavailable("model_grant_unavailable")
         repo = ModelCallRepository(self._session)
+        await repo.lock_envelope_scope(facts.slot)
+        if await repo.envelope(facts.slot, lock=True) is None:
+            raise ModelCallUnavailable("model_grant_unavailable")
+        await repo.lock_slot_scope(facts.slot)
         slot = await repo.slot(facts.slot, lock=True)
         attempt = await repo.attempt(prepared_attempt_id, lock=True)
         if (
             slot is None
             or attempt is None
-            or (attempt.slot_id != slot.id or attempt.request_sha256 != request_sha256)
+            or (attempt.checker_slot_id != slot.id or attempt.request_sha256 != request_sha256)
         ):
             raise ModelCallUnavailable("model_grant_unavailable")
         row = await self._session.scalar(
@@ -180,7 +188,7 @@ class ModelInvocationGrants:
         execution: ModelCallExecutionFacts,
     ) -> ModelCallEffectAuthorityFacts:
         """Select exact consumed effect facts; the ledger must freshly authorize their read."""
-        from app.modules.checkers.model_calls.models import CheckerModelCallAttempt
+        from app.modules.model_usage.models import ModelUsageEffect
 
         require_model_call_transaction(self._session)
         row = await self._session.scalar(
@@ -192,14 +200,14 @@ class ModelInvocationGrants:
         )
         if row is None or row.execution_facts != execution.model_dump(mode="json"):
             raise ModelCallUnavailable("model_grant_completion_unavailable")
-        attempt = await self._session.get(CheckerModelCallAttempt, row.selected_attempt_id)
+        attempt = await self._session.get(ModelUsageEffect, row.selected_attempt_id)
         if attempt is None or attempt.request_sha256 != row.selected_request_sha256:
             raise ModelCallUnavailable("model_grant_completion_unavailable")
         slot = ModelPaidSlotKey.model_validate_json(json.dumps(row.paid_slot))
         return ModelCallEffectAuthorityFacts(
             project_id=execution.project_id,
             task_id=execution.task_id,
-            slot_id=UUID(attempt.slot_id),
+            slot_id=UUID(attempt.checker_slot_id),
             slot_key=slot,
             attempt_id=UUID(attempt.id),
             internal_call_request_id=UUID(attempt.internal_call_request_id),

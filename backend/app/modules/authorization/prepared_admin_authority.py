@@ -4,7 +4,7 @@ from app.modules.authorization.artifact_project_authority import lock_project_ro
 from app.modules.authorization.catalogue import ActionAvailability, ActionId, PermissionId
 from app.modules.authorization.domain import (
     adapter_bindings,
-    checker_models,
+    model_usage as checker_models,
     checker_registry,
     contribution_policies,
 )

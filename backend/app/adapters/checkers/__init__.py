@@ -180,9 +180,9 @@ def external_checker_registry_reader(session):
 
 def model_profile_reader(session):
     """Resolve exact immutable project model profiles without mutation authority."""
-    from app.modules.checkers.model_calls.profiles import ModelProfileReader
+    from app.adapters.model_usage import model_profile_reader as shared_reader
 
-    return ModelProfileReader(session)
+    return shared_reader(session)
 
 
 def external_checker_registry_service(session, authority):
@@ -338,6 +338,7 @@ def checker_retry_service(session, context, *, cursor_secret=None):
     )
     from app.adapters.outbox import outbox_append
     from app.adapters.tasks import evaluation_task_guard
+    from app.adapters.model_usage import model_recovery_sources
     from app.modules.checkers.checker_retry import CheckerRetryService
     from app.modules.checkers.execution_coordination import EvaluationCoordinator
 
@@ -355,6 +356,7 @@ def checker_retry_service(session, context, *, cursor_secret=None):
         ),
         events=outbox_append(session),
         audit=checker_retry_audit(session),
+        model_recovery=model_recovery_sources(session),
     )
 
 
@@ -429,7 +431,8 @@ def post_submission_executor(*, sessions, materialization):
 def checker_output_reservations(session):
     """Resolve exact call custody with TASK-before-CHECKERS request locking."""
     from app.adapters.tasks import evaluation_task_guard
-    from app.modules.checkers.model_calls.custody import (
+    from app.adapters.model_usage import model_evidence_custody, model_recovery_sources
+    from app.modules.checkers.model_usage_custody import (
         CheckerOutputReservations,
         ModelCallCurrentExecution,
     )
@@ -437,8 +440,11 @@ def checker_output_reservations(session):
     tasks = evaluation_task_guard(session)
     return CheckerOutputReservations(
         session,
-        current=ModelCallCurrentExecution(session, tasks=tasks),
+        current=ModelCallCurrentExecution(
+            session, tasks=tasks, recovery=model_recovery_sources(session)
+        ),
         tasks=tasks,
+        model=model_evidence_custody(session),
     )
 
 
@@ -446,13 +452,20 @@ def model_call_service(session, authority):
     """Compose durable model spending with exact TASK and ART owner ports."""
     from app.adapters.tasks import evaluation_task_guard
     from app.adapters.artifacts import checker_model_evidence
-    from app.modules.checkers.model_calls.custody import ModelCallCurrentExecution
-    from app.modules.checkers.model_calls.service import ModelCallService
+    from app.adapters.model_usage import (
+        model_call_service as shared_model_call_service,
+        model_recovery_sources,
+    )
+    from app.modules.checkers.model_usage_custody import ModelCallCurrentExecution
 
-    return ModelCallService(
+    return shared_model_call_service(
         session,
         authority=authority,
-        current_execution=ModelCallCurrentExecution(session, tasks=evaluation_task_guard(session)),
+        current_execution=ModelCallCurrentExecution(
+            session,
+            tasks=evaluation_task_guard(session),
+            recovery=model_recovery_sources(session),
+        ),
         evidence=checker_model_evidence(session),
     )
 
@@ -460,13 +473,20 @@ def model_call_service(session, authority):
 def model_invocation_grants(session, authority):
     """Compose short-lived image capabilities without creating provider effects."""
     from app.adapters.tasks import evaluation_task_guard
-    from app.modules.checkers.model_calls.custody import ModelCallCurrentExecution
-    from app.modules.checkers.model_calls.grants import ModelInvocationGrants
+    from app.adapters.model_usage import (
+        model_invocation_grants as shared_model_invocation_grants,
+        model_recovery_sources,
+    )
+    from app.modules.checkers.model_usage_custody import ModelCallCurrentExecution
 
-    return ModelInvocationGrants(
+    return shared_model_invocation_grants(
         session,
         authority=authority,
-        current=ModelCallCurrentExecution(session, tasks=evaluation_task_guard(session)),
+        current_execution=ModelCallCurrentExecution(
+            session,
+            tasks=evaluation_task_guard(session),
+            recovery=model_recovery_sources(session),
+        ),
     )
 
 

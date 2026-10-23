@@ -23,7 +23,7 @@ from app.api.deps.authorization import (
 from app.core.api_controls import StructuredHTTPException, parse_idempotency_key, request_ids
 from app.core.hashing import canonical_json_hash
 from app.db.session import get_db_session
-from app.modules.checkers.api.model_calls import (
+from app.modules.model_usage.api import (
     ModelBudgetProvisioningFacts,
     ModelCallBudgetUnavailable,
     ModelCallAdministrationPort,

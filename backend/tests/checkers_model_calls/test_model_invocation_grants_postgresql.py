@@ -15,13 +15,13 @@ from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.identifiers import new_record_id
-from app.modules.checkers.api.model_calls import (
+from app.modules.model_usage.api import (
     ModelActionEvidence,
     ModelCallExecutionFacts,
     ModelPaidSlotKey,
     model_action_digest,
 )
-from app.modules.checkers.model_calls.grants import ModelInvocationGrants
+from app.modules.model_usage.grants import ModelInvocationGrants
 from tests.checkers_model_calls.test_model_call_transactions_postgresql import (
     BoundaryPorts,
     DatabaseFacts,
@@ -124,28 +124,12 @@ async def grant_database(ledger_database_fixture: DatabaseFacts) -> GrantDatabas
     async with ledger_database.engine.connect() as connection:
         schema = str(await connection.scalar(text("select current_schema()")))
     migration = runpy.run_path(
-        str(Path(__file__).resolve().parents[2] / "alembic/versions/0060_checker_model_runtime.py")
+        str(Path(__file__).resolve().parents[2] / "alembic/versions/0060_model_usage.py")
     )
     capture = _CaptureOperations()
     migration["_upgrade_invocation_grants"].__globals__["op"] = capture
     migration["_upgrade_invocation_grants"]()
     async with ledger_database.engine.begin() as connection:
-        await connection.execute(
-            text(
-                "alter table external_checker_registry_entries "
-                "add column entry_digest text, add column phase text"
-            )
-        )
-        await connection.execute(
-            text(
-                "update external_checker_registry_entries set entry_digest=:digest,"
-                "phase='post_submit' where id=:id"
-            ),
-            {
-                "digest": ledger_database.registry_entry_digest,
-                "id": ledger_database.registry_entry_id,
-            },
-        )
         await connection.execute(
             text(
                 "alter table checker_runs add column project_id uuid, add column task_id uuid,"
@@ -486,4 +470,4 @@ async def test_grant_trigger_locks_authority_then_task_then_checker_ancestry(
     insert_branch = definition.split("IF jsonb_typeof", maxsplit=1)[1]
     assert insert_branch.index("audit_events") < insert_branch.index("workstream_tasks")
     assert insert_branch.index("workstream_tasks") < insert_branch.index("checker_runs")
-    assert insert_branch.index("checker_runs") < insert_branch.index("checker_model_profiles")
+    assert insert_branch.index("checker_runs") < insert_branch.index("model_usage_profiles")

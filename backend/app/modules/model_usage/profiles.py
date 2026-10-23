@@ -7,7 +7,7 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.modules.checkers.api.model_calls import (
+from app.modules.model_usage.api import (
     ModelCallUnavailable,
     ModelGenerationSettings,
     ModelPricing,
@@ -15,10 +15,10 @@ from app.modules.checkers.api.model_calls import (
     ProjectModelProfile,
     ProjectModelProfileSpec,
 )
-from app.modules.checkers.model_calls.models import CheckerModelProfile
+from app.modules.model_usage.models import ModelUsageProfile
 
 
-def stored_model_profile(row: CheckerModelProfile) -> ProjectModelProfile:
+def stored_model_profile(row: ModelUsageProfile) -> ProjectModelProfile:
     """Decode one immutable row through the strict public profile contract."""
     pricing = ModelPricing(
         pricing_policy_id=UUID(row.pricing_policy_id),
@@ -31,8 +31,6 @@ def stored_model_profile(row: CheckerModelProfile) -> ProjectModelProfile:
     spec = ProjectModelProfileSpec(
         project_id=UUID(row.project_id),
         profile_version=row.profile_version,
-        registry_entry_id=UUID(row.registry_entry_id),
-        registry_entry_digest=row.registry_entry_digest,
         provider=row.provider,
         api=row.api,
         model_snapshot=row.model_snapshot,
@@ -42,8 +40,15 @@ def stored_model_profile(row: CheckerModelProfile) -> ProjectModelProfile:
         maximum_response_bytes=row.maximum_response_bytes,
         maximum_input_tokens=row.maximum_input_tokens,
         maximum_output_tokens=row.maximum_output_tokens,
+        maximum_calls=row.maximum_calls,
+        maximum_total_request_bytes=row.maximum_total_request_bytes,
+        maximum_total_response_bytes=row.maximum_total_response_bytes,
+        maximum_total_input_tokens=row.maximum_total_input_tokens,
+        maximum_total_output_tokens=row.maximum_total_output_tokens,
+        allowed_tools=tuple(row.allowed_tools),
+        maximum_tool_calls=row.maximum_tool_calls,
+        maximum_tool_output_bytes=row.maximum_tool_output_bytes,
         deadline_ms=row.deadline_ms,
-        call_slots=row.call_slots,
         pricing=pricing,
     )
     return ProjectModelProfile(
@@ -79,23 +84,19 @@ class ModelProfileReader:
         selector: ModelProfileSelector,
         *,
         project_id: UUID,
-        registry_entry_id: UUID,
-        registry_entry_digest: str,
     ) -> ProjectModelProfile:
-        """Require the complete selector plus exact project and registry custody."""
+        """Require the complete selector plus exact project custody."""
         self._require_root_transaction()
         try:
             selector = ModelProfileSelector.model_validate(selector)
         except ValueError as exc:
             raise ModelCallUnavailable("model_profile_unavailable") from exc
         row = await self._session.scalar(
-            select(CheckerModelProfile).where(
-                CheckerModelProfile.id == str(selector.profile_id),
-                CheckerModelProfile.profile_version == selector.profile_version,
-                CheckerModelProfile.profile_digest == selector.profile_digest,
-                CheckerModelProfile.project_id == str(project_id),
-                CheckerModelProfile.registry_entry_id == str(registry_entry_id),
-                CheckerModelProfile.registry_entry_digest == registry_entry_digest,
+            select(ModelUsageProfile).where(
+                ModelUsageProfile.id == str(selector.profile_id),
+                ModelUsageProfile.profile_version == selector.profile_version,
+                ModelUsageProfile.profile_digest == selector.profile_digest,
+                ModelUsageProfile.project_id == str(project_id),
             )
         )
         if row is None:

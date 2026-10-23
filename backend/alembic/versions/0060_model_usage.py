@@ -1,17 +1,17 @@
-"""Add guarded project-budgeted model-call custody for external checkers."""
+"""Add shared project-budgeted model-use custody for setup and checkers."""
 
 from alembic import op
 from sqlalchemy import text
 
 
-revision = "0060_checker_model_runtime"
+revision = "0060_model_usage"
 down_revision = "0059_neutral_guide_runtime"
 branch_labels = None
 depends_on = None
 
 
 def upgrade() -> None:
-    """Create the CHECKERS ledger before root-owned ART and AUTH extensions."""
+    """Create shared MODEL-USAGE owners before ART and AUTH extensions."""
     op.execute("SET LOCAL search_path=pg_catalog,public,pg_temp")
     for statement in _TABLES:
         op.execute(statement)
@@ -71,7 +71,7 @@ CREATE TABLE public.checker_model_invocation_grants (
   FOREIGN KEY(authorization_evidence_id)
   REFERENCES public.audit_events(id) ON DELETE RESTRICT,
  CONSTRAINT fk_checker_model_invocation_grants_attempt FOREIGN KEY(selected_attempt_id)
-  REFERENCES public.checker_model_call_attempts(id) ON DELETE RESTRICT
+  REFERENCES public.model_usage_effects(id) ON DELETE RESTRICT
 )
         """
     )
@@ -92,9 +92,9 @@ DECLARE assignment_project uuid;
 DECLARE submission_task uuid;
 DECLARE run public.checker_runs%ROWTYPE;
 DECLARE registry public.external_checker_registry_entries%ROWTYPE;
-DECLARE profile public.checker_model_profiles%ROWTYPE;
-DECLARE attempt public.checker_model_call_attempts%ROWTYPE;
-DECLARE slot public.checker_model_call_slots%ROWTYPE;
+DECLARE profile public.model_usage_profiles%ROWTYPE;
+DECLARE attempt public.model_usage_effects%ROWTYPE;
+DECLARE slot public.checker_model_usage_slots%ROWTYPE;
 DECLARE binding_matches integer;
 BEGIN
  IF TG_OP='DELETE' THEN
@@ -115,10 +115,10 @@ BEGIN
    RAISE EXCEPTION 'checker model invocation grant expired'
     USING ERRCODE='23514';
   END IF;
-  SELECT value.* INTO attempt FROM public.checker_model_call_attempts value
+  SELECT value.* INTO attempt FROM public.model_usage_effects value
    WHERE value.id=NEW.selected_attempt_id FOR SHARE;
-  SELECT value.* INTO slot FROM public.checker_model_call_slots value
-   WHERE value.id=attempt.slot_id FOR SHARE;
+  SELECT value.* INTO slot FROM public.checker_model_usage_slots value
+   WHERE value.id=attempt.checker_slot_id FOR SHARE;
   IF attempt.id IS NULL OR slot.id IS NULL OR
      attempt.request_sha256 IS DISTINCT FROM NEW.selected_request_sha256 OR
      slot.project_id IS DISTINCT FROM NEW.project_id OR
@@ -231,7 +231,7 @@ BEGIN
   WHERE id=NEW.checker_run_id FOR SHARE;
  SELECT * INTO registry FROM public.external_checker_registry_entries
   WHERE id=NEW.registry_entry_id FOR SHARE;
- SELECT * INTO profile FROM public.checker_model_profiles
+ SELECT * INTO profile FROM public.model_usage_profiles
   WHERE id=(NEW.paid_slot->>'profile_id')::uuid AND
    profile_version=(NEW.paid_slot->>'profile_version')::integer AND
    profile_digest=NEW.paid_slot->>'profile_digest' FOR SHARE;
@@ -269,10 +269,7 @@ BEGIN
     run.status IS DISTINCT FROM 'running' OR run.phase IS DISTINCT FROM 'post_submission' OR
     registry.id IS NULL OR registry.phase IS DISTINCT FROM 'post_submit' OR
     registry.entry_digest IS DISTINCT FROM NEW.paid_slot->>'registry_entry_digest' OR
-    profile.id IS NULL OR profile.project_id IS DISTINCT FROM NEW.project_id OR
-    profile.registry_entry_id IS DISTINCT FROM NEW.registry_entry_id OR
-    profile.registry_entry_digest IS DISTINCT FROM
-     NEW.paid_slot->>'registry_entry_digest' THEN
+    profile.id IS NULL OR profile.project_id IS DISTINCT FROM NEW.project_id THEN
   RAISE EXCEPTION 'checker model invocation grant execution ancestry is invalid'
    USING ERRCODE='23514';
  END IF;
@@ -317,7 +314,7 @@ CREATE TRIGGER checker_model_invocation_grants_guard
         r"""
 CREATE TRIGGER checker_model_invocation_grants_no_truncate
  BEFORE TRUNCATE ON public.checker_model_invocation_grants
- FOR EACH STATEMENT EXECUTE FUNCTION public.guard_checker_model_no_truncate()
+ FOR EACH STATEMENT EXECUTE FUNCTION public.guard_model_usage_no_truncate()
         """
     )
 
@@ -326,7 +323,7 @@ def _upgrade_art_custody() -> None:
     """Extend verified ART ancestry to call-stable evidence, preserving retained rows."""
     op.execute(
         r"""
-ALTER TABLE artifact_put_attempts ADD COLUMN model_call_attempt_id uuid REFERENCES checker_model_call_attempts(id) ON DELETE RESTRICT
+ALTER TABLE artifact_put_attempts ADD COLUMN model_call_attempt_id uuid REFERENCES model_usage_effects(id) ON DELETE RESTRICT
         """
     )
     op.execute(
@@ -336,7 +333,7 @@ CREATE INDEX ix_artifact_put_attempts_model_call_attempt_id ON artifact_put_atte
     )
     op.execute(
         r"""
-ALTER TABLE artifact_operation_receipts ADD COLUMN model_call_attempt_id uuid REFERENCES checker_model_call_attempts(id) ON DELETE RESTRICT
+ALTER TABLE artifact_operation_receipts ADD COLUMN model_call_attempt_id uuid REFERENCES model_usage_effects(id) ON DELETE RESTRICT
         """
     )
     op.execute(
@@ -726,14 +723,15 @@ CREATE OR REPLACE FUNCTION public.seal_checker_output_binding_ancestry() RETURNS
         r"""
 CREATE FUNCTION public.guard_checker_model_artifact_ancestry() RETURNS trigger
 LANGUAGE plpgsql SET search_path=pg_catalog,public,pg_temp AS $$
-DECLARE effect checker_model_call_attempts%ROWTYPE;
-        slot checker_model_call_slots%ROWTYPE;
-        profile checker_model_profiles%ROWTYPE;
+DECLARE effect model_usage_effects%ROWTYPE;
+        slot checker_model_usage_slots%ROWTYPE;
+        profile model_usage_profiles%ROWTYPE;
 BEGIN
   IF NEW.model_call_attempt_id IS NULL THEN RETURN NEW; END IF;
-  SELECT * INTO STRICT effect FROM checker_model_call_attempts WHERE id=NEW.model_call_attempt_id;
-  SELECT * INTO STRICT slot FROM checker_model_call_slots WHERE id=effect.slot_id;
-  SELECT * INTO STRICT profile FROM checker_model_profiles
+  SELECT * INTO STRICT effect FROM model_usage_effects WHERE id=NEW.model_call_attempt_id;
+  SELECT * INTO STRICT slot FROM checker_model_usage_slots
+   WHERE id=effect.checker_slot_id;
+  SELECT * INTO STRICT profile FROM model_usage_profiles
     WHERE id=slot.profile_id AND profile_version=slot.profile_version
       AND profile_digest=slot.profile_digest;
   IF ROW(NEW.project_id,NEW.task_id,NEW.submission_id,NEW.submission_version)
@@ -790,6 +788,22 @@ def _upgrade_authorization_vocabulary() -> None:
         ("checker.model_call.observe", "checker.model_call.observe"),
         ("checker.model_call.complete", "checker.model_call.complete"),
         ("checker.model_call.grant", "checker.model_call.grant"),
+        (
+            "project.guide_compilation.model.prepare",
+            "project.guide_compilation.model.prepare",
+        ),
+        (
+            "project.guide_compilation.model.dispatch",
+            "project.guide_compilation.model.dispatch",
+        ),
+        (
+            "project.guide_compilation.model.observe",
+            "project.guide_compilation.model.observe",
+        ),
+        (
+            "project.guide_compilation.model.complete",
+            "project.guide_compilation.model.complete",
+        ),
         ("project.model_profile.provision", "project.model_profile.manage"),
         ("project.model_budget.configure", "project.model_budget.manage"),
         (
@@ -847,13 +861,11 @@ def downgrade() -> None:
 
 _TABLES = (
     r"""
-CREATE TABLE public.checker_model_profiles (
+CREATE TABLE public.model_usage_profiles (
  id uuid NOT NULL,
  project_id uuid NOT NULL,
  profile_version integer NOT NULL,
  profile_digest varchar(71) NOT NULL,
- registry_entry_id uuid NOT NULL,
- registry_entry_digest varchar(71) NOT NULL,
  provider varchar(160) NOT NULL,
  api varchar(160) NOT NULL,
  model_snapshot varchar(160) NOT NULL,
@@ -863,8 +875,15 @@ CREATE TABLE public.checker_model_profiles (
  maximum_response_bytes integer NOT NULL,
  maximum_input_tokens integer NOT NULL,
  maximum_output_tokens integer NOT NULL,
+ maximum_calls integer NOT NULL,
+ maximum_total_request_bytes integer NOT NULL,
+ maximum_total_response_bytes integer NOT NULL,
+ maximum_total_input_tokens integer NOT NULL,
+ maximum_total_output_tokens integer NOT NULL,
+ allowed_tools jsonb NOT NULL,
+ maximum_tool_calls integer NOT NULL,
+ maximum_tool_output_bytes integer NOT NULL,
  deadline_ms integer NOT NULL,
- call_slots integer NOT NULL,
  pricing_policy_id uuid NOT NULL,
  pricing_policy_version integer NOT NULL,
  pricing_policy_digest varchar(71) NOT NULL,
@@ -875,113 +894,176 @@ CREATE TABLE public.checker_model_profiles (
  actor_profile_id uuid NOT NULL,
  authorization_evidence_id uuid NOT NULL,
  created_at timestamptz DEFAULT clock_timestamp() NOT NULL,
- CONSTRAINT pk_checker_model_profiles PRIMARY KEY(id),
- CONSTRAINT ck_checker_model_profiles_id_uuid7 CHECK (
+ CONSTRAINT pk_model_usage_profiles PRIMARY KEY(id),
+ CONSTRAINT ck_model_usage_profiles_id_uuid7 CHECK (
   (get_byte(uuid_send(id),6)>>4)=7 AND (get_byte(uuid_send(id),8)&192)=128),
- CONSTRAINT ck_checker_model_profiles_digests CHECK (
+ CONSTRAINT ck_model_usage_profiles_digests CHECK (
   profile_digest ~ '^sha256:[0-9a-f]{64}$' AND
-  registry_entry_digest ~ '^sha256:[0-9a-f]{64}$' AND
   pricing_policy_digest ~ '^sha256:[0-9a-f]{64}$'),
- CONSTRAINT ck_checker_model_profiles_identifiers CHECK (
-  provider='openai_responses' AND api='responses.v1' AND
+ CONSTRAINT ck_model_usage_profiles_identifiers CHECK (
+  provider ~ '^[A-Za-z0-9][A-Za-z0-9._:/-]{0,159}$' AND
+  api ~ '^[A-Za-z0-9][A-Za-z0-9._:/-]{0,159}$' AND
   model_snapshot ~ '^[A-Za-z0-9][A-Za-z0-9._:/-]{0,159}$'),
- CONSTRAINT ck_checker_model_profiles_settings CHECK (
+ CONSTRAINT ck_model_usage_profiles_settings CHECK (
   generation_settings = jsonb_build_object(
    'reasoning_effort',generation_settings->>'reasoning_effort',
    'text_verbosity',generation_settings->>'text_verbosity') AND
   generation_settings->>'reasoning_effort' IN
    ('none','minimal','low','medium','high','xhigh','max') AND
   generation_settings->>'text_verbosity' IN ('low','medium','high')),
- CONSTRAINT ck_checker_model_profiles_bounds CHECK (
-  profile_version>0 AND pricing_policy_version>0 AND call_slots=1 AND
+ CONSTRAINT ck_model_usage_profiles_bounds CHECK (
+  profile_version>0 AND pricing_policy_version>0 AND maximum_calls BETWEEN 1 AND 100 AND
   maximum_request_bytes BETWEEN 1 AND 1048576 AND
   maximum_output_bytes BETWEEN 1 AND 1048576 AND
   maximum_response_bytes BETWEEN 1 AND 1048576 AND
   maximum_response_bytes >= 6 * maximum_output_bytes + 4096 AND
   maximum_input_tokens BETWEEN 1 AND 10000000 AND
   maximum_output_tokens BETWEEN 1 AND 10000000 AND
+  maximum_total_request_bytes BETWEEN maximum_request_bytes AND 104857600 AND
+  maximum_total_response_bytes BETWEEN maximum_response_bytes AND 104857600 AND
+  maximum_total_input_tokens BETWEEN maximum_input_tokens AND 100000000 AND
+  maximum_total_output_tokens BETWEEN maximum_output_tokens AND 100000000 AND
+  maximum_total_request_bytes<=maximum_request_bytes*maximum_calls AND
+  maximum_total_response_bytes<=maximum_response_bytes*maximum_calls AND
+  maximum_total_input_tokens<=maximum_input_tokens*maximum_calls AND
+  maximum_total_output_tokens<=maximum_output_tokens*maximum_calls AND
+  maximum_tool_calls BETWEEN 0 AND 1000 AND
+  maximum_tool_output_bytes BETWEEN 0 AND 104857600 AND
+  jsonb_typeof(allowed_tools)='array' AND
+  ((jsonb_array_length(allowed_tools)=0 AND maximum_tool_calls=0 AND
+    maximum_tool_output_bytes=0) OR
+   (jsonb_array_length(allowed_tools)>0 AND maximum_tool_calls>0 AND
+    maximum_tool_output_bytes>0)) AND
   deadline_ms BETWEEN 100 AND 3600000 AND
   uncached_input_rate>=0 AND cached_input_rate>=0 AND output_rate>=0 AND
   greatest(uncached_input_rate,cached_input_rate,output_rate)>0 AND
-  maximum_input_tokens::numeric *
+  maximum_total_input_tokens::numeric *
    greatest(uncached_input_rate,cached_input_rate)::numeric +
-   maximum_output_tokens::numeric * output_rate::numeric BETWEEN 1 AND 9000000000000000000),
- CONSTRAINT uq_checker_model_profiles_version UNIQUE(project_id,profile_version),
- CONSTRAINT uq_checker_model_profiles_identity UNIQUE(id,profile_version,profile_digest),
- CONSTRAINT uq_checker_model_profiles_digest UNIQUE(profile_digest),
- CONSTRAINT uq_checker_model_profiles_operation UNIQUE(operation_id),
- CONSTRAINT uq_checker_model_profiles_authority UNIQUE(authorization_evidence_id),
- CONSTRAINT fk_checker_model_profiles_project FOREIGN KEY(project_id)
+   maximum_total_output_tokens::numeric * output_rate::numeric BETWEEN 1 AND 9000000000000000000),
+ CONSTRAINT uq_model_usage_profiles_version UNIQUE(project_id,profile_version),
+ CONSTRAINT uq_model_usage_profiles_identity UNIQUE(id,profile_version,profile_digest),
+ CONSTRAINT uq_model_usage_profiles_digest UNIQUE(profile_digest),
+ CONSTRAINT uq_model_usage_profiles_operation UNIQUE(operation_id),
+ CONSTRAINT uq_model_usage_profiles_authority UNIQUE(authorization_evidence_id),
+ CONSTRAINT fk_model_usage_profiles_project FOREIGN KEY(project_id)
   REFERENCES public.projects(id) ON DELETE RESTRICT,
- CONSTRAINT fk_checker_model_profiles_registry FOREIGN KEY(registry_entry_id)
-  REFERENCES public.external_checker_registry_entries(id) ON DELETE RESTRICT,
- CONSTRAINT fk_checker_model_profiles_actor FOREIGN KEY(actor_profile_id)
+ CONSTRAINT fk_model_usage_profiles_actor FOREIGN KEY(actor_profile_id)
   REFERENCES public.actor_profiles(id) ON DELETE RESTRICT,
- CONSTRAINT fk_checker_model_profiles_authority FOREIGN KEY(authorization_evidence_id)
+ CONSTRAINT fk_model_usage_profiles_authority FOREIGN KEY(authorization_evidence_id)
   REFERENCES public.audit_events(id) ON DELETE RESTRICT
 )
 """,
     r"""
-CREATE TABLE public.checker_model_budget_configurations (
+CREATE TABLE public.model_usage_budget_configurations (
  id uuid NOT NULL,
  project_id uuid NOT NULL,
  configuration_version integer NOT NULL,
  configuration_digest varchar(71) NOT NULL,
+ authorized_total_nanodollars bigint NOT NULL,
+ externally_reconciled_prior_spend_nanodollars bigint NOT NULL,
  lifetime_limit_nanodollars bigint NOT NULL,
  operation_id uuid NOT NULL,
  actor_profile_id uuid NOT NULL,
  authorization_evidence_id uuid NOT NULL,
  created_at timestamptz DEFAULT clock_timestamp() NOT NULL,
- CONSTRAINT pk_checker_model_budget_configurations PRIMARY KEY(id),
- CONSTRAINT ck_checker_model_budget_configurations_id_uuid7 CHECK (
+ CONSTRAINT pk_model_usage_budget_configurations PRIMARY KEY(id),
+ CONSTRAINT ck_model_usage_budget_configurations_id_uuid7 CHECK (
   (get_byte(uuid_send(id),6)>>4)=7 AND (get_byte(uuid_send(id),8)&192)=128),
- CONSTRAINT ck_checker_model_budget_configurations_values CHECK (
-  configuration_version>0 AND lifetime_limit_nanodollars>0 AND
+ CONSTRAINT ck_model_usage_budget_configurations_values CHECK (
+  configuration_version>0 AND authorized_total_nanodollars>0 AND
+  externally_reconciled_prior_spend_nanodollars>=0 AND
+  lifetime_limit_nanodollars>0 AND
+  externally_reconciled_prior_spend_nanodollars+lifetime_limit_nanodollars
+   <=authorized_total_nanodollars AND
   configuration_digest ~ '^sha256:[0-9a-f]{64}$'),
- CONSTRAINT uq_checker_model_budget_configurations_version
+ CONSTRAINT uq_model_usage_budget_configurations_version
   UNIQUE(project_id,configuration_version),
- CONSTRAINT uq_checker_model_budget_configurations_identity
+ CONSTRAINT uq_model_usage_budget_configurations_identity
   UNIQUE(id,project_id,configuration_version,configuration_digest),
- CONSTRAINT uq_checker_model_budget_configurations_attempt_identity
+ CONSTRAINT uq_model_usage_budget_configurations_attempt_identity
   UNIQUE(id,configuration_version,configuration_digest),
- CONSTRAINT uq_checker_model_budget_configurations_id_project UNIQUE(id,project_id),
- CONSTRAINT uq_checker_model_budget_configurations_digest UNIQUE(configuration_digest),
- CONSTRAINT uq_checker_model_budget_configurations_operation UNIQUE(operation_id),
- CONSTRAINT uq_checker_model_budget_configurations_authority
+ CONSTRAINT uq_model_usage_budget_configurations_id_project UNIQUE(id,project_id),
+ CONSTRAINT uq_model_usage_budget_configurations_digest UNIQUE(configuration_digest),
+ CONSTRAINT uq_model_usage_budget_configurations_operation UNIQUE(operation_id),
+ CONSTRAINT uq_model_usage_budget_configurations_authority
   UNIQUE(authorization_evidence_id),
- CONSTRAINT fk_checker_model_budget_configurations_project FOREIGN KEY(project_id)
+ CONSTRAINT fk_model_usage_budget_configurations_project FOREIGN KEY(project_id)
   REFERENCES public.projects(id) ON DELETE RESTRICT,
- CONSTRAINT fk_checker_model_budget_configurations_actor FOREIGN KEY(actor_profile_id)
+ CONSTRAINT fk_model_usage_budget_configurations_actor FOREIGN KEY(actor_profile_id)
   REFERENCES public.actor_profiles(id) ON DELETE RESTRICT,
- CONSTRAINT fk_checker_model_budget_configurations_authority
+ CONSTRAINT fk_model_usage_budget_configurations_authority
   FOREIGN KEY(authorization_evidence_id)
   REFERENCES public.audit_events(id) ON DELETE RESTRICT
 )
 """,
     r"""
-CREATE TABLE public.checker_model_budget_accounts (
+CREATE TABLE public.model_usage_budget_accounts (
  project_id uuid NOT NULL,
  current_configuration_id uuid NOT NULL,
  lifetime_reserved_nanodollars bigint DEFAULT 0 NOT NULL,
  lifetime_settled_nanodollars bigint DEFAULT 0 NOT NULL,
- CONSTRAINT pk_checker_model_budget_accounts PRIMARY KEY(project_id),
- CONSTRAINT uq_checker_model_budget_accounts_configuration
+ CONSTRAINT pk_model_usage_budget_accounts PRIMARY KEY(project_id),
+ CONSTRAINT uq_model_usage_budget_accounts_configuration
   UNIQUE(current_configuration_id),
- CONSTRAINT ck_checker_model_budget_accounts_values CHECK (
+ CONSTRAINT ck_model_usage_budget_accounts_values CHECK (
   lifetime_reserved_nanodollars>=0 AND lifetime_settled_nanodollars>=0 AND
   lifetime_reserved_nanodollars::numeric+lifetime_settled_nanodollars::numeric
    <=9000000000000000000),
- CONSTRAINT fk_checker_model_budget_accounts_project FOREIGN KEY(project_id)
+ CONSTRAINT fk_model_usage_budget_accounts_project FOREIGN KEY(project_id)
   REFERENCES public.projects(id) ON DELETE RESTRICT,
- CONSTRAINT fk_checker_model_budget_accounts_configuration
+ CONSTRAINT fk_model_usage_budget_accounts_configuration
   FOREIGN KEY(current_configuration_id,project_id)
-  REFERENCES public.checker_model_budget_configurations(id,project_id)
+  REFERENCES public.model_usage_budget_configurations(id,project_id)
   ON DELETE RESTRICT
 )
 """,
     r"""
-CREATE TABLE public.checker_model_call_slots (
+CREATE TABLE public.checker_model_usage_envelopes (
  id uuid NOT NULL,
+ project_id uuid NOT NULL,
+ task_id uuid NOT NULL,
+ assignment_id uuid NOT NULL,
+ submission_id uuid NOT NULL,
+ submission_version integer NOT NULL,
+ requirement_id varchar(100) NOT NULL,
+ registry_entry_digest varchar(71) NOT NULL,
+ configuration_sha256 varchar(71) NOT NULL,
+ profile_id uuid NOT NULL,
+ profile_version integer NOT NULL,
+ profile_digest varchar(71) NOT NULL,
+ created_at timestamptz DEFAULT clock_timestamp() NOT NULL,
+ CONSTRAINT pk_checker_model_usage_envelopes PRIMARY KEY(id),
+ CONSTRAINT ck_checker_model_usage_envelopes_id_uuid7 CHECK (
+  (get_byte(uuid_send(id),6)>>4)=7 AND (get_byte(uuid_send(id),8)&192)=128),
+ CONSTRAINT ck_checker_model_usage_envelopes_values CHECK (
+  submission_version>0 AND profile_version>0 AND
+  requirement_id ~ '^[a-z][a-z0-9_.-]{0,99}$' AND
+  registry_entry_digest ~ '^sha256:[0-9a-f]{64}$' AND
+  configuration_sha256 ~ '^sha256:[0-9a-f]{64}$' AND
+  profile_digest ~ '^sha256:[0-9a-f]{64}$'),
+ CONSTRAINT uq_checker_model_usage_envelopes_stable_identity UNIQUE(
+  project_id,assignment_id,submission_id,submission_version,requirement_id,
+  registry_entry_digest,configuration_sha256,profile_id,profile_version,
+  profile_digest),
+ CONSTRAINT fk_checker_model_usage_envelopes_project FOREIGN KEY(project_id)
+  REFERENCES public.projects(id) ON DELETE RESTRICT,
+ CONSTRAINT fk_checker_model_usage_envelopes_task_project FOREIGN KEY(task_id,project_id)
+  REFERENCES public.workstream_tasks(id,project_id) ON DELETE RESTRICT,
+ CONSTRAINT fk_checker_model_usage_envelopes_assignment FOREIGN KEY(assignment_id)
+  REFERENCES public.task_assignments(id) ON DELETE RESTRICT,
+ CONSTRAINT fk_checker_model_usage_envelopes_submission FOREIGN KEY(
+  submission_id,task_id,submission_version)
+  REFERENCES public.submissions(id,task_id,version) ON DELETE RESTRICT,
+ CONSTRAINT fk_checker_model_usage_envelopes_profile FOREIGN KEY(
+  profile_id,profile_version,profile_digest)
+  REFERENCES public.model_usage_profiles(id,profile_version,profile_digest)
+  ON DELETE RESTRICT
+)
+""",
+    r"""
+CREATE TABLE public.checker_model_usage_slots (
+ id uuid NOT NULL,
+ envelope_id uuid NOT NULL,
  project_id uuid NOT NULL,
  task_id uuid NOT NULL,
  assignment_id uuid NOT NULL,
@@ -996,39 +1078,128 @@ CREATE TABLE public.checker_model_call_slots (
  slot_index integer NOT NULL,
  first_request_sha256 varchar(71) NOT NULL,
  created_at timestamptz DEFAULT clock_timestamp() NOT NULL,
- CONSTRAINT pk_checker_model_call_slots PRIMARY KEY(id),
- CONSTRAINT ck_checker_model_call_slots_id_uuid7 CHECK (
+ CONSTRAINT pk_checker_model_usage_slots PRIMARY KEY(id),
+ CONSTRAINT ck_checker_model_usage_slots_id_uuid7 CHECK (
   (get_byte(uuid_send(id),6)>>4)=7 AND (get_byte(uuid_send(id),8)&192)=128),
- CONSTRAINT ck_checker_model_call_slots_values CHECK (
-  submission_version>0 AND profile_version>0 AND slot_index=0 AND
+ CONSTRAINT ck_checker_model_usage_slots_values CHECK (
+  submission_version>0 AND profile_version>0 AND slot_index BETWEEN 0 AND 99 AND
   requirement_id ~ '^[a-z][a-z0-9_.-]{0,99}$' AND
   registry_entry_digest ~ '^sha256:[0-9a-f]{64}$' AND
   configuration_sha256 ~ '^sha256:[0-9a-f]{64}$' AND
   profile_digest ~ '^sha256:[0-9a-f]{64}$' AND
   first_request_sha256 ~ '^sha256:[0-9a-f]{64}$'),
- CONSTRAINT uq_checker_model_call_slots_stable_identity UNIQUE(
+ CONSTRAINT uq_checker_model_usage_slots_stable_identity UNIQUE(
   project_id,assignment_id,submission_id,submission_version,requirement_id,
   registry_entry_digest,configuration_sha256,profile_id,profile_version,
   profile_digest,slot_index),
- CONSTRAINT fk_checker_model_call_slots_project FOREIGN KEY(project_id)
+ CONSTRAINT fk_checker_model_usage_slots_envelope FOREIGN KEY(envelope_id)
+  REFERENCES public.checker_model_usage_envelopes(id) ON DELETE RESTRICT,
+ CONSTRAINT fk_checker_model_usage_slots_project FOREIGN KEY(project_id)
   REFERENCES public.projects(id) ON DELETE RESTRICT,
- CONSTRAINT fk_checker_model_call_slots_task_project FOREIGN KEY(task_id,project_id)
+ CONSTRAINT fk_checker_model_usage_slots_task_project FOREIGN KEY(task_id,project_id)
   REFERENCES public.workstream_tasks(id,project_id) ON DELETE RESTRICT,
- CONSTRAINT fk_checker_model_call_slots_assignment FOREIGN KEY(assignment_id)
+ CONSTRAINT fk_checker_model_usage_slots_assignment FOREIGN KEY(assignment_id)
   REFERENCES public.task_assignments(id) ON DELETE RESTRICT,
- CONSTRAINT fk_checker_model_call_slots_submission FOREIGN KEY(
+ CONSTRAINT fk_checker_model_usage_slots_submission FOREIGN KEY(
   submission_id,task_id,submission_version)
   REFERENCES public.submissions(id,task_id,version) ON DELETE RESTRICT,
- CONSTRAINT fk_checker_model_call_slots_profile FOREIGN KEY(
+ CONSTRAINT fk_checker_model_usage_slots_profile FOREIGN KEY(
   profile_id,profile_version,profile_digest)
-  REFERENCES public.checker_model_profiles(id,profile_version,profile_digest)
+  REFERENCES public.model_usage_profiles(id,profile_version,profile_digest)
   ON DELETE RESTRICT
 )
 """,
     r"""
-CREATE TABLE public.checker_model_call_attempts (
+ALTER TABLE public.project_guide_compilation_attempts
+ ADD CONSTRAINT uq_compilation_attempt_model_usage_owner UNIQUE(
+  id,project_id,guide_id,source_snapshot_id,setup_run_id,setup_generation,
+  runtime_configuration_hash)
+""",
+    r"""
+CREATE TABLE public.setup_model_usage_envelopes (
  id uuid NOT NULL,
- slot_id uuid NOT NULL,
+ compilation_attempt_id uuid NOT NULL,
+ project_id uuid NOT NULL,
+ guide_id uuid NOT NULL,
+ source_snapshot_id uuid NOT NULL,
+ setup_run_id uuid NOT NULL,
+ setup_generation bigint NOT NULL,
+ runtime_configuration_hash varchar(71) NOT NULL,
+ profile_id uuid NOT NULL,
+ profile_version integer NOT NULL,
+ profile_digest varchar(71) NOT NULL,
+ created_at timestamptz DEFAULT clock_timestamp() NOT NULL,
+ CONSTRAINT pk_setup_model_usage_envelopes PRIMARY KEY(id),
+ CONSTRAINT ck_setup_model_usage_envelopes_id_uuid7 CHECK (
+  (get_byte(uuid_send(id),6)>>4)=7 AND (get_byte(uuid_send(id),8)&192)=128),
+ CONSTRAINT ck_setup_model_usage_envelopes_values CHECK (
+  setup_generation>0 AND profile_version>0 AND
+  runtime_configuration_hash ~ '^sha256:[0-9a-f]{64}$' AND
+  profile_digest ~ '^sha256:[0-9a-f]{64}$'),
+ CONSTRAINT uq_setup_model_usage_envelopes_stable_identity UNIQUE(
+  compilation_attempt_id,runtime_configuration_hash,profile_id,profile_version,
+  profile_digest),
+ CONSTRAINT fk_setup_model_usage_envelopes_attempt FOREIGN KEY(
+  compilation_attempt_id,project_id,guide_id,source_snapshot_id,setup_run_id,
+  setup_generation,runtime_configuration_hash)
+  REFERENCES public.project_guide_compilation_attempts(
+   id,project_id,guide_id,source_snapshot_id,setup_run_id,setup_generation,
+   runtime_configuration_hash) ON DELETE RESTRICT,
+ CONSTRAINT fk_setup_model_usage_envelopes_profile FOREIGN KEY(
+  profile_id,profile_version,profile_digest)
+  REFERENCES public.model_usage_profiles(id,profile_version,profile_digest)
+  ON DELETE RESTRICT
+)
+""",
+    r"""
+CREATE TABLE public.setup_model_usage_slots (
+ id uuid NOT NULL,
+ envelope_id uuid NOT NULL,
+ compilation_attempt_id uuid NOT NULL,
+ project_id uuid NOT NULL,
+ guide_id uuid NOT NULL,
+ source_snapshot_id uuid NOT NULL,
+ setup_run_id uuid NOT NULL,
+ setup_generation bigint NOT NULL,
+ runtime_configuration_hash varchar(71) NOT NULL,
+ profile_id uuid NOT NULL,
+ profile_version integer NOT NULL,
+ profile_digest varchar(71) NOT NULL,
+ phase varchar(32) NOT NULL,
+ call_index integer NOT NULL,
+ request_sha256 varchar(71) NOT NULL,
+ created_at timestamptz DEFAULT clock_timestamp() NOT NULL,
+ CONSTRAINT pk_setup_model_usage_slots PRIMARY KEY(id),
+ CONSTRAINT ck_setup_model_usage_slots_id_uuid7 CHECK (
+  (get_byte(uuid_send(id),6)>>4)=7 AND (get_byte(uuid_send(id),8)&192)=128),
+ CONSTRAINT ck_setup_model_usage_slots_values CHECK (
+  setup_generation>0 AND profile_version>0 AND call_index BETWEEN 0 AND 99 AND
+  phase IN ('draft','review','correction') AND
+  runtime_configuration_hash ~ '^sha256:[0-9a-f]{64}$' AND
+  profile_digest ~ '^sha256:[0-9a-f]{64}$' AND
+  request_sha256 ~ '^sha256:[0-9a-f]{64}$'),
+ CONSTRAINT uq_setup_model_usage_slots_stable_identity UNIQUE(
+  compilation_attempt_id,runtime_configuration_hash,profile_id,profile_version,
+  profile_digest,phase,call_index),
+ CONSTRAINT fk_setup_model_usage_slots_envelope FOREIGN KEY(envelope_id)
+  REFERENCES public.setup_model_usage_envelopes(id) ON DELETE RESTRICT,
+ CONSTRAINT fk_setup_model_usage_slots_attempt FOREIGN KEY(
+  compilation_attempt_id,project_id,guide_id,source_snapshot_id,setup_run_id,
+  setup_generation,runtime_configuration_hash)
+  REFERENCES public.project_guide_compilation_attempts(
+   id,project_id,guide_id,source_snapshot_id,setup_run_id,setup_generation,
+   runtime_configuration_hash) ON DELETE RESTRICT,
+ CONSTRAINT fk_setup_model_usage_slots_profile FOREIGN KEY(
+  profile_id,profile_version,profile_digest)
+  REFERENCES public.model_usage_profiles(id,profile_version,profile_digest)
+  ON DELETE RESTRICT
+)
+""",
+    r"""
+CREATE TABLE public.model_usage_effects (
+ id uuid NOT NULL,
+ checker_slot_id uuid,
+ setup_slot_id uuid,
  attempt_number integer NOT NULL,
  internal_call_request_id uuid NOT NULL,
  parent_attempt_id uuid,
@@ -1069,76 +1240,81 @@ CREATE TABLE public.checker_model_call_attempts (
  prepared_at timestamptz DEFAULT clock_timestamp() NOT NULL,
  dispatched_at timestamptz,
  terminal_at timestamptz,
- CONSTRAINT pk_checker_model_call_attempts PRIMARY KEY(id),
- CONSTRAINT ck_checker_model_call_attempts_id_uuid7 CHECK (
+ CONSTRAINT pk_model_usage_effects PRIMARY KEY(id),
+ CONSTRAINT ck_model_usage_effects_id_uuid7 CHECK (
   (get_byte(uuid_send(id),6)>>4)=7 AND (get_byte(uuid_send(id),8)&192)=128),
- CONSTRAINT ck_checker_model_call_attempts_internal_id_uuid7 CHECK (
+ CONSTRAINT ck_model_usage_effects_internal_id_uuid7 CHECK (
   (get_byte(uuid_send(internal_call_request_id),6)>>4)=7 AND
   (get_byte(uuid_send(internal_call_request_id),8)&192)=128),
- CONSTRAINT ck_checker_model_call_attempts_values CHECK (
+ CONSTRAINT ck_model_usage_effects_values CHECK (
   attempt_number>0 AND request_sha256 ~ '^sha256:[0-9a-f]{64}$' AND
   state IN ('prepared','dispatching','uncertain','completed','known_failed','known_no_effect') AND
   (provider_response_id IS NULL OR
    provider_response_id ~ '^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$') AND
   (reserved_nanodollars IS NULL OR reserved_nanodollars>0) AND
   (settled_nanodollars IS NULL OR settled_nanodollars>=0)),
- CONSTRAINT uq_checker_model_call_attempts_number UNIQUE(slot_id,attempt_number),
- CONSTRAINT uq_checker_model_call_attempts_internal_request UNIQUE(internal_call_request_id),
- CONSTRAINT uq_checker_model_call_attempts_prepare_authority
+ CONSTRAINT ck_model_usage_effects_exact_owner CHECK (
+  num_nonnulls(checker_slot_id,setup_slot_id)=1),
+ CONSTRAINT uq_model_usage_effects_checker_number UNIQUE(checker_slot_id,attempt_number),
+ CONSTRAINT uq_model_usage_effects_setup_number UNIQUE(setup_slot_id,attempt_number),
+ CONSTRAINT uq_model_usage_effects_internal_request UNIQUE(internal_call_request_id),
+ CONSTRAINT uq_model_usage_effects_prepare_authority
   UNIQUE(prepared_authorization_evidence_id),
- CONSTRAINT uq_checker_model_call_attempts_dispatch_authority
+ CONSTRAINT uq_model_usage_effects_dispatch_authority
   UNIQUE(dispatch_authorization_evidence_id),
- CONSTRAINT uq_checker_model_call_attempts_observation_authority
+ CONSTRAINT uq_model_usage_effects_observation_authority
   UNIQUE(observation_authorization_evidence_id),
- CONSTRAINT uq_checker_model_call_attempts_terminal_authority
+ CONSTRAINT uq_model_usage_effects_terminal_authority
   UNIQUE(terminal_authorization_evidence_id),
- CONSTRAINT uq_checker_model_call_attempts_settlement_authority
+ CONSTRAINT uq_model_usage_effects_settlement_authority
   UNIQUE(settlement_authorization_evidence_id),
- CONSTRAINT fk_checker_model_call_attempts_slot FOREIGN KEY(slot_id)
-  REFERENCES public.checker_model_call_slots(id) ON DELETE RESTRICT,
- CONSTRAINT fk_checker_model_call_attempts_parent FOREIGN KEY(parent_attempt_id)
-  REFERENCES public.checker_model_call_attempts(id) ON DELETE RESTRICT,
- CONSTRAINT fk_checker_model_call_attempts_budget FOREIGN KEY(
+ CONSTRAINT fk_model_usage_effects_checker_slot FOREIGN KEY(checker_slot_id)
+  REFERENCES public.checker_model_usage_slots(id) ON DELETE RESTRICT,
+ CONSTRAINT fk_model_usage_effects_setup_slot FOREIGN KEY(setup_slot_id)
+  REFERENCES public.setup_model_usage_slots(id) ON DELETE RESTRICT,
+ CONSTRAINT fk_model_usage_effects_parent FOREIGN KEY(parent_attempt_id)
+  REFERENCES public.model_usage_effects(id) ON DELETE RESTRICT,
+ CONSTRAINT fk_model_usage_effects_budget FOREIGN KEY(
   budget_configuration_id,budget_configuration_version,budget_configuration_digest)
-  REFERENCES public.checker_model_budget_configurations(
+  REFERENCES public.model_usage_budget_configurations(
    id,configuration_version,configuration_digest) ON DELETE RESTRICT,
- CONSTRAINT fk_checker_model_call_attempts_prepare_authority
+ CONSTRAINT fk_model_usage_effects_prepare_authority
   FOREIGN KEY(prepared_authorization_evidence_id)
   REFERENCES public.audit_events(id) ON DELETE RESTRICT,
- CONSTRAINT fk_checker_model_call_attempts_dispatch_authority
+ CONSTRAINT fk_model_usage_effects_dispatch_authority
   FOREIGN KEY(dispatch_authorization_evidence_id)
   REFERENCES public.audit_events(id) ON DELETE RESTRICT,
- CONSTRAINT fk_checker_model_call_attempts_observation_authority
+ CONSTRAINT fk_model_usage_effects_observation_authority
   FOREIGN KEY(observation_authorization_evidence_id)
   REFERENCES public.audit_events(id) ON DELETE RESTRICT,
- CONSTRAINT fk_checker_model_call_attempts_terminal_authority
+ CONSTRAINT fk_model_usage_effects_terminal_authority
   FOREIGN KEY(terminal_authorization_evidence_id)
   REFERENCES public.audit_events(id) ON DELETE RESTRICT,
- CONSTRAINT fk_checker_model_call_attempts_settlement_authority
+ CONSTRAINT fk_model_usage_effects_settlement_authority
   FOREIGN KEY(settlement_authorization_evidence_id)
   REFERENCES public.audit_events(id) ON DELETE RESTRICT,
- CONSTRAINT fk_checker_model_call_attempts_request_binding FOREIGN KEY(request_binding_id)
+ CONSTRAINT fk_model_usage_effects_request_binding FOREIGN KEY(request_binding_id)
   REFERENCES public.artifact_bindings(id) ON DELETE RESTRICT,
- CONSTRAINT fk_checker_model_call_attempts_request_content FOREIGN KEY(request_content_id)
+ CONSTRAINT fk_model_usage_effects_request_content FOREIGN KEY(request_content_id)
   REFERENCES public.artifact_contents(id) ON DELETE RESTRICT,
- CONSTRAINT fk_checker_model_call_attempts_request_put FOREIGN KEY(request_put_attempt_id)
+ CONSTRAINT fk_model_usage_effects_request_put FOREIGN KEY(request_put_attempt_id)
   REFERENCES public.artifact_put_attempts(id) ON DELETE RESTRICT,
- CONSTRAINT fk_checker_model_call_attempts_request_verification
+ CONSTRAINT fk_model_usage_effects_request_verification
   FOREIGN KEY(request_verification_receipt_id)
   REFERENCES public.artifact_verification_receipts(id) ON DELETE RESTRICT,
- CONSTRAINT fk_checker_model_call_attempts_response_binding FOREIGN KEY(response_binding_id)
+ CONSTRAINT fk_model_usage_effects_response_binding FOREIGN KEY(response_binding_id)
   REFERENCES public.artifact_bindings(id) ON DELETE RESTRICT,
- CONSTRAINT fk_checker_model_call_attempts_response_content FOREIGN KEY(response_content_id)
+ CONSTRAINT fk_model_usage_effects_response_content FOREIGN KEY(response_content_id)
   REFERENCES public.artifact_contents(id) ON DELETE RESTRICT,
- CONSTRAINT fk_checker_model_call_attempts_response_put FOREIGN KEY(response_put_attempt_id)
+ CONSTRAINT fk_model_usage_effects_response_put FOREIGN KEY(response_put_attempt_id)
   REFERENCES public.artifact_put_attempts(id) ON DELETE RESTRICT,
- CONSTRAINT fk_checker_model_call_attempts_response_verification
+ CONSTRAINT fk_model_usage_effects_response_verification
   FOREIGN KEY(response_verification_receipt_id)
   REFERENCES public.artifact_verification_receipts(id) ON DELETE RESTRICT
 )
 """,
     r"""
-CREATE TABLE public.checker_model_call_recoveries (
+CREATE TABLE public.checker_model_usage_recoveries (
  id uuid NOT NULL,
  attempt_id uuid NOT NULL,
  checker_run_id uuid NOT NULL,
@@ -1146,18 +1322,18 @@ CREATE TABLE public.checker_model_call_recoveries (
  worker_lease_generation integer NOT NULL,
  authorization_evidence_id uuid NOT NULL,
  created_at timestamptz DEFAULT clock_timestamp() NOT NULL,
- CONSTRAINT pk_checker_model_call_recoveries PRIMARY KEY(id),
- CONSTRAINT ck_checker_model_call_recoveries_id_uuid7 CHECK (
+ CONSTRAINT pk_checker_model_usage_recoveries PRIMARY KEY(id),
+ CONSTRAINT ck_checker_model_usage_recoveries_id_uuid7 CHECK (
   (get_byte(uuid_send(id),6)>>4)=7 AND (get_byte(uuid_send(id),8)&192)=128),
- CONSTRAINT ck_checker_model_call_recoveries_generation CHECK(worker_lease_generation>0),
- CONSTRAINT uq_checker_model_call_recoveries_attachment UNIQUE(
+ CONSTRAINT ck_checker_model_usage_recoveries_generation CHECK(worker_lease_generation>0),
+ CONSTRAINT uq_checker_model_usage_recoveries_attachment UNIQUE(
   attempt_id,checker_run_id,worker_lease_id,worker_lease_generation),
- CONSTRAINT uq_checker_model_call_recoveries_authority UNIQUE(authorization_evidence_id),
- CONSTRAINT fk_checker_model_call_recoveries_attempt FOREIGN KEY(attempt_id)
-  REFERENCES public.checker_model_call_attempts(id) ON DELETE RESTRICT,
- CONSTRAINT fk_checker_model_call_recoveries_run FOREIGN KEY(checker_run_id)
+ CONSTRAINT uq_checker_model_usage_recoveries_authority UNIQUE(authorization_evidence_id),
+ CONSTRAINT fk_checker_model_usage_recoveries_attempt FOREIGN KEY(attempt_id)
+  REFERENCES public.model_usage_effects(id) ON DELETE RESTRICT,
+ CONSTRAINT fk_checker_model_usage_recoveries_run FOREIGN KEY(checker_run_id)
   REFERENCES public.checker_runs(id) ON DELETE RESTRICT,
- CONSTRAINT fk_checker_model_call_recoveries_authority FOREIGN KEY(authorization_evidence_id)
+ CONSTRAINT fk_checker_model_usage_recoveries_authority FOREIGN KEY(authorization_evidence_id)
   REFERENCES public.audit_events(id) ON DELETE RESTRICT
 )
 """,
@@ -1166,20 +1342,20 @@ CREATE TABLE public.checker_model_call_recoveries (
 
 _FUNCTIONS = (
     r"""
-CREATE FUNCTION public.checker_model_canonical_json(value jsonb) RETURNS text
+CREATE FUNCTION public.model_usage_canonical_json(value jsonb) RETURNS text
 LANGUAGE plpgsql IMMUTABLE STRICT SET search_path=pg_catalog,public,pg_temp AS $$
 DECLARE encoded text;
 BEGIN
  CASE pg_catalog.jsonb_typeof(value)
   WHEN 'object' THEN
    SELECT '{'||coalesce(pg_catalog.string_agg(
-    pg_catalog.to_json(item_key)::text||':'||public.checker_model_canonical_json(item_value),
+    pg_catalog.to_json(item_key)::text||':'||public.model_usage_canonical_json(item_value),
     ',' ORDER BY item_key COLLATE "C"),'')||'}' INTO encoded
    FROM pg_catalog.jsonb_each(value) AS items(item_key,item_value);
    RETURN encoded;
   WHEN 'array' THEN
    SELECT '['||coalesce(pg_catalog.string_agg(
-    public.checker_model_canonical_json(item_value),',' ORDER BY item_order),'')||']'
+    public.model_usage_canonical_json(item_value),',' ORDER BY item_order),'')||']'
    INTO encoded FROM pg_catalog.jsonb_array_elements(value) WITH ORDINALITY
     AS items(item_value,item_order);
    RETURN encoded;
@@ -1188,30 +1364,37 @@ BEGIN
 END $$
 """,
     r"""
-CREATE FUNCTION public.checker_model_json_digest(value jsonb) RETURNS varchar
+CREATE FUNCTION public.model_usage_json_digest(value jsonb) RETURNS varchar
 LANGUAGE sql IMMUTABLE STRICT SET search_path=pg_catalog,public,pg_temp AS $$
  SELECT 'sha256:'||pg_catalog.encode(pg_catalog.sha256(pg_catalog.convert_to(
-  public.checker_model_canonical_json(value),'UTF8')),'hex')
+  public.model_usage_canonical_json(value),'UTF8')),'hex')
 $$
 """,
     r"""
-CREATE FUNCTION public.checker_model_profile_authority_digest(
- r public.checker_model_profiles
+CREATE FUNCTION public.model_usage_profile_authority_digest(
+ r public.model_usage_profiles
 ) RETURNS varchar LANGUAGE sql IMMUTABLE STRICT
 SET search_path=pg_catalog,public,pg_temp AS $$
  WITH facts(value) AS (SELECT pg_catalog.jsonb_build_object(
   'operation_id',r.operation_id,'actor_profile_id',r.actor_profile_id,
   'spec',pg_catalog.jsonb_build_object(
    'project_id',r.project_id,'profile_version',r.profile_version,
-   'registry_entry_id',r.registry_entry_id,
-   'registry_entry_digest',r.registry_entry_digest,'provider',r.provider,
-   'api',r.api,'model_snapshot',r.model_snapshot,'settings',r.generation_settings,
+   'provider',r.provider,'api',r.api,'model_snapshot',r.model_snapshot,
+   'settings',r.generation_settings,
    'maximum_request_bytes',r.maximum_request_bytes,
    'maximum_output_bytes',r.maximum_output_bytes,
    'maximum_response_bytes',r.maximum_response_bytes,
    'maximum_input_tokens',r.maximum_input_tokens,
-   'maximum_output_tokens',r.maximum_output_tokens,'deadline_ms',r.deadline_ms,
-   'call_slots',r.call_slots,'pricing',pg_catalog.jsonb_build_object(
+   'maximum_output_tokens',r.maximum_output_tokens,
+   'maximum_calls',r.maximum_calls,
+   'maximum_total_request_bytes',r.maximum_total_request_bytes,
+   'maximum_total_response_bytes',r.maximum_total_response_bytes,
+   'maximum_total_input_tokens',r.maximum_total_input_tokens,
+   'maximum_total_output_tokens',r.maximum_total_output_tokens,
+   'allowed_tools',r.allowed_tools,
+   'maximum_tool_calls',r.maximum_tool_calls,
+   'maximum_tool_output_bytes',r.maximum_tool_output_bytes,
+   'deadline_ms',r.deadline_ms,'pricing',pg_catalog.jsonb_build_object(
     'pricing_policy_id',r.pricing_policy_id,
     'pricing_policy_version',r.pricing_policy_version,
     'pricing_policy_digest',r.pricing_policy_digest,
@@ -1219,51 +1402,50 @@ SET search_path=pg_catalog,public,pg_temp AS $$
     'cached_input_nanodollars_per_token',r.cached_input_rate,
     'output_nanodollars_per_token',r.output_rate)),
   'profile_digest',r.profile_digest))
- SELECT public.checker_model_json_digest(pg_catalog.jsonb_build_object(
+ SELECT public.model_usage_json_digest(pg_catalog.jsonb_build_object(
   'resource_context',pg_catalog.jsonb_build_object(
    'resource_type','project_model_administration','resource_id',r.operation_id,
    'project_id',r.project_id,'actor_profile_id',r.actor_profile_id,
    'action_id','project.model_profile.provision','facts',facts.value,
-   'facts_digest',public.checker_model_json_digest(pg_catalog.jsonb_build_object(
+   'facts_digest',public.model_usage_json_digest(pg_catalog.jsonb_build_object(
     'action','project.model_profile.provision','facts',facts.value))))) FROM facts
 $$
 """,
     r"""
-CREATE FUNCTION public.checker_model_budget_authority_digest(
- r public.checker_model_budget_configurations
+CREATE FUNCTION public.model_usage_budget_authority_digest(
+ r public.model_usage_budget_configurations
 ) RETURNS varchar LANGUAGE sql IMMUTABLE STRICT
 SET search_path=pg_catalog,public,pg_temp AS $$
  WITH facts(value) AS (SELECT pg_catalog.jsonb_build_object(
   'operation_id',r.operation_id,'actor_profile_id',r.actor_profile_id,
   'spec',pg_catalog.jsonb_build_object('project_id',r.project_id,
    'configuration_version',r.configuration_version,
+   'authorized_total_nanodollars',r.authorized_total_nanodollars,
+   'externally_reconciled_prior_spend_nanodollars',
+    r.externally_reconciled_prior_spend_nanodollars,
    'lifetime_limit_nanodollars',r.lifetime_limit_nanodollars),
   'configuration_digest',r.configuration_digest))
- SELECT public.checker_model_json_digest(pg_catalog.jsonb_build_object(
+ SELECT public.model_usage_json_digest(pg_catalog.jsonb_build_object(
   'resource_context',pg_catalog.jsonb_build_object(
    'resource_type','project_model_administration','resource_id',r.operation_id,
    'project_id',r.project_id,'actor_profile_id',r.actor_profile_id,
    'action_id','project.model_budget.configure','facts',facts.value,
-   'facts_digest',public.checker_model_json_digest(pg_catalog.jsonb_build_object(
+   'facts_digest',public.model_usage_json_digest(pg_catalog.jsonb_build_object(
     'action','project.model_budget.configure','facts',facts.value))))) FROM facts
 $$
 """,
     r"""
-CREATE FUNCTION public.guard_checker_model_profile() RETURNS trigger
+CREATE FUNCTION public.guard_model_usage_profile() RETURNS trigger
 LANGUAGE plpgsql SET search_path=pg_catalog,public,pg_temp AS $$
 DECLARE expected_version integer;
 DECLARE authority public.audit_events%ROWTYPE;
-DECLARE registry_digest varchar;
-DECLARE registry_phase varchar;
 BEGIN
  IF TG_OP<>'INSERT' THEN
   RAISE EXCEPTION 'checker model profiles are immutable' USING ERRCODE='55000';
  END IF;
- IF NEW.profile_digest<>public.checker_model_json_digest(
+ IF NEW.profile_digest<>public.model_usage_json_digest(
    pg_catalog.jsonb_build_object(
     'project_id',NEW.project_id,'profile_version',NEW.profile_version,
-    'registry_entry_id',NEW.registry_entry_id,
-    'registry_entry_digest',NEW.registry_entry_digest,
     'provider',NEW.provider,'api',NEW.api,
     'model_snapshot',NEW.model_snapshot,'settings',NEW.generation_settings,
     'maximum_request_bytes',NEW.maximum_request_bytes,
@@ -1271,7 +1453,15 @@ BEGIN
     'maximum_response_bytes',NEW.maximum_response_bytes,
     'maximum_input_tokens',NEW.maximum_input_tokens,
     'maximum_output_tokens',NEW.maximum_output_tokens,
-    'deadline_ms',NEW.deadline_ms,'call_slots',NEW.call_slots,
+    'maximum_calls',NEW.maximum_calls,
+    'maximum_total_request_bytes',NEW.maximum_total_request_bytes,
+    'maximum_total_response_bytes',NEW.maximum_total_response_bytes,
+    'maximum_total_input_tokens',NEW.maximum_total_input_tokens,
+    'maximum_total_output_tokens',NEW.maximum_total_output_tokens,
+    'allowed_tools',NEW.allowed_tools,
+    'maximum_tool_calls',NEW.maximum_tool_calls,
+    'maximum_tool_output_bytes',NEW.maximum_tool_output_bytes,
+    'deadline_ms',NEW.deadline_ms,
     'pricing',pg_catalog.jsonb_build_object(
      'pricing_policy_id',NEW.pricing_policy_id,
      'pricing_policy_version',NEW.pricing_policy_version,
@@ -1292,18 +1482,12 @@ BEGIN
     authority.denial_code IS NOT NULL OR
     authority.after_facts::jsonb<>pg_catalog.jsonb_build_object(
      'allowed',true,'resource_context_digest',
-     public.checker_model_profile_authority_digest(NEW)) THEN
+     public.model_usage_profile_authority_digest(NEW)) THEN
   RAISE EXCEPTION 'checker model profile authority is invalid' USING ERRCODE='23514';
- END IF;
- SELECT entry_digest,phase INTO registry_digest,registry_phase
-  FROM public.external_checker_registry_entries WHERE id=NEW.registry_entry_id FOR SHARE;
- IF registry_digest IS DISTINCT FROM NEW.registry_entry_digest OR
-    registry_phase IS DISTINCT FROM 'post_submit' THEN
-  RAISE EXCEPTION 'checker model profile registry binding is invalid' USING ERRCODE='23514';
  END IF;
  PERFORM pg_advisory_xact_lock(hashtextextended('checker-model-profile:'||NEW.project_id,0));
  SELECT coalesce(max(profile_version),0)+1 INTO expected_version
-  FROM public.checker_model_profiles WHERE project_id=NEW.project_id;
+  FROM public.model_usage_profiles WHERE project_id=NEW.project_id;
  IF NEW.profile_version<>expected_version THEN
   RAISE EXCEPTION 'checker model profile version is not sequential' USING ERRCODE='23514';
  END IF;
@@ -1311,19 +1495,22 @@ BEGIN
 END $$
 """,
     r"""
-CREATE FUNCTION public.guard_checker_model_budget_configuration() RETURNS trigger
+CREATE FUNCTION public.guard_model_usage_budget_configuration() RETURNS trigger
 LANGUAGE plpgsql SET search_path=pg_catalog,public,pg_temp AS $$
-DECLARE account public.checker_model_budget_accounts%ROWTYPE;
-DECLARE current_version integer;
+DECLARE account public.model_usage_budget_accounts%ROWTYPE;
+DECLARE account_configuration public.model_usage_budget_configurations%ROWTYPE;
 DECLARE authority public.audit_events%ROWTYPE;
 BEGIN
  IF TG_OP<>'INSERT' THEN
   RAISE EXCEPTION 'checker model budget configurations are immutable' USING ERRCODE='55000';
  END IF;
- IF NEW.configuration_digest<>public.checker_model_json_digest(
+ IF NEW.configuration_digest<>public.model_usage_json_digest(
    pg_catalog.jsonb_build_object(
     'project_id',NEW.project_id,
     'configuration_version',NEW.configuration_version,
+    'authorized_total_nanodollars',NEW.authorized_total_nanodollars,
+    'externally_reconciled_prior_spend_nanodollars',
+     NEW.externally_reconciled_prior_spend_nanodollars,
     'lifetime_limit_nanodollars',NEW.lifetime_limit_nanodollars)) THEN
   RAISE EXCEPTION 'checker model budget configuration digest is invalid'
    USING ERRCODE='23514';
@@ -1339,21 +1526,24 @@ BEGIN
     authority.denial_code IS NOT NULL OR
     authority.after_facts::jsonb<>pg_catalog.jsonb_build_object(
      'allowed',true,'resource_context_digest',
-     public.checker_model_budget_authority_digest(NEW)) THEN
+     public.model_usage_budget_authority_digest(NEW)) THEN
   RAISE EXCEPTION 'checker model budget authority is invalid' USING ERRCODE='23514';
  END IF;
  PERFORM pg_advisory_xact_lock(hashtextextended('checker-model-budget:'||NEW.project_id,0));
- SELECT * INTO account FROM public.checker_model_budget_accounts
+ SELECT * INTO account FROM public.model_usage_budget_accounts
   WHERE project_id=NEW.project_id FOR UPDATE;
  IF account.project_id IS NULL THEN
   IF NEW.configuration_version<>1 THEN
    RAISE EXCEPTION 'initial checker model budget version must be one' USING ERRCODE='23514';
   END IF;
  ELSE
-  SELECT configuration_version INTO current_version
-   FROM public.checker_model_budget_configurations
+  SELECT * INTO account_configuration
+   FROM public.model_usage_budget_configurations
    WHERE id=account.current_configuration_id;
-  IF NEW.configuration_version<>current_version+1 OR
+  IF NEW.configuration_version<>account_configuration.configuration_version+1 OR
+     NEW.authorized_total_nanodollars<account_configuration.authorized_total_nanodollars OR
+     NEW.externally_reconciled_prior_spend_nanodollars<
+      account_configuration.externally_reconciled_prior_spend_nanodollars OR
      NEW.lifetime_limit_nanodollars<
       account.lifetime_reserved_nanodollars+account.lifetime_settled_nanodollars THEN
    RAISE EXCEPTION 'invalid checker model budget adjustment' USING ERRCODE='23514';
@@ -1363,15 +1553,15 @@ BEGIN
 END $$
 """,
     r"""
-CREATE FUNCTION public.guard_checker_model_budget_account() RETURNS trigger
+CREATE FUNCTION public.guard_model_usage_budget_account() RETURNS trigger
 LANGUAGE plpgsql SET search_path=pg_catalog,public,pg_temp AS $$
-DECLARE chosen public.checker_model_budget_configurations%ROWTYPE;
-DECLARE prior public.checker_model_budget_configurations%ROWTYPE;
+DECLARE chosen public.model_usage_budget_configurations%ROWTYPE;
+DECLARE prior public.model_usage_budget_configurations%ROWTYPE;
 BEGIN
  IF TG_OP='DELETE' THEN
   RAISE EXCEPTION 'checker model budget accounts cannot be deleted' USING ERRCODE='55000';
  END IF;
- SELECT * INTO chosen FROM public.checker_model_budget_configurations
+ SELECT * INTO chosen FROM public.model_usage_budget_configurations
   WHERE id=NEW.current_configuration_id AND project_id=NEW.project_id FOR SHARE;
  IF chosen.id IS NULL OR
     NEW.lifetime_reserved_nanodollars+NEW.lifetime_settled_nanodollars>
@@ -1389,7 +1579,7 @@ BEGIN
   RAISE EXCEPTION 'checker model budget project is immutable' USING ERRCODE='55000';
  END IF;
  IF NEW.current_configuration_id<>OLD.current_configuration_id THEN
-  SELECT * INTO prior FROM public.checker_model_budget_configurations
+  SELECT * INTO prior FROM public.model_usage_budget_configurations
    WHERE id=OLD.current_configuration_id FOR SHARE;
   IF ROW(NEW.lifetime_reserved_nanodollars,NEW.lifetime_settled_nanodollars)
       IS DISTINCT FROM
@@ -1411,54 +1601,215 @@ BEGIN
 END $$
 """,
     r"""
-CREATE FUNCTION public.guard_checker_model_call_slot() RETURNS trigger
+CREATE FUNCTION public.guard_checker_model_usage_envelope() RETURNS trigger
 LANGUAGE plpgsql SET search_path=pg_catalog,public,pg_temp AS $$
 DECLARE assignment_task uuid;
 DECLARE assignment_project uuid;
-DECLARE profile public.checker_model_profiles%ROWTYPE;
+DECLARE profile public.model_usage_profiles%ROWTYPE;
 BEGIN
  IF TG_OP<>'INSERT' THEN
-  RAISE EXCEPTION 'checker model call slots are immutable' USING ERRCODE='55000';
+  RAISE EXCEPTION 'checker model usage envelopes are immutable' USING ERRCODE='55000';
  END IF;
  SELECT task_id,project_id INTO assignment_task,assignment_project
   FROM public.task_assignments WHERE id=NEW.assignment_id FOR SHARE;
- SELECT * INTO profile FROM public.checker_model_profiles WHERE
+ SELECT * INTO profile FROM public.model_usage_profiles WHERE
   id=NEW.profile_id AND profile_version=NEW.profile_version AND
   profile_digest=NEW.profile_digest FOR SHARE;
  IF assignment_task IS DISTINCT FROM NEW.task_id OR
     assignment_project IS DISTINCT FROM NEW.project_id OR profile.id IS NULL OR
-    profile.project_id<>NEW.project_id OR
-    profile.registry_entry_digest<>NEW.registry_entry_digest THEN
+    profile.project_id<>NEW.project_id THEN
+  RAISE EXCEPTION 'invalid checker model usage envelope ownership' USING ERRCODE='23514';
+ END IF;
+ RETURN NEW;
+END $$
+""",
+    r"""
+CREATE FUNCTION public.guard_checker_model_call_slot() RETURNS trigger
+LANGUAGE plpgsql SET search_path=pg_catalog,public,pg_temp AS $$
+DECLARE envelope public.checker_model_usage_envelopes%ROWTYPE;
+DECLARE profile public.model_usage_profiles%ROWTYPE;
+BEGIN
+ IF TG_OP<>'INSERT' THEN
+  RAISE EXCEPTION 'checker model call slots are immutable' USING ERRCODE='55000';
+ END IF;
+ SELECT * INTO envelope FROM public.checker_model_usage_envelopes
+  WHERE id=NEW.envelope_id FOR SHARE;
+ SELECT * INTO profile FROM public.model_usage_profiles
+  WHERE id=NEW.profile_id AND profile_version=NEW.profile_version AND
+   profile_digest=NEW.profile_digest FOR SHARE;
+ IF envelope.id IS NULL OR profile.id IS NULL OR
+    ROW(envelope.project_id,envelope.task_id,envelope.assignment_id,
+        envelope.submission_id,envelope.submission_version,envelope.requirement_id,
+        envelope.registry_entry_digest,envelope.configuration_sha256,
+        envelope.profile_id,envelope.profile_version,envelope.profile_digest)
+    IS DISTINCT FROM
+    ROW(NEW.project_id,NEW.task_id,NEW.assignment_id,NEW.submission_id,
+        NEW.submission_version,NEW.requirement_id,NEW.registry_entry_digest,
+        NEW.configuration_sha256,NEW.profile_id,NEW.profile_version,
+        NEW.profile_digest) OR NEW.slot_index>=profile.maximum_calls THEN
   RAISE EXCEPTION 'invalid checker model call slot ownership' USING ERRCODE='23514';
  END IF;
  RETURN NEW;
 END $$
 """,
     r"""
-CREATE FUNCTION public.guard_checker_model_call_attempt() RETURNS trigger
+CREATE FUNCTION public.guard_setup_model_usage_envelope() RETURNS trigger
 LANGUAGE plpgsql SET search_path=pg_catalog,public,pg_temp AS $$
-DECLARE slot public.checker_model_call_slots%ROWTYPE;
-DECLARE profile public.checker_model_profiles%ROWTYPE;
-DECLARE budget public.checker_model_budget_configurations%ROWTYPE;
-DECLARE account public.checker_model_budget_accounts%ROWTYPE;
-DECLARE parent public.checker_model_call_attempts%ROWTYPE;
-DECLARE maximum_reservation numeric;
+DECLARE attempt public.project_guide_compilation_attempts%ROWTYPE;
+DECLARE profile public.model_usage_profiles%ROWTYPE;
+BEGIN
+ IF TG_OP<>'INSERT' THEN
+  RAISE EXCEPTION 'setup model usage envelopes are immutable' USING ERRCODE='55000';
+ END IF;
+ SELECT * INTO attempt FROM public.project_guide_compilation_attempts
+  WHERE id=NEW.compilation_attempt_id FOR SHARE;
+ SELECT * INTO profile FROM public.model_usage_profiles WHERE
+  id=NEW.profile_id AND profile_version=NEW.profile_version AND
+  profile_digest=NEW.profile_digest FOR SHARE;
+ IF attempt.id IS NULL OR profile.id IS NULL OR
+    attempt.project_id IS DISTINCT FROM NEW.project_id OR
+    attempt.guide_id IS DISTINCT FROM NEW.guide_id OR
+    attempt.source_snapshot_id IS DISTINCT FROM NEW.source_snapshot_id OR
+    attempt.setup_run_id IS DISTINCT FROM NEW.setup_run_id OR
+    attempt.setup_generation IS DISTINCT FROM NEW.setup_generation OR
+    attempt.runtime_configuration_hash IS DISTINCT FROM NEW.runtime_configuration_hash OR
+    profile.project_id::text IS DISTINCT FROM NEW.project_id::text THEN
+  RAISE EXCEPTION 'invalid setup model usage envelope ownership' USING ERRCODE='23514';
+ END IF;
+ RETURN NEW;
+END $$
+""",
+    r"""
+CREATE FUNCTION public.guard_setup_model_usage_slot() RETURNS trigger
+LANGUAGE plpgsql SET search_path=pg_catalog,public,pg_temp AS $$
+DECLARE attempt public.project_guide_compilation_attempts%ROWTYPE;
+DECLARE profile public.model_usage_profiles%ROWTYPE;
+DECLARE envelope public.setup_model_usage_envelopes%ROWTYPE;
+BEGIN
+ IF TG_OP<>'INSERT' THEN
+  RAISE EXCEPTION 'setup model usage slots are immutable' USING ERRCODE='55000';
+ END IF;
+ SELECT * INTO attempt FROM public.project_guide_compilation_attempts
+  WHERE id=NEW.compilation_attempt_id FOR SHARE;
+ SELECT * INTO profile FROM public.model_usage_profiles WHERE
+  id=NEW.profile_id AND profile_version=NEW.profile_version AND
+  profile_digest=NEW.profile_digest FOR SHARE;
+ SELECT * INTO envelope FROM public.setup_model_usage_envelopes
+  WHERE id=NEW.envelope_id FOR SHARE;
+ IF attempt.id IS NULL OR profile.id IS NULL OR envelope.id IS NULL OR
+    attempt.project_id IS DISTINCT FROM NEW.project_id OR
+    attempt.guide_id IS DISTINCT FROM NEW.guide_id OR
+    attempt.source_snapshot_id IS DISTINCT FROM NEW.source_snapshot_id OR
+    attempt.setup_run_id IS DISTINCT FROM NEW.setup_run_id OR
+    attempt.setup_generation IS DISTINCT FROM NEW.setup_generation OR
+    attempt.runtime_configuration_hash IS DISTINCT FROM NEW.runtime_configuration_hash OR
+    ROW(envelope.compilation_attempt_id,envelope.project_id,envelope.guide_id,
+        envelope.source_snapshot_id,envelope.setup_run_id,envelope.setup_generation,
+        envelope.runtime_configuration_hash,envelope.profile_id,
+        envelope.profile_version,envelope.profile_digest)
+    IS DISTINCT FROM
+    ROW(NEW.compilation_attempt_id,NEW.project_id,NEW.guide_id,
+        NEW.source_snapshot_id,NEW.setup_run_id,NEW.setup_generation,
+        NEW.runtime_configuration_hash,NEW.profile_id,NEW.profile_version,
+        NEW.profile_digest) OR
+    profile.project_id::text IS DISTINCT FROM NEW.project_id::text OR
+    NEW.call_index>=profile.maximum_calls THEN
+  RAISE EXCEPTION 'invalid setup model usage slot ownership' USING ERRCODE='23514';
+ END IF;
+ RETURN NEW;
+END $$
+""",
+    r"""
+CREATE FUNCTION public.guard_model_usage_effect() RETURNS trigger
+LANGUAGE plpgsql SET search_path=pg_catalog,public,pg_temp AS $$
+DECLARE slot public.checker_model_usage_slots%ROWTYPE;
+DECLARE setup_slot public.setup_model_usage_slots%ROWTYPE;
+DECLARE checker_envelope public.checker_model_usage_envelopes%ROWTYPE;
+DECLARE setup_envelope public.setup_model_usage_envelopes%ROWTYPE;
+DECLARE profile public.model_usage_profiles%ROWTYPE;
+DECLARE budget public.model_usage_budget_configurations%ROWTYPE;
+DECLARE account public.model_usage_budget_accounts%ROWTYPE;
+DECLARE parent public.model_usage_effects%ROWTYPE;
+DECLARE maximum_dispatch_reservation numeric;
+DECLARE maximum_run_reservation numeric;
 DECLARE exact_cost numeric;
+DECLARE run_dispatches bigint;
+DECLARE run_pending_dispatches bigint;
+DECLARE run_reserved numeric;
+DECLARE run_settled numeric;
+DECLARE run_request_bytes bigint;
+DECLARE run_response_bytes bigint;
+DECLARE run_input_tokens bigint;
+DECLARE run_output_tokens bigint;
 DECLARE request_complete boolean;
 DECLARE response_complete boolean;
 DECLARE usage_complete boolean;
+DECLARE prepare_authority public.audit_events%ROWTYPE;
+DECLARE dispatch_authority public.audit_events%ROWTYPE;
+DECLARE observation_authority public.audit_events%ROWTYPE;
+DECLARE terminal_authority public.audit_events%ROWTYPE;
+DECLARE prepare_action text;
+DECLARE dispatch_action text;
+DECLARE observation_action text;
+DECLARE terminal_action text;
 BEGIN
  IF TG_OP='DELETE' THEN
   RAISE EXCEPTION 'checker model call attempts cannot be deleted' USING ERRCODE='55000';
  END IF;
- SELECT * INTO slot FROM public.checker_model_call_slots WHERE id=NEW.slot_id FOR SHARE;
- SELECT * INTO profile FROM public.checker_model_profiles WHERE id=slot.profile_id FOR SHARE;
- IF slot.id IS NULL OR profile.id IS NULL OR NEW.request_sha256<>slot.first_request_sha256 THEN
+ IF NEW.checker_slot_id IS NOT NULL THEN
+  prepare_action:=CASE WHEN NEW.attempt_number=1
+   THEN 'checker.model_call.prepare'
+   ELSE 'project.model_call.recovery_child.authorize' END;
+  dispatch_action:='checker.model_call.dispatch';
+  observation_action:='checker.model_call.observe';
+  terminal_action:='checker.model_call.complete';
+  SELECT * INTO slot FROM public.checker_model_usage_slots
+   WHERE id=NEW.checker_slot_id FOR SHARE;
+  SELECT * INTO profile FROM public.model_usage_profiles WHERE id=slot.profile_id FOR SHARE;
+  IF slot.id IS NULL OR profile.id IS NULL OR
+     NEW.request_sha256<>slot.first_request_sha256 THEN
+   RAISE EXCEPTION 'invalid checker model call attempt ownership' USING ERRCODE='23514';
+  END IF;
+  SELECT * INTO checker_envelope FROM public.checker_model_usage_envelopes
+   WHERE id=slot.envelope_id FOR UPDATE;
+ ELSE
+  prepare_action:='project.guide_compilation.model.prepare';
+  dispatch_action:='project.guide_compilation.model.dispatch';
+  observation_action:='project.guide_compilation.model.observe';
+  terminal_action:='project.guide_compilation.model.complete';
+  SELECT * INTO setup_slot FROM public.setup_model_usage_slots
+   WHERE id=NEW.setup_slot_id FOR SHARE;
+  SELECT * INTO profile FROM public.model_usage_profiles
+   WHERE id=setup_slot.profile_id FOR SHARE;
+  IF setup_slot.id IS NULL OR profile.id IS NULL OR
+     NEW.request_sha256<>setup_slot.request_sha256 THEN
+   RAISE EXCEPTION 'invalid setup model call attempt ownership' USING ERRCODE='23514';
+  END IF;
+  SELECT * INTO setup_envelope FROM public.setup_model_usage_envelopes
+   WHERE id=setup_slot.envelope_id FOR UPDATE;
+ END IF;
+ IF profile.id IS NULL THEN
   RAISE EXCEPTION 'invalid checker model call attempt ownership' USING ERRCODE='23514';
  END IF;
- maximum_reservation := profile.maximum_input_tokens::numeric *
+ SELECT * INTO prepare_authority FROM public.audit_events
+  WHERE id=NEW.prepared_authorization_evidence_id FOR SHARE;
+ IF prepare_authority.id IS NULL OR
+    prepare_authority.event_domain IS DISTINCT FROM 'authority' OR
+    prepare_authority.event_type IS DISTINCT FROM 'SensitiveAuthorizationAllowed' OR
+    prepare_authority.actor_ref_kind IS DISTINCT FROM 'actor_profile' OR
+    prepare_authority.action_id IS DISTINCT FROM prepare_action OR
+    prepare_authority.permission_id IS DISTINCT FROM prepare_action OR
+    prepare_authority.denial_code IS NOT NULL OR
+    coalesce(prepare_authority.after_facts->>'resource_context_digest','')
+     !~ '^sha256:[0-9a-f]{64}$' THEN
+  RAISE EXCEPTION 'model usage prepare authority is invalid' USING ERRCODE='23514';
+ END IF;
+ maximum_dispatch_reservation := profile.maximum_input_tokens::numeric *
   greatest(profile.uncached_input_rate,profile.cached_input_rate)::numeric +
   profile.maximum_output_tokens::numeric * profile.output_rate::numeric;
+ maximum_run_reservation := profile.maximum_total_input_tokens::numeric *
+  greatest(profile.uncached_input_rate,profile.cached_input_rate)::numeric +
+  profile.maximum_total_output_tokens::numeric * profile.output_rate::numeric;
  request_complete := NEW.request_binding_id IS NOT NULL AND NEW.request_content_id IS NOT NULL AND
   NEW.request_put_attempt_id IS NOT NULL AND NEW.request_verification_receipt_id IS NOT NULL AND
   NEW.request_content_sha256=NEW.request_sha256 AND
@@ -1485,23 +1836,29 @@ BEGIN
     RAISE EXCEPTION 'initial checker model attempt cannot have a parent' USING ERRCODE='23514';
    END IF;
   ELSE
-   SELECT * INTO parent FROM public.checker_model_call_attempts
+   SELECT * INTO parent FROM public.model_usage_effects
     WHERE id=NEW.parent_attempt_id FOR SHARE;
-   IF parent.id IS NULL OR parent.slot_id<>NEW.slot_id OR
+   IF parent.id IS NULL OR
+      parent.checker_slot_id IS DISTINCT FROM NEW.checker_slot_id OR
+      parent.setup_slot_id IS DISTINCT FROM NEW.setup_slot_id OR
       parent.attempt_number+1<>NEW.attempt_number OR
       parent.attempt_number<>(SELECT max(attempt_number)
-       FROM public.checker_model_call_attempts WHERE slot_id=NEW.slot_id) OR
+       FROM public.model_usage_effects WHERE
+        checker_slot_id IS NOT DISTINCT FROM NEW.checker_slot_id AND
+        setup_slot_id IS NOT DISTINCT FROM NEW.setup_slot_id) OR
       NOT (parent.state='known_no_effect' OR
        (parent.state='known_failed' AND parent.settled_nanodollars IS NOT NULL AND
         parent.settlement_authorization_evidence_id IS NOT NULL)) THEN
     RAISE EXCEPTION 'invalid checker model child attempt' USING ERRCODE='23514';
    END IF;
   END IF;
- ELSIF ROW(NEW.slot_id,NEW.attempt_number,NEW.internal_call_request_id,
+ ELSIF ROW(NEW.checker_slot_id,NEW.setup_slot_id,NEW.attempt_number,
+             NEW.internal_call_request_id,
              NEW.parent_attempt_id,NEW.request_sha256,
              NEW.prepared_authorization_evidence_id,NEW.prepared_at)
        IS DISTINCT FROM
-       ROW(OLD.slot_id,OLD.attempt_number,OLD.internal_call_request_id,
+       ROW(OLD.checker_slot_id,OLD.setup_slot_id,OLD.attempt_number,
+             OLD.internal_call_request_id,
              OLD.parent_attempt_id,OLD.request_sha256,
              OLD.prepared_authorization_evidence_id,OLD.prepared_at) THEN
   RAISE EXCEPTION 'checker model call attempt identity is immutable' USING ERRCODE='55000';
@@ -1549,20 +1906,75 @@ BEGIN
    RAISE EXCEPTION 'invalid prepared checker model call' USING ERRCODE='23514';
   END IF;
  ELSE
-  SELECT * INTO budget FROM public.checker_model_budget_configurations WHERE
+  SELECT * INTO dispatch_authority FROM public.audit_events
+   WHERE id=NEW.dispatch_authorization_evidence_id FOR SHARE;
+  SELECT * INTO budget FROM public.model_usage_budget_configurations WHERE
    id=NEW.budget_configuration_id AND
    configuration_version=NEW.budget_configuration_version AND
    configuration_digest=NEW.budget_configuration_digest FOR SHARE;
-  SELECT * INTO account FROM public.checker_model_budget_accounts
-   WHERE project_id=slot.project_id FOR SHARE;
-  IF NOT request_complete OR budget.id IS NULL OR budget.project_id<>slot.project_id OR
+  SELECT * INTO account FROM public.model_usage_budget_accounts
+   WHERE project_id=coalesce(slot.project_id,setup_slot.project_id) FOR SHARE;
+  IF dispatch_authority.id IS NULL OR
+     dispatch_authority.event_domain IS DISTINCT FROM 'authority' OR
+     dispatch_authority.event_type IS DISTINCT FROM 'SensitiveAuthorizationAllowed' OR
+     dispatch_authority.actor_ref_kind IS DISTINCT FROM 'actor_profile' OR
+     dispatch_authority.action_id IS DISTINCT FROM dispatch_action OR
+     dispatch_authority.permission_id IS DISTINCT FROM dispatch_action OR
+     dispatch_authority.denial_code IS NOT NULL OR
+     coalesce(dispatch_authority.after_facts->>'resource_context_digest','')
+      !~ '^sha256:[0-9a-f]{64}$' OR
+     NOT request_complete OR budget.id IS NULL OR
+     budget.project_id<>coalesce(slot.project_id,setup_slot.project_id) OR
      (TG_OP='UPDATE' AND OLD.state='prepared' AND
       account.current_configuration_id IS DISTINCT FROM budget.id) OR
 	     NEW.reserved_nanodollars IS NULL OR
-	     NEW.reserved_nanodollars::numeric<>maximum_reservation OR
+     NEW.reserved_nanodollars::numeric<>maximum_dispatch_reservation OR
      NEW.dispatch_authorization_evidence_id IS NULL OR NEW.dispatched_at IS NULL THEN
    RAISE EXCEPTION 'invalid dispatched checker model call' USING ERRCODE='23514';
   END IF;
+ END IF;
+ SELECT count(*) FILTER (WHERE effect.state<>'prepared'),
+  count(*) FILTER (WHERE effect.state IN ('dispatching','uncertain')),
+  coalesce(sum(CASE WHEN effect.state IN ('dispatching','uncertain')
+   THEN effect.reserved_nanodollars ELSE 0 END),0),
+  coalesce(sum(effect.settled_nanodollars),0),
+  coalesce(sum(effect.request_byte_count),0),
+  coalesce(sum(effect.response_byte_count),0),
+  coalesce(sum(effect.input_tokens),0),
+  coalesce(sum(effect.output_tokens),0)
+ INTO run_dispatches,run_pending_dispatches,run_reserved,run_settled,run_request_bytes,
+  run_response_bytes,run_input_tokens,run_output_tokens
+ FROM public.model_usage_effects effect
+ LEFT JOIN public.checker_model_usage_slots checker_child
+  ON checker_child.id=effect.checker_slot_id
+ LEFT JOIN public.setup_model_usage_slots setup_child
+  ON setup_child.id=effect.setup_slot_id
+ WHERE effect.id<>NEW.id AND (
+  (checker_envelope.id IS NOT NULL AND
+   checker_child.envelope_id=checker_envelope.id) OR
+  (setup_envelope.id IS NOT NULL AND setup_child.envelope_id=setup_envelope.id));
+ IF NEW.state<>'prepared' THEN
+  run_dispatches:=run_dispatches+1;
+  run_request_bytes:=run_request_bytes+coalesce(NEW.request_byte_count,0);
+  run_response_bytes:=run_response_bytes+coalesce(NEW.response_byte_count,0);
+  run_input_tokens:=run_input_tokens+coalesce(NEW.input_tokens,0);
+  run_output_tokens:=run_output_tokens+coalesce(NEW.output_tokens,0);
+  IF NEW.state IN ('dispatching','uncertain') THEN
+   run_pending_dispatches:=run_pending_dispatches+1;
+   run_reserved:=run_reserved+NEW.reserved_nanodollars;
+  END IF;
+  run_settled:=run_settled+coalesce(NEW.settled_nanodollars,0);
+ END IF;
+ IF run_dispatches>profile.maximum_calls OR
+    run_reserved+run_settled>maximum_run_reservation OR
+    run_request_bytes>profile.maximum_total_request_bytes OR
+    run_response_bytes+run_pending_dispatches*profile.maximum_response_bytes>
+     profile.maximum_total_response_bytes OR
+    run_input_tokens+run_pending_dispatches*profile.maximum_input_tokens>
+     profile.maximum_total_input_tokens OR
+    run_output_tokens+run_pending_dispatches*profile.maximum_output_tokens>
+     profile.maximum_total_output_tokens THEN
+  RAISE EXCEPTION 'model usage run envelope exceeded' USING ERRCODE='23514';
  END IF;
  IF NEW.state='dispatching' THEN
   IF NEW.provider_response_id IS NOT NULL OR NEW.uncertainty_digest IS NOT NULL OR
@@ -1581,7 +1993,18 @@ BEGIN
    RAISE EXCEPTION 'invalid dispatching checker model call' USING ERRCODE='23514';
   END IF;
  ELSIF NEW.state='uncertain' THEN
-  IF NEW.uncertainty_digest !~ '^sha256:[0-9a-f]{64}$' OR
+  SELECT * INTO observation_authority FROM public.audit_events
+   WHERE id=NEW.observation_authorization_evidence_id FOR SHARE;
+  IF observation_authority.id IS NULL OR
+     observation_authority.event_domain IS DISTINCT FROM 'authority' OR
+     observation_authority.event_type IS DISTINCT FROM 'SensitiveAuthorizationAllowed' OR
+     observation_authority.actor_ref_kind IS DISTINCT FROM 'actor_profile' OR
+     observation_authority.action_id IS DISTINCT FROM observation_action OR
+     observation_authority.permission_id IS DISTINCT FROM observation_action OR
+     observation_authority.denial_code IS NOT NULL OR
+     coalesce(observation_authority.after_facts->>'resource_context_digest','')
+      !~ '^sha256:[0-9a-f]{64}$' OR
+     NEW.uncertainty_digest !~ '^sha256:[0-9a-f]{64}$' OR
      NEW.observation_authorization_evidence_id IS NULL OR
 	    NEW.response_binding_id IS NOT NULL OR NEW.response_content_id IS NOT NULL OR
 	    NEW.response_put_attempt_id IS NOT NULL OR
@@ -1597,7 +2020,18 @@ BEGIN
    RAISE EXCEPTION 'invalid uncertain checker model call' USING ERRCODE='23514';
   END IF;
  ELSIF NEW.state='completed' THEN
-  IF NEW.provider_response_id IS NULL OR NOT response_complete OR NOT usage_complete OR
+  SELECT * INTO terminal_authority FROM public.audit_events
+   WHERE id=NEW.terminal_authorization_evidence_id FOR SHARE;
+  IF terminal_authority.id IS NULL OR
+     terminal_authority.event_domain IS DISTINCT FROM 'authority' OR
+     terminal_authority.event_type IS DISTINCT FROM 'SensitiveAuthorizationAllowed' OR
+     terminal_authority.actor_ref_kind IS DISTINCT FROM 'actor_profile' OR
+     terminal_authority.action_id IS DISTINCT FROM terminal_action OR
+     terminal_authority.permission_id IS DISTINCT FROM terminal_action OR
+     terminal_authority.denial_code IS NOT NULL OR
+     coalesce(terminal_authority.after_facts->>'resource_context_digest','')
+      !~ '^sha256:[0-9a-f]{64}$' OR
+     NEW.provider_response_id IS NULL OR NOT response_complete OR NOT usage_complete OR
 	    NEW.settled_nanodollars IS NULL OR NEW.settled_nanodollars::numeric<>exact_cost OR
      NEW.terminal_authorization_evidence_id IS NULL OR NEW.terminal_at IS NULL OR
 	    NEW.no_effect_proof_id IS NOT NULL OR NEW.no_effect_proof_digest IS NOT NULL OR
@@ -1606,7 +2040,18 @@ BEGIN
    RAISE EXCEPTION 'invalid completed checker model call' USING ERRCODE='23514';
   END IF;
  ELSIF NEW.state='known_failed' THEN
-  IF NEW.provider_response_id IS NULL OR NOT response_complete OR
+  SELECT * INTO terminal_authority FROM public.audit_events
+   WHERE id=NEW.terminal_authorization_evidence_id FOR SHARE;
+  IF terminal_authority.id IS NULL OR
+     terminal_authority.event_domain IS DISTINCT FROM 'authority' OR
+     terminal_authority.event_type IS DISTINCT FROM 'SensitiveAuthorizationAllowed' OR
+     terminal_authority.actor_ref_kind IS DISTINCT FROM 'actor_profile' OR
+     terminal_authority.action_id IS DISTINCT FROM terminal_action OR
+     terminal_authority.permission_id IS DISTINCT FROM terminal_action OR
+     terminal_authority.denial_code IS NOT NULL OR
+     coalesce(terminal_authority.after_facts->>'resource_context_digest','')
+      !~ '^sha256:[0-9a-f]{64}$' OR
+     NEW.provider_response_id IS NULL OR NOT response_complete OR
      NEW.terminal_authorization_evidence_id IS NULL OR NEW.terminal_at IS NULL OR
      NEW.no_effect_proof_id IS NOT NULL OR
 	    NOT usage_complete OR NEW.settled_nanodollars IS NULL OR
@@ -1615,7 +2060,18 @@ BEGIN
    RAISE EXCEPTION 'invalid known-failed checker model call' USING ERRCODE='23514';
   END IF;
  ELSIF NEW.state='known_no_effect' THEN
-  IF NEW.provider_response_id IS NOT NULL OR NEW.response_binding_id IS NOT NULL OR
+  SELECT * INTO terminal_authority FROM public.audit_events
+   WHERE id=NEW.terminal_authorization_evidence_id FOR SHARE;
+  IF terminal_authority.id IS NULL OR
+     terminal_authority.event_domain IS DISTINCT FROM 'authority' OR
+     terminal_authority.event_type IS DISTINCT FROM 'SensitiveAuthorizationAllowed' OR
+     terminal_authority.actor_ref_kind IS DISTINCT FROM 'actor_profile' OR
+     terminal_authority.action_id IS DISTINCT FROM terminal_action OR
+     terminal_authority.permission_id IS DISTINCT FROM terminal_action OR
+     terminal_authority.denial_code IS NOT NULL OR
+     coalesce(terminal_authority.after_facts->>'resource_context_digest','')
+      !~ '^sha256:[0-9a-f]{64}$' OR
+     NEW.provider_response_id IS NOT NULL OR NEW.response_binding_id IS NOT NULL OR
      NEW.response_content_id IS NOT NULL OR NEW.response_put_attempt_id IS NOT NULL OR
      NEW.response_verification_receipt_id IS NOT NULL OR
      NEW.response_content_sha256 IS NOT NULL OR NEW.response_byte_count IS NOT NULL OR
@@ -1676,20 +2132,25 @@ BEGIN
 END $$
 """,
     r"""
-CREATE FUNCTION public.reconcile_checker_model_budget() RETURNS trigger
+CREATE FUNCTION public.reconcile_model_usage_budget() RETURNS trigger
 LANGUAGE plpgsql SET search_path=pg_catalog,public,pg_temp AS $$
 DECLARE target_project uuid;
-DECLARE account public.checker_model_budget_accounts%ROWTYPE;
+DECLARE account public.model_usage_budget_accounts%ROWTYPE;
 DECLARE calculated_reserved numeric;
 DECLARE calculated_settled numeric;
 BEGIN
- IF TG_TABLE_NAME='checker_model_budget_accounts' THEN
+ IF TG_TABLE_NAME='model_usage_budget_accounts' THEN
   target_project:=coalesce(NEW.project_id,OLD.project_id);
  ELSE
-  SELECT project_id INTO target_project FROM public.checker_model_call_slots
-   WHERE id=coalesce(NEW.slot_id,OLD.slot_id);
+  IF coalesce(NEW.checker_slot_id,OLD.checker_slot_id) IS NOT NULL THEN
+   SELECT project_id INTO target_project FROM public.checker_model_usage_slots
+    WHERE id=coalesce(NEW.checker_slot_id,OLD.checker_slot_id);
+  ELSE
+   SELECT project_id INTO target_project FROM public.setup_model_usage_slots
+    WHERE id=coalesce(NEW.setup_slot_id,OLD.setup_slot_id);
+  END IF;
  END IF;
- SELECT * INTO account FROM public.checker_model_budget_accounts
+ SELECT * INTO account FROM public.model_usage_budget_accounts
   WHERE project_id=target_project;
  SELECT coalesce(sum(CASE WHEN
     a.state IN ('dispatching','uncertain')
@@ -1698,9 +2159,12 @@ BEGIN
     (a.state='known_failed' AND a.settled_nanodollars IS NOT NULL)
    THEN a.settled_nanodollars ELSE 0 END),0)
  INTO calculated_reserved,calculated_settled
- FROM public.checker_model_call_attempts a
- JOIN public.checker_model_call_slots s ON s.id=a.slot_id
- WHERE s.project_id=target_project;
+ FROM public.model_usage_effects a
+ LEFT JOIN public.checker_model_usage_slots checker_slot
+  ON checker_slot.id=a.checker_slot_id
+ LEFT JOIN public.setup_model_usage_slots setup_slot
+  ON setup_slot.id=a.setup_slot_id
+ WHERE coalesce(checker_slot.project_id,setup_slot.project_id)=target_project;
  IF account.project_id IS NULL OR
     account.lifetime_reserved_nanodollars::numeric<>calculated_reserved OR
     account.lifetime_settled_nanodollars::numeric<>calculated_settled THEN
@@ -1710,7 +2174,7 @@ BEGIN
 END $$
 """,
     r"""
-CREATE FUNCTION public.guard_checker_model_no_truncate() RETURNS trigger
+CREATE FUNCTION public.guard_model_usage_no_truncate() RETURNS trigger
 LANGUAGE plpgsql AS $$ BEGIN
  RAISE EXCEPTION 'checker model ledger cannot be truncated' USING ERRCODE='55000';
 END $$
@@ -1719,45 +2183,57 @@ END $$
 
 
 _TRIGGERS = (
-    "CREATE TRIGGER checker_model_profiles_guard BEFORE INSERT OR UPDATE OR DELETE "
-    "ON public.checker_model_profiles FOR EACH ROW "
-    "EXECUTE FUNCTION public.guard_checker_model_profile()",
-    "CREATE TRIGGER checker_model_budget_configurations_guard BEFORE INSERT OR UPDATE OR DELETE "
-    "ON public.checker_model_budget_configurations FOR EACH ROW "
-    "EXECUTE FUNCTION public.guard_checker_model_budget_configuration()",
-    "CREATE TRIGGER checker_model_budget_accounts_guard BEFORE INSERT OR UPDATE OR DELETE "
-    "ON public.checker_model_budget_accounts FOR EACH ROW "
-    "EXECUTE FUNCTION public.guard_checker_model_budget_account()",
-    "CREATE TRIGGER checker_model_call_slots_guard BEFORE INSERT OR UPDATE OR DELETE "
-    "ON public.checker_model_call_slots FOR EACH ROW "
+    "CREATE TRIGGER model_usage_profiles_guard BEFORE INSERT OR UPDATE OR DELETE "
+    "ON public.model_usage_profiles FOR EACH ROW "
+    "EXECUTE FUNCTION public.guard_model_usage_profile()",
+    "CREATE TRIGGER model_usage_budget_configurations_guard BEFORE INSERT OR UPDATE OR DELETE "
+    "ON public.model_usage_budget_configurations FOR EACH ROW "
+    "EXECUTE FUNCTION public.guard_model_usage_budget_configuration()",
+    "CREATE TRIGGER model_usage_budget_accounts_guard BEFORE INSERT OR UPDATE OR DELETE "
+    "ON public.model_usage_budget_accounts FOR EACH ROW "
+    "EXECUTE FUNCTION public.guard_model_usage_budget_account()",
+    "CREATE TRIGGER checker_model_usage_slots_guard BEFORE INSERT OR UPDATE OR DELETE "
+    "ON public.checker_model_usage_slots FOR EACH ROW "
     "EXECUTE FUNCTION public.guard_checker_model_call_slot()",
-    "CREATE TRIGGER checker_model_call_attempts_guard BEFORE INSERT OR UPDATE OR DELETE "
-    "ON public.checker_model_call_attempts FOR EACH ROW "
-    "EXECUTE FUNCTION public.guard_checker_model_call_attempt()",
-    "CREATE TRIGGER checker_model_call_recoveries_guard BEFORE INSERT OR UPDATE OR DELETE "
-    "ON public.checker_model_call_recoveries FOR EACH ROW "
+    "CREATE TRIGGER checker_model_usage_envelopes_guard BEFORE INSERT OR UPDATE OR DELETE "
+    "ON public.checker_model_usage_envelopes FOR EACH ROW "
+    "EXECUTE FUNCTION public.guard_checker_model_usage_envelope()",
+    "CREATE TRIGGER setup_model_usage_envelopes_guard BEFORE INSERT OR UPDATE OR DELETE "
+    "ON public.setup_model_usage_envelopes FOR EACH ROW "
+    "EXECUTE FUNCTION public.guard_setup_model_usage_envelope()",
+    "CREATE TRIGGER setup_model_usage_slots_guard BEFORE INSERT OR UPDATE OR DELETE "
+    "ON public.setup_model_usage_slots FOR EACH ROW "
+    "EXECUTE FUNCTION public.guard_setup_model_usage_slot()",
+    "CREATE TRIGGER model_usage_effects_guard BEFORE INSERT OR UPDATE OR DELETE "
+    "ON public.model_usage_effects FOR EACH ROW "
+    "EXECUTE FUNCTION public.guard_model_usage_effect()",
+    "CREATE TRIGGER checker_model_usage_recoveries_guard BEFORE INSERT OR UPDATE OR DELETE "
+    "ON public.checker_model_usage_recoveries FOR EACH ROW "
     "EXECUTE FUNCTION public.guard_checker_model_recovery()",
     "CREATE CONSTRAINT TRIGGER checker_model_budget_account_reconcile "
-    "AFTER INSERT OR UPDATE OR DELETE ON public.checker_model_budget_accounts "
+    "AFTER INSERT OR UPDATE OR DELETE ON public.model_usage_budget_accounts "
     "DEFERRABLE INITIALLY DEFERRED FOR EACH ROW "
-    "EXECUTE FUNCTION public.reconcile_checker_model_budget()",
+    "EXECUTE FUNCTION public.reconcile_model_usage_budget()",
     "CREATE CONSTRAINT TRIGGER checker_model_call_attempt_reconcile "
-    "AFTER INSERT OR UPDATE OR DELETE ON public.checker_model_call_attempts "
+    "AFTER INSERT OR UPDATE OR DELETE ON public.model_usage_effects "
     "DEFERRABLE INITIALLY DEFERRED FOR EACH ROW "
-    "EXECUTE FUNCTION public.reconcile_checker_model_budget()",
+    "EXECUTE FUNCTION public.reconcile_model_usage_budget()",
     *(
         "CREATE TRIGGER "
         + table
         + "_no_truncate BEFORE TRUNCATE ON public."
         + table
-        + " FOR EACH STATEMENT EXECUTE FUNCTION public.guard_checker_model_no_truncate()"
+        + " FOR EACH STATEMENT EXECUTE FUNCTION public.guard_model_usage_no_truncate()"
         for table in (
-            "checker_model_profiles",
-            "checker_model_budget_configurations",
-            "checker_model_budget_accounts",
-            "checker_model_call_slots",
-            "checker_model_call_attempts",
-            "checker_model_call_recoveries",
+            "model_usage_profiles",
+            "model_usage_budget_configurations",
+            "model_usage_budget_accounts",
+            "checker_model_usage_slots",
+            "checker_model_usage_envelopes",
+            "setup_model_usage_envelopes",
+            "setup_model_usage_slots",
+            "model_usage_effects",
+            "checker_model_usage_recoveries",
         )
     ),
 )

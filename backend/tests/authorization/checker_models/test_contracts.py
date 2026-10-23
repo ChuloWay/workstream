@@ -12,8 +12,8 @@ from app.core.hashing import canonical_json_hash
 from app.core.identifiers import new_record_id
 from app.modules.actors.api import ServiceIdentity
 from app.modules.authorization.catalogue import ActionId, PermissionId
-from app.modules.authorization.checker_model_authorization import CheckerModelAuthorization
-from app.modules.authorization.domain.checker_models import (
+from app.modules.authorization.model_usage_authorization import CheckerModelAuthorization
+from app.modules.authorization.domain.model_usage import (
     GRANT,
     RECOVER,
     ModelCallGrantAuthorityFacts,
@@ -37,7 +37,7 @@ from app.modules.authorization.runtime import (
     MatchedAuthorityKind,
     ServiceAuthorizationContext,
 )
-from app.modules.checkers.api.model_calls import (
+from app.modules.model_usage.api import (
     ModelCallEffectAuthorityFacts,
     ModelCallExecutionFacts,
     ModelCallUnavailable,

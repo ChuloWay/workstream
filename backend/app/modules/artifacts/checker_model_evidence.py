@@ -13,7 +13,7 @@ from app.modules.artifacts.models import (
     ArtifactVerificationJob,
     ArtifactVerificationReceipt,
 )
-from app.modules.checkers.api.model_calls import (
+from app.modules.model_usage.api import (
     ModelCallEvidence,
     ModelCallUnavailable,
     PreparedModelCallAttempt,

@@ -25,7 +25,7 @@ from app.adapters.checkers.model_provider import (
     OpenAIResponsesSettings,
 )
 from app.adapters.checkers.model_proxy_transport import ModelProxyTransport
-from app.modules.checkers.api.model_calls import ModelCallUnavailable, ProjectModelProfile
+from app.modules.model_usage.api import ModelCallUnavailable, ProjectModelProfile
 
 
 @asynccontextmanager

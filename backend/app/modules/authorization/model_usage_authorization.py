@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from uuid import UUID
+from uuid import NAMESPACE_URL, UUID, uuid5
 
 from app.modules.actors.api import ServiceIdentity
 from app.modules.authorization.catalogue import ActionId
-from app.modules.authorization.domain.checker_models import (
+from app.modules.authorization.domain.model_usage import (
     BUDGET_CONFIGURE,
     COMPLETE,
     DISPATCH,
@@ -16,6 +16,11 @@ from app.modules.authorization.domain.checker_models import (
     PROFILE_PROVISION,
     RECOVER,
     RECOVERY_CHILD_AUTHORIZE,
+    SETUP_COMPLETE,
+    SETUP_DISPATCH,
+    SETUP_MODEL_USAGE_ACTIONS,
+    SETUP_OBSERVE,
+    SETUP_PREPARE,
     CHECKER_MODEL_CALL_ACTIONS,
     MODEL_ADMIN_ACTIONS,
     ModelCallCompleteAuthorityFacts,
@@ -25,8 +30,13 @@ from app.modules.authorization.domain.checker_models import (
     ModelCallPrepareAuthorityFacts,
     ModelCallRecoverAuthorityFacts,
     ModelCallRecoveryChildAuthorityFacts,
+    SetupModelCompleteAuthorityFacts,
+    SetupModelDispatchAuthorityFacts,
+    SetupModelObserveAuthorityFacts,
+    SetupModelPrepareAuthorityFacts,
     checker_model_call_resource,
     project_model_admin_resource,
+    setup_model_usage_resource,
 )
 from app.modules.authorization.kernel import AuthorizationService
 from app.modules.authorization.prepared import PreparedAuthorizationService
@@ -41,7 +51,7 @@ from app.modules.authorization.runtime import (
     PreparedAuthorityScopeKind,
     ServiceAuthorizationContext,
 )
-from app.modules.checkers.api.model_calls import (
+from app.modules.model_usage.api import (
     ModelActionEvidence,
     ModelBudgetProvisioningFacts,
     ModelCallEffectAuthorityFacts,
@@ -51,6 +61,9 @@ from app.modules.checkers.api.model_calls import (
     ModelPaidSlotKey,
     ModelProfileProvisioningFacts,
     PreparedModelCallAttempt,
+    PreparedSetupModelUsageEffect,
+    SetupModelEffectAuthorityFacts,
+    SetupModelUsageSlotKey,
     model_action_digest,
 )
 
@@ -244,6 +257,96 @@ class CheckerModelAuthorization:
             "complete",
         )
 
+    async def authorize_setup_prepare(
+        self, slot: SetupModelUsageSlotKey, request_sha256: str
+    ) -> ModelActionEvidence:
+        """Authorize one stable setup phase/call slot before MODEL locks."""
+        facts = SetupModelPrepareAuthorityFacts(
+            slot=slot,
+            request_sha256=request_sha256,
+        )
+        return await self._authorize_setup(
+            SETUP_PREPARE,
+            facts,
+            uuid5(NAMESPACE_URL, "workstream:setup-model:" + slot.digest),
+            "setup_prepare",
+        )
+
+    async def authorize_setup_dispatch(
+        self,
+        prepared: PreparedSetupModelUsageEffect,
+        request_evidence: ModelCallEvidence,
+    ) -> ModelActionEvidence:
+        """Authorize one verified setup provider dispatch."""
+        facts = SetupModelDispatchAuthorityFacts(
+            prepared=prepared,
+            request_evidence=request_evidence,
+        )
+        return await self._authorize_setup(
+            SETUP_DISPATCH,
+            facts,
+            prepared.internal_call_request_id,
+            "setup_dispatch",
+        )
+
+    async def authorize_setup_observe(
+        self,
+        effect: SetupModelEffectAuthorityFacts,
+        provider_response_id: str | None,
+        observation_digest: str,
+    ) -> ModelActionEvidence:
+        """Authorize retention of an ambiguous setup provider effect."""
+        facts = SetupModelObserveAuthorityFacts(
+            effect=effect,
+            provider_response_id=provider_response_id,
+            observation_digest=observation_digest,
+        )
+        return await self._authorize_setup(
+            SETUP_OBSERVE,
+            facts,
+            effect.internal_call_request_id,
+            "setup_observe",
+        )
+
+    async def authorize_setup_complete(
+        self,
+        effect: SetupModelEffectAuthorityFacts,
+        response_evidence: ModelCallEvidence | None,
+        terminal_digest: str,
+    ) -> ModelActionEvidence:
+        """Authorize exact terminal setup accounting or proven no-effect release."""
+        facts = SetupModelCompleteAuthorityFacts(
+            effect=effect,
+            response_evidence=response_evidence,
+            terminal_digest=terminal_digest,
+        )
+        return await self._authorize_setup(
+            SETUP_COMPLETE,
+            facts,
+            effect.internal_call_request_id,
+            "setup_complete",
+        )
+
+    async def _authorize_setup(
+        self,
+        action: ActionId,
+        facts: (
+            SetupModelPrepareAuthorityFacts
+            | SetupModelDispatchAuthorityFacts
+            | SetupModelObserveAuthorityFacts
+            | SetupModelCompleteAuthorityFacts
+        ),
+        idempotency_key: UUID,
+        service_action: str,
+    ) -> ModelActionEvidence:
+        self._require_setup_service()
+        return await self._authorize(
+            action,
+            setup_model_usage_resource(action, facts),
+            idempotency_key,
+            model_action_digest(service_action, facts),
+        )
+
     async def _authorize_runtime(
         self,
         action: ActionId,
@@ -275,6 +378,11 @@ class CheckerModelAuthorization:
         service_facts_digest: str,
     ) -> ModelActionEvidence:
         if action in CHECKER_MODEL_CALL_ACTIONS:
+            scope = PreparedAuthorityScope(
+                kind=PreparedAuthorityScopeKind.PROJECT,
+                project_id=resource.scope_project_id,
+            )
+        elif action in SETUP_MODEL_USAGE_ACTIONS:
             scope = PreparedAuthorityScope(
                 kind=PreparedAuthorityScopeKind.PROJECT,
                 project_id=resource.scope_project_id,
@@ -347,6 +455,14 @@ class CheckerModelAuthorization:
         if (
             not isinstance(context, ServiceAuthorizationContext)
             or context.service_identity is not ServiceIdentity.CHECKER_POST_SUBMIT
+        ):
+            raise ModelCallUnavailable("model_call_authority_unavailable")
+
+    def _require_setup_service(self) -> None:
+        context = self._authorization._context
+        if (
+            not isinstance(context, ServiceAuthorizationContext)
+            or context.service_identity is not ServiceIdentity.PROJECT_SETUP
         ):
             raise ModelCallUnavailable("model_call_authority_unavailable")
 

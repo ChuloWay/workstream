@@ -1,6 +1,5 @@
 """Current invocation and call-stable private evidence custody."""
 
-import json
 from uuid import UUID
 
 from sqlalchemy import select
@@ -11,11 +10,14 @@ from app.modules.checkers.api.execution import (
     EvaluationTaskGuard,
     ExecutionLease,
 )
-from app.modules.checkers.api.model_calls import (
+from app.modules.model_usage.api import (
     ModelCallCurrentExecutionPort,
     ModelCallExecutionFacts,
     ModelCallUnavailable,
+    ModelEvidenceCustodyPort,
+    ModelEvidenceSelector,
     ModelPaidSlotKey,
+    ModelRecoverySourcePort,
 )
 from app.modules.checkers.api.output_custody import (
     CheckerOutputReservation,
@@ -31,15 +33,19 @@ from app.modules.checkers.execution_repository import (
     stored_request,
 )
 from app.modules.checkers.models import CheckerRun
-from app.modules.checkers.model_calls.repository import ModelCallRepository
-from app.modules.checkers.model_calls.grants import CheckerModelInvocationGrant
 
 
 class ModelCallCurrentExecution:
     """Check the exact locked project binding before any paid effect is reserved."""
 
-    def __init__(self, session: AsyncSession, *, tasks: EvaluationTaskGuard):
-        self._session, self._tasks = session, tasks
+    def __init__(
+        self,
+        session: AsyncSession,
+        *,
+        tasks: EvaluationTaskGuard,
+        recovery: ModelRecoverySourcePort,
+    ):
+        self._session, self._tasks, self._recovery = session, tasks, recovery
 
     @staticmethod
     def _require_binding(request, slot: ModelPaidSlotKey) -> None:
@@ -116,41 +122,27 @@ class ModelCallCurrentExecution:
         """Lock current TASK/Submission custody for a terminal source, without a lease."""
         require_transaction(self._session)
         slot = ModelPaidSlotKey.model_validate(slot)
-        repo = ModelCallRepository(self._session)
-        slot_row = await repo.slot(slot)
-        parent = await repo.attempt(parent_attempt_id)
-        grant = await self._session.scalar(
-            select(CheckerModelInvocationGrant).where(
-                CheckerModelInvocationGrant.selected_attempt_id == str(parent_attempt_id)
-            )
-        )
-        if (
-            slot_row is None
-            or parent is None
-            or parent.slot_id != slot_row.id
-            or grant is None
-            or grant.project_id != str(slot.project_id)
-            or grant.paid_slot != slot.model_dump(mode="json")
-            or grant.selected_request_sha256 != parent.request_sha256
-        ):
-            raise ModelCallUnavailable("model_call_recovery_unavailable")
-        run = await self._session.get(CheckerRun, grant.checker_run_id)
+        try:
+            source = await self._recovery.recovery_owner(slot, parent_attempt_id)
+        except ModelCallUnavailable:
+            raise ModelCallUnavailable("model_call_recovery_unavailable") from None
+        run = await self._session.get(CheckerRun, str(source.checker_run_id))
         if (
             run is None
-            or run.task_id != slot_row.task_id
+            or run.task_id != str(source.task_id)
             or run.status != "infrastructure_failed"
             or run.failure_code is None
             or run.completed_at is None
         ):
             raise ModelCallUnavailable("model_call_recovery_unavailable")
         try:
-            execution = ModelCallExecutionFacts.model_validate_json(
-                json.dumps(grant.execution_facts)
-            )
             request = stored_request(run)
         except (CheckerExecutionUnavailable, ValueError):
             raise ModelCallUnavailable("model_call_recovery_unavailable") from None
-        if execution.checker_run_id != UUID(run.id) or execution.task_id != UUID(slot_row.task_id):
+        if (
+            source.execution.checker_run_id != UUID(run.id)
+            or source.execution.task_id != source.task_id
+        ):
             raise ModelCallUnavailable("model_call_recovery_unavailable")
         self._require_binding(request, slot)
         try:
@@ -169,9 +161,10 @@ class CheckerOutputReservations:
         *,
         current: ModelCallCurrentExecutionPort,
         tasks: CheckerOutputTaskCustodyPort,
+        model: ModelEvidenceCustodyPort,
     ):
         self._session, self._current = session, current
-        self._tasks = tasks
+        self._tasks, self._model = tasks, model
 
     async def resolve(self, selector: CheckerOutputSelector) -> CheckerOutputReservation:
         """Requests require current execution; late responses retain effect custody."""
@@ -181,37 +174,20 @@ class CheckerOutputReservations:
             await self._current.require_current(selector.execution, selector.paid_slot)
         else:
             await self._tasks.lock_model_evidence_scope(selector)
-        repo = ModelCallRepository(self._session)
-        await repo.lock_slot_scope(selector.paid_slot)
-        slot = await repo.slot(selector.paid_slot, lock=True)
-        if slot is None or (
-            slot.id != str(selector.model_call_slot_id) or slot.task_id != str(selector.task_id)
-        ):
-            raise CheckerOutputUnavailable("checker_output_reservation_unavailable")
-        attempt = await repo.attempt(selector.model_call_attempt_id, lock=True)
-        if attempt is None or attempt.slot_id != slot.id:
-            raise CheckerOutputUnavailable("checker_output_reservation_unavailable")
-        profile = await repo.profile_exact(
-            selector.paid_slot.profile_id,
-            selector.paid_slot.profile_version,
-            selector.paid_slot.profile_digest,
-        )
-        if profile is None or (
-            profile.project_id != str(selector.paid_slot.project_id)
-            or profile.registry_entry_digest != selector.paid_slot.registry_entry_digest
-        ):
-            raise CheckerOutputUnavailable("checker_output_profile_unavailable")
-        if selector.slot_key == "model_request":
-            if attempt.request_sha256 != selector.content_sha256:
-                raise CheckerOutputUnavailable("checker_output_request_conflict")
-            maximum = profile.maximum_request_bytes
-        else:
-            if attempt.state not in {"dispatching", "uncertain", "completed", "known_failed"}:
-                raise CheckerOutputUnavailable("checker_output_effect_unavailable")
-            if attempt.response_content_sha256 not in {None, selector.content_sha256}:
-                raise CheckerOutputUnavailable("checker_output_response_conflict")
-            maximum = profile.maximum_response_bytes
+        try:
+            reservation = await self._model.resolve_evidence(
+                ModelEvidenceSelector(
+                    paid_slot=selector.paid_slot,
+                    task_id=selector.task_id,
+                    model_call_slot_id=selector.model_call_slot_id,
+                    model_call_attempt_id=selector.model_call_attempt_id,
+                    role=selector.slot_key,
+                    content_sha256=selector.content_sha256,
+                )
+            )
+        except ModelCallUnavailable:
+            raise CheckerOutputUnavailable("checker_output_reservation_unavailable") from None
         return CheckerOutputReservation(
             selector=selector,
-            slot=CheckerOutputSlot(key=selector.slot_key, maximum_bytes=maximum),
+            slot=CheckerOutputSlot(key=selector.slot_key, maximum_bytes=reservation.maximum_bytes),
         )

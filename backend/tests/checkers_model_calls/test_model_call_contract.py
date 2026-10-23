@@ -7,14 +7,16 @@ import pytest
 
 from app.core.hashing import canonical_json_hash
 from app.core.identifiers import new_record_id
-from app.modules.checkers.api.model_calls import (
+from app.modules.model_usage.api import (
     ModelCallConflict,
     ModelCallUsage,
     ModelGenerationSettings,
     ModelProfileProvisioningFacts,
     ModelPaidSlotKey,
     ModelPricing,
+    ProjectModelBudgetConfigurationSpec,
     ProjectModelProfileSpec,
+    SetupModelUsageSlotKey,
     model_usage_cost,
 )
 
@@ -27,8 +29,6 @@ def profile_spec() -> ProjectModelProfileSpec:
     return ProjectModelProfileSpec(
         project_id=new_record_id(),
         profile_version=3,
-        registry_entry_id=new_record_id(),
-        registry_entry_digest=sha("registry"),
         provider="openai_responses",
         api="responses.v1",
         model_snapshot="gpt-example-2026-10-01",
@@ -41,6 +41,14 @@ def profile_spec() -> ProjectModelProfileSpec:
         maximum_response_bytes=20_000,
         maximum_input_tokens=100,
         maximum_output_tokens=50,
+        maximum_calls=1,
+        maximum_total_request_bytes=10_000,
+        maximum_total_response_bytes=20_000,
+        maximum_total_input_tokens=100,
+        maximum_total_output_tokens=50,
+        allowed_tools=(),
+        maximum_tool_calls=0,
+        maximum_tool_output_bytes=0,
         deadline_ms=60_000,
         pricing=ModelPricing(
             pricing_policy_id=new_record_id(),
@@ -67,10 +75,54 @@ def test_profile_requires_room_for_canonical_response_evidence() -> None:
         )
 
 
-def test_profile_rejects_unregistered_provider_or_api_aliases() -> None:
-    for changes in ({"provider": "openai"}, {"api": "responses"}):
-        with pytest.raises(ValidationError, match="provider and API are unsupported"):
-            ProjectModelProfileSpec.model_validate(profile_spec().model_dump() | changes)
+def test_profile_requires_finite_canonical_run_and_tool_envelopes() -> None:
+    multi = ProjectModelProfileSpec.model_validate(
+        profile_spec().model_dump()
+        | {
+            "maximum_calls": 3,
+            "maximum_total_request_bytes": 30_000,
+            "maximum_total_response_bytes": 60_000,
+            "maximum_total_input_tokens": 300,
+            "maximum_total_output_tokens": 150,
+            "allowed_tools": ("execution_receipt", "read_material"),
+            "maximum_tool_calls": 8,
+            "maximum_tool_output_bytes": 100_000,
+        }
+    )
+    assert multi.maximum_reservation_nanodollars == 300 * 11 + 150 * 29
+    with pytest.raises(ValidationError, match="canonical"):
+        ProjectModelProfileSpec.model_validate(
+            multi.model_dump() | {"allowed_tools": ("read_material", "execution_receipt")}
+        )
+    with pytest.raises(ValidationError, match="run totals"):
+        ProjectModelProfileSpec.model_validate(
+            multi.model_dump() | {"maximum_total_input_tokens": 301}
+        )
+
+
+def test_budget_requires_explicit_reconciled_remaining_allowance() -> None:
+    with pytest.raises(ValidationError, match="reconciled authorization"):
+        ProjectModelBudgetConfigurationSpec(
+            project_id=new_record_id(),
+            configuration_version=1,
+            authorized_total_nanodollars=10_000_000_000,
+            externally_reconciled_prior_spend_nanodollars=2_000_000_000,
+            lifetime_limit_nanodollars=9_000_000_000,
+        )
+
+
+def test_profile_is_provider_neutral_but_rejects_unbounded_identifiers() -> None:
+    for changes in (
+        {"provider": "openai", "api": "responses"},
+        {"provider": "openrouter", "api": "chat_completions"},
+    ):
+        assert ProjectModelProfileSpec.model_validate(
+            profile_spec().model_dump() | changes
+        ).provider == changes["provider"]
+    with pytest.raises(ValidationError):
+        ProjectModelProfileSpec.model_validate(
+            profile_spec().model_dump() | {"provider": "https://bad host"}
+        )
 
 
 def test_settlement_prices_cached_input_separately_and_reasoning_once() -> None:
@@ -134,7 +186,7 @@ def test_stable_slot_identity_has_no_lease_or_evaluation_generation() -> None:
         submission_id=new_record_id(),
         submission_version=2,
         requirement_id="model_output_quality",
-        registry_entry_digest=spec.registry_entry_digest,
+        registry_entry_digest=sha("registry"),
         configuration_sha256=sha("configuration"),
         profile_id=new_record_id(),
         profile_version=spec.profile_version,
@@ -154,6 +206,26 @@ def test_stable_slot_identity_has_no_lease_or_evaluation_generation() -> None:
         "profile_digest",
         "slot_index",
     }
+
+
+def test_setup_slot_binds_attempt_generation_runtime_profile_and_call_order() -> None:
+    key = SetupModelUsageSlotKey(
+        compilation_attempt_id=new_record_id(),
+        project_id=new_record_id(),
+        guide_id=new_record_id(),
+        source_snapshot_id=new_record_id(),
+        setup_run_id=new_record_id(),
+        setup_generation=4,
+        runtime_configuration_hash=sha("setup-runtime"),
+        profile_id=new_record_id(),
+        profile_version=2,
+        profile_digest=sha("setup-profile"),
+        phase="review",
+        call_index=3,
+    )
+
+    assert key.digest == canonical_json_hash(key.model_dump(mode="json"))
+    assert "checker_run_id" not in type(key).model_fields
 
 
 def test_profile_settings_reject_prompt_or_unapproved_provider_parameters() -> None:

@@ -11,7 +11,7 @@ from app.api.deps.checker_models import CheckerModelAdminCommands
 from app.core.hashing import canonical_json_hash
 from app.core.identifiers import new_record_id
 from app.main import create_app
-from app.modules.checkers.api.model_calls import (
+from app.modules.model_usage.api import (
     ModelCallExecutionFacts,
     ModelCallConflict,
     ModelGenerationSettings,
@@ -37,8 +37,6 @@ def profile_spec(project_id):
     return ProjectModelProfileSpec(
         project_id=project_id,
         profile_version=1,
-        registry_entry_id=new_record_id(),
-        registry_entry_digest=sha("registry"),
         provider="openai_responses",
         api="responses.v1",
         model_snapshot="gpt-example-2026-10-01",
@@ -48,6 +46,14 @@ def profile_spec(project_id):
         maximum_response_bytes=30_000,
         maximum_input_tokens=100,
         maximum_output_tokens=50,
+        maximum_calls=1,
+        maximum_total_request_bytes=10_000,
+        maximum_total_response_bytes=30_000,
+        maximum_total_input_tokens=100,
+        maximum_total_output_tokens=50,
+        allowed_tools=(),
+        maximum_tool_calls=0,
+        maximum_tool_output_bytes=0,
         deadline_ms=30_000,
         pricing=ModelPricing(
             pricing_policy_id=new_record_id(),
@@ -118,6 +124,8 @@ async def test_public_commands_bind_actor_key_project_and_exact_recovery_facts()
     budget = ProjectModelBudgetConfigurationSpec(
         project_id=project_id,
         configuration_version=1,
+        authorized_total_nanodollars=10_000_000_000,
+        externally_reconciled_prior_spend_nanodollars=0,
         lifetime_limit_nanodollars=10_000_000_000,
     )
     await commands.configure_budget(project_id, budget)
@@ -141,15 +149,16 @@ async def test_public_commands_bind_actor_key_project_and_exact_recovery_facts()
         submission_id=execution.submission_id,
         submission_version=1,
         requirement_id="model_review",
-        registry_entry_digest=profile.registry_entry_digest,
+        registry_entry_digest=sha("registry"),
         configuration_sha256=sha("configuration"),
         profile_id=new_record_id(),
         profile_version=1,
         profile_digest=sha("profile"),
     )
+    registry_entry_id = new_record_id()
     request = ModelRecoveryChildRequest(
         slot=slot,
-        registry_entry_id=profile.registry_entry_id,
+        registry_entry_id=registry_entry_id,
         terminal_digest=sha("terminal"),
         request_sha256=sha("request"),
     )
@@ -169,7 +178,7 @@ async def test_public_commands_bind_actor_key_project_and_exact_recovery_facts()
         "child",
         slot,
         {
-            "registry_entry_id": profile.registry_entry_id,
+            "registry_entry_id": registry_entry_id,
             "parent_attempt_id": parent_id,
             "terminal_digest": request.terminal_digest,
             "request_sha256": request.request_sha256,
@@ -184,10 +193,10 @@ async def _model_control_counts() -> dict[str, int]:
     async with db_session.get_session_factory()() as session:
         rows = {}
         for name in (
-            "checker_model_profiles",
-            "checker_model_budget_configurations",
-            "checker_model_budget_accounts",
-            "checker_model_call_attempts",
+            "model_usage_profiles",
+            "model_usage_budget_configurations",
+            "model_usage_budget_accounts",
+            "model_usage_effects",
         ):
             rows[name] = int(await session.scalar(text(f"select count(*) from {name}")) or 0)
         events = (
@@ -225,16 +234,11 @@ async def test_signed_operator_profile_budget_replay_and_fresh_denial(
     project_id = await create_project("Model control replay")
 
     profile_key = uuid4()
-    profile = profile_spec(project_id).model_copy(
-        update={
-            "registry_entry_id": UUID(entry["registry_entry_id"]),
-            "registry_entry_digest": entry["entry_digest"],
-        }
-    )
+    profile = profile_spec(project_id)
     profile_headers = admin_access.target.headers | {"Idempotency-Key": str(profile_key)}
     profile_path = PROFILE_PATH.format(project_id=project_id)
     malformed_profile = profile.model_dump(mode="json")
-    malformed_profile["registry_entry_id"] = "not-a-uuid"
+    malformed_profile["registry_entry_id"] = "profiles-are-not-registry-owned"
     malformed = await admin_access.signed.client.post(
         profile_path,
         headers=admin_access.target.headers,
@@ -255,9 +259,7 @@ async def test_signed_operator_profile_budget_replay_and_fresh_denial(
     assert replayed_profile.status_code == 201, replayed_profile.text
     assert replayed_profile.json() == first_profile.json()
     assert first_profile.json()["operation_id"] == str(profile_key)
-    substituted_profile = profile.model_copy(
-        update={"registry_entry_digest": sha("substituted-registry")}
-    )
+    substituted_profile = profile.model_copy(update={"model_snapshot": "gpt-substituted"})
     substituted = await admin_access.signed.client.post(
         profile_path,
         headers=admin_access.target.headers | {"Idempotency-Key": str(uuid4())},
@@ -270,6 +272,8 @@ async def test_signed_operator_profile_budget_replay_and_fresh_denial(
     budget = ProjectModelBudgetConfigurationSpec(
         project_id=project_id,
         configuration_version=1,
+        authorized_total_nanodollars=10_000_000_000,
+        externally_reconciled_prior_spend_nanodollars=0,
         lifetime_limit_nanodollars=10_000_000_000,
     )
     budget_headers = admin_access.target.headers | {"Idempotency-Key": str(budget_key)}
@@ -392,10 +396,10 @@ async def test_signed_operator_profile_budget_replay_and_fresh_denial(
     assert denied_recovery.json()["error"]["code"] == "checker_model_control_not_found"
 
     assert await _model_control_counts() == {
-        "checker_model_profiles": 1,
-        "checker_model_budget_configurations": 1,
-        "checker_model_budget_accounts": 1,
-        "checker_model_call_attempts": 0,
+        "model_usage_profiles": 1,
+        "model_usage_budget_configurations": 1,
+        "model_usage_budget_accounts": 1,
+        "model_usage_effects": 0,
         "project.model_profile.provision:true": 2,
         "project.model_profile.provision:false": 1,
         "project.model_budget.configure:true": 2,

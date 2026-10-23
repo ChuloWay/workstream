@@ -21,7 +21,7 @@ from app.modules.checkers.api.external import (
     ExternalCheckerRegistryPort,
     external_checker_json_hash,
 )
-from app.modules.checkers.api.model_calls import ModelProfileReaderPort
+from app.modules.model_usage.api import ModelProfileReaderPort
 from app.modules.checkers.api.model_profiles import (
     ModelProfileConfigurationError,
     configured_model_profile_selector,

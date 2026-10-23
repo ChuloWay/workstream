@@ -24,7 +24,7 @@ from app.modules.authorization.catalogue import (
     PermissionId,
 )
 from app.modules.authorization.domain.guide_manager_resources import guide_manager_resource_denial
-from app.modules.authorization.domain import adapter_bindings, artifact_operator, checker_models, checker_registry, checker_retry, contribution_policies, guide_compilation as compilation, post_submit_deliveries
+from app.modules.authorization.domain import adapter_bindings, artifact_operator, model_usage as checker_models, checker_registry, checker_retry, contribution_policies, guide_compilation as compilation, post_submit_deliveries
 from app.modules.authorization.domain.action_groups import (
     GUIDE_BOUND_PROJECT_MANAGER_ACTIONS as _GUIDE_BOUND_PROJECT_MANAGER_ACTIONS,
     CONTEXT_DIGEST_ACTIONS,

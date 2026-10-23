@@ -18,7 +18,7 @@ from app.modules.authorization.api.guide_proposal_review import (
 from app.modules.checkers.api.policy_custody import CompiledPreSubmitCheckerPolicy
 from app.modules.checkers.api.external import ExternalCheckerRegistryPort
 from app.modules.checkers.api.external import ExternalCheckerCapabilityProjection
-from app.modules.checkers.api.model_calls import ModelProfileReaderPort
+from app.modules.model_usage.api import ModelProfileReaderPort
 from app.modules.checkers.api.external_policy import (
     LockedExternalCheckerPolicies,
     compile_external_checker_policy_bundle,

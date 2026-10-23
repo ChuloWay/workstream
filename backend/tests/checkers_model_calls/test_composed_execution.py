@@ -32,9 +32,9 @@ from app.interfaces.project_agents import CapabilityParameter, CheckSpecificatio
 from app.modules.actors.api import ServiceIdentity
 from app.modules.artifacts.preparation import HARD_MAXIMUM_ARTIFACT_BYTES
 from app.modules.checkers.api.external import ExternalCheckerSchema, external_checker_json_hash
-from app.modules.checkers.model_calls.models import (
-    CheckerModelCallAttempt,
-    CheckerModelBudgetAccount,
+from app.modules.model_usage.models import (
+    ModelUsageEffect,
+    ModelUsageBudgetAccount,
 )
 from app.adapters.checkers.model_proxy import CheckerModelProxy
 from tests.checkers.external.support import post_registry_spec
@@ -329,13 +329,13 @@ async def test_public_profile_to_private_model_call_and_completed_checker(
         assert len(creates) == (2 if terminal_mode else 1)
         async with h.factory() as session:
             assert (
-                await session.scalar(select(func.count()).select_from(CheckerModelCallAttempt))
+                await session.scalar(select(func.count()).select_from(ModelUsageEffect))
                 == (2 if terminal_mode else 1)
             )
             attempt = await session.scalar(
-                select(CheckerModelCallAttempt).where(CheckerModelCallAttempt.state == "completed")
+                select(ModelUsageEffect).where(ModelUsageEffect.state == "completed")
             )
-            account = await session.get(CheckerModelBudgetAccount, str(h.request.project_id))
+            account = await session.get(ModelUsageBudgetAccount, str(h.request.project_id))
             assert attempt.state == "completed"
             assert account.lifetime_reserved_nanodollars == 0
             assert account.lifetime_settled_nanodollars == (

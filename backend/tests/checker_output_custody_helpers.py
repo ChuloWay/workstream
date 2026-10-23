@@ -54,7 +54,7 @@ from app.modules.checkers.api.output_custody import (
     CheckerOutputSelector,
     CheckerOutputUnavailable,
 )
-from app.modules.checkers.api.model_calls import (
+from app.modules.model_usage.api import (
     ModelCallEvidence,
     ModelCallExecutionFacts,
     ModelPaidSlotKey,
@@ -62,13 +62,13 @@ from app.modules.checkers.api.model_calls import (
 )
 from app.modules.checkers.execution_repository import stored_request
 from app.modules.checkers.models import CheckerRun, ExternalCheckerRegistryEntryRecord
-from app.modules.checkers.model_calls.service import ModelCallService
+from app.modules.model_usage.service import ModelCallService
 from app.adapters.auth import checker_model_service_authorization
 from app.modules.authorization.checker_output_authorization import (
     PreparedCheckerOutputBindingAuthorization,
     PreparedCheckerOutputWriteAuthorization,
 )
-from app.modules.checkers.model_calls.models import CheckerModelCallAttempt
+from app.modules.model_usage.models import ModelUsageEffect
 from tests.artifact_store_helpers import (
     artifact_admission_limit_settings,
     artifact_preparation_limits,
@@ -133,10 +133,10 @@ class ControlledReservationPort:
     async def resolve(self, selector: CheckerOutputSelector) -> CheckerOutputReservation:
         """Fence the selected call attempt before ART acquires any artifact row lock."""
         attempt = await self._session.scalar(
-            select(CheckerModelCallAttempt)
+            select(ModelUsageEffect)
             .where(
-                CheckerModelCallAttempt.id == str(selector.model_call_attempt_id),
-                CheckerModelCallAttempt.slot_id == str(selector.model_call_slot_id),
+                ModelUsageEffect.id == str(selector.model_call_attempt_id),
+                ModelUsageEffect.checker_slot_id == str(selector.model_call_slot_id),
             )
             .with_for_update()
             .execution_options(populate_existing=True)
@@ -590,11 +590,7 @@ async def _provision_model_policy(factory, namespace, admin_access):
         assert registry is not None
     project_id = policy_bundle[0]["project"]
     spec = profile_spec(project_id).model_copy(
-        update={
-            "registry_entry_id": UUID(str(registry.id)),
-            "registry_entry_digest": registry.entry_digest,
-            "maximum_request_bytes": 1024,
-        }
+        update={"maximum_request_bytes": 1024, "maximum_total_request_bytes": 1024}
     )
     response = await admin_access.signed.client.post(
         f"/api/v1/operations/projects/{project_id}/model-profiles",
@@ -608,6 +604,8 @@ async def _provision_model_policy(factory, namespace, admin_access):
         json={
             "project_id": str(project_id),
             "configuration_version": 1,
+            "authorized_total_nanodollars": 10_000_000_000,
+            "externally_reconciled_prior_spend_nanodollars": 0,
             "lifetime_limit_nanodollars": 10_000_000_000,
         },
     )

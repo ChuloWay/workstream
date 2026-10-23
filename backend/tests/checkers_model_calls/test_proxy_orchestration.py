@@ -23,7 +23,7 @@ from app.interfaces.checker_model_provider import (
     CheckerModelUsage,
 )
 from app.interfaces.checker_model_proxy import ModelProxyRequest
-from app.modules.checkers.api.model_calls import (
+from app.modules.model_usage.api import (
     AttachedModelCallAttempt,
     CompletedModelCall,
     ModelCallBudgetUnavailable,
@@ -34,7 +34,7 @@ from app.modules.checkers.api.model_calls import (
     ProjectModelProfile,
 )
 from app.adapters.checkers.model_proxy import CheckerModelProxy
-from tests.checkers_model_calls.test_model_call_contract import profile_spec
+from tests.checkers_model_calls.test_model_call_contract import profile_spec, sha
 
 
 def digest(data: bytes) -> str:
@@ -74,14 +74,14 @@ class Harness:
             submission_id=self.execution.submission_id,
             submission_version=1,
             requirement_id="quality",
-            registry_entry_digest=spec.registry_entry_digest,
+            registry_entry_digest=sha("registry"),
             configuration_sha256=canonical_json_hash({"selector": "quality"}),
             **self.profile.selector.model_dump(),
         )
         self.facts = SimpleNamespace(
             execution=self.execution,
             slot=self.slot,
-            registry_entry_id=spec.registry_entry_id,
+            registry_entry_id=new_record_id(),
         )
         self.state, self.request_sha = "prepared", None
         self.slot_id, self.attempt_id, self.internal_id = (new_record_id() for _ in range(3))

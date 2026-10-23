@@ -21,7 +21,7 @@ from app.interfaces.checker_model_provider import (
     CheckerModelResponseReference,
 )
 from app.interfaces.checker_model_proxy import ModelProxyRequest, ModelProxyReply
-from app.modules.checkers.api.model_calls import (
+from app.modules.model_usage.api import (
     ModelCallEffectAuthorityFacts,
     ModelCallEvidence,
     ModelCallUsage,

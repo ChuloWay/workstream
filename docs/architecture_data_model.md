@@ -1759,12 +1759,12 @@ another paid effect.
 
 | Table | Custody |
 |---|---|
-| `checker_model_profiles` | Immutable project/image/provider/model/bounds/pricing specification and Operator authorization receipt |
-| `checker_model_budget_configurations` | Immutable versions of the finite project lifetime ceiling |
-| `checker_model_budget_accounts` | Current configuration and serialized lifetime reserved/settled integer USD nanodollars; configuration changes never reset spend |
-| `checker_model_call_slots` | Stable project, assignment, Submission/version, requirement, registry digest, configuration hash, exact profile and call-slot identity; excludes retry generation and execution lease |
-| `checker_model_call_attempts` | Immutable first request hash, dispatch intent, reservation, provider identity, private ART request/response references, usage and once-only terminal settlement |
-| `checker_model_call_recoveries` | Fresh current-run attachment to an existing attempt; cannot authorize a new provider create |
+| `model_usage_profiles` | Immutable project/image/provider/model/bounds/pricing specification and Operator authorization receipt |
+| `model_usage_budget_configurations` | Immutable versions of the finite project lifetime ceiling |
+| `model_usage_budget_accounts` | Current configuration and serialized lifetime reserved/settled integer USD nanodollars; configuration changes never reset spend |
+| `checker_model_usage_slots` | Stable project, assignment, Submission/version, requirement, registry digest, configuration hash, exact profile and call-slot identity; excludes retry generation and execution lease |
+| `model_usage_effects` | Immutable first request hash, dispatch intent, reservation, provider identity, private ART request/response references, usage and once-only terminal settlement |
+| `checker_model_usage_recoveries` | Fresh current-run attachment to an existing attempt; cannot authorize a new provider create |
 | `checker_model_invocation_grants` | Hashed short-lived capability, exact execution and binding, PostgreSQL expiry and one consumption into the selected attempt/request |
 
 An attempt progresses from `prepared` to `dispatching`, with uncertain delivery
@@ -1776,7 +1776,7 @@ or incomplete usage never permits another create. Late completion may retain
 evidence after the originating run ends; fresh current execution is still
 required to release that output to an image.
 
-Migration `0060_checker_model_runtime` extends existing ART put/receipt custody
+Migration `0060_model_usage` extends existing ART put/receipt custody
 with `model_call_attempt_id` and exact private request/response slots. Transcript
 bytes stay in ART, never these ledger rows or outbox payloads. Existing historical
 run-bound ART rows remain retained; new model evidence uses the paid attempt.

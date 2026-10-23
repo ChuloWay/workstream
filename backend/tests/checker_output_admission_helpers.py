@@ -1,14 +1,18 @@
 """Controlled complete CHECKERS owner facts for ART output-custody tests."""
 
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
+import re
 from uuid import UUID
 
-from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import async_sessionmaker
+from sqlalchemy import func, select, text
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.core.identifiers import new_record_id
 from app.core.hashing import canonical_json_hash
 from app.modules.actors.api import ServiceIdentity
+from app.modules.actors.models import ActorProfile
 from app.modules.actors.service import ActorService
 from app.modules.artifacts.schemas import (
     ArtifactAuthorityDeniedError,
@@ -32,15 +36,59 @@ from app.modules.checkers.api.output_custody import (
     CheckerOutputSelector,
     CheckerOutputSlot,
 )
-from app.modules.checkers.api.model_calls import ModelCallExecutionFacts, ModelPaidSlotKey
+from app.modules.model_usage.api import ModelCallExecutionFacts, ModelPaidSlotKey
 from app.modules.checkers.execution_repository import stored_request
-from app.modules.checkers.model_calls.models import (
-    CheckerModelCallAttempt,
-    CheckerModelCallSlot,
-    CheckerModelProfile,
+from app.modules.model_usage.models import (
+    CheckerModelUsageEnvelope,
+    CheckerModelUsageSlot,
+    ModelUsageEffect,
+    ModelUsageProfile,
 )
-from app.modules.checkers.models import CheckerRun, ExternalCheckerRegistryEntryRecord
-from app.modules.tasks.models import Submission, WorkstreamTask
+from app.modules.checkers.models import CheckerRun
+from app.modules.tasks.models import AuditEvent, Submission, WorkstreamTask
+
+
+_ISOLATED_DATABASE_RE = re.compile(r"workstream_test_([a-f0-9]{12})")
+_ISOLATED_ROLE_RE = re.compile(r"workstream_role_([a-f0-9]{12})")
+_CONTROLLED_MODEL_GUARDS = {
+    "model_usage_profiles": "model_usage_profiles_guard",
+    "model_usage_effects": "model_usage_effects_guard",
+}
+
+
+@asynccontextmanager
+async def _suspend_controlled_model_guard(
+    session: AsyncSession, *, table: str
+) -> AsyncIterator[None]:
+    """Suspend one named guard only in the isolated database for this ART fixture."""
+    trigger = _CONTROLLED_MODEL_GUARDS.get(table)
+    if trigger is None:
+        raise RuntimeError("unsupported model usage guard suspension")
+    database_name, database_role = (
+        await session.execute(text("select current_database(), current_user"))
+    ).one()
+    database_match = _ISOLATED_DATABASE_RE.fullmatch(str(database_name))
+    role_match = _ISOLATED_ROLE_RE.fullmatch(str(database_role))
+    if (
+        database_match is None
+        or role_match is None
+        or database_match.group(1) != role_match.group(1)
+    ):
+        raise RuntimeError("model usage guard suspension requires an isolated test database")
+    try:
+        await session.execute(text(f"alter table {table} disable trigger {trigger}"))
+        yield
+        # PostgreSQL will not ALTER a table with deferred FK events pending. This
+        # fixture owns its dedicated arrangement session, so finish the controlled
+        # seed before restoring the guard in a new transaction.
+        await session.commit()
+        await session.execute(text(f"alter table {table} enable trigger {trigger}"))
+        await session.commit()
+    except BaseException:
+        await session.rollback()
+        await session.execute(text(f"alter table {table} enable trigger {trigger}"))
+        await session.commit()
+        raise
 
 
 async def make_checker_output_reservation(
@@ -52,7 +100,7 @@ async def make_checker_output_reservation(
     maximum_bytes: int = 1024,
     content_sha256: str | None = None,
 ) -> CheckerOutputReservation:
-    """Create one call-stable model effect beneath an actual seeded run."""
+    """Create one controlled effect beneath an actual seeded run for ART tests."""
     checker_run = await session.get(CheckerRun, str(checker_run_id))
     assert checker_run is not None
     submission = await session.scalar(
@@ -78,13 +126,11 @@ async def make_checker_output_reservation(
         submission.version,
         UUID(submission.task_assignment_id),
     )
-    registry = await session.scalar(select(ExternalCheckerRegistryEntryRecord).limit(1))
-    assert registry is not None
     profile_version = (
         int(
             await session.scalar(
-                select(func.coalesce(func.max(CheckerModelProfile.profile_version), 0)).where(
-                    CheckerModelProfile.project_id == str(evaluation.project_id)
+                select(func.coalesce(func.max(ModelUsageProfile.profile_version), 0)).where(
+                    ModelUsageProfile.project_id == str(evaluation.project_id)
                 )
             )
             or 0
@@ -92,27 +138,36 @@ async def make_checker_output_reservation(
         + 1
     )
     profile_id = new_record_id()
+    actor_id = await session.scalar(select(ActorProfile.id).order_by(ActorProfile.id).limit(1))
+    audit_event_id = await session.scalar(select(AuditEvent.id).order_by(AuditEvent.id).limit(1))
+    assert actor_id is not None and audit_event_id is not None
+    per_call_bytes = max(maximum_bytes, 1024)
     profile_digest = canonical_json_hash(
         {"project_id": str(evaluation.project_id), "profile_id": str(profile_id)}
     )
-    profile = CheckerModelProfile(
+    profile = ModelUsageProfile(
         id=str(profile_id),
         project_id=str(evaluation.project_id),
         profile_version=profile_version,
         profile_digest=profile_digest,
-        registry_entry_id=str(registry.id),
-        registry_entry_digest=registry.entry_digest,
         provider="test_provider",
         api="test.responses.v1",
         model_snapshot="test-model-2026-10-01",
         generation_settings={"reasoning_effort": "low", "text_verbosity": "low"},
-        maximum_request_bytes=maximum_bytes,
-        maximum_output_bytes=maximum_bytes,
-        maximum_response_bytes=max(maximum_bytes, 6 * maximum_bytes + 4096),
+        maximum_request_bytes=per_call_bytes,
+        maximum_output_bytes=per_call_bytes,
+        maximum_response_bytes=6 * per_call_bytes + 4096,
         maximum_input_tokens=1024,
         maximum_output_tokens=1024,
+        maximum_calls=1,
+        maximum_total_request_bytes=per_call_bytes,
+        maximum_total_response_bytes=6 * per_call_bytes + 4096,
+        maximum_total_input_tokens=1024,
+        maximum_total_output_tokens=1024,
+        allowed_tools=(),
+        maximum_tool_calls=0,
+        maximum_tool_output_bytes=0,
         deadline_ms=30_000,
-        call_slots=1,
         pricing_policy_id=str(new_record_id()),
         pricing_policy_version=1,
         pricing_policy_digest=canonical_json_hash({"profile_id": str(profile_id), "rate": 1}),
@@ -120,10 +175,14 @@ async def make_checker_output_reservation(
         cached_input_rate=1,
         output_rate=1,
         operation_id=str(new_record_id()),
-        actor_profile_id=str(new_record_id()),
-        authorization_evidence_id=str(new_record_id()),
+        actor_profile_id=str(actor_id),
+        authorization_evidence_id=str(audit_event_id),
     )
     session.add(profile)
+    # This fixture proves ART admission and intentionally does not reproduce MODEL-USAGE
+    # authorization/evidence setup. Dedicated real-PG tests exercise both guards.
+    async with _suspend_controlled_model_guard(session, table="model_usage_profiles"):
+        await session.flush()
     configuration_sha256 = canonical_json_hash({"profile_id": str(profile_id)})
     paid_slot = ModelPaidSlotKey(
         project_id=evaluation.project_id,
@@ -131,7 +190,7 @@ async def make_checker_output_reservation(
         submission_id=evaluation.submission_id,
         submission_version=evaluation.submission_version,
         requirement_id="model_evidence",
-        registry_entry_digest=registry.entry_digest,
+        registry_entry_digest=canonical_json_hash({"checker_run_id": checker_run.id}),
         configuration_sha256=configuration_sha256,
         profile_id=profile_id,
         profile_version=profile_version,
@@ -140,10 +199,31 @@ async def make_checker_output_reservation(
     digest = content_sha256 or canonical_json_hash(
         {"model_call": str(profile_id), "role": slot_key}
     )
-    model_slot_id, attempt_id = new_record_id(), new_record_id()
+    envelope_id, model_slot_id, attempt_id = (
+        new_record_id(),
+        new_record_id(),
+        new_record_id(),
+    )
     session.add(
-        CheckerModelCallSlot(
+        CheckerModelUsageEnvelope(
+            id=str(envelope_id),
+            project_id=str(evaluation.project_id),
+            task_id=str(evaluation.task_id),
+            assignment_id=str(evaluation.assignment_id),
+            submission_id=str(evaluation.submission_id),
+            submission_version=evaluation.submission_version,
+            requirement_id=paid_slot.requirement_id,
+            registry_entry_digest=paid_slot.registry_entry_digest,
+            configuration_sha256=paid_slot.configuration_sha256,
+            profile_id=str(profile_id),
+            profile_version=profile_version,
+            profile_digest=profile_digest,
+        )
+    )
+    session.add(
+        CheckerModelUsageSlot(
             id=str(model_slot_id),
+            envelope_id=str(envelope_id),
             project_id=str(evaluation.project_id),
             task_id=str(evaluation.task_id),
             assignment_id=str(evaluation.assignment_id),
@@ -159,18 +239,20 @@ async def make_checker_output_reservation(
             first_request_sha256=digest,
         )
     )
+    await session.flush()
     session.add(
-        CheckerModelCallAttempt(
+        ModelUsageEffect(
             id=str(attempt_id),
-            slot_id=str(model_slot_id),
+            checker_slot_id=str(model_slot_id),
             attempt_number=1,
             internal_call_request_id=str(new_record_id()),
             request_sha256=digest,
             state="dispatching",
-            prepared_authorization_evidence_id=str(new_record_id()),
+            prepared_authorization_evidence_id=str(audit_event_id),
         )
     )
-    await session.flush()
+    async with _suspend_controlled_model_guard(session, table="model_usage_effects"):
+        await session.flush()
     execution = ModelCallExecutionFacts(
         project_id=evaluation.project_id,
         task_id=evaluation.task_id,

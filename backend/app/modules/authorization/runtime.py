@@ -27,7 +27,7 @@ from app.modules.authorization.domain.adapter_bindings import AdapterBindingMuta
 from app.modules.authorization.domain.project_create import ProjectCreateResourceContext
 from app.modules.authorization.domain import (
     checker_registry, checker_retry, checker_retry_reads, contribution_reads,
-    checker_models, checker_outputs, contributor_reads, management_reads, submission_history, task_authority, task_queues,
+    model_usage as checker_models, checker_outputs, contributor_reads, management_reads, submission_history, task_authority, task_queues,
     post_submit_deliveries,
 )
 from app.modules.authorization.domain.guide_mutations import (

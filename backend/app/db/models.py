@@ -124,12 +124,15 @@ from app.modules.reviews.lifecycle.models import JointLifecycleReleaseControl  #
 
 from app.modules.tasks.revision.models import TaskRevisionPreparation, TaskRevisionExpiration, TaskRevisionExhaustion  # noqa: F401
 
-from app.modules.checkers.model_calls.models import (  # noqa: F401
-    CheckerModelProfile,
-    CheckerModelBudgetAccount,
-    CheckerModelBudgetConfiguration,
-    CheckerModelCallSlot,
-    CheckerModelCallAttempt,
-    CheckerModelCallRecovery,
+from app.modules.model_usage.models import (  # noqa: F401
+    ModelUsageProfile,
+    ModelUsageBudgetAccount,
+    ModelUsageBudgetConfiguration,
+    CheckerModelUsageEnvelope,
+    CheckerModelUsageSlot,
+    SetupModelUsageEnvelope,
+    SetupModelUsageSlot,
+    ModelUsageEffect,
+    CheckerModelUsageRecovery,
     CheckerModelInvocationGrant,
 )

@@ -21,7 +21,7 @@ from app.modules.checkers.api.output_custody import (
 from app.interfaces.artifacts import ArtifactStore, ArtifactByteRange, ArtifactIntegrityError
 from app.modules.artifacts.checker_output_custody import select_checker_output
 from app.modules.artifacts.models import ArtifactVerificationJob, ArtifactReplica
-from app.modules.checkers.api.model_calls import ModelCallEvidence
+from app.modules.model_usage.api import ModelCallEvidence
 from app.modules.artifacts.preparation import ArtifactPreparationService
 from app.modules.artifacts.schemas import (
     ArtifactInternalAuthority,

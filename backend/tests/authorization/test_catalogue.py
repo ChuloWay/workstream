@@ -8,25 +8,38 @@ from app.modules.actors.api import SERVICE_IDENTITIES, ServiceIdentity
 from app.modules.authorization.admin_service import AdminRoleGrantService
 
 from app.modules.authorization.catalogue import (
-    ACTION_IDS, ACTION_DEFINITIONS, ACTION_BY_ID, PERMISSION_IDS,
-    HISTORICAL_PERMISSION_IDS, NEW_PERMISSION_IDS, ActionId, PermissionId,
-    ActionOwner, ActionAvailability, resolve_executable_action,
-    FUTURE_INTENT_REQUIRED_ACTIONS, SERVICE_ACTIONS_BY_IDENTITY,
+    ACTION_IDS,
+    ACTION_DEFINITIONS,
+    ACTION_BY_ID,
+    PERMISSION_IDS,
+    HISTORICAL_PERMISSION_IDS,
+    NEW_PERMISSION_IDS,
+    ActionId,
+    PermissionId,
+    ActionOwner,
+    ActionAvailability,
+    resolve_executable_action,
+    FUTURE_INTENT_REQUIRED_ACTIONS,
+    SERVICE_ACTIONS_BY_IDENTITY,
 )
 from tests.authorization.catalogue_fixtures import (
-    ART_CUSTODY_EXPECTATIONS, REV_CUSTODY_EXPECTATIONS, FIXED_SERVICE_ACTION_EXPECTATIONS,
+    ART_CUSTODY_EXPECTATIONS,
+    REV_CUSTODY_EXPECTATIONS,
+    FIXED_SERVICE_ACTION_EXPECTATIONS,
 )
 
 
 def test_closed_permission_and_action_catalogue_is_exact_and_non_executable() -> None:
     from tests.authorization.catalogue_fixtures import (
-        historical_permissions, new_permissions, expected
+        historical_permissions,
+        new_permissions,
+        expected,
     )
 
     assert {item.value for item in HISTORICAL_PERMISSION_IDS} == historical_permissions
     assert {item.value for item in NEW_PERMISSION_IDS} == new_permissions
     assert {item.value for item in PERMISSION_IDS} == historical_permissions | new_permissions
-    assert len(ACTION_IDS) == len(ACTION_DEFINITIONS) == len(ACTION_BY_ID) == 186
+    assert len(ACTION_IDS) == len(ACTION_DEFINITIONS) == len(ACTION_BY_ID) == 190
     assert set(ACTION_BY_ID) == ACTION_IDS
     assert {definition.owner for definition in ACTION_DEFINITIONS} == set(ActionOwner)
     assert {
@@ -105,10 +118,13 @@ def test_closed_permission_and_action_catalogue_is_exact_and_non_executable() ->
     }
     assert all(not owner.value.startswith("WS-REV-") for owner in ActionOwner)
     assert Counter(definition.availability for definition in ACTION_DEFINITIONS) == {
-        ActionAvailability.ACTIVE: 162,
+        ActionAvailability.ACTIVE: 166,
         ActionAvailability.PLANNED: 24,
     }
-    assert resolve_executable_action(ActionId.ACTOR_PROFILE_READ_SELF).permission_id is PermissionId.ACTOR_PROFILE_READ_SELF
+    assert (
+        resolve_executable_action(ActionId.ACTOR_PROFILE_READ_SELF).permission_id
+        is PermissionId.ACTOR_PROFILE_READ_SELF
+    )
     with pytest.raises(ValueError, match="not active"):
         resolve_executable_action(ActionId.REVIEW_QUEUE_READ)
     with pytest.raises(TypeError):
@@ -132,7 +148,7 @@ def test_proposal_actions_have_exact_executable_authority(action):
 
 def test_permission_definition_response_is_exact() -> None:
     permission_response = AdminRoleGrantService.permission_definitions()
-    assert permission_response.total == 91
+    assert permission_response.total == 95
     assert [item.permission_id.value for item in permission_response.items] == sorted(
         permission.value for permission in PermissionId
     )
@@ -147,7 +163,7 @@ def test_fixed_service_action_matrix_and_activation_are_exact_and_immutable() ->
         identity: {action.value for action in actions}
         for identity, actions in SERVICE_ACTIONS_BY_IDENTITY.items()
     } == expected
-    assert sum(map(len, SERVICE_ACTIONS_BY_IDENTITY.values())) == 38
+    assert sum(map(len, SERVICE_ACTIONS_BY_IDENTITY.values())) == 42
     assert FUTURE_INTENT_REQUIRED_ACTIONS == {
         ActionId.REVIEW_FINDING_EVIDENCE_INGEST,
         ActionId.REVIEW_FINDING_RESPONSE_EVIDENCE_INGEST,
@@ -176,6 +192,26 @@ def test_fixed_service_action_matrix_and_activation_are_exact_and_immutable() ->
         ActionId.PROJECT_GUIDE_COMPILATION_EXECUTE: (
             PermissionId.PROJECT_GUIDE_COMPILATION_EXECUTE,
             ActionOwner.AUTH_12I,
+            ActionAvailability.ACTIVE,
+        ),
+        ActionId.PROJECT_GUIDE_COMPILATION_MODEL_PREPARE: (
+            PermissionId.PROJECT_GUIDE_COMPILATION_MODEL_PREPARE,
+            ActionOwner.PILOT_05,
+            ActionAvailability.ACTIVE,
+        ),
+        ActionId.PROJECT_GUIDE_COMPILATION_MODEL_DISPATCH: (
+            PermissionId.PROJECT_GUIDE_COMPILATION_MODEL_DISPATCH,
+            ActionOwner.PILOT_05,
+            ActionAvailability.ACTIVE,
+        ),
+        ActionId.PROJECT_GUIDE_COMPILATION_MODEL_OBSERVE: (
+            PermissionId.PROJECT_GUIDE_COMPILATION_MODEL_OBSERVE,
+            ActionOwner.PILOT_05,
+            ActionAvailability.ACTIVE,
+        ),
+        ActionId.PROJECT_GUIDE_COMPILATION_MODEL_COMPLETE: (
+            PermissionId.PROJECT_GUIDE_COMPILATION_MODEL_COMPLETE,
+            ActionOwner.PILOT_05,
             ActionAvailability.ACTIVE,
         ),
         ActionId.PROJECT_GUIDE_SUFFICIENCY_RUN: (
@@ -216,8 +252,8 @@ def test_active_fixed_service_actions_are_exact():
         ActionId.CHECKER_MODEL_CALL_GRANT,
         ActionId.ARTIFACT_POST_SUBMIT_CHECKER_INPUT_MATERIALIZE,
         ActionId.TASK_ASSIGNMENT_AUTHORITY_RECONCILE,
-            ActionId.TASK_REVISION_EXPIRE,
-            ActionId.TASK_REVISION_RECOVER,
+        ActionId.TASK_REVISION_EXPIRE,
+        ActionId.TASK_REVISION_RECOVER,
         ActionId.OUTBOX_DISPATCH,
         ActionId.TASK_POST_SUBMIT_ROUTE,
         ActionId.ARTIFACT_VERIFICATION_EXECUTE,
@@ -230,6 +266,10 @@ def test_active_fixed_service_actions_are_exact():
         ActionId.ARTIFACT_GUIDE_SOURCE_READ,
         ActionId.PROJECT_GUIDE_COMPILATION_EXECUTE,
         ActionId.PROJECT_GUIDE_COMPILATION_REQUEST_AUTOMATIC,
+        ActionId.PROJECT_GUIDE_COMPILATION_MODEL_PREPARE,
+        ActionId.PROJECT_GUIDE_COMPILATION_MODEL_DISPATCH,
+        ActionId.PROJECT_GUIDE_COMPILATION_MODEL_OBSERVE,
+        ActionId.PROJECT_GUIDE_COMPILATION_MODEL_COMPLETE,
         ActionId.PROJECT_GUIDE_SUFFICIENCY_RUN,
         ActionId.PROJECT_SUBMISSION_ARTIFACT_POLICY_DERIVE,
         ActionId.PROJECT_SETUP_RUN_UPDATE,

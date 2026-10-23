@@ -130,12 +130,10 @@ class ModelPricing(ModelCallValue):
 
 
 class ProjectModelProfileSpec(ModelCallValue):
-    """Operator-owned provider profile bound to one project and registry entry."""
+    """Operator-owned provider and pricing profile shared by model-use owners."""
 
     project_id: UUID
     profile_version: StrictInt = Field(ge=1)
-    registry_entry_id: UUID
-    registry_entry_digest: Sha256
     provider: ProviderIdentifier
     api: ProviderIdentifier
     model_snapshot: ProviderIdentifier
@@ -145,26 +143,73 @@ class ProjectModelProfileSpec(ModelCallValue):
     maximum_response_bytes: StrictInt = Field(ge=1, le=1_048_576)
     maximum_input_tokens: StrictInt = Field(ge=1, le=10_000_000)
     maximum_output_tokens: StrictInt = Field(ge=1, le=10_000_000)
+    maximum_calls: StrictInt = Field(ge=1, le=100)
+    maximum_total_request_bytes: StrictInt = Field(ge=1, le=104_857_600)
+    maximum_total_response_bytes: StrictInt = Field(ge=1, le=104_857_600)
+    maximum_total_input_tokens: StrictInt = Field(ge=1, le=100_000_000)
+    maximum_total_output_tokens: StrictInt = Field(ge=1, le=100_000_000)
+    allowed_tools: tuple[Identifier, ...] = ()
+    maximum_tool_calls: StrictInt = Field(ge=0, le=1_000)
+    maximum_tool_output_bytes: StrictInt = Field(ge=0, le=104_857_600)
     deadline_ms: StrictInt = Field(ge=100, le=3_600_000)
-    call_slots: Literal[1] = 1
     pricing: ModelPricing
 
-    _decode_public_uuids = field_validator("project_id", "registry_entry_id", mode="before")(
-        _public_uuid
-    )
+    _decode_public_uuid = field_validator("project_id", mode="before")(_public_uuid)
+
+    @field_validator("allowed_tools", mode="before")
+    @classmethod
+    def decode_public_tools(cls, value):
+        """Decode the JSON array representation into the frozen canonical tuple."""
+        if isinstance(value, list):
+            return tuple(value)
+        return value
 
     @model_validator(mode="after")
-    def canonical_ids(self) -> Self:
-        _require_uuid7(self.registry_entry_id, "external checker registry entry ID")
-        if (self.provider, self.api) != ("openai_responses", "responses.v1"):
-            raise ValueError("model provider and API are unsupported")
+    def coherent_bounds(self) -> Self:
         if self.maximum_response_bytes < 6 * self.maximum_output_bytes + 4096:
             raise ValueError("model response evidence cannot preserve the maximum output")
+        if len(set(self.allowed_tools)) != len(self.allowed_tools):
+            raise ValueError("model profile tools must be unique")
+        if tuple(sorted(self.allowed_tools)) != self.allowed_tools:
+            raise ValueError("model profile tools must be canonical")
+        if not self.allowed_tools and (
+            self.maximum_tool_calls != 0 or self.maximum_tool_output_bytes != 0
+        ):
+            raise ValueError("tool-free model profiles cannot reserve tool capacity")
+        if self.allowed_tools and (
+            self.maximum_tool_calls == 0 or self.maximum_tool_output_bytes == 0
+        ):
+            raise ValueError("tool-enabled model profiles require finite tool bounds")
+        bounded_totals = (
+            (self.maximum_request_bytes, self.maximum_total_request_bytes),
+            (self.maximum_response_bytes, self.maximum_total_response_bytes),
+            (self.maximum_input_tokens, self.maximum_total_input_tokens),
+            (self.maximum_output_tokens, self.maximum_total_output_tokens),
+        )
+        if any(per_call > total for per_call, total in bounded_totals):
+            raise ValueError("model run totals cannot be smaller than one call")
+        if any(total > per_call * self.maximum_calls for per_call, total in bounded_totals):
+            raise ValueError("model run totals exceed the finite call envelope")
         return self
 
     @property
     def maximum_reservation_nanodollars(self) -> int:
-        """Reserve the maximum rate for each bounded input/output token class."""
+        """Return the maximum settled plus outstanding amount for one whole run."""
+        input_rate = max(
+            self.pricing.uncached_input_nanodollars_per_token,
+            self.pricing.cached_input_nanodollars_per_token,
+        )
+        value = (
+            self.maximum_total_input_tokens * input_rate
+            + self.maximum_total_output_tokens * self.pricing.output_nanodollars_per_token
+        )
+        if value <= 0 or value > 9_000_000_000_000_000_000:
+            raise ValueError("model profile reservation is outside the supported range")
+        return value
+
+    @property
+    def maximum_dispatch_reservation_nanodollars(self) -> int:
+        """Return the conservative reservation for one actual provider dispatch."""
         input_rate = max(
             self.pricing.uncached_input_nanodollars_per_token,
             self.pricing.cached_input_nanodollars_per_token,
@@ -173,8 +218,8 @@ class ProjectModelProfileSpec(ModelCallValue):
             self.maximum_input_tokens * input_rate
             + self.maximum_output_tokens * self.pricing.output_nanodollars_per_token
         )
-        if value <= 0 or value > 9_000_000_000_000_000_000:
-            raise ValueError("model profile reservation is outside the supported range")
+        if value <= 0 or value > self.maximum_reservation_nanodollars:
+            raise ValueError("model dispatch reservation is outside the run envelope")
         return value
 
 
@@ -215,10 +260,17 @@ class ProjectModelProfile(ModelProfileProvisioningFacts):
 
 
 class ProjectModelBudgetConfigurationSpec(ModelCallValue):
-    """One immutable lifetime-ceiling adjustment; versions never reset counters."""
+    """One explicit authorization/reconciliation and metered-ceiling adjustment.
+
+    Externally reconciled prior spend excludes usage retained by this ledger. Later
+    immutable versions may only increase that external fact; account counters remain
+    lifetime values and are never folded into or reset by this field.
+    """
 
     project_id: UUID
     configuration_version: StrictInt = Field(ge=1)
+    authorized_total_nanodollars: Nanodollars
+    externally_reconciled_prior_spend_nanodollars: Nanodollars
     lifetime_limit_nanodollars: Nanodollars
 
     _decode_public_uuid = field_validator("project_id", mode="before")(_public_uuid)
@@ -227,6 +279,13 @@ class ProjectModelBudgetConfigurationSpec(ModelCallValue):
     def positive_limit(self) -> Self:
         if self.lifetime_limit_nanodollars <= 0:
             raise ValueError("model budget limit must be positive")
+        if self.authorized_total_nanodollars <= 0:
+            raise ValueError("model authorization ceiling must be positive")
+        if (
+            self.externally_reconciled_prior_spend_nanodollars + self.lifetime_limit_nanodollars
+            > self.authorized_total_nanodollars
+        ):
+            raise ValueError("model metered allowance exceeds the reconciled authorization")
         return self
 
 
@@ -273,7 +332,7 @@ class ModelPaidSlotKey(ModelCallValue):
     profile_id: UUID
     profile_version: StrictInt = Field(ge=1)
     profile_digest: Sha256
-    slot_index: Literal[0] = 0
+    slot_index: StrictInt = Field(default=0, ge=0, le=99)
 
     _decode_public_uuids = field_validator(
         "project_id", "assignment_id", "submission_id", "profile_id", mode="before"
@@ -287,6 +346,236 @@ class ModelPaidSlotKey(ModelCallValue):
     @property
     def digest(self) -> str:
         return canonical_json_hash(self.model_dump(mode="json"))
+
+    @property
+    def envelope_digest(self) -> str:
+        """Commit the stable whole-run subject independently of a call index."""
+        return canonical_json_hash(self.model_dump(mode="json", exclude={"slot_index"}))
+
+
+class SetupModelUsageSlotKey(ModelCallValue):
+    """Exact setup-owned provider dispatch identity allocated before I/O."""
+
+    compilation_attempt_id: UUID
+    project_id: UUID
+    guide_id: UUID
+    source_snapshot_id: UUID
+    setup_run_id: UUID
+    setup_generation: StrictInt = Field(ge=1)
+    runtime_configuration_hash: Sha256
+    profile_id: UUID
+    profile_version: StrictInt = Field(ge=1)
+    profile_digest: Sha256
+    phase: Literal["draft", "review", "correction"]
+    call_index: StrictInt = Field(ge=0, le=99)
+
+    _decode_public_uuids = field_validator(
+        "compilation_attempt_id",
+        "project_id",
+        "guide_id",
+        "source_snapshot_id",
+        "setup_run_id",
+        "profile_id",
+        mode="before",
+    )(_public_uuid)
+
+    @model_validator(mode="after")
+    def canonical_records(self) -> Self:
+        _require_uuid7(self.compilation_attempt_id, "guide compilation attempt ID")
+        _require_uuid7(self.setup_run_id, "project setup run ID")
+        _require_uuid7(self.profile_id, "model profile ID")
+        return self
+
+    @property
+    def digest(self) -> str:
+        """Commit the complete setup subject without provider request bytes."""
+        return canonical_json_hash(self.model_dump(mode="json"))
+
+    @property
+    def envelope_digest(self) -> str:
+        """Commit the setup attempt run independently of phase and call index."""
+        return canonical_json_hash(self.model_dump(mode="json", exclude={"phase", "call_index"}))
+
+
+class PreparedSetupModelUsageEffect(ModelCallValue):
+    """Prepared setup effect allocated under exact attempt custody before I/O."""
+
+    envelope_id: UUID
+    slot_id: UUID
+    slot_key: SetupModelUsageSlotKey
+    effect_id: UUID
+    attempt_number: StrictInt = Field(ge=1)
+    internal_call_request_id: UUID
+    request_sha256: Sha256
+    state: Literal["prepared"] = "prepared"
+    replayed: bool
+
+
+class SetupModelEffectAuthorityFacts(ModelCallValue):
+    """Exact setup-owned provider effect used by narrow observation authority."""
+
+    project_id: UUID
+    slot_id: UUID
+    slot_key: SetupModelUsageSlotKey
+    effect_id: UUID
+    internal_call_request_id: UUID
+
+
+class SetupModelDispatchReservation(ModelCallValue):
+    """One setup provider dispatch reserved against shared project and run ceilings."""
+
+    envelope_id: UUID
+    slot_id: UUID
+    slot_key: SetupModelUsageSlotKey
+    effect_id: UUID
+    attempt_number: StrictInt = Field(ge=1)
+    internal_call_request_id: UUID
+    effect: SetupModelEffectAuthorityFacts
+    request_sha256: Sha256
+    request_evidence: ModelCallEvidence
+    budget_configuration_id: UUID
+    budget_configuration_version: StrictInt = Field(ge=1)
+    budget_configuration_digest: Sha256
+    reserved_nanodollars: Nanodollars
+    state: Literal["dispatching"] = "dispatching"
+    replayed: bool
+
+    @model_validator(mode="after")
+    def exact_effect(self) -> Self:
+        if (
+            self.effect.project_id != self.slot_key.project_id
+            or self.effect.slot_id != self.slot_id
+            or self.effect.slot_key != self.slot_key
+            or self.effect.effect_id != self.effect_id
+            or self.effect.internal_call_request_id != self.internal_call_request_id
+        ):
+            raise ValueError("setup dispatch effect identity mismatch")
+        return self
+
+
+class ObservedSetupModelUsageEffect(ModelCallValue):
+    """Durable ambiguous provider effect that keeps its full reservation."""
+
+    effect: SetupModelEffectAuthorityFacts
+    uncertainty_digest: Sha256
+    provider_response_id: ProviderResponseIdentifier | None = None
+    state: Literal["uncertain"] = "uncertain"
+    replayed: bool
+
+
+class SetupModelUsageAuthorityPort(Protocol):
+    """PROJECTS-owned authorization for exact setup model-use mutations."""
+
+    async def authorize_setup_prepare(
+        self, slot: SetupModelUsageSlotKey, request_sha256: str
+    ) -> ModelActionEvidence:
+        """Authorize one preallocated setup call slot before owner locks."""
+        ...
+
+    async def authorize_setup_dispatch(
+        self,
+        prepared: PreparedSetupModelUsageEffect,
+        request_evidence: ModelCallEvidence,
+    ) -> ModelActionEvidence:
+        """Authorize one verified setup provider dispatch before owner locks."""
+        ...
+
+    async def authorize_setup_observe(
+        self,
+        effect: SetupModelEffectAuthorityFacts,
+        provider_response_id: str | None,
+        observation_digest: str,
+    ) -> ModelActionEvidence:
+        """Authorize retention of one ambiguous provider observation."""
+        ...
+
+    async def authorize_setup_complete(
+        self,
+        effect: SetupModelEffectAuthorityFacts,
+        response_evidence: ModelCallEvidence | None,
+        terminal_digest: str,
+    ) -> ModelActionEvidence:
+        """Authorize exact terminal accounting or authenticated no-effect release."""
+        ...
+
+
+class SetupModelUsageEvidencePort(Protocol):
+    """Verify private ART request evidence for an exact setup effect."""
+
+    async def require_setup_request(
+        self,
+        prepared: PreparedSetupModelUsageEffect,
+        evidence: ModelCallEvidence,
+    ) -> None:
+        """Require sealed bytes owned by the exact setup effect and request hash."""
+        ...
+
+    async def require_setup_response(self, effect_id: UUID, evidence: ModelCallEvidence) -> None:
+        """Require sealed response bytes owned by the exact setup effect."""
+        ...
+
+
+class SetupModelUsageOwnerPort(Protocol):
+    """Require the exact current PROJECTS compilation attempt before MODEL locks."""
+
+    async def require_setup_current(self, slot: SetupModelUsageSlotKey) -> None:
+        """Lock and validate the complete setup attempt ancestry."""
+        ...
+
+
+class ModelEvidenceSelector(ModelCallValue):
+    """Owner-neutral selector for one checker request or response evidence slot."""
+
+    paid_slot: ModelPaidSlotKey
+    task_id: UUID
+    model_call_slot_id: UUID
+    model_call_attempt_id: UUID
+    role: Literal["model_request", "model_response"]
+    content_sha256: Sha256
+
+
+class ModelEvidenceReservation(ModelCallValue):
+    """Bound returned by the shared ledger after exact effect validation."""
+
+    maximum_bytes: StrictInt = Field(ge=1, le=1_048_576)
+
+
+class ModelEvidenceCustodyPort(Protocol):
+    """Resolve shared ledger custody after the owner has taken its own locks."""
+
+    async def resolve_evidence(self, selector: ModelEvidenceSelector) -> ModelEvidenceReservation:
+        """Lock envelope, slot and effect and return the exact role bound."""
+        ...
+
+
+class ModelRecoverySourcePort(Protocol):
+    """Read retained recovery lineage without granting fresh owner authority."""
+
+    async def recovery_owner(
+        self, slot: ModelPaidSlotKey, parent_attempt_id: UUID
+    ) -> ModelRecoveryOwnerFacts:
+        """Resolve an exact terminal effect to its originating checker run."""
+        ...
+
+    async def recovery_candidates(
+        self, source_run_ids: tuple[UUID, ...]
+    ) -> dict[UUID, tuple[ModelRecoveryCandidate, ...]]:
+        """Project retryable terminal effects for the requested retained runs."""
+        ...
+
+
+class ModelInvocationGrantAuthorityPort(Protocol):
+    """Issue one bounded callback capability without authorizing provider spend."""
+
+    async def authorize_grant(
+        self,
+        execution: ModelCallExecutionFacts,
+        slot: ModelPaidSlotKey,
+        external_request_digest: str,
+        token_hash: str,
+    ) -> ModelActionEvidence:
+        """Authorize the exact invocation, request binding and opaque token hash."""
+        ...
 
 
 class ModelCallExecutionFacts(ModelCallValue):
@@ -477,6 +766,29 @@ class KnownNoEffectProof(ModelCallValue):
     observed_at: AwareDatetime
 
 
+class CompletedSetupModelUsageEffect(ModelCallValue):
+    """Exact retained setup response and once-settled project cost."""
+
+    effect: SetupModelEffectAuthorityFacts
+    provider_response_id: ProviderResponseIdentifier
+    request_evidence: ModelCallEvidence
+    response_evidence: ModelCallEvidence
+    usage: ModelCallUsage
+    settled_nanodollars: Nanodollars
+    completed_at: AwareDatetime
+    state: Literal["completed"] = "completed"
+    replayed: bool
+
+
+class KnownNoEffectSetupModelUsageEffect(ModelCallValue):
+    """Authenticated zero-effect terminal setup call with released reservation."""
+
+    effect: SetupModelEffectAuthorityFacts
+    proof: KnownNoEffectProof
+    state: Literal["known_no_effect"] = "known_no_effect"
+    replayed: bool
+
+
 def model_retry_terminal_digest(
     terminal: KnownFailedModelCall | KnownNoEffectProof,
 ) -> str:
@@ -506,6 +818,25 @@ class ModelActionEvidence(ModelCallValue):
     facts_digest: Sha256
 
 
+class ModelRecoveryOwnerFacts(ModelCallValue):
+    """Retained checker lineage selected from an exact paid effect and grant."""
+
+    checker_run_id: UUID
+    task_id: UUID
+    execution: ModelCallExecutionFacts
+    request_sha256: Sha256
+
+
+class ModelInvocationGrantFacts(ModelCallValue):
+    """Immutable owner facts selected privately by the proxy, never image input."""
+
+    token_hash: str = Field(repr=False)
+    external_request_digest: Sha256
+    execution: ModelCallExecutionFacts
+    slot: ModelPaidSlotKey
+    registry_entry_id: UUID
+
+
 class ModelProfileReaderPort(Protocol):
     """Read one immutable profile by complete identity."""
 
@@ -514,19 +845,15 @@ class ModelProfileReaderPort(Protocol):
         selector: ModelProfileSelector,
         *,
         project_id: UUID,
-        registry_entry_id: UUID,
-        registry_entry_digest: str,
     ) -> ProjectModelProfile:
-        """Resolve the complete selector only for its exact project and registry digest."""
+        """Resolve the complete selector only for its exact project."""
         ...
 
 
 class ModelCallAdministrationPort(Protocol):
     """Own exact public profile, budget and recovery-child mutations."""
 
-    async def provision_profile(
-        self, facts: ModelProfileProvisioningFacts
-    ) -> ProjectModelProfile:
+    async def provision_profile(self, facts: ModelProfileProvisioningFacts) -> ProjectModelProfile:
         """Authorize and retain immutable profile facts with exact operation replay."""
         ...
 
@@ -552,9 +879,7 @@ class ModelCallAdministrationPort(Protocol):
 class ModelCallCurrentExecutionPort(Protocol):
     """Require one current authorized checker execution without granting model effects."""
 
-    async def require_current(
-        self, facts: ModelCallExecutionFacts, slot: ModelPaidSlotKey
-    ) -> None:
+    async def require_current(self, facts: ModelCallExecutionFacts, slot: ModelPaidSlotKey) -> None:
         """Require current TASK and checker lease custody before attaching a paid slot."""
         ...
 
@@ -582,15 +907,11 @@ class ModelCallEvidencePort(Protocol):
 class ModelCallAuthorityPort(Protocol):
     """Action-specific authority; implementations must reject phase substitution."""
 
-    async def authorize_profile(
-        self, facts: ModelProfileProvisioningFacts
-    ) -> ModelActionEvidence:
+    async def authorize_profile(self, facts: ModelProfileProvisioningFacts) -> ModelActionEvidence:
         """Bind profile publication authority to the project and complete immutable facts."""
         ...
 
-    async def authorize_budget(
-        self, facts: ModelBudgetProvisioningFacts
-    ) -> ModelActionEvidence:
+    async def authorize_budget(self, facts: ModelBudgetProvisioningFacts) -> ModelActionEvidence:
         """Bind budget publication authority to the exact project and configuration."""
         ...
 
@@ -678,9 +999,11 @@ def model_action_digest(action: str, facts: object) -> str:
 
 
 __all__ = (
+    "CompletedSetupModelUsageEffect",
     "CompletedModelCall",
     "AttachedModelCallAttempt",
     "KnownNoEffectProof",
+    "KnownNoEffectSetupModelUsageEffect",
     "KnownFailedModelCall",
     "ModelActionEvidence",
     "ModelBudgetProvisioningFacts",
@@ -698,18 +1021,33 @@ __all__ = (
     "ModelCallRecoveryAttachment",
     "ModelDispatchReservation",
     "ModelGenerationSettings",
+    "ModelEvidenceCustodyPort",
+    "ModelEvidenceReservation",
+    "ModelEvidenceSelector",
+    "ModelInvocationGrantAuthorityPort",
+    "ModelInvocationGrantFacts",
     "ModelPaidSlotKey",
     "ModelPricing",
     "ModelProfileProvisioningFacts",
     "ModelRecoveryCandidate",
     "ModelRecoveryChildRequest",
+    "ModelRecoveryOwnerFacts",
+    "ModelRecoverySourcePort",
     "ModelProfileReaderPort",
     "ModelProfileSelector",
+    "ObservedSetupModelUsageEffect",
     "PreparedModelCallAttempt",
     "ProjectModelBudgetConfiguration",
     "ProjectModelBudgetConfigurationSpec",
     "ProjectModelProfile",
     "ProjectModelProfileSpec",
+    "PreparedSetupModelUsageEffect",
+    "SetupModelDispatchReservation",
+    "SetupModelEffectAuthorityFacts",
+    "SetupModelUsageAuthorityPort",
+    "SetupModelUsageEvidencePort",
+    "SetupModelUsageOwnerPort",
+    "SetupModelUsageSlotKey",
     "model_usage_cost",
     "model_action_digest",
     "model_retry_terminal_digest",

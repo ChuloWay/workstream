@@ -138,7 +138,7 @@ def checker_registry_authorization(
 
 def checker_model_authorization(session: AsyncSession, context: AuthorizationContext):
     """Compose exact project-model authority using the existing AUTH/PREP graph."""
-    from app.modules.authorization.checker_model_authorization import CheckerModelAuthorization
+    from app.modules.authorization.model_usage_authorization import CheckerModelAuthorization
 
     repository = AdminAuthorizationRepository(session)
     revalidate = None

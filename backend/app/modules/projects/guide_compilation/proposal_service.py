@@ -32,7 +32,7 @@ from app.modules.projects.api.guide_proposals import (
 from app.modules.projects.api.guide_documents import GuideDocumentManifestPort
 from app.modules.checkers.api.external import ExternalCheckerCapabilityProjection
 from app.modules.checkers.api.external import ExternalCheckerRegistryPort
-from app.modules.checkers.api.model_calls import ModelProfileReaderPort
+from app.modules.model_usage.api import ModelProfileReaderPort
 from app.modules.projects.api.guide_proposal_package import GuideProposalReviewPackage
 
 from .proposal_repository import GuideProposalRepository
