@@ -430,6 +430,10 @@ omitting the text selects the repository's canonical compilation instructions.
 The OpenAI Agents SDK and OmniCoreAgent runtimes use the same explicit read/search
 tools over verified originals; neither uploads guide files or creates hosted
 containers.
+Both have passed the same bounded original-guide public API, Celery, real-parser
+and MinIO qualification through a warning-ready manager draft. That proves the
+runtime swap at this contract boundary, not deployment or the complete
+guide-to-contribution journey.
 Changing the inference provider does not change PROJECTS document custody or the
 proposal contract. The attempt records a validated adapter profile with the exact
 SDK versions and effective settings. `WORKSTREAM_PROJECT_AGENT_RUNTIME_OPTIONS`
@@ -448,7 +452,7 @@ historical OpenAI resource IDs remain available solely for exact cleanup, using
 the original provider credential, without redispatching uncertain attempts.
 The registered runtimes are `openai_agents_sdk` (the default), `omnicore_agent`
 and the provider-free `manager_authored` runtime described above. OmniCoreAgent
-uses its closed immutable profile and the mutually exclusive `omnicore` worker
+uses its closed immutable profile and the mutually exclusive `omnicore` inference
 image; it accepts no runtime options. `manager_authored` works in either SDK image
 and has no retry, circuit or provider credential because it makes no provider
 request. See the [hosted runtime selection runbook](deploy/hosted/README.md#prepare-source-images).

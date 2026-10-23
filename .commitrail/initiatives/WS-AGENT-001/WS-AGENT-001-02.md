@@ -400,13 +400,27 @@ and two document reads. Its retained evidence contains only response sizes and J
 shape, not response content. It used a synthetic guide without the database, S3 or
 a durable worker, so it establishes neither original-guide nor hosted readiness.
 
-The complete Omni-environment MinIO suite, both selected release-image builds and
-parser isolation runs remain required before this record is complete. The selected-
-image AWS proof remains required before a deployment claim. The repository
-documents but cannot prove OpenRouter account defaults; real original-guide material
-remains behind retained account/organization/workspace/plugin evidence and operator
-confirmation. A generated-data provider call does not establish privacy or hosted
-readiness.
+At exact commit `a529cd2b123677cc22b42ef40b6fa85a456a956b`, no-cache
+Agents and Omni release images passed source inventory, mutually exclusive package
+closure, immutable marker, neutral-parser and wrong-runtime-worker verification.
+All 11 parser identity/isolation cases passed independently in each image, and all
+40 real-MinIO adapter tests passed in the frozen Omni environment. These proofs do
+not alone establish the Omni original-guide/durable-worker provider path. A later
+diagnostic run of the same exact commit and unchanged Omni image completed that
+path through the public API, Celery, real parser and MinIO with OpenRouter chat
+completions and `openai/gpt-5.6-terra`. It completed in 235.02 seconds
+(226.116 seconds in setup), returned `completed_partial_coverage` and
+`draft_ready_with_warnings`, and retained 10 requirements, 2 findings, 9
+suggestions and 22 evidence references. The isolated empty checker catalogue
+correctly produced zero bindings; no approval or activation was claimed. Exact
+manager proposal access returned 200 while outsider access was concealed as 404.
+
+The selected-image AWS proof and broader hosted Flow contribution journey remain
+required before a deployment claim. The repository documents but cannot prove
+OpenRouter account defaults; external account/organization/workspace/plugin
+evidence and operator confirmation remain separate. The private 68,347-byte actual
+response remains outside the repository; its retained SHA-256 is
+`02b9308ee635189d8e5fe18031af65055db36579884bf0f6bd2b6e088f755529`.
 
 The first exact-image Omni original-guide attempt reached health but stopped before
 inference because the shared release entrypoint incorrectly required runtime/model
@@ -414,8 +428,14 @@ configuration for the isolated parser role. Its retained failure evidence record
 `parser_exited`, successful cleanup and no inference request. A focused shell
 regression now exercises a parser without runtime configuration in both SDK
 environments, and release-image verification runs the same parser startup plus a
-wrong-SDK worker denial before any provider secret can load. Exact rebuilt-image and
-parser-isolation evidence remain required before retrying the live qualification.
+wrong-SDK worker denial before any provider secret can load. The exact rebuilt-image
+and parser-isolation proofs now pass; a successful live Omni original-guide
+qualification was subsequently completed on the unchanged image. An intervening
+first `a529cd2b` attempt had reached the parser and finished its worker but the
+harness reported `setup_finished_without_draft_outputs`; it retained no terminal
+body, so the record neither attributes a code cause nor erases that failed attempt.
+The later diagnostic run added private observation only and did not change product
+code or image contents.
 
 ## Reconciliation
 

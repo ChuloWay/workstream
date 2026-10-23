@@ -18,8 +18,11 @@ exact source access, immutable attempt evidence and overall run bounds.
    qualification through the manager draft read; no policy activation is claimed.
 2. [OmniCoreAgent qualification](WS-AGENT-001-02.md): registers the real second
    runtime and contains its native mechanics in an isolated dependency image. Its
-   actual SDK and synthetic production-factory loops pass; the same original-guide
-   and exact image/worker qualification remain the next companion proof.
+   actual SDK, synthetic production-factory, mutually exclusive release-image,
+   parser-isolation and real-MinIO proofs pass. The same original-guide public API,
+   durable-worker, real-parser and MinIO qualification also passes with the selected
+   Omni image; external account evidence, selected-image AWS and the broader hosted
+   Flow contribution journey remain separate.
 
 SDK environments may differ; product contracts and core behavior must not.
 No speculative Claude adapter, generic plugin platform, runtime-generated shell
