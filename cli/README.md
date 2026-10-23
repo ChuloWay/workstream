@@ -2018,5 +2018,8 @@ The scope is manager-authored setup, an explicitly unpaid policy and the locked
 no-human-review acceptance branch. The example checker validates declared proof
 fields, not the truth of remote GitHub work. This is not hosted deployment,
 external Flow issuer, live model inference, human review/revision or compensation
-fulfillment certification. Parallel CLI additions still need reconciliation and
-their own affected proof after merge.
+fulfillment certification. The connected proof also reads the exact submission's
+artifact binding, replica and verification evidence through the Operator CLI,
+and checks non-Operator concealment. The separate signed API test exercises
+retry only on a genuinely exhausted verification job. A successful upload is
+never used as an eligible retry fixture.

@@ -163,16 +163,18 @@ revision-context presentation correction.
 | [#608](https://github.com/Flow-Research/workstream/issues/608) | External-checker registry and explicit retry, delivered by [WS-CLI-001-29](WS-CLI-001-29.md) | 4 |
 | [#609](https://github.com/Flow-Research/workstream/issues/609) | Operator task inspection/start override, delivered by [WS-CLI-001-36](WS-CLI-001-36.md) | 3 |
 | [#610](https://github.com/Flow-Research/workstream/issues/610) | Task audit context/evidence — delivered by [WS-CLI-001-34](WS-CLI-001-34.md) | 2 |
-| [#611](https://github.com/Flow-Research/workstream/issues/611) | Artifact operator inspection/recovery CLI remains separate from the exact-authorized backend prerequisite [AUTH-ART-02D-OPERATOR](../WS-AUTH-001/WS-AUTH-001-ART02DOPERATOR.md) | 9 |
+| [#611](https://github.com/Flow-Research/workstream/issues/611) | Artifact Operator inspection/recovery CLI in [WS-CLI-001-43](WS-CLI-001-43.md), consuming the exact-authorized backend prerequisite [AUTH-ART-02D-OPERATOR](../WS-AUTH-001/WS-AUTH-001-ART02DOPERATOR.md) | 9 |
 
 After that baseline, #617 added two live post-submit delivery discovery and
 reconciliation operations. [#634](https://github.com/Flow-Research/workstream/issues/634)
 tracks their public CLI client separately; the baseline counts do not include them.
 For #611, [AUTH-ART-02D-OPERATOR](../WS-AUTH-001/WS-AUTH-001-ART02DOPERATOR.md)
 activates the existing nine backend routes through persisted exact authority.
-The client-only CLI follow-on still needs its
-own bounded implementation and public-route proof; no dormant commands or
-client-side authority bypass belong in this initiative.
+The client-only `operations artifact` commands consume those nine routes with
+explicit pagination and reasoned retry. Signed PostgreSQL proof covers fresh
+authority and exact replay; the connected journey additionally checks custody
+of its real submission. Neither client observation nor cached output grants
+authority. Hosted operation remains separate.
 
 Continue only the remaining boundaries in the inventory above; delivered rows
 are not new assignments. Inspection informs subsequent manual mutations
