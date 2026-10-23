@@ -63,6 +63,8 @@ class _SyntheticOpenRouter:
         *,
         handle: str,
         final_output: str,
+        final_outputs: tuple[str, ...] | None = None,
+        skip_tool_on_correction: bool = False,
         retry_statuses: tuple[int, ...] = (),
         always_status: int | None = None,
         error_message: str = "synthetic persistent provider failure",
@@ -74,6 +76,8 @@ class _SyntheticOpenRouter:
     ) -> None:
         self.handle = handle
         self.final_output = final_output
+        self.final_outputs = final_outputs
+        self.skip_tool_on_correction = skip_tool_on_correction
         self.retry_statuses = retry_statuses
         self.always_status = always_status
         self.error_message = error_message
@@ -149,6 +153,11 @@ class _SyntheticOpenRouter:
                 return
             successful_index = len(self.requests) - len(self.retry_statuses)
             cycle_index = (successful_index - 1) % (self.tool_calls_before_final + 1)
+            if self.skip_tool_on_correction and any(
+                "correction_instruction" in str(item.get("content", ""))
+                for item in body["messages"]
+            ):
+                cycle_index = self.tool_calls_before_final
             if cycle_index < self.tool_calls_before_final:
                 message = {
                     "role": "assistant",
@@ -167,7 +176,13 @@ class _SyntheticOpenRouter:
                 }
                 finish_reason = "tool_calls"
             else:
-                message = {"role": "assistant", "content": self.final_output}
+                completion_index = (successful_index - 1) // (self.tool_calls_before_final + 1)
+                output = (
+                    self.final_outputs[min(completion_index, len(self.final_outputs) - 1)]
+                    if self.final_outputs
+                    else self.final_output
+                )
+                message = {"role": "assistant", "content": output}
                 finish_reason = "stop"
             await self._respond(
                 writer,
@@ -254,13 +269,19 @@ class _GuardAdmission:
 
 
 def _provider_output() -> str:
-    return generated_result().model_dump_json()
+    return generated_result().model_dump_json(exclude={"setup_notes"})
+
+
+def _wrong_agent_version_output() -> str:
+    payload = json.loads(_provider_output())
+    payload["agent_version"] = "stale-version"
+    return json.dumps(payload)
 
 
 def _large_provider_output() -> str:
     result = generated_result()
     requirement = result.requirements[0]
-    payload = result.model_dump(mode="python")
+    payload = result.model_dump(mode="python", exclude={"setup_notes"})
     payload["requirements"] = [
         requirement.model_copy(
             update={
@@ -275,7 +296,7 @@ def _large_provider_output() -> str:
         ).model_dump(mode="python")
         for index in range(10)
     ]
-    return type(result).model_validate(payload).model_dump_json()
+    return type(result).model_validate(payload).model_dump_json(exclude={"setup_notes"})
 
 
 def _capabilities(
@@ -586,6 +607,7 @@ async def test_transport_header_mutations_never_reach_upstream(header, value):
             profile=profile,
             admission=_GuardAdmission(),
             maximum_requests=1,
+            maximum_logical_turns=1,
             io_timeout_seconds=5,
             upstream=_validated_test_upstream(provider.url, _TEST_UPSTREAM_AUTHORITY),
         )
@@ -610,6 +632,7 @@ async def test_transport_stops_oversized_provider_response():
             profile=replace(profile, maximum_response_bytes=64),
             admission=_GuardAdmission(),
             maximum_requests=1,
+            maximum_logical_turns=1,
             io_timeout_seconds=5,
             upstream=_validated_test_upstream(provider.url, _TEST_UPSTREAM_AUTHORITY),
         )
@@ -641,6 +664,7 @@ async def test_transport_binds_the_trusted_configured_model():
             profile=profile,
             admission=_GuardAdmission(),
             maximum_requests=1,
+            maximum_logical_turns=1,
             io_timeout_seconds=5,
             upstream=_validated_test_upstream(provider.url, _TEST_UPSTREAM_AUTHORITY),
         )
@@ -762,6 +786,28 @@ async def test_actual_sdk_large_valid_draft_crosses_review_handoff():
     assert result == type(result).model_validate_json(output)
     assert reads == [handle, handle]
     assert len(provider.requests) == 4
+    for request_index in (0, 2):
+        messages = provider.requests[request_index][1]["messages"]
+        instructions = [
+            message["content"]
+            for message in messages
+            if message["role"] == "system"
+            and isinstance(message.get("content"), str)
+            and "checker-specification schema: " in message["content"]
+        ]
+        assert len(instructions) == 1
+        schema_text = instructions[0].split("checker-specification schema: ", 1)[1]
+        presented_schema, _ = json.JSONDecoder().raw_decode(schema_text)
+        assert "setup_notes" not in presented_schema["properties"]
+        assert "setup_notes" not in presented_schema.get("required", [])
+        assert set(presented_schema["$defs"]["RequirementDisposition"]["enum"]) == {
+            "platform_covered",
+            "supported_pre_submit",
+            "pre_submit_capability_gap",
+            "supported_post_submit",
+            "post_submit_capability_gap",
+            "guide_blocker",
+        }
 
 
 async def test_actual_sdk_rejects_oversized_workstream_input_before_provider():
@@ -814,7 +860,7 @@ async def test_actual_sdk_foreign_source_identity_is_rejected_before_opening():
             await runtime.aclose()
     assert provider.requests
     assert reads == []
-    assert capabilities.tools.rejections == ["source_identity", "source_identity"]
+    assert capabilities.tools.rejections == ["source_identity"]
     assert await capabilities.tools.opened_handles() == frozenset()
 
 
@@ -888,6 +934,217 @@ async def test_actual_sdk_malformed_output_is_terminal_invalid_output():
             await runtime.aclose()
     assert caught.value.failure_code == "schema_invalid"
     assert len(provider.requests) == 2
+
+
+@pytest.mark.parametrize(
+    ("outputs", "correction_phase", "issue_code"),
+    [
+        (
+            ("not-json", _provider_output(), _provider_output()),
+            "checker_specification",
+            "invalid_json",
+        ),
+        ((_provider_output(), "not-json", _provider_output()), "coverage_review", "invalid_json"),
+        (
+            (_wrong_agent_version_output(), _provider_output(), _provider_output()),
+            "checker_specification",
+            "context_constraint",
+        ),
+    ],
+)
+async def test_actual_sdk_corrects_known_invalid_output_within_attempt(
+    outputs, correction_phase, issue_code
+):
+    base = _runtime_context()
+    compilation_context = base.model_copy(
+        update={
+            "runtime_configuration": base.runtime_configuration.model_copy(
+                update={"maximum_turns": 12}
+            )
+        }
+    )
+    capabilities, reads, handle = _capabilities(compilation_context)
+    async with _SyntheticOpenRouter(
+        handle=handle,
+        final_output=_provider_output(),
+        final_outputs=outputs,
+    ) as provider:
+        runtime = OmniCoreAgentProjectGuideRuntime._for_test(
+            compilation_context.runtime_configuration,
+            upstream_url=provider.url,
+        )
+        runtime.admit_execution()
+        try:
+            result = await runtime.compile_project_guide(compilation_context, capabilities)
+        finally:
+            await runtime.aclose()
+    assert result == generated_result()
+    assert reads == [handle, handle, handle]
+    assert len(provider.requests) == 6
+    correction_messages = provider.requests[4 if correction_phase == "coverage_review" else 2][1][
+        "messages"
+    ]
+    assert correction_phase in str(correction_messages)
+    assert issue_code in str(correction_messages)
+    assert "stale-version" not in str(correction_messages)
+
+
+async def test_actual_sdk_corrections_remain_aggregate_across_phases():
+    base = _runtime_context()
+    compilation_context = base.model_copy(
+        update={
+            "runtime_configuration": base.runtime_configuration.model_copy(
+                update={"maximum_turns": 12}
+            )
+        }
+    )
+    capabilities, reads, handle = _capabilities(compilation_context)
+    async with _SyntheticOpenRouter(
+        handle=handle,
+        final_output=_provider_output(),
+        final_outputs=("not-json", _provider_output(), "not-json", "not-json", _provider_output()),
+    ) as provider:
+        runtime = OmniCoreAgentProjectGuideRuntime._for_test(
+            compilation_context.runtime_configuration,
+            upstream_url=provider.url,
+        )
+        runtime.admit_execution()
+        try:
+            with pytest.raises(ProjectGuideCompilationInvalidOutputError) as caught:
+                await runtime.compile_project_guide(compilation_context, capabilities)
+        finally:
+            await runtime.aclose()
+    assert caught.value.failure_code == "schema_invalid"
+    assert reads == [handle] * 4
+    assert len(provider.requests) == 8
+    assert "correction_instruction" in str(provider.requests[2][1]["messages"])
+    assert "correction_instruction" in str(provider.requests[6][1]["messages"])
+
+
+async def test_actual_sdk_review_correction_keeps_aggregate_turn_ceiling():
+    base = _runtime_context()
+    compilation_context = base.model_copy(
+        update={
+            "runtime_configuration": base.runtime_configuration.model_copy(
+                update={"maximum_turns": 6}
+            )
+        }
+    )
+    capabilities, reads, handle = _capabilities(compilation_context)
+    async with _SyntheticOpenRouter(
+        handle=handle,
+        final_output=_provider_output(),
+        final_outputs=(_provider_output(), "not-json", "not-json", _provider_output()),
+    ) as provider:
+        runtime = OmniCoreAgentProjectGuideRuntime._for_test(
+            compilation_context.runtime_configuration,
+            upstream_url=provider.url,
+        )
+        runtime.admit_execution()
+        try:
+            with pytest.raises(ProjectGuideCompilationInvalidOutputError) as caught:
+                await runtime.compile_project_guide(compilation_context, capabilities)
+        finally:
+            await runtime.aclose()
+    assert caught.value.failure_code == "schema_invalid"
+    assert reads == [handle] * 3
+    assert len(provider.requests) == 6
+
+
+async def test_actual_sdk_correction_keeps_aggregate_tool_quota():
+    base = _runtime_context()
+    compilation_context = base.model_copy(
+        update={
+            "runtime_configuration": base.runtime_configuration.model_copy(
+                update={"maximum_turns": 12, "maximum_tool_calls": 1}
+            )
+        }
+    )
+    capabilities, reads, handle = _capabilities(compilation_context)
+    async with _SyntheticOpenRouter(
+        handle=handle,
+        final_output=_provider_output(),
+        final_outputs=("not-json", _provider_output()),
+    ) as provider:
+        runtime = OmniCoreAgentProjectGuideRuntime._for_test(
+            compilation_context.runtime_configuration,
+            upstream_url=provider.url,
+        )
+        runtime.admit_execution()
+        try:
+            with pytest.raises(
+                (ProjectAgentRuntimeError, ProjectGuideCompilationInvalidOutputError)
+            ):
+                await runtime.compile_project_guide(compilation_context, capabilities)
+        finally:
+            await runtime.aclose()
+    assert reads == [handle]
+    assert "tool_calls" in capabilities.tools.rejections
+    assert len(provider.requests) > 2
+
+
+async def test_actual_sdk_rejects_historical_scope_and_exhausts_corrections():
+    base = _runtime_context()
+    compilation_context = base.model_copy(
+        update={
+            "runtime_configuration": base.runtime_configuration.model_copy(
+                update={"maximum_turns": 12}
+            )
+        }
+    )
+    capabilities, reads, handle = _capabilities(compilation_context)
+    out_of_scope = generated_result().model_dump(mode="json", exclude={"setup_notes"})
+    out_of_scope["requirements"][0]["disposition"] = "human_review"
+    async with _SyntheticOpenRouter(
+        handle=handle,
+        final_output=json.dumps(out_of_scope),
+    ) as provider:
+        runtime = OmniCoreAgentProjectGuideRuntime._for_test(
+            compilation_context.runtime_configuration,
+            upstream_url=provider.url,
+        )
+        runtime.admit_execution()
+        try:
+            with pytest.raises(ProjectGuideCompilationInvalidOutputError) as caught:
+                await runtime.compile_project_guide(compilation_context, capabilities)
+        finally:
+            await runtime.aclose()
+    assert caught.value.failure_code == "schema_invalid"
+    assert len(reads) == 3
+    assert len(provider.requests) == 6
+    assert "schema_enum" in str(provider.requests[2][1]["messages"])
+    assert "human_review" not in str(provider.requests[2][1]["messages"])
+
+
+async def test_actual_sdk_correction_requires_new_source_read():
+    base = _runtime_context()
+    compilation_context = base.model_copy(
+        update={
+            "runtime_configuration": base.runtime_configuration.model_copy(
+                update={"maximum_turns": 12}
+            )
+        }
+    )
+    capabilities, reads, handle = _capabilities(compilation_context)
+    async with _SyntheticOpenRouter(
+        handle=handle,
+        final_output=_provider_output(),
+        final_outputs=(_provider_output(), "not-json", _provider_output()),
+        skip_tool_on_correction=True,
+    ) as provider:
+        runtime = OmniCoreAgentProjectGuideRuntime._for_test(
+            compilation_context.runtime_configuration,
+            upstream_url=provider.url,
+        )
+        runtime.admit_execution()
+        try:
+            with pytest.raises(ProjectGuideCompilationInvalidOutputError) as caught:
+                await runtime.compile_project_guide(compilation_context, capabilities)
+        finally:
+            await runtime.aclose()
+    assert caught.value.failure_code == "schema_invalid"
+    assert reads == [handle, handle]
+    assert len(provider.requests) == 6
 
 
 async def test_exhausted_native_retries_open_shared_provider_circuit(monkeypatch):
