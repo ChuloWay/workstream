@@ -405,6 +405,7 @@ async def _send_guard_request(
             ],
             "temperature": 0,
             "max_tokens": 16_384,
+            "reasoning_effort": "medium",
             "tools": _MODEL_TOOLS,
             "usage": {"include": True},
         },
@@ -762,6 +763,8 @@ async def test_actual_sdk_tool_loop_retries_and_rebuilds_private_provider_contro
         "usage",
         "provider",
         "plugins",
+        "reasoning_effort",
+        "verbosity",
     }
     assert all(set(body) == expected_fields for _, body in provider.requests)
     for request_index in (4, 6):
