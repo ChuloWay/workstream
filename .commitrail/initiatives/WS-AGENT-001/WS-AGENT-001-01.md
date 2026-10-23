@@ -58,6 +58,9 @@ obligation before claiming the hosted journey recovered.
   updating its ART and parser consumers together; remove the former private module
   without an alias. This prevents parser coupling to ART internals while retaining
   one canonical bounded archive implementation.
+- `backend/scripts/guide_compilation_e2e.py` and its API/pilot drill callers:
+  replace the removed hosted-resource interface with the same neutral tool contract.
+  Remove only their obsolete generated-ID inventory entries.
 - Focused affected tests, ownership/lane inventories, and current guide/runtime,
   deployment, developer and roadmap documentation. No unrelated inventory edits.
 - `.github/workflows/release-images.yml`: select the affected local deployment,
@@ -209,14 +212,14 @@ obligation before claiming the hosted journey recovered.
 
 | Claim | Command or proof | Result | Remaining uncertainty |
 |---|---|---|---|
-| OpenRouter can run the native SDK tool loop | Production OpenAI Agents SDK adapter with an invented guide and in-memory typed document tools | Four reads, private draft, separate coverage review and validated result at `254fd6cfe` using `openai/gpt-5.6-terra` | Does not prove S3 custody, a durable worker run or another model |
+| OpenRouter can run the native SDK tool loop | Production OpenAI Agents SDK adapter with an invented guide and in-memory typed document tools | Five reads, private draft, separate coverage review and validated result at `b9bf0e7d0` using `openai/gpt-5.6-terra` | Does not prove S3 custody, a durable worker run or another model |
 | Document ownership no longer depends on provider attachments | Neutral capability, trusted tool wrapper, SQL access receipts and removal of hosted execution | Implemented; retained cleanup has no dispatch capability | Final migration, isolation and negative-proof corrections require exact-head verification |
 | OmniCoreAgent is a separate runtime integration | Published 0.6.0 SDK qualification in companion change 02 | Companion owns its SDK environment, native behavior and registration | This change does not claim OmniCore deployment |
 | Retained data and bounded archive behavior survive | Isolated PostgreSQL cleanup plus archive tests at `254fd6cfe` | 50 passed, isolated database and role cleanup confirmed | Subsequent profile guard and proof changes require replay |
 | Runtime configuration, source custody and retained-data migration | Isolated PostgreSQL batch at `96b657e5f` | 94 passed; database and role cleanup confirmed | Parser privilege separation has its own Docker proof |
 | Canonical profile and conflicting receipt guards discriminate invalid input | Remove each guard independently on `96b657e5f` | Both named regressions fail at their expected rejection assertion | No claim about unrelated guards |
-| Unread-source rejection has independent service and database protection | Disable the service check on `96b657e5f` and trace the actual acceptance path | Valid result reaches acceptance; PostgreSQL rejects missing original-document access | The service-specific assertion is added separately so database protection cannot mask its removal |
-| Parser container boundary needs privilege separation | Initial real-container proof plus independent compromised-child inspection | Ordinary parsing/isolation proof passed; same-UID broker/child design was insufficient | Amended broker/child identities and committed Docker regression must pass before readiness |
+| Unread-source rejection has independent service and database protection | Disable the service check on `96b657e5f`, then replay the direct service regression at `1c806ea2c` | PostgreSQL independently rejects missing access; the service control passes and removing its guard fails the exact rejection assertion | No claim about unrelated finalization guards |
+| Parser process identities isolate concurrent document reads | Release-image proof at `984e44833`, with safe diagnostic harness | All ten cases passed: four formats, separate child identities, denied socket/process access, timeout/cancellation and reuse; owned containers removed | An earlier short generic failure was not reproducible and its cause remains unknown; final source and diagnostic script require one clean image replay |
 
 ## Reconciliation
 
