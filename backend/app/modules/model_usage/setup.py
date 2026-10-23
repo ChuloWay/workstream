@@ -16,8 +16,8 @@ from app.modules.model_usage.api import (
     ModelCallBudgetUnavailable,
     ModelCallConflict,
     ModelCallEvidence,
-    ModelCallUsage,
     ModelCallUnavailable,
+    ModelCallUsage,
     ObservedSetupModelUsageEffect,
     PreparedSetupModelUsageEffect,
     SetupModelDispatchReservation,
@@ -204,6 +204,31 @@ class SetupModelUsageService:
         await self._repo.add(effect)
         return _prepared(envelope, slot, effect, key, replayed=False)
 
+    async def recover_completed(
+        self, key: SetupModelUsageSlotKey, request_sha256: str
+    ) -> CompletedSetupModelUsageEffect | None:
+        """Return one exact completed response without recreating provider I/O."""
+        require_model_call_transaction(self._session)
+        key = SetupModelUsageSlotKey.model_validate(key)
+        owner_profile = await self._owner.require_setup_current(key)
+        await self._profile(key, owner_profile)
+        await self._repo.lock_setup_envelope_scope(key)
+        envelope = await self._repo.setup_envelope(key, lock=True)
+        if envelope is None:
+            return None
+        await self._repo.lock_setup_slot_scope(key)
+        slot = await self._repo.setup_slot(key, lock=True)
+        if slot is None:
+            return None
+        if slot.envelope_id != envelope.id or slot.request_sha256 != request_sha256:
+            raise ModelCallConflict("setup_model_request_conflict")
+        effect = await self._repo.latest_setup_effect(slot.id, lock=True)
+        if effect is None or effect.state == "prepared":
+            return None
+        if effect.state != "completed":
+            raise ModelCallUnavailable("setup_model_effect_not_replayable")
+        return self._completed(effect, slot, replayed=True)
+
     async def reserve_dispatch(
         self,
         prepared: PreparedSetupModelUsageEffect,
@@ -378,6 +403,7 @@ class SetupModelUsageService:
         provider_model_snapshot: str,
         response_evidence: ModelCallEvidence,
         usage: ModelCallUsage,
+        usable: bool = True,
     ) -> CompletedSetupModelUsageEffect:
         """Settle one verified setup response under narrow retained-effect authority."""
         require_model_call_transaction(self._session)
@@ -394,6 +420,7 @@ class SetupModelUsageService:
                 "provider_model_snapshot": provider_model_snapshot,
                 "response_evidence": response_evidence.model_dump(mode="json"),
                 "usage": usage.model_dump(mode="json"),
+                "usable": usable,
             }
         )
         authority = await self._authority.authorize_setup_complete(
@@ -418,8 +445,11 @@ class SetupModelUsageService:
         cost = model_usage_cost(profile.spec, usage)
         row = await self._lock_terminal(slot, supplied.effect_id)
         _require_effect(supplied, slot, row)
-        if row.state == "completed":
+        target_state = "completed" if usable else "known_failed"
+        if row.state in {"completed", "known_failed"}:
             if (
+                row.state != target_state
+                or
                 row.provider_response_id != provider_response_id
                 or _evidence(row, "response") != response_evidence
                 or _usage(row) != usage
@@ -437,7 +467,7 @@ class SetupModelUsageService:
         row.settled_nanodollars = cost
         row.terminal_authorization_evidence_id = str(authority.evidence_id)
         row.terminal_at = await self._repo.now()
-        row.state = "completed"
+        row.state = target_state
         await self._repo.flush()
         return self._completed(row, slot, replayed=False)
 
@@ -568,6 +598,7 @@ class SetupModelUsageService:
             usage=usage,
             settled_nanodollars=row.settled_nanodollars,
             completed_at=row.terminal_at,
+            state=row.state,
             replayed=replayed,
         )
 

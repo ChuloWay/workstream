@@ -103,5 +103,30 @@ class ModelProfileReader:
             raise ModelCallUnavailable("model_profile_unavailable")
         return stored_model_profile(row)
 
+    async def read_latest_matching(
+        self,
+        *,
+        project_id: UUID,
+        provider: str,
+        api: str,
+        model_snapshot: str,
+    ) -> ProjectModelProfile:
+        """Select only the newest immutable version for this project and identity."""
+        self._require_root_transaction()
+        row = await self._session.scalar(
+            select(ModelUsageProfile)
+            .where(
+                ModelUsageProfile.project_id == str(project_id),
+                ModelUsageProfile.provider == provider,
+                ModelUsageProfile.api == api,
+                ModelUsageProfile.model_snapshot == model_snapshot,
+            )
+            .order_by(ModelUsageProfile.profile_version.desc())
+            .limit(1)
+        )
+        if row is None:
+            raise ModelCallUnavailable("model_profile_unavailable")
+        return stored_model_profile(row)
+
 
 __all__ = ("ModelProfileReader", "stored_model_profile")

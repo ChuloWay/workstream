@@ -5,9 +5,9 @@ from __future__ import annotations
 import asyncio
 import json
 import os
-from pathlib import Path
 import stat
 import struct
+from pathlib import Path
 from typing import Any
 from collections.abc import Awaitable, Callable
 
@@ -20,6 +20,12 @@ from app.interfaces.checker_model_proxy import (
     ModelProxyReply,
     ModelProxyRequest,
     ModelProxyResolvedReceipt,
+)
+from app.interfaces.setup_model_proxy import (
+    SETUP_MODEL_PROXY_PROTOCOL,
+    SetupModelProxyHandler,
+    SetupModelProxyReply,
+    setup_model_proxy_request_from_wire,
 )
 
 
@@ -44,6 +50,7 @@ class ModelProxyTransport:
         socket_path: Path,
         handler: ModelProxyHandler,
         trial_handler: Callable[[dict], Awaitable[dict]] | None = None,
+        setup_handler: SetupModelProxyHandler | None = None,
         maximum_connections: int = 16,
         read_timeout_seconds: float = 2.0,
         write_timeout_seconds: float = 2.0,
@@ -53,6 +60,7 @@ class ModelProxyTransport:
             not isinstance(socket_path, Path)
             or not callable(handler)
             or (trial_handler is not None and not callable(trial_handler))
+            or (setup_handler is not None and not callable(setup_handler))
             or type(maximum_connections) is not int
             or not 1 <= maximum_connections <= 256
             or type(read_timeout_seconds) is not float
@@ -71,6 +79,7 @@ class ModelProxyTransport:
             if trial_handler is not None
             else MODEL_PROXY_MAXIMUM_FRAME_BYTES
         )
+        self._setup_handler = setup_handler
         self._maximum_connections = maximum_connections
         self._read_timeout_seconds = read_timeout_seconds
         self._write_timeout_seconds = write_timeout_seconds
@@ -228,7 +237,8 @@ class ModelProxyTransport:
                 if size == 0 or size > self._maximum_frame_bytes:
                     return
                 payload = await reader.readexactly(size)
-            awaitable, is_trial = self._dispatch(payload)
+            awaitable, reply_type = self._dispatch(payload)
+            is_trial = reply_type is dict
             handler_task = asyncio.create_task(
                 awaitable,
                 name="checker-model-proxy-handler",
@@ -239,9 +249,7 @@ class ModelProxyTransport:
                 reply = await asyncio.shield(handler_task)
             except BaseException:
                 return
-            if (is_trial and type(reply) is not dict) or (
-                not is_trial and type(reply) is not ModelProxyReply
-            ):
+            if type(reply) is not reply_type:
                 return
             body = json.dumps(
                 reply if is_trial else reply.wire_value(),
@@ -275,8 +283,8 @@ class ModelProxyTransport:
             except (TimeoutError, OSError):
                 pass
 
-    def _dispatch(self, payload: bytes) -> tuple[Awaitable[Any], bool]:
-        """Route only the two closed protocols while retaining each frame ceiling."""
+    def _dispatch(self, payload: bytes) -> tuple[Awaitable[Any], type]:
+        """Route the three closed protocols with exact reply types and frame ceilings."""
         value = json.loads(
             payload.decode("utf-8"),
             parse_constant=_reject_json_constant,
@@ -287,10 +295,14 @@ class ModelProxyTransport:
         if value.get("protocol_version") == TRIAL_PROXY_PROTOCOL:
             if self._trial_handler is None:
                 raise ValueError("trial proxy is not configured")
-            return self._trial_handler(value), True
+            return self._trial_handler(value), dict
         if len(payload) > MODEL_PROXY_MAXIMUM_FRAME_BYTES:
             raise ValueError("model proxy frame exceeds its limit")
-        return self._handler(_decode_request(payload)), False
+        if value.get("protocol_version") == SETUP_MODEL_PROXY_PROTOCOL:
+            if self._setup_handler is None:
+                raise ValueError("setup proxy is not configured")
+            return self._setup_handler(setup_model_proxy_request_from_wire(value)), SetupModelProxyReply
+        return self._handler(_decode_request(payload)), ModelProxyReply
 
     def _unlink_owned(
         self,

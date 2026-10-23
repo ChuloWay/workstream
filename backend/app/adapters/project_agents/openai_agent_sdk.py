@@ -4,12 +4,11 @@ from __future__ import annotations
 
 import asyncio
 import json
-import os
 
 from app.adapters.project_agents.compilation_draft import (
     CompilationDraftParser,
-    generated_compilation_schema,
     contextual_output_issue,
+    generated_compilation_schema,
 )
 from app.adapters.project_agents.openai_profile import (
     require_openai_agents_sdk_adapter_profile,
@@ -23,6 +22,7 @@ from app.adapters.project_agents.result_validation import (
     require_result_sources_opened,
     validate_project_guide_runtime_result,
 )
+from app.adapters.project_agents.setup_model_proxy import create_setup_httpx_client
 from app.interfaces.external_services import ExternalServiceAdapterIdentity
 from app.interfaces.project_agents import (
     ProjectAgentRuntimeConfigurationError,
@@ -34,13 +34,12 @@ from app.interfaces.project_agents import (
     project_guide_compilation_prompt_bytes,
 )
 from app.interfaces.project_guide_runtime import ProjectGuideRuntimeConfiguration
-from .openrouter_policy import openrouter_request_options, require_direct_openrouter_model
 from app.modules.projects.api.guide_documents import GuideRuntimeCapabilities
 
+from .openrouter_policy import openrouter_request_options, require_direct_openrouter_model
 
 _INVALID_SCHEMA_OUTPUT = object()
-_OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
-_OPENAI_BASE_URL = "https://api.openai.com/v1"
+_PROXY_BASE_URL = "https://model-proxy.invalid/v1"
 
 
 
@@ -57,7 +56,7 @@ class OpenAIAgentSdkProjectGuideRuntime:
             raise ProjectAgentRuntimeConfigurationError(
                 "project guide runtime requires draft and review turns"
             )
-        self._provider = _provider_configuration(configuration)
+        _require_supported_provider(configuration)
         self._profile = require_openai_agents_sdk_adapter_profile(
             configuration.adapter_profile_values()
         )
@@ -157,12 +156,15 @@ class OpenAIAgentSdkProjectGuideRuntime:
             function_tool,
         )
         from agents.exceptions import ModelBehaviorError
-        from openai import AsyncOpenAI, DefaultAsyncHttpx2Client
+        from openai import AsyncOpenAI
 
         configuration = self._configuration
         profile = self._profile
         admission = self._admission
         assert admission is not None
+        if capabilities.model is None:
+            raise ProjectAgentRuntimeError("project guide model capability is unavailable")
+        active_phase = "draft"
 
         phase_opened: set[str] = set()
 
@@ -259,13 +261,16 @@ class OpenAIAgentSdkProjectGuideRuntime:
                 admission.request_succeeded()
                 return response
 
-        http_client = DefaultAsyncHttpx2Client(
-            trust_env=False,
-            follow_redirects=False,
+        http_client = create_setup_httpx_client(
+            capabilities.model,
+            model=configuration.model,
+            api=configuration.model_api,
+            phase=lambda: active_phase,
+            timeout_seconds=float(profile.request_timeout_seconds),
         )
         client = AsyncOpenAI(
-            api_key=self._provider.api_key,
-            base_url=self._provider.base_url,
+            api_key="setup-model-proxy",
+            base_url=_PROXY_BASE_URL,
             http_client=http_client,
             max_retries=0,
             timeout=profile.request_timeout_seconds,
@@ -314,6 +319,9 @@ class OpenAIAgentSdkProjectGuideRuntime:
             model_settings = ModelSettings(
                 parallel_tool_calls=False,
                 store=False,
+                max_tokens=capabilities.model.maximum_output_tokens,
+                reasoning={"effort": capabilities.model.reasoning_effort},
+                verbosity=capabilities.model.text_verbosity,
                 timeout=profile.request_timeout_seconds,
                 retry=model_retry_settings(profile),
                 extra_body=extra_body,
@@ -335,7 +343,8 @@ class OpenAIAgentSdkProjectGuideRuntime:
 
             async def run_phase(phase, phase_prompt, turn_limit):
                 """Correct known invalid responses without replaying uncertain requests."""
-                nonlocal corrections
+                nonlocal active_phase, corrections
+                active_phase = "draft" if phase == "checker_specification" else "review"
                 while True:
                     remaining = turn_limit - agent.model.model_turns
                     if remaining <= 0:
@@ -356,6 +365,7 @@ class OpenAIAgentSdkProjectGuideRuntime:
                     if corrections >= 2:
                         raise ProjectGuideCompilationInvalidOutputError("schema_invalid")
                     corrections += 1
+                    active_phase = "correction"
                     phase_prompt = json.dumps(
                         {
                             "phase": phase,
@@ -410,37 +420,21 @@ class OpenAIAgentSdkProjectGuideRuntime:
             await client.close()
 
 
-class _ProviderConfiguration:
-    __slots__ = ("api_key", "base_url")
-
-    def __init__(self, api_key: str, base_url: str) -> None:
-        self.api_key = api_key
-        self.base_url = base_url
-
-
-def _provider_configuration(
+def _require_supported_provider(
     configuration: ProjectGuideRuntimeConfiguration,
-) -> _ProviderConfiguration:
+) -> None:
     if (
         configuration.model_provider == "openrouter"
         and configuration.model_api == "chat_completions"
     ):
         require_direct_openrouter_model(configuration.model)
-        credential_name = "OPENROUTER_API_KEY"
-        base_url = _OPENROUTER_BASE_URL
+        return
     elif configuration.model_provider == "openai" and configuration.model_api in {
         "responses",
         "chat_completions",
     }:
-        credential_name = "OPENAI_API_KEY"
-        base_url = _OPENAI_BASE_URL
+        return
     else:
         raise ProjectAgentRuntimeConfigurationError(
             "project guide model provider or protocol is unsupported"
         )
-    api_key = os.environ.get(credential_name)
-    if not api_key:
-        raise ProjectAgentRuntimeConfigurationError(
-            "project guide model credentials are unavailable"
-        )
-    return _ProviderConfiguration(api_key, base_url)

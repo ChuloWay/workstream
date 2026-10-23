@@ -7,40 +7,42 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from app.modules.projects.api.guide_documents import GuideDocumentManifestPort
-from app.modules.projects.api.task_examples import (
-    GuideTaskExampleInputError,
-    require_task_example_commitment,
-)
 from app.interfaces.project_guide_runtime import ProjectGuideRuntimeConfiguration
 from app.modules.authorization.api import (
     ActorIdentityFacts,
     ProjectGuideCompilationAuthorizationPort,
 )
 from app.modules.checkers.api.external import ExternalCheckerCapabilityProjection
+from app.modules.model_usage.api import ModelProfileReaderPort
 from app.modules.projects.api.guide_compilation import (
     ProjectGuideCompilationDelivery,
     ProjectGuideCompilationDeliveryError,
+    ProjectGuideCompilationExecutionClassification,
     ProjectGuideCompilationExecutionCommand,
     ProjectGuideCompilationExecutionPort,
-    ProjectGuideCompilationExecutionClassification,
     ProjectGuideSetupFinalizationCommand,
 )
 from app.modules.projects.api.guide_compilation_projections import ProjectGuideProjectionCommand
+from app.modules.projects.api.guide_documents import GuideDocumentManifestPort
 from app.modules.projects.api.setup_identity import project_guide_compilation_task_id
-from app.modules.projects.repository import ProjectRepository
+from app.modules.projects.api.task_examples import (
+    GuideTaskExampleInputError,
+    require_task_example_commitment,
+)
 from app.modules.projects.models import ProjectSetupRun
-from .source_state import is_compilation_source_setup
+from app.modules.projects.repository import ProjectRepository
+
 from .diagnostics import compilation_setup_response
-from .request_inputs import CompilationRequestInputs, automatic_request_selector
+from .finalization import GuideCompilationFinalizationService
 from .models import (
-    ProjectGuideCompilationAttempt,
     ProjectGuideCompilation,
+    ProjectGuideCompilationAttempt,
     ProjectGuideSetupFinalization,
 )
 from .repository import GuideCompilationIntegrityError
+from .request_inputs import CompilationRequestInputs, automatic_request_selector
 from .service import GuideCompilationService
-from .finalization import GuideCompilationFinalizationService
+from .source_state import is_compilation_source_setup
 
 RequestAuthority = Callable[
     [AsyncSession, UUID],
@@ -61,6 +63,7 @@ class LiveGuideCompilationCoordinator:
         checker_capabilities: ExternalCheckerCapabilityProjection,
         request_authority: RequestAuthority,
         configuration_factory: Callable[[], ProjectGuideRuntimeConfiguration],
+        model_profiles: Callable[[AsyncSession], ModelProfileReaderPort],
         execution: ProjectGuideCompilationExecutionPort,
         projections,
         finalization_authorization_factory,
@@ -70,6 +73,7 @@ class LiveGuideCompilationCoordinator:
         self._checker_capabilities = checker_capabilities
         self._request_authority = request_authority
         self._configuration = configuration_factory
+        self._model_profiles = model_profiles
         self._execution = execution
         self._projections = projections
         self._finalization_authorization = finalization_authorization_factory
@@ -88,11 +92,7 @@ class LiveGuideCompilationCoordinator:
             return await self._finalize(finalization)
         if has_attempt and snapshot is None:
             raise GuideCompilationIntegrityError("compilation runtime configuration unavailable")
-        configuration = (
-            ProjectGuideRuntimeConfiguration.model_validate(snapshot)
-            if snapshot is not None
-            else self._configuration()
-        )
+        configuration = ProjectGuideRuntimeConfiguration.model_validate(snapshot)
         if manual_attempt is None:
             operation_id = automatic_request_selector(
                 delivery.setup_run_id, delivery.setup_generation
@@ -232,12 +232,39 @@ class LiveGuideCompilationCoordinator:
             from .delivery_request import manual_delivery_attempt
 
             manual_attempt = await manual_delivery_attempt(session, setup, attempt)
+            runtime_configuration = (
+                attempt.runtime_configuration
+                if attempt is not None
+                else (await self._select_runtime_configuration(session, delivery.project_id))
+                .model_dump(mode="json")
+            )
             return (
                 None,
                 attempt is not None,
-                attempt.runtime_configuration if attempt else None,
+                runtime_configuration,
                 manual_attempt,
             )
+
+    async def _select_runtime_configuration(
+        self, session: AsyncSession, project_id: UUID
+    ) -> ProjectGuideRuntimeConfiguration:
+        """Snapshot the newest exact Operator profile while PROJECTS custody is held."""
+        configuration = self._configuration()
+        if not configuration.uses_inference:
+            return configuration
+        profile = await self._model_profiles(session).read_latest_matching(
+            project_id=project_id,
+            provider=configuration.model_provider,
+            api=configuration.model_api,
+            model_snapshot=configuration.model,
+        )
+        return configuration.model_copy(
+            update={
+                "model_profile_id": profile.profile_id,
+                "model_profile_version": profile.spec.profile_version,
+                "model_profile_digest": profile.profile_digest,
+            }
+        )
 
     async def _finalize(self, command: ProjectGuideSetupFinalizationCommand) -> dict:
         """Create or replay the existing finalizer's receipt under fresh authority."""
