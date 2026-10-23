@@ -29,7 +29,7 @@ class TrialEvidenceStableSubject(CheckerValue):
     registry_entry_digest: Sha256
     configuration_sha256: Sha256
     trial_kind: Identifier
-    slot_index: Annotated[StrictInt, Field(ge=0, le=1023)]
+    slot_index: Annotated[StrictInt, Field(ge=0, le=0)]
     plan_sha256: Sha256
     input_digest: Sha256
     materials_digest: Sha256

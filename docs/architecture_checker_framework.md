@@ -182,6 +182,12 @@ Context-enabled member results retain the configuration hash, actual input hash,
 context hash and visible material identities. Current-only results omit this
 unselected receipt, preserving immutable historical result hashes. This extends
 the one selected execution contract; it creates no second executor or authority.
+The parent run retains `input_context_custody`: the exact context and any selected
+predecessor verification chain. PostgreSQL reconstructs its consumed preparation,
+same-assignment predecessor and normalized historical findings, and includes the
+extension in materialization and finalization authority digests. Missing or
+substituted custody cannot commit. The current archive's existing custody shape
+and retained current-only receipt digests remain unchanged.
 
 There is no catalogue request/result decoder, generic rule planner, alternate
 phase service or old execution path. Removing those implementations does not
@@ -313,11 +319,14 @@ a supported, bounded image implementation before the project can activate.
 An approved POST image may use the existing service's typed generic trial tool
 through one request-bound `/work/execution.sock`. This socket is an internal
 capability of the already selected invocation; it is not a second runner,
-provider, host socket or final-result variant. The exact administrative profile
-binds the POST registry entry and digest, checker image and configuration hash,
-offline builder/base/cache identities, opaque material roles and visibility,
-generic operation slots, aggregate resource ceilings and current execution
-identity. The image cannot select Docker flags, host paths, mounts, runtime,
+provider, host socket or final-result variant. Six flat approved configuration
+values select the exact profile and projection
+by ID, version and digest. A trusted operator manifest resolves those immutable
+values. The verified ART request binds their configuration to the registry entry,
+checker image, material and current execution. The profile bounds offline
+builder/base/cache identities, operations and aggregate resources; the
+projection selects material roles, visibility and finite ordered step templates.
+The image cannot select Docker flags, host paths, mounts, runtime,
 network, devices, credentials or another image. Workload commands remain
 untrusted argument arrays executed only inside the confined candidate image;
 they are never appended as host launcher flags.
@@ -336,9 +345,19 @@ scratch are settled. An opaque handle resolves to server-owned, request/material
 profile/plan/engine-bound facts in the same invocation. When a model assessment
 depends on a trial, the model boundary injects the resolved canonical facts; an
 image-authored copy cannot substitute. Required observations and cleanup also
-guard final result acceptance. Any durable replay claim additionally needs a
-typed CHECKERS/ART evidence owner; invocation memory and isolation metadata are
-not durable ART custody.
+guard final result acceptance. CHECKERS allocates one stable trial slot for
+the exact Submission and selected binding before execution. The plan and input
+hashes are immutable at that address. ART stores and independently verifies
+the canonical receipt, then binds it to `checker_trial_evidence`. Only that
+verified receipt can produce a handle for model assessment.
+
+A restart after reservation but before a receipt is pinned may execute the
+same plan under fresh current authority; reservation provenance and the actual
+executor remain distinct. After content is pinned, replay recovers those exact
+bytes and issues a fresh local handle without rerunning the trial. A missing or
+uncertain stored receipt fails as infrastructure; it never becomes fabricated
+observations or a work failure. Model request hashing includes the resolved
+canonical evidence, not the invocation-local handle.
 
 This mechanism does not revive the removed output continuation. Shared Rust
 contains no project filename, task identity, rubric, trial sequence or command

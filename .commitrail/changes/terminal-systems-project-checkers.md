@@ -14,7 +14,8 @@ reference, not current policy. The unchanged guide and a fresh PRE/POST-only
 proposal remain the sources to reconcile. This is a real guide-driven project,
 not a fixed task-name fixture. Shared model access now covers both POST agents
 and setup under #492's one project account; this change consumes that contract
-without owning its ledger, migrations or provider credentials.
+without owning its shared ledger or provider credentials. CHECKERS input/trial
+custody adds linear migrations 0061 and 0062 after that dependency.
 
 ## Bounded change
 
@@ -24,8 +25,9 @@ test/CI selection for these project assets. Preserve and reuse the delivered
 Python PRE image, its exact handoff provenance, samples and recorded evidence.
 New project code implements POST rubrics and bounded agent orchestration
 independently of named tasks. Shared runtime changes remain generic and are
-listed separately below. Database schema, policy authority, guide content and
-lifecycle outcomes are unchanged by this change.
+listed separately below. The unchanged guide, policy authority and lifecycle
+operations remain with their existing owners. Schema additions retain exact revision input and trial
+evidence; they introduce no new contributor lifecycle.
 
 `.github/workflows/terminal-systems-checkers.yml` runs the project unit and real
 image samples on project/contract/tool changes. It adds no model calls, cloud
@@ -57,14 +59,15 @@ material tools, strict model-output validation, project image behavior and
 offline test doubles. It must consume the generic invocation-local model proxy
 contract owned by the concurrent model-runtime change; it must not invent a
 second transport, a global bearer token, a provider SDK, provider credentials,
-budget storage or a paid-effect ledger. Exact proxy fields are not frozen here
-until that owner publishes the typed contract.
+budget storage or a paid-effect ledger. The shared v2 model-session and closed
+trial-evidence callback contracts are typed at the existing private proxy boundary; model credentials and ledger
+operations remain outside project images.
 
 Generic isolated build/trial support owns the new
 `external_checkers/workstream-checker-service/src/trial_relay.rs` module after
-coordination with the model-runtime owner. That owner retains the coupled
-`main.rs` invocation-capability assembly, `model_relay.rs`, budget/profile
-owners and every migration; this change does not edit `main.rs` concurrently.
+coordination with the model-runtime owner. Shared model transport remains in
+`model_relay.rs`; this change owns coordinated `main.rs` assembly of the independent trial capability. Model ledger/profile
+changes remain in 0060; this change owns only 0061/0062.
 `external_checkers/workstream-checker-service/tests/trial_relay.rs` compiles
 that otherwise unconnected module and exercises its fake-engine protocol,
 identity, bounds, cancellation and cleanup contracts before shared composition.
@@ -82,9 +85,9 @@ command, ownership journal, observation and recovery implementation. The
 listed trial-profile, relay and engine files also replace exact fixed slots with
 finite ordered slot templates (minimum/maximum occurrences, roles, fresh state
 and retainable work outcomes), so source-cited documented procedures remain
-variable without becoming an unbounded or project-named shared allowlist. The
-model-runtime owner retains serialized composition in `main.rs`; implementation
-of the trial engine is not deferred to that owner. The explicit real-engine
+variable without becoming an unbounded or project-named shared allowlist.
+Composition in `main.rs` is serialized with the shared model transport changes;
+this change delivers its own trial engine and callback. The explicit real-engine
 qualification entrypoint is
 `external_checkers/workstream-checker-service/scripts/qualify_trial_docker.sh`,
 backed by the non-production binary
@@ -96,11 +99,9 @@ in `backend/app/modules/checkers/api/trial_profiles.py`,
 `backend/app/interfaces/trial_execution.py`, and
 `backend/tests/checkers/external/test_trial_profiles.py`. These define a
 distinct digest-pinned trusted service-config reader and do not reuse the
-monetary model profile. Later selected-POST, TASK and ART owner files require
-their exact file list and typed port contract to be added here before edits;
-this change owns no migration. The bridge must
-keep Docker authority and
-prepared offline material outside the untrusted project image, expose only
+monetary model profile. The exact selected-POST, TASK and ART extension files
+and typed contracts are listed below, including the two additive owner-custody
+migrations. The bridge must keep Docker authority and prepared offline material outside the untrusted project image, expose only
 invocation-local bounded tools, and prove aggregate time, CPU, memory, PID and
 scratch-disk limits, cancellation, cleanup, no network or host socket in the
 nested workload, and trusted infrastructure-versus-work classification. It must

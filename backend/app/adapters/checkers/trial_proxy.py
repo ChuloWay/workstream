@@ -73,7 +73,15 @@ def _validate_receipt(value, ticket, external, profile):
         raise ValueError("trial receipt shape differs")
     subject = ticket.subject
     identity = value["originating_identity"]
-    if not isinstance(identity, dict) or any(
+    identity_fields = {
+        "request_digest", "material_binding_digest", "input_digest", "materials_digest",
+        "project_id", "task_id", "assignment_id", "submission_id", "submission_version",
+        "requirement_id", "registry_entry_id", "registry_entry_digest", "checker_image_digest",
+        "configuration_sha256", "evaluation_request_id", "evaluation_generation",
+        "checker_run_id", "attempt_id", "result_id", "worker_lease_id",
+        "worker_lease_generation", "worker_lease_expires_at",
+    }
+    if not isinstance(identity, dict) or set(identity) != identity_fields or any(
         value[name] is not True for name in ("plan_started", "plan_completed", "cleanup_confirmed")
     ):
         raise ValueError("trial receipt is incomplete")
@@ -93,6 +101,9 @@ def _validate_receipt(value, ticket, external, profile):
             "request_digest": external.request_digest,
             "checker_run_id": str(current.attempt_id),
             "attempt_id": str(current.attempt_id),
+            "evaluation_request_id": str(current.evaluation_request_id),
+            "evaluation_generation": current.evaluation_generation,
+            "result_id": str(current.result_id),
             "worker_lease_id": str(current.lease_id),
             "worker_lease_generation": current.lease_generation,
             "worker_lease_expires_at": current.model_dump(mode="json")["lease_expires_at"],
@@ -147,7 +158,7 @@ class CheckerTrialProxy:
             if isinstance(request, TrialReserveRequest):
                 return await self._reserve(request)
             return await self._publish(request)
-        except (ValidationError, ValueError, TypeError, KeyError, AttributeError):
+        except (ValidationError, ValueError, TypeError, KeyError):
             return self._unavailable(operation, "trial_request_invalid")
         except (TrialEvidenceUnavailable, TrialProfileError):
             return self._unavailable(operation, "trial_evidence_unavailable")

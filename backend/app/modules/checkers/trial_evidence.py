@@ -129,9 +129,11 @@ class TrialEvidenceReservations:
         async with self._authority.prepare_execution(facts.request) as prepared:
             await self._lock_current(facts)
             slot = self._slot(subject)
+            # Immutable keys let ART retain FK/key-share custody without
+            # reversing this owner's trial-row -> ART publication lock order.
             row = await self._session.scalar(select(CheckerTrialEvidence).where(
                 CheckerTrialEvidence.address_digest == subject.address_digest,
-            ).with_for_update().execution_options(populate_existing=True))
+            ).with_for_update(key_share=True).execution_options(populate_existing=True))
             if row is not None:
                 self._match(row, subject, slot)
                 # Fresh current execution authority is distinct from original provenance.
@@ -167,6 +169,7 @@ class TrialEvidenceReservations:
         if selector.project_id != facts.request.project_id:
             raise TrialEvidenceUnavailable("trial_evidence_unavailable")
         await self._lock_current(facts)
+        # Pin a non-key field; FOR UPDATE would conflict with ART's FK checks.
         row = await self._session.scalar(select(CheckerTrialEvidence).where(
             CheckerTrialEvidence.id == str(selector.trial_evidence_id),
             CheckerTrialEvidence.project_id == str(facts.request.project_id),
@@ -174,7 +177,7 @@ class TrialEvidenceReservations:
             CheckerTrialEvidence.assignment_id == str(facts.request.assignment_id),
             CheckerTrialEvidence.submission_id == str(facts.request.submission_id),
             CheckerTrialEvidence.submission_version == facts.request.submission_version,
-        ).with_for_update().execution_options(populate_existing=True))
+        ).with_for_update(key_share=True).execution_options(populate_existing=True))
         if row is None:
             raise TrialEvidenceUnavailable("trial_evidence_unavailable")
         subject = _value(TrialEvidenceStableSubject, row.subject)

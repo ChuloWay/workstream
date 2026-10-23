@@ -40,6 +40,9 @@ def _receipt_case():
         "request_digest": external.request_digest, "material_binding_digest": digest("f"),
         "checker_image_digest": external.registry.image_digest,
         "checker_run_id": str(identity.attempt_id), "attempt_id": str(identity.attempt_id),
+        "evaluation_request_id": str(identity.evaluation_request_id),
+        "evaluation_generation": identity.evaluation_generation,
+        "result_id": str(identity.result_id),
         "worker_lease_id": str(identity.lease_id), "worker_lease_generation": identity.lease_generation,
         "worker_lease_expires_at": identity.model_dump(mode="json")["lease_expires_at"],
     }
@@ -65,6 +68,7 @@ def test_trial_receipt_rejects_plan_runtime_origin_and_observation_substitution(
         ("observation_digest", digest("0")), ("observation_byte_count", True),
         ("plan_completed", False), ("slot_ids", ["invented"]),
         ("originating_identity", value["originating_identity"] | {"worker_lease_id": str(new_record_id())}),
+        ("originating_identity", value["originating_identity"] | {"extra": "untrusted"}),
     ):
         with pytest.raises(ValueError):
             _validate_receipt(value | {key: changed}, ticket, external, selected)

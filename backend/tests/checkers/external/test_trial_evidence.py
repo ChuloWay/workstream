@@ -89,12 +89,21 @@ class ReservingExecution(ControlledSelectedExecution):
             replay = await _owner(second, request, self.catalog).reserve(subject)
             assert replay.replayed and replay.trial_evidence_id == ticket.trial_evidence_id
             assert replay.origin == ticket.origin and replay.content_sha256 is None
+            # A verifier may already hold ART rows when it checks its trial
+            # FK. That key-share check must progress while publication retains
+            # the trial row, rather than forming a reverse lock dependency.
+            async with self.factory() as verifier, verifier.begin():
+                await verifier.execute(text("SET LOCAL lock_timeout='1s'"))
+                shared = await verifier.scalar(text(
+                    "SELECT id FROM checker_trial_evidence WHERE id=:id FOR KEY SHARE"
+                ), {"id": ticket.trial_evidence_id})
+                assert shared == ticket.trial_evidence_id
         for field, value in (
             ("plan_sha256", digest("2")), ("input_digest", digest("3")),
             ("materials_digest", digest("4")), ("slot_index", 1),
             ("assignment_id", new_record_id()),
         ):
-            with pytest.raises(TrialEvidenceUnavailable):
+            with pytest.raises((TrialEvidenceUnavailable, ValueError)):
                 async with self.factory() as session, session.begin():
                     await _owner(session, request, self.catalog).reserve(
                         subject.model_copy(update={field: value}),
