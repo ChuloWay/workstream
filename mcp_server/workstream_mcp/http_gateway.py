@@ -18,6 +18,7 @@ from workstream_mcp.schemas import (
     actor_lifecycle_output_validator,
     admin_grant_output_validator,
     authorization_context_output_validator,
+    guide_output_validator,
     profile_output_validator,
     profile_update_output_validator,
     project_grant_output_validator,
@@ -390,6 +391,87 @@ class WorkstreamGateway:
             )
         else:
             matches = matches and self._same_uuid(data.get("id"), arguments["grant_id"])
+        if not matches:
+            return GatewayResult(
+                failure=SafeFailure(
+                    "workstream_execution_uncertain",
+                    status=502,
+                    correlation_id=correlation_id,
+                )
+            )
+        return outcome
+
+    async def guide_mutation(
+        self,
+        name: str,
+        bearer: str,
+        arguments: dict[str, Any],
+        correlation_id: str | None = None,
+    ) -> GatewayResult:
+        """Dispatch one fixed guide metadata mutation and bind its selectors."""
+        project_id = arguments["project_id"]
+        base = f"/api/v1/projects/{quote(project_id, safe='')}/guides"
+        create = name == "guides_create"
+        path = (
+            base
+            if create
+            else f"{base}/{quote(arguments['guide_id'], safe='')}"
+        )
+        outcome = await self._request(
+            "POST" if create else "PATCH",
+            path,
+            bearer,
+            guide_output_validator(name),
+            correlation_id,
+            json_body=arguments["body"],
+            idempotency_key=arguments["idempotency_key"],
+            expected_status=201 if create else 200,
+            mutation=True,
+        )
+        if outcome.failure is not None:
+            return outcome
+        data = outcome.data or {}
+        matches = self._same_uuid(data.get("project_id"), project_id)
+        if create:
+            body = arguments["body"]
+            requested_examples = [
+                {
+                    "content": item["content"],
+                    "title": item.get("title"),
+                    "labels": item.get("labels", []),
+                }
+                for item in body["task_examples"]
+            ]
+            returned_documents = data.get("documents")
+            requested_documents = body["documents"]
+            matches = (
+                matches
+                and data.get("version") == body["version"]
+                and data.get("status") == "draft"
+                and data.get("change_summary") == body.get("change_summary")
+                and data.get("task_examples") == requested_examples
+                and isinstance(returned_documents, list)
+                and len(returned_documents) == len(requested_documents)
+                and self._unique_uuid_field(returned_documents, "document_id")
+                and all(
+                    isinstance(returned, dict)
+                    and returned.get("label") == requested.get("label")
+                    and returned.get("media_type") == requested.get("media_type")
+                    and returned.get("order") == index
+                    for index, (returned, requested) in enumerate(
+                        zip(returned_documents, requested_documents, strict=True)
+                    )
+                )
+                and isinstance(data.get("setup"), dict)
+                and data["setup"].get("status") == "awaiting_documents"
+            )
+        else:
+            matches = matches and self._same_uuid(data.get("id"), arguments["guide_id"])
+            if "change_summary" in arguments["body"]:
+                matches = (
+                    matches
+                    and data.get("change_summary") == arguments["body"]["change_summary"]
+                )
         if not matches:
             return GatewayResult(
                 failure=SafeFailure(
