@@ -211,11 +211,15 @@ def test_api_drill_action_expectations_use_current_catalogue():
     from app.modules.authorization.catalogue import ActionId
 
     source = ast.parse(Path(MODULES[0].__file__).read_text())
-    inventories = [node.comparators[0] for node in ast.walk(source)
-        if isinstance(node, ast.Compare) and isinstance(node.left, ast.Subscript)
+    inventories = [
+        node.comparators[0]
+        for node in ast.walk(source)
+        if isinstance(node, ast.Compare)
+        and isinstance(node.left, ast.Subscript)
         and isinstance(node.left.slice, ast.Constant)
         and node.left.slice.value == "effective_action_ids"
-        and isinstance(node.comparators[0], ast.List)]
+        and isinstance(node.comparators[0], ast.List)
+    ]
     assert inventories
     current_actions = {action.value for action in ActionId}
     for inventory in inventories:
