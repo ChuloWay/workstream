@@ -24,6 +24,7 @@ from public_setup import configure_guide, publish_unpaid_terms, approve_and_acti
 from runtime import durable_runtime
 from task_work import claim_and_read
 from submission_work import submit_and_observe
+from artifact_work import inspect_submission_custody
 
 ROOT = Path(__file__).resolve().parents[3]
 BACKEND = ROOT / "backend"
@@ -279,7 +280,7 @@ def main():
                         )
                         client.complete_stage("task_claim_and_guide")
                         if os.environ.get("WORKSTREAM_CLI_JOURNEY_SUBMIT") == "1":
-                            submit_and_observe(
+                            receipt = submit_and_observe(
                                 client,
                                 tokens,
                                 actors,
@@ -291,6 +292,14 @@ def main():
                             client.complete_stage(
                                 "submission_contribution_export_revocation"
                             )
+                            inspect_submission_custody(
+                                client,
+                                tokens,
+                                project_id,
+                                task_id,
+                                receipt["submission_id"],
+                            )
+                            client.complete_stage("operator_submission_custody")
                 print(
                     json.dumps(
                         {

@@ -1824,6 +1824,35 @@ key. An existing child can later be active, acknowledged or held on exact
 replay. This is distinct from `operations checker retry`, which selects a
 known-terminal infrastructure-failed checker run.
 
+## Inspect artifact custody and explicitly retry verification
+
+`operations artifact` uses the existing public `/api/v1/operator/artifacts`
+routes. It requires current system-Operator authority; observations do not
+authorize a later mutation, reveal provider coordinates or establish readiness
+locally.
+
+```sh
+workstream operations artifact bindings submission SUBMISSION_ID -o json
+workstream operations artifact replicas CONTENT_ID -o json
+workstream operations artifact receipts REPLICA_ID -o json
+workstream operations artifact verification-job JOB_ID -o json
+workstream operations artifact recovery-attempt ATTEMPT_ID -o json
+workstream operations artifact audit-events artifact_binding BINDING_ID -o json
+workstream operations artifact admission-usage PROJECT_ID --task-id TASK_ID -o json
+workstream operations artifact readiness -o json
+workstream operations artifact retry JOB_ID --project-id PROJECT_ID --task-id TASK_ID --submission-id SUBMISSION_ID --reason 'Provider availability restored' --idempotency-key UUID --expected-source-job-cas-version 3 -o json
+```
+
+Bindings, replicas, receipts, audit events and admission usage return one bounded page. Continue
+explicitly with `--cursor` and the same selectors and `--limit` (1..100, default
+50). The backend determines which resource types and facts the caller may read.
+Retry uses the exact source job and current CAS version, project, task, optional
+submission, reason and caller-owned key. It sends one POST; it does not retry
+automatically or infer eligibility from a successful read. An uncertain outcome
+must be reconciled by manually replaying those unchanged inputs. Fresh authority
+is required even for replay. A successful upload is not a failed verification
+job and should not be retried through this operation.
+
 ## Verification
 
 Behavior tests invoke the built executable from outside the repository, with

@@ -21,7 +21,11 @@ def poll(client, token, arguments, predicate):
         value = client.call(token, *arguments)
         if predicate(value):
             return value
-        if value.get("status") in {"failed", "guide_blocked"}:
+        if value.get("status") in {
+            "failed",
+            "guide_blocked",
+            "compilation_invalid_terminal",
+        }:
             raise AssertionError("public setup reached a terminal unsuccessful state")
         time.sleep(1)
     raise AssertionError("public read did not reach its expected state within deadline")
@@ -38,6 +42,58 @@ def authored_rules():
                 "statement": "Validate the declared proof fields.",
                 "disposition": "supported_" + phase,
                 "evidence_refs": [reference],
+                "classification_rationale": "Registered static inspection validates declared fields, not remote work.",
+                "check_specification": {
+                    "evaluation_method": "static_inspection",
+                    "execution_mode": "bounded_pre_submit"
+                    if phase == "pre_submit"
+                    else "background",
+                    "maximum_duration_seconds": 30,
+                    "stage_rationale": "Validate the candidate at intake and the immutable attempt after submission.",
+                    "inputs": [
+                        {
+                            "input_id": "proof",
+                            "kind": "relative_file",
+                            "relative_path": "proof.json",
+                            "purpose": "Declared proof claims, without network verification.",
+                        }
+                    ],
+                    "check_steps": [
+                        "Require a regular proof.json of at most 65536 bytes containing a UTF-8 JSON object.",
+                        "Require schema harnessy.work.proof.v1 and commit_sha of exactly 40 hexadecimal characters.",
+                        "Require pr_url and ci_run_url with scheme https, authority github.com and a non-root path.",
+                        "Require ci_conclusion success and merged equal to the JSON boolean true.",
+                    ],
+                    "pass_conditions": [
+                        "All declared proof fields satisfy the static predicates."
+                    ],
+                    "failure_findings": [
+                        {
+                            "code": "harnessy.proof.invalid_json",
+                            "level": "error",
+                            "condition": "proof.json is not a UTF-8 JSON object.",
+                            "message": "proof.json must contain a valid JSON object.",
+                        }
+                    ],
+                    "positive_tests": [
+                        "A JSON object satisfying every stated field predicate passes."
+                    ],
+                    "negative_tests": [
+                        {
+                            "name": "invalid_json",
+                            "scenario": "proof.json contains malformed JSON.",
+                            "expected_verdict": "failed",
+                            "expected_finding_codes": ["harnessy.proof.invalid_json"],
+                        }
+                    ],
+                    "runtime_dependencies": [],
+                    "infrastructure_failures": [
+                        {
+                            "code": "invalid_output",
+                            "condition": "The registered checker returns a malformed result envelope.",
+                        }
+                    ],
+                },
             }
         )
         bindings.append(
