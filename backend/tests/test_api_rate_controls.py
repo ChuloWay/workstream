@@ -913,6 +913,7 @@ ESTABLISHED_AUTHORIZATION_READ_RATE_ROUTES = {
     ("GET", "/audit/projects/{project_id}/tasks/{task_id}/locked-context"),
     ("GET", "/operations/projects/{project_id}/tasks"),
     ("GET", "/operations/projects/{project_id}/tasks/{task_id}/locked-context"),
+    ("GET", "/projects"),
     ("GET", "/projects/{project_id}"),
     ("GET", "/projects/{project_id}/active-guide"),
     ("GET", "/projects/{project_id}/contribution-policies/current"),

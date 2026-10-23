@@ -35,12 +35,15 @@ class ProjectCatalogueItem(BaseModel):
 
 
 class ProjectCataloguePage(BaseModel):
+    """A bounded minimal identity page and optional signed continuation."""
+
     model_config = _FROZEN
     items: tuple[ProjectCatalogueItem, ...]
     next_cursor: str | None
 
 
 def _cursor_invalid() -> StructuredHTTPException:
+    """Expose one bounded error for malformed or substituted cursors."""
     return StructuredHTTPException(
         status_code=422,
         detail="Invalid project catalogue cursor",
@@ -50,6 +53,7 @@ def _cursor_invalid() -> StructuredHTTPException:
 
 
 def _unavailable() -> StructuredHTTPException:
+    """Normalize infrastructure and projection failures without private facts."""
     return StructuredHTTPException(
         status_code=503,
         detail="Project catalogue unavailable",
@@ -69,15 +73,18 @@ class ProjectCatalogueReadOperation:
         authority: ProjectCatalogueAuthorizationPort,
         projects: ProjectCatalogueReadPort,
     ) -> None:
+        """Bind request-local public owners to the response transaction."""
         self._session, self._actor_id = session, actor_profile_id
         self._authority, self._projects = authority, projects
 
     async def list(self, *, limit: int, cursor: str | None) -> ProjectCataloguePage:
+        """Commit AUTH evidence only with a validated minimal project page."""
         request = ProjectCatalogueRequest(
             actor_profile_id=self._actor_id, limit=limit, cursor=cursor
         )
 
         async def read(grant):
+            """Project only authorized public columns before the snapshot commits."""
             rows, more = await self._projects.read_project_catalogue(
                 after=grant.position, limit=limit
             )

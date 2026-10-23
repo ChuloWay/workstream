@@ -20,10 +20,12 @@ class ProjectCatalogueAuthorization:
     """Use the canonical kernel for each page before decoding a continuation."""
 
     def __init__(self, kernel: AuthorizationService, secret) -> None:
+        """Reuse the canonical kernel and configured cursor-signing secret."""
         self._kernel, self._secret = kernel, secret
 
     @staticmethod
     def _query(request: ProjectCatalogueRequest) -> str:
+        """Bind the cursor to the exact actor, action and ID-keyset request."""
         return canonical_json_hash(
             {
                 "action_id": ActionId.PROJECT_CATALOGUE_LIST.value,
@@ -34,11 +36,13 @@ class ProjectCatalogueAuthorization:
         )
 
     def _codec(self) -> AuthorizationIdCursorCodec:
+        """Fail closed when no valid cursor-signing configuration is available."""
         if self._secret is None:
             raise ProjectCatalogueUnavailable("Project catalogue unavailable")
         return AuthorizationIdCursorCodec(decode_pagination_cursor_hmac_secret(self._secret))
 
     async def authorize(self, request: ProjectCatalogueRequest) -> ProjectCatalogueGrant:
+        """Require fresh locked authority before decoding the submitted cursor."""
         codec = self._codec()
         query_digest = self._query(request)
         await self._kernel.require(
@@ -66,6 +70,7 @@ class ProjectCatalogueAuthorization:
             raise ProjectCatalogueCursorInvalid("Invalid project catalogue cursor") from exc
 
     def encode(self, request: ProjectCatalogueRequest, position) -> str:
+        """Publish only an already-disclosed ID in the signed query envelope."""
         return self._codec().encode(
             query_digest=self._query(request),
             resource_id=position,
