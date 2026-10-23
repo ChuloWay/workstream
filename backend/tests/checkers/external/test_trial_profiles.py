@@ -1,6 +1,9 @@
 from dataclasses import asdict, replace
 import json
 import os
+from pathlib import Path
+import subprocess
+import sys
 from uuid import UUID
 
 import pytest
@@ -322,3 +325,30 @@ def test_operator_manifest_loader_rejects_path_replacement_during_read(tmp_path,
     monkeypatch.setattr(trial_profiles.os, "read", replace_then_read)
     with pytest.raises(TrialProfileError, match="changed"):
         load_trial_authority_manifest(path, digest("f"))
+
+
+def test_operator_manifest_loader_rejects_fifo_without_blocking(tmp_path):
+    path = tmp_path / "trial-authority.fifo"
+    os.mkfifo(path, 0o600)
+    backend_root = Path(__file__).resolve().parents[3]
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            (
+                "from pathlib import Path; "
+                "from app.modules.checkers.api.trial_profiles import "
+                "load_trial_authority_manifest, TrialProfileError; "
+                "\ntry: load_trial_authority_manifest(Path(__import__('sys').argv[1]), "
+                "'sha256:' + 'f' * 64)"
+                "\nexcept TrialProfileError: raise SystemExit(0)"
+                "\nraise SystemExit(1)"
+            ),
+            str(path),
+        ],
+        cwd=backend_root,
+        capture_output=True,
+        check=False,
+        timeout=2,
+    )
+    assert completed.returncode == 0, completed.stderr.decode("utf-8", errors="replace")

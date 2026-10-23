@@ -683,7 +683,7 @@ fn read_trial_authority_manifest_after_open(
     }
     let mut file = OpenOptions::new()
         .read(true)
-        .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC)
+        .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC | libc::O_NONBLOCK)
         .open(path)
         .map_err(|_| "trial authority manifest unavailable")?;
     let before = file
@@ -2975,6 +2975,50 @@ mod tests {
             .unwrap_err(),
             "trial authority manifest changed"
         );
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn trial_manifest_reader_rejects_fifo_without_blocking() {
+        const CHILD_PATH: &str = "WORKSTREAM_TRIAL_MANIFEST_FIFO_CHILD";
+        if let Some(path) = std::env::var_os(CHILD_PATH) {
+            assert_eq!(
+                read_trial_authority_manifest(Path::new(&path)).unwrap_err(),
+                "trial authority manifest path invalid"
+            );
+            return;
+        }
+
+        use std::ffi::CString;
+        use std::os::unix::ffi::OsStrExt;
+
+        let (root, _) = test_config();
+        let path = root.join("trial-authority.fifo");
+        let path_bytes = CString::new(path.as_os_str().as_bytes()).unwrap();
+        // SAFETY: the path is a NUL-free CString beneath this test's private root.
+        assert_eq!(unsafe { libc::mkfifo(path_bytes.as_ptr(), 0o600) }, 0);
+        let mut child = Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "tests::trial_manifest_reader_rejects_fifo_without_blocking",
+                "--nocapture",
+            ])
+            .env(CHILD_PATH, &path)
+            .spawn()
+            .unwrap();
+        let deadline = Instant::now() + Duration::from_secs(2);
+        let status = loop {
+            if let Some(status) = child.try_wait().unwrap() {
+                break status;
+            }
+            if Instant::now() >= deadline {
+                child.kill().unwrap();
+                let _ = child.wait();
+                panic!("FIFO manifest read blocked");
+            }
+            thread::sleep(Duration::from_millis(10));
+        };
+        assert!(status.success());
         fs::remove_dir_all(root).unwrap();
     }
 

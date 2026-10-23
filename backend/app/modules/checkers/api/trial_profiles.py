@@ -103,15 +103,18 @@ class TrialResourceCeilings:
             raise TrialProfileError("trial timeout ceiling is invalid")
         if self.maximum_memory_bytes != self.maximum_swap_bytes:
             raise TrialProfileError("trial swap must be disabled")
-        if any(
-            value > 4 * 1024 * 1024
-            for value in (
-                self.maximum_step_output_bytes,
-                self.maximum_observation_bytes,
-                self.maximum_frame_bytes,
-                self.maximum_response_bytes,
+        if (
+            any(
+                value > 4 * 1024 * 1024
+                for value in (
+                    self.maximum_step_output_bytes,
+                    self.maximum_observation_bytes,
+                    self.maximum_frame_bytes,
+                    self.maximum_response_bytes,
+                )
             )
-        ) or self.maximum_receipt_bytes > 1024 * 1024:
+            or self.maximum_receipt_bytes > 1024 * 1024
+        ):
             raise TrialProfileError("trial byte ceiling is invalid")
 
 
@@ -634,7 +637,10 @@ def _read_bounded_manifest(path: Path) -> bytes:
     try:
         if path.resolve(strict=True) != path:
             raise TrialProfileError("trial authority manifest is invalid")
-        descriptor = os.open(path, os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW)
+        descriptor = os.open(
+            path,
+            os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW | os.O_NONBLOCK,
+        )
     except OSError as exc:
         raise TrialProfileError("trial authority manifest is unavailable") from exc
     try:
