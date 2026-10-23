@@ -353,6 +353,7 @@ async def _storage_case(tmp_path, database_url, monkeypatch) -> AsyncIterator[_S
         )
         for service_identity in (
             ServiceIdentity.ARTIFACT_CHECKER_OUTPUT,
+            ServiceIdentity.ARTIFACT_BINDING,
             ServiceIdentity.ARTIFACT_PUT_RESOLVER,
             ServiceIdentity.ARTIFACT_VERIFIER,
         ):
