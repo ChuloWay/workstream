@@ -56,7 +56,12 @@ async def test_retained_feedback_matches_exact_completed_members_without_writes(
     isolated_database_env,
     findings,
 ):
-    async with completed_evidence(tmp_path, isolated_database_env, findings=findings) as h:
+    async with completed_evidence(
+        tmp_path,
+        isolated_database_env,
+        findings=findings,
+        human_review_required=False,
+    ) as h:
         selector = feedback_selector(h)
         async with h.factory() as session, session.begin():
             before = await evidence_snapshot(session)

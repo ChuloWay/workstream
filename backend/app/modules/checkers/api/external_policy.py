@@ -37,9 +37,51 @@ SELECTED_POST_HANDLER_TIMEOUT_SECONDS = (
 ) // 1000
 SELECTED_POST_DELIVERY_LEASE_SECONDS = 3_600
 
+EVALUATION_CONTEXT_VERSION_KEY = "workstream_evaluation_context_version"
+EVALUATION_CONTEXT_ROLES_KEY = "workstream_evaluation_context_roles"
+EVALUATION_CONTEXT_ROLES = ("predecessor_findings", "predecessor_submission_archive")
+
 
 class ExternalCheckerPolicyError(ValueError):
     """Reject incomplete, stale or phase-substituted locked checker policy."""
+
+
+def selected_evaluation_context_roles(
+    configuration: dict[str, JsonValue],
+    phase: ExternalCheckerPhase,
+) -> tuple[str, ...] | None:
+    """Select approved historical material only through an exact POST capability."""
+    keys = {key for key in configuration if key.startswith("workstream_evaluation_context_")}
+    if not keys:
+        return None
+    if keys != {EVALUATION_CONTEXT_VERSION_KEY, EVALUATION_CONTEXT_ROLES_KEY}:
+        raise ExternalCheckerPolicyError("evaluation context selection is incomplete or unknown")
+    roles = configuration[EVALUATION_CONTEXT_ROLES_KEY]
+    if (
+        phase != "post_submit"
+        or configuration[EVALUATION_CONTEXT_VERSION_KEY] != "v1"
+        or type(roles) is not list
+        or any(type(role) is not str or role not in EVALUATION_CONTEXT_ROLES for role in roles)
+        or roles != sorted(set(roles))
+    ):
+        raise ExternalCheckerPolicyError("evaluation context selection is invalid")
+    return tuple(roles)
+
+
+def validated_evaluation_context_roles(
+    configuration: dict[str, JsonValue],
+    registry: ExternalCheckerRegistryEntry,
+) -> tuple[str, ...] | None:
+    """Require the immutable checker schema to declare any selected context capability."""
+    selected = selected_evaluation_context_roles(configuration, registry.phase)
+    if selected is not None:
+        properties = registry.configuration_schema.document.get("properties")
+        if not isinstance(properties, dict) or not {
+            EVALUATION_CONTEXT_VERSION_KEY,
+            EVALUATION_CONTEXT_ROLES_KEY,
+        }.issubset(properties):
+            raise ExternalCheckerPolicyError("checker schema does not declare evaluation context")
+    return selected
 
 
 class _PolicyValue(BaseModel):
@@ -60,6 +102,7 @@ class LockedExternalCheckerBinding(_PolicyValue):
         if self.registry.phase != self.stage:
             raise ExternalCheckerPolicyError("checker binding phase mismatch")
         self.registry.configuration_schema.validate_instance(self.configuration)
+        validated_evaluation_context_roles(self.configuration, self.registry)
         if self.configuration_sha256 != external_checker_json_hash(self.configuration):
             raise ExternalCheckerPolicyError("checker binding configuration mismatch")
         return self

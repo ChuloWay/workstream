@@ -147,6 +147,42 @@ supply work evidence and do not grant acceptance authority. Passing required
 POST checks routes through the existing human-review or shared final-acceptance
 branch selected by the locked ReviewPolicy.
 
+A POST binding can explicitly select revision context using the flat approved
+configuration pair `workstream_evaluation_context_version: "v1"` and
+`workstream_evaluation_context_roles`. The latter is a sorted, unique list drawn
+from `predecessor_findings` and `predecessor_submission_archive`. Both properties
+must be declared by the immutable registry configuration schema; permissive
+additional properties do not grant the capability. PRE cannot select it.
+Absent selection means current Submission material only.
+
+Selected images receive a typed `input.evaluation_context` with `kind`, `source`,
+`predecessor` and `feedback`. An initial attempt has null source, predecessor and
+feedback, even when its global Submission version exceeds one after reclaim.
+A checker revision binds the preparation actually consumed by that Submission,
+the exact previous Submission from the same assignment/contributor, and the
+immutable checker completion that requested the revision. It never follows a
+latest preparation or today's policy. Kept and rebased contexts use the same
+owner read; neither alters old attempts. Feedback is complete normalized member
+evidence, bounded at 512 KiB; excess or inconsistent evidence fails closed.
+Contributor identities and provider locations are not included in image context.
+
+ART reads these facts under current materialization authority, verifies each
+selected archive's bytes and semantic manifest, and projects the files once into
+one quota-owned private workspace. Each binding receives its own temporary
+request-bound v2 grant. The current role mounts read-only at `/work/input`; an
+explicitly selected predecessor role mounts read-only at
+`/work/context/predecessor`. A current-only binding in the same aggregate cannot
+see that prior role. Publishing or revoking a grant does not move the files, so
+later selected bindings reuse the verified trees. Combined expanded bytes and
+entries remain subject to the existing ceilings; adding a prior archive does
+not double them. All views and grants close before replay validation or result
+publication.
+
+Context-enabled member results retain the configuration hash, actual input hash,
+context hash and visible material identities. Current-only results omit this
+unselected receipt, preserving immutable historical result hashes. This extends
+the one selected execution contract; it creates no second executor or authority.
+
 There is no catalogue request/result decoder, generic rule planner, alternate
 phase service or old execution path. Removing those implementations does not
 rewrite or delete stored records. Unsupported stored envelopes fail closed;

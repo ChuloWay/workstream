@@ -47,6 +47,18 @@ for separate runner provisioning and Operator registration; it changes no policy
   image, mount another project's files or request a private host-side continuation
   through its final output.
 
+POST grants use one aggregate v2 workspace with fixed role roots and a separate
+temporary manifest for each selected binding. Current work mounts at
+`/work/input`. A registry-declared, policy-approved revision-context selection
+may additionally expose the exact prior attempt at `/work/context/predecessor`
+and bounded prior findings in `input.evaluation_context`. Neither a global
+Submission version nor a project image request authorizes historical access.
+Initial attempts carry explicit null prior context, including after another
+contributor releases a task. PRE keeps its distinct pre-admission grant; there
+is no POST fallback to the PRE protocol. See the
+[POST contract](../docs/architecture_checker_framework.md#post-submit-contract)
+for selection, evidence, quota and replay rules.
+
 The service does not interpret project-private build plans. An image that needs
 to compile or test submitted work may use the typed generic invocation-local
 trial tool only when its exact POST binding and administrative profile authorize

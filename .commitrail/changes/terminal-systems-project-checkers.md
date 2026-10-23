@@ -223,3 +223,107 @@ mutation. Focused positive/negative and PostgreSQL owner proofs precede the ART
 projection integration. This staged read slice alone does not deliver the
 prior archive to an image or close PILOT-06. Declare the exact ART/grant files
 and obtain boundary review before extending that transport.
+
+The next bounded policy slice owns
+`backend/app/modules/checkers/api/external_policy.py` and
+`backend/tests/checkers/external/test_evaluation_context_selection.py`.
+The flat reserved configuration pair
+`workstream_evaluation_context_version` / `workstream_evaluation_context_roles`
+selects version `v1` and a sorted, unique subset of
+`predecessor_submission_archive` and `predecessor_findings`. Empty roles request
+only the initial/revision distinction. Both absent means current-only material;
+partial, unknown-prefix or PRE selections fail. The immutable registry
+configuration schema must explicitly declare both keys as properties as well
+as validate the approved values. No policy or schema is injected at runtime.
+Focused positive/negative compilation tests must preserve ordinary PRE/POST
+bindings and reject permissive schemas that never declared this capability.
+
+## Revision material transport
+
+The next transport slice extends the existing execution/materialization path in
+`backend/app/modules/checkers/api/external.py`,
+`backend/app/modules/checkers/api/evaluation_context.py`,
+`backend/app/modules/checkers/api/materialization.py`,
+`backend/app/modules/checkers/api/selected_post_submit.py`,
+`backend/app/modules/checkers/execution.py`,
+`backend/app/modules/checkers/selected_post_submit_execution.py`,
+`backend/app/modules/artifacts/post_submit_selection.py`,
+`backend/app/modules/artifacts/post_submit_materialization.py`,
+`backend/app/modules/artifacts/preparation.py`, and the existing composition
+files `backend/app/adapters/tasks/__init__.py`,
+`backend/app/adapters/checkers/__init__.py`, and
+`backend/app/adapters/artifacts/__init__.py`.
+The shared image wire/grant changes own
+`external_checkers/workstream-checker-sdk/src/lib.rs` and the grant verification
+and mount construction sections of
+`external_checkers/workstream-checker-service/src/main.rs` only. Coordinate
+those sections with the model-runtime owner; do not overwrite its capability
+composition or the execution agent's trial engine.
+
+An independent scratch reproduction confirmed that the current POST grant
+publisher moves the tree on its first use and rejects the second selected
+binding. POST uses one v2 aggregate grant workspace for both current-only and
+revision material. Archives project once into fixed private role roots; each
+binding publishes and revokes only its request-bound manifest. PRE remains its
+distinct existing v1 intake protocol. Current material mounts read-only at
+`/work/input`; an approved predecessor role mounts read-only at
+`/work/context/predecessor`. An image selects neither host paths nor mount flags.
+One aggregate reservation applies the existing scratch byte/entry ceilings to
+both archives and control entries. There is no second materializer or doubled
+per-archive allowance.
+
+The short transaction order is AUTH preparation, TASK current bundle, ART's
+nonlocking consumed-preparation selector, TASK revision facts, current CHECKERS
+lease custody, requested historical feedback, and complete ART selections.
+The exact policy plan and role facts enter the authority digest; commit before
+storage I/O. After cancellation-safe cleanup, repeat that order and validate
+the original receipt against exact unchanged selections. A missing, excessive
+or substituted source is infrastructure failure, never a fallback to less
+material. Image context omits contributor identities. Optional member input
+receipts are mandatory for context-enabled bindings and omitted canonically
+when absent, preserving retained historical result digests without a parallel
+execution implementation.
+
+Regression scope also includes
+`backend/tests/checkers/external/test_contracts.py`,
+`backend/tests/checkers/external/test_selected_post_submit.py`,
+`backend/tests/checkers/external/test_runtime.py`,
+`backend/tests/checkers/external/test_revision_materialization.py`,
+`backend/tests/projects/post_policy/test_compiler.py`,
+`backend/tests/test_post_submit_selection.py`,
+`backend/tests/test_post_submit_materialization.py`, their existing
+`backend/tests/post_submit_materialization_helpers.py` fixture, and
+SDK/service inline tests. Prove two sequential bindings with unchanged trees,
+current-only hidden-prior isolation, exact revision identity and findings,
+rebase/reclaim, denied/substituted grants, aggregate quota/cleanup, retained
+result reconstitution, and fresh real PostgreSQL/MinIO materialization. These
+changes require architecture, security, QA/test-delta and affected docs review
+before the complete issue is represented as ready.
+
+The real approved revision-role fixture exposed a prerequisite in
+`backend/app/modules/projects/post_policy/compiler.py`: saved POST configuration
+compared JSON lists with typed proposal tuples and rejected identical approved
+array parameters. This bounded owner fix compares canonical JSON parameter
+values, matching approval compilation. Preserve exact ordering and reject
+changed values; do not weaken proposal, registry or approval custody.
+
+Real PostgreSQL terminal publication also requires extending retained input
+custody: the existing SQL authorization digest reconstructs only the current
+archive and correctly rejects an authority receipt that additionally binds
+revision context. Add nullable `checker_runs.input_context_custody`, typed closed
+context/prior evidence, and bind it to terminal authorization and replay. Keep
+the existing `material_custody` shape and historical receipt digests unchanged.
+No context-enabled terminal result may omit the extension or substitute a
+different preparation, assignment, predecessor or feedback source.
+
+This extension owns `backend/app/modules/checkers/models.py`,
+`backend/app/modules/checkers/api/execution.py`,
+`backend/alembic/versions/0061_checker_revision_input.py`,
+`backend/alembic/env.py`, `backend/tests/test_alembic.py`,
+`backend/scripts/schema_baseline_manifest.py`,
+`backend/tests/checkers/external/test_revision_materialization.py` and affected
+schema fingerprints. Migration 0061 follows PILOT-05's shared model owner 0060;
+integrate the committed dependency before migration qualification. No competing
+head or rewritten retained data is allowed. Prove exact SQL/Python digest
+agreement, current-only retained data, selected initial/revised inputs,
+substitution/omission denial and rollback on real PostgreSQL.
