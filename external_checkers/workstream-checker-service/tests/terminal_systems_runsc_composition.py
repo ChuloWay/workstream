@@ -424,7 +424,7 @@ def _wait_for_socket(
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         if process.poll() is not None:
-            raise AssertionError(f"Rust service exited early: {process.stderr.read()}")
+            raise AssertionError(f"Rust service exited early with {process.returncode}")
         if path.is_socket():
             with socket.socket(socket.AF_UNIX) as stream:
                 try:
