@@ -578,6 +578,23 @@ expected = {
 
 
 AUDIT_ALLOWED_ACTION_VALUES = {
+    "checker.model_call.prepare",
+    "checker.model_call.dispatch",
+    "checker.model_call.recover",
+    "checker.model_call.observe",
+    "checker.model_call.complete",
+    "checker.model_call.grant",
+    "project.guide_compilation.model.prepare",
+    "project.guide_compilation.model.dispatch",
+    "project.guide_compilation.model.observe",
+    "project.guide_compilation.model.complete",
+    "project.model_profile.provision",
+    "project.model_budget.configure",
+    "project.model_usage.read",
+    "project.model_call.recovery_child.authorize",
+    "artifact.checker_output.write",
+    "artifact.checker_output.binding.create",
+
     "task.revision.expire",
     "task.revision.recover",
     "checker.pre_submit.execute",

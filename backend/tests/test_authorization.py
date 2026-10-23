@@ -2242,7 +2242,9 @@ def test_administrative_role_policy_and_definition_responses_are_exact() -> None
             project.effective_policy.read review.queue.inspect review.lease.force_release
             contribution.read_project operations.status.read operations.timer.run operations.reconcile.run operations.outbox.retry
             operations.projection.rebuild operations.task.start_override
-            operations.submission_gate.repair operations.checker.retry artifact.binding.read
+            operations.submission_gate.repair operations.checker.retry
+            project.model_profile.manage project.model_budget.manage
+            project.model_call.recovery_child.authorize artifact.binding.read
             artifact.replica.read artifact.receipt.read artifact.verification_job.read
             artifact.verification_job.retry artifact.recovery_attempt.read artifact.audit.read
             audit.read""".split(),
@@ -2715,7 +2717,7 @@ async def test_identity_link_lifecycle_route_preserves_outcome_transaction_contr
                     definition.action_id,
                     definition.permission_id,
                     definition.owner,
-                    ActionAvailability.ACTIVE,
+                    ActionAvailability.PLANNED,
                 )
                 if definition.action_id is ActionId.ARTIFACT_CHECKER_OUTPUT_WRITE
                 else definition

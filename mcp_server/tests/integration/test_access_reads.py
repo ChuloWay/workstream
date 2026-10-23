@@ -202,10 +202,17 @@ async def _exercise_access_reads(
             if allowed and "items" in body:
                 assert body["items"] and body["total"] >= len(body["items"])
             if allowed and name == "workstream_permissions_list":
-                assert body["total"] == len(body["items"]) == 91
-                assert {"task.revision.expire", "task.revision.recover"} <= {
-                    item["permission_id"] for item in body["items"]
-                }
+                assert body["total"] == len(body["items"]) == 95
+                assert {
+                    "task.revision.expire",
+                    "task.revision.recover",
+                    "project.model_profile.manage",
+                    "project.model_budget.manage",
+                    "project.guide_compilation.model.prepare",
+                    "project.guide_compilation.model.dispatch",
+                    "project.guide_compilation.model.observe",
+                    "project.guide_compilation.model.complete",
+                } <= {item["permission_id"] for item in body["items"]}
             if allowed and name == "workstream_actor_get":
                 assert body["display_name"] == "Access read target"
 

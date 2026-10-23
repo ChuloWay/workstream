@@ -633,13 +633,25 @@ def test_openapi_documents_request_error_and_response_context() -> None:
     assert repair_operation["x-workstream-action-id"] == "project.task.revision.repair"
     assert repair_operation["security"]
     new_manager_reads.add(revision_repair)
-    assert len(route_inventory) == 129
-    retained_routes = sorted(set(route_inventory) - proposal_routes - post_policy_routes - queue_routes - new_manager_reads - guide_read - contribution_reads.keys() - public_entry_actions.keys() - registry_actions.keys() - recovery_actions.keys())
-    retained_protected = sorted(set(protected_inventory) - proposal_routes - post_policy_routes - queue_routes - new_manager_reads - guide_read - contribution_reads.keys() - public_entry_actions.keys() - registry_actions.keys() - recovery_actions.keys())
+    model_actions = {
+        "POST /api/v1/operations/projects/{project_id}/model-profiles": "project.model_profile.provision",
+        "POST /api/v1/operations/projects/{project_id}/model-budget-configurations": "project.model_budget.configure",
+        "GET /api/v1/operations/projects/{project_id}/model-usage/effects/{effect_id}": "project.model_usage.read",
+        "POST /api/v1/operations/projects/{project_id}/model-call-attempts/{parent_attempt_id}/recovery-children": "project.model_call.recovery_child.authorize",
+    }
+    for route, action in model_actions.items():
+        assert route in protected_inventory
+        method, path = route.split(" ", 1)
+        operation = schema["paths"][path][method.lower()]
+        assert operation["x-workstream-action-id"] == action
+        assert operation["security"]
+    assert len(route_inventory) == 133
+    retained_routes = sorted(set(route_inventory) - proposal_routes - post_policy_routes - queue_routes - new_manager_reads - guide_read - contribution_reads.keys() - public_entry_actions.keys() - registry_actions.keys() - recovery_actions.keys() - model_actions.keys())
+    retained_protected = sorted(set(protected_inventory) - proposal_routes - post_policy_routes - queue_routes - new_manager_reads - guide_read - contribution_reads.keys() - public_entry_actions.keys() - registry_actions.keys() - recovery_actions.keys() - model_actions.keys())
     assert sha256("\n".join(retained_routes).encode()).hexdigest() == (
         "793237012e9256d308dd5d1e9c1a65e41381cf6306888fdd175dc9794b118444"
     )
-    assert len(protected_inventory) == 127
+    assert len(protected_inventory) == 131
     assert sha256("\n".join(retained_protected).encode()).hexdigest() == (
         "0953ae6392b81a4a7ba7c9f6b7fccc17768f34cd1f958572fdc553cd204ec82e"
     )
@@ -676,6 +688,7 @@ def test_openapi_documents_request_error_and_response_context() -> None:
         **public_entry_actions,
         **registry_actions,
         **recovery_actions,
+        **model_actions,
         **batch_actions,
         "GET /api/v1/tasks/{task_id}/submissions": "task.submission.list",
         "GET /api/v1/submissions/{submission_id}": "submission.read",
