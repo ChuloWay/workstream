@@ -29,7 +29,10 @@ from app.interfaces.checker_model_provider import (
     CheckerModelUsage,
 )
 from app.interfaces.checker_model_proxy import ModelProxyRequest
-from app.interfaces.external_services import ExternalServiceAdapterIdentity, ExternalServiceUnavailableError
+from app.interfaces.external_services import (
+    ExternalServiceAdapterIdentity,
+    ExternalServiceUnavailableError,
+)
 from app.interfaces.project_agents import CapabilityParameter, CheckSpecification
 from app.modules.actors.api import ServiceIdentity
 from app.modules.artifacts.preparation import HARD_MAXIMUM_ARTIFACT_BYTES
@@ -60,13 +63,15 @@ def model_review_specification():
         execution_mode="background",
         maximum_duration_seconds=120,
         stage_rationale="Content review runs after immutable submission creation.",
-        runtime_dependencies=[{
-            "dependency_id": "model_runtime",
-            "kind": "model_service",
-            "provisioning": "model_proxy",
-            "purpose": "Evaluate submitted evidence through the budgeted model service.",
-            "unavailable_code": "implementation_unavailable",
-        }],
+        runtime_dependencies=[
+            {
+                "dependency_id": "model_runtime",
+                "kind": "model_service",
+                "provisioning": "model_proxy",
+                "purpose": "Evaluate submitted evidence through the budgeted model service.",
+                "unavailable_code": "implementation_unavailable",
+            }
+        ],
         infrastructure_failures=[
             *specification["infrastructure_failures"],
             {
@@ -98,7 +103,7 @@ def model_registry_spec():
                 schema_version="v1",
                 document=document,
                 schema_sha256=external_checker_json_hash(document),
-            )
+            ),
         }
     )
 
@@ -154,6 +159,8 @@ async def test_public_profile_to_private_model_call_and_completed_checker(
             json={
                 "project_id": str(project_id),
                 "configuration_version": 1,
+                "authorized_total_nanodollars": 10_000_000_000,
+                "externally_reconciled_prior_spend_nanodollars": 0,
                 "lifetime_limit_nanodollars": 10_000_000_000,
             },
         )
@@ -204,7 +211,9 @@ async def test_public_profile_to_private_model_call_and_completed_checker(
                     observation=CheckerModelObservation(
                         reference,
                         profiles[0]["spec"]["model_snapshot"],
-                        CheckerModelProviderStatus.FAILED if failed else CheckerModelProviderStatus.COMPLETED,
+                        CheckerModelProviderStatus.FAILED
+                        if failed
+                        else CheckerModelProviderStatus.COMPLETED,
                         None if failed else '{"verdict":"passed"}',
                         CheckerModelUsage(20, 5, 10, 2, 30),
                     ),
@@ -253,14 +262,18 @@ async def test_public_profile_to_private_model_call_and_completed_checker(
                 )
                 if concurrent_callback:
                     replies = await asyncio.gather(proxy.handle(callback), proxy.handle(callback))
-                    assert sorted(reply.outcome for reply in replies) == ["completed", "unavailable"]
+                    assert sorted(reply.outcome for reply in replies) == [
+                        "completed",
+                        "unavailable",
+                    ]
                     reply = next(reply for reply in replies if reply.outcome == "completed")
                 else:
                     reply = await proxy.handle(callback)
                 if terminal_mode is not None and self.invocations == 1:
                     assert reply.outcome == "unavailable", reply.outcome
                     assert reply.failure_code == (
-                        "model_provider_no_effect" if terminal_mode == "no_effect"
+                        "model_provider_no_effect"
+                        if terminal_mode == "no_effect"
                         else "model_provider_failed"
                     )
                     raise ExternalServiceUnavailableError(self.identity)
@@ -301,11 +314,15 @@ async def test_public_profile_to_private_model_call_and_completed_checker(
                 )
                 recovery_headers = admin_access.target.headers
                 child = await admin_access.signed.client.post(
-                    recovery_path, headers=recovery_headers, json=candidate,
+                    recovery_path,
+                    headers=recovery_headers,
+                    json=candidate,
                 )
                 assert child.status_code == 201, child.text
                 replay = await admin_access.signed.client.post(
-                    recovery_path, headers=recovery_headers, json=candidate,
+                    recovery_path,
+                    headers=recovery_headers,
+                    json=candidate,
                 )
                 assert replay.status_code == 201, replay.text
                 assert replay.json()["attempt_id"] == child.json()["attempt_id"]
@@ -314,7 +331,9 @@ async def test_public_profile_to_private_model_call_and_completed_checker(
                 f"/api/v1/operations/projects/{h.request.project_id}/checker-runs/"
                 f"{h.created.evaluation_attempt_id}/retry",
                 headers=admin_access.target.headers | {"Idempotency-Key": str(uuid4())},
-                json={"reason": "Recover lost image response without repeating the paid model call"},
+                json={
+                    "reason": "Recover lost image response without repeating the paid model call"
+                },
             )
             assert retry.status_code == 201, retry.text
             async with h.factory() as session, session.begin():
@@ -332,9 +351,8 @@ async def test_public_profile_to_private_model_call_and_completed_checker(
         assert await executor.evaluate_post_submission(current_request) == result
         assert len(creates) == (2 if terminal_mode else 1)
         async with h.factory() as session:
-            assert (
-                await session.scalar(select(func.count()).select_from(ModelUsageEffect))
-                == (2 if terminal_mode else 1)
+            assert await session.scalar(select(func.count()).select_from(ModelUsageEffect)) == (
+                2 if terminal_mode else 1
             )
             attempt = await session.scalar(
                 select(ModelUsageEffect).where(ModelUsageEffect.state == "completed")

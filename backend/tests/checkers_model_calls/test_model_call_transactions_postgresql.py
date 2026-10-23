@@ -4,20 +4,21 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 import asyncio
 import json
-from pathlib import Path
-import runpy
 from uuid import UUID, uuid4
 
 import pytest
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
-from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from app.core.hashing import canonical_json_hash
 from app.core.identifiers import new_record_id
 from app.modules.authorization.domain.model_usage import (
     BUDGET_CONFIGURE,
     PROFILE_PROVISION,
+    RECOVER,
+    ModelCallRecoverAuthorityFacts,
+    checker_model_call_resource,
     project_model_admin_resource,
 )
 from app.modules.authorization.domain.resource_digest import authorization_resource_digest
@@ -47,99 +48,16 @@ from app.modules.model_usage.models import ModelUsageBudgetAccount
 from app.modules.model_usage.profiles import ModelProfileReader
 from app.modules.model_usage.service import ModelCallService
 from app.modules.model_usage.setup import SetupModelUsageService
+from tests.checkers_model_calls.model_usage_pg_support import (
+    DatabaseFacts,
+    model_database as _model_database,
+)
+
+model_database = _model_database
 
 
 def sha(label: str) -> str:
     return canonical_json_hash({"label": label})
-
-
-@dataclass(frozen=True)
-class DatabaseFacts:
-    engine: AsyncEngine
-    project_id: UUID
-    task_id: UUID
-    assignment_id: UUID
-    submission_id: UUID
-    registry_entry_id: UUID
-    registry_entry_digest: str
-
-
-@pytest.fixture
-async def model_database(postgres_database_url: str):
-    schema = f"model_calls_{uuid4().hex}"
-    engine = create_async_engine(
-        postgres_database_url,
-        connect_args={"server_settings": {"search_path": schema}},
-    )
-    project_id = new_record_id()
-    task_id = new_record_id()
-    assignment_id = new_record_id()
-    submission_id = new_record_id()
-    registry_entry_id = new_record_id()
-    registry_entry_digest = sha("registry")
-    migration = runpy.run_path(str(Path(__file__).resolve().parents[2] / "alembic/versions/0061_model_usage.py"))
-
-    def isolated(statement: str) -> str:
-        return statement.replace("public.", f'"{schema}".').replace("pg_catalog,public,pg_temp", f'pg_catalog,"{schema}",pg_temp')
-
-    async with engine.begin() as connection:
-        await connection.execute(text(f'create schema "{schema}"'))
-        for statement in (
-            "create table projects(id uuid primary key)",
-            "create table workstream_tasks(id uuid primary key, project_id uuid not null, unique(id,project_id))",
-            "create table task_assignments(id uuid primary key, task_id uuid not null, project_id uuid not null)",
-            "create table submissions(id uuid primary key, task_id uuid not null, version integer not null, unique(id,task_id,version))",
-            "create table external_checker_registry_entries(id uuid primary key,entry_digest text not null,phase text not null)",
-            "create table checker_runs(id uuid primary key)",
-            "create table actor_profiles(id uuid primary key)",
-            "create table audit_events(id uuid primary key, event_domain text, event_type text, actor_ref_kind text, actor_id text, action_id text, permission_id text, denial_code text, after_facts json)",
-            "create table artifact_bindings(id uuid primary key)",
-            "create table artifact_contents(id uuid primary key)",
-            "create table artifact_put_attempts(id uuid primary key)",
-            "create table artifact_verification_receipts(id uuid primary key)",
-            "create table project_guide_compilation_attempts(id uuid primary key,project_id uuid not null,guide_id uuid not null,source_snapshot_id uuid not null,setup_run_id uuid not null,setup_generation bigint not null,runtime_configuration jsonb,runtime_configuration_hash text,status text)",
-        ):
-            await connection.execute(text(statement))
-        for statement in migration["_TABLES"]:
-            await connection.execute(text(isolated(statement)))
-        for statement in migration["_FUNCTIONS"]:
-            await connection.execute(text(isolated(statement)))
-        for statement in migration["_TRIGGERS"]:
-            await connection.execute(text(isolated(statement)))
-        await connection.execute(text("insert into projects(id) values (:id)"), {"id": project_id})
-        await connection.execute(
-            text("insert into workstream_tasks(id,project_id) values (:id,:project)"),
-            {"id": task_id, "project": project_id},
-        )
-        await connection.execute(
-            text("insert into task_assignments(id,task_id,project_id) values (:id,:task,:project)"),
-            {"id": assignment_id, "task": task_id, "project": project_id},
-        )
-        await connection.execute(
-            text("insert into submissions(id,task_id,version) values (:id,:task,1)"),
-            {"id": submission_id, "task": task_id},
-        )
-        await connection.execute(
-            text("insert into external_checker_registry_entries(id,entry_digest,phase) values (:id,:digest,'post_submit')"),
-            {"id": registry_entry_id, "digest": registry_entry_digest},
-        )
-    try:
-        yield DatabaseFacts(
-            engine,
-            project_id,
-            task_id,
-            assignment_id,
-            submission_id,
-            registry_entry_id,
-            registry_entry_digest,
-        )
-    finally:
-        try:
-            async with engine.begin() as connection:
-                await connection.execute(text("set local search_path = pg_catalog"))
-                await connection.execute(text(f'drop schema if exists "{schema}" cascade'))
-        finally:
-            await engine.dispose()
 
 
 @dataclass
@@ -155,7 +73,11 @@ class BoundaryPorts:
     def _decision(self, action: str, facts: object) -> ModelActionEvidence:
         self.events.append(action)
         digest = model_action_digest(action, facts)
-        evidence_id = new_record_id() if self.fresh_authority_evidence else self.decisions.setdefault(digest, new_record_id())
+        evidence_id = (
+            new_record_id()
+            if self.fresh_authority_evidence
+            else self.decisions.setdefault(digest, new_record_id())
+        )
         return ModelActionEvidence(evidence_id=evidence_id, facts_digest=digest)
 
     async def authorize_profile(self, facts):
@@ -218,7 +140,11 @@ class BoundaryPorts:
             "complete",
             {
                 "effect": effect.model_dump(mode="json"),
-                "response_evidence": (response_evidence.model_dump(mode="json") if response_evidence is not None else None),
+                "response_evidence": (
+                    response_evidence.model_dump(mode="json")
+                    if response_evidence is not None
+                    else None
+                ),
                 "terminal_digest": terminal_digest,
             },
         )
@@ -253,7 +179,11 @@ class BoundaryPorts:
             "setup_complete",
             {
                 "effect": effect.model_dump(mode="json"),
-                "response_evidence": (response_evidence.model_dump(mode="json") if response_evidence is not None else None),
+                "response_evidence": (
+                    response_evidence.model_dump(mode="json")
+                    if response_evidence is not None
+                    else None
+                ),
                 "terminal_digest": terminal_digest,
             },
         )
@@ -286,7 +216,9 @@ class DatabaseBoundaryPorts:
         self._session = session
         self._ports = ports
 
-    async def _authority(self, evidence, *, action: str, permission: str, actor_id=None, resource_digest=None):
+    async def _authority(
+        self, evidence, *, action: str, permission: str, actor_id=None, resource_digest=None
+    ):
         actor = str(actor_id or new_record_id())
         if actor_id is not None:
             await self._session.execute(
@@ -294,7 +226,9 @@ class DatabaseBoundaryPorts:
                 {"id": actor_id},
             )
         await self._session.execute(
-            text("insert into audit_events(id,event_domain,event_type,actor_ref_kind,actor_id,action_id,permission_id,denial_code,after_facts) values (:id,'authority','SensitiveAuthorizationAllowed','actor_profile',:actor,:action,:permission,null,cast(:after as json))"),
+            text(
+                "insert into audit_events(id,event_domain,event_type,actor_ref_kind,actor_id,action_id,permission_id,denial_code,after_facts) values (:id,'authority','SensitiveAuthorizationAllowed','actor_profile',:actor,:action,:permission,null,cast(:after as json))"
+            ),
             {
                 "id": evidence.evidence_id,
                 "actor": actor,
@@ -303,7 +237,11 @@ class DatabaseBoundaryPorts:
                 "after": json.dumps(
                     {
                         "allowed": True,
-                        "resource_context_digest": (sha("substituted-authority") if actor_id is not None and self._ports.corrupt_admin_receipt else resource_digest or sha("authority")),
+                        "resource_context_digest": (
+                            sha("substituted-authority")
+                            if actor_id is not None and self._ports.corrupt_admin_receipt
+                            else resource_digest or sha("authority")
+                        ),
                     }
                 ),
             },
@@ -317,7 +255,11 @@ class DatabaseBoundaryPorts:
             action="project.model_profile.provision",
             permission="project.model_profile.manage",
             actor_id=facts.actor_profile_id,
-            resource_digest=authorization_resource_digest(project_model_admin_resource(PROFILE_PROVISION, facts, actor_profile_id=facts.actor_profile_id)),
+            resource_digest=authorization_resource_digest(
+                project_model_admin_resource(
+                    PROFILE_PROVISION, facts, actor_profile_id=facts.actor_profile_id
+                )
+            ),
         )
 
     async def authorize_budget(self, facts):
@@ -327,12 +269,18 @@ class DatabaseBoundaryPorts:
             action="project.model_budget.configure",
             permission="project.model_budget.manage",
             actor_id=facts.actor_profile_id,
-            resource_digest=authorization_resource_digest(project_model_admin_resource(BUDGET_CONFIGURE, facts, actor_profile_id=facts.actor_profile_id)),
+            resource_digest=authorization_resource_digest(
+                project_model_admin_resource(
+                    BUDGET_CONFIGURE, facts, actor_profile_id=facts.actor_profile_id
+                )
+            ),
         )
 
     async def authorize_prepare(self, execution, slot, request_sha256):
         evidence = await self._ports.authorize_prepare(execution, slot, request_sha256)
-        return await self._authority(evidence, action="checker.model_call.prepare", permission="checker.model_call.prepare")
+        return await self._authority(
+            evidence, action="checker.model_call.prepare", permission="checker.model_call.prepare"
+        )
 
     async def authorize_dispatch(self, execution, attempt, request_evidence):
         evidence = await self._ports.authorize_dispatch(execution, attempt, request_evidence)
@@ -344,11 +292,32 @@ class DatabaseBoundaryPorts:
 
     async def authorize_recover(self, execution, effect):
         evidence = await self._ports.authorize_recover(execution, effect)
-        return await self._authority(evidence, action="checker.model_call.recover", permission="checker.model_call.recover")
+        actor_id = new_record_id()
+        await self._session.execute(
+            text(
+                "insert into actor_profiles(id,actor_kind,status,service_identity) "
+                "values (:id,'service','active','workstream.checker.post_submit')"
+            ),
+            {"id": actor_id},
+        )
+        facts = ModelCallRecoverAuthorityFacts(execution=execution, effect=effect)
+        return await self._authority(
+            evidence,
+            action="checker.model_call.recover",
+            permission="checker.model_call.recover",
+            actor_id=actor_id,
+            resource_digest=authorization_resource_digest(
+                checker_model_call_resource(RECOVER, facts)
+            ),
+        )
 
     async def authorize_observe(self, effect, provider_response_id, observation_digest):
-        evidence = await self._ports.authorize_observe(effect, provider_response_id, observation_digest)
-        return await self._authority(evidence, action="checker.model_call.observe", permission="checker.model_call.observe")
+        evidence = await self._ports.authorize_observe(
+            effect, provider_response_id, observation_digest
+        )
+        return await self._authority(
+            evidence, action="checker.model_call.observe", permission="checker.model_call.observe"
+        )
 
     async def authorize_child(self, project_id, parent_attempt_id, terminal_digest):
         evidence = await self._ports.authorize_child(project_id, parent_attempt_id, terminal_digest)
@@ -383,7 +352,9 @@ class DatabaseBoundaryPorts:
         )
 
     async def authorize_setup_observe(self, effect, provider_response_id, observation_digest):
-        evidence = await self._ports.authorize_setup_observe(effect, provider_response_id, observation_digest)
+        evidence = await self._ports.authorize_setup_observe(
+            effect, provider_response_id, observation_digest
+        )
         return await self._authority(
             evidence,
             action="project.guide_compilation.model.observe",
@@ -391,7 +362,9 @@ class DatabaseBoundaryPorts:
         )
 
     async def authorize_setup_complete(self, effect, response_evidence, terminal_digest):
-        evidence = await self._ports.authorize_setup_complete(effect, response_evidence, terminal_digest)
+        evidence = await self._ports.authorize_setup_complete(
+            effect, response_evidence, terminal_digest
+        )
         return await self._authority(
             evidence,
             action="project.guide_compilation.model.complete",
@@ -408,7 +381,9 @@ class DatabaseBoundaryPorts:
 
     async def require_setup_current(self, slot):
         attempt_id = await self._session.scalar(
-            text("select id from project_guide_compilation_attempts where id=:id and project_id=:project and guide_id=:guide and source_snapshot_id=:snapshot and setup_run_id=:run and setup_generation=:generation and runtime_configuration_hash=:runtime and status='compilation_reserved' for update"),
+            text(
+                "select id from project_guide_compilation_attempts where id=:id and project_id=:project and guide_id=:guide and source_snapshot_id=:snapshot and setup_run_id=:run and setup_generation=:generation and runtime_configuration_hash=:runtime and status='compilation_reserved' for update"
+            ),
             {
                 "id": slot.compilation_attempt_id,
                 "project": slot.project_id,
@@ -500,7 +475,9 @@ async def setup_slot_key(
     runtime_hash = canonical_json_hash(runtime_configuration)
     async with facts.engine.begin() as connection:
         await connection.execute(
-            text("insert into project_guide_compilation_attempts(id,project_id,guide_id,source_snapshot_id,setup_run_id,setup_generation,runtime_configuration,runtime_configuration_hash,status) values(:id,:project,:guide,:snapshot,:run,1,cast(:configuration as jsonb),:runtime,'compilation_reserved')"),
+            text(
+                "insert into project_guide_compilation_attempts(id,project_id,guide_id,source_snapshot_id,setup_run_id,setup_generation,runtime_configuration,runtime_configuration_hash,status) values(:id,:project,:guide,:snapshot,:run,1,cast(:configuration as jsonb),:runtime,'compilation_reserved')"
+            ),
             {
                 "id": attempt_id,
                 "project": facts.project_id,
@@ -594,8 +571,12 @@ async def provision(
             if replay:
                 replayed_profile = await owner.provision_profile(profile_facts)
                 replayed_budget = await owner.provision_budget(budget_facts)
-                assert replayed_profile.authorization_evidence_id == (profile.authorization_evidence_id)
-                assert replayed_budget.authorization_evidence_id == (budget.authorization_evidence_id)
+                assert replayed_profile.authorization_evidence_id == (
+                    profile.authorization_evidence_id
+                )
+                assert replayed_budget.authorization_evidence_id == (
+                    budget.authorization_evidence_id
+                )
     return profile
 
 
@@ -612,6 +593,32 @@ def execution(facts: DatabaseFacts) -> ModelCallExecutionFacts:
         worker_lease_id=new_record_id(),
         worker_lease_generation=1,
         worker_lease_expires_at=datetime.now(UTC) + timedelta(minutes=5),
+    )
+
+
+async def insert_checker_run(session: AsyncSession, run: ModelCallExecutionFacts) -> None:
+    """Persist the exact running lease used by a recovery attachment."""
+    await session.execute(
+        text(
+            "insert into checker_runs(id,task_id,submission_id,submission_version,project_id,"
+            "evaluation_request_id,phase,evaluation_generation,request_json,worker_lease_id,"
+            "worker_lease_generation,worker_lease_expires_at,status) values "
+            "(:id,:task,:submission,:version,:project,:request,'post_submission',:generation,"
+            ":request_json,:lease,:lease_generation,:expires,'running')"
+        ),
+        {
+            "id": run.checker_run_id,
+            "task": run.task_id,
+            "submission": run.submission_id,
+            "version": run.submission_version,
+            "project": run.project_id,
+            "request": run.evaluation_request_id,
+            "generation": run.evaluation_generation,
+            "request_json": json.dumps({"assignment_id": str(run.assignment_id)}),
+            "lease": run.worker_lease_id,
+            "lease_generation": run.worker_lease_generation,
+            "expires": run.worker_lease_expires_at,
+        },
     )
 
 
@@ -650,7 +657,9 @@ async def wait_until_blocked_by(
     """Observe an actual PostgreSQL lock wait instead of inferring final totals."""
     for _ in range(200):
         async with engine.connect() as connection:
-            blockers = await connection.scalar(text("select pg_blocking_pids(:pid)"), {"pid": blocked_pid})
+            blockers = await connection.scalar(
+                text("select pg_blocking_pids(:pid)"), {"pid": blocked_pid}
+            )
         if blocker_pid in blockers:
             return
         await asyncio.sleep(0.01)
@@ -765,7 +774,9 @@ async def test_terminal_holds_envelope_before_other_slot_and_account(
         terminal_pid = await terminal.scalar(text("select pg_backend_pid()"))
         contender_pid = await contender.scalar(text("select pg_backend_pid()"))
         await holder.execute(
-            text("select project_id from model_usage_budget_accounts where project_id=:project_id for update"),
+            text(
+                "select project_id from model_usage_budget_accounts where project_id=:project_id for update"
+            ),
             {"project_id": model_database.project_id},
         )
 
@@ -834,7 +845,9 @@ async def test_uncertain_holds_budget_and_only_proven_no_effect_allows_child(
     ports = BoundaryPorts()
     reservation = 100 * 11 + 50 * 29
     profile = await provision(model_database, ports, limit=reservation * 2)
-    run, paid_slot, prepared, dispatched, _ = await prepare_and_reserve(model_database, ports, profile, "model_recovery")
+    run, paid_slot, prepared, dispatched, _ = await prepare_and_reserve(
+        model_database, ports, profile, "model_recovery"
+    )
     uncertainty = sha("uncertain-delivery")
     async with AsyncSession(model_database.engine, expire_on_commit=False) as session:
         async with session.begin():
@@ -863,7 +876,9 @@ async def test_uncertain_holds_budget_and_only_proven_no_effect_allows_child(
             assert account.lifetime_reserved_nanodollars == reservation
 
     # A distinct call proves the only zero-cost child path: authenticated no effect.
-    run2, paid_slot2, prepared2, dispatched2, _ = await prepare_and_reserve(model_database, ports, profile, "model_no_effect")
+    run2, paid_slot2, prepared2, dispatched2, _ = await prepare_and_reserve(
+        model_database, ports, profile, "model_no_effect"
+    )
     proof = KnownNoEffectProof(
         proof_id=new_record_id(),
         proof_digest=sha("provider-no-effect"),
@@ -900,7 +915,9 @@ async def test_budget_adjustment_preserves_reserved_and_settles_old_snapshot(
     ports = BoundaryPorts()
     reservation = 100 * 11 + 50 * 29
     profile = await provision(model_database, ports, limit=reservation)
-    _run, _paid_slot, _prepared, dispatched, _ = await prepare_and_reserve(model_database, ports, profile, "model_budget_adjustment")
+    _run, _paid_slot, _prepared, dispatched, _ = await prepare_and_reserve(
+        model_database, ports, profile, "model_budget_adjustment"
+    )
     adjusted_spec = ProjectModelBudgetConfigurationSpec(
         project_id=model_database.project_id,
         configuration_version=2,
@@ -922,7 +939,9 @@ async def test_budget_adjustment_preserves_reserved_and_settles_old_snapshot(
 
     # The explicitly increased ceiling admits another dispatch without resetting
     # the first reservation or counting ledger usage as external prior spend.
-    _second = await prepare_and_reserve(model_database, ports, profile, "model_budget_adjustment_second")
+    _second = await prepare_and_reserve(
+        model_database, ports, profile, "model_budget_adjustment_second"
+    )
 
     too_low_spec = ProjectModelBudgetConfigurationSpec(
         project_id=model_database.project_id,
@@ -1014,7 +1033,9 @@ async def test_known_failed_settles_once_and_allows_authorized_child(
     ports = BoundaryPorts()
     reservation = 100 * 11 + 50 * 29
     profile = await provision(model_database, ports, limit=reservation * 2)
-    run, paid_slot, prepared, dispatched, _ = await prepare_and_reserve(model_database, ports, profile, "model_known_failure")
+    run, paid_slot, prepared, dispatched, _ = await prepare_and_reserve(
+        model_database, ports, profile, "model_known_failure"
+    )
     usage = ModelCallUsage(
         input_tokens=22,
         cached_input_tokens=2,
@@ -1059,13 +1080,17 @@ async def test_database_guards_reject_ledger_mutation_and_counter_substitution(
     ports = BoundaryPorts()
     reservation = 100 * 11 + 50 * 29
     profile = await provision(model_database, ports, limit=reservation * 2)
-    _, _, _, dispatched, _ = await prepare_and_reserve(model_database, ports, profile, "model_guarded")
+    _, _, _, dispatched, _ = await prepare_and_reserve(
+        model_database, ports, profile, "model_guarded"
+    )
 
     async with AsyncSession(model_database.engine) as session:
         with pytest.raises(DBAPIError):
             async with session.begin():
                 await session.execute(
-                    text("update checker_model_usage_slots set first_request_sha256=:digest where id=:slot_id"),
+                    text(
+                        "update checker_model_usage_slots set first_request_sha256=:digest where id=:slot_id"
+                    ),
                     {"digest": sha("substituted"), "slot_id": dispatched.slot_id},
                 )
 
@@ -1073,7 +1098,9 @@ async def test_database_guards_reject_ledger_mutation_and_counter_substitution(
         with pytest.raises(DBAPIError):
             async with session.begin():
                 await session.execute(
-                    text("update model_usage_budget_accounts set lifetime_reserved_nanodollars=lifetime_reserved_nanodollars-1 where project_id=:project_id"),
+                    text(
+                        "update model_usage_budget_accounts set lifetime_reserved_nanodollars=lifetime_reserved_nanodollars-1 where project_id=:project_id"
+                    ),
                     {"project_id": model_database.project_id},
                 )
 
@@ -1088,7 +1115,9 @@ async def test_database_ancestry_prevents_receipt_and_artifact_deletion(
 ) -> None:
     ports = BoundaryPorts()
     profile = await provision(model_database, ports, limit=10_000)
-    _, _, _, _, request = await prepare_and_reserve(model_database, ports, profile, "model_ancestry")
+    _, _, _, _, request = await prepare_and_reserve(
+        model_database, ports, profile, "model_ancestry"
+    )
     for statement, identifier in (
         ("delete from actor_profiles where id=:id", profile.actor_profile_id),
         ("delete from audit_events where id=:id", profile.authorization_evidence_id),
@@ -1125,6 +1154,8 @@ async def test_profile_reader_requires_exact_project_and_selector(
                 await reader.read_exact(profile.selector, project_id=new_record_id())
             with pytest.raises(ModelCallUnavailable, match="model_profile_unavailable"):
                 await reader.read_exact(
-                    profile.selector.model_copy(update={"profile_digest": sha("substituted-profile")}),
+                    profile.selector.model_copy(
+                        update={"profile_digest": sha("substituted-profile")}
+                    ),
                     project_id=model_database.project_id,
                 )

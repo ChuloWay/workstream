@@ -25,9 +25,9 @@ from app.modules.model_usage.models import (
 from app.modules.model_usage.repository import require_model_call_transaction
 
 
-def _uuid(value: str) -> UUID:
+def _uuid(value: str | UUID) -> UUID:
     """Decode a stored canonical record identifier."""
-    return UUID(value)
+    return UUID(str(value))
 
 
 def _checker_key(row: CheckerModelUsageSlot) -> ModelPaidSlotKey:

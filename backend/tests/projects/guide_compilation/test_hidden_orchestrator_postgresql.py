@@ -127,7 +127,7 @@ def _backend(factory):
     )
 
 
-def _port(factory, runtime, *, checker_capabilities=None):
+def _port(factory, runtime, *, checker_capabilities=None, model_session_factory=None):
     return project_guide_compilation_execution_port(
         factory,
         material_factory=guide_document_manifest_port,
@@ -135,6 +135,7 @@ def _port(factory, runtime, *, checker_capabilities=None):
         checker_capabilities=checker_capabilities or capability_projection(),
         authorization_context=_fixed_service_authorization,
         runtime_factory=lambda configuration: runtime,
+        model_session_factory=model_session_factory,
     )
 
 
@@ -820,7 +821,9 @@ async def test_sdk_parser_rejection_persists_terminal_without_reinvocation(
     from types import SimpleNamespace
     from agents import Runner
     from app.adapters.project_agents.openai_agent_sdk import OpenAIAgentSdkProjectGuideRuntime
-    from tests.test_agent_runtime import _provider_payload
+    from app.core.hashing import canonical_json_hash
+    from app.core.identifiers import new_record_id
+    from tests.test_agent_runtime import _TestModelSession, _provider_payload
 
     from agents import _debug
 
@@ -845,13 +848,32 @@ async def test_sdk_parser_rejection_persists_terminal_without_reinvocation(
 
     monkeypatch.setattr(Runner, "run", run)
 
+    configuration = type(runtime_configuration()).model_validate(
+        runtime_configuration().model_dump(mode="json")
+        | {
+            "model_profile_id": new_record_id(),
+            "model_profile_version": 1,
+            "model_profile_digest": canonical_json_hash({"profile": "sdk-parser-test"}),
+        }
+    )
+
+    @asynccontextmanager
+    async def model_session(subject, selected_configuration):
+        assert subject is not None
+        assert selected_configuration == configuration
+        yield _TestModelSession()
+
     values = await seed_database(clean_postgres_database)
-    requested = await _authorized_attempt(clean_postgres_database, values)
+    requested = await _authorized_attempt(clean_postgres_database, values, configuration)
     engine = create_async_engine(clean_postgres_database)
     factory = async_sessionmaker(engine, expire_on_commit=False)
     command = ProjectGuideCompilationExecutionCommand(attempt_id=requested.attempt_id)
     try:
-        port = _port(factory, OpenAIAgentSdkProjectGuideRuntime(runtime_configuration()))
+        port = _port(
+            factory,
+            OpenAIAgentSdkProjectGuideRuntime(configuration),
+            model_session_factory=model_session,
+        )
         first = await port.execute(command)
         assert (
             first.classification is ProjectGuideCompilationExecutionClassification.INVALID_TERMINAL

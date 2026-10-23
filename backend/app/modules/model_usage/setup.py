@@ -76,7 +76,7 @@ def _prepared(
 
 def _slot_key(slot: SetupModelUsageSlot) -> SetupModelUsageSlotKey:
     return SetupModelUsageSlotKey(
-        compilation_attempt_id=UUID(slot.compilation_attempt_id),
+        compilation_attempt_id=UUID(str(slot.compilation_attempt_id)),
         project_id=UUID(slot.project_id),
         guide_id=UUID(slot.guide_id),
         source_snapshot_id=UUID(slot.source_snapshot_id),
@@ -139,18 +139,15 @@ class SetupModelUsageService:
         if row is None:
             raise ModelCallUnavailable("model_profile_unavailable")
         profile = stored_model_profile(row)
-        if (
-            profile.spec.project_id != key.project_id
-            or (
-                owner_profile is not None
-                and (
-                    profile.selector != owner_profile.selector
-                    or (profile.spec.provider, profile.spec.api, profile.spec.model_snapshot)
-                    != (
-                        owner_profile.provider,
-                        owner_profile.api,
-                        owner_profile.model_snapshot,
-                    )
+        if profile.spec.project_id != key.project_id or (
+            owner_profile is not None
+            and (
+                profile.selector != owner_profile.selector
+                or (profile.spec.provider, profile.spec.api, profile.spec.model_snapshot)
+                != (
+                    owner_profile.provider,
+                    owner_profile.api,
+                    owner_profile.model_snapshot,
                 )
             )
         ):
@@ -175,16 +172,19 @@ class SetupModelUsageService:
         envelope = await self._repo.setup_envelope(key, lock=True)
         if envelope is None:
             values = key.model_dump(mode="json", exclude={"phase", "call_index"})
+            values["compilation_attempt_id"] = key.compilation_attempt_id
             envelope = SetupModelUsageEnvelope(id=str(new_record_id()), **values)
             await self._repo.add(envelope)
         await self._repo.lock_setup_slot_scope(key)
         slot = await self._repo.setup_slot(key, lock=True)
         if slot is None:
+            slot_values = key.model_dump(mode="json")
+            slot_values["compilation_attempt_id"] = key.compilation_attempt_id
             slot = SetupModelUsageSlot(
                 id=str(new_record_id()),
                 envelope_id=envelope.id,
                 request_sha256=request_sha256,
-                **key.model_dump(mode="json"),
+                **slot_values,
             )
             await self._repo.add(slot)
         elif slot.request_sha256 != request_sha256 or slot.envelope_id != envelope.id:
@@ -462,8 +462,7 @@ class SetupModelUsageService:
         if row.state in {"completed", "known_failed"}:
             if (
                 row.state != target_state
-                or
-                row.provider_response_id != provider_response_id
+                or row.provider_response_id != provider_response_id
                 or _evidence(row, "response") != response_evidence
                 or _usage(row) != usage
                 or row.settled_nanodollars != cost
@@ -478,6 +477,9 @@ class SetupModelUsageService:
         self._set_usage(row, usage)
         row.provider_response_id = provider_response_id
         row.settled_nanodollars = cost
+        if target_state == "known_failed":
+            row.settlement_authorization_evidence_id = str(authority.evidence_id)
+            row.settled_at = await self._repo.now()
         row.terminal_authorization_evidence_id = str(authority.evidence_id)
         row.terminal_at = await self._repo.now()
         row.state = target_state

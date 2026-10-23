@@ -1,6 +1,7 @@
 """Explicit catalogue expectations, independent of production definitions."""
 
 from app.modules.actors.api import ServiceIdentity
+from app.modules.authorization.schemas import AdminRole, AdminScope
 
 FIXED_SERVICE_ACTION_EXPECTATIONS = {
     ServiceIdentity.TASK_REVISION_EXPIRER: {"task.revision.expire", "task.revision.recover"},
@@ -746,4 +747,46 @@ AUDIT_ALLOWED_ACTION_VALUES = {
     "project_role_grant.read",
     "project_role_grant.revoke",
     "submission.create",
+}
+
+
+ADMIN_ROLE_PERMISSION_EXPECTATIONS = {
+    AdminRole.ACCESS_ADMINISTRATOR: """actor.profile.read_any actor.profile.suspend
+        actor.profile.reactivate actor.profile.deactivate actor.identity_link.read
+        actor.identity_link.revoke actor.identity_link.reactivate actor.service.provision
+        admin_role.read admin_role.grant admin_role.revoke audit.read audit.export""".split(),
+    AdminRole.OPERATOR: """project.read project.setup_diagnostic.read
+        project.effective_policy.read review.queue.inspect review.lease.force_release
+        contribution.read_project operations.status.read operations.timer.run operations.reconcile.run operations.outbox.retry
+        operations.projection.rebuild operations.task.start_override
+        operations.submission_gate.repair operations.checker.retry
+        project.model_profile.manage project.model_budget.manage
+        project.model_call.recovery_child.authorize artifact.binding.read
+        artifact.replica.read artifact.receipt.read artifact.verification_job.read
+        artifact.verification_job.retry artifact.recovery_attempt.read artifact.audit.read
+        audit.read""".split(),
+    AdminRole.PROJECT_MANAGER: """project.create project.read project.setup_diagnostic.read
+        project.effective_policy.read project.update project.archive project.guide.manage
+        project.guide_compilation.request project.effective_policy.manage project.task.manage
+        project.review_policy.manage project.role_grant.read project.role_grant.manage
+        artifact.guide_source.ingest
+        review.queue.inspect contribution.read_project compensation.award.read
+        audit.read""".split(),
+    AdminRole.FINANCE_AUTHORITY: """project.read contribution.read_project
+        compensation.policy.manage compensation.adapter_binding.manage
+        compensation.award.read compensation.delivery.reconcile audit.read""".split(),
+    AdminRole.AUDIT_AUTHORITY: """actor.profile.read_any actor.identity_link.read
+        admin_role.read project.read project.setup_diagnostic.read
+        project.effective_policy.read project.role_grant.read review.queue.inspect
+        review.chain.read contribution.read_project compensation.award.read audit.read
+        audit.export""".split(),
+}
+
+
+ADMIN_ROLE_SCOPE_EXPECTATIONS = {
+    AdminRole.ACCESS_ADMINISTRATOR: [AdminScope.SYSTEM],
+    AdminRole.OPERATOR: [AdminScope.SYSTEM],
+    AdminRole.PROJECT_MANAGER: [AdminScope.SYSTEM, AdminScope.PROJECT],
+    AdminRole.FINANCE_AUTHORITY: [AdminScope.SYSTEM, AdminScope.PROJECT],
+    AdminRole.AUDIT_AUTHORITY: [AdminScope.SYSTEM, AdminScope.PROJECT],
 }

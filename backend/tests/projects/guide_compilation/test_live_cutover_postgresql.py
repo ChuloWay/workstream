@@ -19,6 +19,7 @@ from .runtime_fixtures import (
     ScriptedGuideRuntime,
     scripted_document_access_runtime,
     scripted_guide_document_parser_factory,
+    scripted_model_profile,  # noqa: F401 - registered pytest fixture
     scripted_runtime_configuration,
 )
 
@@ -67,6 +68,7 @@ async def _delivery(factory, setup_id):
 
 
 
+@pytest.mark.usefixtures("scripted_model_profile")
 @pytest.mark.parametrize("status", ["draft_ready", "draft_ready_with_warnings", "guide_blocked"])
 async def test_pending_exact_delivery_compiles_once_and_replays_finalization(
     automatic_source, monkeypatch, status, project_client
@@ -177,6 +179,7 @@ async def test_pending_exact_delivery_compiles_once_and_replays_finalization(
     assert runtime.calls == 1
 
 
+@pytest.mark.usefixtures("scripted_model_profile")
 @pytest.mark.parametrize("phase", ["compilation", "sufficiency", "finalization"])
 async def test_compilation_phase_and_public_setup_read_share_parent_lock_order(
     automatic_source, project_client, project_database_env, monkeypatch, phase
@@ -300,6 +303,7 @@ async def test_stale_delivery_rejects_before_any_compilation_effect(
             assert await session.scalar(text("select count(*) from " + table)) == 0
 
 
+@pytest.mark.usefixtures("scripted_model_profile")
 @pytest.mark.parametrize("outcome", ["invalid", "uncertain"])
 async def test_invalid_or_uncertain_attempt_reports_durable_diagnostics_without_projection(
     automatic_source, monkeypatch, outcome, project_client
@@ -388,6 +392,7 @@ async def test_invalid_or_uncertain_attempt_reports_durable_diagnostics_without_
             assert await session.scalar(text("select count(*) from " + table)) == 0
 
 
+@pytest.mark.usefixtures("scripted_model_profile")
 async def test_finalized_receipt_excludes_every_recovery_shape(automatic_source, monkeypatch):
     from app.workers import project_setup as worker
 
@@ -479,6 +484,7 @@ async def _assert_terminal_not_reclaimable(factory, delivery, monkeypatch, *, fi
             )
 
 
+@pytest.mark.usefixtures("scripted_model_profile")
 async def test_publisher_acknowledgement_cannot_overwrite_worker_finalization(
     automatic_source, monkeypatch
 ):
@@ -558,6 +564,7 @@ async def test_publisher_acknowledgement_cannot_overwrite_worker_finalization(
 @pytest.mark.parametrize(
     "boundary", ["persisted", "sufficiency", "both_projections", "retained_unconfigured"]
 )
+@pytest.mark.usefixtures("scripted_model_profile")
 async def test_phase_crash_recovers_same_attempt_without_reinference(
     automatic_source, monkeypatch, boundary
 ):
@@ -648,6 +655,7 @@ async def test_phase_crash_recovers_same_attempt_without_reinference(
         )
 
 
+@pytest.mark.usefixtures("scripted_model_profile")
 @pytest.mark.parametrize("phase", ["request", "fence", "sufficiency", "policy", "finalization"])
 async def test_each_phase_rechecks_service_authority_and_restoration_reuses_attempt(
     automatic_source, monkeypatch, phase
@@ -746,6 +754,7 @@ async def test_each_phase_rechecks_service_authority_and_restoration_reuses_atte
         )
 
 
+@pytest.mark.usefixtures("scripted_model_profile")
 async def test_concurrent_live_deliveries_share_one_provider_and_finalization(
     automatic_source, monkeypatch
 ):
@@ -845,6 +854,7 @@ async def test_dirty_setup_rejects_before_request_or_provider(
             assert await session.scalar(text("select count(*) from " + table)) == 0
 
 
+@pytest.mark.usefixtures("scripted_model_profile")
 async def test_stale_queued_configuration_failure_is_reclaimed_and_finishes_same_delivery(
     automatic_source, monkeypatch
 ):

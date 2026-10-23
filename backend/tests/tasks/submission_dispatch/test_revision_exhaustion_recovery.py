@@ -37,7 +37,11 @@ from tests.tasks.submission_dispatch.test_revision_exhaustion import (
 )
 from tests.tasks.submission_dispatch.test_revision_expiry import _provision_expirer
 from tests.tasks.test_public_submission_intake import _client
-from tests.test_alembic import _alembic_config, _execute
+from tests.test_alembic import (
+    _alembic_config,
+    _execute,
+    _historical_artifact_model_usage_projection,
+)
 
 
 pytestmark = pytest.mark.postgres_schema_contract
@@ -88,34 +92,41 @@ async def _retained_cap_source(tmp_path, database_url, monkeypatch):
         monkeypatch,
         "0047_revision_source_cap_one",
     ) as h:
-        await assert_historical_revision_guards(h.factory, "0047_revision_recovery")
-        h.envelope = await invoked_completion(h)
-        await assert_historical_revision_guards(h.factory, "0047_revision_recovery")
-        with monkeypatch.context() as patch:
-            patch.setattr(TaskRoutingSourcePreparer, "prepare", old_source)
-            patch.setattr("app.modules.tasks.post_submit_routing.outcome.prepare_revision", insert_0047_preparation)
-            patch.setattr("app.modules.tasks.revision.service.head_for_source", _0047_head)
-            patch.setattr("app.modules.tasks.submission_context.head_for_source", _0047_head)
-            initial = await _apply(h)
-            async with h.factory() as session:
-                first = await _0047_head(session, initial.routing_manifest_id)
-                h.revision_preparation_id = first.id
-                h.revision_preparation_sha256 = first.preparation_sha256
-            h.data = revision_archive(h.data)
-            prepared, admission = await _ready_replacement(h, h.data)
-            h.created = await _create(h, _creation_request(h, prepared, admission))
-            assert h.created.submission_version == 2
-            retained = await _fail_current_submission(h, terminal=True)
-            async with h.factory() as session:
-                blocked = await _0047_head(session, retained.routing_manifest_id)
-                assert (blocked.outcome, blocked.blocked_reason) == ("blocked", "revision_limit_reached")
-                assert blocked.next_revision_round == 2 and blocked.max_revision_rounds == 1
-                before = await retained_revision_rows(session, retained.routing_manifest_id)
-                assert await session.scalar(text("""
-                    SELECT count(*) FROM pg_trigger t JOIN pg_class c ON c.oid=t.tgrelid
-                    JOIN pg_namespace n ON n.oid=c.relnamespace
-                    WHERE n.nspname='public' AND NOT t.tgisinternal AND t.tgenabled='D'
-                """)) == 0
+        async with _historical_artifact_model_usage_projection(database_url):
+            await assert_historical_revision_guards(h.factory, "0047_revision_recovery")
+            h.envelope = await invoked_completion(h)
+            await assert_historical_revision_guards(h.factory, "0047_revision_recovery")
+            with monkeypatch.context() as patch:
+                patch.setattr(TaskRoutingSourcePreparer, "prepare", old_source)
+                patch.setattr(
+                    "app.modules.tasks.post_submit_routing.outcome.prepare_revision",
+                    insert_0047_preparation,
+                )
+                patch.setattr("app.modules.tasks.revision.service.head_for_source", _0047_head)
+                patch.setattr("app.modules.tasks.submission_context.head_for_source", _0047_head)
+                initial = await _apply(h)
+                async with h.factory() as session:
+                    first = await _0047_head(session, initial.routing_manifest_id)
+                    h.revision_preparation_id = first.id
+                    h.revision_preparation_sha256 = first.preparation_sha256
+                h.data = revision_archive(h.data)
+                prepared, admission = await _ready_replacement(h, h.data)
+                h.created = await _create(h, _creation_request(h, prepared, admission))
+                assert h.created.submission_version == 2
+                retained = await _fail_current_submission(h, terminal=True)
+                async with h.factory() as session:
+                    blocked = await _0047_head(session, retained.routing_manifest_id)
+                    assert (blocked.outcome, blocked.blocked_reason) == (
+                        "blocked",
+                        "revision_limit_reached",
+                    )
+                    assert blocked.next_revision_round == 2 and blocked.max_revision_rounds == 1
+                    before = await retained_revision_rows(session, retained.routing_manifest_id)
+                    assert await session.scalar(text("""
+                        SELECT count(*) FROM pg_trigger t JOIN pg_class c ON c.oid=t.tgrelid
+                        JOIN pg_namespace n ON n.oid=c.relnamespace
+                        WHERE n.nspname='public' AND NOT t.tgisinternal AND t.tgenabled='D'
+                    """)) == 0
         shape.undo()
         await leave_predecessor_owner_shape(_execute, database_url)
         await asyncio.to_thread(command.upgrade, _alembic_config(), current_schema_revision())
@@ -236,20 +247,27 @@ async def test_upgrade_backfills_assignments_around_a_retained_exhausted_assignm
         monkeypatch,
         "0048_revision_source_cap_zero",
     ) as h:
-        await assert_historical_revision_guards(h.factory, "0048_revision_exhaustion")
-        h.envelope = await invoked_completion(h)
-        await assert_historical_revision_guards(h.factory, "0048_revision_exhaustion")
-        exhausted = await _apply(h)
-        async with h.factory() as session:
-            receipt = await session.scalar(select(TaskRevisionExhaustion).where(
-                TaskRevisionExhaustion.routing_manifest_id == exhausted.routing_manifest_id,
-            ))
-            assert receipt is not None
-            before = await session.scalar(text(
-                "SELECT to_jsonb(a)-ARRAY['started_at','updated_at'] "
-                "FROM public.task_assignments a WHERE id=:id"
-            ), {"id": receipt.assignment_id})
-            assert before["status"] == "revision_exhausted"
+        async with _historical_artifact_model_usage_projection(database_url):
+            await assert_historical_revision_guards(h.factory, "0048_revision_exhaustion")
+            h.envelope = await invoked_completion(h)
+            await assert_historical_revision_guards(h.factory, "0048_revision_exhaustion")
+            exhausted = await _apply(h)
+            async with h.factory() as session:
+                receipt = await session.scalar(
+                    select(TaskRevisionExhaustion).where(
+                        TaskRevisionExhaustion.routing_manifest_id
+                        == exhausted.routing_manifest_id,
+                    )
+                )
+                assert receipt is not None
+                before = await session.scalar(
+                    text(
+                        "SELECT to_jsonb(a)-ARRAY['started_at','updated_at'] "
+                        "FROM public.task_assignments a WHERE id=:id"
+                    ),
+                    {"id": receipt.assignment_id},
+                )
+                assert before["status"] == "revision_exhausted"
         shape.undo()
         await leave_predecessor_owner_shape(_execute, database_url)
         await asyncio.to_thread(command.upgrade, _alembic_config(), current_schema_revision())

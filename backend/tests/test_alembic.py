@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from contextlib import asynccontextmanager
 import hashlib
 import json
 from pathlib import Path
@@ -74,6 +75,33 @@ async def _execute(database_url: str, statement: str, *arguments: object) -> Non
         await connection.close()
 
 
+@asynccontextmanager
+async def _historical_artifact_model_usage_projection(database_url: str):
+    """Expose nullable 0061 ORM columns while arranging older ART rows."""
+    connection = await asyncpg.connect(database_url.replace("+asyncpg", ""))
+    columns = (
+        ("artifact_put_attempts", "model_call_attempt_id"),
+        ("artifact_operation_receipts", "model_call_attempt_id"),
+    )
+    installed: list[tuple[str, str]] = []
+    try:
+        for table, column in columns:
+            await connection.execute(f"ALTER TABLE {table} ADD COLUMN {column} uuid")
+            installed.append((table, column))
+        yield
+    finally:
+        unexpected = {
+            f"{table}.{column}": await connection.fetchval(
+                f"SELECT count(*) FROM {table} WHERE {column} IS NOT NULL"
+            )
+            for table, column in installed
+        }
+        for table, column in reversed(installed):
+            await connection.execute(f"ALTER TABLE {table} DROP COLUMN {column}")
+        await connection.close()
+        assert all(count == 0 for count in unexpected.values()), unexpected
+
+
 async def _seed_retained_guide_runtime_rows(
     database_url: str, *, status: str, include_unknown: bool = False
 ) -> dict[str, object]:
@@ -86,7 +114,8 @@ async def _seed_retained_guide_runtime_rows(
         _historical_configuration,
     )
 
-    values = await seed_database(database_url)
+    async with _historical_artifact_model_usage_projection(database_url):
+        values = await seed_database(database_url)
     compilation = context(values)
     attempt_identity = identity(compilation)
     document = compilation.material.documents[0]
@@ -807,20 +836,7 @@ def test_neutral_runtime_upgrade_preserves_retained_provider_facts(
     isolated_database_env: str, migration_lock
 ) -> None:
     """0059 labels historical access without inventing parser evidence or losing IDs."""
-    config = _alembic_config()
-    with migration_lock():
-        asyncio.run(
-            _execute(isolated_database_env, "drop schema public cascade; create schema public")
-        )
-        command.upgrade(config, "0058_compensation_unit_create")
-        seeded = asyncio.run(
-            _seed_retained_guide_runtime_rows(
-                isolated_database_env, status="compilation_provider_uncertain"
-            )
-        )
-        command.upgrade(config, HEAD_REVISION)
-
-    async def retained():
+    async def retained(seeded):
         connection = await asyncpg.connect(isolated_database_env.replace("+asyncpg", ""))
         try:
             attempt = await connection.fetchrow(
@@ -842,7 +858,19 @@ def test_neutral_runtime_upgrade_preserves_retained_provider_facts(
         finally:
             await connection.close()
 
-    attempt, allocations, access = asyncio.run(retained())
+    config = _alembic_config()
+    with migration_lock():
+        asyncio.run(
+            _execute(isolated_database_env, "drop schema public cascade; create schema public")
+        )
+        command.upgrade(config, "0058_compensation_unit_create")
+        seeded = asyncio.run(
+            _seed_retained_guide_runtime_rows(
+                isolated_database_env, status="compilation_provider_uncertain"
+            )
+        )
+        command.upgrade(config, HEAD_REVISION)
+        attempt, allocations, access = asyncio.run(retained(seeded))
     assert json.loads(attempt["runtime_configuration"]) == seeded["configuration"]
     assert attempt["runtime_configuration_hash"] == seeded["configuration_hash"]
     assert attempt["status"] == "compilation_provider_uncertain"
@@ -868,6 +896,18 @@ def test_neutral_runtime_upgrade_refuses_old_predispatch_inference(
     """An old reserved inference attempt cannot cross into a runtime that cannot resume it."""
     from sqlalchemy.exc import DBAPIError
 
+    async def retained_attempt_exists(attempt_id) -> bool:
+        connection = await asyncpg.connect(isolated_database_env.replace("+asyncpg", ""))
+        try:
+            return bool(
+                await connection.fetchval(
+                    "select exists(select 1 from project_guide_compilation_attempts where id=$1)",
+                    attempt_id,
+                )
+            )
+        finally:
+            await connection.close()
+
     config = _alembic_config()
     with migration_lock():
         asyncio.run(
@@ -884,22 +924,11 @@ def test_neutral_runtime_upgrade_refuses_old_predispatch_inference(
         ):
             command.upgrade(config, HEAD_REVISION)
         after = asyncio.run(_database_snapshot(isolated_database_env))
+        retained = asyncio.run(retained_attempt_exists(seeded["attempt_id"]))
     assert before == after
     assert after["versions"] == ["0058_compensation_unit_create"]
 
-    async def retained_attempt_exists() -> bool:
-        connection = await asyncpg.connect(isolated_database_env.replace("+asyncpg", ""))
-        try:
-            return bool(
-                await connection.fetchval(
-                    "select exists(select 1 from project_guide_compilation_attempts where id=$1)",
-                    seeded["attempt_id"],
-                )
-            )
-        finally:
-            await connection.close()
-
-    assert asyncio.run(retained_attempt_exists())
+    assert retained
 
 
 async def test_roles_anywhere_upgrade_preserves_old_proof_and_refuses_downgrade(

@@ -1499,12 +1499,16 @@ CREATE TABLE public.checker_model_usage_recoveries (
  checker_run_id uuid NOT NULL,
  worker_lease_id uuid NOT NULL,
  worker_lease_generation integer NOT NULL,
+ execution_facts jsonb NOT NULL,
+ effect_facts jsonb NOT NULL,
  authorization_evidence_id uuid NOT NULL,
  created_at timestamptz DEFAULT clock_timestamp() NOT NULL,
  CONSTRAINT pk_checker_model_usage_recoveries PRIMARY KEY(id),
  CONSTRAINT ck_checker_model_usage_recoveries_id_uuid7 CHECK (
   (get_byte(uuid_send(id),6)>>4)=7 AND (get_byte(uuid_send(id),8)&192)=128),
  CONSTRAINT ck_checker_model_usage_recoveries_generation CHECK(worker_lease_generation>0),
+ CONSTRAINT ck_checker_model_usage_recoveries_facts CHECK(
+  jsonb_typeof(execution_facts)='object' AND jsonb_typeof(effect_facts)='object'),
  CONSTRAINT uq_checker_model_usage_recoveries_attachment UNIQUE(
   attempt_id,checker_run_id,worker_lease_id,worker_lease_generation),
  CONSTRAINT uq_checker_model_usage_recoveries_authority UNIQUE(authorization_evidence_id),
@@ -2323,9 +2327,114 @@ END $$
     r"""
 CREATE FUNCTION public.guard_checker_model_recovery() RETURNS trigger
 LANGUAGE plpgsql SET search_path=pg_catalog,public,pg_temp AS $$
+DECLARE effect public.model_usage_effects%ROWTYPE;
+DECLARE slot public.checker_model_usage_slots%ROWTYPE;
+DECLARE run public.checker_runs%ROWTYPE;
+DECLARE authority public.audit_events%ROWTYPE;
+DECLARE actor public.actor_profiles%ROWTYPE;
+DECLARE task_project uuid;
+DECLARE assignment_task uuid;
+DECLARE assignment_project uuid;
+DECLARE submission_task uuid;
+DECLARE expected_slot jsonb;
+DECLARE expected_effect jsonb;
+DECLARE expected_digest varchar;
 BEGIN
  IF TG_OP<>'INSERT' THEN
   RAISE EXCEPTION 'checker model recovery attachments are immutable' USING ERRCODE='55000';
+ END IF;
+ SELECT * INTO effect FROM public.model_usage_effects
+  WHERE id=NEW.attempt_id FOR SHARE;
+ SELECT * INTO slot FROM public.checker_model_usage_slots
+  WHERE id=effect.checker_slot_id FOR SHARE;
+ SELECT * INTO run FROM public.checker_runs
+  WHERE id=NEW.checker_run_id FOR SHARE;
+ SELECT * INTO authority FROM public.audit_events
+  WHERE id=NEW.authorization_evidence_id FOR SHARE;
+ SELECT * INTO actor FROM public.actor_profiles
+  WHERE id=authority.actor_id::uuid FOR SHARE;
+ SELECT project_id INTO task_project FROM public.workstream_tasks
+  WHERE id=run.task_id FOR SHARE;
+ SELECT task_id,project_id INTO assignment_task,assignment_project
+  FROM public.task_assignments WHERE id=slot.assignment_id FOR SHARE;
+ SELECT task_id INTO submission_task FROM public.submissions
+  WHERE id=slot.submission_id AND version=slot.submission_version FOR SHARE;
+
+ expected_slot:=jsonb_build_object(
+  'project_id',slot.project_id,'assignment_id',slot.assignment_id,
+  'submission_id',slot.submission_id,'submission_version',slot.submission_version,
+  'requirement_id',slot.requirement_id,
+  'registry_entry_digest',slot.registry_entry_digest,
+  'configuration_sha256',slot.configuration_sha256,
+  'profile_id',slot.profile_id,'profile_version',slot.profile_version,
+  'profile_digest',slot.profile_digest,'slot_index',slot.slot_index);
+ expected_effect:=jsonb_build_object(
+  'project_id',slot.project_id,'task_id',run.task_id,'slot_id',slot.id,
+  'slot_key',expected_slot,'attempt_id',effect.id,
+  'internal_call_request_id',effect.internal_call_request_id);
+ expected_digest:=public.model_usage_json_digest(jsonb_build_object(
+  'resource_context',jsonb_build_object(
+   'resource_type','checker_model_call','resource_id',effect.id,
+   'scope_project_id',slot.project_id,'action_id','checker.model_call.recover',
+   'facts',jsonb_build_object(
+    'execution',NEW.execution_facts,'effect',NEW.effect_facts),
+   'facts_digest',public.model_usage_json_digest(jsonb_build_object(
+    'action','checker.model_call.recover','facts',jsonb_build_object(
+     'execution',NEW.execution_facts,'effect',NEW.effect_facts))))));
+
+ IF jsonb_typeof(NEW.execution_facts)<>'object' OR
+    (SELECT count(*) FROM jsonb_object_keys(NEW.execution_facts))<>11 OR
+    NOT NEW.execution_facts ?& ARRAY[
+     'project_id','task_id','assignment_id','submission_id','submission_version',
+     'evaluation_request_id','evaluation_generation','checker_run_id',
+     'worker_lease_id','worker_lease_generation','worker_lease_expires_at'] OR
+    effect.id IS NULL OR slot.id IS NULL OR run.id IS NULL OR
+    effect.setup_slot_id IS NOT NULL OR
+    effect.state NOT IN ('dispatching','uncertain','completed') OR
+    effect.provider_response_id IS NULL OR
+    NEW.effect_facts IS DISTINCT FROM expected_effect OR
+    NEW.attempt_id IS DISTINCT FROM (NEW.effect_facts->>'attempt_id')::uuid OR
+    NEW.checker_run_id IS DISTINCT FROM (NEW.execution_facts->>'checker_run_id')::uuid OR
+    NEW.worker_lease_id IS DISTINCT FROM (NEW.execution_facts->>'worker_lease_id')::uuid OR
+    NEW.worker_lease_generation IS DISTINCT FROM
+     (NEW.execution_facts->>'worker_lease_generation')::integer OR
+    (NEW.execution_facts->>'project_id')::uuid IS DISTINCT FROM slot.project_id OR
+    (NEW.execution_facts->>'task_id')::uuid IS DISTINCT FROM run.task_id OR
+    (NEW.execution_facts->>'assignment_id')::uuid IS DISTINCT FROM slot.assignment_id OR
+    (NEW.execution_facts->>'submission_id')::uuid IS DISTINCT FROM slot.submission_id OR
+    (NEW.execution_facts->>'submission_version')::integer IS DISTINCT FROM
+     slot.submission_version OR
+    (NEW.execution_facts->>'evaluation_request_id')::uuid IS DISTINCT FROM
+     run.evaluation_request_id OR
+    (NEW.execution_facts->>'evaluation_generation')::integer IS DISTINCT FROM
+     run.evaluation_generation OR
+    (NEW.execution_facts->>'worker_lease_expires_at')::timestamptz IS DISTINCT FROM
+     run.worker_lease_expires_at OR
+    run.project_id IS DISTINCT FROM slot.project_id OR
+    task_project IS DISTINCT FROM slot.project_id OR
+    assignment_task IS DISTINCT FROM run.task_id OR
+    assignment_project IS DISTINCT FROM slot.project_id OR
+    submission_task IS DISTINCT FROM run.task_id OR
+    (run.request_json::jsonb->>'assignment_id')::uuid IS DISTINCT FROM slot.assignment_id OR
+    run.submission_id IS DISTINCT FROM slot.submission_id OR
+    run.submission_version IS DISTINCT FROM slot.submission_version OR
+    run.worker_lease_id IS DISTINCT FROM NEW.worker_lease_id OR
+    run.worker_lease_generation IS DISTINCT FROM NEW.worker_lease_generation OR
+    run.status IS DISTINCT FROM 'running' OR run.phase IS DISTINCT FROM 'post_submission' THEN
+  RAISE EXCEPTION 'checker model recovery ancestry is invalid' USING ERRCODE='23514';
+ END IF;
+ IF authority.id IS NULL OR actor.id IS NULL OR
+    authority.event_domain IS DISTINCT FROM 'authority' OR
+    authority.event_type IS DISTINCT FROM 'SensitiveAuthorizationAllowed' OR
+    authority.actor_ref_kind IS DISTINCT FROM 'actor_profile' OR
+    authority.action_id IS DISTINCT FROM 'checker.model_call.recover' OR
+    authority.permission_id IS DISTINCT FROM 'checker.model_call.recover' OR
+    authority.denial_code IS NOT NULL OR
+    authority.after_facts::jsonb IS DISTINCT FROM jsonb_build_object(
+     'allowed',true,'resource_context_digest',expected_digest) OR
+    actor.actor_kind IS DISTINCT FROM 'service' OR actor.status IS DISTINCT FROM 'active' OR
+    actor.service_identity IS DISTINCT FROM 'workstream.checker.post_submit' THEN
+  RAISE EXCEPTION 'checker model recovery authority is invalid' USING ERRCODE='23514';
  END IF;
  RETURN NEW;
 END $$

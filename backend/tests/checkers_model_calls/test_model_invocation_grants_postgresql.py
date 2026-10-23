@@ -23,11 +23,13 @@ from app.modules.model_usage.api import (
     model_action_digest,
 )
 from app.modules.model_usage.grants import ModelInvocationGrants
+from tests.checkers_model_calls.model_usage_pg_support import (
+    DatabaseFacts,
+    model_database as _ledger_database,
+)
 from tests.checkers_model_calls.test_model_call_transactions_postgresql import (
     BoundaryPorts,
-    DatabaseFacts,
     execution,
-    model_database as _ledger_database,
     provision,
     service,
     sha,
@@ -310,22 +312,23 @@ async def test_grant_round_trip_binds_exact_calls_and_becomes_immutable(
                 request_sha256=second_request,
                 prepared_attempt_id=second_attempt.attempt_id,
             )
-            assert await session.scalar(
-                text(
-                    "select count(*) from checker_model_invocation_grant_calls "
-                    "where grant_id=:grant"
-                ),
-                {"grant": row.grant_id},
-            ) == 2
+            assert (
+                await session.scalar(
+                    text(
+                        "select count(*) from checker_model_invocation_grant_calls "
+                        "where grant_id=:grant"
+                    ),
+                    {"grant": row.grant_id},
+                )
+                == 2
+            )
 
     for mutation in (
         "update checker_model_invocation_grants set external_request_digest="
         "'sha256:" + "d" * 64 + "'",
         "delete from checker_model_invocation_grants",
         "truncate checker_model_invocation_grants",
-        "update checker_model_invocation_grant_calls set request_sha256='sha256:"
-        + "e" * 64
-        + "'",
+        "update checker_model_invocation_grant_calls set request_sha256='sha256:" + "e" * 64 + "'",
         "delete from checker_model_invocation_grant_calls",
         "truncate checker_model_invocation_grant_calls",
     ):

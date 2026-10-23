@@ -88,7 +88,7 @@ class ModelInvocationGrants:
                 token_hash=token_hash,
                 project_id=str(execution.project_id),
                 checker_run_id=str(execution.checker_run_id),
-                registry_entry_id=str(registry_entry_id),
+                registry_entry_id=registry_entry_id,
                 execution_facts=execution.model_dump(mode="json"),
                 paid_slot=slot.model_dump(mode="json"),
                 external_request_digest=external_request_digest,
@@ -129,7 +129,7 @@ class ModelInvocationGrants:
             external_request_digest=request_digest,
             execution=execution,
             slot=slot,
-            registry_entry_id=UUID(row.registry_entry_id),
+            registry_entry_id=UUID(str(row.registry_entry_id)),
         )
 
     async def consume_prepared(
