@@ -27,7 +27,7 @@ if len(arguments) >= 2 and arguments[0] == 'machine':
             lease_path = Path(settings['socket']).parent / 'smol-leases' / (str(name) + '.json')
             lease = json.loads(lease_path.read_text()) if lease_path.exists() else None
             output.write(json.dumps({'operation': operation, 'name': name, 'project': project,
-                                     'monotonic': time.monotonic(),
+                                     'monotonic': time.monotonic(), 'wall_ms': time.time_ns() // 1_000_000,
                                      'lease': {k: lease[k] for k in ('name', 'owner', 'epoch', 'expires_ms', 'lifetime_ms')}
                                      if lease else None}) + '\n')
             output.flush()

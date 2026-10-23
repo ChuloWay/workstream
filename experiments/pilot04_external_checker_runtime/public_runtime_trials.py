@@ -64,6 +64,13 @@ async def public_runtime_trials(client, factory, env, root: Path):
                          and len({lease['expires_ms'] for lease in leases}) == 1,
                          'interrupted execution changed its original lease epoch/deadline')
             row = await _selected(factory, key)
+            if action == 'project_deadline':
+                events = [event for event in trace_events(root)[start:] if event['project']]
+                created = next(event for event in events if event['operation'] == 'create')
+                deleted = next(event for event in events if event['operation'] == 'delete')
+                _require(row.terminal_json['infrastructure_failure_code'] == 'deadline_exceeded'
+                         and deleted['wall_ms'] >= created['lease']['expires_ms'],
+                         'deadline trial did not reach its original expiry with exact timeout custody')
             if expected == 503:
                 _require(row.status == 'infrastructure_failed' and row.terminal_json['execution'] is None,
                          'runtime outage was represented as a work verdict')
@@ -92,7 +99,8 @@ async def public_runtime_trials(client, factory, env, root: Path):
                          'fresh request did not repeat intake successfully after recovery')
             evidence.append({'case': action, 'run_id': row.id, 'machines': names,
                              'elapsed_seconds': round(time.monotonic() - began, 3),
-                             'status': row.status, 'cleanup': drained})
+                             'status': row.status, 'failure_code': row.terminal_json.get('infrastructure_failure_code'),
+                             'cleanup': drained})
     finally:
         await node_command(root, 'clear')
         await node_command(root, 'drained')
