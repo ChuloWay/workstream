@@ -55,6 +55,9 @@ def assert_launches(root, start, *, creates, executions, project=True, shared_de
              'runtime retried an invoked guest or skipped expected execution')
     _trace_require(set(made) == {event['name'] for event in events if event['operation'] == 'delete'},
              'runtime retry lacks deletion of each exact machine')
+    created = [event for event in events if event['operation'] == 'create']
+    _trace_require(all(event.get('lease') and event['lease']['name'] == event['name'] for event in created),
+                   'created machine lacks exact lease evidence')
     leases = [event['lease'] for event in events if event.get('lease')]
     if made and shared_deadline:
         _trace_require(len({lease['epoch'] for lease in leases}) == 1

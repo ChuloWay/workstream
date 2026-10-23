@@ -56,7 +56,7 @@ class PrivateFaultControls(unittest.TestCase):
     def test_launch_trace_rejects_extra_execution_and_reset_deadline(self):
         trace = self.root / 'runtime-trace.jsonl'
         lease = {'epoch': 'original', 'expires_ms': 1000}
-        rows = [{'operation': operation, 'name': name, 'project': True, 'lease': dict(lease)}
+        rows = [{'operation': operation, 'name': name, 'project': True, 'lease': dict(lease, name=name)}
                 for name in ('first', 'second') for operation in ('create', 'start', 'delete')]
         rows.insert(5, {'operation': 'exec', 'name': 'second', 'project': True, 'lease': dict(lease)})
         def write(values):
@@ -65,6 +65,10 @@ class PrivateFaultControls(unittest.TestCase):
         self.assertEqual(faults.assert_launches(self.root, 0, creates=2, executions=1), ['first', 'second'])
         write(rows + [{'operation': 'exec', 'name': 'hidden-second-checker', 'project': True, 'lease': lease}])
         with self.assertRaisesRegex(RuntimeError, 'retried an invoked guest'):
+            faults.assert_launches(self.root, 0, creates=2, executions=1)
+        missing = [dict(row, lease=None) if row['name'] == 'second' else row for row in rows]
+        write(missing)
+        with self.assertRaisesRegex(RuntimeError, 'lacks exact lease evidence'):
             faults.assert_launches(self.root, 0, creates=2, executions=1)
         rows[3]['lease']['expires_ms'] += 1
         write(rows)
