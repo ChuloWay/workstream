@@ -1,6 +1,7 @@
 //! Trusted long-lived Unix-socket boundary for digest-pinned checker containers.
 
 mod model_relay;
+mod proxy_transport;
 
 use model_relay::{
     deserialize_required_model_grant, valid_model_grant, validate_proxy_socket,
