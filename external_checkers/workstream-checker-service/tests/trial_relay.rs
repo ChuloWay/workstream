@@ -439,8 +439,25 @@ fn completed_plan_publishes_runner_facts_only_after_confirmed_cleanup() {
     let response = exchange(started.relay.socket_path(), &request(plan()));
     assert_eq!(response["outcome"], "completed");
     assert!(response.get("plan").is_none());
-    assert_eq!(started.engine.calls.load(Ordering::Relaxed), 1);
+    assert_eq!(
+        response["observations"]["schema_version"],
+        "workstream.checker_trial_observations.v1"
+    );
+    assert_eq!(response["observations"]["terminal_state"], "completed_work");
+    assert_eq!(response["observations"]["steps"][0]["slot_id"], "slot_a");
+    assert_eq!(response["observations"]["steps"][0]["outcome"], "succeeded");
+    assert_eq!(response["observations"]["steps"][0]["stdout_byte_count"], 3);
+    assert_eq!(
+        response["observations"]["steps"][0]["stdout_sha256"],
+        text_digest("ok\n")
+    );
+    assert!(response["observations"]["steps"][0].get("stdout").is_none());
     let publications = started.publisher.0.lock().unwrap();
+    assert_eq!(
+        response["observations"]["observation_digest"],
+        publications[0]["observation_digest"]
+    );
+    assert_eq!(started.engine.calls.load(Ordering::Relaxed), 1);
     assert_eq!(publications.len(), 1);
     assert_eq!(publications[0]["request_identity_digest"], digest('1'));
     assert_eq!(publications[0]["trial_kind"], "generic_build_and_run");

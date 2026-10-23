@@ -394,7 +394,66 @@ struct CompletedImageTrialResponse<'a> {
     outcome: &'static str,
     receipt_handle: &'a str,
     receipt_digest: &'a str,
+    observations: &'a TrialObservationProjection,
     failure_code: Option<&'static str>,
+}
+
+#[derive(Serialize)]
+struct TrialObservationProjection {
+    schema_version: &'static str,
+    terminal_state: &'static str,
+    profile_digest: String,
+    engine_identity_digest: String,
+    plan_digest: String,
+    observation_digest: String,
+    build: TrialBuildProjection,
+    steps: Vec<TrialStepProjection>,
+}
+
+#[derive(Serialize)]
+struct TrialBuildProjection {
+    terminal_state: &'static str,
+    outcome: TrialOperationOutcome,
+    exit_code: Option<i32>,
+    signal: Option<i32>,
+    stdout_sha256: String,
+    stdout_byte_count: usize,
+    stderr_sha256: String,
+    stderr_byte_count: usize,
+    candidate_image_digest: Option<String>,
+    candidate_archive_digest: Option<String>,
+    measurements_available: bool,
+    elapsed_ms: u64,
+    cpu_time_ms: u64,
+    peak_memory_bytes: u64,
+    peak_pids: u64,
+    written_bytes: u64,
+    written_entries: u64,
+    measurement_method: String,
+}
+
+#[derive(Serialize)]
+struct TrialStepProjection {
+    terminal_state: &'static str,
+    slot_id: String,
+    operation_order: u32,
+    outcome: TrialOperationOutcome,
+    exit_code: Option<i32>,
+    signal: Option<i32>,
+    stdout_sha256: String,
+    stdout_byte_count: usize,
+    stderr_sha256: String,
+    stderr_byte_count: usize,
+    workspace_before_sha256: String,
+    workspace_after_sha256: String,
+    measurements_available: bool,
+    elapsed_ms: u64,
+    cpu_time_ms: u64,
+    peak_memory_bytes: u64,
+    peak_pids: u64,
+    written_bytes: u64,
+    written_entries: u64,
+    measurement_method: String,
 }
 
 #[derive(Serialize)]
@@ -904,6 +963,7 @@ fn relay_once(
     };
     let receipt_digest = receipt.receipt_digest.clone();
     let receipt_byte_count = receipt.byte_count;
+    let observations = observation_projection(&receipt.facts);
     let published = match publisher.publish_completed(receipt) {
         Ok(published)
             if valid_receipt_handle(&published.receipt_handle)
@@ -940,6 +1000,7 @@ fn relay_once(
         outcome: "completed",
         receipt_handle: &published.receipt_handle,
         receipt_digest: &receipt_digest,
+        observations: &observations,
         failure_code: None,
     };
     if write_json_frame(
@@ -959,6 +1020,65 @@ fn relay_once(
         plan_completed: true,
         receipt_handle: Some(published.receipt_handle),
         receipt_digest: Some(receipt_digest),
+    }
+}
+
+fn observation_projection(receipt: &TrialReceiptPublication) -> TrialObservationProjection {
+    let build = &receipt.execution.build;
+    TrialObservationProjection {
+        schema_version: "workstream.checker_trial_observations.v1",
+        terminal_state: "completed_work",
+        profile_digest: receipt.profile_digest.clone(),
+        engine_identity_digest: receipt.engine_identity_digest.clone(),
+        plan_digest: receipt.plan_digest.clone(),
+        observation_digest: receipt.observation_digest.clone(),
+        build: TrialBuildProjection {
+            terminal_state: "completed_work",
+            outcome: build.outcome,
+            exit_code: build.exit_code,
+            signal: build.signal,
+            stdout_sha256: build.stdout_sha256.clone(),
+            stdout_byte_count: build.stdout.len(),
+            stderr_sha256: build.stderr_sha256.clone(),
+            stderr_byte_count: build.stderr.len(),
+            candidate_image_digest: build.candidate_image_digest.clone(),
+            candidate_archive_digest: build.candidate_archive_digest.clone(),
+            measurements_available: true,
+            elapsed_ms: build.elapsed_ms,
+            cpu_time_ms: build.cpu_time_ms,
+            peak_memory_bytes: build.peak_memory_bytes,
+            peak_pids: build.peak_pids,
+            written_bytes: build.written_bytes,
+            written_entries: build.written_entries,
+            measurement_method: build.measurement_method.clone(),
+        },
+        steps: receipt
+            .execution
+            .steps
+            .iter()
+            .map(|step| TrialStepProjection {
+                terminal_state: "completed_work",
+                slot_id: step.slot_id.clone(),
+                operation_order: step.operation_order,
+                outcome: step.outcome,
+                exit_code: step.exit_code,
+                signal: step.signal,
+                stdout_sha256: step.stdout_sha256.clone(),
+                stdout_byte_count: step.stdout.len(),
+                stderr_sha256: step.stderr_sha256.clone(),
+                stderr_byte_count: step.stderr.len(),
+                workspace_before_sha256: step.workspace_before_sha256.clone(),
+                workspace_after_sha256: step.workspace_after_sha256.clone(),
+                measurements_available: true,
+                elapsed_ms: step.elapsed_ms,
+                cpu_time_ms: step.cpu_time_ms,
+                peak_memory_bytes: step.peak_memory_bytes,
+                peak_pids: step.peak_pids,
+                written_bytes: step.written_bytes,
+                written_entries: step.written_entries,
+                measurement_method: step.measurement_method.clone(),
+            })
+            .collect(),
     }
 }
 
