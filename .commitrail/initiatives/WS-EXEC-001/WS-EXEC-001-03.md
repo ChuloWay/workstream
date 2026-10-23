@@ -194,7 +194,9 @@ strengthened the proof itself: independently supplied node/binary custody, exact
 controller kill and disk cleanup, explicit idle-node checks under optimized Python,
 CI ownership of safety tests, one-slot enforcement, fixture-derived artifact hashes,
 request-correlated execution counts, cancellation resource readback and per-machine
-original retry leases. The timeout trial requires `deadline_exceeded` at the original
+original retry leases. Retry wall-clock projections permit only the observed
+one-millisecond flooring difference while remaining lifetimes must shrink; the
+Rust operation retains one monotonic deadline. The timeout trial requires `deadline_exceeded` at the original
 lease expiry, with no in-session retry. Required hosted checks and reviewer freshness
 are reported against the final PR candidate, not stored as durable workflow state.
 

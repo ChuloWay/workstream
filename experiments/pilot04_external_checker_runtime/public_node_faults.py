@@ -67,8 +67,14 @@ def assert_launches(root, start, *, creates, executions, project=True, shared_de
                    'created machine lacks exact lease evidence')
     leases = [event['lease'] for event in events if event.get('lease')]
     if made and shared_deadline:
+        # Rust retains one Instant deadline; each persisted wall-clock projection
+        # floors both now_ms and remaining.as_millis(), so adjacent values can differ
+        # by one millisecond. A new full budget is never valid on a later retry.
+        expiries = [lease['expires_ms'] for lease in leases]
+        lifetimes = [event['lease']['lifetime_ms'] for event in created]
         _trace_require(len({lease['epoch'] for lease in leases}) == 1
-                 and len({lease['expires_ms'] for lease in leases}) == 1,
+                 and max(expiries) - min(expiries) <= 1
+                 and all(later < earlier for earlier, later in zip(lifetimes, lifetimes[1:])),
                  'launch retry changed its original lease epoch/deadline')
     return made
 

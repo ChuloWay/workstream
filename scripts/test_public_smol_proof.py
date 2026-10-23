@@ -56,7 +56,7 @@ class PrivateFaultControls(unittest.TestCase):
     def test_launch_trace_rejects_extra_execution_and_reset_deadline(self):
         trace = self.root / 'runtime-trace.jsonl'
         lease = {'epoch': 'original', 'expires_ms': 1000}
-        rows = [{'operation': operation, 'name': name, 'project': True, 'lease': dict(lease, name=name)}
+        rows = [{'operation': operation, 'name': name, 'project': True, 'lease': dict(lease, name=name, lifetime_ms=900 if name == 'first' else 650)}
                 for name in ('first', 'second') for operation in ('create', 'start', 'delete')]
         rows.insert(5, {'operation': 'exec', 'name': 'second', 'project': True, 'lease': dict(lease)})
         def write(values):
@@ -78,7 +78,10 @@ class PrivateFaultControls(unittest.TestCase):
         write(missing)
         with self.assertRaisesRegex(RuntimeError, 'lacks exact lease evidence'):
             faults.assert_launches(self.root, 0, creates=2, executions=1)
-        rows[3]['lease']['expires_ms'] += 1
+        rounded = [dict(row, lease=dict(row['lease'], expires_ms=1001)) if row['name'] == 'second' else row for row in rows]
+        write(rounded)
+        self.assertEqual(faults.assert_launches(self.root, 0, creates=2, executions=1), ['first', 'second'])
+        rows[3]['lease']['expires_ms'] += 1000
         write(rows)
         with self.assertRaisesRegex(RuntimeError, 'original lease epoch/deadline'):
             faults.assert_launches(self.root, 0, creates=2, executions=1)
