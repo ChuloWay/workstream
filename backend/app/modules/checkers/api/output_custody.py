@@ -8,18 +8,17 @@ from uuid import UUID
 from pydantic import Field, StrictInt, TypeAdapter, model_validator
 
 from app.core.hashing import canonical_json_hash
-from app.modules.checkers.api.trial_evidence import TrialEvidenceReservation, TrialEvidenceSelector
-
-from app.modules.model_usage.api import (
-    ModelCallExecutionFacts,
-    ModelPaidSlotKey,
-    ModelCallEvidence,
-    SetupModelOutputReservation,
-    SetupModelOutputSelector,
-)
 from app.modules.checkers.api.canonical_values import (
     CheckerValue,
     ResourceId,
+)
+from app.modules.checkers.api.trial_evidence import TrialEvidenceReservation, TrialEvidenceSelector
+from app.modules.model_usage.api import (
+    ModelCallEvidence,
+    ModelCallExecutionFacts,
+    ModelPaidSlotKey,
+    SetupModelOutputReservation,
+    SetupModelOutputSelector,
 )
 
 
@@ -132,6 +131,8 @@ class CheckerOutputArtifactResult:
     status: str
     content_id: UUID | None
     verification_receipt_id: UUID | None
+    content_sha256: str
+    byte_count: int
     replayed: bool
 
 

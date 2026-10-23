@@ -1,41 +1,19 @@
 """Bounded checker bytes through the existing durable ART storage workflow."""
 
+import hashlib
 from collections.abc import Callable
 from uuid import UUID
-import hashlib
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.core.config import Settings
+from app.interfaces.artifacts import ArtifactByteRange, ArtifactIntegrityError, ArtifactStore
 from app.modules.artifacts.api.checker_output_authority import (
     CheckerOutputWriteAuthority,
 )
-from app.modules.checkers.api.output_custody import (
-    CheckerOutputArtifactRequest,
-    CheckerOutputArtifactResult,
-    CheckerOutputReservationPort,
-    CheckerOutputSelector,
-    CheckerOutputUnavailable,
-    GeneratedOutputSelector,
-    GENERATED_OUTPUT_SELECTOR,
-)
-from app.modules.checkers.api.trial_evidence import (
-    TrialEvidenceArtifactRequest,
-    TrialEvidenceCustodyAck,
-    TrialEvidenceSelector,
-    TrialEvidenceReservationPort,
-)
-from app.interfaces.artifacts import ArtifactStore, ArtifactByteRange, ArtifactIntegrityError
 from app.modules.artifacts.checker_output_custody import select_checker_output
-from app.modules.artifacts.models import ArtifactVerificationJob, ArtifactReplica, ArtifactBinding
-from app.modules.model_usage.api import (
-    ModelCallEvidence,
-    SetupModelOutputArtifactRequest,
-    SetupModelOutputArtifactResult,
-    SetupModelOutputReservationPort,
-    SetupModelOutputSelector,
-)
+from app.modules.artifacts.models import ArtifactBinding, ArtifactReplica, ArtifactVerificationJob
 from app.modules.artifacts.preparation import ArtifactPreparationService
 from app.modules.artifacts.schemas import (
     ArtifactInternalAuthority,
@@ -43,8 +21,30 @@ from app.modules.artifacts.schemas import (
 )
 from app.modules.artifacts.service import (
     ArtifactAdmissionService,
-    ArtifactStorageOrchestrator,
     ArtifactStorageNamespaceSpec,
+    ArtifactStorageOrchestrator,
+)
+from app.modules.checkers.api.output_custody import (
+    GENERATED_OUTPUT_SELECTOR,
+    CheckerOutputArtifactRequest,
+    CheckerOutputArtifactResult,
+    CheckerOutputReservationPort,
+    CheckerOutputSelector,
+    CheckerOutputUnavailable,
+    GeneratedOutputSelector,
+)
+from app.modules.checkers.api.trial_evidence import (
+    TrialEvidenceArtifactRequest,
+    TrialEvidenceCustodyAck,
+    TrialEvidenceSelector,
+    TrialEvidenceReservationPort,
+)
+from app.modules.model_usage.api import (
+    ModelCallEvidence,
+    SetupModelOutputArtifactRequest,
+    SetupModelOutputArtifactResult,
+    SetupModelOutputReservationPort,
+    SetupModelOutputSelector,
 )
 
 
@@ -98,6 +98,8 @@ class CheckerArtifactOutputService:
             result.status,
             result.content_id,
             result.verification_receipt_id,
+            result.content_sha256,
+            result.byte_count,
             result.replayed,
         )
 
@@ -187,6 +189,8 @@ class CheckerArtifactOutputService:
                 result.status,
                 result.content_id,
                 result.verification_receipt_id,
+                result.content_sha256,
+                result.byte_count,
                 result.replayed,
             )
         )
@@ -436,5 +440,7 @@ class CheckerArtifactOutputService:
                 facts.status,
                 facts.content_id,
                 facts.verification_receipt_id,
+                facts.sha256,
+                facts.byte_count,
                 replayed,
             )

@@ -204,12 +204,16 @@ class SetupModelUsageService:
         await self._repo.add(effect)
         return _prepared(envelope, slot, effect, key, replayed=False)
 
-    async def recover_completed(
+    async def recover_existing(
         self, key: SetupModelUsageSlotKey, request_sha256: str
-    ) -> CompletedSetupModelUsageEffect | None:
-        """Return one exact completed response without recreating provider I/O."""
+    ) -> CompletedSetupModelUsageEffect | ObservedSetupModelUsageEffect | None:
+        """Return a retained terminal or uncertain effect without recreating I/O."""
         require_model_call_transaction(self._session)
         key = SetupModelUsageSlotKey.model_validate(key)
+        request_sha256 = _sha(request_sha256)
+        facts = {"slot": key.model_dump(mode="json"), "request_sha256": request_sha256}
+        authority = await self._authority.authorize_setup_prepare(key, request_sha256)
+        _require_authority("setup_prepare", facts, authority)
         owner_profile = await self._owner.require_setup_current(key)
         await self._profile(key, owner_profile)
         await self._repo.lock_setup_envelope_scope(key)
@@ -225,7 +229,16 @@ class SetupModelUsageService:
         effect = await self._repo.latest_setup_effect(slot.id, lock=True)
         if effect is None or effect.state == "prepared":
             return None
-        if effect.state != "completed":
+        if effect.state == "uncertain":
+            if effect.uncertainty_digest is None:
+                raise ModelCallUnavailable("setup_model_effect_not_replayable")
+            return ObservedSetupModelUsageEffect(
+                effect=_effect(slot, effect),
+                uncertainty_digest=effect.uncertainty_digest,
+                provider_response_id=effect.provider_response_id,
+                replayed=True,
+            )
+        if effect.state not in {"completed", "known_failed"}:
             raise ModelCallUnavailable("setup_model_effect_not_replayable")
         return self._completed(effect, slot, replayed=True)
 

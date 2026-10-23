@@ -634,7 +634,13 @@ class SetupModelOutputArtifactResult:
     status: str
     content_id: UUID | None
     verification_receipt_id: UUID | None
+    content_sha256: Sha256
+    byte_count: int
     replayed: bool
+
+    def __post_init__(self) -> None:
+        if type(self.byte_count) is not int or not 0 <= self.byte_count <= 1_048_576:
+            raise ValueError("setup model output byte count is invalid")
 
 
 @dataclass(frozen=True, slots=True)

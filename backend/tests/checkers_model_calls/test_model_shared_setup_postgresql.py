@@ -480,6 +480,10 @@ async def test_uncertain_setup_effect_replay_never_reauthorizes_dispatch(
     async with AsyncSession(model_database.engine, expire_on_commit=False) as session:
         async with session.begin():
             owner = setup_service(session, ports)
+            observed = await owner.recover_existing(key, request_sha)
+            assert observed is not None
+            assert observed.state == "uncertain"
+            assert observed.replayed is True
             replayed = await owner.prepare(key, request_sha)
             with pytest.raises(ModelCallConflict, match="not_dispatchable"):
                 await owner.reserve_dispatch(replayed, request_evidence)
