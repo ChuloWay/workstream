@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
-from importlib.metadata import PackageNotFoundError, version as distribution_version
 
 from app.interfaces.project_agents import ProjectAgentRuntimeConfigurationError
 from app.interfaces.project_guide_runtime import AdapterProfileValue
@@ -101,8 +100,8 @@ def require_omnicore_agent_adapter_profile(
     try:
         import omnicoreagent
         import openai
-        litellm_version = distribution_version("litellm")
-    except (ImportError, PackageNotFoundError):
+        from litellm._version import version as litellm_version
+    except ImportError:
         raise ProjectAgentRuntimeConfigurationError(
             "project guide runtime is unavailable"
         ) from None
