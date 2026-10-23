@@ -23,8 +23,10 @@ Existing owner files and startup cleanup protect Docker container ownership.
 - `external_checkers/`: production Smol driver, generic static guest launcher,
   configuration/cache provisioning, bounded session protocol and focused tests.
 - `backend/app/interfaces/external_checker_execution.py`,
-  `backend/app/adapters/checkers/`, and their focused tests: typed preparation,
-  fixed factory composition, Smol health/receipt validation.
+  `backend/app/adapters/checkers/`, and their focused tests: unchanged execute transport,
+  fixed factory composition and closed Smol health/receipt validation. Project
+  preparation remains private inside Rust execute; the typed prepare/inspect/
+  default handle belongs only to boundary 2's ART-owned port.
 - Affected checker receipt validators, configuration, execution contract docs,
   capability ledger and this initiative/index: truthful runtime support.
 
