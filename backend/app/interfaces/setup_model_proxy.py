@@ -49,15 +49,19 @@ class SetupModelProxySubject:
     model: str
 
     def __post_init__(self) -> None:
+        """Reject incomplete, substituted or non-canonical setup lineage."""
         if (
-            any(type(value) is not UUID for value in (
-                self.compilation_attempt_id,
-                self.project_id,
-                self.guide_id,
-                self.source_snapshot_id,
-                self.setup_run_id,
-                self.profile_id,
-            ))
+            any(
+                type(value) is not UUID
+                for value in (
+                    self.compilation_attempt_id,
+                    self.project_id,
+                    self.guide_id,
+                    self.source_snapshot_id,
+                    self.setup_run_id,
+                    self.profile_id,
+                )
+            )
             or type(self.setup_generation) is not int
             or self.setup_generation < 1
             or type(self.profile_version) is not int
@@ -80,6 +84,7 @@ class SetupModelProxyRequest:
     provider_request_json: str
 
     def __post_init__(self) -> None:
+        """Require a canonical provider request and bounded stable call index."""
         if (
             type(self.subject) is not SetupModelProxySubject
             or self.phase not in {"draft", "review", "correction"}
@@ -92,7 +97,10 @@ class SetupModelProxyRequest:
             value = json.loads(self.provider_request_json)
         except (TypeError, ValueError, UnicodeError):
             raise ValueError("setup model proxy request is invalid") from None
-        if not isinstance(value, dict) or canonical_provider_json(value) != self.provider_request_json:
+        if (
+            not isinstance(value, dict)
+            or canonical_provider_json(value) != self.provider_request_json
+        ):
             raise ValueError("setup model proxy request is invalid")
 
     @property
@@ -101,6 +109,7 @@ class SetupModelProxyRequest:
         return "sha256:" + hashlib.sha256(self.provider_request_json.encode("utf-8")).hexdigest()
 
     def __repr__(self) -> str:
+        """Hide prompt and provider payload content from diagnostic output."""
         return "SetupModelProxyRequest(<redacted>)"
 
     def wire_value(self) -> dict[str, object]:
@@ -131,6 +140,7 @@ class SetupModelProxyReply:
     session_exhausted: bool
 
     def __post_init__(self) -> None:
+        """Validate completed or unavailable wire state and its frame bound."""
         completed = (
             self.outcome == "completed"
             and type(self.status_code) is int
@@ -170,9 +180,11 @@ class SetupModelProxyReply:
             raise ValueError("setup model proxy reply exceeds transport bound")
 
     def __repr__(self) -> str:
+        """Expose only the outcome while redacting retained provider content."""
         return f"SetupModelProxyReply(outcome={self.outcome!r}, <redacted>)"
 
     def wire_value(self) -> dict[str, object]:
+        """Return the closed response root used by private framing."""
         return {
             "protocol_version": SETUP_MODEL_PROXY_PROTOCOL,
             "operation": "dispatch",
@@ -190,17 +202,25 @@ class SetupModelDispatchPort(Protocol):
     """Attempt-bound capability used at each native SDK HTTP boundary."""
 
     @property
-    def maximum_output_tokens(self) -> int: ...
+    def maximum_output_tokens(self) -> int:
+        """Return the immutable completion-token ceiling."""
+        ...
 
     @property
-    def reasoning_effort(self) -> str: ...
+    def reasoning_effort(self) -> str:
+        """Return the immutable reasoning setting."""
+        ...
 
     @property
-    def text_verbosity(self) -> str: ...
+    def text_verbosity(self) -> str:
+        """Return the immutable text-verbosity setting."""
+        ...
 
     async def dispatch(
         self, phase: SetupModelPhase, provider_request: Mapping[str, object]
-    ) -> SetupModelProxyReply: ...
+    ) -> SetupModelProxyReply:
+        """Dispatch one phase call through the trusted metered boundary."""
+        ...
 
 
 SetupModelProxyHandler = Callable[[SetupModelProxyRequest], Awaitable[SetupModelProxyReply]]
@@ -262,6 +282,7 @@ def setup_model_proxy_request_from_wire(value: object) -> SetupModelProxyRequest
 
 
 def _valid_sha256(value: object) -> bool:
+    """Recognize one exact lowercase prefixed SHA-256 digest."""
     return (
         type(value) is str
         and len(value) == 71
@@ -271,6 +292,7 @@ def _valid_sha256(value: object) -> bool:
 
 
 def _valid_identifier(value: object) -> bool:
+    """Recognize one bounded lowercase protocol identifier."""
     return (
         type(value) is str
         and 1 <= len(value) <= 64
@@ -285,16 +307,21 @@ def _valid_identifier(value: object) -> bool:
 
 
 def _valid_model(value: object) -> bool:
+    """Recognize one bounded direct provider model identifier."""
     return (
         type(value) is str
         and 1 <= len(value) <= 200
         and value[0].isalnum()
         and value[0].isascii()
-        and all(character.isascii() and (character.isalnum() or character in "._:/-") for character in value)
+        and all(
+            character.isascii() and (character.isalnum() or character in "._:/-")
+            for character in value
+        )
     )
 
 
 def _valid_headers(value: tuple[tuple[str, str], ...]) -> bool:
+    """Accept only sorted bounded retry guidance headers."""
     allowed = {"retry-after", "x-ratelimit-reset-requests", "x-ratelimit-reset-tokens"}
     names = [name for name, _ in value]
     return (
