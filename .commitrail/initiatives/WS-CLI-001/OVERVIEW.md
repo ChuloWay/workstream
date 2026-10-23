@@ -51,6 +51,9 @@
 
 [WS-CLI-001-40](WS-CLI-001-40.md) additionally delivers exact-project uncertain
 delivery inspection and explicit reconciliation.
+[WS-CLI-001-44](WS-CLI-001-44.md) prepares four native CLI release archives,
+integrity metadata and a separately gated manual GitHub Releases publisher.
+It does not claim a tag, published binary or signed/notarized artifact.
 
 ## Current boundary
 
@@ -60,7 +63,9 @@ and separate guide-bound review/revision policy configuration. The commands
 the existing public writes with caller-owned replay keys and policy `If-Match`.
 The backend owns manager authorization for new writes, policy semantics, replay and activation;
 editing/configuring a guide does not approve or activate it. Other public API
-client gaps, optional TUI and binary distribution remain separate work.
+client gaps and the optional TUI remain separate work. Binary distribution's
+workflow is prepared by -44; a protected release run and public-asset audit
+remain operational work.
 
 The Operator commands `operations task list`, `operations task locked-context`
 and `operations task start` use three existing public routes. Their restricted
@@ -288,8 +293,8 @@ neither requires batch-origin Tasks or activates a lifecycle writer.
 All have text/JSON
 output and built-binary integration proof. Mutations preserve omitted/null
 semantics and explicitly report uncertain outcomes without automatic retries.
-Further public workflows
-and binary distribution remain proposed below.
+Further public workflows remain proposed below. Binary release preparation is
+bounded in [WS-CLI-001-44](WS-CLI-001-44.md), separate from product commands.
 
 ## Design
 

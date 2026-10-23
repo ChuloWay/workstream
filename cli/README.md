@@ -242,6 +242,58 @@ private; it includes stored actor attribution.
 
 ## Build and use
 
+### Install a released binary
+
+The CLI release channel is [GitHub Releases](https://github.com/Flow-Research/workstream/releases).
+When a `cli-vMAJOR.MINOR.PATCH` release is published, its initial supported
+targets are Linux x86-64 (`linux-amd64`), Intel macOS (`darwin-amd64`), Apple
+Silicon macOS (`darwin-arm64`), and Windows x86-64 (`windows-amd64`). Linux
+ARM64 and Windows ARM64 are not part of this first contract. Use the archive
+whose platform matches your host; a different architecture or OS will not run.
+There is no package-manager or automatic-update channel.
+
+Download the exact platform archive and `SHA256SUMS` from the same GitHub
+release over HTTPS. Compare the archive's SHA-256 with its exact filename line
+in `SHA256SUMS` before extracting. On Linux/macOS, for example:
+
+```sh
+sha256sum -c SHA256SUMS --ignore-missing  # Linux; require exactly your archive to say OK
+# macOS: shasum -a 256 ARCHIVE.tar.gz; compare the output manually to SHA256SUMS
+tar -xzf ARCHIVE.tar.gz
+mkdir -p "$HOME/.local/bin"
+install -m 755 workstream "$HOME/.local/bin/workstream"
+"$HOME/.local/bin/workstream" --version
+```
+
+On Windows, compare `Get-FileHash ARCHIVE.zip -Algorithm SHA256` with the
+matching `SHA256SUMS` line, extract the ZIP, and put `workstream.exe` in a
+user-owned directory on `PATH` (add `$HOME/.local/bin` to `PATH` on Unix if
+needed). Keep the included `LICENSE`. `--version`
+prints `vMAJOR.MINOR.PATCH+gFULL_COMMIT_SHA`; that SHA is the exact release
+source commit. For upgrades, first retain the installed binary privately,
+verify the new archive, then replace the binary. Rollback replaces it with a
+previously verified binary; removal deletes the installed executable and any
+PATH entry you added. The CLI does not store tokens or create state to migrate.
+
+Checksums detect mismatch against the release page, not a compromised page or
+repository account; these binaries are not cryptographically signed. The macOS
+archives are currently unsigned and unnotarized, so platform security controls
+may block them. Do not disable those controls automatically. A first release
+has no prior published version to prove cross-release rollback compatibility.
+Release automation and native smoke proof are prepared by
+[WS-CLI-001-44](../.commitrail/initiatives/WS-CLI-001/WS-CLI-001-44.md), but
+until an approved tag and protected release run actually publish assets, use
+the source build below; CI preview artifacts are not public releases.
+
+If execution fails, check the archive suffix and host architecture first, then
+compare the hash and run `--version`. If the CLI executes but an API call fails,
+check the configured API origin and whether that deployed server supports the
+requested public route/response contract; there is no server-version negotiation
+or universal CLI/backend compatibility guarantee. Do not paste bearer tokens
+into issue reports, command arguments or diagnostic logs.
+
+### Build from source
+
 Use Go 1.27.1, matching `go.mod` and CI. From this directory:
 
 ```sh
@@ -262,9 +314,8 @@ origin you trust to receive that credential. Redirects and ambient HTTP proxies
 are disabled; system certificate verification remains enabled.
 
 The binary runs independently of Python, the backend source tree and MCP. The
-source package is buildable; published binaries, installers and signing are a
-later release boundary. The [CLI initiative](../.commitrail/initiatives/WS-CLI-001/OVERVIEW.md)
-describes subsequent public workflows and an optional TUI.
+[CLI initiative](../.commitrail/initiatives/WS-CLI-001/OVERVIEW.md) describes
+subsequent public workflows and an optional TUI.
 
 ## Output and automation
 
