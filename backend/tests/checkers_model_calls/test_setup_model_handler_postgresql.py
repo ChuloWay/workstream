@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from dataclasses import asdict, replace
+from dataclasses import asdict, dataclass, replace
+import json
 import os
 from uuid import UUID, uuid4
 
@@ -54,6 +56,7 @@ from app.modules.authorization.api import (
     ProjectGuideCompilationRequestOrigin,
 )
 from app.modules.model_usage.api import (
+    ModelCallUnavailable,
     ModelCallUsage,
     ProjectModelProfile,
     ProjectModelProfileSpec,
@@ -128,7 +131,7 @@ async def _publish_profile(access, project_id: UUID) -> ProjectModelProfile:
         },
     )
     assert budget.status_code == 201, budget.text
-    return ProjectModelProfile.model_validate(response.json())
+    return ProjectModelProfile.model_validate_json(json.dumps(response.json()))
 
 
 def _runtime(profile: ProjectModelProfile):
@@ -200,13 +203,22 @@ def _provider_request(profile: ProjectModelProfile) -> str:
     )
 
 
-async def test_setup_request_and_response_use_verified_minio_custody_and_replay(
-    tmp_path,
-    isolated_database_env,
-    admin_access,  # noqa: F811 - imported fixture is intentionally requested here
-    monkeypatch,
-) -> None:
-    """Persist both private payloads in ART and replay without another provider send."""
+@dataclass(slots=True)
+class _StorageCase:
+    database_url: str
+    factory: object
+    engine: object
+    bootstrap: object
+    manager: ArtifactScratchManager
+    settings: object
+    namespace: object
+    store: object
+    values: dict
+
+
+@asynccontextmanager
+async def _storage_case(tmp_path, database_url, monkeypatch) -> AsyncIterator[_StorageCase]:
+    """Own one real MinIO namespace and its exact PostgreSQL namespace row."""
     from tests import test_s3_artifact_store
     from tests.test_s3_artifact_store import minio_settings, provision_minio_bucket
 
@@ -236,11 +248,11 @@ async def test_setup_request_and_response_use_verified_minio_custody_and_replay(
         root=tmp_path / "setup-model-preparation",
         limits=artifact_preparation_limits(),
     )
-    engine = create_async_engine(isolated_database_env)
+    engine = create_async_engine(database_url)
     factory = async_sessionmaker(engine, expire_on_commit=False)
     try:
         values = await seed_database(
-            isolated_database_env,
+            database_url,
             namespace=namespace,
             provider_object_ref="fixture/guide-source-not-read",
         )
@@ -250,210 +262,251 @@ async def test_setup_request_and_response_use_verified_minio_custody_and_replay(
             ServiceIdentity.ARTIFACT_VERIFIER,
         ):
             await provision_post_submit_service(factory, service_identity)
-        profile = await _publish_profile(admin_access, values["project"])
-        configuration = _runtime(profile)
-        requested = await _fence_setup_attempt(
-            isolated_database_env, values, configuration
+        yield _StorageCase(
+            database_url,
+            factory,
+            engine,
+            bootstrap,
+            manager,
+            settings,
+            namespace,
+            store,
+            values,
         )
-        attempt = context(values, configuration=configuration)
-        subject = SetupModelProxySubject(
-            compilation_attempt_id=requested.attempt_id,
-            project_id=values["project"],
-            guide_id=values["guide"],
-            source_snapshot_id=values["snapshot"],
-            setup_run_id=values["setup_1"],
-            setup_generation=1,
-            runtime_configuration_hash=configuration.sha256,
-            profile_id=profile.profile_id,
-            profile_version=profile.spec.profile_version,
-            profile_digest=profile.profile_digest,
-            provider=profile.spec.provider,
-            api=profile.spec.api,
-            model=profile.spec.model_snapshot,
-        )
-        assert attempt.setup_run_id == subject.setup_run_id
-        request = SetupModelProxyRequest(
-            subject=subject,
-            phase="draft",
-            call_index=0,
-            provider_request_json=_provider_request(profile),
-        )
-        response_marker = f"private-setup-response-{uuid4()}"
-        response_json = canonical_provider_json(
-            {
-                "id": "setup-response-1",
-                "model": profile.spec.model_snapshot,
-                "choices": [{"message": {"content": response_marker}}],
-                "usage": {"prompt_tokens": 1, "completion_tokens": 1},
-            }
-        )
-        provider_calls = 0
-        reserve_observations: list[tuple[str, str, str]] = []
-
-        class Provider:
-            async def count_input(self, _body):
-                return 1
-
-            async def dispatch(self, _body):
-                nonlocal provider_calls
-                provider_calls += 1
-                assert reserve_observations == [
-                    ("setup_model_call", "model_request", "verified")
-                ]
-                return SetupProviderResponse(
-                    status_code=200,
-                    response_json=response_json,
-                    provider_response_id="setup-response-1",
-                    provider_model=profile.spec.model_snapshot,
-                    usage=ModelCallUsage(
-                        input_tokens=1,
-                        cached_input_tokens=0,
-                        output_tokens=1,
-                        reasoning_tokens=0,
-                    ),
-                )
-
-        @asynccontextmanager
-        async def provider(_profile):
-            yield Provider()
-
-        def calls(session, authority):
-            owner = setup_model_usage_service(
-                session,
-                authority=authority,
-                evidence=setup_model_evidence(session),
-                owner=setup_model_usage_owner(session),
-            )
-
-            class ObservedCalls:
-                def __getattr__(self, name):
-                    return getattr(owner, name)
-
-                async def reserve_dispatch(self, prepared, request_evidence):
-                    row = (
-                        await session.execute(
-                            text(
-                                "select binding.resource_type,binding.logical_role,receipt.outcome "
-                                "from artifact_bindings binding "
-                                "join artifact_verification_receipts receipt "
-                                "on receipt.id=binding.verification_receipt_id "
-                                "where binding.id=:binding and binding.resource_id=:effect"
-                            ),
-                            {
-                                "binding": str(request_evidence.binding_id),
-                                "effect": str(prepared.effect_id),
-                            },
-                        )
-                    ).one()
-                    reserve_observations.append(tuple(row))
-                    return await owner.reserve_dispatch(prepared, request_evidence)
-
-            return ObservedCalls()
-
-        preparation = ArtifactPreparationService(manager)
-        outputs = setup_model_output_storage(
-            sessions=factory,
-            store=store,
-            namespace=namespace,
-            preparation=preparation,
-            settings=settings,
-            owner=setup_model_usage_owner,
-        )
-
-        def handler() -> SetupModelProxyHandler:
-            return SetupModelProxyHandler(
-                sessions=factory,
-                authorization=setup_model_service_authorization,
-                calls=calls,
-                profiles=model_profile_reader,
-                outputs=outputs,
-                bindings=lambda session: setup_model_output_binding(
-                    session,
-                    namespace=namespace,
-                    owner=setup_model_usage_owner(session),
-                ),
-                provider=provider,
-            )
-
-        first = await handler().handle(request)
-        assert first.outcome == "completed"
-        assert first.response_json == response_json
-        assert provider_calls == 1
-
-        async with factory() as session:
-            state = (
-                await session.execute(
-                    text(
-                        "select effect.id,effect.state,effect.request_binding_id,"
-                        "effect.response_binding_id,effect.settled_nanodollars,"
-                        "account.lifetime_reserved_nanodollars,"
-                        "account.lifetime_settled_nanodollars "
-                        "from model_usage_effects effect "
-                        "join setup_model_usage_slots slot on slot.id=effect.setup_slot_id "
-                        "join model_usage_budget_accounts account on account.project_id=slot.project_id "
-                        "where slot.compilation_attempt_id=:attempt"
-                    ),
-                    {"attempt": str(requested.attempt_id)},
-                )
-            ).one()
-            bindings = (
-                await session.execute(
-                    text(
-                        "select binding.logical_role,binding.resource_id,receipt.outcome "
-                        "from artifact_bindings binding "
-                        "join artifact_verification_receipts receipt "
-                        "on receipt.id=binding.verification_receipt_id "
-                        "where binding.resource_type='setup_model_call' "
-                        "and binding.resource_id=:effect order by binding.logical_role"
-                    ),
-                    {"effect": str(state.id)},
-                )
-            ).all()
-            assert [tuple(row) for row in bindings] == [
-                ("model_request", str(state.id), "verified"),
-                ("model_response", str(state.id), "verified"),
-            ]
-            assert state.state == "completed"
-            assert state.request_binding_id is not None
-            assert state.response_binding_id is not None
-            assert state.lifetime_reserved_nanodollars == 0
-            assert state.lifetime_settled_nanodollars == state.settled_nanodollars
-            settled = state.lifetime_settled_nanodollars
-            for table in (
-                "model_usage_effects",
-                "artifact_contents",
-                "artifact_put_attempts",
-                "artifact_operation_receipts",
-                "artifact_verification_receipts",
-                "artifact_bindings",
-                "audit_events",
-            ):
-                leaked = await session.scalar(
-                    text(
-                        f"select exists(select 1 from {table} row "
-                        "where to_jsonb(row)::text like :needle)"
-                    ),
-                    {"needle": f"%{response_marker}%"},
-                )
-                assert leaked is False, table
-
-        replay = await handler().handle(request)
-        assert replay == first
-        assert provider_calls == 1
-        async with factory() as session:
-            replay_state = (
-                await session.execute(
-                    text(
-                        "select count(*) as effects,min(state) as state,"
-                        "min(settled_nanodollars) as settled from model_usage_effects effect "
-                        "join setup_model_usage_slots slot on slot.id=effect.setup_slot_id "
-                        "where slot.compilation_attempt_id=:attempt"
-                    ),
-                    {"attempt": str(requested.attempt_id)},
-                )
-            ).one()
-            assert replay_state == (1, "completed", settled)
     finally:
         manager.close()
         bootstrap.close()
         await engine.dispose()
+
+
+@dataclass(slots=True)
+class _Journey:
+    storage: _StorageCase
+    profile: ProjectModelProfile
+    request: SetupModelProxyRequest
+    response_json: str
+    response_marker: str
+    provider_calls: list[str]
+    reserve_observations: list[tuple[str, str, str]]
+    fail_completion: list[bool]
+    outputs: object
+
+    def handler(self) -> SetupModelProxyHandler:
+        return SetupModelProxyHandler(
+            sessions=self.storage.factory,
+            authorization=setup_model_service_authorization,
+            calls=lambda session, authority: _ObservedCalls(session, authority, self),
+            profiles=model_profile_reader,
+            outputs=self.outputs,
+            bindings=lambda session: setup_model_output_binding(
+                session,
+                namespace=self.storage.namespace,
+                owner=setup_model_usage_owner(session),
+            ),
+            provider=lambda profile: _provider(self, profile),
+        )
+
+
+class _Provider:
+    def __init__(self, journey: _Journey) -> None:
+        self.journey = journey
+
+    async def count_input(self, _body):
+        return 1
+
+    async def dispatch(self, _body):
+        self.journey.provider_calls.append("dispatch")
+        assert self.journey.reserve_observations == [
+            ("setup_model_call", "model_request", "verified")
+        ]
+        return SetupProviderResponse(
+            status_code=200,
+            response_json=self.journey.response_json,
+            provider_response_id="setup-response-1",
+            provider_model=self.journey.profile.spec.model_snapshot,
+            usage=ModelCallUsage(
+                input_tokens=1,
+                cached_input_tokens=0,
+                output_tokens=1,
+                reasoning_tokens=0,
+            ),
+        )
+
+
+@asynccontextmanager
+async def _provider(journey: _Journey, _profile) -> AsyncIterator[_Provider]:
+    yield _Provider(journey)
+
+
+class _ObservedCalls:
+    def __init__(self, session, authority, journey: _Journey) -> None:
+        self.session = session
+        self.journey = journey
+        self.owner = setup_model_usage_service(
+            session,
+            authority=authority,
+            evidence=setup_model_evidence(session),
+            owner=setup_model_usage_owner(session),
+        )
+
+    def __getattr__(self, name):
+        return getattr(self.owner, name)
+
+    async def reserve_dispatch(self, prepared, request_evidence):
+        row = (
+            await self.session.execute(
+                text(
+                    "select binding.resource_type,binding.logical_role,receipt.outcome "
+                    "from artifact_bindings binding join artifact_verification_receipts receipt "
+                    "on receipt.id=binding.verification_receipt_id "
+                    "where binding.id=:binding and binding.resource_id=:effect"
+                ),
+                {
+                    "binding": str(request_evidence.binding_id),
+                    "effect": str(prepared.effect_id),
+                },
+            )
+        ).one()
+        self.journey.reserve_observations.append(tuple(row))
+        return await self.owner.reserve_dispatch(prepared, request_evidence)
+
+    async def complete(self, *args, **kwargs):
+        if self.journey.fail_completion[0]:
+            self.journey.fail_completion[0] = False
+            raise ModelCallUnavailable("simulated_setup_ledger_unavailable")
+        return await self.owner.complete(*args, **kwargs)
+
+
+async def _journey(storage: _StorageCase, access) -> _Journey:
+    profile = await _publish_profile(access, storage.values["project"])
+    configuration = _runtime(profile)
+    requested = await _fence_setup_attempt(
+        storage.database_url, storage.values, configuration
+    )
+    subject = SetupModelProxySubject(
+        compilation_attempt_id=requested.attempt_id,
+        project_id=storage.values["project"],
+        guide_id=storage.values["guide"],
+        source_snapshot_id=storage.values["snapshot"],
+        setup_run_id=storage.values["setup_1"],
+        setup_generation=1,
+        runtime_configuration_hash=configuration.sha256,
+        profile_id=profile.profile_id,
+        profile_version=profile.spec.profile_version,
+        profile_digest=profile.profile_digest,
+        provider=profile.spec.provider,
+        api=profile.spec.api,
+        model=profile.spec.model_snapshot,
+    )
+    request = SetupModelProxyRequest(
+        subject, "draft", 0, _provider_request(profile)
+    )
+    marker = f"private-setup-response-{uuid4()}"
+    response = canonical_provider_json(
+        {
+            "id": "setup-response-1",
+            "model": profile.spec.model_snapshot,
+            "choices": [{"message": {"content": marker}}],
+            "usage": {"prompt_tokens": 1, "completion_tokens": 1},
+        }
+    )
+    outputs = setup_model_output_storage(
+        sessions=storage.factory,
+        store=storage.store,
+        namespace=storage.namespace,
+        preparation=ArtifactPreparationService(storage.manager),
+        settings=storage.settings,
+        owner=setup_model_usage_owner,
+    )
+    return _Journey(storage, profile, request, response, marker, [], [], [True], outputs)
+
+
+async def _state(journey: _Journey):
+    async with journey.storage.factory() as session:
+        return (
+            await session.execute(
+                text(
+                    "select effect.id,effect.state,effect.request_binding_id,"
+                    "effect.response_binding_id,effect.settled_nanodollars,"
+                    "account.lifetime_reserved_nanodollars,"
+                    "account.lifetime_settled_nanodollars "
+                    "from model_usage_effects effect "
+                    "join setup_model_usage_slots slot on slot.id=effect.setup_slot_id "
+                    "join model_usage_budget_accounts account on account.project_id=slot.project_id "
+                    "where slot.compilation_attempt_id=:attempt"
+                ),
+                {"attempt": str(journey.request.subject.compilation_attempt_id)},
+            )
+        ).one()
+
+
+async def _assert_bound_private_art(journey: _Journey, state) -> None:
+    async with journey.storage.factory() as session:
+        bindings = (
+            await session.execute(
+                text(
+                    "select binding.logical_role,binding.resource_id,receipt.outcome "
+                    "from artifact_bindings binding join artifact_verification_receipts receipt "
+                    "on receipt.id=binding.verification_receipt_id "
+                    "where binding.resource_type='setup_model_call' "
+                    "and binding.resource_id=:effect order by binding.logical_role"
+                ),
+                {"effect": str(state.id)},
+            )
+        ).all()
+        assert [tuple(row) for row in bindings] == [
+            ("model_request", str(state.id), "verified"),
+            ("model_response", str(state.id), "verified"),
+        ]
+        for table in (
+            "model_usage_effects",
+            "artifact_contents",
+            "artifact_put_attempts",
+            "artifact_operation_receipts",
+            "artifact_verification_receipts",
+            "artifact_bindings",
+            "audit_events",
+        ):
+            leaked = await session.scalar(
+                text(
+                    f"select exists(select 1 from {table} row "
+                    "where to_jsonb(row)::text like :needle)"
+                ),
+                {"needle": f"%{journey.response_marker}%"},
+            )
+            assert leaked is False, table
+
+
+async def test_setup_response_recovers_from_verified_minio_after_ledger_loss(
+    tmp_path,
+    isolated_database_env,
+    admin_access,  # noqa: F811 - imported fixture is intentionally requested here
+    monkeypatch,
+) -> None:
+    """Recover exact response ART after a crash boundary without a second send."""
+    async with _storage_case(tmp_path, isolated_database_env, monkeypatch) as storage:
+        journey = await _journey(storage, admin_access)
+        first = await journey.handler().handle(journey.request)
+        assert first.outcome == "unavailable"
+        uncertain = await _state(journey)
+        assert uncertain.state == "uncertain"
+        assert uncertain.response_binding_id is None
+        assert uncertain.lifetime_reserved_nanodollars > 0
+        assert uncertain.lifetime_settled_nanodollars == 0
+        await _assert_bound_private_art(journey, uncertain)
+
+        recovered = await journey.handler().handle(journey.request)
+        assert recovered.outcome == "completed"
+        assert recovered.response_json == journey.response_json
+        completed = await _state(journey)
+        assert completed.state == "completed"
+        assert completed.request_binding_id is not None
+        assert completed.response_binding_id is not None
+        assert completed.lifetime_reserved_nanodollars == 0
+        assert completed.lifetime_settled_nanodollars == completed.settled_nanodollars
+        await _assert_bound_private_art(journey, completed)
+
+        replay = await journey.handler().handle(journey.request)
+        assert replay == recovered
+        assert journey.provider_calls == ["dispatch"]
+        assert await _state(journey) == completed
