@@ -19,6 +19,7 @@ from workstream_mcp.schemas import (
     admin_grant_output_validator,
     authorization_context_output_validator,
     guide_output_validator,
+    policy_output_validator,
     profile_output_validator,
     profile_update_output_validator,
     project_grant_output_validator,
@@ -58,6 +59,9 @@ _PUBLIC_ERROR_CODES = frozenset(
         "project_role_grant_already_revoked",
         "project_role_grant_exists",
         "project_role_grant_replay_state_changed",
+        "policy_precondition_failed",
+        "policy_precondition_invalid",
+        "authorization_handle_invalid",
         "resource_guard_denied",
         "resource_not_found",
         "rate_limit_exceeded",
@@ -455,7 +459,7 @@ class WorkstreamGateway:
                 and self._unique_uuid_field(returned_documents, "document_id")
                 and all(
                     isinstance(returned, dict)
-                    and returned.get("label") == requested.get("label")
+                    and returned.get("label") == " ".join(requested["label"].split())
                     and returned.get("media_type") == requested.get("media_type")
                     and returned.get("order") == index
                     for index, (returned, requested) in enumerate(
@@ -481,6 +485,75 @@ class WorkstreamGateway:
                 )
             )
         return outcome
+
+    async def policy_mutation(
+        self,
+        name: str,
+        bearer: str,
+        arguments: dict[str, Any],
+        correlation_id: str | None = None,
+    ) -> GatewayResult:
+        """Dispatch one fixed policy mutation and bind its returned lineage."""
+        project_id = arguments["project_id"]
+        guide_id = arguments["guide_id"]
+        policy_kind = "review" if name == "review_policy_put" else "revision"
+        path = (
+            f"/api/v1/projects/{quote(project_id, safe='')}/guides/"
+            f"{quote(guide_id, safe='')}/{policy_kind}-policy"
+        )
+        outcome = await self._request(
+            "PUT",
+            path,
+            bearer,
+            policy_output_validator(name),
+            correlation_id,
+            json_body=arguments["body"],
+            idempotency_key=arguments["idempotency_key"],
+            if_match=arguments["if_match"],
+            expected_status=200,
+            mutation=True,
+        )
+        if outcome.failure is not None:
+            return outcome
+        data = outcome.data or {}
+        lineage_matches = self._policy_lineage_matches(data, arguments["if_match"])
+        matches = (
+            self._same_uuid(data.get("project_id"), project_id)
+            and lineage_matches
+            and data.get("semantics_status") == "complete"
+            and isinstance(data.get("policy_generation"), int)
+            and data["policy_generation"] >= 1
+            and isinstance(data.get("policy_hash"), str)
+            and re.fullmatch(r"sha256:[0-9a-f]{64}", data["policy_hash"]) is not None
+        )
+        body = arguments["body"]
+        matches = matches and all(data.get(key) == value for key, value in body.items())
+        if not matches:
+            return GatewayResult(
+                failure=SafeFailure(
+                    "workstream_execution_uncertain",
+                    status=502,
+                    correlation_id=correlation_id,
+                )
+            )
+        return outcome
+
+    @classmethod
+    def _policy_lineage_matches(cls, data: dict[str, Any], selector: str) -> bool:
+        """Bind a successful immutable policy response to its requested predecessor."""
+        if selector == '"no-current-policy"':
+            return data.get("policy_generation") == 1 and data.get(
+                "supersedes_policy_id"
+            ) is None
+        match = re.fullmatch(
+            r'"([0-9a-fA-F-]{36})\.([1-9][0-9]*)\.([0-9a-f]{64})"', selector
+        )
+        if match is None:
+            return False
+        predecessor_id, generation, _ = match.groups()
+        return cls._same_uuid(data.get("supersedes_policy_id"), predecessor_id) and data.get(
+            "policy_generation"
+        ) == int(generation) + 1
 
     @staticmethod
     def _same_uuid(candidate: object, expected: str) -> bool:
@@ -565,6 +638,7 @@ class WorkstreamGateway:
         json_body: dict[str, Any] | None = None,
         params: dict[str, str] | None = None,
         idempotency_key: str | None = None,
+        if_match: str | None = None,
         expected_status: int = 200,
         expected_payload: dict[str, Any] | None = None,
         expected_resource_id: str | None = None,
@@ -582,6 +656,8 @@ class WorkstreamGateway:
                     }
                     if idempotency_key is not None:
                         headers["Idempotency-Key"] = idempotency_key
+                    if if_match is not None:
+                        headers["If-Match"] = if_match
                     async with self._client.stream(
                         method,
                         path,
