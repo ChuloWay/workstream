@@ -41,6 +41,7 @@ class TrialEvidenceReservations:
         tasks: EvaluationTaskGuard, profiles: TrialProfileReaderPort,
         authority: ExecutionAuthorityPort,
     ):
+        """Bind a caller-owned transaction to one validated POST execution request."""
         self._session = session
         self._request = ExternalCheckerExecutionRequest.model_validate(request)
         self._tasks, self._profiles, self._authority = tasks, profiles, authority

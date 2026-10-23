@@ -140,6 +140,7 @@ class CheckerTrialProxy:
     """The trusted host callback never delegates evidence custody to an image."""
 
     def __init__(self, *, sessions, reservations, outputs, bindings, profiles):
+        """Compose existing custody owners with the trusted trial-profile reader."""
         self._sessions, self._reservations = sessions, reservations
         self._outputs, self._bindings = outputs, bindings
         self._profiles = profiles
@@ -168,10 +169,12 @@ class CheckerTrialProxy:
 
     @staticmethod
     def _unavailable(operation, code):
+        """Return a bounded protocol failure without internal exception details."""
         return {"protocol_version": TRIAL_PROXY_PROTOCOL, "operation": operation,
                 "outcome": "unavailable", "failure_code": code}
 
     async def _reserve(self, request):
+        """Reserve one stable trial slot or recover its original verified receipt."""
         async with self._sessions() as session, session.begin():
             ticket = await self._reservations(session, request.external_request).reserve(request.subject)
         retained = None
@@ -194,6 +197,7 @@ class CheckerTrialProxy:
                 "retained_receipt": retained, "failure_code": None}
 
     async def _publish(self, request):
+        """Validate runtime evidence, store exact bytes through ART and bind custody."""
         raw, value = _receipt_bytes(request)
         subject = _receipt_subject(request.external_request, value)
         async with self._sessions() as session, session.begin():
@@ -213,6 +217,7 @@ class CheckerTrialProxy:
         )
 
         async def stream():
+            """Supply the already bounded receipt to the canonical ART upload path."""
             yield raw
 
         stored = await self._outputs(request.external_request).store_trial_evidence(
@@ -224,6 +229,7 @@ class CheckerTrialProxy:
                 "failure_code": None}
 
     async def _bind(self, external, selector, stored):
+        """Bind verified output under fresh invocation authority in one transaction."""
         if stored is None or stored.content_id is None or stored.verification_receipt_id is None:
             raise TrialEvidenceUnavailable("trial_evidence_unavailable")
         async with self._sessions() as session, session.begin():

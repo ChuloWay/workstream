@@ -37,6 +37,7 @@ class TrialProfileSelector:
     profile_digest: Sha256
 
     def __post_init__(self) -> None:
+        """Reject non-native UUIDs, non-positive versions and malformed content digests."""
         if (
             type(self.profile_id) is not UUID
             or type(self.profile_version) is not int
@@ -56,6 +57,7 @@ class TrialProjectionSelector:
     projection_digest: Sha256
 
     def __post_init__(self) -> None:
+        """Require an exact typed projection version and SHA-256 identity."""
         if (
             type(self.projection_id) is not UUID
             or type(self.projection_version) is not int
@@ -94,6 +96,7 @@ class TrialResourceCeilings:
     maximum_response_bytes: int
 
     def __post_init__(self) -> None:
+        """Enforce positive finite ceilings, disabled swap and bounded protocol payloads."""
         values = asdict(self)
         if any(type(value) is not int or value < 1 for value in values.values()):
             raise TrialProfileError("trial resource ceiling is invalid")
@@ -149,6 +152,7 @@ class TrialExecutionProfile:
     limits: TrialResourceCeilings
 
     def __post_init__(self) -> None:
+        """Validate isolated runtime controls and recompute the immutable profile digest."""
         if (
             self.schema_version != "workstream.trial_execution_profile.v1"
             or self.runtime != "runsc"
@@ -207,6 +211,7 @@ class TrialSlotProjection:
     retain_state_after: tuple[Literal["succeeded", "exit_nonzero", "signalled"], ...]
 
     def __post_init__(self) -> None:
+        """Bound ordered occurrences and reject ambiguous role or state-retention grants."""
         if (
             type(self.slot_kind) is not str
             or _IDENTIFIER.fullmatch(self.slot_kind) is None
@@ -240,6 +245,7 @@ class TrialMaterialProjection:
     exclusions: tuple[str, ...]
 
     def __post_init__(self) -> None:
+        """Constrain material copies to canonical relative paths and disjoint exclusions."""
         if (
             type(self.role) is not str
             or _IDENTIFIER.fullmatch(self.role) is None
@@ -269,6 +275,7 @@ class TrialExecutionProjection:
     slot_templates: tuple[TrialSlotProjection, ...]
 
     def __post_init__(self) -> None:
+        """Validate material and slot relationships before accepting the projection digest."""
         allowed = set(self.allowed_material_roles)
         projected = {item.role for item in self.material_projections}
         if (
@@ -354,6 +361,7 @@ class TrialExecutionProjection:
 
 
 def _selector_value(selector: TrialProfileSelector, *, include_digest: bool) -> dict[str, object]:
+    """Serialize native profile identity and optionally include its stored digest."""
     value = {
         "profile_id": str(selector.profile_id),
         "profile_version": selector.profile_version,
@@ -445,6 +453,7 @@ class TrialAuthorityBinding:
     projection: TrialExecutionProjection
 
     def __post_init__(self) -> None:
+        """Bind exact registry, image and configuration identities to a permitted projection."""
         if type(self.registry_entry_id) is not UUID or any(
             type(value) is not str or _DIGEST.fullmatch(value) is None
             for value in (
@@ -501,12 +510,14 @@ def trial_selector_from_configuration(
 
 
 def _string_tuple(value: object) -> tuple[str, ...]:
+    """Accept a JSON string array without coercing other scalar types."""
     if type(value) is not list or any(type(item) is not str for item in value):
         raise TrialProfileError("trial execution projection is invalid")
     return tuple(value)
 
 
 def _safe_relative(value: object, *, allow_dot: bool) -> bool:
+    """Check a canonical POSIX relative path without traversal or alternate separators."""
     if type(value) is not str or not value or "\\" in value or "\x00" in value:
         return False
     if value == ".":
@@ -519,6 +530,7 @@ def _safe_relative(value: object, *, allow_dot: bool) -> bool:
 
 
 def _paths_overlap(values: tuple[str, ...]) -> bool:
+    """Detect duplicate paths and ancestor/descendant pairs in exclusion lists."""
     normalized = [() if value == "." else PurePosixPath(value).parts for value in values]
     for index, left in enumerate(normalized):
         for right in normalized[index + 1 :]:
@@ -531,6 +543,7 @@ class PinnedTrialProfileCatalog:
     """Read-only exact-match catalog populated only from trusted service config."""
 
     def __init__(self, profiles: tuple[TrialExecutionProfile, ...]) -> None:
+        """Freeze trusted profiles while rejecting duplicate identities or version aliases."""
         values: dict[tuple[UUID, int, str], TrialExecutionProfile] = {}
         versions: set[tuple[UUID, int]] = set()
         for profile in profiles:
@@ -560,6 +573,7 @@ class PinnedTrialExecutionCatalog:
         self,
         entries: tuple[tuple[TrialExecutionProfile, TrialExecutionProjection], ...],
     ) -> None:
+        """Freeze exact profile/projection pairs after checking each authority subset."""
         values: dict[
             tuple[UUID, int, str, UUID, int, str],
             tuple[TrialExecutionProfile, TrialExecutionProjection],
@@ -638,6 +652,7 @@ def load_trial_authority_manifest(path: Path, expected_digest: str) -> PinnedTri
 
 
 def _read_bounded_manifest(path: Path) -> bytes:
+    """Read one bounded regular file and reject link or inode replacement races."""
     try:
         if path.resolve(strict=True) != path:
             raise TrialProfileError("trial authority manifest is invalid")
@@ -683,6 +698,7 @@ def _read_bounded_manifest(path: Path) -> bytes:
 
 
 def _closed_manifest_object(pairs: list[tuple[str, object]]) -> dict[str, object]:
+    """Reject duplicate JSON keys rather than silently replacing trusted authority."""
     value: dict[str, object] = {}
     for key, item in pairs:
         if key in value:
@@ -692,10 +708,12 @@ def _closed_manifest_object(pairs: list[tuple[str, object]]) -> dict[str, object
 
 
 def _invalid_manifest_constant(_value: str) -> object:
+    """Reject non-finite JSON numeric constants in the trusted manifest."""
     raise TrialProfileError("trial authority manifest is invalid")
 
 
 def _parse_authority_binding(value: object) -> TrialAuthorityBinding:
+    """Parse the closed image/policy authority envelope and its immutable selectors."""
     if type(value) is not dict or set(value) != {
         "registry_entry_id",
         "registry_entry_digest",
@@ -721,6 +739,7 @@ def _parse_authority_binding(value: object) -> TrialAuthorityBinding:
 
 
 def _parse_profile(value: object) -> TrialExecutionProfile:
+    """Reconstruct a complete profile with typed selectors, ceilings and JSON arrays."""
     if type(value) is not dict or set(value) != set(TrialExecutionProfile.__dataclass_fields__):
         raise TrialProfileError("trial execution profile is invalid")
     selector = value["selector"]
@@ -756,6 +775,7 @@ def _parse_profile(value: object) -> TrialExecutionProfile:
 
 
 def _parse_projection(value: object) -> TrialExecutionProjection:
+    """Reconstruct exact material and slot projections without dropping unknown fields."""
     if type(value) is not dict or set(value) != set(TrialExecutionProjection.__dataclass_fields__):
         raise TrialProfileError("trial execution projection is invalid")
     selector = value["selector"]
@@ -814,10 +834,12 @@ def _parse_projection(value: object) -> TrialExecutionProjection:
 
 
 def _exact_manifest_item(value: object, cls: type[object]) -> bool:
+    """Require a manifest object to contain exactly the declared dataclass fields."""
     return type(value) is dict and set(value) == set(cls.__dataclass_fields__)
 
 
 def _manifest_tuple(value: object) -> tuple:
+    """Convert only a JSON array to the immutable manifest representation."""
     if type(value) is not list:
         raise TrialProfileError("trial authority manifest is invalid")
     return tuple(value)
