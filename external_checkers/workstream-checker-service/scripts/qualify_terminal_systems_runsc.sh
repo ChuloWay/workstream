@@ -26,6 +26,7 @@ readonly EXTRACT_CONTAINER="ws493-runsc-registry-extract-${RUN_ID}"
 STARTED=0
 CONFIG_REPLACED=0
 EXTRACT_CREATED=0
+HOST_CHECKER_BUILT=0
 
 cleanup() {
   local status=$?
@@ -54,6 +55,9 @@ cleanup() {
   fi
   if [[ "${EXTRACT_CREATED}" == 1 ]]; then
     docker rm -f "${EXTRACT_CONTAINER}" >/dev/null 2>&1 || status=1
+  fi
+  if [[ "${HOST_CHECKER_BUILT}" == 1 ]]; then
+    docker image rm "${CHECKER_IMAGE}" >/dev/null 2>&1 || status=1
   fi
   if [[ "${CONFIG_REPLACED}" == 1 ]]; then
     cp -- "${ORIGINAL_CONFIG}" "${STATE_ROOT}/daemon.json" || status=1
@@ -170,9 +174,14 @@ cp -- "$(readlink -f /lib/x86_64-linux-gnu/libm.so.6)" "${COMPOSITION_ROOT}/bin/
 cp -- "$(readlink -f /lib/x86_64-linux-gnu/libc.so.6)" "${COMPOSITION_ROOT}/bin/libc.so.6"
 chmod 0555 "${COMPOSITION_ROOT}/bin/"*
 
+if docker image inspect "${CHECKER_IMAGE}" >/dev/null 2>&1; then
+  echo "qualification checker image tag already exists on the host" >&2
+  exit 1
+fi
 docker build --pull=false --network=none --tag "${CHECKER_IMAGE}" \
   --file "${REPOSITORY_ROOT}/pilots/terminal_systems/checkers/post/model/Dockerfile" \
   "${REPOSITORY_ROOT}/pilots/terminal_systems/checkers/post/model" >/dev/null
+HOST_CHECKER_BUILT=1
 docker image inspect "${CHECKER_IMAGE}" >/dev/null
 docker image inspect "${REGISTRY_IMAGE}" >/dev/null
 docker save --output "${COMPOSITION_ROOT}/input/checker-image.tar" "${CHECKER_IMAGE}"
