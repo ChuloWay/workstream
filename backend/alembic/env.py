@@ -113,6 +113,7 @@ def do_run_migrations(connection: Connection) -> None:
             ("0057_roles_anywhere_custody",),
             ("0058_compensation_unit_create",),
             ("0059_neutral_guide_runtime",),
+            ("0060_audit_restore_path",),
             (_CURRENT_HEAD_REVISION,),
         ):
             raise RuntimeError(_RECREATE_GUIDANCE)
