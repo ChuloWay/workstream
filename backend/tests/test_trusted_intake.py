@@ -65,7 +65,7 @@ def _command(operation: str, payload: dict, lease: str = _LEASE) -> bytes:
 def _archive(path: str = "work.txt", content: bytes = b"finished work") -> bytes:
     output = BytesIO()
     with zipfile.ZipFile(output, "w") as archive:
-        archive.writestr(path, content)
+        archive.writestr(zipfile.ZipInfo(path, date_time=(1980, 1, 1, 0, 0, 0)), content)
     return output.getvalue()
 
 
@@ -160,6 +160,7 @@ def test_worker_inspects_exports_and_runs_canonical_default_once(tmp_path):
         (b"not a zip", "submission_archive_malformed"),
         (_archive("../escape"), "submission_archive_unsafe_entry"),
     ],
+    ids=("malformed", "traversal"),
 )
 def test_worker_preserves_canonical_zip_rejection_without_export(tmp_path, data, code):
     worker, output = _run(tmp_path, data)

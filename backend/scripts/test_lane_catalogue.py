@@ -502,6 +502,7 @@ CHECKER_DELIVERY_MODULES = (
     "tests/checkers/external/test_policy.py",
     "tests/checkers/external/test_selected_post_submit.py",
     "tests/checkers/external/test_selected_pre_submit.py",
+    "tests/checkers/external/test_selected_intake_lifecycle.py",
     "tests/checkers/external/test_selected_pre_submit_coordination.py",
     "tests/checkers/external/test_selected_pre_submit_service.py",
     "tests/checkers/external/test_selected_preparation_command.py",
