@@ -2,8 +2,9 @@
 
 use crate::proxy_transport::{connect_private, read_frame, write_frame};
 use crate::trial_relay::{
-    valid_sha256, valid_uuid, CanonicalTrialReceipt, TrialEvidenceSubject, TrialReceiptCustodyAck,
-    TrialReceiptPublication,
+    valid_sha256, valid_uuid, CanonicalTrialReceipt, PublishedTrialReceipt, TrialEvidenceSubject,
+    TrialReceiptCustodyAck, TrialReceiptPublication, TrialReceiptPublishFailure,
+    TrialReceiptPublisher, TrialReceiptReservation, TrialRelayFailure,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -24,6 +25,25 @@ pub(crate) struct TrialEvidenceProxyClient {
     socket: PathBuf,
     external_request: Value,
     reservations: Arc<Mutex<HashMap<String, ReservedOwner>>>,
+}
+
+pub(crate) trait InvocationReceiptRegistrar: Send + Sync + 'static {
+    fn register(
+        &self,
+        request_digest: &str,
+        canonical_receipt_utf8: String,
+        receipt_sha256: String,
+        custody: &TrialReceiptCustodyAck,
+    ) -> Result<String, ()>;
+}
+
+pub(crate) struct DurableTrialReceiptPublisher<R: InvocationReceiptRegistrar> {
+    proxy: TrialEvidenceProxyClient,
+    registrar: Arc<R>,
+    request_digest: String,
+    maximum_receipt_bytes: usize,
+    deadline: Instant,
+    cancelled: Arc<AtomicBool>,
 }
 
 #[derive(Clone, Debug)]
@@ -360,6 +380,113 @@ impl TrialEvidenceProxyClient {
         let response = read_frame(&mut stream, MAXIMUM_FRAME_BYTES, deadline, cancelled)
             .map_err(|_| TrialEvidenceProxyFailure::Unavailable)?;
         serde_json::from_slice(&response).map_err(|_| TrialEvidenceProxyFailure::InvalidResponse)
+    }
+}
+
+impl<R: InvocationReceiptRegistrar> DurableTrialReceiptPublisher<R> {
+    pub(crate) fn new(
+        proxy: TrialEvidenceProxyClient,
+        registrar: Arc<R>,
+        request_digest: String,
+        maximum_receipt_bytes: usize,
+        deadline: Instant,
+        cancelled: Arc<AtomicBool>,
+    ) -> Result<Self, TrialReceiptPublishFailure> {
+        if !valid_sha256(&request_digest)
+            || maximum_receipt_bytes == 0
+            || maximum_receipt_bytes > MAXIMUM_RECEIPT_BYTES
+        {
+            return Err(publish_failure(TrialEvidenceProxyFailure::InvalidResponse));
+        }
+        Ok(Self {
+            proxy,
+            registrar,
+            request_digest,
+            maximum_receipt_bytes,
+            deadline,
+            cancelled,
+        })
+    }
+
+    fn register(
+        &self,
+        receipt: &CanonicalTrialReceipt,
+        custody: &TrialReceiptCustodyAck,
+    ) -> Result<String, TrialReceiptPublishFailure> {
+        let canonical = String::from_utf8(receipt.canonical_bytes.clone())
+            .map_err(|_| publish_failure(TrialEvidenceProxyFailure::InvalidResponse))?;
+        self.registrar
+            .register(
+                &self.request_digest,
+                canonical,
+                receipt.receipt_digest.clone(),
+                custody,
+            )
+            .map_err(|_| publish_failure(TrialEvidenceProxyFailure::Unavailable))
+    }
+}
+
+impl<R: InvocationReceiptRegistrar> TrialReceiptPublisher for DurableTrialReceiptPublisher<R> {
+    fn reserve_completed(
+        &self,
+        subject: TrialEvidenceSubject,
+    ) -> Result<TrialReceiptReservation, TrialReceiptPublishFailure> {
+        match self
+            .proxy
+            .reserve(
+                &subject,
+                self.maximum_receipt_bytes,
+                self.deadline,
+                &self.cancelled,
+            )
+            .map_err(publish_failure)?
+        {
+            ReservedTrialEvidence::Fresh { trial_evidence_id } => {
+                Ok(TrialReceiptReservation::Fresh { trial_evidence_id })
+            }
+            ReservedTrialEvidence::Retained {
+                trial_evidence_id,
+                receipt,
+                custody,
+            } => {
+                let receipt_handle = self.register(&receipt, &custody)?;
+                Ok(TrialReceiptReservation::Retained {
+                    trial_evidence_id,
+                    receipt,
+                    published: PublishedTrialReceipt {
+                        receipt_handle,
+                        custody,
+                    },
+                })
+            }
+        }
+    }
+
+    fn publish_completed(
+        &self,
+        trial_evidence_id: &str,
+        receipt: CanonicalTrialReceipt,
+    ) -> Result<PublishedTrialReceipt, TrialReceiptPublishFailure> {
+        let custody = self
+            .proxy
+            .publish(trial_evidence_id, &receipt, self.deadline, &self.cancelled)
+            .map_err(publish_failure)?;
+        let receipt_handle = self.register(&receipt, &custody)?;
+        Ok(PublishedTrialReceipt {
+            receipt_handle,
+            custody,
+        })
+    }
+}
+
+fn publish_failure(value: TrialEvidenceProxyFailure) -> TrialReceiptPublishFailure {
+    TrialReceiptPublishFailure {
+        code: match value {
+            TrialEvidenceProxyFailure::Deadline => TrialRelayFailure::DeadlineExceeded,
+            TrialEvidenceProxyFailure::Unavailable | TrialEvidenceProxyFailure::InvalidResponse => {
+                TrialRelayFailure::ImplementationUnavailable
+            }
+        },
     }
 }
 
