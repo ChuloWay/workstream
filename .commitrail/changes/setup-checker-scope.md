@@ -95,3 +95,10 @@ faults used the removed notes field. The scoreboard now requires fresh proposal
 correction before implementation. Length, Unicode and unsafe-prose faults use a
 supported finding message and assert their intended validation layer, preserving
 the distinct boundaries instead of merely testing unknown-field rejection.
+
+The retained PostgreSQL parser-rejection test also expected immediate termination.
+Its pre-fix run reproduced three bounded calls against that one-call expectation.
+The corrected proof checks both corrections, terminal persistence without a
+proposal, sanitized feedback and zero further calls on exact replay. Its malformed,
+schema-invalid and unsafe-prose cases retain distinct invalid-output causes. All
+three passed against isolated PostgreSQL; database and role cleanup was confirmed.
