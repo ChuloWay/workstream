@@ -323,6 +323,7 @@ BEGIN
       'submission_version',manifest.submission_version,
       'completion_event_id',manifest.completion_event_id,
       'result',jsonb_build_object(
+        'schema_version','post_submit_current_result_reference',
         'attempt_id',manifest.checker_run_id,'request_id',manifest.evaluation_request_id,
         'request_digest',manifest.request_digest,
         'evaluation_generation',manifest.evaluation_generation,

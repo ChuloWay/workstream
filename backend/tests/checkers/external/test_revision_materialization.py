@@ -172,6 +172,25 @@ async def test_revision_reads_exact_previous_material_with_per_binding_visibilit
             assert (retained.input_context_custody["predecessor"] is not None) == (
                 "predecessor_submission_archive" in roles
             )
+        if "predecessor_findings" in roles:
+            # Validate the SQL predicate directly on detached candidate values:
+            # immutable-row guards alone must not hide an incomplete witness.
+            async with h.factory() as session:
+                for replacement in ("'null'::jsonb", "to_jsonb(CAST('wrong' AS text))"):
+                    valid = await session.scalar(text(
+                        "SELECT public.checker_input_context_valid(jsonb_populate_record("
+                        "NULL::public.checker_runs,jsonb_set(to_jsonb(r),"
+                        "'{input_context_custody,evaluation_context,feedback,source,result,schema_version}',"
+                        + replacement + "))) FROM public.checker_runs r WHERE id=:id"
+                    ), {"id": completed.attempt_id})
+                    assert valid is False
+                missing = await session.scalar(text(
+                    "SELECT public.checker_input_context_valid(jsonb_populate_record("
+                    "NULL::public.checker_runs,to_jsonb(r) #- "
+                    "'{input_context_custody,evaluation_context,feedback,source,result,schema_version}')) "
+                    "FROM public.checker_runs r WHERE id=:id"
+                ), {"id": completed.attempt_id})
+                assert missing is False
         for expression in (
             "NULL",
             "jsonb_set(input_context_custody,'{evaluation_context,source,preparation_sha256}',to_jsonb(CAST(:wrong AS text)))",
