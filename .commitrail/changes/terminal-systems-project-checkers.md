@@ -69,10 +69,14 @@ owners and every migration; this change does not edit `main.rs` concurrently.
 that otherwise unconnected module and exercises its fake-engine protocol,
 identity, bounds, cancellation and cleanup contracts before shared composition.
 The trial module publishes a generic typed relay, profile and observation API;
-it does not treat relay success as a work verdict. Backend trial
-authority/materialization may later extend the existing
-selected-POST, TASK and ART owner files only after their exact file list and
-typed port contract are added here; it will not add a migration. The bridge must
+it does not treat relay success as a work verdict. Backend trial authority starts
+in `backend/app/modules/checkers/api/trial_profiles.py`,
+`backend/app/interfaces/trial_execution.py`, and
+`backend/tests/checkers/external/test_trial_profiles.py`. These define a
+distinct digest-pinned trusted service-config reader and do not reuse the
+monetary model profile. Later selected-POST, TASK and ART owner files require
+their exact file list and typed port contract to be added here before edits;
+this change owns no migration. The bridge must
 keep Docker authority and
 prepared offline material outside the untrusted project image, expose only
 invocation-local bounded tools, and prove aggregate time, CPU, memory, PID and
