@@ -117,7 +117,7 @@ Its samples are structural fixtures, not completed authoring submissions.
 The eight POST checks and their model, isolated execution and authenticated
 material dependencies remain unavailable. No registered image, approved policy,
 activated guide or contribution outcome is claimed. Engineering
-must implement the proposed checks and resolve their runtime/material gaps,
+must implement the remaining eight POST checks and resolve their runtime/material gaps,
 register the exact images, and obtain corrected bindings and PM approval before
 activation and the contributor journey.
 See the [live setup record](../../.commitrail/changes/terminal-systems-live-setup.md)
