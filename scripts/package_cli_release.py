@@ -151,7 +151,10 @@ def verify(root: Path, tag: str, commit: str, *, assembled: bool) -> list[Path]:
                 ] or any(not member.isfile() for member in members):
                     raise ValueError("unexpected Unix archive members")
                 binary_bytes = reader.extractfile(binary_name).read()
-        if version not in binary_bytes:
+        if not re.search(
+            rb"(?<![A-Za-z0-9_.+\-])" + re.escape(version) + rb"(?![A-Za-z0-9_.+\-])",
+            binary_bytes,
+        ):
             raise ValueError("embedded CLI version does not match release source")
     return [root / name for name in sorted(expected)]
 

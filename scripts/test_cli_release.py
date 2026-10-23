@@ -64,6 +64,15 @@ def run(
     return result
 
 
+def check_version_output(
+    result: subprocess.CompletedProcess[str], version: str
+) -> None:
+    if result.stdout != f"workstream version {version}\n" or result.stderr:
+        raise AssertionError(
+            "installed CLI version output does not match release source"
+        )
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--archive", type=Path, required=True)
@@ -128,14 +137,14 @@ def main() -> None:
 
         # A fresh install and a prior-version overwrite are separate observations.
         shutil.copy2(staged, installed)
-        assert version in run(installed, ["--version"]).stdout
+        check_version_output(run(installed, ["--version"]), version)
         installed.unlink()
         shutil.copy2(old, installed)
-        assert "v0.0.0+smoke" in run(installed, ["--version"]).stdout
+        check_version_output(run(installed, ["--version"]), "v0.0.0+smoke")
         shutil.copy2(staged, installed)
-        assert version in run(installed, ["--version"]).stdout
+        check_version_output(run(installed, ["--version"]), version)
         shutil.copy2(old, installed)
-        assert "v0.0.0+smoke" in run(installed, ["--version"]).stdout
+        check_version_output(run(installed, ["--version"]), "v0.0.0+smoke")
         shutil.copy2(staged, installed)
 
         received: list[tuple[str, str]] = []
@@ -164,6 +173,7 @@ def main() -> None:
                 WORKSTREAM_TOKEN=token,
             )
             result = run(installed, ["whoami", "--output", "json"], call_env)
+            assert result.stderr == "" and token not in result.stdout
             assert json.loads(result.stdout) == PROFILE
             assert received == [("/api/v1/actors/me", f"Bearer {token}")]
         finally:

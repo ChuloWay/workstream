@@ -52,7 +52,8 @@
 [WS-CLI-001-40](WS-CLI-001-40.md) additionally delivers exact-project uncertain
 delivery inspection and explicit reconciliation.
 [WS-CLI-001-44](WS-CLI-001-44.md) prepares four native CLI release archives,
-integrity metadata and a separately gated manual GitHub Releases publisher.
+integrity metadata and a separately gated manual GitHub Releases publisher;
+the environment and immutable tag ruleset remain external prerequisites.
 It does not claim a tag, published binary or signed/notarized artifact.
 
 ## Current boundary

@@ -82,6 +82,19 @@ class ReleaseBundleTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "embedded CLI version"):
             verify(self.root, TAG, COMMIT, assembled=True)
 
+    def test_version_suffix_fails_even_with_updated_checksum(self) -> None:
+        name = next(name for name in self.archive_names if name.endswith(".zip"))
+        archive = self.root / name
+        version = validate(TAG, COMMIT, "windows-amd64")[0]
+        with zipfile.ZipFile(archive, "w") as writer:
+            writer.writestr(
+                "workstream.exe", f"native executable with {version}-WRONG".encode()
+            )
+            writer.writestr("LICENSE", b"license")
+        self.write_manifest()
+        with self.assertRaisesRegex(ValueError, "embedded CLI version"):
+            verify(self.root, TAG, COMMIT, assembled=True)
+
     def test_ambiguous_tag_fails(self) -> None:
         for tag in ("v0.1.0", "cli-v01.0.0", "cli-v0.1.0-rc1", "cli-v0.1.0\nother"):
             with self.subTest(tag=tag), self.assertRaises(ValueError):

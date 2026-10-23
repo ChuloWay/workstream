@@ -20,10 +20,27 @@ Before the first release, a repository administrator must configure the
 branch restriction to `main`, with self-review prevention enabled, then inspect
 those settings. The workflow queries the environment API in both preparation
 and publication and fails closed if those controls are absent or unavailable.
-At planning time, the environment was absent; it is an external
-prerequisite, not a repo file or an implicit workflow setting. Confirm branch protection and
+At planning time, the environment could not be verified (GitHub API returned
+404, which could mean absent or inaccessible). It is an external prerequisite,
+not a repo file or an implicit workflow setting. Confirm branch protection and
 the desired release operator. Do not use production credentials for this job;
-the publisher needs only its short-lived `GITHUB_TOKEN` with `contents: write`.
+the publisher uses only its short-lived `GITHUB_TOKEN` with `contents: write`
+and `actions: read`.
+
+A repository administrator must also configure one active repository tag ruleset
+named `Workstream CLI immutable tags`, targeting exactly `refs/tags/cli-v*`,
+with update and deletion restricted and no bypass actors. This protects the
+exact source tag across draft creation and publication. The workflow checks
+the visible ruleset before native release builds and again before publication;
+it cannot create or repair that repository policy. GitHub omits the bypass list
+from this read-only token response. Before approving the `cli-release`
+environment, an independent repository administrator must inspect and record
+that the ruleset has no bypass actors, then ensure the tag still points to the
+reviewed commit. Do not treat an omitted bypass list as empty. A trusted
+administrator could later alter policy; this is a residual operational trust
+boundary. No such ruleset was verified at planning time. Classic tag protection
+alone is not accepted by this workflow because it does not prove the exact
+no-bypass contract here.
 
 For an approved source commit already on `main`, create an annotated
 `cli-vMAJOR.MINOR.PATCH` tag and push that exact tag under repository controls.
@@ -33,7 +50,9 @@ main ancestry, runs all four native jobs, assembles exactly five assets and
 waits for `cli-release` environment approval. The publisher checks the trusted
 main workflow checkout, tag identity, asset allowlist, archive contents,
 embedded versions and hashes before creating a draft release; it downloads and
-rechecks uploaded assets before making that draft public. An interrupted run may
+rechecks uploaded assets and the tag immediately before and after making that
+draft public. These checks do not make a mutable tag atomic; enforced protection
+and the administrator bypass inspection are required. An interrupted run may
 leave a draft; inspect it and resolve it deliberately rather than rerunning
 against a possibly existing release.
 
