@@ -2,9 +2,10 @@
 
 import asyncio
 import hashlib
+from contextlib import asynccontextmanager
 
 import pytest
-from sqlalchemy import select, func, text
+from sqlalchemy import select, func, text, event
 
 from app.adapters.artifacts import checker_output_binding, checker_output_storage
 from app.modules.actors.api import ServiceIdentity
@@ -206,9 +207,6 @@ class CompetingPublication(ControlledSelectedExecution):
                 self.owner = _owner(session, request, catalog)
 
             async def resolve(self, selected):
-                if self.label == "second":
-                    pids[self.label] = await self.session.scalar(text("SELECT pg_backend_pid()"))
-                    contending.set()
                 return await self.owner.resolve(selected)
 
             async def pin_content(self, selected):
@@ -220,8 +218,21 @@ class CompetingPublication(ControlledSelectedExecution):
                 return resolved
 
         def output(label):
+            @asynccontextmanager
+            async def sessions():
+                async with h.factory() as session:
+                    if label == "second":
+                        # AUTH custody precedes the trial owner. Observe the
+                        # actual connection before AUTH can itself block.
+                        def began(_session, _transaction, connection):
+                            pids[label] = connection.exec_driver_sql("SELECT pg_backend_pid()").scalar()
+                            contending.set()
+
+                        event.listen(session.sync_session, "after_begin", began)
+                    yield session
+
             return checker_output_storage(
-                sessions=h.factory, store=h.store.wrapped, namespace=h.namespace,
+                sessions=sessions, store=h.store.wrapped, namespace=h.namespace,
                 preparation=h.preparation, settings=h.settings,
                 reservations=lambda session: ObservedOwner(session, label),
             )
