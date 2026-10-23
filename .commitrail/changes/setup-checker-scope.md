@@ -106,3 +106,7 @@ Independent replay caught that ordinary model serialization omitted a nullable
 provider-required member and masked the unsafe-prose case. The fixture now uses
 the existing strict provider-payload helper and asserts exact per-case diagnostic
 paths and codes, so a wrong validation layer cannot satisfy the database proof.
+
+Merge review also reconciled the compilation scoreboard inherited from main: it
+now requires fresh correction and PRE-image reconciliation before implementing
+and binding the resulting POST checks, matching the pilot row and runbook.
