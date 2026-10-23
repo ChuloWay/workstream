@@ -77,10 +77,13 @@ Terminal Systems paths, task names, commands or findings.
 `external_checkers/workstream-checker-service/src/trial_docker.rs` and
 `external_checkers/workstream-checker-service/tests/trial_docker.rs` own the
 generic offline Kaniko/descendant-runsc launch policy and a narrow
-module-neutral runtime-control seam. The model-runtime owner will move the
-existing bounded command, ownership journal, observation and recovery
-implementation from `main.rs` behind that seam during shared assembly; this
-change does not duplicate or concurrently edit those coupled primitives.
+module-neutral runtime-control seam. This change owns its concrete bounded
+command, ownership journal, observation and recovery implementation. The
+model-runtime owner retains serialized composition in `main.rs`; implementation
+of the trial engine is not deferred to that owner. The explicit real-engine
+qualification entrypoint is
+`external_checkers/workstream-checker-service/scripts/qualify_trial_docker.sh`;
+it must exercise the real target with zero silently skipped proof cases.
 The trial module publishes a generic typed relay, profile and observation API;
 it does not treat relay success as a work verdict. Backend trial authority starts
 in `backend/app/modules/checkers/api/trial_profiles.py`,
@@ -178,3 +181,39 @@ publisher pushed the reviewed image to ECR, verified the immutable manifest,
 pulled it back and reran all seven samples. The exact image was registered through
 the local Operator CLI. Publication and registry facts are in the checker README;
 these do not establish gVisor, policy approval or a completed contribution journey.
+
+
+## Revision evaluation material: owner-bound read slice
+
+The lead owns the additional files
+`backend/app/modules/tasks/api/evaluation_revision.py`,
+`backend/app/modules/tasks/evaluation_revision.py`,
+`backend/app/modules/checkers/api/revision_feedback.py`,
+`backend/app/modules/checkers/revision_feedback.py`, and focused regressions
+`backend/tests/tasks/submission_dispatch/test_evaluation_revision.py` and
+`backend/tests/checkers/execution/test_revision_feedback.py`.
+
+TASK projects the current immutable Submission and, only for a real revision
+within the same assignment, the exact predecessor and consumed revision
+preparation. ART supplies the preparation selector from its consumed admission;
+TASK validates its own preparation/source/assignment and applied policy lineage.
+It never substitutes the latest preparation or reevaluates an already-consumed
+revision deadline at read time. A new claimant starts with no predecessor
+material even when the task's global Submission version exceeds one.
+
+CHECKERS resolves the exact retained completed source result through a typed
+read port, validates its canonical request/result identities, and projects only
+bounded normalized findings with requirement/registry/configuration provenance.
+These reads grant no authority. Composition must retain existing AUTH and
+TASK-before-CHECKERS current-lease custody before selection, close transactions
+before storage I/O, and revalidate exact selections afterward. No private
+cross-owner table reads, migrations, public contributor surface, lifecycle
+changes, partial/truncated feedback, or change to #555 is permitted.
+
+Acceptance is exact initial/revision identity and policy linkage, immutable
+retained findings, concealment of cross-project/assignment and stale selectors,
+reclaimed-task initial isolation, bounded complete feedback, and no read-time
+mutation. Focused positive/negative and PostgreSQL owner proofs precede the ART
+projection integration. This staged read slice alone does not deliver the
+prior archive to an image or close PILOT-06. Declare the exact ART/grant files
+and obtain boundary review before extending that transport.
