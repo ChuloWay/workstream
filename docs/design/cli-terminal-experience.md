@@ -384,13 +384,19 @@ the implementation change before adding modules.
 ### Smallest proposed first implementation slice
 
 Build an opt-in **read-only contributor workbench** in the existing Go binary:
-launch/terminal guard → `me projects` page → selected project's Ready/Mine/
-Submissions page → fresh task or owned Submission detail → exact locked
-context, requirements and findings when the current backend permits them →
-own contribution evidence. An unassigned ready task gets contributor-safe
-detail and both locked contribution terms, not assigned guide access. Existing
-active assignments and attempts let the read-only slice observe the full
-available evidence path without pretending it performed the writes.
+launch/terminal guard → actor binding → `me projects` page → selected project's
+Ready/active Mine/Submissions page → fresh task or owned Submission detail.
+This first slice uses exactly nine existing typed client reads: `Profile`,
+`MyProjects`, `ReadyTasks`, `MyAssignments`, `MySubmissions`, `ContributorTask`,
+`WorkContext`, `SubmissionRequirements` and `Submission`, as bounded in
+[WS-CLI-001-48](../../.commitrail/initiatives/WS-CLI-001/WS-CLI-001-48.md).
+Ready opens contributor-safe task detail and both locked contribution terms;
+active Mine additionally offers explicit context/intake sections. This is a UI
+scope cut, not a claim that the backend context/requirements endpoints require
+assignment. Guide document disclosure remains backend-owned; no guide bytes
+are fetched. Owned Submission detail shows stored outcome and finding counts.
+Detailed checker findings and contribution Evidence are clearly labelled
+manual CLI handoffs only, not in-TUI evidence browsers or automatic reads.
 
 This slice includes explicit pagination, scoped refresh, stale/denied states,
 local filtering labels, safe terminal text, 120×40/80×24 reflow, plain/no-color
@@ -402,22 +408,25 @@ perform the backend's existing admission/last-seen/audit effects, so “read-onl
 does not mean an unaudited or side-effect-free backend. No explicit CLI output,
 exit status, flags, help for existing commands, or implicit local state changes.
 
-Contribution evidence needs one bounded client prerequisite: a typed
+The first slice makes no `cli/internal/api/` changes. A later in-TUI
+contribution Evidence slice needs one bounded client prerequisite: a typed
 single-page contribution read that returns validated records and the opaque
 continuation. The current exported `Contributions(..., io.Writer)` walks up to
 100 pages and discards the continuation in its merged output; it cannot back
 explicit `n` navigation. Extend the existing client owner using its transport
 and record validators, and let the existing complete-export CLI retain its
 current behavior. Do not parse stdout, silently traverse pages in the TUI or
-implement a duplicate endpoint client. Evidence stays an explicit CLI handoff
-until this port is implemented and tested: a page with a continuation must
+implement a duplicate endpoint client. Evidence stays an explicit manual CLI
+handoff in the first slice; only a later slice implements and tests this port.
+In that later slice, a page with a continuation must
 produce exactly one request until the user asks for the next page. Retain the
 existing multipage CLI export regression alongside that new proof.
 
-Its bounded implementation record must select exact dependencies and allowed
-files, include this narrowly scoped typed-page prerequisite rather than a
-general client refactor, and name focused
-interaction, hostile-response, denial, resize and terminal-teardown tests.
+The first slice's bounded implementation record must select exact dependencies
+and allowed files and name focused interaction, hostile-response, denial,
+resize and terminal-teardown tests. It must not add the deferred typed-page
+port or detailed-findings decoder. A later Evidence record must include only
+that narrowly scoped shared typed-page prerequisite, not a general client refactor.
 Proof must include a built TUI/public-API journey and unchanged explicit CLI
 text/JSON/non-TTY behavior; render snapshots alone are not runtime proof.
 This proposal is not authorization to begin that next change automatically.
@@ -426,7 +435,8 @@ This proposal is not authorization to begin that next change automatically.
 
 | Boundary | Dependency and next usable result |
 |---|---|
-| Contributor read-only workbench | Existing public typed client and merged backend guards, plus the single-page contribution port before in-TUI Evidence → browse/inspect/observe with explicit pagination; Evidence remains a CLI handoff until that port is proven; no catalogue dependency |
+| Contributor read-only workbench | Nine existing typed reads and merged backend guards → project/Ready/active Mine/Submissions browse/inspect with explicit pagination; detailed findings and Evidence are manual CLI handoffs; no API-client edit or catalogue dependency |
+| Later in-TUI contribution Evidence | Narrow shared typed single-page contribution port and preserved complete-export regressions → explicit per-page evidence browsing; not a first-slice prerequisite |
 | Claim/start | Read workbench + reviewed per-operation private receipt and exact-key recovery → separate claim and start confirmations |
 | Prepare/submit | Claim/start + ZIP source integrity + distinct preparation/admission replay receipts → separate intake and immutable Submission, then stored evaluation/outcome/contribution evidence |
 | System workspace project picker | Pending #665 merged and verified → four-role system catalogue only; exact-grant/exact-ID entry retained for actors outside that scope |
