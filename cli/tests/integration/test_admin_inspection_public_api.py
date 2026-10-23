@@ -89,9 +89,7 @@ async def test_admin_inspection_follows_real_authority_and_scope(
                 timeout=20,
                 limits=httpx.Limits(max_keepalive_connections=0),
             ) as direct:
-                openapi = (await direct.get("/openapi.json", timeout=60)).json()[
-                    "paths"
-                ]
+                openapi = (await direct.get("/openapi.json", timeout=60)).json()["paths"]
                 for route in (
                     "/api/v1/actors/{actor_profile_id}",
                     "/api/v1/actors/{actor_profile_id}/identity-links",
@@ -111,9 +109,7 @@ async def test_admin_inspection_follows_real_authority_and_scope(
                 bootstrap_code, bootstrap = await run_bootstrap(
                     UUID(profiles["admin"]), execute=True
                 )
-                assert (
-                    bootstrap_code == 0 and bootstrap["result_code"] == "bootstrapped"
-                )
+                assert bootstrap_code == 0 and bootstrap["result_code"] == "bootstrapped"
 
                 def headers(name: str, key: bool = False) -> dict[str, str]:
                     value = {"Authorization": "Bearer " + tokens[name]}
@@ -121,9 +117,7 @@ async def test_admin_inspection_follows_real_authority_and_scope(
                         value["Idempotency-Key"] = str(uuid4())
                     return value
 
-                async def issue(
-                    target: str, role: str, project: str | None = None
-                ) -> str:
+                async def issue(target: str, role: str, project: str | None = None) -> str:
                     response = await direct.post(
                         "/api/v1/admin-role-grants",
                         headers=headers("admin", True),
@@ -141,6 +135,27 @@ async def test_admin_inspection_follows_real_authority_and_scope(
                 system_grant = await issue("auditor", "audit_authority")
                 project = str(await create_project("CLI inspection scope"))
                 foreign = str(await create_project("CLI inspection foreign"))
+                catalogue = cli(
+                    origin, tokens["auditor"], "project", "list", "--limit", "1", "-o", "json"
+                )
+                assert catalogue.returncode == 0 and catalogue.stderr == "", catalogue.stderr
+                catalogue_page = json.loads(catalogue.stdout)
+                direct_catalogue = await direct.get(
+                    "/api/v1/projects",
+                    headers=headers("auditor"),
+                    params={"limit": 1},
+                )
+                assert direct_catalogue.status_code == 200, direct_catalogue.text
+                assert catalogue_page == direct_catalogue.json()
+                assert len(catalogue_page["items"]) == 1
+                assert catalogue_page["items"][0] == {
+                    "project_id": min(project, foreign),
+                    "name": "CLI inspection scope"
+                    if project < foreign
+                    else "CLI inspection foreign",
+                    "status": "draft",
+                }
+                assert catalogue_page["next_cursor"]
                 scoped_grant = await issue("scoped", "audit_authority", project)
                 target_grant = await issue("target", "project_manager", project)
                 target = profiles["target"]
@@ -163,16 +178,8 @@ async def test_admin_inspection_follows_real_authority_and_scope(
                     expected = await direct.get(path, headers=headers("auditor"))
                     assert expected.status_code == 200, expected.text
                     assert value == expected.json()
-                assert (
-                    inspected(cli, origin, tokens["auditor"], "permissions")["total"]
-                    == 82
-                )
-                assert (
-                    inspected(cli, origin, tokens["auditor"], "role-definitions")[
-                        "total"
-                    ]
-                    == 5
-                )
+                assert inspected(cli, origin, tokens["auditor"], "permissions")["total"] == 82
+                assert inspected(cli, origin, tokens["auditor"], "role-definitions")["total"] == 5
                 for command, path in (
                     (("role-grants",), "/api/v1/admin-role-grants"),
                     (
@@ -204,9 +211,7 @@ async def test_admin_inspection_follows_real_authority_and_scope(
                             "limit": 1,
                         },
                     )
-                    assert expected.status_code == 200 and value == expected.json(), (
-                        expected.text
-                    )
+                    assert expected.status_code == 200 and value == expected.json(), expected.text
                     assert value["total"] >= 1
                 first = inspected(
                     cli,
@@ -246,9 +251,7 @@ async def test_admin_inspection_follows_real_authority_and_scope(
                         "cursor": cursor,
                     },
                 )
-                assert (
-                    direct_second.status_code == 200 and second == direct_second.json()
-                )
+                assert direct_second.status_code == 200 and second == direct_second.json()
                 assert {
                     first["items"][0]["grant_id"],
                     second["items"][0]["grant_id"],
@@ -332,9 +335,7 @@ async def test_admin_inspection_follows_real_authority_and_scope(
                 )
                 assert suspended.status_code == 200, suspended.text
                 assert (
-                    inspected(
-                        cli, origin, tokens["auditor"], "permissions", status=403
-                    )["code"]
+                    inspected(cli, origin, tokens["auditor"], "permissions", status=403)["code"]
                     == "actor_suspended"
                 )
         finally:
