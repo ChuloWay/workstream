@@ -83,6 +83,8 @@ data remains supported. The image sample suite includes both rejection cases.
 The affected roadmap and project documentation distinguish the retained ten
 unbound suggestions, implemented PRE rules, and remaining eight POST rules.
 
-Seventeen rule tests pass. Image qualification uses the actual networkless Docker
-runner and strict public request/result contracts; it does not establish gVisor,
-registration, policy approval or a completed contribution journey.
+Seventeen rule tests and seven actual networkless Docker samples pass. The
+publisher pushed the reviewed image to ECR, verified the immutable manifest,
+pulled it back and reran all seven samples. The exact image was registered through
+the local Operator CLI. Publication and registry facts are in the checker README;
+these do not establish gVisor, policy approval or a completed contribution journey.
