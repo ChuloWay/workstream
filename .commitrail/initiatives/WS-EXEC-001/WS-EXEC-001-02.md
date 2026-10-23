@@ -157,7 +157,9 @@ execution. Restore the sealed exported tree when revoking each exact grant,
 including submissions that themselves contain `workspace` or the manifest name.
 Keep one bounded scratch reservation and preserve per-request revalidation.
 Strengthen the existing ordered lifecycle test to use the real ART grant owner;
-verify it fails before the repair. Retain reserved-name/cleanup tests and rerun
+verify a restoration-disabled mutant fails. PRE and POST also verify sealed
+directory/file permissions after each grant; a permission-restoration mutant is
+rejected before a later grant can hide the defect. Retain reserved-name/cleanup tests and rerun
 the real public two-binding case. This repair belongs to this boundary's existing
 ART preparation scope; it adds no policy or runtime path.
 
@@ -206,7 +208,7 @@ preserving descriptor-relative child containment.
 Real PostgreSQL/MinIO proof covers verified original material, immutable
 Submission/lease custody, late authority and content drift, cancellation and
 scratch revocation, durable worker materialization and public intake outcomes.
-The combined 139-case EC2 run passes with database and MinIO cleanup confirmed.
+The combined 140-case EC2 run passes with database and MinIO cleanup confirmed.
 These transaction fixtures explicitly inject an in-process intake fake; the
 separate KVM matrix establishes the real adapter/guest boundary. Neither proof
 is mislabeled as a public API -> Smol -> durable worker -> governed outcome drill.
