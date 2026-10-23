@@ -26,7 +26,8 @@ def inspect_submission_custody(client, tokens, project_id, task_id, submission_i
     if replica["content_id"] != binding["content_id"]:
         raise AssertionError("replica substituted submission content")
     receipts = read("receipts", replica["id"])
-    if receipts["next_cursor"] is not None:
+    # This route excludes nulls, including an exhausted page's next_cursor.
+    if receipts.get("next_cursor") is not None:
         raise AssertionError("isolated custody receipts unexpectedly exceed one page")
     verified = [
         item for item in receipts["items"] if item["receipt_type"] == "verification"
