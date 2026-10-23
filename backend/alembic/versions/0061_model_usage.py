@@ -772,7 +772,8 @@ CREATE OR REPLACE FUNCTION public.guard_checker_output_binding_insert() RETURNS 
                   CASE WHEN NEW.resource_type='setup_model_call'
                   THEN 'setup_model_output' ELSE 'checker_output' END)
              OR attempt.producer_type <> 'service_identity'
-             OR attempt.submission_id IS NULL OR attempt.submission_version IS NULL
+             OR (NEW.resource_type <> 'setup_model_call'
+                 AND (attempt.submission_id IS NULL OR attempt.submission_version IS NULL))
              OR attempt.checker_request_digest IS NULL
              OR attempt.status <> 'object_confirmed'
              OR attempt.replica_id IS DISTINCT FROM replica.id
