@@ -65,6 +65,15 @@ def test_architecture_inspections_share_capacity_without_losing_nodes() -> None:
 
 def test_checker_delivery_and_routing_preparation_partition_every_node_once() -> None:
     delivery = {
+        "tests/checkers/execution/test_revision_feedback.py",
+        "tests/checkers/external/test_evaluation_context_selection.py",
+        "tests/checkers/external/test_revision_materialization.py",
+        "tests/checkers/external/test_trial_artifact_custody.py",
+        "tests/checkers/external/test_trial_evidence.py",
+        "tests/checkers/external/test_trial_model_custody.py",
+        "tests/checkers/external/test_trial_policy.py",
+        "tests/checkers/external/test_trial_profiles.py",
+        "tests/checkers/external/test_trial_proxy.py",
         "tests/checkers_model_calls/test_composed_execution.py",
         "tests/checkers_model_calls/test_model_call_contract.py",
         "tests/checkers_model_calls/test_model_call_transactions_postgresql.py",
@@ -228,6 +237,7 @@ def test_expanded_lane_families_keep_exact_semantic_owners() -> None:
     assert schema_static_contracts.isdisjoint(partitioned_modules)
     assert {
         "tests/test_alembic.py",
+        "tests/test_checker_evidence_migrations.py",
         "tests/migrations/test_contribution_export_snapshots.py",
         "tests/migrations/test_contribution_read_audit.py",
         "tests/test_database_reset.py",
