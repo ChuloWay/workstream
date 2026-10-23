@@ -18,6 +18,7 @@ The instructions explicitly invite lifecycle and human-review classifications; g
 
 - `backend/app/core/project_guide_instructions.py`, setup contracts in `backend/app/interfaces/`, and `backend/app/adapters/project_agents/`: scope, provider schemas, bounded validation/correction and examples.
 - Affected setup tests, shared fixture callers, current setup documentation and roadmap; this record.
+- `backend/scripts/test_lane_catalogue.py`: register the new setup regression module in the existing complete CI inventory; no execution or gate changes.
 - Existing PROJECTS admission call sites only if needed to enforce the same generation boundary.
 
 ### Not allowed
@@ -41,7 +42,7 @@ Use the existing inference generation-admission boundary to narrow new proposals
 ## Risk and review routing
 
 - Risk class: `L1`
-- Required reviewers: `architecture`, `security`, `qa`, `documentation`, `product_ops`, `test_delta`
+- Required reviewers: `architecture`, `security`, `qa`, `documentation`, `product_ops`, `test_delta`, `ci_integrity`
 - Human review focus: Only PRE/POST work requirements may be generated; historical evidence remains immutable; corrections cannot expand access or runtime budgets.
 
 ## Evidence
@@ -110,3 +111,8 @@ paths and codes, so a wrong validation layer cannot satisfy the database proof.
 Merge review also reconciled the compilation scoreboard inherited from main: it
 now requires fresh correction and PRE-image reconciliation before implementing
 and binding the resulting POST checks, matching the pilot row and runbook.
+
+Hosted completeness validation found the new setup test module absent from the
+lane catalogue. It is now assigned to the same shared-foundation partition as
+the other setup runtime tests. No runner, selection rule or completeness gate
+changed; the existing recursive inventory test detects the omitted registration.
