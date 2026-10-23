@@ -213,7 +213,8 @@ class HostedReleaseConfigTests(unittest.TestCase):
         for service in services.values():
             self.assertNotIn("volumes_from", service)
             self.assertNotIn("configs", service)
-        for name, file_keys in preflight.ROLE_SECRET_FILE_KEYS.items():
+        for name in preflight.ROLE_SECRET_FILE_KEYS:
+            file_keys = preflight._role_secret_file_keys(name, self.environment)
             self.assertEqual(
                 services[name]["environment"]["WORKSTREAM_RELEASE_ROLE"], name
             )
@@ -865,6 +866,7 @@ class HostedReleaseConfigTests(unittest.TestCase):
             "WORKSTREAM_PROJECT_AGENT_MODEL": "none",
             "WORKSTREAM_PROJECT_AGENT_RUNTIME_OPTIONS": "{}",
         }
+        manager.pop("WORKSTREAM_PROJECT_AGENT_API_KEY_FILE")
         preflight.validate_environment(manager)
         for changed in (
             omni | {"WORKSTREAM_PROJECT_AGENT_MODEL_PROVIDER": "openai"},
@@ -874,6 +876,56 @@ class HostedReleaseConfigTests(unittest.TestCase):
         ):
             with self.assertRaises(preflight.PreflightError):
                 preflight.validate_environment(changed)
+
+    def test_manager_authored_render_has_no_provider_credential_surface(self) -> None:
+        manager_text = self.environment_path.read_text(encoding="utf-8")
+        replacements = {
+            "WORKSTREAM_PROJECT_AGENT_RUNTIME=openai_agents_sdk": (
+                "WORKSTREAM_PROJECT_AGENT_RUNTIME=manager_authored"
+            ),
+            "WORKSTREAM_PROJECT_AGENT_MODEL_PROVIDER=openrouter": (
+                "WORKSTREAM_PROJECT_AGENT_MODEL_PROVIDER=none"
+            ),
+            "WORKSTREAM_PROJECT_AGENT_MODEL=openai/gpt-5.6-terra": (
+                "WORKSTREAM_PROJECT_AGENT_MODEL=none"
+            ),
+            "WORKSTREAM_PROJECT_AGENT_MODEL_API=chat_completions": (
+                "WORKSTREAM_PROJECT_AGENT_MODEL_API=none"
+            ),
+        }
+        for old, new in replacements.items():
+            manager_text = manager_text.replace(old, new)
+        manager_text = (
+            "\n".join(
+                line
+                for line in manager_text.splitlines()
+                if not line.startswith("WORKSTREAM_PROJECT_AGENT_API_KEY_FILE=")
+            )
+            + "\n"
+        )
+        manager_path = self.root / "manager.env"
+        manager_path.write_text(manager_text, encoding="utf-8")
+        manager = preflight.parse_environment(manager_path)
+
+        preflight.validate_environment(manager)
+        rendered = preflight.render_compose(manager_path, manager)
+        preflight.validate_compose(rendered, manager)
+
+        self.assertNotIn("project_agent_api_key", rendered.get("secrets", {}))
+        worker = rendered["services"]["worker"]
+        self.assertNotIn("WORKSTREAM_PROJECT_AGENT_API_KEY_FILE", worker["environment"])
+        self.assertNotIn(
+            "project_agent_api_key",
+            {item["source"] for item in worker["secrets"]},
+        )
+
+        selected = manager | {
+            "WORKSTREAM_PROJECT_AGENT_API_KEY_FILE": str(self.root / "provider")
+        }
+        with self.assertRaisesRegex(
+            preflight.PreflightError, "cannot select a provider credential"
+        ):
+            preflight.validate_environment(selected)
 
     def test_checker_config_rejects_non_hosted_or_substituted_identity(self) -> None:
         cases = {
@@ -1400,6 +1452,8 @@ class ReleaseSecretLoaderTests(unittest.TestCase):
             path.write_text(content, encoding="utf-8")
             path.chmod(0o400)
             environment[variable] = str(path)
+        if runtime == "manager_authored":
+            environment.pop("WORKSTREAM_PROJECT_AGENT_API_KEY_FILE", None)
         for secret_name in {
             *self.FILE_TO_SECRET.values(),
             "OPENAI_API_KEY",

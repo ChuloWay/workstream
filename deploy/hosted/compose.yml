@@ -243,7 +243,6 @@ services:
       WORKSTREAM_RELEASE_ROLE: worker
       WORKSTREAM_DATABASE_URL_FILE: /run/secrets/database_url
       WORKSTREAM_CELERY_BROKER_URL_FILE: /run/secrets/celery_broker_url
-      WORKSTREAM_PROJECT_AGENT_API_KEY_FILE: /run/secrets/project_agent_api_key
       WORKSTREAM_GUIDE_DOCUMENT_PARSER_SOCKET: /var/lib/workstream/guide-runtime/guide.sock
     secrets:
       - source: database_url
@@ -253,11 +252,6 @@ services:
         mode: 0400
       - source: celery_broker_url
         target: celery_broker_url
-        uid: "${WORKSTREAM_RUNTIME_UID}"
-        gid: "${WORKSTREAM_RUNTIME_GID}"
-        mode: 0400
-      - source: project_agent_api_key
-        target: project_agent_api_key
         uid: "${WORKSTREAM_RUNTIME_UID}"
         gid: "${WORKSTREAM_RUNTIME_GID}"
         mode: 0400
@@ -403,5 +397,3 @@ secrets:
     file: ${WORKSTREAM_API_RATE_LIMIT_KEY_SECRET_FILE:?set the private rate-limit key file}
   pagination_cursor_hmac:
     file: ${WORKSTREAM_PAGINATION_CURSOR_HMAC_SECRET_FILE:?set the private cursor key file}
-  project_agent_api_key:
-    file: ${WORKSTREAM_PROJECT_AGENT_API_KEY_FILE:?set the private project-agent provider key file}

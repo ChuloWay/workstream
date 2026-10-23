@@ -123,11 +123,12 @@ not secret values. Select real Flow issuer, audience, JWKS and algorithm values.
 The release profile uses `WORKSTREAM_AUTH_PROVIDER=flow`; local Flow-HMAC and
 development authentication are absent.
 
-Create each secret as a one-value regular file at the configured path. Make it
+Create each secret selected by the configured runtime as a one-value regular file at the configured path. Make it
 owned by the runtime UID/GID with mode `0400`. The explicit role loader gives the
 API only the database, broker, rate-limit and pagination secrets; the worker
-gets the database, broker and one project-agent provider credential because it
-hosts setup jobs; Beat
+gets the database and broker. Inference runtimes additionally select and mount
+one project-agent provider credential because the worker hosts setup jobs;
+`manager_authored` must omit that selector, mount and secret definition. Beat
 gets the database and broker secrets because its startup guard verifies the
 current artifact-provider activation before scheduling jobs. An absent required selector or unknown role stops
 startup, and an unrelated secret is neither mounted nor loaded. The loader

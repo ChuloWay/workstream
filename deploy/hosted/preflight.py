@@ -19,6 +19,7 @@ from uuid import UUID
 
 
 COMPOSE_PATH = Path(__file__).with_name("compose.yml")
+INFERENCE_COMPOSE_PATH = Path(__file__).with_name("compose.inference.yml")
 SCRATCH_ROOT = Path("/var/lib/workstream/scratch")
 SOCKET_ROOT = Path("/var/lib/workstream/checker-runtime")
 SOCKET_PATH = SOCKET_ROOT / "checker.sock"
@@ -37,13 +38,14 @@ DIGEST = re.compile(r"sha256:[0-9a-f]{64}\Z")
 IMAGE_REFERENCE = re.compile(r"[^\s@]+@sha256:[0-9a-f]{64}\Z")
 ENVIRONMENT_KEY = re.compile(r"[A-Z][A-Z0-9_]*\Z")
 
-SECRET_FILE_KEYS = (
+BASE_SECRET_FILE_KEYS = (
     "WORKSTREAM_DATABASE_URL_FILE",
     "WORKSTREAM_CELERY_BROKER_URL_FILE",
     "WORKSTREAM_API_RATE_LIMIT_KEY_SECRET_FILE",
     "WORKSTREAM_PAGINATION_CURSOR_HMAC_SECRET_FILE",
-    "WORKSTREAM_PROJECT_AGENT_API_KEY_FILE",
 )
+PROJECT_AGENT_SECRET_FILE_KEY = "WORKSTREAM_PROJECT_AGENT_API_KEY_FILE"
+SECRET_FILE_KEYS = (*BASE_SECRET_FILE_KEYS, PROJECT_AGENT_SECRET_FILE_KEY)
 SECRET_FILE_TARGETS = {
     "WORKSTREAM_DATABASE_URL_FILE": ("database_url", "/run/secrets/database_url"),
     "WORKSTREAM_CELERY_BROKER_URL_FILE": (
@@ -73,7 +75,6 @@ ROLE_SECRET_FILE_KEYS = {
     "worker": (
         "WORKSTREAM_DATABASE_URL_FILE",
         "WORKSTREAM_CELERY_BROKER_URL_FILE",
-        "WORKSTREAM_PROJECT_AGENT_API_KEY_FILE",
     ),
     "beat": (
         "WORKSTREAM_DATABASE_URL_FILE",
@@ -212,7 +213,7 @@ REQUIRED_RELEASE_KEYS = (
     *ROLES_ANYWHERE_HOST_FILE_KEYS,
     *AWS_S3_EVIDENCE_KEYS,
     *TIMEOUT_KEYS,
-    *SECRET_FILE_KEYS,
+    *BASE_SECRET_FILE_KEYS,
 )
 OPTIONAL_RELEASE_KEYS = (
     "WORKSTREAM_API_HOST_PORT",
@@ -220,6 +221,7 @@ OPTIONAL_RELEASE_KEYS = (
     "WORKSTREAM_OBSERVABILITY_LOG_LEVEL",
     "WORKSTREAM_OBSERVABILITY_OTLP_ENDPOINT",
     "WORKSTREAM_OBSERVABILITY_TRACE_SAMPLE_RATIO",
+    PROJECT_AGENT_SECRET_FILE_KEY,
 )
 RELEASE_KEYS = frozenset((*REQUIRED_RELEASE_KEYS, *OPTIONAL_RELEASE_KEYS))
 
@@ -322,8 +324,15 @@ def validate_environment(values: dict[str, str]) -> None:
     model = values["WORKSTREAM_PROJECT_AGENT_MODEL"]
     if runtime == "manager_authored":
         if (provider, model_api, model) != ("none", "none", "none"):
-            raise PreflightError("manager-authored project agent configuration is invalid")
+            raise PreflightError(
+                "manager-authored project agent configuration is invalid"
+            )
+        if values.get(PROJECT_AGENT_SECRET_FILE_KEY):
+            raise PreflightError(
+                "manager-authored releases cannot select a provider credential"
+            )
     else:
+        _required(values, PROJECT_AGENT_SECRET_FILE_KEY)
         if provider not in {"openai", "openrouter"}:
             raise PreflightError("unsupported project agent model provider")
         if model_api not in {"chat_completions", "responses"}:
@@ -374,7 +383,9 @@ def validate_environment(values: dict[str, str]) -> None:
     ):
         raise PreflightError("project agent runtime options are invalid")
     if runtime in {"manager_authored", "omnicore_agent"} and runtime_options:
-        raise PreflightError("selected project agent runtime accepts no runtime options")
+        raise PreflightError(
+            "selected project agent runtime accepts no runtime options"
+        )
     if not values["WORKSTREAM_TOKEN_ISSUER"].startswith("https://"):
         raise PreflightError("Flow issuer must use HTTPS")
     if not values["WORKSTREAM_TOKEN_JWKS_URL"].startswith("https://"):
@@ -466,6 +477,22 @@ def _private_metadata(path: Path, *, kind: str, uid: int, gid: int, mode: int) -
         raise PreflightError(f"private file is empty: {path}")
 
 
+def _secret_file_keys(values: dict[str, str]) -> tuple[str, ...]:
+    if values["WORKSTREAM_PROJECT_AGENT_RUNTIME"] == "manager_authored":
+        return BASE_SECRET_FILE_KEYS
+    return SECRET_FILE_KEYS
+
+
+def _role_secret_file_keys(role: str, values: dict[str, str]) -> tuple[str, ...]:
+    keys = ROLE_SECRET_FILE_KEYS[role]
+    if (
+        role == "worker"
+        and values["WORKSTREAM_PROJECT_AGENT_RUNTIME"] != "manager_authored"
+    ):
+        return (*keys, PROJECT_AGENT_SECRET_FILE_KEY)
+    return keys
+
+
 def validate_private_host_inputs(values: dict[str, str]) -> None:
     """Inspect metadata only; do not read application secret contents."""
     uid = _positive_id(values, "WORKSTREAM_RUNTIME_UID")
@@ -496,7 +523,7 @@ def validate_private_host_inputs(values: dict[str, str]) -> None:
         raise PreflightError("guide parser socket has unsafe retained state")
     private_paths = [
         Path(values["WORKSTREAM_CHECKER_CONFIG_FILE"]),
-        *(Path(values[key]) for key in SECRET_FILE_KEYS),
+        *(Path(values[key]) for key in _secret_file_keys(values)),
         *(Path(values[key]) for key in ROLES_ANYWHERE_HOST_FILE_KEYS),
     ]
     for path in private_paths:
@@ -560,6 +587,13 @@ def _run_json(
         raise PreflightError(failure) from exc
 
 
+def _compose_file_arguments(values: dict[str, str]) -> list[str]:
+    arguments = ["--file", str(COMPOSE_PATH)]
+    if values["WORKSTREAM_PROJECT_AGENT_RUNTIME"] != "manager_authored":
+        arguments.extend(("--file", str(INFERENCE_COMPOSE_PATH)))
+    return arguments
+
+
 def render_compose(environment_path: Path, values: dict[str, str]) -> dict[str, Any]:
     """Render Compose from non-secret values without emitting the result."""
     rendered = _run_json(
@@ -568,8 +602,7 @@ def render_compose(environment_path: Path, values: dict[str, str]) -> dict[str, 
             "compose",
             "--env-file",
             str(environment_path),
-            "-f",
-            str(COMPOSE_PATH),
+            *_compose_file_arguments(values),
             "--profile",
             "aws-proof",
             "config",
@@ -601,8 +634,7 @@ def run_compose(
                 "compose",
                 "--env-file",
                 str(environment_path),
-                "--file",
-                str(COMPOSE_PATH),
+                *_compose_file_arguments(values),
                 *compose_arguments,
             ],
             check=False,
@@ -628,8 +660,7 @@ def run_shutdown(environment_path: Path, values: dict[str, str]) -> int:
                     "compose",
                     "--env-file",
                     str(environment_path),
-                    "--file",
-                    str(COMPOSE_PATH),
+                    *_compose_file_arguments(values),
                     *arguments,
                 ],
                 check=False,
@@ -665,8 +696,7 @@ def run_proof_group(
                     "compose",
                     "--env-file",
                     str(environment_path),
-                    "--file",
-                    str(COMPOSE_PATH),
+                    *_compose_file_arguments(values),
                     "--profile",
                     "aws-proof",
                     "run",
@@ -902,6 +932,7 @@ def validate_compose(rendered: dict[str, Any], values: dict[str, str]) -> None:
     expected_secret_files = {
         secret_name: values[key]
         for key, (secret_name, _target) in SECRET_FILE_TARGETS.items()
+        if key in _secret_file_keys(values)
     }
     rendered_secrets = rendered.get("secrets")
     if not isinstance(rendered_secrets, dict) or set(rendered_secrets) != set(
@@ -1070,7 +1101,7 @@ def validate_compose(rendered: dict[str, Any], values: dict[str, str]) -> None:
             raise PreflightError(f"{role} release environment is unavailable")
         if environment.get("WORKSTREAM_RELEASE_ROLE") != role:
             raise PreflightError(f"{role} has an unsafe release role")
-        required_file_keys = set(ROLE_SECRET_FILE_KEYS[role])
+        required_file_keys = set(_role_secret_file_keys(role, values))
         for key, (_, target) in SECRET_FILE_TARGETS.items():
             if key in required_file_keys:
                 if environment.get(key) != target:
@@ -1085,7 +1116,7 @@ def validate_compose(rendered: dict[str, Any], values: dict[str, str]) -> None:
         if not isinstance(mounted, list):
             raise PreflightError(f"{role} release secrets are unavailable")
         expected_sources = {
-            SECRET_FILE_TARGETS[key][0] for key in ROLE_SECRET_FILE_KEYS[role]
+            SECRET_FILE_TARGETS[key][0] for key in _role_secret_file_keys(role, values)
         }
         service_uid, service_gid = services[role]["user"].split(":", maxsplit=1)
         if len(mounted) != len(expected_sources) or any(
