@@ -98,6 +98,10 @@
     },
     {
       "group": "lifecycle",
+      "target": "backend/app/adapters/project_agents/openrouter_policy.py"
+    },
+    {
+      "group": "lifecycle",
       "target": "backend/app/adapters/project_agents/provider_resilience.py"
     },
     {
@@ -322,6 +326,10 @@
     },
     {
       "group": "shared",
+      "target": "backend/app/core/zip_safety.py"
+    },
+    {
+      "group": "shared",
       "target": "backend/app/db/base.py"
     },
     {
@@ -427,6 +435,10 @@
     {
       "group": "shared",
       "target": "backend/app/modules/api_controls/service.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/modules/artifacts/api/operator_authority.py"
     },
     {
       "group": "artifacts",
@@ -569,10 +581,6 @@
       "target": "backend/app/modules/artifacts/task_import_sources.py"
     },
     {
-      "group": "artifacts",
-      "target": "backend/app/modules/artifacts/zip_safety.py"
-    },
-    {
       "group": "shared",
       "target": "backend/app/modules/audit/api.py"
     },
@@ -682,6 +690,10 @@
     },
     {
       "group": "auth",
+      "target": "backend/app/modules/authorization/artifact_operator_authorization.py"
+    },
+    {
+      "group": "auth",
       "target": "backend/app/modules/authorization/artifact_project_authority.py"
     },
     {
@@ -723,6 +735,10 @@
     {
       "group": "auth",
       "target": "backend/app/modules/authorization/domain/adapter_bindings.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/domain/artifact_operator.py"
     },
     {
       "group": "auth",
@@ -2317,7 +2333,7 @@
       "target": "backend/scripts/validate_test_lane_evidence.py"
     }
   ],
-  "authority_digest": "0752941bbb47f96955b6a938aac920f75cdfc2511e0b9e322af1ce16c3e28968",
+  "authority_digest": "89f7b7c9195a5b5500f07152c97e82cb6275762d38913307e99eb735f7d3a162",
   "protected_base_commit": "7676ce4347db0c9694962a9b587a20765e16eac6",
   "schema": "workstream.behavior-ownership-partition.v1"
 }

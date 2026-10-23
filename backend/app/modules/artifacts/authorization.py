@@ -268,10 +268,15 @@ class PreparedSubmissionBundlePreparationAuthorization:
 async def get_artifact_authorization_context(
     request: Request,
     resolved: Annotated[ResolvedActor, Depends(get_authorization_actor)],
+    session: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> AuthorizationContext:
     """Project canonical actor rows into request-scoped ART preflight facts."""
     request_id, correlation_id = (UUID(value) for value in request_ids(request))
-    return _authorization_context(resolved, request_id, correlation_id)
+    context = _authorization_context(resolved, request_id, correlation_id)
+    # Actor resolution has completed its read root. ART recovery must own a fresh
+    # transaction; GET decisions are committed only after the response validates.
+    await session.rollback()
+    return context
 
 
 def guide_ingest_prepared_request_value(

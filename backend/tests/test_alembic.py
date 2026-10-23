@@ -74,7 +74,9 @@ async def _execute(database_url: str, statement: str, *arguments: object) -> Non
         await connection.close()
 
 
-async def _seed_retained_guide_runtime_rows(database_url: str, *, status: str) -> dict[str, object]:
+async def _seed_retained_guide_runtime_rows(
+    database_url: str, *, status: str, include_unknown: bool = False
+) -> dict[str, object]:
     """Seed exact 0058 runtime facts without using a post-0058 product writer."""
     from uuid import UUID
     from app.core.hashing import canonical_json_hash
@@ -93,6 +95,7 @@ async def _seed_retained_guide_runtime_rows(database_url: str, *, status: str) -
     file_id = new_record_id()
     attachment_id = new_record_id()
     access_id = new_record_id()
+    unknown_id = new_record_id() if include_unknown else None
     historical = _historical_configuration()
     configuration_json = json.dumps(historical, separators=(",", ":"), sort_keys=True)
     provider_uncertain_at = "now()" if status == "compilation_provider_uncertain" else "null"
@@ -141,28 +144,56 @@ async def _seed_retained_guide_runtime_rows(database_url: str, *, status: str) -
                 "configuration": historical,
                 "configuration_hash": canonical_json_hash(historical),
             }
+        if unknown_id is not None:
+            await connection.execute(
+                "insert into project_guide_runtime_allocations("
+                "id,attempt_id,manifest_sha256,runtime_key,kind,state,created_at,expires_at) "
+                "values($1,$2,$3,'openai_agents_sdk','container','allocating',"
+                "now()-interval '5 minutes',now()+interval '15 minutes')",
+                unknown_id,
+                attempt_id,
+                compilation.material.sha256,
+            )
+            await connection.execute(
+                "update project_guide_runtime_allocations set state='uncertain' where id=$1",
+                unknown_id,
+            )
+            return {
+                "attempt_id": attempt_id,
+                "allocation_ids": set(),
+                "access_id": None,
+                "context": compilation,
+                "unknown_id": unknown_id,
+                "configuration": historical,
+                "configuration_hash": canonical_json_hash(historical),
+            }
         handle = UUID(compilation.material.handle_for(document))
         await connection.execute(
             "insert into project_guide_runtime_allocations("
-            "id,attempt_id,manifest_sha256,runtime_key,kind,state,provider_id,expires_at) "
-            "values($1,$2,$3,'openai_agents_sdk','container','allocated','cntr_retained',"
-            "now()+interval '20 minutes')",
+            "id,attempt_id,manifest_sha256,runtime_key,kind,state,created_at,expires_at) "
+            "values($1,$2,$3,'openai_agents_sdk','container','allocating',"
+            "now()-interval '5 minutes',now()+interval '15 minutes')",
             container_id,
             attempt_id,
             compilation.material.sha256,
         )
         await connection.execute(
+            "update project_guide_runtime_allocations set state='allocated',"
+            "provider_id='cntr_retained' where id=$1",
+            container_id,
+        )
+        await connection.execute(
             "insert into project_guide_runtime_allocations("
             "id,attempt_id,manifest_sha256,runtime_key,kind,state,document_handle,provider_id,"
             "source_item_id,document_version_id,put_attempt_id,content_id,replica_id,"
-            "storage_namespace_id,namespace_fingerprint,sha256,byte_count,media_type,expires_at) "
-            "values($1,$2,$3,'openai_agents_sdk','file','allocated',$4,$5,$6,$7,$8,$9,$10,"
-            "$11,$12,$13,$14,$15,now()+interval '20 minutes')",
+            "storage_namespace_id,namespace_fingerprint,sha256,byte_count,media_type,"
+            "created_at,expires_at) "
+            "values($1,$2,$3,'openai_agents_sdk','file','allocating',$4,null,$5,$6,$7,$8,$9,"
+            "$10,$11,$12,$13,$14,now()-interval '5 minutes',now()+interval '15 minutes')",
             file_id,
             attempt_id,
             compilation.material.sha256,
             handle,
-            "file-retained",
             document.source_item_id,
             document.ingest_id,
             document.put_attempt_id,
@@ -175,17 +206,29 @@ async def _seed_retained_guide_runtime_rows(database_url: str, *, status: str) -
             document.media_type,
         )
         await connection.execute(
+            "update project_guide_runtime_allocations set state='allocated',"
+            "provider_id='file-retained' where id=$1",
+            file_id,
+        )
+        await connection.execute(
             "insert into project_guide_runtime_allocations("
             "id,attempt_id,manifest_sha256,runtime_key,kind,state,document_handle,provider_id,"
-            "parent_provider_id,source_file_allocation_id,container_allocation_id,expires_at) "
-            "values($1,$2,$3,'openai_agents_sdk','attachment','allocated',$4,"
-            "'cfile_retained','cntr_retained',$5,$6,now()+interval '20 minutes')",
+            "parent_provider_id,source_file_allocation_id,container_allocation_id,created_at,"
+            "expires_at) "
+            "values($1,$2,$3,'openai_agents_sdk','attachment','allocating',$4,"
+            "null,'cntr_retained',$5,$6,now()-interval '5 minutes',"
+            "now()+interval '15 minutes')",
             attachment_id,
             attempt_id,
             compilation.material.sha256,
             handle,
             file_id,
             container_id,
+        )
+        await connection.execute(
+            "update project_guide_runtime_allocations set state='allocated',"
+            "provider_id='cfile_retained' where id=$1",
+            attachment_id,
         )
         await connection.execute(
             "insert into project_guide_document_accesses("
@@ -206,6 +249,8 @@ async def _seed_retained_guide_runtime_rows(database_url: str, *, status: str) -
         "attempt_id": attempt_id,
         "allocation_ids": {container_id, file_id, attachment_id},
         "access_id": access_id,
+        "context": compilation,
+        "unknown_id": unknown_id,
         "configuration": historical,
         "configuration_hash": canonical_json_hash(historical),
     }

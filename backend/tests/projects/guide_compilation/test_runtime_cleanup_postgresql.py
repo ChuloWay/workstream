@@ -1,15 +1,16 @@
 """Retained provider cleanup remains exact-ID only after inference cutover."""
 
-from datetime import UTC, datetime, timedelta
-from uuid import UUID, uuid4
+import asyncio
+from contextlib import asynccontextmanager
+from types import SimpleNamespace
+from uuid import uuid4
 
 import pytest
-from sqlalchemy import insert, select, text, update
+from alembic import command
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-from app.core.hashing import canonical_json_hash
-from app.core.identifiers import new_record_id
 from app.modules.projects.guide_compilation.models import (
-    ProjectGuideCompilationAttempt,
     ProjectGuideRuntimeAllocation,
 )
 from app.modules.projects.guide_compilation.runtime_resources import (
@@ -18,7 +19,6 @@ from app.modules.projects.guide_compilation.runtime_resources import (
     pending_runtime_resource_cleanup,
 )
 from .helpers import runtime_configuration
-from .test_document_access_postgresql import grant_case as grant_case
 
 RETAINED_RUNTIME = "openai_agents_sdk"
 
@@ -57,81 +57,54 @@ def _historical_configuration():
     }
 
 
-async def seed_retained_allocation_history(grant, context, *, include_unknown=False):
-    """Insert predecessor facts with triggers bypassed only in this isolated fixture."""
-    document = context.material.documents[0]
-    handle = UUID(context.material.handle_for(document))
-    container_id, file_id, attachment_id = new_record_id(), new_record_id(), new_record_id()
-    old = datetime.now(UTC) - timedelta(minutes=5)
-    expiry = old + timedelta(minutes=20)
-    base = {
-        "attempt_id": grant._attempt_id,
-        "manifest_sha256": context.material.sha256,
-        "runtime_key": RETAINED_RUNTIME,
-        "state": "allocated",
-        "created_at": old,
-        "expires_at": expiry,
-    }
-    rows = [
-        base
-        | {
-            "id": container_id,
-            "kind": "container",
-            "provider_id": "cntr_retained",
-        },
-        base
-        | {
-            "id": file_id,
-            "kind": "file",
-            "provider_id": "file-retained",
-            "document_handle": handle,
-            "source_item_id": str(document.source_item_id),
-            "document_version_id": str(document.ingest_id),
-            "put_attempt_id": str(document.put_attempt_id),
-            "content_id": str(document.content_id),
-            "replica_id": str(document.replica_id),
-            "storage_namespace_id": document.storage_namespace_id,
-            "namespace_fingerprint": document.namespace_fingerprint,
-            "sha256": document.sha256,
-            "byte_count": document.byte_count,
-            "media_type": document.media_type,
-        },
-        base
-        | {
-            "id": attachment_id,
-            "kind": "attachment",
-            "provider_id": "cfile_retained",
-            "document_handle": handle,
-            "parent_provider_id": "cntr_retained",
-            "container_allocation_id": container_id,
-            "source_file_allocation_id": file_id,
-        },
-    ]
-    unknown_id = None
-    if include_unknown:
-        unknown_id = new_record_id()
-        rows.append(
-            base
-            | {
-                "id": unknown_id,
-                "kind": "container",
-                "state": "uncertain",
-                "provider_id": "cntr_unconfirmed",
-            }
-        )
-    historical = _historical_configuration()
-    async with grant._sessions() as session, session.begin():
-        await session.execute(text("SET LOCAL session_replication_role=replica"))
-        await session.execute(
-            update(ProjectGuideCompilationAttempt)
-            .where(ProjectGuideCompilationAttempt.id == grant._attempt_id)
-            .values(
-                runtime_configuration=historical,
-                runtime_configuration_hash=canonical_json_hash(historical),
+@asynccontextmanager
+async def _retained_history(database_url, migration_lock, *, include_unknown=False):
+    """Create genuine 0058 allocation facts, then exercise the real 0059 upgrade."""
+    from tests.test_alembic import (
+        _alembic_config,
+        _execute,
+        _seed_retained_guide_runtime_rows,
+    )
+
+    config = _alembic_config()
+    prepared = False
+    engine = None
+    try:
+        with migration_lock():
+            await _execute(database_url, "drop schema public cascade; create schema public")
+            await asyncio.to_thread(command.upgrade, config, "0058_compensation_unit_create")
+            seeded = await _seed_retained_guide_runtime_rows(
+                database_url,
+                status="compilation_provider_uncertain",
+                include_unknown=include_unknown,
             )
-        )
-        await session.execute(insert(ProjectGuideRuntimeAllocation), rows)
-    return {container_id, file_id, attachment_id}, unknown_id
+            await asyncio.to_thread(command.upgrade, config, "head")
+        prepared = True
+        engine = create_async_engine(database_url)
+        sessions = async_sessionmaker(engine, expire_on_commit=False)
+        grant = SimpleNamespace(_sessions=sessions, _attempt_id=seeded["attempt_id"])
+        yield grant, seeded["context"], seeded["allocation_ids"], seeded["unknown_id"]
+    finally:
+        if engine is not None:
+            await engine.dispose()
+        if not prepared:
+            with migration_lock():
+                await _execute(database_url, "drop schema public cascade; create schema public")
+                await asyncio.to_thread(command.upgrade, config, "head")
+
+
+@pytest.fixture
+async def retained_history_case(clean_postgres_database, migration_lock):
+    async with _retained_history(clean_postgres_database, migration_lock) as case:
+        yield case
+
+
+@pytest.fixture
+async def retained_history_with_unknown_case(clean_postgres_database, migration_lock):
+    async with _retained_history(
+        clean_postgres_database, migration_lock, include_unknown=True
+    ) as case:
+        yield case
 
 
 async def persisted_states(grant):
@@ -148,9 +121,10 @@ async def persisted_states(grant):
     return {row.id: (row.state, row.deleted_at) for row in rows}
 
 
-async def test_retained_cleanup_selection_preserves_old_config_and_exact_ids(grant_case):
-    grant, _store, _authority, _manager, context = grant_case
-    identifiers, _ = await seed_retained_allocation_history(grant, context)
+async def test_retained_cleanup_selection_preserves_old_config_and_exact_ids(
+    retained_history_case,
+):
+    grant, context, identifiers, _unknown = retained_history_case
     async with grant._sessions() as session:
         selected = await pending_runtime_resource_cleanup(
             session, retained_runtime_key=RETAINED_RUNTIME
@@ -172,9 +146,8 @@ async def test_retained_cleanup_selection_preserves_old_config_and_exact_ids(gra
     }
 
 
-async def test_cleanup_failure_replay_and_deletion_are_monotonic(grant_case):
-    grant, _store, _authority, _manager, context = grant_case
-    identifiers, _ = await seed_retained_allocation_history(grant, context)
+async def test_cleanup_failure_replay_and_deletion_are_monotonic(retained_history_case):
+    grant, context, identifiers, _unknown = retained_history_case
     custody = SqlAlchemyGuideRuntimeCleanupCustody(
         grant._sessions, grant._attempt_id, context.material.sha256, RETAINED_RUNTIME
     )
@@ -193,9 +166,8 @@ async def test_cleanup_failure_replay_and_deletion_are_monotonic(grant_case):
 
 
 @pytest.mark.parametrize("field", ["attempt", "manifest", "runtime"])
-async def test_cleanup_rejects_cross_scope_substitution(grant_case, field):
-    grant, _store, _authority, _manager, context = grant_case
-    identifiers, _ = await seed_retained_allocation_history(grant, context)
+async def test_cleanup_rejects_cross_scope_substitution(retained_history_case, field):
+    grant, context, identifiers, _unknown = retained_history_case
     custody = SqlAlchemyGuideRuntimeCleanupCustody(
         grant._sessions,
         uuid4() if field == "attempt" else grant._attempt_id,
@@ -210,24 +182,29 @@ async def test_cleanup_rejects_cross_scope_substitution(grant_case, field):
     assert await persisted_states(grant) == before
 
 
-async def test_unknown_allocation_cannot_be_confirmed_or_selected(grant_case):
-    grant, _store, _authority, _manager, context = grant_case
-    identifiers, unknown = await seed_retained_allocation_history(
-        grant, context, include_unknown=True
-    )
+async def test_unknown_allocation_cannot_be_confirmed_or_selected(
+    retained_history_with_unknown_case,
+):
+    grant, context, identifiers, unknown = retained_history_with_unknown_case
     custody = SqlAlchemyGuideRuntimeCleanupCustody(
         grant._sessions, grant._attempt_id, context.material.sha256, RETAINED_RUNTIME
     )
     assert {item.allocation_id for item in await custody.cleanup_resources()} == identifiers
+    async with grant._sessions() as session:
+        assert (
+            await pending_runtime_resource_cleanup(session, retained_runtime_key=RETAINED_RUNTIME)
+            == ()
+        )
     with pytest.raises(ValueError, match="unknown resource deletion cannot be confirmed"):
         await custody.record_deleted(unknown)
     await custody.record_cleanup_failed(unknown)
     assert (await persisted_states(grant))[unknown] == ("uncertain", None)
 
 
-async def test_current_provider_selection_cannot_redirect_retained_cleanup(grant_case):
-    grant, _store, _authority, _manager, context = grant_case
-    await seed_retained_allocation_history(grant, context)
+async def test_current_provider_selection_cannot_redirect_retained_cleanup(
+    retained_history_case,
+):
+    grant, _context, _identifiers, _unknown = retained_history_case
     async with grant._sessions() as session:
         assert (
             await pending_runtime_resource_cleanup(session, retained_runtime_key="another_runtime")
@@ -244,11 +221,10 @@ async def test_current_provider_selection_cannot_redirect_retained_cleanup(grant
 
 
 @pytest.mark.parametrize("fail", [False, True])
-async def test_cleanup_composition_uses_only_fixed_cleanup_callable(grant_case, fail):
+async def test_cleanup_composition_uses_only_fixed_cleanup_callable(retained_history_case, fail):
     from app.adapters.projects import cleanup_project_guide_runtime_resources
 
-    grant, _store, _authority, _manager, context = grant_case
-    identifiers, _ = await seed_retained_allocation_history(grant, context)
+    grant, _context, identifiers, _unknown = retained_history_case
     calls = []
 
     async def cleanup(custody):

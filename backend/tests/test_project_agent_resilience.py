@@ -18,7 +18,7 @@ from app.adapters.project_agents import build_project_guide_adapter_profile
 from app.adapters.project_agents.openai_profile import (
     require_openai_agents_sdk_adapter_profile,
 )
-from app.core.config import Settings
+from app.core.config import Settings, get_settings
 from app.core.project_agents import project_guide_runtime_configuration
 
 
@@ -342,3 +342,23 @@ async def test_cleanup_bypasses_open_inference_circuit(monkeypatch):
         SimpleNamespace(files=Files()), Resources()
     ) is True
     assert calls == [("delete", "file_assigned"), ("retrieve", "file_assigned"), ("record_deleted", allocation)]
+
+
+def test_project_agent_timeout_is_loaded_from_environment(monkeypatch) -> None:
+    monkeypatch.setenv("WORKSTREAM_PROJECT_AGENT_MODEL", "test-model")
+    monkeypatch.setenv("WORKSTREAM_PROJECT_AGENT_RUN_TIMEOUT_SECONDS", "42")
+    monkeypatch.setenv("WORKSTREAM_PROJECT_AGENT_MAX_MANIFEST_BYTES", "12345")
+    get_settings.cache_clear()
+    try:
+        settings = get_settings()
+        configuration = project_guide_runtime_configuration(
+            settings,
+            adapter_profile_builder=partial(
+                build_project_guide_adapter_profile, settings.project_agent_runtime
+            ),
+        )
+        assert configuration.timeout_seconds == 42
+        assert configuration.maximum_manifest_bytes == 12345
+        assert configuration.model == "test-model"
+    finally:
+        get_settings.cache_clear()

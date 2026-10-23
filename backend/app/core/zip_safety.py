@@ -1,4 +1,4 @@
-"""Neutral bounded ZIP directory primitives shared by ART consumers."""
+"""Neutral bounded ZIP directory primitives shared by archive consumers."""
 
 from __future__ import annotations
 

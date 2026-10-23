@@ -19,7 +19,7 @@ from app.modules.artifacts.submission_archive import (
     SubmissionArchiveLimits,
     SubmissionArchiveRejectedError,
 )
-from app.modules.artifacts.zip_safety import zip_directory_facts
+from app.core.zip_safety import zip_directory_facts
 from tests.artifact_store_helpers import artifact_byte_stream, artifact_preparation_limits
 
 

@@ -29,20 +29,14 @@ from app.interfaces.project_agents import (
     project_guide_compilation_prompt_bytes,
 )
 from app.interfaces.project_guide_runtime import ProjectGuideRuntimeConfiguration
+from .openrouter_policy import openrouter_request_options
 from app.modules.projects.api.guide_documents import GuideRuntimeCapabilities
 
 
 _INVALID_SCHEMA_OUTPUT = object()
 _OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 _OPENAI_BASE_URL = "https://api.openai.com/v1"
-_OPENROUTER_DISABLED_PLUGINS = (
-    "web",
-    "file-parser",
-    "response-healing",
-    "alignment",
-    "armor",
-    "pareto",
-)
+
 
 
 class OpenAIAgentSdkProjectGuideRuntime:
@@ -305,16 +299,7 @@ class OpenAIAgentSdkProjectGuideRuntime:
 
             extra_body = None
             if configuration.model_provider == "openrouter":
-                extra_body = {
-                    "provider": {
-                        "allow_fallbacks": False,
-                        "data_collection": "deny",
-                    },
-                    "plugins": [
-                        {"id": plugin, "enabled": False}
-                        for plugin in _OPENROUTER_DISABLED_PLUGINS
-                    ],
-                }
+                extra_body = openrouter_request_options()
             model_settings = ModelSettings(
                 parallel_tool_calls=False,
                 store=False,

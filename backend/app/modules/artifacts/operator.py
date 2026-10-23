@@ -13,10 +13,17 @@ from app.interfaces.artifact_operations import (
     ArtifactAuditResourceType,
     ArtifactBindingResourceType,
 )
+from app.modules.artifacts.api.operator_authority import (
+    ArtifactOperatorAuthority,
+    ArtifactOperatorAuthorityFacts,
+    ArtifactOperatorAuthorizationEvidence,
+    ArtifactOperatorResourceType,
+)
 from app.modules.artifacts.models import (
     ArtifactAdmissionCharge,
     ArtifactAdmissionScope,
     ArtifactBinding,
+    ArtifactContent,
     ArtifactOperationReceipt,
     ArtifactPutAttempt,
     ArtifactPutAttemptCharge,
@@ -29,12 +36,6 @@ from app.modules.artifacts.models import (
     SubmissionBundleDurableIntent,
 )
 from app.modules.artifacts.metrics import ArtifactAdmissionMetrics
-from app.modules.artifacts.schemas import (
-    ArtifactOperatorAuthority,
-    ArtifactOperatorAuthorityFacts,
-    ArtifactOperatorAuthorizationEvidence,
-    ArtifactOperatorResourceType,
-)
 from app.modules.checkers.models import CheckerRun
 from app.modules.projects.models import (
     GuideSourceSnapshot,
@@ -42,7 +43,7 @@ from app.modules.projects.models import (
     Project,
     ProjectGuide,
 )
-from app.modules.authorization.catalogue import ActionId, PermissionId
+from app.modules.authorization.catalogue import ACTION_BY_ID, ActionId
 from app.modules.authorization.runtime import AuthorizationContext
 from app.modules.tasks.models import AuditEvent, Submission, WorkstreamTask
 
@@ -63,17 +64,6 @@ class ArtifactOperatorEvidenceError(RuntimeError):
 
 class ArtifactOperatorInputError(ValueError):
     """Bounded invalid pagination or filter input."""
-
-
-_PERMISSIONS = {
-    ActionId.ARTIFACT_BINDING_READ: PermissionId.ARTIFACT_BINDING_READ,
-    ActionId.ARTIFACT_REPLICA_READ: PermissionId.ARTIFACT_REPLICA_READ,
-    ActionId.ARTIFACT_RECEIPT_READ: PermissionId.ARTIFACT_RECEIPT_READ,
-    ActionId.ARTIFACT_VERIFICATION_JOB_READ: PermissionId.ARTIFACT_VERIFICATION_JOB_READ,
-    ActionId.ARTIFACT_RECOVERY_ATTEMPT_READ: PermissionId.ARTIFACT_RECOVERY_ATTEMPT_READ,
-    ActionId.ARTIFACT_AUDIT_READ: PermissionId.ARTIFACT_AUDIT_READ,
-    ActionId.OPERATIONS_ARTIFACT_STORAGE_ADMISSION_READ: PermissionId.OPERATIONS_STATUS_READ,
-}
 
 
 class ArtifactOperatorService:
@@ -99,6 +89,7 @@ class ArtifactOperatorService:
             ArtifactOperatorResourceType.ADMISSION_SCOPE,
             "artifact-storage-readiness",
             (),
+            None,
         )
 
     async def list_bindings(
@@ -120,6 +111,7 @@ class ArtifactOperatorService:
             ArtifactOperatorResourceType.BINDING_SCOPE,
             f"{resource_type}:{resource_id}",
             project,
+            resource_id,
         )
         base = (
             select(ArtifactBinding)
@@ -164,6 +156,7 @@ class ArtifactOperatorService:
             ArtifactOperatorResourceType.CONTENT,
             str(content_id),
             projects,
+            content_id,
         )
         rows = await self._page(
             select(ArtifactReplica).where(ArtifactReplica.content_id == str(content_id)),
@@ -203,6 +196,7 @@ class ArtifactOperatorService:
             ArtifactOperatorResourceType.REPLICA,
             str(replica_id),
             projects,
+            replica_id,
         )
 
         receipt_order = {"put": 0, "put_observation": 1, "verification": 2}
@@ -320,12 +314,15 @@ class ArtifactOperatorService:
         if row is None:
             raise ArtifactOperatorNotFound("artifact resource was not found")
         projects = await self._replica_projects(row.replica_id)
+        if not projects:
+            raise ArtifactOperatorNotFound("artifact resource was not found")
         await self._authorize(
             authorization_context,
             ActionId.ARTIFACT_VERIFICATION_JOB_READ,
             ArtifactOperatorResourceType.VERIFICATION_JOB,
             row.id,
             projects,
+            UUID(row.id),
         )
         receipt = await self._session.scalar(
             select(ArtifactVerificationReceipt).where(
@@ -364,6 +361,7 @@ class ArtifactOperatorService:
             ArtifactOperatorResourceType.RECOVERY_ATTEMPT,
             row.id,
             (UUID(row.project_id),),
+            UUID(row.id),
         )
         source = await self._session.scalar(
             select(ArtifactVerificationJob).where(
@@ -415,6 +413,7 @@ class ArtifactOperatorService:
             ArtifactOperatorResourceType.AUDIT_RESOURCE,
             f"{resource_type}:{resource_id}",
             projects,
+            resource_id,
         )
         rows = await self._page(
             select(AuditEvent).where(
@@ -493,6 +492,7 @@ class ArtifactOperatorService:
             ArtifactOperatorResourceType.ADMISSION_SCOPE,
             f"project:{project_id or '*'}:task:{task_id or '*'}",
             projects,
+            task_id or project_id,
         )
         if cursor:
             cursor_type, separator, cursor_id = cursor.partition(":")
@@ -594,24 +594,32 @@ class ArtifactOperatorService:
         resource_type: ArtifactOperatorResourceType,
         resource_id: str,
         projects: tuple[UUID, ...],
+        record_id: UUID | None,
     ) -> ArtifactOperatorAuthorizationEvidence:
         evidence = await self._authority.authorize(
             authorization_context=context,
-            facts=ArtifactOperatorAuthorityFacts(resource_type, resource_id, projects, action),
+            facts=ArtifactOperatorAuthorityFacts(resource_type, resource_id, projects, action.value, record_id),
         )
-        expected = _PERMISSIONS[action].value
-        if evidence.action_id is not action or evidence.permission_id != expected:
+        expected = ACTION_BY_ID[action].permission_id.value
+        if evidence.action_id != action.value or evidence.permission_id != expected:
             raise ArtifactOperatorEvidenceError(
                 "artifact Operator authorization evidence is invalid"
             )
         return evidence
 
     async def _content_projects(self, content_id: str) -> tuple[UUID, ...]:
+        # Binding and put-completion writers take this same row before publication.
+        content = await self._session.scalar(
+            select(ArtifactContent.id)
+            .where(ArtifactContent.id == content_id)
+            .with_for_update()
+        )
+        if content is None:
+            return ()
         binding_values = (
             await self._session.scalars(
                 select(ArtifactBinding.project_id)
                 .where(ArtifactBinding.content_id == content_id)
-                .with_for_update()
             )
         ).all()
         attempt_values = (
@@ -619,27 +627,23 @@ class ArtifactOperatorService:
                 select(ArtifactPutAttempt.project_id)
                 .join(ArtifactReplica, ArtifactReplica.id == ArtifactPutAttempt.replica_id)
                 .where(ArtifactReplica.content_id == content_id)
-                .with_for_update(of=(ArtifactPutAttempt, ArtifactReplica))
             )
         ).all()
         return self._project_ids((*binding_values, *attempt_values))
 
     async def _replica_projects(self, replica_id: str) -> tuple[UUID, ...]:
-        values = (
-            await self._session.scalars(
-                select(ArtifactPutAttempt.project_id)
-                .where(ArtifactPutAttempt.replica_id == replica_id)
-                .with_for_update()
-            )
-        ).all()
-        if values:
-            return self._project_ids(values)
         content_id = await self._session.scalar(
             select(ArtifactReplica.content_id)
             .where(ArtifactReplica.id == replica_id)
-            .with_for_update()
         )
-        return await self._content_projects(content_id) if content_id else ()
+        if content_id is None:
+            return ()
+        projects = await self._content_projects(content_id)
+        current_content_id = await self._session.scalar(
+            select(ArtifactReplica.content_id)
+            .where(ArtifactReplica.id == replica_id)
+        )
+        return projects if current_content_id == content_id else ()
 
     async def _binding_resource_project(self, resource_type: str, resource_id: str) -> str | None:
         if resource_type == "project":

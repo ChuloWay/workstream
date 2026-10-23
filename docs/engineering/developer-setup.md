@@ -312,3 +312,10 @@ The connected Compose configuration includes Beat; start it before creating guid
 The Beat scheduler must run alongside the Celery execution processes so
 artifact pending-work, verified guide-continuation and post-policy approval scans can recover
 publication failures automatically.
+
+OpenRouter account plugins must all be disabled before sending private guide
+content, including any organization-enforced settings. The runtime requests
+disabling supported plugins, but the current Alignment API rejects an `enabled`
+flag; it must remain off in account settings. Account enforcement can override
+request controls. `data_collection=deny` constrains provider routing and does not
+claim zero data retention. See [OpenRouter plugin precedence](https://openrouter.ai/docs/guides/features/plugins).

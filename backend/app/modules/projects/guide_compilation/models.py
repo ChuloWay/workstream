@@ -843,9 +843,12 @@ class ProjectGuideDocumentAccess(Base):
             "and operation is null and parser_request_hash is null "
             "and parser_response_hash is null and parser_build_digest is null) or "
             "(access_method='trusted_parser' and attachment_allocation_id is null "
-            "and operation in ('read','search') "
+            "and operation is not null and operation in ('read','search') "
+            "and parser_request_hash is not null "
             "and parser_request_hash ~ '^sha256:[0-9a-f]{64}$' "
+            "and parser_response_hash is not null "
             "and parser_response_hash ~ '^sha256:[0-9a-f]{64}$' "
+            "and parser_build_digest is not null "
             "and parser_build_digest ~ '^sha256:[0-9a-f]{64}$')",
             name="ck_guide_document_access_evidence",
         ),

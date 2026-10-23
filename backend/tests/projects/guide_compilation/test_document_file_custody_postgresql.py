@@ -115,14 +115,22 @@ async def test_exact_parser_receipt_is_idempotent_and_conflicts_are_rejected(gra
 @pytest.mark.parametrize(
     "changes",
     [
-        {"access_method": "direct_original", "operation": None,
-         "parser_request_hash": None, "parser_response_hash": None,
-         "parser_build_digest": None},
+        {
+            "access_method": "direct_original",
+            "operation": None,
+            "parser_request_hash": None,
+            "parser_response_hash": None,
+            "parser_build_digest": None,
+        },
         {"access_method": "provider_attachment"},
         {"source_item_id": str(uuid4())},
         {"document_version_id": str(uuid4())},
         {"sha256": HASH_B},
         {"document_handle": uuid4()},
+        {"operation": None},
+        {"parser_request_hash": None},
+        {"parser_response_hash": None},
+        {"parser_build_digest": None},
     ],
 )
 async def test_sql_accepts_only_exact_trusted_parser_access(grant_case, changes):
@@ -130,11 +138,23 @@ async def test_sql_accepts_only_exact_trusted_parser_access(grant_case, changes)
     async with grant._sessions() as session, session.begin():
         with pytest.raises(DBAPIError, match="access lineage is invalid") as error:
             await session.execute(
-                insert(ProjectGuideDocumentAccess).values(
-                    **access_row(grant, context, **changes)
-                )
+                insert(ProjectGuideDocumentAccess).values(**access_row(grant, context, **changes))
             )
         assert error.value.orig.sqlstate == "23514"
+
+
+async def test_sql_accepts_complete_exact_trusted_parser_access(grant_case):
+    grant, _store, _authority, _manager, context = grant_case
+    row = access_row(grant, context)
+    async with grant._sessions() as session, session.begin():
+        await session.execute(insert(ProjectGuideDocumentAccess).values(**row))
+    async with grant._sessions() as session:
+        stored = await session.get(ProjectGuideDocumentAccess, row["id"])
+    assert stored is not None
+    assert stored.operation == "read"
+    assert stored.parser_request_hash == HASH_A
+    assert stored.parser_response_hash == HASH_B
+    assert stored.parser_build_digest == "sha256:" + "c" * 64
 
 
 async def test_new_provider_allocation_path_is_closed(grant_case):
