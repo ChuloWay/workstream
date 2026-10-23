@@ -10,7 +10,7 @@ from io import BytesIO
 from uuid import uuid4
 
 from app.modules.projects.api.guide_documents import OpenGuideDocument
-from .helpers import SOURCE_BYTES, runtime_configuration, result
+from .helpers import SOURCE_BYTES, generated_result, runtime_configuration
 from app.interfaces.project_agents import GuideEvidenceRef
 
 
@@ -59,7 +59,7 @@ async def record_attempt_document_access(sessions, attempt_id, context):
 
 
 class ScriptedGuideRuntime:
-    outcome = result()
+    outcome = generated_result()
     identity = runtime_configuration().adapter_identity
     calls = 0
 

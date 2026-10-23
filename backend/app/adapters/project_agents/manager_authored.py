@@ -31,6 +31,7 @@ from app.interfaces.project_agents import (
     ProjectGuideCompilationInvalidOutputError,
     ProjectGuideCompilationResult,
     invalid_compilation_failure_code,
+    require_complete_generated_specifications,
     require_complete_project_guide_compilation_result,
     require_ready_result_cites_every_document,
     validate_project_guide_compilation_result,
@@ -196,6 +197,7 @@ def _compile_rules(
     result = ProjectGuideCompilationResult.model_validate(body)
     require_complete_project_guide_compilation_result(result)
     validate_project_guide_compilation_result(context, result)
+    require_complete_generated_specifications(context, result)
     require_ready_result_cites_every_document(context, result)
     return result
 
