@@ -130,10 +130,10 @@ def test_upgrade_qualifies_public_constraint_under_shadowed_search_path(
     with migration_lock():
         asyncio.run(db_session.dispose_engine())
         asyncio.run(_drop_test_database_schema(isolated_database_env))
-        command.upgrade(_config(), "0059_neutral_guide_runtime")
+        command.upgrade(_config(), "0060_audit_restore_path")
         before_public, before_shadow = asyncio.run(_prepare_shadow(isolated_database_env))
         try:
-            command.upgrade(_config(), "0060_project_catalogue_read")
+            command.upgrade(_config(), "0061_project_catalogue_read")
             after_public, after_shadow = asyncio.run(_definitions(isolated_database_env))
             assert before_public.count("project.catalogue.list") == 0
             assert after_public.count("project.catalogue.list") == 2
