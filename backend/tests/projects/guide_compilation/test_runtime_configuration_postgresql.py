@@ -1,5 +1,7 @@
 """Independent SQL enforcement of attempt-bound execution configuration."""
 
+import json
+
 import pytest
 from sqlalchemy import insert, text
 from sqlalchemy.exc import DBAPIError
@@ -7,6 +9,9 @@ from sqlalchemy.ext.asyncio import create_async_engine
 
 from app.core.hashing import canonical_json_hash
 from app.core.identifiers import new_record_id
+from app.interfaces.project_guide_runtime import (
+    ProjectGuideRuntimeConfiguration, canonical_adapter_profile,
+)
 from app.modules.projects.guide_compilation.models import ProjectGuideCompilationAttempt
 from .helpers import (
     context,
@@ -85,6 +90,87 @@ async def test_sql_rejects_invalid_runtime_configuration(clean_postgres_database
 
 
 _NO_INFERENCE_IDENTITY = {"model_provider": "none", "model_api": "none", "model": "none"}
+
+
+async def test_sql_rejects_noncanonical_profile_with_valid_configuration_hash(
+    clean_postgres_database,
+):
+    """SQL rejects exactly the profile serialization rejected by runtime recovery."""
+    values = await seed_database(clean_postgres_database)
+    canonical = runtime_configuration().model_dump(mode="json")
+    altered = canonical | {
+        "adapter_profile": json.dumps(json.loads(canonical["adapter_profile"]), indent=2)
+    }
+    assert altered["adapter_profile"] != canonical["adapter_profile"]
+    assert json.loads(altered["adapter_profile"]) == json.loads(canonical["adapter_profile"])
+    engine = create_async_engine(clean_postgres_database)
+    try:
+        async with engine.begin() as connection:
+            with pytest.raises(
+                DBAPIError, match="compilation runtime adapter profile is invalid"
+            ) as error:
+                await connection.execute(
+                    insert(ProjectGuideCompilationAttempt).values(**_row(values, altered))
+                )
+            assert error.value.orig.sqlstate == "23514"
+        async with engine.begin() as connection:
+            await connection.execute(
+                insert(ProjectGuideCompilationAttempt).values(**_row(values, canonical))
+            )
+        async with engine.connect() as connection:
+            stored = await connection.scalar(
+                text("select runtime_configuration::jsonb from project_guide_compilation_attempts")
+            )
+        assert stored == canonical
+    finally:
+        await engine.dispose()
+
+
+async def test_unicode_profile_round_trips_python_and_postgresql(clean_postgres_database):
+    values = await seed_database(clean_postgres_database)
+    configuration = runtime_configuration().model_dump(mode="json")
+    profile = json.loads(configuration["adapter_profile"]) | {"label": "Café 🧪"}
+    configuration["adapter_profile"] = canonical_adapter_profile(profile)
+    validated = ProjectGuideRuntimeConfiguration.model_validate(configuration)
+    engine = create_async_engine(clean_postgres_database)
+    try:
+        async with engine.begin() as connection:
+            await connection.execute(
+                insert(ProjectGuideCompilationAttempt).values(**_row(values, configuration))
+            )
+        async with engine.connect() as connection:
+            stored = await connection.scalar(
+                text("select runtime_configuration::jsonb from project_guide_compilation_attempts")
+            )
+        assert stored == configuration
+        assert ProjectGuideRuntimeConfiguration.model_validate(stored) == validated
+        assert validated.adapter_profile_values()["label"] == "Café 🧪"
+    finally:
+        await engine.dispose()
+
+
+async def test_sql_profile_total_limit_counts_utf8_bytes(clean_postgres_database):
+    values = await seed_database(clean_postgres_database)
+    profile = {f"label_{index}": "é" * 256 for index in range(16)}
+    encoded = json.dumps(profile, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    assert len(encoded) < 8192 < len(encoded.encode("utf-8"))
+    with pytest.raises(ValueError, match="profile is too large"):
+        canonical_adapter_profile(profile)
+    configuration = runtime_configuration().model_dump(mode="json") | {"adapter_profile": encoded}
+    engine = create_async_engine(clean_postgres_database)
+    try:
+        async with engine.begin() as connection:
+            with pytest.raises(DBAPIError, match="compilation runtime configuration is invalid") as error:
+                await connection.execute(
+                    insert(ProjectGuideCompilationAttempt).values(**_row(values, configuration))
+                )
+            assert error.value.orig.sqlstate == "23514"
+        async with engine.begin() as connection:
+            await connection.execute(insert(ProjectGuideCompilationAttempt).values(
+                **_row(values, runtime_configuration().model_dump(mode="json"))
+            ))
+    finally:
+        await engine.dispose()
 
 
 @pytest.mark.parametrize(

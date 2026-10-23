@@ -209,6 +209,14 @@ def test_adapter_profile_is_closed_effective_sdk_configuration():
         OpenAIAgentSdkProjectGuideRuntime(tampered)
 
 
+def test_profile_canonicalization_preserves_utf8_and_rejects_unstorable_null():
+    from app.interfaces.project_guide_runtime import canonical_adapter_profile
+
+    assert canonical_adapter_profile({"label": "Café 🧪"}) == '{"label":"Café 🧪"}'
+    with pytest.raises(ValueError, match="null character"):
+        canonical_adapter_profile({"label": "\x00"})
+
+
 @pytest.mark.parametrize("model", ["openai/gpt-5.6-terra:online", "openrouter/auto"])
 def test_openrouter_rejects_provider_routed_model_variants(monkeypatch, model):
     monkeypatch.setenv("OPENROUTER_API_KEY", "unit-test-only")

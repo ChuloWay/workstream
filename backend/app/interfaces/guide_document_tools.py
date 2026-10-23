@@ -8,6 +8,14 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, StrictInt
 
 
+GuideDocumentMediaType = Literal[
+    "application/pdf",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    "text/markdown",
+]
+
+
 class GuideTextLocator(BaseModel):
     """A parser-derived location within a bounded returned text fragment."""
 

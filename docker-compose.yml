@@ -155,10 +155,11 @@ services:
     image: ${COMPOSE_PROJECT_NAME}-backend:local
     pull_policy: never
     init: true
-    user: "10002:10001"
+    user: "0:0"
     network_mode: none
     read_only: true
     cap_drop: [ALL]
+    cap_add: [KILL, SETGID, SETUID]
     security_opt: [no-new-privileges:true]
     pids_limit: 32
     mem_limit: 512m

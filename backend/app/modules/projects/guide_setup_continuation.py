@@ -7,7 +7,7 @@ from uuid import UUID
 
 from sqlalchemy import and_, or_, func, select
 from sqlalchemy.sql.elements import ColumnElement
-from app.interfaces.project_guide_runtime import PROVIDER_FREE
+from app.interfaces.project_guide_runtime import NO_INFERENCE_IDENTITY
 from .guide_compilation.models import ProjectGuideCompilationAttempt, ProjectGuideSetupFinalization
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -39,7 +39,7 @@ def retryable_compilation_dispatch_predicate() -> ColumnElement[bool]:
                     ProjectGuideCompilationAttempt.status == "compilation_provider_uncertain",
                     ProjectGuideCompilationAttempt.runtime_configuration["model_provider"]
                     .as_string()
-                    .is_distinct_from(PROVIDER_FREE),
+                    .is_distinct_from(NO_INFERENCE_IDENTITY),
                 ),
             ),
         )

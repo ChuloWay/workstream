@@ -1187,7 +1187,7 @@ The broader v0.1 sequence below retains later scope:
    through #554; preserve
    prior attempts and reviewer economic evidence. Finish remaining recovery,
    fulfillment, reconciliation, audit, release controls, and legacy cleanup.
-7. **Release proof.** The isolated six-service local stack is available; use it
+7. **Release proof.** The isolated seven-service local stack is available; use it
     to expose stable APIs and frontend surfaces, exercise the complete path
     through real database, durable-job, storage, security, failure, and recovery
     tests, then run the internal pilot. Compose health alone is not journey proof.

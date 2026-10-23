@@ -35,12 +35,21 @@ Do not replace either path with a named volume or another in-container path.
 
 Guide parsing uses a separate private Unix socket at
 `/var/lib/workstream/guide-runtime/guide.sock`. The parser uses the immutable
-backend image as UID 10002 and GID 10001, has no network or secrets, and owns
-the socket directory and socket. Only the guide worker mounts that directory as
+backend image without network or secrets. Its bootstrap starts as root with only
+`KILL`, `SETGID` and `SETUID`, then drops the broker to UID 10002 and GID 10001
+before binding the socket. The broker retains those three capabilities only to
+isolate and terminate parser children. Each of its two concurrent children uses
+a distinct fixed identity (10003 or 10004), no supplementary groups and no
+capabilities. The broker and children verify their process protections before
+processing documents; startup fails if the required identity boundary is absent.
+The broker owns the socket directory and socket. Only the guide worker mounts that directory as
 a read-only client. API, Beat, proof jobs and the checker controller do not
 receive it. The parser process validates directory and socket ownership before
-binding, and the health check performs a framed protocol round trip against the
-fixed parser build identity.
+binding. The health check drops to client UID/GID 10001 with no capabilities before
+performing a framed protocol round trip against the fixed parser build identity.
+Keep the configured capability allowlist, no-new-privileges, read-only root,
+network isolation and process limits together; do not replace this profile with
+a privileged container.
 
 ## Prepare source images
 
@@ -95,8 +104,9 @@ Install and configure Docker and gVisor using the approved host process. Confirm
 that Docker reports a `runsc` runtime. Installation and daemon configuration are
 outside this repository configuration.
 
-The hosted profile fixes backend processes at UID/GID 10001 and the parser at
-UID 10002 with the shared client group 10001. Find the Docker socket GID and
+The hosted profile fixes backend processes at UID/GID 10001 and the parser broker
+at UID 10002 with the shared client group 10001 after its identity bootstrap.
+Find the Docker socket GID and
 create the fixed private directories with these exact identities:
 
 ```sh
@@ -324,6 +334,18 @@ all retained work, update only reviewed digest identities/configuration, rerun
 full preflight, pull, and start with `up --detach --wait`. Exercise an interrupted
 job and verify the existing exact retry/reconciliation operations rather than
 editing rows or replaying unknown work blindly.
+
+Before upgrading through `0059_neutral_guide_runtime`, inspect retained guide
+attempts using the currently deployed release's supported diagnostics and
+recovery operations. The migration refuses an inferred attempt without
+`adapter_profile` in `compilation_reserved` or `provider_result_accepted`, with
+`old inferred guide attempt requires removed runtime recovery before upgrade`.
+Finish supported recovery under the existing image and its compatible schema
+before retrying the upgrade. API startup applies migrations, so this refusal also
+prevents the new API from starting. If recovery cannot complete, keep the upgrade
+blocked; do not edit the attempt, delete evidence, or redispatch uncertain work
+under the new runtime. The new image preserves retained evidence and exact-ID
+cleanup, not the removed inference implementation.
 
 Database migrations are forward-only. Never downgrade a protected migration or
 delete immutable rows/objects to force a code rollback. An older application

@@ -1,11 +1,62 @@
 """Local guide parsing must retain the same isolation boundary as deployment."""
 
+from contextlib import chdir
+import json
+import os
 from pathlib import Path
+import subprocess
+import sys
+import tempfile
+from types import ModuleType
 import unittest
+from unittest.mock import patch
 
 import yaml
 
+from scripts import verify_guide_parser_isolation as parser_proof
+
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "backend"))
+
+from app.adapters.project_agents import (  # noqa: E402
+    build_project_guide_adapter_profile,
+    create_project_guide_runtime,
+)
+from app.core.config import Settings  # noqa: E402
+from app.core.project_agents import project_guide_runtime_configuration  # noqa: E402
+
+
+class ParserProofCheckoutTests(unittest.TestCase):
+    def test_read_only_inspection_handles_large_index_and_rejects_dirty_source(self):
+        with tempfile.TemporaryDirectory(prefix="ws-parser-checkout-") as directory:
+            root = Path(directory)
+
+            def git(*arguments):
+                return subprocess.check_output(
+                    ["git", "-c", "core.hooksPath=/dev/null", *arguments],
+                    cwd=root, stderr=subprocess.DEVNULL,
+                ).decode().strip()
+
+            git("init", "--quiet", "--template=")
+            for number in range(1200):
+                (root / f"{number:04d}-{'x' * 120}").touch()
+            git("add", ".")
+            git("-c", "user.name=Parser Proof", "-c", "user.email=proof@example.invalid",
+                "commit", "--quiet", "-m", "Synthetic source")
+            head = git("rev-parse", "HEAD")
+            index = root / ".git/index"
+            self.assertGreater(index.stat().st_size, parser_proof.OUTPUT_LIMIT)
+            before = index.read_bytes()
+            source = root / f"0000-{'x' * 120}"
+            metadata = source.stat()
+            os.utime(source, ns=(metadata.st_atime_ns, metadata.st_mtime_ns - 10**9))
+            with chdir(root):
+                self.assertEqual(parser_proof._source_checkout(head), head)
+                self.assertEqual(index.read_bytes(), before)
+                self.assertFalse((root / ".git/index.lock").exists())
+                source.write_text("changed")
+                with self.assertRaisesRegex(ValueError, "checkout is dirty"):
+                    parser_proof._source_checkout(head)
 
 
 class LocalGuideRuntimeTests(unittest.TestCase):
@@ -16,9 +67,10 @@ class LocalGuideRuntimeTests(unittest.TestCase):
     def test_parser_has_no_secrets_network_or_source_mount(self):
         parser = self.services["guide-document-parser"]
         self.assertEqual(parser["network_mode"], "none")
-        self.assertEqual(parser["user"], "10002:10001")
+        self.assertEqual(parser["user"], "0:0")
         self.assertTrue(parser["read_only"])
         self.assertEqual(parser["cap_drop"], ["ALL"])
+        self.assertEqual(parser["cap_add"], ["KILL", "SETGID", "SETUID"])
         self.assertEqual(parser["security_opt"], ["no-new-privileges:true"])
         self.assertFalse(parser.get("environment"))
         self.assertFalse(parser.get("secrets"))
@@ -48,6 +100,60 @@ class LocalGuideRuntimeTests(unittest.TestCase):
             dockerfile = (ROOT / f"docker/backend/Dockerfile.{name}").read_text()
             self.assertIn("install -d -m 0750 -o 10002 -g 10001 /var/lib/workstream/guide-runtime", dockerfile)
         self.assertIn("backend/.env", (ROOT / ".dockerignore").read_text().splitlines())
+
+    def test_rendered_default_model_tuple_constructs_registered_adapter(self):
+        environment = os.environ.copy()
+        environment.update({
+            "COMPOSE_PROJECT_NAME": "guide-runtime-test",
+            "WORKSTREAM_API_RATE_LIMIT_KEY_SECRET": "test-only",
+            "WORKSTREAM_MINIO_ROOT_USER": "test-only",
+            "WORKSTREAM_MINIO_ROOT_PASSWORD": "test-only",
+            "WORKSTREAM_DATABASE_URL": "postgresql+asyncpg://user:pass@postgres/test",
+            "WORKSTREAM_FLOW_AUTH_LOCAL_HMAC_SECRET": "test-only",
+            "WORKSTREAM_PAGINATION_CURSOR_HMAC_SECRET": "test-only",
+            "WORKSTREAM_PROJECT_AGENT_RUNTIME_OPTIONS": "{}",
+            "WORKSTREAM_POSTGRES_PASSWORD": "test-only",
+        })
+        for name in (
+            "WORKSTREAM_PROJECT_AGENT_RUNTIME",
+            "WORKSTREAM_PROJECT_AGENT_MODEL_PROVIDER",
+            "WORKSTREAM_PROJECT_AGENT_MODEL_API",
+            "WORKSTREAM_PROJECT_AGENT_MODEL",
+        ):
+            environment.pop(name, None)
+        rendered = subprocess.run(
+            ["docker", "compose", "-f", "docker-compose.yml", "--profile", "backend",
+             "config", "--format", "json"],
+            cwd=ROOT, env=environment, text=True, capture_output=True, check=True,
+        )
+        worker = json.loads(rendered.stdout)["services"]["worker"]["environment"]
+        settings = Settings(
+            project_agent_runtime=worker["WORKSTREAM_PROJECT_AGENT_RUNTIME"],
+            project_agent_model_provider=worker["WORKSTREAM_PROJECT_AGENT_MODEL_PROVIDER"],
+            project_agent_model_api=worker["WORKSTREAM_PROJECT_AGENT_MODEL_API"],
+            project_agent_model=worker["WORKSTREAM_PROJECT_AGENT_MODEL"],
+            project_agent_runtime_options=json.loads(
+                worker["WORKSTREAM_PROJECT_AGENT_RUNTIME_OPTIONS"]
+            ),
+        )
+        configuration = project_guide_runtime_configuration(
+            settings,
+            adapter_profile_builder=lambda options: build_project_guide_adapter_profile(
+                settings.project_agent_runtime, options
+            ),
+        )
+        with patch.dict(os.environ, {"OPENROUTER_API_KEY": "test-only"}), patch(
+            "app.adapters.project_agents.openai_agent_sdk."
+            "require_openai_agents_sdk_adapter_profile",
+            return_value=object(),
+        ), patch.dict(sys.modules, {"agents": ModuleType("agents"), "openai": ModuleType("openai")}):
+            runtime = create_project_guide_runtime(configuration)
+        self.assertEqual(
+            (configuration.runtime_key, configuration.model_provider,
+             configuration.model_api, configuration.model),
+            ("openai_agents_sdk", "openrouter", "chat_completions", "openai/gpt-5.6-terra"),
+        )
+        self.assertEqual(runtime.identity, configuration.adapter_identity)
 
 
 if __name__ == "__main__":

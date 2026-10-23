@@ -43,6 +43,7 @@ from app.modules.projects.guide_compilation.orchestrator import (
     SqlAlchemyGuideCompilationExecutionBackend,
     project_guide_compilation_execution_port,
 )
+from app.modules.projects.guide_compilation import runtime_resources
 from tests.checkers.external.support import capability_projection
 
 from .helpers import (
@@ -78,6 +79,12 @@ class _Runtime:
             await asyncio.sleep(self.delay)
         if isinstance(self.outcome, BaseException):
             raise self.outcome
+        return self.outcome
+
+
+class _CitingRuntimeWithoutToolAccess(_Runtime):
+    async def compile_project_guide(self, _context, _capabilities):
+        self.calls += 1
         return self.outcome
 
 
@@ -222,6 +229,7 @@ async def test_hidden_command_persists_one_complete_result_and_no_projections(
                         "(select count(*) from submission_artifact_policies),"
                         "(select count(*) from pre_submit_checker_policies),"
                         "(select count(*) from checker_policies),"
+                        "(select count(*) from project_guide_document_accesses),"
                         "(select count(*) from outbox_events)"
                     )
                 )
@@ -238,8 +246,61 @@ async def test_hidden_command_persists_one_complete_result_and_no_projections(
                 )
             ).one()
             await session.rollback()
-        assert counts == (1, 1, 1, 0, 0, 0, 0, 0)
+        assert counts == (1, 1, 1, 0, 0, 0, 0, 1, 0)
         assert setup == ("queued", None, None, None)
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_cited_result_without_tool_access_is_rejected_without_persistence(
+    clean_postgres_database: str,
+) -> None:
+    values = await seed_database(clean_postgres_database)
+    requested = await _authorized_attempt(clean_postgres_database, values)
+    engine = create_async_engine(clean_postgres_database)
+    factory = async_sessionmaker(engine, expire_on_commit=False)
+    runtime = _CitingRuntimeWithoutToolAccess()
+    command = ProjectGuideCompilationExecutionCommand(attempt_id=requested.attempt_id)
+    try:
+        compilation_context = context(values)
+        # Prove the service guard directly because the orchestrator deliberately
+        # collapses it and the independent SQL evidence guard to one unresolved receipt.
+        async with factory() as session:
+            with pytest.raises(
+                ValueError, match="^compilation has no document access evidence$"
+            ):
+                await runtime_resources.require_compilation_document_access(
+                    session,
+                    requested.attempt_id,
+                    compilation_context.material,
+                    runtime.outcome,
+                )
+
+        port = _port(factory, runtime)
+        receipt = await port.execute(command)
+        replay = await port.execute(command)
+
+        assert (
+            receipt.classification
+            is ProjectGuideCompilationExecutionClassification.PROVIDER_UNRESOLVED
+        )
+        assert replay == receipt
+        assert runtime.calls == 1
+        async with factory() as session:
+            row = (
+                await session.execute(
+                    text(
+                        "select status,"
+                        "(select count(*) from project_guide_compilations),"
+                        "(select count(*) from project_guide_document_accesses) "
+                        "from project_guide_compilation_attempts where id=:id"
+                    ),
+                    {"id": requested.attempt_id},
+                )
+            ).one()
+            await session.rollback()
+        assert row == ("compilation_provider_uncertain", 0, 0)
     finally:
         await engine.dispose()
 

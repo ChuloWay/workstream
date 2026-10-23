@@ -10,7 +10,6 @@ from uuid import UUID, uuid4
 from app.adapters.guide_document_tools.contracts import (
     GuideDocumentParserAdapter,
     GuideDocumentParserRequest,
-    GuideDocumentParserResponse,
     MAXIMUM_RESULT_CHARACTERS,
     MAXIMUM_SOURCE_BYTES,
 )
@@ -117,9 +116,7 @@ class TrustedGuideDocumentTools(GuideDocumentToolPort):
         finally:
             source = b""
         response.validate_against(request)
-        await self._reserve_output(response)
-        await self._custody.record_success(_receipt(handle, document, response))
-        return GuideDocumentToolResult(
+        result = GuideDocumentToolResult(
             handle=handle,
             source_item_id=document.source_item_id,
             document_version_id=document.ingest_id,
@@ -130,6 +127,9 @@ class TrustedGuideDocumentTools(GuideDocumentToolPort):
             next_offset=response.next_offset,
             total_characters=response.total_characters,
         )
+        await self._reserve_output(result)
+        await self._custody.record_success(_receipt(handle, document, response))
+        return result
 
     async def _consume_call_budget(self) -> None:
         async with self._budget_lock:
@@ -137,11 +137,12 @@ class TrustedGuideDocumentTools(GuideDocumentToolPort):
                 raise ValueError("guide document tool call budget exceeded")
             self._tool_calls += 1
 
-    async def _reserve_output(self, response: GuideDocumentParserResponse) -> None:
-        if len(response.text) > MAXIMUM_RESULT_CHARACTERS:
+    async def _reserve_output(self, result: GuideDocumentToolResult) -> None:
+        if len(result.text) > MAXIMUM_RESULT_CHARACTERS:
             raise ValueError("guide document tool result exceeds per-call bound")
+        serialized_characters = len(result.model_dump_json())
         async with self._budget_lock:
-            total = self._tool_output_characters + len(response.text)
+            total = self._tool_output_characters + serialized_characters
             if total > self._configuration.maximum_tool_output_characters:
                 raise ValueError("guide document tool output budget exceeded")
             self._tool_output_characters = total

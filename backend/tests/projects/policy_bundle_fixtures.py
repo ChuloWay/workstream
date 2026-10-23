@@ -25,6 +25,7 @@ async def create_approved_policy_bundle(
     artifact_proposal=None,
     request_headers=None,
     post_submit_registry_spec=None,
+    document_access_factory=None,
 ) -> dict:
     snapshot = await read_guide_source_snapshot(project_id, guide_id)
     report = await create_sufficiency_report(
@@ -35,8 +36,13 @@ async def create_approved_policy_bundle(
         status=sufficiency_status,
         request_headers=request_headers,
     )
-    policy = await create_unified_submission_policy(report["id"], snapshot["id"], proposal=artifact_proposal,
-                                                     post_submit_registry_spec=post_submit_registry_spec)
+    policy = await create_unified_submission_policy(
+        report["id"],
+        snapshot["id"],
+        proposal=artifact_proposal,
+        post_submit_registry_spec=post_submit_registry_spec,
+        document_access_factory=document_access_factory,
+    )
     from app.db import session as db_session
     from app.modules.projects.models import ProjectSetupRun
     from sqlalchemy import select

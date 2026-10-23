@@ -121,13 +121,15 @@ ACLs.
 
 The default runtime is `openai_agents_sdk`, with OpenRouter as the inference
 provider and `openai/gpt-5.6-terra` as the model. Runtime, provider, model,
-instructions and runtime-specific options are separate settings. Put
-`OPENROUTER_API_KEY` only in the ignored local Compose `.env`; the worker receives
+instructions and runtime-specific options are separate settings. OpenRouter uses
+`WORKSTREAM_PROJECT_AGENT_MODEL_API=chat_completions`, as in both environment
+examples. Put
+`OPENROUTER_API_KEY` only in the ignored local Compose `.env`; the Celery worker receives
 it, while the fixed guide-document parser has no credentials or network.
 Direct OpenAI inference remains an explicit provider selection with its own key;
 there is no automatic provider fallback.
 
-Use the containerized worker for connected guide inference so untrusted document
+Use the containerized Celery worker for connected guide inference so untrusted document
 parsing runs in its separate, bounded service:
 
 ```bash
@@ -135,7 +137,7 @@ parsing runs in its separate, bounded service:
 docker compose --profile backend up -d --build --wait
 ```
 
-This starts the API, worker, Beat and parser with the backing services. Native
+This starts the API, Celery worker, Beat and parser with the backing services. Native
 API-only development remains supported, but starting a native Celery process
 alone does not provide the isolated parser. The parser supports bounded read and
 search over the exact assigned Markdown, PDF, DOCX and PPTX originals; it exposes

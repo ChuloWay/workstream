@@ -415,6 +415,7 @@ NEUTRAL_GUIDE_RUNTIME_TARGETS = frozenset({
     "backend/app/adapters/guide_document_tools/child.py",
     "backend/app/adapters/guide_document_tools/client.py",
     "backend/app/adapters/guide_document_tools/contracts.py",
+    "backend/app/adapters/guide_document_tools/identity.py",
     "backend/app/adapters/guide_document_tools/parsing.py",
     "backend/app/adapters/guide_document_tools/service.py",
     "backend/app/adapters/project_agents/openai_profile.py",

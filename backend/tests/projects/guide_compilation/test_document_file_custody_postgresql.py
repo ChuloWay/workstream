@@ -87,7 +87,34 @@ async def test_access_custody_rejects_cross_source_or_invalid_parser_receipt(
     assert await custody.opened_handles() == set()
 
 
-async def test_exact_parser_receipt_is_idempotent_and_conflicts_are_rejected(grant_case):
+@pytest.mark.parametrize(
+    ("changes", "expected_error"),
+    [
+        pytest.param(
+            {"parser_response_hash": "sha256:" + "d" * 64},
+            "guide document access receipt conflicts",
+            id="response-hash",
+        ),
+        pytest.param(
+            {"parser_build_digest": "sha256:" + "d" * 64},
+            "guide document access receipt conflicts",
+            id="parser-build",
+        ),
+        pytest.param(
+            {"operation": "search"},
+            "guide document access receipt conflicts",
+            id="operation",
+        ),
+        pytest.param(
+            {"source_item_id": uuid4()},
+            "guide document access receipt is invalid",
+            id="source-binding",
+        ),
+    ],
+)
+async def test_exact_parser_receipt_is_idempotent_and_conflicts_leave_it_unchanged(
+    grant_case, changes, expected_error
+):
     grant, _store, _authority, _manager, context = grant_case
     custody = SqlAlchemyGuideDocumentAccessCustody(
         grant._sessions,
@@ -98,6 +125,8 @@ async def test_exact_parser_receipt_is_idempotent_and_conflicts_are_rejected(gra
     receipt = access_receipt(context)
     await custody.record_success(receipt)
     await custody.record_success(receipt)
+    with pytest.raises(ValueError, match=f"^{expected_error}$"):
+        await custody.record_success(access_receipt(context, **changes))
     assert await custody.opened_handles() == {receipt.handle}
     async with grant._sessions() as session:
         rows = list(
@@ -110,6 +139,25 @@ async def test_exact_parser_receipt_is_idempotent_and_conflicts_are_rejected(gra
     assert len(rows) == 1
     assert rows[0].access_method == "trusted_parser"
     assert rows[0].attachment_allocation_id is None
+    assert (
+        rows[0].source_item_id,
+        rows[0].document_version_id,
+        rows[0].sha256,
+        rows[0].document_handle,
+        rows[0].operation,
+        rows[0].parser_request_hash,
+        rows[0].parser_response_hash,
+        rows[0].parser_build_digest,
+    ) == (
+        str(receipt.source_item_id),
+        str(receipt.document_version_id),
+        receipt.sha256,
+        UUID(receipt.handle),
+        receipt.operation,
+        receipt.parser_request_hash,
+        receipt.parser_response_hash,
+        receipt.parser_build_digest,
+    )
 
 
 @pytest.mark.parametrize(

@@ -916,12 +916,14 @@ async def test_revision_upgrade_retains_policy_source_and_running_window(
     from app.modules.tasks.revision.models import TaskRevisionPreparation
     from app.modules.tasks.revision.service import project_current_revision
     from tests.migration_revision_fixtures import (
+        assert_historical_revision_guards,
         enter_predecessor_owner_shape,
+        historical_revision_source,
         insert_0047_preparation,
         leave_predecessor_owner_shape,
         retained_revision_rows,
     )
-    from tests.tasks.post_submit_routing.remediation_support import remediation_source
+    from tests.tasks.post_submit_routing.outcome_support import invoked_completion
     from tests.tasks.post_submit_routing.support import revision_archive
     from tests.tasks.submission_dispatch.test_replacement_creation import (
         _create,
@@ -934,7 +936,15 @@ async def test_revision_upgrade_retains_policy_source_and_running_window(
         await asyncio.to_thread(command.upgrade, _alembic_config(), "0047_revision_recovery")
         shape = pytest.MonkeyPatch()
         await enter_predecessor_owner_shape(_execute, isolated_database_env, shape)
-        async with remediation_source(tmp_path, isolated_database_env) as h:
+        async with historical_revision_source(
+            tmp_path,
+            isolated_database_env,
+            monkeypatch,
+            "0047_revision_source_default",
+        ) as h:
+            await assert_historical_revision_guards(h.factory, "0047_revision_recovery")
+            h.envelope = await invoked_completion(h)
+            await assert_historical_revision_guards(h.factory, "0047_revision_recovery")
             with monkeypatch.context() as patch:
                 patch.setattr(
                     "app.modules.tasks.post_submit_routing.outcome.prepare_revision",

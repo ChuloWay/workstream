@@ -14,7 +14,7 @@ from app.interfaces.external_services import (
     ExternalServiceAdapterError,
     ExternalServiceAdapterIdentity,
 )
-from app.interfaces.guide_document_tools import GuideTextLocator
+from app.interfaces.guide_document_tools import GuideDocumentMediaType, GuideTextLocator
 
 
 GUIDE_DOCUMENT_PARSER_CAPABILITY_KEY = "guide_document_parser"
@@ -28,12 +28,6 @@ MAXIMUM_SEARCH_QUERY_CHARACTERS = 512
 MAXIMUM_REQUEST_METADATA_BYTES = 8 * 1024
 MAXIMUM_RESPONSE_BYTES = 512 * 1024
 
-GuideDocumentMediaType = Literal[
-    "application/pdf",
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-    "text/markdown",
-]
 GuideDocumentParserOperation = Literal["read", "search"]
 GuideDocumentParserRejectionReason = Literal[
     "document_encrypted",

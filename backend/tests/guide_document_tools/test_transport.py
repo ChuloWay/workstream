@@ -7,9 +7,12 @@ from hashlib import sha256
 import json
 import os
 from pathlib import Path
+import signal
 import socket
 import struct
+import subprocess
 import sys
+import time
 from uuid import uuid4
 
 import pytest
@@ -33,6 +36,31 @@ from app.interfaces.external_services import (
     ExternalServiceProtocolError,
     ExternalServiceUnavailableError,
 )
+
+
+@pytest.fixture(autouse=True)
+def _unprivileged_service_seam(monkeypatch: pytest.MonkeyPatch):
+    """Keep unit transport proof unprivileged without a production identity fallback."""
+    monkeypatch.setattr(
+        service_module,
+        "_FIXED_CHILD_COMMAND",
+        (
+            sys.executable,
+            "-c",
+            "from app.adapters.guide_document_tools.child import _run_protocol;"
+            "raise SystemExit(_run_protocol())",
+        ),
+    )
+    monkeypatch.setattr(
+        service_module,
+        "_service_socket_identity",
+        lambda: (os.geteuid(), os.getegid()),
+    )
+    monkeypatch.setattr(
+        service_module,
+        "_prepare_child_process",
+        lambda _identity: None,
+    )
 
 
 def _request(source: bytes, *, offset: int = 0) -> GuideDocumentParserRequest:
@@ -67,8 +95,6 @@ def _service(
         socket_path=path,
         child_timeout_seconds=child_timeout,
         request_read_timeout_seconds=read_timeout,
-        expected_uid=os.geteuid(),
-        expected_gid=os.getegid(),
     )
 
 
@@ -123,6 +149,21 @@ def test_child_environment_is_fixed_and_contains_no_parent_secrets() -> None:
         "PYTHONHASHSEED": "0",
         "PYTHONIOENCODING": "utf-8",
     }
+    first, second = service_module.CHILD_IDENTITIES
+    assert service_module._child_environment(first) == {
+        **service_module._CHILD_ENVIRONMENT,
+        "WORKSTREAM_GUIDE_PARSER_CHILD_UID": "10003",
+        "WORKSTREAM_GUIDE_PARSER_CHILD_GID": "10003",
+    }
+    assert (second.uid, second.gid) == (10004, 10004)
+
+
+def test_service_rejects_more_concurrency_than_closed_child_slots(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="configuration"):
+        GuideDocumentParserService(
+            socket_path=tmp_path / "guide.sock",
+            maximum_concurrency=3,
+        )
 
 
 @pytest.mark.asyncio
@@ -204,6 +245,48 @@ async def test_service_parses_concurrent_sources_without_cross_request_state(
     assert not path.exists()
 
 
+def test_sigterm_closes_service_and_removes_owned_socket(tmp_path: Path) -> None:
+    path = tmp_path / "runtime" / "guide.sock"
+    path.parent.mkdir()
+    path.parent.chmod(0o750)
+    program = """
+import os
+import sys
+from app.adapters.guide_document_tools import service
+
+service.bootstrap_broker_identity = lambda: None
+service._service_socket_identity = lambda: (os.geteuid(), os.getegid())
+sys.argv = ["guide-parser-sigterm-test", "--socket", sys.argv[1]]
+raise SystemExit(service.main())
+"""
+    process = subprocess.Popen(
+        [sys.executable, "-c", program, str(path)],
+        cwd=Path(service_module.__file__).resolve().parents[3],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    try:
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline and not path.is_socket():
+            if process.poll() is not None:
+                break
+            time.sleep(0.01)
+        assert process.poll() is None
+        assert path.is_socket()
+
+        process.send_signal(signal.SIGTERM)
+        stdout, stderr = process.communicate(timeout=5)
+
+        assert process.returncode == 0, (stdout, stderr)
+        assert not path.exists()
+    finally:
+        if process.poll() is None:
+            process.kill()
+            process.wait(timeout=5)
+        if path.exists() or path.is_symlink():
+            path.unlink()
+
+
 @pytest.mark.asyncio
 async def test_partial_request_frame_is_aborted(tmp_path: Path) -> None:
     path = tmp_path / "runtime" / "guide.sock"
@@ -232,8 +315,6 @@ async def test_admission_limit_closes_excess_connections(tmp_path: Path) -> None
         maximum_admitted_connections=1,
         request_read_timeout_seconds=1.0,
         child_timeout_seconds=1.0,
-        expected_uid=os.geteuid(),
-        expected_gid=os.getegid(),
     )
     await service.start()
     first_reader, first_writer = await asyncio.open_unix_connection(path)

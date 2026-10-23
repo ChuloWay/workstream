@@ -45,9 +45,11 @@ async def test_lost_post_policy_correction_discovered_and_dispatched_by_new_mana
 ):
     from app.core import project_agents
     from app.modules.projects import setup_queue
-    from tests.projects.guide_compilation.helpers import runtime_configuration
+    from tests.projects.guide_compilation.runtime_fixtures import (
+        scripted_runtime_configuration,
+    )
 
-    monkeypatch.setattr(project_agents, "project_guide_runtime_configuration", lambda settings: runtime_configuration())
+    monkeypatch.setattr(project_agents, "project_guide_runtime_configuration", scripted_runtime_configuration)
     dispatched = []
     def enqueue(**values):
         dispatched.append(values)

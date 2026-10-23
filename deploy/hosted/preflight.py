@@ -821,13 +821,18 @@ def validate_compose(rendered: dict[str, Any], values: dict[str, str]) -> None:
             raise PreflightError(f"release service retains Linux capabilities: {name}")
         if "no-new-privileges:true" not in service.get("security_opt", []):
             raise PreflightError(f"release service allows new privileges: {name}")
-        user = service.get("user")
-        if not isinstance(user, str) or not re.fullmatch(
-            r"[1-9][0-9]*:[1-9][0-9]*", user
-        ):
-            raise PreflightError(
-                f"release service must use a numeric non-root identity: {name}"
-            )
+        if name != "guide-document-parser":
+            if service.get("cap_add"):
+                raise PreflightError(
+                    f"release service adds Linux capabilities: {name}"
+                )
+            user = service.get("user")
+            if not isinstance(user, str) or not re.fullmatch(
+                r"[1-9][0-9]*:[1-9][0-9]*", user
+            ):
+                raise PreflightError(
+                    f"release service must use a numeric non-root identity: {name}"
+                )
     runtime_identity = (
         f"{values['WORKSTREAM_RUNTIME_UID']}:{values['WORKSTREAM_RUNTIME_GID']}"
     )
@@ -836,10 +841,8 @@ def validate_compose(rendered: dict[str, Any], values: dict[str, str]) -> None:
             raise PreflightError(
                 f"release service has the wrong runtime identity: {name}"
             )
-    if services["guide-document-parser"]["user"] != (
-        f"{GUIDE_PARSER_UID}:{GUIDE_PARSER_GID}"
-    ):
-        raise PreflightError("guide parser has the wrong isolated identity")
+    if services["guide-document-parser"]["user"] != "0:0":
+        raise PreflightError("guide parser has the wrong bootstrap identity")
     backend_image = services["api"]["image"]
     if (
         services["worker"]["image"] != backend_image
@@ -968,7 +971,8 @@ def validate_compose(rendered: dict[str, Any], values: dict[str, str]) -> None:
         or parser.get("secrets")
         or parser.get("group_add")
         or parser.get("privileged") is True
-        or parser.get("cap_add")
+        or parser.get("cap_drop") != ["ALL"]
+        or parser.get("cap_add") != ["KILL", "SETGID", "SETUID"]
         or parser.get("devices")
         or parser.get("device_cgroup_rules")
         or parser.get("credential_spec")

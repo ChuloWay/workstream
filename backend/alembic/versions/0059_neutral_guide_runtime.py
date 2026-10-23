@@ -59,7 +59,7 @@ BEGIN
              OR ((config->>'model_provider')<>'none' AND (config->>'model_api')<>'none'
                  AND (config->>'model')<>'none'))
      OR jsonb_typeof(config->'adapter_profile') IS DISTINCT FROM 'string'
-     OR length(config->>'adapter_profile') NOT BETWEEN 2 AND 8192
+     OR octet_length(config->>'adapter_profile') NOT BETWEEN 2 AND 8192
      OR config->>'instruction_id' IS DISTINCT FROM 'project_guide_compilation'
      OR jsonb_typeof(config->'instruction_version') IS DISTINCT FROM 'string'
      OR length(config->>'instruction_version') NOT BETWEEN 1 AND 100
@@ -85,6 +85,8 @@ BEGIN
     RAISE EXCEPTION 'compilation runtime adapter profile is invalid' USING ERRCODE='23514';
   END;
   IF jsonb_typeof(profile) IS DISTINCT FROM 'object'
+     OR config->>'adapter_profile' IS DISTINCT FROM
+       public.project_guide_projection_canonical_json(profile)
      OR (SELECT count(*) FROM jsonb_each(profile)) > 32
      OR EXISTS (
        SELECT 1 FROM jsonb_each(profile) item

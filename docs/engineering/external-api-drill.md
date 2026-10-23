@@ -344,11 +344,11 @@ shareable PDFs, an isolated runner-owned PostgreSQL database and MinIO bucket,
 and a separately owned loopback Redis broker and actual Celery worker. The
 canonical fixed guide-document parser must already be running as a separate,
 networkless service with its own UID and socket custody. The drill passes its
-canonical socket setting only to its preflight client and worker environment;
+canonical socket setting only to its preflight client and Celery worker environment;
 the API subprocess does not receive that setting. The drill does not start a
-parser inside the worker or give the parser provider credentials, database
+parser inside the Celery worker or give the parser provider credentials, database
 access, or an artifact-store mount.
-The worker transmits only the bounded document bytes required by the parser
+The Celery worker transmits only the bounded document bytes required by the parser
 protocol. The drill does not seed product rows or substitute a parser or
 model/provider implementation.
 The private provider configuration contributes only the explicitly selected
@@ -382,7 +382,7 @@ Celery worker even when a scenario fails.
 This pass checks partial-upload waiting, exact commitments, replay, ungranted and
 wrong-media denials, independently rereads stored original bytes, and observes
 the real Celery worker through public setup diagnostics. Before it reads either
-private PDF, creates a project or guide, starts the worker, or permits model
+private PDF, creates a project or guide, starts the Celery worker, or permits model
 inference, it sends a fixed synthetic Markdown parse through the canonical client.
 An absent socket, wrong socket custody, malformed protocol response, or wrong
 fixed-parser identity fails the drill without exposing the synthetic text in the
@@ -392,10 +392,10 @@ setup does not certify manager approval, active project policy, submission or
 acceptance. New upload/setup/findings operations are outside the original
 29-operation census and must be reported separately with their actual evidence.
 
-The diagnostic worker consumes only the default `celery` queue with the solo
+The diagnostic Celery worker consumes only the default `celery` queue with the solo
 pool. It does not consume `workstream.outbox`; that queue requires the validated
-prefork worker owned by the outbox topology. This pass therefore does not claim
-outbox delivery evidence and must not add the outbox queue to its solo worker.
+prefork Celery worker owned by the outbox topology. This pass therefore does not claim
+outbox delivery evidence and must not add the outbox queue to its solo Celery worker.
 
 The provider's unresolved outcome can describe an invocation still in flight:
 observe the same setup run through completion or the bounded timeout, without

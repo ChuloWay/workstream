@@ -13,7 +13,7 @@ The companion `WS-AGENT-001-02` adds OmniCoreAgent and qualifies both actual SDK
 against this same document-tool/result contract. This is a repair to the current hosted
 guide journey, not a general agent platform or an additional product lifecycle.
 
-## Current behavior
+## Behavior before this change
 
 `interfaces/project_guide_runtime.py` couples provider-backed execution to
 `openai/responses`. `adapters/project_agents/openai_agent_sdk.py` uses OpenAI
@@ -42,6 +42,8 @@ obligation before claiming the hosted journey recovered.
   custody, composition and validation; ART `guide_document_access.py` and its
   composition only for trusted exact-read evidence. Keep cross-owner ports.
 - API dependency and Celery worker composition for the same configuration/tool ports.
+- The shared guide-media literal and its PROJECTS/ART/parser consumers, preserving
+  one neutral definition rather than parallel format lists.
 - A fixed document parser service and client under the existing adapter/worker
   conventions, using the release image and a private Unix socket. No generic
   command execution or new network API.
@@ -56,8 +58,19 @@ obligation before claiming the hosted journey recovered.
   updating its ART and parser consumers together; remove the former private module
   without an alias. This prevents parser coupling to ART internals while retaining
   one canonical bounded archive implementation.
+- `backend/scripts/guide_compilation_e2e.py` and its API/pilot drill callers:
+  replace the removed hosted-resource interface with the same neutral tool contract.
+  Remove only their obsolete generated-ID inventory entries.
 - Focused affected tests, ownership/lane inventories, and current guide/runtime,
   deployment, developer and roadmap documentation. No unrelated inventory edits.
+- Historical TASK migration fixtures may restore checksum-bound predecessor
+  data through the existing isolated archive-restore operation. Restore is setup,
+  not proof of a current writer: all guards must be restored before the real
+  migration, recovery or replay assertions. Do not retain old runtime execution
+  merely to construct that data.
+- `.github/workflows/release-images.yml`: select the affected local deployment,
+  drill-readiness and parser-isolation proof in the existing release gate. Preserve
+  frozen installation, complete test execution and existing image checks.
 
 ### Not allowed
 
@@ -105,9 +118,20 @@ obligation before claiming the hosted journey recovered.
    Do not send all guide content up front. Common final validation rejects cited
    unopened sources and mismatched proposals regardless of SDK.
 4. Parse only the currently supported PDF, DOCX, PPTX and Markdown formats in a
-   fixed secret-free, networkless service, nonroot/read-only with bounded
+   fixed secret-free, networkless service with read-only root and bounded
    memory/CPU/PIDs and per-call deadlines. Stream verified bytes over a private
    Unix socket; no shared source paths or durable extracted-content storage.
+   Bootstrap the container as UID/GID 0 with exactly KILL, SETGID and SETUID
+   capabilities, then drop all real/effective/saved broker credentials to
+   UID 10002/GID 10001. The broker retains only those three capabilities to launch
+   and terminate children; inheritable/ambient sets are empty, no-new-privileges
+   remains set and dumpable is zero. Verify this before binding. Two fixed child
+   identities (10003:10003 and 10004:10004), empty supplementary groups and zero
+   capabilities isolate concurrent calls. Child startup reapplies dumpable zero
+   after exec and verifies identity before importing parser libraries or reading
+   input. Existing process-count limits forbid child forks. Reuse a slot only
+   after confirmed exit and reap. A Docker healthcheck drops immediately to the
+   unprivileged socket-client identity and retains no capabilities.
    Use a dedicated socket volume mounted only by parser (read-write) and guide
    worker (read-only), with directory owner/parser UID 10002, worker group 10001,
    directory mode 0750, socket mode 0660. API, Beat, migrations and checker receive
@@ -154,6 +178,22 @@ obligation before claiming the hosted journey recovered.
   locators; a large guide is not silently truncated or sent whole to inference.
 - Real isolated parser tests cover no network/credential/source mount, malformed
   and resource-exhausting inputs, cancellation, concurrent requests and cleanup.
+- Committed release-image proof exercises real broker/child credentials, both
+  simultaneous slots and every supported format. A compromised-child simulation
+  cannot control the broker socket or inspect/signal the broker or sibling; the
+  worker client remains functional. Prove timeout/cancellation reap before slot
+  reuse, startup rejection for invalid identity/capabilities, and a discriminating
+  removal probe. Unprivileged transport fixtures may model only the OS identity
+  boundary; production has no same-UID fallback.
+- Normal container SIGTERM must run the existing parser shutdown operation,
+  reap admitted children and remove only its own socket. The real release-image
+  proof must observe clean exit and socket removal, without a harness cleanup
+  substituting for production shutdown.
+- SQL profile validation rejects noncanonical inner JSON even when the outer
+  configuration hash matches, with a valid control. Production tool-budget tests
+  enforce call and aggregate-output limits. Conflicting receipt replay preserves
+  the original evidence, and a runtime citing an unread source cannot persist a
+  compilation or successful access receipt.
 - PostgreSQL tests preserve retained facts and reject false source lineage; old
   unresolved work is not redispatched. Remove tests for obsolete OpenAI-only
   implementation requirements while retaining their actual safety guarantees.
@@ -181,17 +221,35 @@ obligation before claiming the hosted journey recovered.
 
 | Claim | Command or proof | Result | Remaining uncertainty |
 |---|---|---|---|
-| Current OpenRouter key/model is usable | Private authenticated model catalogue and one synthetic Responses request | HTTP 200; `openai/gpt-5.6-terra` completed | Does not prove tool loops or document processing |
-| Current core is provider-coupled | Runtime configuration, resource custody and SQL inspection | OpenAI-only pairing and attachment requirement confirmed | Correction not implemented |
-| OmniCoreAgent API identified | Published 0.6.0 wheel metadata/source and official release page | Async tool registry/run API exists | Retry/privacy controls and dependency installation need qualification |
-| Shared behavior | Planned actual-SDK contract suite and PostgreSQL negative/control cases | Not run | New tests must fail on the reproduced coupling/invalid-access cases |
-| Deployment and live substitution | Planned secret-free parser isolation and one live guide run per SDK | Not run | No full hosted journey claim |
+| OpenRouter can run the native SDK tool loop | Production OpenAI Agents SDK adapter with an invented guide and in-memory typed document tools | Five reads, private draft, separate coverage review and validated result at `b9bf0e7d0` using `openai/gpt-5.6-terra` | Does not prove S3 custody, a durable worker run or another model |
+| Document ownership no longer depends on provider attachments | Neutral capability, trusted tool wrapper, SQL access receipts and removal of hosted execution | Implemented; retained cleanup has no dispatch capability | Final migration, isolation and negative-proof corrections require exact-head verification |
+| OmniCoreAgent is a separate runtime integration | Published 0.6.0 SDK qualification in companion change 02 | Companion owns its SDK environment, native behavior and registration | This change does not claim OmniCore deployment |
+| Retained data and bounded archive behavior survive | Isolated PostgreSQL cleanup plus archive tests at `254fd6cfe` | 50 passed, isolated database and role cleanup confirmed | Subsequent profile guard and proof changes require replay |
+| Runtime configuration, source custody and retained-data migration | Isolated PostgreSQL batch at `96b657e5f`; updated configuration/custody/cleanup batch at `dab1b940f` | 94 then 87 passed, including Unicode profile parity, UTF-8 byte bounds and typed retained-cleanup selection; database and role cleanup confirmed | Parser privilege separation has its own Docker proof |
+| Existing durable setup callers use the neutral contract | Isolated PostgreSQL worker, capability-growth, public dispatch and recovery batch at `898d10712` | 50 passed | Scripted inference does not qualify a real provider |
+| Canonical profile and conflicting receipt guards discriminate invalid input | Remove each guard independently on `96b657e5f` | Both named regressions fail at their expected rejection assertion | No claim about unrelated guards |
+| Unread-source rejection has independent service and database protection | Disable the service check on `96b657e5f`, then replay the direct service regression at `1c806ea2c` | PostgreSQL independently rejects missing access; the service control passes and removing its guard fails the exact rejection assertion | No claim about unrelated finalization guards |
+| Parser process identities isolate concurrent document reads | Clean release-image proof at `898d10712` | All ten cases passed: four formats, separate child identities, denied socket/process access, timeout/cancellation and reuse; owned containers removed and no Git index lock retained | This run predates the normal SIGTERM cleanup repair and does not prove that later boundary. Read-only Git inspection fixes the proof-runner file-limit failure; removing it fails the large-index regression |
+| The public guide drill recognizes unapproved guide lineage | Shared external-client oracle at `c735327fb` | 37 script tests passed; the new valid-response regression rejects the preceding oracle at its exact shape assertion, and fabricated activation/policy IDs remain rejected | An oracle test is not a completed provider-backed guide run |
+| The release parser preserves isolation and cleans up on ordinary container stop | Exact clean-source release image and full Docker proof at `95e02e2d6` | All eleven cases passed, including `sigterm_removes_owned_socket`; image `sha256:ae1e91d6122e6d530f7af146338cd4e2fb7672a6e5793d1087cbafaf16eee5a1` | This synthetic parser proof does not establish a provider-backed guide compilation or the full contribution journey |
+| Historical TASK upgrades and recovery retain their original facts | Five focused PostgreSQL cases and 34 affected shared-restore cases on exact clean `43028e38a` | Both batches passed; metadata binds that source and migration 0059, with owned database/role cleanup confirmed. Snapshots come from `6fa9a9b55`; checksum-bound restore reuses the existing guarded test restore operation | Restoration is setup, not proof that current guide writers create old-schema data |
+| The uploaded terminal-project guide reaches manager review through real inference | Public API, durable Celery, real parser and MinIO run on clean `95e02e2d6`, OpenAI Agents SDK with OpenRouter `openai/gpt-5.6-terra` | `policy_draft_ready` / `draft_ready_with_warnings`; 11 requirements, 3 findings, 9 capability suggestions and 23 evidence references; exact-project manager read succeeds and outsider read is concealed; owned database/role/bucket cleanup confirmed | No approval, activation, selected external checker bindings or contribution effects; local test issuer and MinIO do not prove deployed Flow/AWS integration. This run retained validation summaries, not proposal prose |
+
+## Review-driven correction
+
+The aggregate document-tool output bound covers the exact serialized result sent
+to either SDK, including locators and identity metadata. Counting text alone
+understated locator-heavy responses. Construct and reserve that complete result
+before committing successful access evidence or returning it. The regression uses
+the real fixed parser, admits an exact serialized limit and rejects the next
+result without another receipt; it fails against the preceding text-only guard.
 
 ## Reconciliation
 
-- Current-source reconciliation: incorporates main `3ff69e3a8`, including merged
+- Current-source reconciliation: incorporates main `6fa9a9b55`, including merged
   PR #651 setup output specifications, bounded draft review and correction inputs,
-  and #655 guide metadata tools. Preserve those behaviors across both adapters;
+  and #655 guide metadata tools, plus #650 artifact Operator authorization.
+  Preserve those behaviors across both adapters;
   runtime substitution changes document access, not proposal requirements.
 - Next usable boundary: real two-runtime guide qualification, then the existing
   project-owned checker and contribution journey drill.

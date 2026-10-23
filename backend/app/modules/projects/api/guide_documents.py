@@ -12,14 +12,8 @@ import hashlib
 from pydantic import BaseModel, ConfigDict, Field, StrictInt, model_validator
 
 from app.core.hashing import canonical_json_hash
-from app.interfaces.guide_document_tools import GuideDocumentToolPort
-
-GuideDocumentMediaType = Literal[
-    "application/pdf",
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-    "text/markdown",
-]
+from app.interfaces.external_services import ExternalServiceAdapter
+from app.interfaces.guide_document_tools import GuideDocumentMediaType, GuideDocumentToolPort
 DOCUMENT_EXTENSIONS: dict[str, str] = {
     "application/pdf": "pdf",
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
@@ -178,6 +172,17 @@ class GuideRuntimeCleanupCustody(Protocol):
     async def record_deleted(self, allocation_id: UUID) -> None: ...
 
     async def record_cleanup_failed(self, allocation_id: UUID) -> None: ...
+
+
+GUIDE_RUNTIME_RESOURCE_CLEANUP_CAPABILITY_KEY = "project_guide_resource_cleanup"
+
+
+class GuideRuntimeResourceCleanupAdapter(ExternalServiceAdapter, Protocol):
+    """Cleanup-only external capability over exact retained provider IDs."""
+
+    async def cleanup(self, custody: GuideRuntimeCleanupCustody) -> bool:
+        """Attempt deletion of only the resources exposed by retained custody."""
+        ...
 
 
 @dataclass(frozen=True, slots=True)

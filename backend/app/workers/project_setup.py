@@ -35,6 +35,11 @@ from app.modules.projects.api.guide_compilation import (
     ProjectGuideCompilationDelivery,
     ProjectGuideCompilationDeliveryError,
 )
+from app.interfaces.external_services import ExternalServiceAdapterFactory
+from app.modules.projects.api.guide_documents import (
+    GUIDE_RUNTIME_RESOURCE_CLEANUP_CAPABILITY_KEY,
+    GuideRuntimeResourceCleanupAdapter,
+)
 from app.workers.async_runner import run_async_task
 from app.workers.celery_app import celery_app
 from app.workers.project_setup_topology import (
@@ -144,15 +149,23 @@ async def _cleanup_guide_runtime_resources():
     """Keep SDK and PROJECTS internals behind their public composition boundaries."""
     from app.adapters.projects import cleanup_project_guide_runtime_resources
     from app.adapters.project_agents.openai_workspace import (
-        cleanup_retained_openai_guide_resources,
+        OpenAIGuideRuntimeCleanupAdapter,
+        RETAINED_OPENAI_GUIDE_RUNTIME_KEY,
     )
 
+    cleanup_adapters = ExternalServiceAdapterFactory[
+        GuideRuntimeResourceCleanupAdapter
+    ](GUIDE_RUNTIME_RESOURCE_CLEANUP_CAPABILITY_KEY)
+    cleanup_adapters.register(
+        RETAINED_OPENAI_GUIDE_RUNTIME_KEY,
+        OpenAIGuideRuntimeCleanupAdapter,
+    )
     engine = create_async_engine(get_database_url(), pool_pre_ping=True)
     try:
         return await cleanup_project_guide_runtime_resources(
             async_sessionmaker(engine, expire_on_commit=False),
-            retained_runtime_key="openai_agents_sdk",
-            cleanup_resources=cleanup_retained_openai_guide_resources,
+            retained_runtime_key=RETAINED_OPENAI_GUIDE_RUNTIME_KEY,
+            cleanup_adapter_factory=cleanup_adapters,
         )
     finally:
         await engine.dispose()

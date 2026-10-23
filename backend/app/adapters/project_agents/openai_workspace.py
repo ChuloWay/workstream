@@ -5,12 +5,19 @@ from __future__ import annotations
 import asyncio
 import os
 
+from app.interfaces.external_services import ExternalServiceAdapterIdentity
+from app.modules.projects.api.guide_documents import (
+    GUIDE_RUNTIME_RESOURCE_CLEANUP_CAPABILITY_KEY,
+    GuideRuntimeCleanupCustody,
+)
+
 
 _OPENAI_BASE_URL = "https://api.openai.com/v1"
 _CLEANUP_TIMEOUT_SECONDS = 30
+RETAINED_OPENAI_GUIDE_RUNTIME_KEY = "openai_agents_sdk"
 
 
-async def cleanup_recorded_openai_guide_resources(client, custody) -> bool:
+async def _cleanup_recorded_openai_guide_resources(client, custody) -> bool:
     """Delete recorded OpenAI resources only; never discover or create provider IDs."""
     from openai import NotFoundError
 
@@ -68,31 +75,39 @@ async def cleanup_recorded_openai_guide_resources(client, custody) -> bool:
         return False
 
 
-async def cleanup_retained_openai_guide_resources(custody) -> bool:
-    """Clean retained OpenAI facts with a dedicated OpenAI-origin credential only."""
-    from openai import AsyncOpenAI, DefaultAsyncHttpx2Client
+class OpenAIGuideRuntimeCleanupAdapter:
+    """Delete only retained OpenAI workspace IDs, without inference authority."""
 
-    api_key = os.environ.get("OPENAI_API_KEY")
-    if not api_key:
-        return False
-    try:
-        async with asyncio.timeout(_CLEANUP_TIMEOUT_SECONDS):
-            async with AsyncOpenAI(
-                api_key=api_key,
-                base_url=_OPENAI_BASE_URL,
-                http_client=DefaultAsyncHttpx2Client(
-                    trust_env=False,
-                    follow_redirects=False,
-                ),
-                max_retries=0,
-                timeout=_CLEANUP_TIMEOUT_SECONDS,
-            ) as client:
-                return await cleanup_recorded_openai_guide_resources(client, custody)
-    except Exception:
-        return False
+    identity = ExternalServiceAdapterIdentity(
+        GUIDE_RUNTIME_RESOURCE_CLEANUP_CAPABILITY_KEY,
+        RETAINED_OPENAI_GUIDE_RUNTIME_KEY,
+    )
+
+    async def cleanup(self, custody: GuideRuntimeCleanupCustody) -> bool:
+        """Use only the OpenAI-origin credential for exact-ID cleanup."""
+        from openai import AsyncOpenAI, DefaultAsyncHttpx2Client
+
+        api_key = os.environ.get("OPENAI_API_KEY")
+        if not api_key:
+            return False
+        try:
+            async with asyncio.timeout(_CLEANUP_TIMEOUT_SECONDS):
+                async with AsyncOpenAI(
+                    api_key=api_key,
+                    base_url=_OPENAI_BASE_URL,
+                    http_client=DefaultAsyncHttpx2Client(
+                        trust_env=False,
+                        follow_redirects=False,
+                    ),
+                    max_retries=0,
+                    timeout=_CLEANUP_TIMEOUT_SECONDS,
+                ) as client:
+                    return await _cleanup_recorded_openai_guide_resources(client, custody)
+        except Exception:
+            return False
 
 
 __all__ = (
-    "cleanup_recorded_openai_guide_resources",
-    "cleanup_retained_openai_guide_resources",
+    "OpenAIGuideRuntimeCleanupAdapter",
+    "RETAINED_OPENAI_GUIDE_RUNTIME_KEY",
 )
