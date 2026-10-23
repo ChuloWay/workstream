@@ -902,6 +902,15 @@ class _LoopbackOpenRouterGuard:
                 response_body = b"".join(chunks)
                 if not 200 <= response.status_code < 300:
                     response_body = _SANITIZED_PROVIDER_ERROR_BODY
+                else:
+                    try:
+                        response_body = _rebuild_provider_success_body(
+                            response_body,
+                            expected_model=self._model,
+                        )
+                    except (UnicodeDecodeError, ValueError, RecursionError, _GuardRejection):
+                        self._last_upstream_transient_failure = True
+                        return 502, {}, _SANITIZED_PROVIDER_ERROR_BODY
                 return response.status_code, returned_headers, response_body
         except httpx.TransportError:
             self._last_upstream_transient_failure = True
@@ -1057,6 +1066,83 @@ def _rebuild_openrouter_body(body: dict[str, Any], *, model: str) -> dict[str, A
         }
     )
     return rebuilt
+
+
+def _rebuild_provider_success_body(body_bytes: bytes, *, expected_model: str) -> bytes:
+    """Validate and minimize one non-streaming Chat Completions success response."""
+    body = json.loads(
+        body_bytes,
+        object_pairs_hook=_unique_object,
+        parse_constant=_reject_constant,
+    )
+    if not isinstance(body, dict):
+        raise _GuardRejection(502)
+    response_id = body.get("id")
+    created = body.get("created")
+    if (
+        not isinstance(response_id, str)
+        or not 1 <= len(response_id) <= 256
+        or body.get("object") != "chat.completion"
+        or isinstance(created, bool)
+        or not isinstance(created, int)
+        or created < 0
+        or body.get("model") != expected_model
+    ):
+        raise _GuardRejection(502)
+    choices = body.get("choices")
+    if not isinstance(choices, list) or len(choices) != 1:
+        raise _GuardRejection(502)
+    choice = choices[0]
+    if not isinstance(choice, dict) or choice.get("index") != 0:
+        raise _GuardRejection(502)
+    finish_reason = choice.get("finish_reason")
+    message = choice.get("message")
+    if finish_reason not in {"stop", "tool_calls"} or not isinstance(message, dict):
+        raise _GuardRejection(502)
+    if message.get("role") != "assistant":
+        raise _GuardRejection(502)
+    content = message.get("content")
+    calls = message.get("tool_calls")
+    if content is not None and not isinstance(content, str):
+        raise _GuardRejection(502)
+    rebuilt_message: dict[str, Any] = {"role": "assistant", "content": content}
+    if finish_reason == "tool_calls":
+        if not isinstance(calls, list) or not 1 <= len(calls) <= 64:
+            raise _GuardRejection(502)
+        for call in calls:
+            _validate_tool_call(call)
+        rebuilt_message["tool_calls"] = calls
+    elif calls is not None or not isinstance(content, str):
+        raise _GuardRejection(502)
+    usage = body.get("usage")
+    if not isinstance(usage, dict):
+        raise _GuardRejection(502)
+    rebuilt_usage: dict[str, int] = {}
+    for name in ("prompt_tokens", "completion_tokens", "total_tokens"):
+        value = usage.get(name)
+        if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+            raise _GuardRejection(502)
+        rebuilt_usage[name] = value
+    rebuilt = {
+        "id": response_id,
+        "object": "chat.completion",
+        "created": created,
+        "model": expected_model,
+        "choices": [
+            {
+                "index": 0,
+                "message": rebuilt_message,
+                "finish_reason": finish_reason,
+            }
+        ],
+        "usage": rebuilt_usage,
+    }
+    return json.dumps(
+        rebuilt,
+        ensure_ascii=False,
+        allow_nan=False,
+        separators=(",", ":"),
+    ).encode("utf-8")
 
 
 def _unique_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:

@@ -597,7 +597,10 @@ async def test_exhausted_native_retries_open_shared_provider_circuit(monkeypatch
     await blocked.aclose()
 
 
-@pytest.mark.parametrize(("status", "expected_attempts"), [(400, 1), (429, 4), (500, 4)])
+@pytest.mark.parametrize(
+    ("status", "expected_attempts"),
+    [(200, 4), (400, 1), (429, 4), (500, 4)],
+)
 async def test_actual_sdk_provider_error_body_never_reaches_logs_or_exception(
     caplog,
     status,
