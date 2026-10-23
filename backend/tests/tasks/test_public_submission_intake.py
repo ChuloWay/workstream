@@ -579,3 +579,64 @@ async def test_public_checker_remediation_uses_exact_predecessor(
             successor = await session.get(Submission, result["submission_id"])
             assert successor.supersedes_submission_id == str(h.created.submission_id)
             assert successor.submission_bundle_admission_id == str(admission_id)
+
+
+async def test_confirmed_intake_deadline_persists_terminal_failure_and_replays(
+    isolated_database_env, tmp_path, monkeypatch,
+):
+    """A drained PRE timeout commits failure once without admission or Submission."""
+    from app.modules.artifacts.models import SubmissionBundleDurableIntent
+    from app.modules.checkers.selected_pre_submit_execution import SelectedPreSubmitProcessor
+
+    async with _prepared_packet(isolated_database_env, tmp_path, verify=False) as h:
+        calls = 0
+
+        async def deadline_after_intake(self, material, default):
+            nonlocal calls
+            calls += 1
+            assert default.eligible
+            assert material.entries
+            # ART has exported, evaluated default and awaited intake.close()
+            # before invoking this project processor. Exercise its TimeoutError
+            # conversion without changing the production deadline or finalizer.
+            raise TimeoutError("project operation deadline")
+
+        monkeypatch.setattr(SelectedPreSubmitProcessor, "process", deadline_after_intake)
+        key = new_record_id()
+        headers = {
+            "Content-Type": "application/zip",
+            "X-Task-Assignment-Id": str(h.assignment_id),
+            "Idempotency-Key": str(key),
+            "X-Submission-Summary": h.preparation_request.summary,
+            "X-Contributor-Attestation": h.preparation_request.contributor_attestation,
+        }
+        route = f"/api/v1/tasks/{h.task_id}/submission-bundle-preparations"
+        async with _client(h, monkeypatch, isolated_database_env) as client:
+            first = await client.post(route, headers=headers, content=h.archive_bytes)
+            assert first.status_code == 503, first.text
+            assert first.json()["detail"] == "deadline_exceeded"
+            async with h.factory() as session:
+                run = (await session.scalars(select(SelectedPreSubmitRun).where(
+                    SelectedPreSubmitRun.idempotency_key == str(key)
+                ))).one()
+                assert run.status == "infrastructure_failed"
+                assert run.terminal_json["outcome"] == "infrastructure_failed"
+                assert run.terminal_json["infrastructure_failure_code"] == "deadline_exceeded"
+                assert run.terminal_json["execution"] is None and run.eligible is None
+                assert run.execute_evidence_id and run.finalize_evidence_id
+                retained = (run.id, run.terminal_digest, run.finalize_evidence_id)
+                for model in (SubmissionBundleDurableIntent, SubmissionBundleAdmission):
+                    assert await session.scalar(select(func.count()).select_from(model).where(
+                        model.selected_pre_submit_run_id == run.id
+                    )) == 0
+                assert await session.scalar(select(func.count()).select_from(Submission).where(
+                    Submission.task_id == str(h.task_id)
+                )) == 0
+            replay = await client.post(route, headers=headers, content=h.archive_bytes)
+            assert replay.status_code == 503 and replay.json()["detail"] == "deadline_exceeded"
+        assert calls == 1
+        async with h.factory() as session:
+            run = (await session.scalars(select(SelectedPreSubmitRun).where(
+                SelectedPreSubmitRun.idempotency_key == str(key)
+            ))).one()
+            assert (run.id, run.terminal_digest, run.finalize_evidence_id) == retained
