@@ -10,10 +10,10 @@
 #
 # The socket lives on a second named volume. Docker Desktop host-shared paths
 # refuse chmod on Unix sockets, and AF_UNIX paths must stay within 107 bytes.
-# An optional backend model proxy uses its own private named volume. Invocation
-# relay sockets use a fourth volume mounted in the checker at the volume's
-# daemon-visible path so Docker can bind-mount an individual socket into an
-# otherwise networkless checker image.
+# An optional singleton model-proxy worker uses its own private named volume.
+# Invocation relay sockets use a fourth volume mounted in the checker at the
+# volume's daemon-visible path so Docker can bind-mount an individual socket
+# into an otherwise networkless checker image.
 
 x-agent-loop-backend: &agent-loop-backend
   environment:
@@ -34,12 +34,6 @@ services:
   beat: *agent-loop-backend
 
   model-proxy:
-    extends:
-      file: docker-compose.yml
-      service: worker
-    profiles: ["model-proxy"]
-    command: [python, -m, app.workers.checker_model_proxy]
-    stop_grace_period: 125m
     environment:
       WORKSTREAM_CHECKER_MODEL_PROXY_SOCKET: /run/ws-model-proxy/model-proxy.sock
       WORKSTREAM_ARTIFACT_SCRATCH_ROOT: /var/lib/docker/volumes/${COMPOSE_PROJECT_NAME}-checker-material/_data

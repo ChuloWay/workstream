@@ -1,44 +1,24 @@
 """Verified checker-output bindings in the caller's final-result transaction."""
 
-from typing import Protocol
 from uuid import UUID
 
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.identifiers import new_record_id
+from app.modules.artifacts.api.checker_output_authority import (
+    CheckerOutputBindingAuthority,
+)
 from app.modules.checkers.api.output_custody import (
     CheckerOutputBindingRequest,
     CheckerOutputBindingResult,
-    CheckerOutputReservation,
     CheckerOutputReservationPort,
     CheckerOutputSelector,
     CheckerOutputUnavailable,
 )
 from app.modules.actors.api import ServiceIdentity
-from app.modules.artifacts.checker_output_custody import (
-    CheckerOutputStoredFacts,
-    select_checker_output,
-)
+from app.modules.artifacts.checker_output_custody import select_checker_output
 from app.modules.artifacts.models import ArtifactBinding
-
-
-class CheckerOutputBindingAuthority(Protocol):
-    """Prepare authority before CHECKERS locks, consume exact ART custody afterward."""
-
-    async def preflight(self, selector: CheckerOutputSelector) -> None:
-        """Deny before any owner or artifact lookup."""
-
-    async def prepare(self, selector: CheckerOutputSelector) -> None:
-        """Stabilize exact service authority before feature row locks."""
-
-    async def consume(
-        self, reservation: CheckerOutputReservation, facts: CheckerOutputStoredFacts
-    ) -> None:
-        """Consume binding action authority in this caller-owned transaction."""
-
-    def discard(self) -> None:
-        """Release process-local authority without committing or rolling back."""
 
 
 class CheckerOutputBindingService:

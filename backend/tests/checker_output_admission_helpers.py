@@ -14,6 +14,9 @@ from app.modules.artifacts.schemas import (
     ArtifactAuthorityDeniedError,
     CheckerOutputArtifactAdmissionRequest,
 )
+from app.modules.artifacts.api.checker_output_authority import (
+    CheckerOutputCommitmentAuthorityFacts,
+)
 from app.modules.artifacts.models import (
     ArtifactAdmissionCharge,
     ArtifactAdmissionScope,
@@ -332,7 +335,7 @@ class ControlledCheckerOutputAdmissionAuthority:
         self._identity_link_id = identity_link_id
         self.calls = 0
 
-    async def consume(self, request: CheckerOutputArtifactAdmissionRequest) -> None:
+    async def consume(self, facts: CheckerOutputCommitmentAuthorityFacts) -> None:
         self.calls += 1
         proof = await ActorService(self._session).lock_admission_proof(
             self._actor_id,

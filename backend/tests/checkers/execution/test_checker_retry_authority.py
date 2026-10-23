@@ -283,10 +283,11 @@ async def _operator_discovery(admin_access, h, discovery_path):
     item = body["items"][0]
     assert set(item) == {
         "source", "recovery_state", "created_at", "completed_at",
-        "retry_receipt_id", "successor",
+        "retry_receipt_id", "successor", "model_recovery_candidates",
     }
     assert item["recovery_state"] == "eligible"
     assert item["retry_receipt_id"] is None and item["successor"] is None
+    assert item["model_recovery_candidates"] == []
     assert item["source"] == {
         "project_id": str(h.request.project_id),
         "task_id": str(h.request.task_id),

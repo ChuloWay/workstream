@@ -17,7 +17,6 @@ from app.interfaces.checker_model_provider import (
     CheckerModelCreateOutcome,
     CheckerModelCreateResult,
     CheckerModelObservation,
-    CheckerModelProvider,
     CheckerModelProviderStatus,
     CheckerModelRecoveryOutcome,
     CheckerModelRecoveryResult,
@@ -25,10 +24,7 @@ from app.interfaces.checker_model_provider import (
     CheckerModelResponseReference,
     CheckerModelUsage,
 )
-from app.interfaces.external_services import (
-    ExternalServiceAdapterFactory,
-    ExternalServiceAdapterIdentity,
-)
+from app.interfaces.external_services import ExternalServiceAdapterIdentity
 
 
 OPENAI_RESPONSES_PROVIDER_KEY = "openai_responses"
@@ -59,6 +55,7 @@ class OpenAIResponsesSettings:
     text_verbosity: TextVerbosity
 
     def __post_init__(self) -> None:
+        """Reject credentials, model identity, or limits outside the closed profile bounds."""
         if (
             not isinstance(self.api_key, str)
             or not self.api_key
@@ -85,11 +82,15 @@ class OpenAIResponsesSettings:
 
 
 class _InputTokenResource(Protocol):
+    """Describe the provider endpoint that counts input without creating an effect."""
+
     async def count(self, **kwargs: Any) -> object:
         """Count the exact request input without creating a response."""
 
 
 class _ResponsesResource(Protocol):
+    """Describe the exact stored-response operations used by this adapter."""
+
     input_tokens: _InputTokenResource
 
     async def create(self, **kwargs: Any) -> object:
@@ -100,6 +101,8 @@ class _ResponsesResource(Protocol):
 
 
 class _OpenAIClient(Protocol):
+    """Describe the bounded client surface owned by one profile adapter."""
+
     responses: _ResponsesResource
 
     async def close(self) -> None:
@@ -112,6 +115,7 @@ class OpenAIResponsesCheckerModelProvider:
     __slots__ = ("_client", "_settings")
 
     def __init__(self, settings: OpenAIResponsesSettings, client: _OpenAIClient) -> None:
+        """Bind validated trusted settings to one structurally valid SDK client."""
         if type(settings) is not OpenAIResponsesSettings:
             raise ValueError("OpenAI checker model settings are invalid")
         if not hasattr(client, "responses") or not callable(getattr(client, "close", None)):
@@ -216,6 +220,7 @@ class OpenAIResponsesCheckerModelProvider:
         await self._client.close()
 
     def _request_parameters(self, prompt: str) -> dict[str, object]:
+        """Build provider parameters solely from the locked profile and supplied prompt."""
         return {
             "model": self._settings.model,
             "input": prompt,
@@ -228,6 +233,7 @@ class OpenAIResponsesCheckerModelProvider:
         }
 
     def _observation(self, response: object) -> CheckerModelObservation:
+        """Validate provider identity, bounds, status, output, and usage as one observation."""
         reference = CheckerModelResponseReference(getattr(response, "id", None))
         if getattr(response, "service_tier", None) != "default":
             raise ValueError("provider pricing tier differs from the locked standard rates")
@@ -260,28 +266,8 @@ class OpenAIResponsesCheckerModelProvider:
         )
 
 
-def create_checker_model_provider(
-    settings: OpenAIResponsesSettings,
-) -> CheckerModelProvider:
-    """Construct the sole explicitly registered provider for one locked profile."""
-    from openai import AsyncOpenAI
-
-    factory = ExternalServiceAdapterFactory[CheckerModelProvider](CHECKER_MODEL_CAPABILITY_KEY)
-    factory.register(
-        OPENAI_RESPONSES_PROVIDER_KEY,
-        lambda: OpenAIResponsesCheckerModelProvider(
-            settings,
-            AsyncOpenAI(
-                api_key=settings.api_key,
-                max_retries=0,
-                timeout=settings.request_timeout_seconds,
-            ),
-        ),
-    )
-    return factory.create(OPENAI_RESPONSES_PROVIDER_KEY)
-
-
 def _known_response(response: object) -> CheckerModelResponseReference | None:
+    """Recover a valid provider response identity without trusting other response fields."""
     try:
         return CheckerModelResponseReference(getattr(response, "id", None))
     except (TypeError, ValueError):
@@ -289,6 +275,7 @@ def _known_response(response: object) -> CheckerModelResponseReference | None:
 
 
 def _usage(value: object) -> CheckerModelUsage:
+    """Normalize the provider's nested token counters through the strict usage contract."""
     input_details = getattr(value, "input_tokens_details", None)
     output_details = getattr(value, "output_tokens_details", None)
     return CheckerModelUsage(

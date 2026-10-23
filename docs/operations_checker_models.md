@@ -40,13 +40,48 @@ configuration changes the ceiling without resetting settled spend or outstanding
 reservations. A project cannot lower its ceiling below the sum already committed.
 The budget belongs to Workstream-paid evaluation, not contributor compensation.
 
+The public Operator commands all require a fresh authenticated system Operator
+grant. Profile and budget publication also require an `Idempotency-Key`:
+
+| Command | Route |
+| --- | --- |
+| Publish an immutable image-bound profile | `POST /api/v1/operations/projects/{project_id}/model-profiles` |
+| Configure the lifetime project ceiling | `POST /api/v1/operations/projects/{project_id}/model-budget-configurations` |
+| Authorize a permitted child of a terminal call | `POST /api/v1/operations/projects/{project_id}/model-call-attempts/{parent_attempt_id}/recovery-children` |
+
+Recovery-child replay is naturally identified by the immutable parent and exact
+candidate, so that route does not require or use an `Idempotency-Key`.
+
+`GET /api/v1/operations/projects/{project_id}/checker-retry-sources` includes
+bounded `model_recovery_candidates` on the matching terminal source run. Each
+candidate contains the exact parent, paid slot, registered image, request hash
+and terminal digest. Put `parent_attempt_id` in the child route's path and send
+the remaining four fields (`slot`, `registry_entry_id`, `request_sha256`,
+`terminal_digest`) as its JSON body. After child authorization, use the ordinary
+checker retry command to dispatch a new checker execution.
+
+The request schemas are exposed in OpenAPI. An exact replay uses the original
+key and packet; it does not reset spend or bypass current authorization. A new
+budget configuration requires its next explicit version. A recovery child also
+requires one exact candidate returned by the existing authorized checker-retry
+source read; it cannot replace an uncertain call. Child preparation locks the
+candidate's current Task, Assignment and Submission custody without requiring an
+Operator to race an execution lease. A later checker invocation must still pass the
+ordinary current-run, exact-binding and live-lease checks before dispatch.
+Profile provisioning does not approve project policy.
+
 ## Runtime and credentials
 
 For the local agent-loop compose overlay, enable the `model-proxy` profile and
-start its singleton `model-proxy` service. It runs
-`python -m app.workers.checker_model_proxy` with
-`WORKSTREAM_CHECKER_MODEL_PROXY_SOCKET=/run/ws-model-proxy/model-proxy.sock`.
-Ordinary API workers do not own this listener. The backend's existing
+start its singleton `model-proxy` service with
+`WORKSTREAM_CHECKER_MODEL_PROXY_SOCKET=/run/ws-model-proxy/model-proxy.sock`:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.agent-loop.yml \
+  --profile backend --profile agent-loop --profile model-proxy up -d model-proxy
+```
+
+Ordinary API processes do not own this listener. The backend's existing
 `OPENAI_API_KEY` supplies credentials; never put that key in an image, policy,
 checker input or command output. Configure the Rust service's `model_proxy_socket`
 to the same path and `model_relay_root` to its private daemon-visible relay root.
@@ -96,7 +131,7 @@ recovery authority.
 | Known provider ID still pending/unavailable | Original effect and reservation retained | Retrieve that ID through a fresh authorized execution |
 | Terminal failure without complete usage | Uncertain; reservation retained | Recover complete usage for the original ID; no paid child yet |
 | Terminal failure with complete settled usage | `known_failed`, immutable evidence | Explicit Operator-authorized child attempt, then checker recovery |
-| Completed call but worker/image response lost | Completed effect, original ART bytes and settled cost | Fresh current execution attaches the same cached completion |
+| Completed call but image response lost | Completed effect, original ART bytes and settled cost | Fresh current execution attaches the same cached completion |
 
 Infrastructure and budget failures never consume a contributor revision. A late
 provider response may finish the original paid call after its checker lease has

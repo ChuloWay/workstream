@@ -77,6 +77,10 @@ from app.modules.artifacts.api.operator_authority import (
     ArtifactRecoveryAuthority,
     ArtifactRecoveryAuthorityFacts,
 )
+from app.modules.artifacts.api.checker_output_authority import (
+    CheckerOutputCommitmentAuthorityFacts,
+    CheckerOutputWriteAuthority,
+)
 from app.modules.artifacts.provider_activation import require_provider_activation_for_terminal
 from app.modules.artifacts.authorization import (
     GuideArtifactPreparedAuthorization,
@@ -100,7 +104,6 @@ from app.modules.artifacts.schemas import (
     ArtifactRecoveryIneligibleError,
     ArtifactRecoveryNotFoundError,
     DenyArtifactInternalAuthority,
-    CheckerOutputAdmissionAuthority,
     CheckerOutputArtifactAdmissionRequest,
     GuideArtifactAdmissionRequest,
     GuideArtifactIngestAuthorityFacts,
@@ -115,7 +118,6 @@ from app.modules.artifacts.submission_authorization import (
 from app.modules.artifacts.sources import CommittedArtifactSource, PreparedArtifact
 from app.modules.checkers.api.output_custody import (
     CheckerOutputReservation,
-    CheckerOutputSelector,
     CheckerOutputUnavailable,
 )
 from app.modules.authorization.runtime import (
@@ -2240,7 +2242,7 @@ class ArtifactAdmissionService:
         submission_prepared_authorization: SubmissionBundlePreparedAuthorization | None = None,
         submission_task_contexts: TaskSubmissionContextPort | None = None,
         submission_project_contexts: ProjectLockedPolicyContextPort | None = None,
-        checker_output_authority: CheckerOutputAdmissionAuthority | None = None,
+        checker_output_authority: CheckerOutputWriteAuthority | None = None,
         task_import_source_authority: TaskImportSourceAdmissionAuthority | None = None,
         prepared_authorization: PreparedAuthorizationHandle | None = None,
         existing_transaction: bool = False,
@@ -2261,7 +2263,15 @@ class ArtifactAdmissionService:
         ):
             if type(request) is CheckerOutputArtifactAdmissionRequest:
                 assert checker_output_authority is not None
-                await checker_output_authority.consume(request)
+                await checker_output_authority.consume(
+                    CheckerOutputCommitmentAuthorityFacts(
+                        reservation=request.reservation,
+                        slot_key=request.slot_key,
+                        sha256=commitment.sha256,
+                        byte_count=commitment.byte_count,
+                        media_type=commitment.media_type,
+                    )
+                )
             import_facts = None
             if type(request) is TaskImportSourceAdmissionRequest:
                 if task_import_source_authority is None:

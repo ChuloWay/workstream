@@ -156,6 +156,7 @@ def test_published_registry_bodies_are_backend_valid_for_both_phases() -> None:
 
 def test_published_service_paths_match_the_compose_overlay() -> None:
     """The service config and the overlay must name the same daemon and socket paths."""
+    base = yaml.safe_load((CHECKER_ROOT.parents[1] / "docker-compose.yml").read_text())
     overlay = yaml.safe_load(
         (CHECKER_ROOT.parents[1] / "docker-compose.agent-loop.yml").read_text()
     )
@@ -193,13 +194,23 @@ def test_published_service_paths_match_the_compose_overlay() -> None:
     assert model_config["model_proxy_socket"] == "/run/ws-model-proxy/model-proxy.sock"
     assert model_config["model_relay_root"] == relay_root
     assert len(f"{relay_root}/.model-{'0' * 16}/model.sock".encode()) < 108
-    assert "checker_model_proxy:/run/ws-model-proxy" in overlay["services"]["backend"]["volumes"]
-    for name in ("backend", "worker", "beat"):
+    base_proxy = base["services"]["model-proxy"]
+    overlay_proxy = overlay["services"]["model-proxy"]
+    assert base_proxy["profiles"] == ["model-proxy"]
+    assert base_proxy["command"] == ["python", "-m", "app.workers.checker_model_proxy"]
+    assert base_proxy["stop_grace_period"] == "125m"
+    assert "extends" not in overlay_proxy
+    assert "profiles" not in overlay_proxy
+    assert overlay_proxy["environment"]["WORKSTREAM_CHECKER_MODEL_PROXY_SOCKET"] == (
+        "/run/ws-model-proxy/model-proxy.sock"
+    )
+    assert "checker_model_proxy:/run/ws-model-proxy" in overlay_proxy["volumes"]
+    for name in ("backend", "worker", "beat", "model-proxy"):
         assert all(
             "/var/run/docker.sock" not in str(mount)
-            for mount in overlay["services"][name]["volumes"]
+            for mount in overlay["services"].get(name, {}).get("volumes", ())
         )
-    for name in ("worker", "beat"):
+    for name in ("backend", "worker", "beat"):
         assert all(
             "checker_model_proxy" not in str(mount)
             for mount in overlay["services"][name]["volumes"]

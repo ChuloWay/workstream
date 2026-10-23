@@ -6,14 +6,10 @@ import re
 import secrets
 from uuid import UUID
 
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, String, Uuid, select, func
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import Mapped, mapped_column
-from datetime import datetime
 
 from app.core.identifiers import new_record_id
-from app.db.base import Base
 from app.interfaces.external_checker_execution import ExternalCheckerModelGrant
 from app.modules.checkers.api.model_calls import (
     ModelCallCurrentExecutionPort,
@@ -28,67 +24,7 @@ from app.modules.checkers.api.model_grants import (
     ModelInvocationGrantFacts,
 )
 from app.modules.checkers.model_calls.repository import require_model_call_transaction
-
-
-class CheckerModelInvocationGrant(Base):
-    """No plaintext capability or transcript; exact immutable callback custody only."""
-
-    __tablename__ = "checker_model_invocation_grants"
-    __table_args__ = (
-        CheckConstraint(
-            "(get_byte(uuid_send(id),6)>>4)=7 and (get_byte(uuid_send(id),8)&192)=128",
-            name="id_uuid7",
-        ),
-        CheckConstraint(
-            "token_hash ~ '^sha256:[0-9a-f]{64}$' and "
-            "external_request_digest ~ '^sha256:[0-9a-f]{64}$' and "
-            "(selected_request_sha256 is null or selected_request_sha256 ~ '^sha256:[0-9a-f]{64}$')",
-            name="digests",
-        ),
-        CheckConstraint(
-            "(consumed_at is null and selected_request_sha256 is null and selected_attempt_id is null) or "
-            "(consumed_at is not null and selected_request_sha256 is not null and selected_attempt_id is not null)",
-            name="consumption",
-        ),
-    )
-    id: Mapped[str] = mapped_column(Uuid(as_uuid=False), primary_key=True)
-    token_hash: Mapped[str] = mapped_column(String(71), nullable=False, unique=True)
-    project_id: Mapped[str] = mapped_column(
-        Uuid(as_uuid=False),
-        ForeignKey("projects.id", ondelete="RESTRICT"),
-        nullable=False,
-    )
-    checker_run_id: Mapped[str] = mapped_column(
-        Uuid(as_uuid=False),
-        ForeignKey("checker_runs.id", ondelete="RESTRICT"),
-        nullable=False,
-    )
-    registry_entry_id: Mapped[str] = mapped_column(
-        Uuid(as_uuid=False),
-        ForeignKey("external_checker_registry_entries.id", ondelete="RESTRICT"),
-        nullable=False,
-    )
-    execution_facts: Mapped[dict] = mapped_column(JSONB, nullable=False)
-    paid_slot: Mapped[dict] = mapped_column(JSONB, nullable=False)
-    external_request_digest: Mapped[str] = mapped_column(String(71), nullable=False)
-    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    issued_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        server_default=func.clock_timestamp(),
-        nullable=False,
-    )
-    authorization_evidence_id: Mapped[str] = mapped_column(
-        Uuid(as_uuid=False),
-        ForeignKey("audit_events.id", ondelete="RESTRICT"),
-        nullable=False,
-        unique=True,
-    )
-    selected_request_sha256: Mapped[str | None] = mapped_column(String(71))
-    selected_attempt_id: Mapped[str | None] = mapped_column(
-        Uuid(as_uuid=False),
-        ForeignKey("checker_model_call_attempts.id", ondelete="RESTRICT"),
-    )
-    consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+from app.modules.checkers.model_calls.models import CheckerModelInvocationGrant
 
 
 def model_grant_token_hash(token: str) -> str:

@@ -33,6 +33,7 @@ RETIRED_ARTIFACT_MATERIALIZATION_API = (
 )
 COMPOSITION_ROOT = APP_ROOT / "adapters" / "artifacts" / "__init__.py"
 CHECKER_COMPOSITION_ROOT = APP_ROOT / "adapters" / "checkers" / "__init__.py"
+MODEL_RUNTIME_COMPOSITION = APP_ROOT / "adapters" / "checkers" / "model_runtime.py"
 AGENT_COMPOSITION_ROOT = APP_ROOT / "adapters/project_agents/__init__.py"
 OBSERVABILITY_COMPOSITION_ROOT = APP_ROOT / "adapters" / "observability.py"
 AGENT_ADAPTER_MODULE = "app.adapters.project_agents.openai_agent_sdk"
@@ -89,6 +90,7 @@ CONCRETE_ADAPTER_MODULES = {
     "app.adapters.artifacts.local",
     "app.adapters.artifacts.s3_compatible",
     "app.adapters.checkers.external_service",
+    "app.adapters.checkers.model_provider",
 }
 CONCRETE_OBSERVABILITY_MODULES = {
     "opentelemetry.exporter.otlp.proto.http.metric_exporter",
@@ -234,7 +236,12 @@ def test_only_artifact_custody_services_own_provider_execution() -> None:
             node.name: node
             for node in tree.body
             if isinstance(node, ast.ClassDef)
-            and node.name in {"ArtifactStorageOrchestrator", "ScopedGuideDocumentGrant", "PostSubmissionMaterializer"}
+            and node.name in {
+                "ArtifactStorageOrchestrator",
+                "CheckerArtifactOutputService",
+                "ScopedGuideDocumentGrant",
+                "PostSubmissionMaterializer",
+            }
         }
         for node in ast.walk(tree):
             if (
@@ -255,7 +262,13 @@ def test_only_artifact_custody_services_own_provider_execution() -> None:
                     None,
                 )
                 if owner is None or (
-                    owner.name in {"ScopedGuideDocumentGrant", "PostSubmissionMaterializer"} and node.func.attr != "open"
+                    owner.name
+                    in {
+                        "CheckerArtifactOutputService",
+                        "ScopedGuideDocumentGrant",
+                        "PostSubmissionMaterializer",
+                    }
+                    and node.func.attr != "open"
                 ):
                     violations.append(f"{path.relative_to(BACKEND_ROOT)} calls {node.func.attr}")
     assert violations == []
@@ -339,6 +352,7 @@ def _assert_concrete_adapter_composition(
                 "LocalStorageAdapter",
                 "S3CompatibleArtifactStore",
                 "UnixSocketExternalCheckerAdapter",
+                "OpenAIResponsesCheckerModelProvider",
             }
         )
         agent_calls.extend(path for name in calls if name == "OpenAIAgentSdkProjectGuideRuntime")
@@ -353,12 +367,15 @@ def _assert_concrete_adapter_composition(
         AGENT_COMPOSITION_ROOT,
         OBSERVABILITY_COMPOSITION_ROOT,
     }
-    assert len(factory_calls) == 4
-    assert adapter_calls == [COMPOSITION_ROOT, S3_ADAPTER_MODULE, CHECKER_COMPOSITION_ROOT]
+    assert len(factory_calls) == 5
+    assert adapter_calls == [
+        COMPOSITION_ROOT, S3_ADAPTER_MODULE, CHECKER_COMPOSITION_ROOT, CHECKER_COMPOSITION_ROOT,
+    ]
     assert set(concrete_imports) == {
         COMPOSITION_ROOT,
         CHECKER_COMPOSITION_ROOT,
         AWS_LIVE_PROOF_MODULE,
+        MODEL_RUNTIME_COMPOSITION,
     }
     assert agent_imports == [AGENT_COMPOSITION_ROOT]
     assert agent_calls == [AGENT_COMPOSITION_ROOT]
@@ -704,6 +721,7 @@ def _assert_checker_custody_consumers(
     expected = {
         "app.modules.checkers.api.output_custody": {
             "app/adapters/artifacts/__init__.py",
+            "app/modules/artifacts/api/checker_output_authority.py",
             "app/modules/artifacts/checker_output_bindings.py",
             "app/modules/artifacts/checker_output_custody.py",
             "app/modules/artifacts/checker_outputs.py",

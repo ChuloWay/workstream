@@ -12,8 +12,8 @@ import pytest
 from app.adapters.checkers.model_provider import (
     OpenAIResponsesCheckerModelProvider,
     OpenAIResponsesSettings,
-    create_checker_model_provider,
 )
+from app.adapters.checkers import create_checker_model_provider
 from app.interfaces.checker_model_provider import (
     CHECKER_MODEL_CAPABILITY_KEY,
     MAX_CHECKER_MODEL_OUTPUT_BYTES,

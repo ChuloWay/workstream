@@ -25,6 +25,7 @@ from app.modules.checkers.api.canonical_values import (
 from app.modules.checkers.api.delivery_reconciliation import (
     PostSubmitRequestDeliveryFacts,
 )
+from app.modules.checkers.api.model_calls import ModelRecoveryCandidate
 
 REQUEST_EVENT = "PostSubmissionEvaluationRequested"
 COMPLETION_EVENT = "PostSubmissionEvaluationCompleted"
@@ -173,6 +174,7 @@ class CheckerRetrySourceItem(CheckerValue):
     completed_at: AwareDatetime
     retry_receipt_id: ResourceId | None = None
     successor: CheckerRetrySuccessor | None = None
+    model_recovery_candidates: tuple[ModelRecoveryCandidate, ...] = ()
 
     @model_validator(mode="after")
     def exact_retry_state(self):

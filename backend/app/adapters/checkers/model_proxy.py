@@ -84,6 +84,11 @@ class CheckerModelProxy:
             return _unavailable("model_call_unavailable")
 
     async def _handle(self, request: ModelProxyRequest) -> ModelProxyReply:
+        # Reject malformed bytes before consuming invocation custody or reserving spend.
+        try:
+            provider_request = CheckerModelRequest(request.prompt)
+        except ValueError:
+            return _unavailable("model_request_invalid")
         data = _canonical_bytes(
             {
                 "schema_version": "workstream.checker_model_request.v1",
@@ -150,7 +155,7 @@ class CheckerModelProxy:
             if dispatch is not None and not dispatch.replayed:
                 try:
                     created = await asyncio.wait_for(
-                        provider.create(CheckerModelRequest(request.prompt)),
+                        provider.create(provider_request),
                         timeout=max(0.001, deadline - asyncio.get_running_loop().time()),
                     )
                 except TimeoutError:

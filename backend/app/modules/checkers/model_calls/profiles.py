@@ -61,9 +61,11 @@ class ModelProfileReader:
     """Read exact immutable metadata without profile-mutation authority."""
 
     def __init__(self, session: AsyncSession) -> None:
+        """Bind exact profile reads to the caller-owned database session."""
         self._session = session
 
     def _require_root_transaction(self) -> None:
+        """Reject reads outside an active root transaction or inside a savepoint."""
         transaction = self._session.sync_session.get_transaction()
         if (
             transaction is None

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import Literal, Self
 from uuid import UUID
 
@@ -101,7 +102,7 @@ class ModelCallRecoveryChildAuthorityFacts(BaseModel):
     """Operator-authorized child after one exact terminal parent effect."""
 
     model_config = _STRICT_FROZEN
-    execution: ModelCallExecutionFacts
+    project_id: UUID
     parent_attempt_id: UUID
     terminal_digest: _Sha256 = Field(pattern=r"^sha256:[0-9a-f]{64}$")
 
@@ -192,6 +193,9 @@ CHECKER_MODEL_RESOURCE_BY_ACTION = {
     **{action: CheckerModelCallResourceContext for action in CHECKER_MODEL_CALL_ACTIONS},
     **{action: ProjectModelAdministrationResourceContext for action in MODEL_ADMIN_ACTIONS},
 }
+MODEL_ADMIN_RESOURCE_BY_ACTION = {
+    action: ProjectModelAdministrationResourceContext for action in MODEL_ADMIN_ACTIONS
+}
 
 
 def checker_model_call_resource(
@@ -234,7 +238,10 @@ def parse_checker_model_prepare(
     if expected is None:
         return None
     try:
-        resource = expected.model_validate(value)
+        # Prepared requests are retained as JSON-compatible values. Re-enter through
+        # JSON validation so strict UUID/datetime fields receive their wire types
+        # without weakening integer, boolean, enum or object validation.
+        resource = expected.model_validate_json(json.dumps(value))
         if resource.action_id is not action:
             raise ValueError("checker model action mismatch")
         return resource
@@ -296,7 +303,7 @@ def _admin_identity(facts: AdminFacts, actor_profile_id: UUID) -> tuple[UUID, UU
     if type(facts) in {ModelProfileProvisioningFacts, ModelBudgetProvisioningFacts}:
         return facts.spec.project_id, facts.operation_id, facts.actor_profile_id
     if type(facts) is ModelCallRecoveryChildAuthorityFacts:
-        return facts.execution.project_id, facts.parent_attempt_id, actor_profile_id
+        return facts.project_id, facts.parent_attempt_id, actor_profile_id
     raise ValueError("invalid project model administration facts")
 
 
@@ -310,6 +317,7 @@ __all__ = (
     "DISPATCH",
     "GRANT",
     "MODEL_ADMIN_ACTIONS",
+    "MODEL_ADMIN_RESOURCE_BY_ACTION",
     "ModelCallCompleteAuthorityFacts",
     "ModelCallDispatchAuthorityFacts",
     "ModelCallGrantAuthorityFacts",

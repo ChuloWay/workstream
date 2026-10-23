@@ -77,6 +77,16 @@ lifecycle is proven. See the
 
 ## Status Vocabulary
 
+The project-image model runtime adds immutable Operator-provisioned model
+profiles, a finite lifetime project budget, private ART call evidence and
+recovery of the same paid effect across checker retries. Images keep their own
+rubrics and receive only an invocation-local socket through the generic Rust
+service. This provides the model capability needed by the real Terminal Systems
+POST proposal; it does not establish that project's activation, model quality,
+gVisor qualification or live contribution journey. See
+[model runtime operations](operations_checker_models.md) and its
+[bounded change](../.commitrail/changes/checker-model-runtime.md).
+
 The public automated-acceptance journey passed its bounded connected local drill
 from public guide inputs with recorded inference, local Flow-compatible auth and
 real PostgreSQL, MinIO, Redis, prefork Celery and Beat. Both policy outcomes,
@@ -489,6 +499,7 @@ cannot be reused as post-submission review-gate evidence. See the
 
 | Lifecycle stage | Intended merged status | What is already proven | What remains before v0.1 |
 | --- | --- | --- | --- |
+| Project-image model evaluation | **Budgeted runtime and public Operator controls** | Exact approved project/image/profile selection; single-use private callback; stable paid-call identity; atomic lifetime reservation; private ART request/response evidence; retrieve-only recovery after uncertain dispatch; once-only settlement | Qualify each project's POST image and model rubric, exact pricing, intended isolation and capped live calls; broader PM spend reads and setup-agent billing remain separate |
 | Identity and actor resolution | **Live foundation** | Flow-token verification; canonical ActorProfile and ActorIdentityLink; human/service separation; lifecycle controls; canonical `/actors/me` self-read with duplicate `/auth/me` removed; suspension denies both self-read and self-update; CLI privileged exact-actor/profile and identity-link reads and explicit separate profile/link lifecycle writes remain distinct from self-service and backend guards | Final end-to-end operational and conformance proof |
 | Authorization kernel | **Live foundation** | Closed action/permission catalogues; deny-by-default evaluation; grants; exact-project, privacy-safe candidate read now consumed by the CLI; fixed services; rate controls; opaque transaction-bound PREP; atomic decision evidence; CLI scope-filtered administrative grant/catalogue reads and explicit keyed grant issue/revoke consume existing public APIs without local authority decisions | Activate only the remaining owner-proven TASK, checker, REV, and CON boundaries; remove obsolete authority after replacement paths are live |
 | Project Guide source custody | **Live foundation** | Guide creation declares documents and task examples; public document upload; immutable internal metadata snapshots; draft guide and review/revision policy writes with fresh-authorized exact replay of original receipts; exact run-scoped setup reads and assigned-task locked-original reads; S3-backed originals and isolated agent document inspection; exact document generation through separate manager approvals and public exact-authorized CP07 activation; Project Manager guide list, guide detail, activation readiness dry run and verified original read-back (PILOT-READ-3); the CLI exposes existing administrative active-chain and retained sufficiency/artifact-policy reads, keyed human sufficiency writes, and separate manual artifact-policy draft create/update with backend-owned policy decisions | Public original upload, task examples, Celery setup and separate approvals are connected locally with recorded inference; prove configured live inference and readers in the intended environment; manual drafts are not compiled activation proposals; deployed CLI remains separate |
@@ -1259,7 +1270,8 @@ Delivered foundations (bounded local journey proven; no deployment claim)
   task/assignment/Submission lineage + public ZIP intake/admission-backed creation
   ARCH-03D exact approved historical guide through durable intake handoff
   ARCH-04B hidden verified Submission input
-  ARCH-04B2 hidden checker output store/recovery/binding (authority deny-only)
+  private model-call ART request/response custody with exact fixed-service authority
+  immutable project model profiles + lifetime budget + stable paid-effect recovery
   ARCH-04C hidden durable execution/current results + atomic completion event
   shared dispatcher + exact-authorized hidden assignment invalidation
   ARCH-03C2 invalidation producer + first handler registration
@@ -1402,6 +1414,11 @@ v0.1 is not ready until all of the following are true:
   Flow/AWS identities, gVisor execution and measured limits in the deployed
   environment; configuration rendering and local source-image builds are only
   prerequisites.
+- Qualify model-enabled POST images with their approved profiles, current exact
+  pricing and finite lifetime project budget. Prove invocation sockets under the
+  intended isolation and recover interrupted paid effects without another
+  create. The Terminal Systems live rehearsal has a US$10 aggregate cap;
+  offline transport/ledger tests do not establish its full project journey.
 - Complete the client-only #611 artifact diagnosis/retry CLI against the
   exact-authorized public API; API activation alone does not deliver the CLI or
   prove hosted S3 operation.

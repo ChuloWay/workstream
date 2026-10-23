@@ -4,26 +4,28 @@ from contextlib import asynccontextmanager
 import os
 
 from app.adapters.artifacts import (
+    artifact_preparation_service,
     artifact_provider_activation_guard,
     checker_output_binding,
     checker_output_storage,
+    configured_artifact_storage_namespace,
     create_artifact_scratch_manager,
     create_artifact_store_bootstrap,
+    validate_configured_artifact_storage_namespace,
 )
 from app.adapters.auth import checker_model_service_authorization
-from app.adapters.checkers import model_call_service, model_invocation_grants, model_profile_reader
+from app.adapters.checkers import (
+    checker_model_proxy,
+    create_checker_model_provider,
+    model_call_service,
+    model_invocation_grants,
+    model_profile_reader,
+)
 from app.adapters.checkers.model_provider import (
     OpenAIResponsesSettings,
-    create_checker_model_provider,
 )
 from app.adapters.checkers.model_proxy_transport import ModelProxyTransport
-from app.modules.artifacts.preparation import ArtifactPreparationService
-from app.modules.artifacts.service import (
-    artifact_storage_namespace_spec,
-    validate_artifact_storage_namespace_at_startup,
-)
 from app.modules.checkers.api.model_calls import ModelCallUnavailable, ProjectModelProfile
-from app.modules.checkers.model_calls.proxy import CheckerModelProxy
 
 
 @asynccontextmanager
@@ -66,22 +68,22 @@ async def configured_model_proxy_runtime(settings, sessions):
     )
     manager = None
     try:
-        claim = await validate_artifact_storage_namespace_at_startup(
+        claim = await validate_configured_artifact_storage_namespace(
             bootstrap,
             settings,
             sessions,
         )
         store = bootstrap.initialize_after_namespace_claim(claim)
-        namespace = artifact_storage_namespace_spec(settings, bootstrap)
+        namespace = configured_artifact_storage_namespace(settings, bootstrap)
         manager = create_artifact_scratch_manager(settings)
         outputs = checker_output_storage(
             sessions=sessions,
             store=store,
             namespace=namespace,
-            preparation=ArtifactPreparationService(manager),
+            preparation=artifact_preparation_service(manager),
             settings=settings,
         )
-        proxy = CheckerModelProxy(
+        proxy = checker_model_proxy(
             sessions=sessions,
             authorization=checker_model_service_authorization,
             grants=model_invocation_grants,

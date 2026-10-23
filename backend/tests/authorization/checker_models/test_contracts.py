@@ -26,6 +26,7 @@ from app.modules.authorization.domain.checker_outputs import (
     checker_output_prepare_matches,
     checker_output_prepare_resource,
     checker_output_stored_resource,
+    parse_checker_output_prepare,
 )
 from app.modules.authorization.prepared import PreparedAuthorizationHandle
 from app.modules.authorization.runtime import (
@@ -134,6 +135,25 @@ def test_grant_resource_binds_opaque_digests_and_exact_slot() -> None:
     assert resource.resource_id == current.evaluation_request_id
     assert "token" not in resource.model_dump(mode="json")["facts"]
     assert resource.facts.token_hash == sha("opaque token")
+
+
+@pytest.mark.parametrize("action", [WRITE, BIND])
+def test_output_prepare_accepts_its_json_packet_without_coercing_integers(action) -> None:
+    """Prepared AUTH receives JSON values, including nested UUIDs and timestamps."""
+    current = execution()
+    prepared = checker_output_prepare_resource(action, selector(current, paid_slot(current)))
+    packet = prepared.model_dump(mode="json")
+    assert parse_checker_output_prepare(action, packet, RuntimeError) == prepared
+
+    packet["selector"]["paid_slot"]["submission_version"] = "1"
+    with pytest.raises(RuntimeError) as rejected:
+        parse_checker_output_prepare(action, packet, RuntimeError)
+    assert isinstance(rejected.value.__cause__, ValidationError)
+    assert any(
+        error["loc"] == ("selector", "paid_slot", "submission_version")
+        and error["type"] == "int_type"
+        for error in rejected.value.__cause__.errors()
+    )
 
 
 def test_output_final_facts_cannot_substitute_selector_or_unverified_binding() -> None:

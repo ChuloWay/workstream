@@ -1,7 +1,6 @@
 """Bounded checker bytes through the existing durable ART storage workflow."""
 
 from collections.abc import Callable
-from typing import Protocol
 from uuid import UUID
 import hashlib
 
@@ -9,19 +8,18 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.core.config import Settings
+from app.modules.artifacts.api.checker_output_authority import (
+    CheckerOutputWriteAuthority,
+)
 from app.modules.checkers.api.output_custody import (
     CheckerOutputArtifactRequest,
     CheckerOutputArtifactResult,
-    CheckerOutputReservation,
     CheckerOutputReservationPort,
     CheckerOutputSelector,
     CheckerOutputUnavailable,
 )
 from app.interfaces.artifacts import ArtifactStore, ArtifactByteRange, ArtifactIntegrityError
-from app.modules.artifacts.checker_output_custody import (
-    CheckerOutputStoredFacts,
-    select_checker_output,
-)
+from app.modules.artifacts.checker_output_custody import select_checker_output
 from app.modules.artifacts.models import ArtifactVerificationJob, ArtifactReplica
 from app.modules.checkers.api.model_calls import ModelCallEvidence
 from app.modules.artifacts.preparation import ArtifactPreparationService
@@ -34,27 +32,6 @@ from app.modules.artifacts.service import (
     ArtifactStorageOrchestrator,
     ArtifactStorageNamespaceSpec,
 )
-
-
-class CheckerOutputWriteAuthority(Protocol):
-    """Fresh write authority; no prepared handle survives a storage operation."""
-
-    async def preflight(self, selector: CheckerOutputSelector) -> None:
-        """Deny before owner facts, source iteration or scratch access."""
-
-    async def prepare(self, selector: CheckerOutputSelector) -> None:
-        """Stabilize service authority before CHECKERS and ART transaction locks."""
-
-    async def consume(self, request: CheckerOutputArtifactAdmissionRequest) -> None:
-        """Bind the exact active worker, slot and byte commitment before admission."""
-
-    async def consume_existing(
-        self, reservation: CheckerOutputReservation, facts: CheckerOutputStoredFacts
-    ) -> None:
-        """Authorize exact stored output recovery with the current worker lease."""
-
-    def discard(self) -> None:
-        """Dispose transaction-local authority after each phase."""
 
 
 class CheckerArtifactOutputService:

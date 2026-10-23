@@ -17,6 +17,10 @@ from app.interfaces.external_services import (
     ExternalServiceAdapterIdentity,
     ExternalServiceUnavailableError,
 )
+from app.interfaces.checker_model_provider import (
+    CHECKER_MODEL_CAPABILITY_KEY,
+    CheckerModelProvider,
+)
 from app.modules.tasks.api import TaskSubmissionContextFacts
 
 from app.modules.checkers.api.external_policy import LockedExternalPostSubmitPolicy
@@ -62,6 +66,30 @@ def external_checker_execution_factory(
         ),
     )
     return factory
+
+
+def create_checker_model_provider(settings):
+    """Construct the sole provider registered for one locked model profile."""
+    from openai import AsyncOpenAI
+
+    from app.adapters.checkers.model_provider import (
+        OPENAI_RESPONSES_PROVIDER_KEY,
+        OpenAIResponsesCheckerModelProvider,
+    )
+
+    factory = ExternalServiceAdapterFactory[CheckerModelProvider](CHECKER_MODEL_CAPABILITY_KEY)
+    factory.register(
+        OPENAI_RESPONSES_PROVIDER_KEY,
+        lambda: OpenAIResponsesCheckerModelProvider(
+            settings,
+            AsyncOpenAI(
+                api_key=settings.api_key,
+                max_retries=0,
+                timeout=settings.request_timeout_seconds,
+            ),
+        ),
+    )
+    return factory.create(OPENAI_RESPONSES_PROVIDER_KEY)
 
 
 def configured_external_checker_execution_factory(settings):
@@ -123,12 +151,15 @@ def configured_external_checker_execution(settings) -> ExternalCheckerExecutionA
     return _ConfiguredExternalCheckerExecution(settings)
 
 
-def configured_post_submit_external_execution(settings, *, sessions) -> ExternalCheckerExecutionAdapter:
+def configured_post_submit_external_execution(
+    settings, *, sessions
+) -> ExternalCheckerExecutionAdapter:
     """Add durable project model custody to the existing Rust image transport."""
     from app.adapters.checkers.model_execution import ModelAwareExternalExecution
 
     return ModelAwareExternalExecution(
-        execution=configured_external_checker_execution(settings), sessions=sessions,
+        execution=configured_external_checker_execution(settings),
+        sessions=sessions,
     )
 
 
@@ -439,6 +470,13 @@ def model_invocation_grants(session, authority):
     )
 
 
+def checker_model_proxy(**ports):
+    """Compose provider orchestration from typed CHECKERS, AUTH and ART ports."""
+    from app.adapters.checkers.model_proxy import CheckerModelProxy
+
+    return CheckerModelProxy(**ports)
+
+
 def current_post_submit_execution(session):
     """Keep ART currentness checks behind the CHECKERS owner port."""
     from app.modules.checkers.execution_coordination import CurrentExecution
@@ -591,7 +629,9 @@ def post_submit_delivery_reconciliation_handler(*, sessions, materialization):
             original=original,
             payload=payload,
             request=request,
-            selected_execution=configured_post_submit_external_execution(get_settings(), sessions=sessions),
+            selected_execution=configured_post_submit_external_execution(
+                get_settings(), sessions=sessions
+            ),
         )
 
     return PostSubmitDeliveryReconciliationHandler(

@@ -89,6 +89,7 @@ def _external_compilation_outcome(
     refs,
     *,
     post_submit_parameters=(),
+    post_submit_specification=None,
 ):
     if not registry_entries:
         return outcome
@@ -127,7 +128,7 @@ def _external_compilation_outcome(
                 disposition="supported_post_submit",
                 evidence_refs=refs,
                 classification_rationale="Evaluate the submitted work in the background.",
-                check_specification=CheckSpecification.model_validate({
+                check_specification=post_submit_specification or CheckSpecification.model_validate({
                     **valid_specification().model_dump(mode="json"),
                     "execution_mode": "background",
                     "stage_rationale": "The selected registry entry evaluates immutable submitted evidence.",
@@ -162,6 +163,7 @@ async def create_compiled_guide(
     pre_submit_registry_entry=None,
     post_submit_registry_entry=None,
     post_submit_parameters=(),
+    post_submit_specification=None,
     compilation_outcome=None,
 ):
     """Create declarations with real AUTH, then execute/project/finalize scripted findings."""
@@ -221,6 +223,7 @@ async def create_compiled_guide(
         post_submit_registry_entry,
         refs,
         post_submit_parameters=post_submit_parameters,
+        post_submit_specification=post_submit_specification,
     )
     url = factory.kw["bind"].url.render_as_string(hide_password=False)
     finalization = await compilation_and_projections(
@@ -244,6 +247,7 @@ async def source_case(
     pre_submit_registry_spec=None,
     post_submit_registry_spec=None,
     post_submit_binding_setup: PostSubmitBindingSetup | None = None,
+    post_submit_specification=None,
     compilation_outcome=None,
 ):
     """An authorized draft Project plus a genuinely created complete guide source."""
@@ -311,6 +315,7 @@ async def source_case(
             pre_submit_registry_entry=pre_registry_entry,
             post_submit_registry_entry=post_registry_entry,
             post_submit_parameters=post_submit_parameters,
+            post_submit_specification=post_submit_specification,
             compilation_outcome=compilation_outcome,
         )
         yield values, factory, finalization, actor, grant

@@ -8,7 +8,6 @@ from app.modules.authorization.prepared_lifecycle_replay import validate_lifecyc
 from app.modules.authorization.fixed_service_revalidation import fixed_service_context_revalidator
 from app.modules.authorization.prepared_checker_retry_replay import validate_checker_retry_replay
 from app.modules.reviews.api.lifecycle import LifecycleTransitionCommand
-
 from copy import Error as CopyError
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
@@ -47,19 +46,7 @@ from app.modules.authorization.domain.checker_retry import (
     checker_retry_resource_matches,
     parse_checker_retry_prepare,
 )
-from app.modules.authorization.domain.checker_models import (
-    CHECKER_MODEL_ACTIONS,
-    CheckerModelCallResourceContext,
-    ProjectModelAdministrationResourceContext,
-    checker_model_prepare_matches,
-    parse_checker_model_prepare,
-)
-from app.modules.authorization.domain.checker_outputs import (
-    CHECKER_OUTPUT_ACTIONS,
-    CheckerOutputResourceContext,
-    checker_output_prepare_matches,
-    parse_checker_output_prepare,
-)
+from app.modules.authorization.domain.prepared_checker_runtime import checker_runtime_binding_matches, checker_runtime_project_id, parse_checker_runtime_bindings
 from app.modules.checkers.api.execution import CheckerRetryPreparation
 from app.modules.authorization.domain.prepared_submission_policy import parse_submission_policy_prepare
 from app.modules.authorization.domain.prepared_compilation import prepared_compilation_matches
@@ -285,12 +272,8 @@ class _PreparedAuthorizationBinding:
     adapter_binding_resource_digest: str | None = None
     guide_projection_prepare_context: dict | None = None
     setup_finalization_prepare_context: dict | None = None
-    checker_model_context: (
-        CheckerModelCallResourceContext
-        | ProjectModelAdministrationResourceContext
-        | None
-    ) = None
-    checker_output_context: CheckerOutputResourceContext | None = None
+    checker_model_context: object | None = None
+    checker_output_context: object | None = None
 
 
 TASK_IMPORT_SOURCE_ACTIONS = frozenset({
@@ -681,20 +664,12 @@ class PreparedAuthorizationService:
             issuance.authority.context.identity_link_id, historical_checker_retry_link,
         ):
             raise PreparedAuthorizationHandleInvalid("invalid prepared checker retry authority")
-        if expected_action_id in CHECKER_MODEL_ACTIONS and not checker_model_prepare_matches(
-            issuance.binding.checker_model_context,
-            final_resource_context,
-        ):
-            raise PreparedAuthorizationHandleInvalid(
-                "invalid prepared checker model authority"
-            )
-        if expected_action_id in CHECKER_OUTPUT_ACTIONS and not checker_output_prepare_matches(
-            issuance.binding.checker_output_context,
-            final_resource_context,
-        ):
-            raise PreparedAuthorizationHandleInvalid(
-                "invalid prepared checker output authority"
-            )
+        checker_runtime_matches = checker_runtime_binding_matches(
+            expected_action_id, issuance.binding.checker_model_context,
+            issuance.binding.checker_output_context, final_resource_context,
+        )
+        if checker_runtime_matches is False:
+            raise PreparedAuthorizationHandleInvalid("invalid prepared checker runtime authority")
 
     async def consume(
         self,
@@ -999,16 +974,7 @@ class PreparedAuthorizationService:
             **parse_prepared_contribution_policy(action_id, caller_input.request_value),
             **parse_review_bindings(action_id, caller_input, scope, self._context),
             **setup_bindings,
-            checker_model_context=parse_checker_model_prepare(
-                action_id,
-                caller_input.request_value,
-                PreparedAuthorizationHandleInvalid,
-            ),
-            checker_output_context=parse_checker_output_prepare(
-                action_id,
-                caller_input.request_value,
-                PreparedAuthorizationHandleInvalid,
-            ),
+            **parse_checker_runtime_bindings(action_id, caller_input.request_value, PreparedAuthorizationHandleInvalid),
         )
 
     @staticmethod
@@ -1018,26 +984,14 @@ class PreparedAuthorizationService:
     ) -> PreparedAuthorityScope:
         artifact_resource = _EXACT_ARTIFACT_RESOURCE_BY_ACTION.get(action_id)
         if artifact_resource is not None and isinstance(resource, artifact_resource[1]):
-            return PreparedAuthorityScope(
-                kind=PreparedAuthorityScopeKind.ARTIFACT_INTERNAL,
-                artifact_resource_type=artifact_resource[0],
-                artifact_resource_id=resource.resource_id,
-            )
+            return PreparedAuthorityScope(kind=PreparedAuthorityScopeKind.ARTIFACT_INTERNAL, artifact_resource_type=artifact_resource[0], artifact_resource_id=resource.resource_id)
         if isinstance(resource, (ProjectGuideProjectionResourceContext, PostPolicyResourceContext, OutboxDispatchResourceContext, AssignmentInvalidationResourceContext, RevisionExpiryResourceContext, RevisionRecoveryResourceContext, PreSubmitResourceContext, PostSubmitResourceContext, PostSubmitRoutingResourceContext)):
             return PreparedAuthorityScope(
                 kind=PreparedAuthorityScopeKind.PROJECT,
                 project_id=resource.scope_project_id,
             )
-        if isinstance(resource, CheckerModelCallResourceContext):
-            return PreparedAuthorityScope(
-                kind=PreparedAuthorityScopeKind.PROJECT,
-                project_id=resource.scope_project_id,
-            )
-        if isinstance(resource, CheckerOutputResourceContext):
-            return PreparedAuthorityScope(
-                kind=PreparedAuthorityScopeKind.PROJECT,
-                project_id=resource.scope_project_id,
-            )
+        if checker_runtime_project := checker_runtime_project_id(action_id, resource):
+            return PreparedAuthorityScope(kind=PreparedAuthorityScopeKind.PROJECT, project_id=checker_runtime_project)
         if action_id is ActionId.ACTOR_PROFILE_UPDATE_SELF and isinstance(
             resource, ActorSelfResourceContext
         ):
@@ -1122,7 +1076,6 @@ class PreparedAuthorizationService:
                 project_id=resource.scope_project_id,
             )
         raise PreparedAuthorizationHandleInvalid("invalid prepared authorization handle")
-
 
 def _admin_prepared_scope(action_id, resource):
     """Return the exact administrative prepared scope when applicable."""

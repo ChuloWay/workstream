@@ -1,12 +1,12 @@
 """Exact ART-owned output selection shared by storage recovery and binding."""
 
-from dataclasses import dataclass
 from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.hashing import canonical_json_hash
+from app.modules.artifacts.api.checker_output_authority import CheckerOutputStoredFacts
 from app.modules.artifacts.models import (
     ArtifactContent,
     ArtifactPutAttempt,
@@ -24,22 +24,6 @@ from app.modules.checkers.api.output_custody import (
     CheckerOutputSelector,
     CheckerOutputUnavailable,
 )
-
-
-@dataclass(frozen=True, slots=True)
-class CheckerOutputStoredFacts:
-    """Exact storage facts consumed by fresh output action authority."""
-
-    put_attempt_id: UUID
-    checker_request_digest: str
-    sha256: str
-    byte_count: int
-    media_type: str
-    status: str
-    content_id: UUID | None
-    replica_id: UUID | None
-    verification_receipt_id: UUID | None
-
 
 
 async def select_checker_output(

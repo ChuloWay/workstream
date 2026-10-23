@@ -32,6 +32,7 @@ from app.modules.checkers.execution_repository import (
 from app.modules.checkers.models import (
     CheckerRetryReceipt, CheckerRun, CheckerSubmissionFence,
 )
+from app.modules.checkers.model_calls.service import model_recovery_candidates
 from app.modules.outbox.api import (
     OutboxAppendInput, OutboxAppendPort, OutboxAppendResult,
     OutboxIdempotencyConflict, OutboxInputError, OutboxPersistenceError,
@@ -240,6 +241,10 @@ class CheckerRetryService:
                 statement.order_by(CheckerRun.created_at, CheckerRun.id).limit(query.limit + 1)
             )
         ).mappings().all()
+        recovery_candidates = await model_recovery_candidates(
+            self._session,
+            tuple(UUID(row.source_run_id) for row in rows[: query.limit]),
+        )
         items = []
         for row in rows[: query.limit]:
             source = CheckerRetryDiscoverySource(
@@ -285,6 +290,9 @@ class CheckerRetryService:
                 completed_at=row.completed_at,
                 retry_receipt_id=receipt_id,
                 successor=successor,
+                model_recovery_candidates=recovery_candidates.get(
+                    UUID(row.source_run_id), ()
+                ),
             ))
         next_cursor = None
         if len(rows) > query.limit:

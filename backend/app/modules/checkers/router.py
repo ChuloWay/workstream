@@ -29,8 +29,10 @@ from app.api.deps.checker_models import (
     MODEL_ADMIN_IDEMPOTENCY_PARAMETER,
     CheckerModelAdminCommands,
     get_checker_model_admin_commands,
+    get_checker_model_recovery_commands,
     require_model_admin_human,
     require_model_admin_key,
+    require_model_recovery_human,
 )
 
 from app.api.deps.history import HistoryReadOperation, get_history_reads
@@ -126,13 +128,11 @@ async def configure_project_model_budget(
     status_code=status.HTTP_201_CREATED,
     dependencies=[
         Depends(enforce_admin_mutation_rate_limit),
-        Depends(require_model_admin_human),
-        Depends(require_model_admin_key),
+        Depends(require_model_recovery_human),
     ],
     responses={code: {"model": ApiErrorResponse} for code in (404, 409, 422, 503)},
     openapi_extra={
         "x-workstream-action-id": "project.model_call.recovery_child.authorize",
-        "parameters": [MODEL_ADMIN_IDEMPOTENCY_PARAMETER],
     },
 )
 async def prepare_project_model_recovery_child(
@@ -140,7 +140,7 @@ async def prepare_project_model_recovery_child(
     parent_attempt_id: UUID,
     payload: ModelRecoveryChildRequest,
     commands: Annotated[
-        CheckerModelAdminCommands, Depends(get_checker_model_admin_commands)
+        CheckerModelAdminCommands, Depends(get_checker_model_recovery_commands)
     ],
 ) -> PreparedModelCallAttempt:
     """Create or replay a child only for one exact known terminal paid effect."""

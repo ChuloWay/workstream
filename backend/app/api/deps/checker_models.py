@@ -26,6 +26,7 @@ from app.db.session import get_db_session
 from app.modules.checkers.api.model_calls import (
     ModelBudgetProvisioningFacts,
     ModelCallBudgetUnavailable,
+    ModelCallAdministrationPort,
     ModelCallConflict,
     ModelCallUnavailable,
     ModelProfileProvisioningFacts,
@@ -36,7 +37,6 @@ from app.modules.checkers.api.model_calls import (
     ProjectModelProfile,
     ProjectModelProfileSpec,
 )
-from app.modules.checkers.model_calls.service import ModelCallService
 from app.schemas.auth import AuthVerificationResult
 
 
@@ -79,11 +79,19 @@ async def require_model_admin_human(
         raise _error(404)
 
 
+async def require_model_recovery_human(
+    result: Annotated[AuthVerificationResult, Depends(get_auth_verification_result)],
+) -> None:
+    """Conceal recovery controls from every nonhuman public caller."""
+    if result.token.subject_kind != "human":
+        raise _error(404)
+
+
 @dataclass(frozen=True)
 class CheckerModelAdminCommands:
     """Bind path, actor and caller key to the existing atomic CHECKERS owner."""
 
-    service: ModelCallService
+    service: ModelCallAdministrationPort
     actor_profile_id: UUID
     operation_id: UUID
 
@@ -121,10 +129,9 @@ class CheckerModelAdminCommands:
         parent_attempt_id: UUID,
         request: ModelRecoveryChildRequest,
     ) -> PreparedModelCallAttempt:
-        if request.execution.project_id != project_id or request.slot.project_id != project_id:
+        if request.slot.project_id != project_id:
             raise ModelCallConflict("model_recovery_project_conflict")
         return await self.service.prepare_recovery_child(
-            request.execution,
             request.slot,
             registry_entry_id=request.registry_entry_id,
             parent_attempt_id=parent_attempt_id,
@@ -139,9 +146,11 @@ async def _model_admin_operation(
     operation_id: UUID,
     resolved: ResolvedActor,
     session: AsyncSession,
+    *,
+    correlation_id: UUID | None = None,
 ) -> AsyncIterator[CheckerModelAdminCommands]:
     request_id, _ = (UUID(value) for value in request_ids(request))
-    context = _authorization_context(resolved, request_id, operation_id)
+    context = _authorization_context(resolved, request_id, correlation_id or operation_id)
     await session.rollback()
     try:
         async with session.begin():
@@ -155,7 +164,7 @@ async def _model_admin_operation(
             except ModelCallUnavailable as exc:
                 # AUTH has already staged its canonical denial. Preserve that evidence
                 # before the public boundary conceals the private authority reason.
-                if str(exc) == "model_call_authority_unavailable":
+                if str(exc) == "model_call_authority_unavailable" and session.is_active:
                     await session.commit()
                 raise
     except ModelCallBudgetUnavailable as exc:
@@ -183,10 +192,29 @@ async def get_checker_model_admin_commands(
         yield commands
 
 
+async def get_checker_model_recovery_commands(
+    request: Request,
+    resolved: Annotated[ResolvedActor, Depends(get_authorization_actor)],
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> AsyncIterator[CheckerModelAdminCommands]:
+    """Compose recovery under fresh request IDs; the parent/candidate own replay."""
+    request_id, correlation_id = (UUID(value) for value in request_ids(request))
+    async with _model_admin_operation(
+        request,
+        request_id,
+        resolved,
+        session,
+        correlation_id=correlation_id,
+    ) as commands:
+        yield commands
+
+
 __all__ = (
     "MODEL_ADMIN_IDEMPOTENCY_PARAMETER",
     "CheckerModelAdminCommands",
     "get_checker_model_admin_commands",
+    "get_checker_model_recovery_commands",
     "require_model_admin_human",
     "require_model_admin_key",
+    "require_model_recovery_human",
 )

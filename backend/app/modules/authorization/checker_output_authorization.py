@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 from app.modules.actors.api import ServiceIdentity
-from app.modules.artifacts.checker_output_bindings import CheckerOutputBindingAuthority
-from app.modules.artifacts.checker_output_custody import CheckerOutputStoredFacts
-from app.modules.artifacts.checker_outputs import CheckerOutputWriteAuthority
-from app.modules.artifacts.schemas import CheckerOutputArtifactAdmissionRequest
+from app.modules.artifacts.api.checker_output_authority import (
+    CheckerOutputBindingAuthority,
+    CheckerOutputCommitmentAuthorityFacts,
+    CheckerOutputStoredFacts,
+    CheckerOutputWriteAuthority,
+)
 from app.modules.authorization.catalogue import (
     ACTION_BY_ID,
     SERVICE_ACTIONS_BY_IDENTITY,
@@ -183,12 +185,19 @@ class PreparedCheckerOutputWriteAuthorization(
             service_identity=ServiceIdentity.ARTIFACT_CHECKER_OUTPUT,
         )
 
-    async def consume(self, request: CheckerOutputArtifactAdmissionRequest) -> None:
+    async def consume(self, facts: CheckerOutputCommitmentAuthorityFacts) -> None:
         """Consume server-computed commitment facts without receiving raw bytes."""
-        selector = self._require_selector()
-        if request.slot_key != selector.slot_key:
+        if type(facts) is not CheckerOutputCommitmentAuthorityFacts:
             raise CheckerOutputUnavailable("checker_output_authority_unavailable")
-        await self._consume(checker_output_admission_resource(selector, request))
+        selector = self._require_selector()
+        if facts.slot_key != selector.slot_key:
+            raise CheckerOutputUnavailable("checker_output_authority_unavailable")
+        try:
+            resource = checker_output_admission_resource(selector, facts)
+        except (TypeError, ValueError) as error:
+            self.discard()
+            raise CheckerOutputUnavailable("checker_output_authority_unavailable") from error
+        await self._consume(resource)
 
     async def consume_existing(
         self,
@@ -197,7 +206,12 @@ class PreparedCheckerOutputWriteAuthorization(
     ) -> None:
         """Consume exact stored ancestry selected under the prepared selector."""
         selector = self._require_selector()
-        await self._consume(checker_output_stored_resource(WRITE, selector, reservation, facts))
+        try:
+            resource = checker_output_stored_resource(WRITE, selector, reservation, facts)
+        except (TypeError, ValueError) as error:
+            self.discard()
+            raise CheckerOutputUnavailable("checker_output_authority_unavailable") from error
+        await self._consume(resource)
 
     def _require_selector(self) -> CheckerOutputSelector:
         if self._selector is None:
@@ -225,9 +239,12 @@ class PreparedCheckerOutputBindingAuthorization(
         """Consume only complete verified ancestry for the prepared selector."""
         if self._selector is None:
             raise CheckerOutputUnavailable("checker_output_authority_unavailable")
-        await self._consume(
-            checker_output_stored_resource(BIND, self._selector, reservation, facts)
-        )
+        try:
+            resource = checker_output_stored_resource(BIND, self._selector, reservation, facts)
+        except (TypeError, ValueError) as error:
+            self.discard()
+            raise CheckerOutputUnavailable("checker_output_authority_unavailable") from error
+        await self._consume(resource)
 
 
 __all__ = (

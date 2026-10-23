@@ -33,7 +33,7 @@ from app.modules.checkers.api.model_calls import (
     ModelPaidSlotKey,
     ProjectModelProfile,
 )
-from app.modules.checkers.model_calls.proxy import CheckerModelProxy
+from app.adapters.checkers.model_proxy import CheckerModelProxy
 from tests.checkers_model_calls.test_model_call_contract import profile_spec
 
 
@@ -272,6 +272,51 @@ async def test_completed_effect_is_reused_across_proxy_restart():
     assert first.outcome == "completed"
     assert (h.create_count, h.recover_count, h.settle_count) == (1, 0, 1)
     assert json.loads(h.blobs["model_request"])["prompt"] == "Evaluate this work"
+
+
+async def test_invalid_prompt_cannot_consume_grant_store_bytes_or_reserve_spend():
+    h = Harness()
+    reply = await h.invoke("")
+    assert reply.failure_code == "model_request_invalid"
+    assert h.state == "prepared"
+    assert h.request_sha is None
+    assert h.events == []
+    assert h.blobs == {}
+    assert h.create_count == 0
+
+
+async def test_crash_before_provider_identity_commit_retains_one_paid_effect():
+    h = Harness()
+
+    async def crash_before_reference(*_args, **_kwargs):
+        raise RuntimeError("controlled process loss before provider identity commit")
+
+    h.mark_uncertain = crash_before_reference
+    with pytest.raises(RuntimeError, match="controlled process loss"):
+        await h.invoke()
+    assert h.state == "dispatching"
+    assert h.provider_id is None
+    assert h.create_count == 1
+    assert (await h.invoke()).outcome == "unavailable"
+    assert (h.create_count, h.recover_count, h.settle_count) == (1, 0, 0)
+
+
+async def test_lease_loss_during_cached_art_read_denies_output_but_preserves_effect():
+    h = Harness()
+    original = await h.invoke()
+    read_response = h.read_response
+
+    async def lose_lease_while_reading(*args):
+        data = await read_response(*args)
+        h.stale = True
+        return data
+
+    h.read_response = lose_lease_while_reading
+    assert (await h.invoke()).outcome == "unavailable"
+    assert (h.create_count, h.settle_count) == (1, 1)
+    h.read_response, h.stale = read_response, False
+    assert await h.invoke() == original
+    assert (h.create_count, h.settle_count) == (1, 1)
 
 
 @pytest.mark.parametrize("known_id", [True, False])

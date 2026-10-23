@@ -201,7 +201,7 @@ BEGIN
     authority.action_id IS DISTINCT FROM 'checker.model_call.grant' OR
     authority.permission_id IS DISTINCT FROM 'checker.model_call.grant' OR
     authority.denial_code IS NOT NULL OR
-    authority.after_facts IS DISTINCT FROM jsonb_build_object(
+    authority.after_facts::jsonb IS DISTINCT FROM jsonb_build_object(
      'allowed',true,
      'resource_context_digest',authority.after_facts->>'resource_context_digest') OR
     coalesce(authority.after_facts->>'resource_context_digest','')
@@ -362,6 +362,54 @@ ALTER TABLE artifact_operation_receipts DROP CONSTRAINT ck_artifact_operation_re
     op.execute(
         r"""
 ALTER TABLE artifact_operation_receipts ADD CONSTRAINT ck_artifact_operation_receipts_contract_producer_reference CHECK (contract_version = 2 and put_attempt_id is not null and ((guide_source_item_id is not null and checker_run_id is null and model_call_attempt_id is null and logical_role is null) or (guide_source_item_id is null and checker_run_id is not null and model_call_attempt_id is null and octet_length(logical_role) between 1 and 100) or (guide_source_item_id is null and checker_run_id is null and model_call_attempt_id is null and (logical_role is null or logical_role='task_import_source')) or (guide_source_item_id is null and checker_run_id is null and model_call_attempt_id is not null and logical_role in ('model_request','model_response'))))
+        """
+    )
+    op.execute(
+        r"""
+CREATE OR REPLACE FUNCTION public.guard_artifact_receipt_producer_reference() RETURNS trigger
+        LANGUAGE plpgsql SET search_path=pg_catalog,public,pg_temp AS $$
+        DECLARE
+          attempt artifact_put_attempts%ROWTYPE;
+        BEGIN
+          SELECT value.* INTO attempt
+          FROM public.artifact_put_attempts value
+          WHERE value.id=NEW.put_attempt_id;
+          IF attempt.id IS NULL
+             OR (attempt.producer_request_type='guide' AND NOT (
+               NEW.guide_source_item_id IS NOT NULL
+               AND NEW.checker_run_id IS NULL
+               AND NEW.model_call_attempt_id IS NULL
+               AND NEW.logical_role IS NULL))
+             OR (attempt.producer_request_type='checker_output' AND NOT (
+               NEW.guide_source_item_id IS NULL
+               AND (
+                 (attempt.model_call_attempt_id IS NULL
+                  AND NEW.checker_run_id IS NOT NULL
+                  AND NEW.model_call_attempt_id IS NULL
+                  AND octet_length(NEW.logical_role) BETWEEN 1 AND 100)
+                 OR
+                 (attempt.model_call_attempt_id IS NOT NULL
+                  AND NEW.checker_run_id IS NULL
+                  AND NEW.model_call_attempt_id IS NOT DISTINCT FROM attempt.model_call_attempt_id
+                  AND NEW.logical_role IS NOT DISTINCT FROM attempt.logical_role
+                  AND NEW.logical_role IN ('model_request','model_response')))))
+             OR (attempt.producer_request_type='submission_bundle' AND NOT (
+               NEW.guide_source_item_id IS NULL
+               AND NEW.checker_run_id IS NULL
+               AND NEW.model_call_attempt_id IS NULL
+               AND NEW.logical_role IS NULL))
+             OR (attempt.producer_request_type='task_import_source' AND (
+               NEW.guide_source_item_id IS NOT NULL
+               OR NEW.checker_run_id IS NOT NULL
+               OR NEW.model_call_attempt_id IS NOT NULL
+               OR NEW.logical_role IS DISTINCT FROM 'task_import_source'))
+             OR attempt.producer_request_type NOT IN (
+               'guide','checker_output','submission_bundle','task_import_source') THEN
+            RAISE EXCEPTION 'artifact receipt producer reference mismatch'
+              USING ERRCODE='23514';
+          END IF;
+          RETURN NEW;
+        END $$
         """
     )
     op.execute(
@@ -602,8 +650,10 @@ CREATE OR REPLACE FUNCTION public.guard_checker_output_binding_insert() RETURNS 
              OR NEW.put_attempt_id IS DISTINCT FROM attempt.id
              OR NEW.content_id IS DISTINCT FROM content.id
              OR NEW.project_id IS DISTINCT FROM attempt.project_id
-             OR NEW.resource_id IS DISTINCT FROM CASE WHEN NEW.resource_type='checker_model_call'
+             OR NEW.resource_id IS DISTINCT FROM (
+                  CASE WHEN NEW.resource_type='checker_model_call'
                   THEN attempt.model_call_attempt_id::text ELSE attempt.checker_run_id::text END
+                )
              OR NEW.logical_role IS DISTINCT FROM attempt.logical_role
              OR NEW.actor_id IS DISTINCT FROM attempt.producer_ref
              OR NEW.attribution_type IS DISTINCT FROM 'service_identity'
@@ -715,18 +765,38 @@ FOR EACH ROW EXECUTE FUNCTION public.guard_checker_model_artifact_ancestry()
 
 
 def _upgrade_authorization_vocabulary() -> None:
-    """Admit exactly the new model actions in the retained audit evidence constraint."""
+    """Admit exactly the new model actions and permissions in retained audit custody."""
     op.execute("LOCK TABLE public.audit_events IN ACCESS EXCLUSIVE MODE")
     name = "ck_audit_events_authorization_action_evidence"
-    definition = op.get_bind().execute(text(
-        "SELECT pg_catalog.pg_get_constraintdef(oid) FROM pg_catalog.pg_constraint "
-        "WHERE conrelid='public.audit_events'::regclass AND conname=:name"
-    ), {"name": name}).scalar_one()
+    definition = (
+        op.get_bind()
+        .execute(
+            text(
+                "SELECT pg_catalog.pg_get_constraintdef(oid) FROM pg_catalog.pg_constraint "
+                "WHERE conrelid='public.audit_events'::regclass AND conname=:name"
+            ),
+            {"name": name},
+        )
+        .scalar_one()
+    )
     anchor = (
         "(((action_id)::text = 'contribution.compensation_unit.create'::text) AND "
         "((permission_id)::text = 'compensation.policy.manage'::text))"
     )
-    actions = (('checker.model_call.prepare', 'checker.model_call.prepare'), ('checker.model_call.dispatch', 'checker.model_call.dispatch'), ('checker.model_call.recover', 'checker.model_call.recover'), ('checker.model_call.observe', 'checker.model_call.observe'), ('checker.model_call.complete', 'checker.model_call.complete'), ('checker.model_call.grant', 'checker.model_call.grant'), ('project.model_profile.provision', 'project.model_profile.manage'), ('project.model_budget.configure', 'project.model_budget.manage'), ('project.model_call.recovery_child.authorize', 'project.model_call.recovery_child.authorize'))
+    actions = (
+        ("checker.model_call.prepare", "checker.model_call.prepare"),
+        ("checker.model_call.dispatch", "checker.model_call.dispatch"),
+        ("checker.model_call.recover", "checker.model_call.recover"),
+        ("checker.model_call.observe", "checker.model_call.observe"),
+        ("checker.model_call.complete", "checker.model_call.complete"),
+        ("checker.model_call.grant", "checker.model_call.grant"),
+        ("project.model_profile.provision", "project.model_profile.manage"),
+        ("project.model_budget.configure", "project.model_budget.manage"),
+        (
+            "project.model_call.recovery_child.authorize",
+            "project.model_call.recovery_child.authorize",
+        ),
+    )
     if definition.count(anchor) != 2 or any(action in definition for action, _ in actions):
         raise RuntimeError("model-call audit action constraint shape changed")
     addition = "".join(
@@ -735,8 +805,39 @@ def _upgrade_authorization_vocabulary() -> None:
         for action, permission in actions
     )
     op.execute("ALTER TABLE public.audit_events DROP CONSTRAINT " + name)
-    op.execute("ALTER TABLE public.audit_events ADD CONSTRAINT " + name + " "
-               + definition.replace(anchor, anchor + addition))
+    op.execute(
+        "ALTER TABLE public.audit_events ADD CONSTRAINT "
+        + name
+        + " "
+        + definition.replace(anchor, anchor + addition)
+    )
+
+    name = "ck_audit_events_authority_registries"
+    definition = (
+        op.get_bind()
+        .execute(
+            text(
+                "SELECT pg_catalog.pg_get_constraintdef(oid) FROM pg_catalog.pg_constraint "
+                "WHERE conrelid='public.audit_events'::regclass AND conname=:name"
+            ),
+            {"name": name},
+        )
+        .scalar_one()
+    )
+    anchor = "('task.revision.recover'::character varying)::text"
+    permissions = tuple(dict.fromkeys(permission for _, permission in actions))
+    if definition.count(anchor) != 1 or any(
+        f"('{permission}'::character varying)::text" in definition for permission in permissions
+    ):
+        raise RuntimeError("model-call audit permission registry shape changed")
+    addition = "".join(f", ('{permission}'::character varying)::text" for permission in permissions)
+    op.execute("ALTER TABLE public.audit_events DROP CONSTRAINT " + name)
+    op.execute(
+        "ALTER TABLE public.audit_events ADD CONSTRAINT "
+        + name
+        + " "
+        + definition.replace(anchor, anchor + addition)
+    )
 
 
 def downgrade() -> None:
@@ -1152,9 +1253,33 @@ CREATE FUNCTION public.guard_checker_model_profile() RETURNS trigger
 LANGUAGE plpgsql SET search_path=pg_catalog,public,pg_temp AS $$
 DECLARE expected_version integer;
 DECLARE authority public.audit_events%ROWTYPE;
+DECLARE registry_digest varchar;
+DECLARE registry_phase varchar;
 BEGIN
  IF TG_OP<>'INSERT' THEN
   RAISE EXCEPTION 'checker model profiles are immutable' USING ERRCODE='55000';
+ END IF;
+ IF NEW.profile_digest<>public.checker_model_json_digest(
+   pg_catalog.jsonb_build_object(
+    'project_id',NEW.project_id,'profile_version',NEW.profile_version,
+    'registry_entry_id',NEW.registry_entry_id,
+    'registry_entry_digest',NEW.registry_entry_digest,
+    'provider',NEW.provider,'api',NEW.api,
+    'model_snapshot',NEW.model_snapshot,'settings',NEW.generation_settings,
+    'maximum_request_bytes',NEW.maximum_request_bytes,
+    'maximum_output_bytes',NEW.maximum_output_bytes,
+    'maximum_response_bytes',NEW.maximum_response_bytes,
+    'maximum_input_tokens',NEW.maximum_input_tokens,
+    'maximum_output_tokens',NEW.maximum_output_tokens,
+    'deadline_ms',NEW.deadline_ms,'call_slots',NEW.call_slots,
+    'pricing',pg_catalog.jsonb_build_object(
+     'pricing_policy_id',NEW.pricing_policy_id,
+     'pricing_policy_version',NEW.pricing_policy_version,
+     'pricing_policy_digest',NEW.pricing_policy_digest,
+     'uncached_input_nanodollars_per_token',NEW.uncached_input_rate,
+     'cached_input_nanodollars_per_token',NEW.cached_input_rate,
+     'output_nanodollars_per_token',NEW.output_rate))) THEN
+  RAISE EXCEPTION 'checker model profile digest is invalid' USING ERRCODE='23514';
  END IF;
  SELECT * INTO authority FROM public.audit_events
   WHERE id=NEW.authorization_evidence_id FOR SHARE;
@@ -1165,10 +1290,16 @@ BEGIN
     authority.action_id<>'project.model_profile.provision' OR
     authority.permission_id<>'project.model_profile.manage' OR
     authority.denial_code IS NOT NULL OR
-    authority.after_facts<>pg_catalog.jsonb_build_object(
+    authority.after_facts::jsonb<>pg_catalog.jsonb_build_object(
      'allowed',true,'resource_context_digest',
      public.checker_model_profile_authority_digest(NEW)) THEN
   RAISE EXCEPTION 'checker model profile authority is invalid' USING ERRCODE='23514';
+ END IF;
+ SELECT entry_digest,phase INTO registry_digest,registry_phase
+  FROM public.external_checker_registry_entries WHERE id=NEW.registry_entry_id FOR SHARE;
+ IF registry_digest IS DISTINCT FROM NEW.registry_entry_digest OR
+    registry_phase IS DISTINCT FROM 'post_submit' THEN
+  RAISE EXCEPTION 'checker model profile registry binding is invalid' USING ERRCODE='23514';
  END IF;
  PERFORM pg_advisory_xact_lock(hashtextextended('checker-model-profile:'||NEW.project_id,0));
  SELECT coalesce(max(profile_version),0)+1 INTO expected_version
@@ -1189,6 +1320,14 @@ BEGIN
  IF TG_OP<>'INSERT' THEN
   RAISE EXCEPTION 'checker model budget configurations are immutable' USING ERRCODE='55000';
  END IF;
+ IF NEW.configuration_digest<>public.checker_model_json_digest(
+   pg_catalog.jsonb_build_object(
+    'project_id',NEW.project_id,
+    'configuration_version',NEW.configuration_version,
+    'lifetime_limit_nanodollars',NEW.lifetime_limit_nanodollars)) THEN
+  RAISE EXCEPTION 'checker model budget configuration digest is invalid'
+   USING ERRCODE='23514';
+ END IF;
  SELECT * INTO authority FROM public.audit_events
   WHERE id=NEW.authorization_evidence_id FOR SHARE;
  IF authority.id IS NULL OR authority.event_domain<>'authority' OR
@@ -1198,7 +1337,7 @@ BEGIN
     authority.action_id<>'project.model_budget.configure' OR
     authority.permission_id<>'project.model_budget.manage' OR
     authority.denial_code IS NOT NULL OR
-    authority.after_facts<>pg_catalog.jsonb_build_object(
+    authority.after_facts::jsonb<>pg_catalog.jsonb_build_object(
      'allowed',true,'resource_context_digest',
      public.checker_model_budget_authority_digest(NEW)) THEN
   RAISE EXCEPTION 'checker model budget authority is invalid' USING ERRCODE='23514';

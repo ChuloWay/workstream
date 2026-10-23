@@ -202,14 +202,14 @@ class CheckerModelAuthorization:
 
     async def authorize_child(
         self,
-        execution: ModelCallExecutionFacts,
+        project_id: UUID,
         parent_attempt_id: UUID,
         terminal_digest: str,
     ) -> ModelActionEvidence:
         """Require explicit system Operator authority for one recovery child."""
         actor_profile_id = self._require_human()
         facts = ModelCallRecoveryChildAuthorityFacts(
-            execution=execution,
+            project_id=project_id,
             parent_attempt_id=parent_attempt_id,
             terminal_digest=terminal_digest,
         )
@@ -304,25 +304,31 @@ class CheckerModelAuthorization:
                     resource,
                     error,
                 )
+            except AuthorizationEvidenceUnavailable as evidence_error:
+                raise ModelCallUnavailable(
+                    "model_call_authority_evidence_unavailable"
+                ) from evidence_error
             except (
                 AuthorizationDenied,
-                AuthorizationEvidenceUnavailable,
                 PreparedAuthorizationHandleInvalid,
                 PreparedAuthorizationUnsupported,
             ):
                 pass
             raise ModelCallUnavailable("model_call_authority_unavailable") from error
-        except (
-            AuthorizationDenied,
-            AuthorizationEvidenceUnavailable,
-            PreparedAuthorizationHandleInvalid,
-        ) as error:
+        except AuthorizationDenied as error:
             if handle is not None:
                 try:
                     self._prepared.close_handle(handle)
                 except PreparedAuthorizationHandleInvalid:
                     pass
             raise ModelCallUnavailable("model_call_authority_unavailable") from error
+        except (AuthorizationEvidenceUnavailable, PreparedAuthorizationHandleInvalid) as error:
+            if handle is not None:
+                try:
+                    self._prepared.close_handle(handle)
+                except PreparedAuthorizationHandleInvalid:
+                    pass
+            raise ModelCallUnavailable("model_call_authority_evidence_unavailable") from error
         return ModelActionEvidence(
             evidence_id=decision.decision_id,
             facts_digest=service_facts_digest,

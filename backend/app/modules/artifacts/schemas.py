@@ -84,12 +84,6 @@ def checker_output_request_digest_facts(
     }
 
 
-class CheckerOutputAdmissionAuthority(Protocol):
-    """Consume caller-prepared authority for one exact output reservation."""
-
-    async def consume(self, request: CheckerOutputArtifactAdmissionRequest) -> None: ...
-
-
 @final
 @dataclass(frozen=True, slots=True)
 class SubmissionBundleArtifactAdmissionRequest:

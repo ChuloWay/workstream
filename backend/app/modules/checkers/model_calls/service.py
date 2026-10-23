@@ -5,7 +5,9 @@ from __future__ import annotations
 from uuid import UUID
 
 from pydantic import TypeAdapter
+from sqlalchemy import exists, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import aliased
 
 from app.core.hashing import canonical_json_hash
 from app.core.identifiers import new_record_id
@@ -31,6 +33,7 @@ from app.modules.checkers.api.model_calls import (
     ModelPaidSlotKey,
     ModelProfileProvisioningFacts,
     ModelProfileSelector,
+    ModelRecoveryCandidate,
     PreparedModelCallAttempt,
     ProviderResponseIdentifier,
     ProjectModelBudgetConfiguration,
@@ -55,10 +58,12 @@ from app.modules.checkers.model_calls.profiles import stored_model_profile
 
 
 def _uuid(value: str) -> UUID:
+    """Decode a persisted UUID string at the typed service boundary."""
     return UUID(value)
 
 
 def _same_uuid(value: str, expected: UUID) -> bool:
+    """Compare persisted string identity with a typed caller UUID exactly."""
     return value == str(expected)
 
 
@@ -67,6 +72,7 @@ _PROVIDER_RESPONSE_ADAPTER = TypeAdapter(ProviderResponseIdentifier)
 
 
 def _sha(value: str) -> str:
+    """Require one lowercase SHA-256 identifier for raw service arguments."""
     # Pydantic constrained aliases are validated by their containing public values;
     # raw service arguments receive the equivalent closed check here.
     if len(value) != 71 or not value.startswith("sha256:"):
@@ -81,11 +87,13 @@ def _sha(value: str) -> str:
 
 
 def _require_authority(action: str, facts: object, evidence: ModelActionEvidence) -> None:
+    """Require authority evidence to bind the exact action and canonical facts."""
     if evidence.facts_digest != model_action_digest(action, facts):
         raise ModelCallUnavailable("model_call_authority_unavailable")
 
 
 def _slot_key(row: CheckerModelCallSlot) -> ModelPaidSlotKey:
+    """Project a stored slot through the complete immutable paid-slot identity."""
     return ModelPaidSlotKey(
         project_id=_uuid(row.project_id),
         assignment_id=_uuid(row.assignment_id),
@@ -102,6 +110,7 @@ def _slot_key(row: CheckerModelCallSlot) -> ModelPaidSlotKey:
 
 
 def _evidence(row: CheckerModelCallAttempt, prefix: str) -> ModelCallEvidence:
+    """Decode one complete request or response ART evidence set from an attempt."""
     values = {
         "binding_id": getattr(row, f"{prefix}_binding_id"),
         "content_id": getattr(row, f"{prefix}_content_id"),
@@ -128,6 +137,7 @@ def _attempt(
     *,
     replayed: bool,
 ) -> AttachedModelCallAttempt:
+    """Project a stored attempt with its exact slot identity and replay status."""
     values = dict(
         slot_id=_uuid(slot.id),
         slot_key=_slot_key(slot),
@@ -146,6 +156,7 @@ def _attempt(
 def _effect(
     slot: CheckerModelCallSlot, row: CheckerModelCallAttempt
 ) -> ModelCallEffectAuthorityFacts:
+    """Build the authority facts identifying one durable provider effect."""
     return ModelCallEffectAuthorityFacts(
         project_id=_uuid(slot.project_id),
         task_id=_uuid(slot.task_id),
@@ -161,11 +172,13 @@ def _require_effect(
     slot: CheckerModelCallSlot,
     row: CheckerModelCallAttempt,
 ) -> None:
+    """Reject supplied effect authority facts that differ from stored custody."""
     if supplied != _effect(slot, row):
         raise ModelCallUnavailable("model_call_effect_unavailable")
 
 
 def _usage(row: CheckerModelCallAttempt) -> ModelCallUsage | None:
+    """Return complete stored usage, distinguishing absent from partial counters."""
     values = (
         row.input_tokens,
         row.cached_input_tokens,
@@ -184,6 +197,107 @@ def _usage(row: CheckerModelCallAttempt) -> ModelCallUsage | None:
     )
 
 
+def _stored_retry_terminal_digest(row: CheckerModelCallAttempt) -> str | None:
+    """Reconstruct a retry-eligible terminal digest only from complete stored facts."""
+    if row.state == "known_no_effect":
+        if (
+            row.no_effect_proof_id is None
+            or row.no_effect_proof_digest is None
+            or row.no_effect_observed_at is None
+            or row.reserved_nanodollars is None
+        ):
+            return None
+        return canonical_json_hash(
+            {
+                "state": row.state,
+                "proof_id": row.no_effect_proof_id,
+                "proof_digest": row.no_effect_proof_digest,
+                "observed_at": row.no_effect_observed_at.isoformat(),
+            }
+        )
+    if row.state == "known_failed":
+        usage = _usage(row)
+        if (
+            usage is None
+            or row.provider_response_id is None
+            or row.response_content_sha256 is None
+            or row.settled_nanodollars is None
+            or row.settlement_authorization_evidence_id is None
+            or row.settled_at is None
+        ):
+            return None
+        return canonical_json_hash(
+            {
+                "state": row.state,
+                "provider_response_id": row.provider_response_id,
+                "response_content_sha256": row.response_content_sha256,
+                "usage": usage.model_dump(mode="json"),
+                "settled_nanodollars": row.settled_nanodollars,
+            }
+        )
+    return None
+
+
+async def model_recovery_candidates(
+    session: AsyncSession, source_run_ids: tuple[UUID, ...]
+) -> dict[UUID, tuple[ModelRecoveryCandidate, ...]]:
+    """Project retry-read projection of exact retryable paid effects."""
+    if not source_run_ids:
+        return {}
+    from app.modules.checkers.model_calls.grants import CheckerModelInvocationGrant
+
+    child = aliased(CheckerModelCallAttempt)
+    rows = (
+        await session.execute(
+            select(
+                CheckerModelInvocationGrant.checker_run_id,
+                CheckerModelCallAttempt,
+                CheckerModelCallSlot,
+                CheckerModelProfile.registry_entry_id,
+            )
+            .join(
+                CheckerModelCallAttempt,
+                CheckerModelCallAttempt.id
+                == CheckerModelInvocationGrant.selected_attempt_id,
+            )
+            .join(CheckerModelCallSlot, CheckerModelCallSlot.id == CheckerModelCallAttempt.slot_id)
+            .join(CheckerModelProfile, CheckerModelProfile.id == CheckerModelCallSlot.profile_id)
+            .where(
+                CheckerModelInvocationGrant.checker_run_id.in_(
+                    tuple(str(value) for value in source_run_ids)
+                ),
+                CheckerModelCallAttempt.state.in_(("known_failed", "known_no_effect")),
+                ~exists(
+                    select(child.id).where(
+                        child.parent_attempt_id == CheckerModelCallAttempt.id
+                    )
+                ),
+            )
+            .order_by(
+                CheckerModelInvocationGrant.checker_run_id,
+                CheckerModelCallAttempt.id,
+            )
+        )
+    ).all()
+    projected: dict[UUID, dict[UUID, ModelRecoveryCandidate]] = {}
+    for run_id, attempt, slot, registry_entry_id in rows:
+        digest = _stored_retry_terminal_digest(attempt)
+        if digest is None:
+            continue
+        candidate = ModelRecoveryCandidate(
+            parent_attempt_id=_uuid(attempt.id),
+            slot=_slot_key(slot),
+            registry_entry_id=_uuid(registry_entry_id),
+            terminal_digest=digest,
+            request_sha256=attempt.request_sha256,
+        )
+        projected.setdefault(_uuid(run_id), {})[candidate.parent_attempt_id] = candidate
+    return {
+        run_id: tuple(candidates.values())
+        for run_id, candidates in projected.items()
+    }
+
+
 class ModelCallService:
     """Flush-only state machine; the caller owns commit or rollback."""
 
@@ -195,6 +309,7 @@ class ModelCallService:
         current_execution: ModelCallCurrentExecutionPort,
         evidence: ModelCallEvidencePort,
     ) -> None:
+        """Bind persistence and authority ports without taking transaction ownership."""
         self._session = session
         self._repo = ModelCallRepository(session)
         self._authority = authority
@@ -202,6 +317,7 @@ class ModelCallService:
         self._evidence = evidence
 
     def _require_transaction(self) -> None:
+        """Require the caller's active root transaction before state-machine work."""
         require_model_call_transaction(self._session)
 
     async def provision_profile(self, facts: ModelProfileProvisioningFacts) -> ProjectModelProfile:
@@ -211,6 +327,10 @@ class ModelCallService:
         _ = facts.spec.maximum_reservation_nanodollars
         authority = await self._authority.authorize_profile(facts)
         _require_authority("profile", facts, authority)
+        if not await self._repo.is_exact_post_submit_registry_entry(
+            facts.spec.registry_entry_id, facts.spec.registry_entry_digest
+        ):
+            raise ModelCallConflict("model_profile_registry_conflict")
 
         await self._repo.lock_profile_scopes(
             facts.operation_id, facts.spec.project_id, facts.spec.profile_version
@@ -344,6 +464,7 @@ class ModelCallService:
     def _budget_result(
         row: CheckerModelBudgetConfiguration, account: CheckerModelBudgetAccount
     ) -> ProjectModelBudgetConfiguration:
+        """Project an immutable budget version with its current lifetime counters."""
         return ProjectModelBudgetConfiguration(
             configuration_id=_uuid(row.id),
             operation_id=_uuid(row.operation_id),
@@ -387,6 +508,7 @@ class ModelCallService:
 
     @staticmethod
     def _require_execution_slot(execution: ModelCallExecutionFacts, slot: ModelPaidSlotKey) -> None:
+        """Require the paid slot to belong to the exact authorized execution."""
         if (
             execution.project_id != slot.project_id
             or execution.assignment_id != slot.assignment_id
@@ -398,6 +520,7 @@ class ModelCallService:
     async def _profile_for_slot(
         self, slot: ModelPaidSlotKey, registry_entry_id: UUID
     ) -> ProjectModelProfile:
+        """Resolve the exact stored profile and registry entry selected by a new slot."""
         return await self.read_exact(
             ModelProfileSelector(
                 profile_id=slot.profile_id,
@@ -410,6 +533,7 @@ class ModelCallService:
         )
 
     async def _profile_for_stored_slot(self, slot: ModelPaidSlotKey) -> ProjectModelProfile:
+        """Resolve a stored slot's immutable profile without accepting registry substitution."""
         row = await self._repo.profile_exact(
             slot.profile_id, slot.profile_version, slot.profile_digest
         )
@@ -482,7 +606,6 @@ class ModelCallService:
 
     async def prepare_recovery_child(
         self,
-        execution: ModelCallExecutionFacts,
         slot: ModelPaidSlotKey,
         *,
         registry_entry_id: UUID,
@@ -492,21 +615,19 @@ class ModelCallService:
     ) -> PreparedModelCallAttempt:
         """Allocate N+1 only after an authorized, fully-known terminal parent."""
         self._require_transaction()
-        execution = ModelCallExecutionFacts.model_validate(execution)
         slot = ModelPaidSlotKey.model_validate(slot)
         terminal_digest = _sha(terminal_digest)
         request_sha256 = _sha(request_sha256)
-        self._require_execution_slot(execution, slot)
         authority = await self._authority.authorize_child(
-            execution, parent_attempt_id, terminal_digest
+            slot.project_id, parent_attempt_id, terminal_digest
         )
         child_facts = {
-            "execution": execution.model_dump(mode="json"),
+            "project_id": str(slot.project_id),
             "parent_attempt_id": str(parent_attempt_id),
             "terminal_digest": terminal_digest,
         }
         _require_authority("child", child_facts, authority)
-        await self._current.require_current(execution, slot)
+        await self._current.require_recovery_current(slot, parent_attempt_id)
         await self._profile_for_slot(slot, registry_entry_id)
 
         await self._repo.lock_slot_scope(slot)
@@ -518,6 +639,17 @@ class ModelCallService:
         latest = await self._repo.latest_attempt(slot_row.id, lock=True)
         if latest is None:
             raise ModelCallUnavailable("model_call_parent_unavailable")
+        parent = (
+            latest
+            if latest.id == str(parent_attempt_id)
+            else await self._repo.attempt(parent_attempt_id)
+        )
+        if (
+            parent is None
+            or parent.slot_id != slot_row.id
+            or not self._eligible_parent(parent, terminal_digest)
+        ):
+            raise ModelCallConflict("model_call_parent_not_retryable")
         if latest.id != str(parent_attempt_id):
             if (
                 latest.attempt_number > 1
@@ -529,8 +661,6 @@ class ModelCallService:
                     _attempt(slot_row, latest, replayed=True)
                 )
             raise ModelCallConflict("model_call_parent_superseded")
-        if not self._eligible_parent(latest, terminal_digest):
-            raise ModelCallConflict("model_call_parent_not_retryable")
 
         child = CheckerModelCallAttempt(
             id=str(new_record_id()),
@@ -547,28 +677,8 @@ class ModelCallService:
 
     @staticmethod
     def _eligible_parent(row: CheckerModelCallAttempt, terminal_digest: str) -> bool:
-        if row.state == "known_no_effect":
-            actual = canonical_json_hash(
-                {
-                    "state": row.state,
-                    "proof_id": row.no_effect_proof_id,
-                    "proof_digest": row.no_effect_proof_digest,
-                    "observed_at": (
-                        row.no_effect_observed_at.isoformat()
-                        if row.no_effect_observed_at is not None
-                        else None
-                    ),
-                }
-            )
-            return row.reserved_nanodollars is not None and actual == terminal_digest
-        if row.state == "known_failed":
-            result = ModelCallService._failed_result(row, replayed=False)
-            return (
-                row.settlement_authorization_evidence_id is not None
-                and row.settled_at is not None
-                and model_retry_terminal_digest(result) == terminal_digest
-            )
-        return False
+        """Accept a retry parent only when complete stored terminal facts match the digest."""
+        return _stored_retry_terminal_digest(row) == terminal_digest
 
     async def reserve_dispatch(
         self,
@@ -648,6 +758,7 @@ class ModelCallService:
     def _set_evidence(
         row: CheckerModelCallAttempt, prefix: str, evidence: ModelCallEvidence
     ) -> None:
+        """Copy validated ART custody fields into the selected attempt evidence side."""
         for field, value in evidence.model_dump(mode="json", exclude={"media_type"}).items():
             setattr(row, f"{prefix}_{field}", value)
 
@@ -658,6 +769,7 @@ class ModelCallService:
         slot: CheckerModelCallSlot | None = None,
         replayed: bool,
     ) -> ModelDispatchReservation:
+        """Project a dispatch reservation only from effect-bearing stored states."""
         if row.state not in {"dispatching", "uncertain", "completed"}:
             raise ModelCallConflict("model_call_not_dispatchable")
         if slot is None:
@@ -1032,6 +1144,7 @@ class ModelCallService:
     async def _terminal_preflight(
         self, attempt_id: UUID
     ) -> tuple[CheckerModelCallAttempt, CheckerModelCallSlot, ProjectModelProfile]:
+        """Load the attempt, slot, and exact profile before taking terminal locks."""
         self._require_transaction()
         row = await self._repo.attempt(attempt_id)
         if row is None:
@@ -1049,6 +1162,7 @@ class ModelCallService:
     async def _lock_terminal(
         self, slot: CheckerModelCallSlot, attempt_id: UUID
     ) -> CheckerModelCallAttempt:
+        """Take slot-order custody, then lock the attempt and recheck its ancestry."""
         await self._repo.lock_slot_scope(_slot_key(slot))
         row = await self._repo.attempt(attempt_id, lock=True)
         if row is None or row.slot_id != slot.id:
@@ -1057,6 +1171,7 @@ class ModelCallService:
 
     @staticmethod
     def _require_effect_pending(row: CheckerModelCallAttempt) -> None:
+        """Require an effect-bearing nonterminal attempt with an active reservation."""
         if row.state not in {"dispatching", "uncertain"}:
             raise ModelCallConflict("model_call_terminal_conflict")
         if row.reserved_nanodollars is None:
@@ -1068,6 +1183,7 @@ class ModelCallService:
         slot: CheckerModelCallSlot,
         cost: int,
     ) -> None:
+        """Atomically move one reservation into the project's lifetime settled total."""
         await self._repo.lock_budget_scope(_uuid(slot.project_id))
         account = await self._repo.budget_account(_uuid(slot.project_id), lock=True)
         if account is None or row.reserved_nanodollars is None:
@@ -1078,6 +1194,7 @@ class ModelCallService:
         account.lifetime_settled_nanodollars += cost
 
     async def _release(self, row: CheckerModelCallAttempt, slot: CheckerModelCallSlot) -> None:
+        """Return a proven no-effect reservation to the locked project account."""
         await self._repo.lock_budget_scope(_uuid(slot.project_id))
         account = await self._repo.budget_account(_uuid(slot.project_id), lock=True)
         if account is None or row.reserved_nanodollars is None:
@@ -1088,6 +1205,7 @@ class ModelCallService:
 
     @staticmethod
     def _set_usage(row: CheckerModelCallAttempt, usage: ModelCallUsage) -> None:
+        """Persist every normalized usage counter as one inseparable terminal set."""
         row.input_tokens = usage.input_tokens
         row.cached_input_tokens = usage.cached_input_tokens
         row.output_tokens = usage.output_tokens
@@ -1095,6 +1213,7 @@ class ModelCallService:
 
     @staticmethod
     def _completed_result(row: CheckerModelCallAttempt, *, replayed: bool) -> CompletedModelCall:
+        """Project a completed call only when usage, evidence, cost, and time are complete."""
         usage = _usage(row)
         if usage is None or row.terminal_at is None or row.settled_nanodollars is None:
             raise ModelCallUnavailable("model_call_completion_unavailable")
@@ -1114,6 +1233,7 @@ class ModelCallService:
 
     @staticmethod
     def _failed_result(row: CheckerModelCallAttempt, *, replayed: bool) -> KnownFailedModelCall:
+        """Project a known failed call only from complete billed terminal custody."""
         usage = _usage(row)
         if row.terminal_at is None or usage is None or row.settled_nanodollars is None:
             raise ModelCallUnavailable("model_call_completion_unavailable")
@@ -1132,4 +1252,4 @@ class ModelCallService:
         )
 
 
-__all__ = ("ModelCallService",)
+__all__ = ("ModelCallService", "model_recovery_candidates")

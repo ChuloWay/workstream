@@ -1,9 +1,9 @@
 {
-  "canonical_sha256": "5972b939c5c83b6790b6025d18e08623199cb1ad288851d62f5ba34bedae7061",
+  "canonical_sha256": "49952b484c5a99b013f492d027744844e3c18cd91d2bf68ff8db07fad58e7f47",
   "components": {
     "schemas": {
       "ActionId": {
-        "type": "string",
+        "description": "Closed action identifiers reserved by approved owner chunks.",
         "enum": [
           "task.submission.list",
           "submission.read",
@@ -59,6 +59,15 @@
           "checker.pre_submit.finalize",
           "checker.post_submit.execute",
           "checker.post_submit.finalize",
+          "checker.model_call.prepare",
+          "checker.model_call.dispatch",
+          "checker.model_call.recover",
+          "checker.model_call.observe",
+          "checker.model_call.complete",
+          "checker.model_call.grant",
+          "project.model_profile.provision",
+          "project.model_budget.configure",
+          "project.model_call.recovery_child.authorize",
           "outbox.dispatch",
           "actor.service.provision",
           "project.contributor_candidate.list",
@@ -184,7 +193,7 @@
           "contribution.policy.list"
         ],
         "title": "ActionId",
-        "description": "Closed action identifiers reserved by approved owner chunks."
+        "type": "string"
       },
       "ActorAuthorizationContextResponse": {
         "properties": {
@@ -568,7 +577,7 @@
   "schema_version": 1,
   "source": {
     "action_id": "actor.authorization_context.read",
-    "backend_git_sha": "5f2e1c97f1de1145bb61717fbcd2b414adfb7d92",
+    "backend_git_sha": "3a1d2b53062c534d199f7d7087832b66d2c0b72a",
     "method": "GET",
     "openapi_version": "3.1.0",
     "path": "/api/v1/actors/me/authorization-context"

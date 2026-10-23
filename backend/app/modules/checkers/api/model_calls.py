@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Annotated, Literal, Protocol, Self
 from uuid import RFC_4122, UUID
 
@@ -12,6 +13,7 @@ from pydantic import (
     Field,
     StrictInt,
     StrictStr,
+    field_validator,
     model_validator,
 )
 
@@ -59,6 +61,29 @@ def _require_uuid7(value: UUID, name: str) -> UUID:
     return value
 
 
+def _public_uuid(value: object) -> object:
+    """Decode only the canonical UUID spelling that a JSON request can carry."""
+    if isinstance(value, UUID) or type(value) is not str:
+        return value
+    try:
+        parsed = UUID(value)
+    except ValueError:
+        return value
+    if str(parsed) != value:
+        raise ValueError("UUID must use its canonical lowercase spelling")
+    return parsed
+
+
+def _public_datetime(value: object) -> object:
+    """Decode an RFC 3339-compatible timestamp before strict aware validation."""
+    if isinstance(value, datetime) or type(value) is not str:
+        return value
+    try:
+        return datetime.fromisoformat(value)
+    except ValueError:
+        return value
+
+
 class ModelProfileSelector(ModelCallValue):
     """Exact immutable profile identity retained in approved checker configuration."""
 
@@ -88,6 +113,8 @@ class ModelPricing(ModelCallValue):
     uncached_input_nanodollars_per_token: Nanodollars
     cached_input_nanodollars_per_token: Nanodollars
     output_nanodollars_per_token: Nanodollars
+
+    _decode_public_uuid = field_validator("pricing_policy_id", mode="before")(_public_uuid)
 
     @model_validator(mode="after")
     def nonzero_and_canonical(self) -> Self:
@@ -121,6 +148,10 @@ class ProjectModelProfileSpec(ModelCallValue):
     deadline_ms: StrictInt = Field(ge=100, le=3_600_000)
     call_slots: Literal[1] = 1
     pricing: ModelPricing
+
+    _decode_public_uuids = field_validator("project_id", "registry_entry_id", mode="before")(
+        _public_uuid
+    )
 
     @model_validator(mode="after")
     def canonical_ids(self) -> Self:
@@ -190,6 +221,8 @@ class ProjectModelBudgetConfigurationSpec(ModelCallValue):
     configuration_version: StrictInt = Field(ge=1)
     lifetime_limit_nanodollars: Nanodollars
 
+    _decode_public_uuid = field_validator("project_id", mode="before")(_public_uuid)
+
     @model_validator(mode="after")
     def positive_limit(self) -> Self:
         if self.lifetime_limit_nanodollars <= 0:
@@ -242,6 +275,10 @@ class ModelPaidSlotKey(ModelCallValue):
     profile_digest: Sha256
     slot_index: Literal[0] = 0
 
+    _decode_public_uuids = field_validator(
+        "project_id", "assignment_id", "submission_id", "profile_id", mode="before"
+    )(_public_uuid)
+
     @model_validator(mode="after")
     def canonical_profile(self) -> Self:
         _require_uuid7(self.profile_id, "model profile ID")
@@ -267,32 +304,43 @@ class ModelCallExecutionFacts(ModelCallValue):
     worker_lease_generation: StrictInt = Field(ge=1)
     worker_lease_expires_at: AwareDatetime
 
+    _decode_public_uuids = field_validator(
+        "project_id",
+        "task_id",
+        "assignment_id",
+        "submission_id",
+        "evaluation_request_id",
+        "checker_run_id",
+        "worker_lease_id",
+        mode="before",
+    )(_public_uuid)
+    _decode_public_expiry = field_validator("worker_lease_expires_at", mode="before")(
+        _public_datetime
+    )
+
 
 class ModelRecoveryChildRequest(ModelCallValue):
     """Public Operator request for one exact known-terminal paid-call child."""
 
-    execution: ModelCallExecutionFacts
     slot: ModelPaidSlotKey
     registry_entry_id: UUID
     terminal_digest: Sha256
     request_sha256: Sha256
 
+    _decode_public_uuid = field_validator("registry_entry_id", mode="before")(_public_uuid)
+
     @model_validator(mode="after")
-    def exact_execution(self) -> Self:
+    def canonical_registry(self) -> Self:
         _require_uuid7(self.registry_entry_id, "external checker registry entry ID")
-        if (
-            self.execution.project_id,
-            self.execution.assignment_id,
-            self.execution.submission_id,
-            self.execution.submission_version,
-        ) != (
-            self.slot.project_id,
-            self.slot.assignment_id,
-            self.slot.submission_id,
-            self.slot.submission_version,
-        ):
-            raise ValueError("model recovery execution and slot do not match")
         return self
+
+
+class ModelRecoveryCandidate(ModelRecoveryChildRequest):
+    """Exact terminal paid effect disclosed under existing Operator retry reads."""
+
+    parent_attempt_id: UUID
+
+    _decode_public_parent = field_validator("parent_attempt_id", mode="before")(_public_uuid)
 
 
 class ModelCallEvidence(ModelCallValue):
@@ -468,7 +516,37 @@ class ModelProfileReaderPort(Protocol):
         project_id: UUID,
         registry_entry_id: UUID,
         registry_entry_digest: str,
-    ) -> ProjectModelProfile: ...
+    ) -> ProjectModelProfile:
+        """Resolve the complete selector only for its exact project and registry digest."""
+        ...
+
+
+class ModelCallAdministrationPort(Protocol):
+    """Own exact public profile, budget and recovery-child mutations."""
+
+    async def provision_profile(
+        self, facts: ModelProfileProvisioningFacts
+    ) -> ProjectModelProfile:
+        """Authorize and retain immutable profile facts with exact operation replay."""
+        ...
+
+    async def provision_budget(
+        self, facts: ModelBudgetProvisioningFacts
+    ) -> ProjectModelBudgetConfiguration:
+        """Publish a finite lifetime limit without resetting reserved or settled spend."""
+        ...
+
+    async def prepare_recovery_child(
+        self,
+        slot: ModelPaidSlotKey,
+        *,
+        registry_entry_id: UUID,
+        parent_attempt_id: UUID,
+        terminal_digest: str,
+        request_sha256: str,
+    ) -> PreparedModelCallAttempt:
+        """Authorize a child of proven terminal failure without dispatching a provider call."""
+        ...
 
 
 class ModelCallCurrentExecutionPort(Protocol):
@@ -476,7 +554,15 @@ class ModelCallCurrentExecutionPort(Protocol):
 
     async def require_current(
         self, facts: ModelCallExecutionFacts, slot: ModelPaidSlotKey
-    ) -> None: ...
+    ) -> None:
+        """Require current TASK and checker lease custody before attaching a paid slot."""
+        ...
+
+    async def require_recovery_current(
+        self, slot: ModelPaidSlotKey, parent_attempt_id: UUID
+    ) -> None:
+        """Lock current TASK/Submission custody without requiring a live worker lease."""
+        ...
 
 
 class ModelCallEvidencePort(Protocol):
@@ -484,9 +570,13 @@ class ModelCallEvidencePort(Protocol):
 
     async def require_request(
         self, attempt: PreparedModelCallAttempt, evidence: ModelCallEvidence
-    ) -> None: ...
+    ) -> None:
+        """Verify the exact attempt owns the sealed request bytes before dispatch."""
+        ...
 
-    async def require_response(self, attempt_id: UUID, evidence: ModelCallEvidence) -> None: ...
+    async def require_response(self, attempt_id: UUID, evidence: ModelCallEvidence) -> None:
+        """Verify sealed response evidence belongs to this attempt before settlement."""
+        ...
 
 
 class ModelCallAuthorityPort(Protocol):
@@ -494,52 +584,68 @@ class ModelCallAuthorityPort(Protocol):
 
     async def authorize_profile(
         self, facts: ModelProfileProvisioningFacts
-    ) -> ModelActionEvidence: ...
+    ) -> ModelActionEvidence:
+        """Bind profile publication authority to the project and complete immutable facts."""
+        ...
 
     async def authorize_budget(
         self, facts: ModelBudgetProvisioningFacts
-    ) -> ModelActionEvidence: ...
+    ) -> ModelActionEvidence:
+        """Bind budget publication authority to the exact project and configuration."""
+        ...
 
     async def authorize_prepare(
         self,
         execution: ModelCallExecutionFacts,
         slot: ModelPaidSlotKey,
         request_sha256: str,
-    ) -> ModelActionEvidence: ...
+    ) -> ModelActionEvidence:
+        """Authorize request preparation for the current execution and stable paid slot."""
+        ...
 
     async def authorize_dispatch(
         self,
         execution: ModelCallExecutionFacts,
         attempt: PreparedModelCallAttempt,
         request_evidence: ModelCallEvidence,
-    ) -> ModelActionEvidence: ...
+    ) -> ModelActionEvidence:
+        """Authorize one provider effect using current execution and verified request evidence."""
+        ...
 
     async def authorize_recover(
         self,
         execution: ModelCallExecutionFacts,
         effect: ModelCallEffectAuthorityFacts,
-    ) -> ModelActionEvidence: ...
+    ) -> ModelActionEvidence:
+        """Authorize inspection of an existing effect without permitting another create."""
+        ...
 
     async def authorize_observe(
         self,
         effect: ModelCallEffectAuthorityFacts,
         provider_response_id: str | None,
         observation_digest: str,
-    ) -> ModelActionEvidence: ...
+    ) -> ModelActionEvidence:
+        """Authorize retention of exact provider observations independently of lease expiry."""
+        ...
 
     async def authorize_child(
         self,
-        execution: ModelCallExecutionFacts,
+        project_id: UUID,
         parent_attempt_id: UUID,
         terminal_digest: str,
-    ) -> ModelActionEvidence: ...
+    ) -> ModelActionEvidence:
+        """Authorize a recovery child only against the exact retained terminal digest."""
+        ...
 
     async def authorize_complete(
         self,
         effect: ModelCallEffectAuthorityFacts,
         response_evidence: ModelCallEvidence | None,
         terminal_digest: str,
-    ) -> ModelActionEvidence: ...
+    ) -> ModelActionEvidence:
+        """Authorize terminal accounting against the effect and its response evidence."""
+        ...
 
 
 def model_usage_cost(profile: ProjectModelProfileSpec, usage: ModelCallUsage) -> int:
@@ -579,6 +685,7 @@ __all__ = (
     "ModelActionEvidence",
     "ModelBudgetProvisioningFacts",
     "ModelCallAuthorityPort",
+    "ModelCallAdministrationPort",
     "ModelCallBudgetUnavailable",
     "ModelCallConflict",
     "ModelCallCurrentExecutionPort",
@@ -594,6 +701,7 @@ __all__ = (
     "ModelPaidSlotKey",
     "ModelPricing",
     "ModelProfileProvisioningFacts",
+    "ModelRecoveryCandidate",
     "ModelRecoveryChildRequest",
     "ModelProfileReaderPort",
     "ModelProfileSelector",

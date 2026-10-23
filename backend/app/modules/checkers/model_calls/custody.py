@@ -1,5 +1,8 @@
 """Current invocation and call-stable private evidence custody."""
 
+import json
+from uuid import UUID
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -29,6 +32,7 @@ from app.modules.checkers.execution_repository import (
 )
 from app.modules.checkers.models import CheckerRun
 from app.modules.checkers.model_calls.repository import ModelCallRepository
+from app.modules.checkers.model_calls.grants import CheckerModelInvocationGrant
 
 
 class ModelCallCurrentExecution:
@@ -36,6 +40,32 @@ class ModelCallCurrentExecution:
 
     def __init__(self, session: AsyncSession, *, tasks: EvaluationTaskGuard):
         self._session, self._tasks = session, tasks
+
+    @staticmethod
+    def _require_binding(request, slot: ModelPaidSlotKey) -> None:
+        if request.assignment_id != slot.assignment_id or (
+            slot.project_id,
+            slot.submission_id,
+            slot.submission_version,
+        ) != (request.project_id, request.submission_id, request.submission_version):
+            raise ModelCallUnavailable("model_call_execution_unavailable")
+        bindings = [
+            binding
+            for binding in request.policy.entries
+            if binding.requirement_id == slot.requirement_id
+            and binding.registry.entry_digest == slot.registry_entry_digest
+            and binding.configuration_sha256 == slot.configuration_sha256
+        ]
+        if len(bindings) != 1:
+            raise ModelCallUnavailable("model_call_binding_unavailable")
+        configuration = bindings[0].configuration
+        if (
+            configuration.get("model_profile_id") != str(slot.profile_id)
+            or type(configuration.get("model_profile_version")) is not int
+            or configuration.get("model_profile_version") != slot.profile_version
+            or configuration.get("model_profile_digest") != slot.profile_digest
+        ):
+            raise ModelCallUnavailable("model_call_profile_unavailable")
 
     async def require_current(
         self,
@@ -62,30 +92,9 @@ class ModelCallCurrentExecution:
         if run is None:
             raise ModelCallUnavailable("model_call_execution_unavailable")
         request = stored_request(run)
-        if request.assignment_id != facts.assignment_id or (
-            slot.project_id,
-            slot.assignment_id,
-            slot.submission_id,
-            slot.submission_version,
-        ) != (facts.project_id, facts.assignment_id, facts.submission_id, facts.submission_version):
+        if request.assignment_id != facts.assignment_id:
             raise ModelCallUnavailable("model_call_execution_unavailable")
-        bindings = [
-            binding
-            for binding in request.policy.entries
-            if binding.requirement_id == slot.requirement_id
-            and binding.registry.entry_digest == slot.registry_entry_digest
-            and binding.configuration_sha256 == slot.configuration_sha256
-        ]
-        if len(bindings) != 1:
-            raise ModelCallUnavailable("model_call_binding_unavailable")
-        configuration = bindings[0].configuration
-        if (
-            configuration.get("model_profile_id") != str(slot.profile_id)
-            or type(configuration.get("model_profile_version")) is not int
-            or configuration.get("model_profile_version") != slot.profile_version
-            or configuration.get("model_profile_digest") != slot.profile_digest
-        ):
-            raise ModelCallUnavailable("model_call_profile_unavailable")
+        self._require_binding(request, slot)
         try:
             if not await self._tasks.lock_evaluation_scope(request):
                 raise ModelCallUnavailable("model_call_execution_unavailable")
@@ -100,6 +109,55 @@ class ModelCallCurrentExecution:
             )
         except CheckerExecutionUnavailable:
             raise ModelCallUnavailable("model_call_execution_unavailable") from None
+
+    async def require_recovery_current(
+        self, slot: ModelPaidSlotKey, parent_attempt_id: UUID
+    ) -> None:
+        """Lock current TASK/Submission custody for a terminal source, without a lease."""
+        require_transaction(self._session)
+        slot = ModelPaidSlotKey.model_validate(slot)
+        repo = ModelCallRepository(self._session)
+        slot_row = await repo.slot(slot)
+        parent = await repo.attempt(parent_attempt_id)
+        grant = await self._session.scalar(
+            select(CheckerModelInvocationGrant).where(
+                CheckerModelInvocationGrant.selected_attempt_id == str(parent_attempt_id)
+            )
+        )
+        if (
+            slot_row is None
+            or parent is None
+            or parent.slot_id != slot_row.id
+            or grant is None
+            or grant.project_id != str(slot.project_id)
+            or grant.paid_slot != slot.model_dump(mode="json")
+            or grant.selected_request_sha256 != parent.request_sha256
+        ):
+            raise ModelCallUnavailable("model_call_recovery_unavailable")
+        run = await self._session.get(CheckerRun, grant.checker_run_id)
+        if (
+            run is None
+            or run.task_id != slot_row.task_id
+            or run.status != "infrastructure_failed"
+            or run.failure_code is None
+            or run.completed_at is None
+        ):
+            raise ModelCallUnavailable("model_call_recovery_unavailable")
+        try:
+            execution = ModelCallExecutionFacts.model_validate_json(
+                json.dumps(grant.execution_facts)
+            )
+            request = stored_request(run)
+        except (CheckerExecutionUnavailable, ValueError):
+            raise ModelCallUnavailable("model_call_recovery_unavailable") from None
+        if execution.checker_run_id != UUID(run.id) or execution.task_id != UUID(slot_row.task_id):
+            raise ModelCallUnavailable("model_call_recovery_unavailable")
+        self._require_binding(request, slot)
+        try:
+            if not await self._tasks.lock_evaluation_scope(request):
+                raise ModelCallUnavailable("model_call_recovery_unavailable")
+        except CheckerExecutionUnavailable:
+            raise ModelCallUnavailable("model_call_recovery_unavailable") from None
 
 
 class CheckerOutputReservations:

@@ -39,6 +39,8 @@ ports, but their production reservation path needs inspection before reuse.
   network denial, read-only submission material, cleanup and output budgets.
 - Focused PostgreSQL/MinIO, transport, provider and public lifecycle tests;
   affected CI allocation, owner specifications, runbook and roadmap.
+- Reconcile the existing CLI retry-source decoder and its process tests with
+  the bounded model recovery candidates returned by that public read.
 
 ### Not allowed
 
@@ -177,7 +179,63 @@ honest separation of local proof from deployed operation.
 
 Initial source inspection and architecture review identified the stable paid
 slot and the need to preserve image ownership. This is a design record; no
-runtime, budget, provider call or live project completion is established yet.
+live provider spend or project completion is established yet. The implementation
+has focused offline provider, proxy crash/replay, private Unix transport and
+Compose lifecycle proof. The retained-data 0058-to-0059 upgrade and PostgreSQL
+ledger, signed public provisioning and real MCP catalogue adapter checks pass.
+All six composed public profile-to-checker cases pass with real PostgreSQL,
+local/MinIO ART and a controlled provider/image boundary: completion, retained
+paid results after a lost image reply, concurrent callbacks, and explicit child
+recovery after proven no-effect or fully settled provider failure. Database and
+MinIO cleanup completed. Final independent reviews and full CI remain required
+before readiness. These checks do not establish live provider or gVisor operation.
+
+Implementation review caught and repaired two runtime defects: inherited Compose
+profiles unintentionally started the optional listener, and an empty prompt could
+reserve budget before local validation rejected it. Profile publication now also
+requires the exact registered POST image digest, with independent SQL checks of
+canonical profile/budget specification hashes. Regressions cover each boundary;
+the final frozen review must assess their composed behavior and current head.
+
+The retained-data 0058-to-0059 upgrade exposed a PL/pgSQL parsing failure that
+fresh baseline installation did not expose. A discriminating PostgreSQL probe
+isolated the unparenthesized CASE expression in the ART binding guard; the
+corrected upgrade passes with retained data and owned-database cleanup. Public
+HTTP qualification also exposed strict JSON UUID decoding and a prepared
+system-Operator scope mismatch. These require the real adapter/API proofs; the
+ledger's controlled-authority tests alone cannot establish public usability.
+
+Composed execution also exposed strict Python decoding of the JSON prepared
+ART authorization packet. The parser now validates that packet as JSON while
+retaining strict integer validation. Both write and binding regressions reject
+the original decoder. The composed fixture explicitly declares model evaluation
+and supplies the canonical profile reader instead of attaching a model profile
+to a static requirement; production policy validation remains unchanged.
+
+That composed path also exposed an inherited ART receipt trigger that required
+a checker-run producer even for a paid-call receipt. The migration now admits
+only the exact model-call attempt and request/response role while retaining the
+existing producer guards. Fresh schema installation, the canonical ART custody
+case and retained 0058-to-0059 upgrade pass with the corrected trigger.
+
+Canonical storage regressions also require malformed or substituted commitment
+facts to leave AUTH through its concealed unavailable outcome. Resource
+validation now discards the prepared handle before returning that outcome;
+changed bytes cannot reach provider I/O. The remaining ART cases cover mixed
+binding lineage, rollback/concurrent replay, uncertain puts, revocation,
+cancellation and size limits. The adapter composition uses existing owner ports
+and passes the protected-base boundary check without adding private-edge debt.
+
+Operator recovery uses the existing authorized checker retry-source read to
+discover bounded eligible paid-call candidates. Child preparation retains exact
+current Task/Submission custody without requiring a live worker lease; actual
+dispatch still requires a fresh current invocation. This closes the otherwise
+unusable repair path after a terminal infrastructure failure.
+
+Current owner documentation replaces deny-only generated-output wording with
+active paid-call ART custody, lists all nine model permission/action mappings and
+describes stable effect records. Existing normalized checker outcomes and
+true/false review-policy routing remain unchanged.
 
 Plan review found that existing ART output slots are empty and run/lease-bound;
 the stable call evidence reservation above is required. It also required exact

@@ -170,6 +170,7 @@ async def create_standalone_unified_policy(
     pre_submit_registry_spec=None,
     post_submit_registry_spec=None,
     post_submit_binding_setup=None,
+    post_submit_specification=None,
 ):
     """Arrange complete activated context before a downstream artifact transaction."""
     from app.modules.projects.models import PreSubmitCheckerPolicy
@@ -190,6 +191,7 @@ async def create_standalone_unified_policy(
         pre_submit_registry_spec=pre_submit_registry_spec,
         post_submit_registry_spec=post_submit_registry_spec,
         post_submit_binding_setup=post_submit_binding_setup,
+        post_submit_specification=post_submit_specification,
     ) as (values, _, command, actor, grant):
         await seed_selected_review_revision_inputs(
             sessions, command, actor, human_review_required=human_review_required,

@@ -115,8 +115,9 @@ All 57 accumulated provider resources were deleted. The project-owned
 local rule tests and networkless container samples qualify its intake behavior.
 Its samples are structural fixtures, not completed authoring submissions.
 The eight POST checks and their model, isolated execution and authenticated
-material dependencies remain unavailable. No registered image, approved policy,
-activated guide or contribution outcome is claimed. Engineering
+material dependencies remain unavailable. The PRE image is published by digest
+and registered in the local rehearsal; no approved binding, activated guide or
+contribution outcome is claimed. Engineering
 must implement the remaining eight POST checks and resolve their runtime/material gaps,
 register the exact images, and obtain corrected bindings and PM approval before
 activation and the contributor journey.

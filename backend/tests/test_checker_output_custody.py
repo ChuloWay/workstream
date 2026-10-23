@@ -9,6 +9,16 @@ from uuid import UUID
 import pytest
 from sqlalchemy import func, select
 
+from tests.authentication.fixtures import (
+    auth_database_env as auth_database_env,
+    clear_settings_cache as clear_settings_cache,
+    rsa_signing_material as rsa_signing_material,
+)
+from tests.authorization.admin_access.fixtures import (
+    admin_access as admin_access,
+    signed_access as signed_access,
+)
+
 from app.interfaces.artifacts import ArtifactLimitExceededError
 from app.modules.actors.api import ServiceIdentity
 from app.modules.artifacts.models import (
@@ -16,10 +26,10 @@ from app.modules.artifacts.models import (
     ArtifactOperationReceipt,
     ArtifactPutObservationReceipt,
     ArtifactPutAttempt,
+    ArtifactReplica,
     ArtifactVerificationJob,
     ArtifactVerificationReceipt,
 )
-from app.modules.artifacts.service import ArtifactAdmissionConflictError
 from app.modules.checkers.api.output_custody import (
     CheckerOutputArtifactRequest,
     CheckerOutputBindingRequest,
@@ -41,6 +51,7 @@ def content_sha256(value: bytes) -> str:
 async def test_real_store_verification_and_binding(
     tmp_path,
     isolated_database_env,
+    admin_access,
     provider,
 ) -> None:
     """Store, independently verify and bind one exact output through real providers."""
@@ -51,6 +62,7 @@ async def test_real_store_verification_and_binding(
     async with output_custody_harness(
         tmp_path,
         isolated_database_env,
+        admin_access=admin_access,
         provider=provider,
     ) as harness:
         result = await harness.service.store(harness.request(b"verified checker output"))
@@ -89,6 +101,33 @@ async def test_real_store_verification_and_binding(
                 str(result.put_attempt_id),
                 str(result.verification_receipt_id),
             )
+            attempt = await session.get(ArtifactPutAttempt, str(result.put_attempt_id))
+            receipt = await session.scalar(
+                select(ArtifactOperationReceipt).where(
+                    ArtifactOperationReceipt.put_attempt_id == str(result.put_attempt_id)
+                )
+            )
+            job = await session.scalar(
+                select(ArtifactVerificationJob).where(
+                    ArtifactVerificationJob.originating_put_attempt_id == str(result.put_attempt_id)
+                )
+            )
+            assert attempt is not None and receipt is not None and job is not None
+            replica = await session.get(ArtifactReplica, job.replica_id)
+            assert replica is not None
+            assert (
+                receipt.model_call_attempt_id,
+                receipt.logical_role,
+                attempt.checker_output_custody_sealed,
+                job.checker_output_custody_sealed,
+                replica.checker_output_custody_sealed,
+            ) == (
+                str(harness.selector.model_call_attempt_id),
+                harness.selector.slot_key,
+                True,
+                True,
+                True,
+            )
         assert harness.state.admissions
         assert harness.state.recoveries
         assert harness.state.bindings
@@ -97,9 +136,12 @@ async def test_real_store_verification_and_binding(
 async def test_identical_store_replay_reuses_verified_custody_without_provider_work(
     tmp_path,
     isolated_database_env,
+    admin_access,
 ) -> None:
     """Replay exact bytes through the stable attempt without another put or verify."""
-    async with output_custody_harness(tmp_path, isolated_database_env) as harness:
+    async with output_custody_harness(
+        tmp_path, isolated_database_env, admin_access=admin_access
+    ) as harness:
         first = await harness.service.store(harness.request(b"stable replay output"))
         assert first.status == "verified"
         assert first.content_id is not None
@@ -145,7 +187,8 @@ async def test_identical_store_replay_reuses_verified_custody_without_provider_w
                     .select_from(ArtifactPutAttempt)
                     .where(
                         ArtifactPutAttempt.model_call_attempt_id
-                        == str(harness.selector.model_call_attempt_id)
+                        == str(harness.selector.model_call_attempt_id),
+                        ArtifactPutAttempt.logical_role == harness.selector.slot_key,
                     )
                 )
                 == 1
@@ -181,9 +224,12 @@ async def test_identical_store_replay_reuses_verified_custody_without_provider_w
 async def test_foreign_lineage_and_changed_bytes_fail_before_provider(
     tmp_path,
     isolated_database_env,
+    admin_access,
 ) -> None:
     """Reject coherent foreign ownership before bytes and immutable replay drift before put."""
-    async with output_custody_harness(tmp_path, isolated_database_env) as harness:
+    async with output_custody_harness(
+        tmp_path, isolated_database_env, admin_access=admin_access
+    ) as harness:
         original_reservation = harness.state.reservation
         foreign = await harness.seed_reservation(content_sha256=content_sha256(b"foreign control"))
         foreign_selector = selector_for(foreign)
@@ -220,7 +266,7 @@ async def test_foreign_lineage_and_changed_bytes_fail_before_provider(
             assert harness.store.puts == 2
             assert (await harness.manager.usage()).reservation_count == 0
 
-        with pytest.raises(ArtifactAdmissionConflictError):
+        with pytest.raises(CheckerOutputUnavailable, match="authority_unavailable"):
             await harness.service.store(
                 harness.request(b"changed output", selector=original_selector)
             )
@@ -231,9 +277,12 @@ async def test_foreign_lineage_and_changed_bytes_fail_before_provider(
 async def test_binding_rejects_mixed_stored_lineage_before_consumption_or_mutation(
     tmp_path,
     isolated_database_env,
+    admin_access,
 ) -> None:
     """Bind two valid controls, then reject every original/foreign custody mix."""
-    async with output_custody_harness(tmp_path, isolated_database_env) as harness:
+    async with output_custody_harness(
+        tmp_path, isolated_database_env, admin_access=admin_access
+    ) as harness:
         original_reservation = harness.state.reservation
         foreign_reservation = await harness.seed_reservation(
             content_sha256=content_sha256(b"foreign binding control")
@@ -308,9 +357,12 @@ async def test_binding_rejects_mixed_stored_lineage_before_consumption_or_mutati
 async def test_binding_rollback_and_concurrent_replay_are_atomic(
     tmp_path,
     isolated_database_env,
+    admin_access,
 ) -> None:
     """Keep caller rollback empty and serialize concurrent binding to one row."""
-    async with output_custody_harness(tmp_path, isolated_database_env) as harness:
+    async with output_custody_harness(
+        tmp_path, isolated_database_env, admin_access=admin_access
+    ) as harness:
         stored = await harness.service.store(harness.request(b"binding output"))
         assert stored.verification_receipt_id is not None
         request = CheckerOutputBindingRequest(
@@ -341,6 +393,7 @@ async def test_binding_rollback_and_concurrent_replay_are_atomic(
                 .where(
                     ArtifactBinding.resource_type == "checker_model_call",
                     ArtifactBinding.resource_id == str(harness.selector.model_call_attempt_id),
+                    ArtifactBinding.logical_role == harness.selector.slot_key,
                 )
             )
             assert count == 1
@@ -349,9 +402,12 @@ async def test_binding_rollback_and_concurrent_replay_are_atomic(
 async def test_unknown_put_is_observed_recovered_and_bound_without_bytes(
     tmp_path,
     isolated_database_env,
+    admin_access,
 ) -> None:
     """Recover lost acknowledgement through typed observation evidence and bind it."""
-    async with output_custody_harness(tmp_path, isolated_database_env) as harness:
+    async with output_custody_harness(
+        tmp_path, isolated_database_env, admin_access=admin_access
+    ) as harness:
         harness.store.lose_put_acknowledgement = True
         unknown = await harness.service.store(harness.request(b"observed output"))
         assert unknown.status == "acknowledgement_unknown"
@@ -398,9 +454,12 @@ async def test_unknown_put_is_observed_recovered_and_bound_without_bytes(
 async def test_authority_revocation_during_put_prevents_return_and_binding(
     tmp_path,
     isolated_database_env,
+    admin_access,
 ) -> None:
     """Recheck authority after provider I/O and deny publication after revocation."""
-    async with output_custody_harness(tmp_path, isolated_database_env) as harness:
+    async with output_custody_harness(
+        tmp_path, isolated_database_env, admin_access=admin_access
+    ) as harness:
         harness.store.put_entered = asyncio.Event()
         harness.store.put_release = asyncio.Event()
         operation = asyncio.create_task(harness.service.store(harness.request(b"revoked output")))
@@ -415,7 +474,8 @@ async def test_authority_revocation_during_put_prevents_return_and_binding(
                 select(ArtifactPutAttempt)
                 .where(
                     ArtifactPutAttempt.model_call_attempt_id
-                    == str(harness.selector.model_call_attempt_id)
+                    == str(harness.selector.model_call_attempt_id),
+                    ArtifactPutAttempt.logical_role == harness.selector.slot_key,
                 )
                 .with_for_update(nowait=True)
             )
@@ -430,7 +490,8 @@ async def test_authority_revocation_during_put_prevents_return_and_binding(
                 await session.scalars(
                     select(ArtifactPutAttempt).where(
                         ArtifactPutAttempt.model_call_attempt_id
-                        == str(harness.selector.model_call_attempt_id)
+                        == str(harness.selector.model_call_attempt_id),
+                        ArtifactPutAttempt.logical_role == harness.selector.slot_key,
                     )
                 )
             ).one()
@@ -459,6 +520,7 @@ async def test_authority_revocation_during_put_prevents_return_and_binding(
                 .where(
                     ArtifactBinding.resource_type == "checker_model_call",
                     ArtifactBinding.resource_id == str(harness.selector.model_call_attempt_id),
+                    ArtifactBinding.logical_role == harness.selector.slot_key,
                 )
             )
             assert binding_count == 0
@@ -467,9 +529,12 @@ async def test_authority_revocation_during_put_prevents_return_and_binding(
 async def test_cancellation_during_provider_put_cleans_scratch_and_retains_uncertainty(
     tmp_path,
     isolated_database_env,
+    admin_access,
 ) -> None:
     """Preserve cancellation while retaining only the durable in-flight attempt."""
-    async with output_custody_harness(tmp_path, isolated_database_env) as harness:
+    async with output_custody_harness(
+        tmp_path, isolated_database_env, admin_access=admin_access
+    ) as harness:
         harness.store.put_entered = asyncio.Event()
         harness.store.put_release = asyncio.Event()
         operation = asyncio.create_task(harness.service.store(harness.request(b"cancelled output")))
@@ -500,7 +565,8 @@ async def test_cancellation_during_provider_put_cleans_scratch_and_retains_uncer
             attempt = await session.scalar(
                 select(ArtifactPutAttempt).where(
                     ArtifactPutAttempt.model_call_attempt_id
-                    == str(harness.selector.model_call_attempt_id)
+                    == str(harness.selector.model_call_attempt_id),
+                    ArtifactPutAttempt.logical_role == harness.selector.slot_key,
                 )
             )
             assert attempt is not None
@@ -518,7 +584,8 @@ async def test_cancellation_during_provider_put_cleans_scratch_and_retains_uncer
                     .select_from(ArtifactOperationReceipt)
                     .where(
                         ArtifactOperationReceipt.model_call_attempt_id
-                        == str(harness.selector.model_call_attempt_id)
+                        == str(harness.selector.model_call_attempt_id),
+                        ArtifactOperationReceipt.logical_role == harness.selector.slot_key,
                     )
                 )
                 == 0
@@ -546,6 +613,7 @@ async def test_cancellation_during_provider_put_cleans_scratch_and_retains_uncer
                     .where(
                         ArtifactBinding.resource_type == "checker_model_call",
                         ArtifactBinding.resource_id == str(harness.selector.model_call_attempt_id),
+                        ArtifactBinding.logical_role == harness.selector.slot_key,
                     )
                 )
                 == 0
@@ -555,11 +623,13 @@ async def test_cancellation_during_provider_put_cleans_scratch_and_retains_uncer
 async def test_per_slot_cap_stops_source_and_cleans_scratch(
     tmp_path,
     isolated_database_env,
+    admin_access,
 ) -> None:
     """Apply the owner-issued cap before excess bytes reach durable intent or provider."""
     async with output_custody_harness(
         tmp_path,
         isolated_database_env,
+        admin_access=admin_access,
         maximum_bytes=4,
     ) as harness:
         observed: list[bytes] = []
@@ -577,6 +647,10 @@ async def test_per_slot_cap_stops_source_and_cleans_scratch(
             attempts = await session.scalar(
                 select(func.count())
                 .select_from(ArtifactPutAttempt)
-                .where(ArtifactPutAttempt.producer_request_type == "checker_output")
+                .where(
+                    ArtifactPutAttempt.model_call_attempt_id
+                    == str(harness.selector.model_call_attempt_id),
+                    ArtifactPutAttempt.logical_role == harness.selector.slot_key,
+                )
             )
             assert attempts == 0

@@ -249,13 +249,13 @@ async def _material_fixture(
     pre_submit_registry_spec=None,
     post_submit_registry_spec=None,
     post_submit_binding_setup=None,
+    post_submit_specification=None,
     post_scratch_root=None,
 ):
     engine = create_async_engine(database_url)
     factory = async_sessionmaker(engine, expire_on_commit=False)
     settings, bootstrap, namespace, store, scratch, manager = _material_storage(
-        tmp_path, provider, storage_settings, scratch_limits, post_scratch_root
-    )
+        tmp_path, provider, storage_settings, scratch_limits, post_scratch_root)
     try:
         plan, policy = await approved_selected_policy_fixture(
             factory,
@@ -267,15 +267,9 @@ async def _material_fixture(
             pre_submit_registry_spec=pre_submit_registry_spec,
             post_submit_registry_spec=post_submit_registry_spec,
             post_submit_binding_setup=post_submit_binding_setup,
+            post_submit_specification=post_submit_specification,
         )
-        (
-            context,
-            task_id,
-            data,
-            admission_id,
-            creation_request,
-            created,
-        ) = await _create_material_submission(
+        context, task_id, data, admission_id, creation_request, created = await _create_material_submission(
             factory,
             engine,
             plan,

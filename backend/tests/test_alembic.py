@@ -339,6 +339,7 @@ def test_repeated_upgrade_head_preserves_current_database(
     "0055_delivery_reconciliation",
     "0056_manager_authored_runtime",
     "0057_roles_anywhere_custody",
+    "0058_compensation_unit_create",
 ])
 def test_preceding_head_upgrades_to_current_without_recreation(
     isolated_database_env: str, migration_lock, installed_revision: str,

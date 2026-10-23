@@ -73,8 +73,9 @@ access to the global proxy endpoint. The service wraps the prompt with the
 invocation's private grant and request digest. It offers one call slot and keeps
 the checker container on `--network none`.
 
-The dedicated singleton model-proxy worker is optional. Its `model-proxy`
-Compose profile sets
+The dedicated singleton model-proxy worker is optional. Add `model-proxy` to
+the existing backend and agent-loop Compose profiles to enable it. That profile
+sets
 `WORKSTREAM_CHECKER_MODEL_PROXY_SOCKET=/run/ws-model-proxy/model-proxy.sock` and
 binds the listener; the ordinary API, task worker and beat processes do not own
 or mount that socket. An empty value outside the model-proxy process leaves the
@@ -87,16 +88,39 @@ root. Enabling only one side does not activate model calls.
 
 The proxy and relay roots must be canonical mode-`0700` directories owned by the
 shared service UID and GID. The global proxy socket and each invocation socket
-are mode `0600`. The backend has read-write access to the proxy volume, the Rust
-service connects through its read-only volume mount and creates invocation
-sockets in the relay volume, and a checker receives only its individual socket
-file. A different service/sandbox identity is rejected because this path does
-not rely on privileged ownership changes.
+are mode `0600`. The singleton model-proxy worker has read-write access to the
+proxy volume, the Rust service connects through its read-only volume mount and
+creates invocation sockets in the relay volume, and a checker receives only its
+individual socket file. A different service/sandbox identity is rejected
+because this path does not rely on privileged ownership changes.
 
 Docker development proves only the ordinary runtime path. A gVisor `runsc`
 deployment must separately enable `host-uds=open` before a mounted host Unix
 socket can work. This repository does not claim that the model relay has been
 qualified under gVisor.
+
+The opt-in
+[`model_relay_docker.py`](workstream-checker-service/tests/model_relay_docker.py)
+probe drives a real Docker-development checker from its invocation-local socket,
+through the Rust relay, to a fake private global proxy. It records the created
+checker before cleanup and verifies `--network none`, a read-only root filesystem,
+read-only material and socket mounts, the closed proxy request and exact reply,
+and removal of the checker and invocation directory. It uses only already-local
+`alpine:3.20` and `registry:2` images, creates a small disposable checker layer,
+and makes no provider call:
+
+```console
+CARGO_TARGET_DIR=/dev/shm/workstream-checker-target \
+  cargo build --locked -p workstream-checker-service
+TMPDIR=/dev/shm python3 \
+  workstream-checker-service/tests/model_relay_docker.py \
+  --service /dev/shm/workstream-checker-target/debug/workstream-checker-service
+```
+
+Run those commands from `external_checkers/`. The probe never pulls images,
+scans Docker state for cleanup, or qualifies the gVisor path. Its fake reply is
+transport evidence only; it does not prove provider execution, budget settlement,
+or a completed product model-evaluation journey.
 
 ## From guide to an active project
 

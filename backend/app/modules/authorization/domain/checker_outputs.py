@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import Literal, Self
 from uuid import UUID
 
@@ -146,10 +147,9 @@ def checker_output_prepare_resource(
 
 def checker_output_admission_resource(
     selector: CheckerOutputSelector,
-    request: object,
+    facts: object,
 ) -> CheckerOutputResourceContext:
     """Bind prepared write authority to server-computed content facts."""
-    commitment = request.source.commitment
     prepared = checker_output_prepare_resource(WRITE, selector)
     return CheckerOutputResourceContext(
         resource_id=prepared.resource_id,
@@ -157,11 +157,11 @@ def checker_output_admission_resource(
         action_id=prepared.action_id,
         selector=prepared.selector,
         selector_digest=prepared.selector_digest,
-        reservation=request.reservation,
+        reservation=facts.reservation,
         commitment=CheckerOutputCommitmentFacts(
-            sha256=commitment.sha256,
-            byte_count=commitment.byte_count,
-            media_type=commitment.media_type,
+            sha256=facts.sha256,
+            byte_count=facts.byte_count,
+            media_type=facts.media_type,
         ),
     )
 
@@ -217,7 +217,7 @@ def parse_checker_output_prepare(
     if action not in CHECKER_OUTPUT_ACTIONS:
         return None
     try:
-        resource = CheckerOutputResourceContext.model_validate(value)
+        resource = CheckerOutputResourceContext.model_validate_json(json.dumps(value))
         if (
             resource.action_id is not action
             or resource.reservation is not None

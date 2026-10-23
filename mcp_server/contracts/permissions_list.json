@@ -402,7 +402,7 @@
   "schema_version": 1,
   "source": {
     "action_id": "authorization.permission_catalogue.read",
-    "backend_git_sha": "7326dc95e59f59fc9f6dee438857091e73c370aa",
+    "backend_git_sha": "3a1d2b53062c534d199f7d7087832b66d2c0b72a",
     "method": "GET",
     "openapi_version": "3.1.0",
     "path": "/api/v1/authorization/permissions"

@@ -1,6 +1,9 @@
 """Configured proxy startup and provider ownership boundaries."""
 
+import asyncio
+from contextlib import asynccontextmanager
 from pathlib import Path
+import signal
 from types import SimpleNamespace
 
 import pytest
@@ -9,6 +12,7 @@ from pydantic import ValidationError
 from app.adapters.checkers import model_runtime
 from app.core.config import Settings
 from app.modules.checkers.api.model_calls import ModelCallUnavailable
+from app.workers import checker_model_proxy
 from tests.artifact_store_helpers import artifact_admission_limit_settings
 from tests.checkers_model_calls.test_proxy_orchestration import Harness
 
@@ -80,3 +84,52 @@ async def test_missing_provider_key_stops_before_reserving_budget(monkeypatch):
     with pytest.raises(ModelCallUnavailable):
         async with model_runtime.configured_model_provider(h.profile):
             pass
+
+
+async def test_singleton_worker_drains_before_engine_disposal(monkeypatch):
+    """SIGTERM stops admission and awaits the owned runtime before DB disposal."""
+    calls = []
+    settings = SimpleNamespace(checker_model_proxy_socket=Path("/private/model.sock"))
+    sessions = object()
+    real_loop = asyncio.get_running_loop()
+
+    class SignalLoop:
+        def add_signal_handler(self, signum, callback):
+            calls.append(("add_signal", signum))
+            if signum == signal.SIGTERM:
+                real_loop.call_soon(callback)
+
+        def remove_signal_handler(self, signum):
+            calls.append(("remove_signal", signum))
+            return True
+
+    @asynccontextmanager
+    async def runtime(received_settings, received_sessions):
+        assert received_settings is settings
+        assert received_sessions is sessions
+        calls.append("runtime_started")
+        try:
+            yield
+        finally:
+            calls.append("runtime_drained")
+
+    async def dispose():
+        calls.append("engine_disposed")
+
+    monkeypatch.setattr(checker_model_proxy, "get_settings", lambda: settings)
+    monkeypatch.setattr(checker_model_proxy, "get_session_factory", lambda: sessions)
+    monkeypatch.setattr(checker_model_proxy, "configured_model_proxy_runtime", runtime)
+    monkeypatch.setattr(checker_model_proxy, "dispose_engine", dispose)
+    monkeypatch.setattr(checker_model_proxy.asyncio, "get_running_loop", SignalLoop)
+
+    await checker_model_proxy.serve()
+
+    assert calls == [
+        ("add_signal", signal.SIGINT),
+        ("add_signal", signal.SIGTERM),
+        "runtime_started",
+        "runtime_drained",
+        ("remove_signal", signal.SIGINT),
+        ("remove_signal", signal.SIGTERM),
+        "engine_disposed",
+    ]

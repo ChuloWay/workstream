@@ -42,6 +42,7 @@ from app.modules.checkers.api.model_calls import (
 )
 from app.modules.checkers.model_calls.models import CheckerModelBudgetAccount
 from app.modules.checkers.model_calls.profiles import ModelProfileReader
+from app.modules.checkers.model_calls.repository import ModelCallRepository
 from app.modules.checkers.model_calls.service import ModelCallService
 
 
@@ -92,12 +93,13 @@ async def model_database(postgres_database_url: str):
             "project_id uuid not null)",
             "create table submissions(id uuid primary key, task_id uuid not null, "
             "version integer not null, unique(id,task_id,version))",
-            "create table external_checker_registry_entries(id uuid primary key)",
+            "create table external_checker_registry_entries(id uuid primary key,"
+            "entry_digest text not null,phase text not null)",
             "create table checker_runs(id uuid primary key)",
             "create table actor_profiles(id uuid primary key)",
             "create table audit_events(id uuid primary key, event_domain text, event_type text, "
             "actor_ref_kind text, actor_id text, action_id text, permission_id text, "
-            "denial_code text, after_facts jsonb)",
+            "denial_code text, after_facts json)",
             "create table artifact_bindings(id uuid primary key)",
             "create table artifact_contents(id uuid primary key)",
             "create table artifact_put_attempts(id uuid primary key)",
@@ -124,8 +126,11 @@ async def model_database(postgres_database_url: str):
             {"id": submission_id, "task": task_id},
         )
         await connection.execute(
-            text("insert into external_checker_registry_entries(id) values (:id)"),
-            {"id": registry_entry_id},
+            text(
+                "insert into external_checker_registry_entries(id,entry_digest,phase) "
+                "values (:id,:digest,'post_submit')"
+            ),
+            {"id": registry_entry_id, "digest": registry_entry_digest},
         )
     try:
         yield DatabaseFacts(
@@ -211,11 +216,11 @@ class BoundaryPorts:
             },
         )
 
-    async def authorize_child(self, execution, parent_attempt_id, terminal_digest):
+    async def authorize_child(self, project_id, parent_attempt_id, terminal_digest):
         return self._decision(
             "child",
             {
-                "execution": execution.model_dump(mode="json"),
+                "project_id": str(project_id),
                 "parent_attempt_id": str(parent_attempt_id),
                 "terminal_digest": terminal_digest,
             },
@@ -238,6 +243,10 @@ class BoundaryPorts:
     async def require_current(self, facts, slot):
         self.current_checks += 1
         self.events.append("current")
+
+    async def require_recovery_current(self, slot, parent_attempt_id):
+        self.current_checks += 1
+        self.events.append("recovery_current")
 
     async def require_request(self, attempt, evidence):
         self.request_checks += 1
@@ -267,7 +276,7 @@ class DatabaseBoundaryPorts:
                 "insert into audit_events(id,event_domain,event_type,actor_ref_kind,actor_id,"
                 "action_id,permission_id,denial_code,after_facts) values "
                 "(:id,'authority','SensitiveAuthorizationAllowed','actor_profile',:actor,"
-                ":action,:permission,null,cast(:after as jsonb))"
+                ":action,:permission,null,cast(:after as json))"
             ),
             {
                 "id": evidence.evidence_id,
@@ -344,9 +353,9 @@ class DatabaseBoundaryPorts:
             evidence, action="checker.model_call.observe", permission="checker.model_call.observe"
         )
 
-    async def authorize_child(self, execution, parent_attempt_id, terminal_digest):
+    async def authorize_child(self, project_id, parent_attempt_id, terminal_digest):
         evidence = await self._ports.authorize_child(
-            execution, parent_attempt_id, terminal_digest
+            project_id, parent_attempt_id, terminal_digest
         )
         return await self._authority(
             evidence,
@@ -366,6 +375,9 @@ class DatabaseBoundaryPorts:
 
     async def require_current(self, facts, slot):
         await self._ports.require_current(facts, slot)
+
+    async def require_recovery_current(self, slot, parent_attempt_id):
+        await self._ports.require_recovery_current(slot, parent_attempt_id)
 
     async def _artifact(self, evidence):
         for table_name, value in (
@@ -404,6 +416,7 @@ async def provision(
     *,
     limit: int,
     replay: bool = False,
+    profile_changes: dict | None = None,
 ):
     profile_spec = ProjectModelProfileSpec(
         project_id=facts.project_id,
@@ -429,6 +442,8 @@ async def provision(
             output_nanodollars_per_token=29,
         ),
     )
+    if profile_changes:
+        profile_spec = profile_spec.model_copy(update=profile_changes)
     profile_facts = ModelProfileProvisioningFacts(
         operation_id=uuid4(),
         actor_profile_id=new_record_id(),
@@ -478,6 +493,105 @@ async def test_profile_publication_rejects_substituted_authority_digest(
             BoundaryPorts(corrupt_admin_receipt=True),
             limit=10_000,
         )
+
+
+async def test_profile_publication_requires_exact_post_submit_registry(
+    model_database: DatabaseFacts,
+) -> None:
+    with pytest.raises(ModelCallConflict, match="model_profile_registry_conflict"):
+        await provision(
+            model_database,
+            BoundaryPorts(),
+            limit=10_000,
+            profile_changes={"registry_entry_digest": sha("substituted-registry")},
+        )
+
+    pre_entry_id = new_record_id()
+    pre_digest = sha("pre-registry")
+    async with model_database.engine.begin() as connection:
+        await connection.execute(
+            text(
+                "insert into external_checker_registry_entries(id,entry_digest,phase) "
+                "values (:id,:digest,'pre_submit')"
+            ),
+            {"id": pre_entry_id, "digest": pre_digest},
+        )
+    with pytest.raises(ModelCallConflict, match="model_profile_registry_conflict"):
+        await provision(
+            model_database,
+            BoundaryPorts(),
+            limit=10_000,
+            profile_changes={
+                "registry_entry_id": pre_entry_id,
+                "registry_entry_digest": pre_digest,
+            },
+        )
+
+
+async def test_database_profile_guard_rechecks_registry_digest(
+    model_database: DatabaseFacts,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def substituted_registry(*_args, **_kwargs):
+        return True
+
+    monkeypatch.setattr(
+        ModelCallRepository,
+        "is_exact_post_submit_registry_entry",
+        substituted_registry,
+    )
+    with pytest.raises(DBAPIError, match="profile registry binding"):
+        await provision(
+            model_database,
+            BoundaryPorts(),
+            limit=10_000,
+            profile_changes={"registry_entry_digest": sha("substituted-registry")},
+        )
+
+
+async def test_database_guards_recompute_profile_and_budget_digests(
+    model_database: DatabaseFacts,
+) -> None:
+    await provision(model_database, BoundaryPorts(), limit=10_000)
+    async with AsyncSession(model_database.engine) as session:
+        with pytest.raises(DBAPIError, match="profile digest is invalid"):
+            async with session.begin():
+                await session.execute(
+                    text(
+                        "insert into checker_model_profiles select "
+                        ":id,project_id,2,:digest,registry_entry_id,registry_entry_digest,"
+                        "provider,api,model_snapshot,generation_settings,maximum_request_bytes,"
+                        "maximum_output_bytes,maximum_response_bytes,maximum_input_tokens,"
+                        "maximum_output_tokens,deadline_ms,call_slots,pricing_policy_id,"
+                        "pricing_policy_version,pricing_policy_digest,uncached_input_rate,"
+                        "cached_input_rate,output_rate,:operation,actor_profile_id,:authority,"
+                        "clock_timestamp() from checker_model_profiles where profile_version=1"
+                    ),
+                    {
+                        "id": new_record_id(),
+                        "digest": sha("noncanonical-profile"),
+                        "operation": uuid4(),
+                        "authority": new_record_id(),
+                    },
+                )
+
+    async with AsyncSession(model_database.engine) as session:
+        with pytest.raises(DBAPIError, match="configuration digest is invalid"):
+            async with session.begin():
+                await session.execute(
+                    text(
+                        "insert into checker_model_budget_configurations select "
+                        ":id,project_id,2,:digest,lifetime_limit_nanodollars,:operation,"
+                        "actor_profile_id,:authority,clock_timestamp() "
+                        "from checker_model_budget_configurations where configuration_version=1"
+                    ),
+                    {
+                        "id": new_record_id(),
+                        "digest": sha("noncanonical-budget"),
+                        "operation": uuid4(),
+                        "authority": new_record_id(),
+                    },
+                )
 
 
 def execution(facts: DatabaseFacts) -> ModelCallExecutionFacts:
@@ -629,14 +743,13 @@ async def test_fresh_execution_authority_precedes_currentness_and_owner_locks(
             ports.events.clear()
             with pytest.raises(ModelCallConflict, match="not_retryable"):
                 await owner.prepare_recovery_child(
-                    run,
                     paid_slot,
                     registry_entry_id=model_database.registry_entry_id,
                     parent_attempt_id=prepared.attempt_id,
                     terminal_digest=sha("ordered-uncertain"),
                     request_sha256=prepared.request_sha256,
                 )
-            assert ports.events == ["child", "current"]
+            assert ports.events == ["child", "recovery_current"]
 
 
 async def test_reservation_rollback_and_completion_settle_exactly_once(
@@ -732,7 +845,6 @@ async def test_uncertain_holds_budget_and_only_proven_no_effect_allows_child(
             assert observed.state == "uncertain"
             with pytest.raises(ModelCallConflict, match="not_retryable"):
                 await owner.prepare_recovery_child(
-                    run,
                     paid_slot,
                     registry_entry_id=model_database.registry_entry_id,
                     parent_attempt_id=prepared.attempt_id,
@@ -756,7 +868,6 @@ async def test_uncertain_holds_budget_and_only_proven_no_effect_allows_child(
             owner = service(session, ports)
             await owner.mark_known_no_effect(dispatched2.effect, proof)
             child = await owner.prepare_recovery_child(
-                run2,
                 paid_slot2,
                 registry_entry_id=model_database.registry_entry_id,
                 parent_attempt_id=prepared2.attempt_id,
@@ -765,6 +876,14 @@ async def test_uncertain_holds_budget_and_only_proven_no_effect_allows_child(
             )
             assert child.attempt_number == 2
             assert child.state == "prepared"
+            with pytest.raises(ModelCallConflict, match="parent_not_retryable"):
+                await owner.prepare_recovery_child(
+                    paid_slot2,
+                    registry_entry_id=model_database.registry_entry_id,
+                    parent_attempt_id=prepared2.attempt_id,
+                    terminal_digest=sha("substituted-terminal"),
+                    request_sha256=prepared2.request_sha256,
+                )
             account = await session.get(CheckerModelBudgetAccount, str(model_database.project_id))
             assert account.lifetime_reserved_nanodollars == reservation
 
@@ -867,7 +986,6 @@ async def test_known_failed_settles_once_and_allows_authorized_child(
             )
             assert replay.replayed
             child = await owner.prepare_recovery_child(
-                run,
                 paid_slot,
                 registry_entry_id=model_database.registry_entry_id,
                 parent_attempt_id=prepared.attempt_id,

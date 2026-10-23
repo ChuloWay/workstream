@@ -201,14 +201,8 @@ async def prelock_serialized_admin_read_actor(
         )
 
 _ARTIFACT_INTERNAL_RESOURCES = {
-    ActionId.ARTIFACT_GUIDE_SOURCE_READ: (
-        "guide_source_read",
-        GuideSourceReadResourceContext,
-    ),
-    ActionId.ARTIFACT_PRE_SUBMIT_CHECKER_INPUT_MATERIALIZE: (
-        "pre_submit_checker_input",
-        PreSubmitCheckerInputResourceContext,
-    ),
+    ActionId.ARTIFACT_GUIDE_SOURCE_READ: ("guide_source_read", GuideSourceReadResourceContext),
+    ActionId.ARTIFACT_PRE_SUBMIT_CHECKER_INPUT_MATERIALIZE: ("pre_submit_checker_input", PreSubmitCheckerInputResourceContext),
     ActionId.ARTIFACT_SUBMISSION_BINDING_CREATE: ("submission_binding", SubmissionBindingResourceContext),
     ActionId.ARTIFACT_PUT_ATTEMPT_RESOLVE: (
         "artifact_put_attempt",
@@ -253,17 +247,12 @@ _ADMIN_EXPECTED_RESOURCES = MappingProxyType(
         ActionId.PROJECT_GUIDE_SUFFICIENCY_REPORT_READ: ProjectDiagnosticReadResourceContext,
         ActionId.PROJECT_SUBMISSION_ARTIFACT_POLICY_LIST: ProjectDiagnosticReadResourceContext,
         ActionId.PROJECT_SUBMISSION_ARTIFACT_POLICY_READ: ProjectDiagnosticReadResourceContext,
-        ActionId.PROJECT_EFFECTIVE_SUBMISSION_ARTIFACT_POLICY_READ: (
-            ProjectPolicyReadResourceContext
-        ),
+        ActionId.PROJECT_EFFECTIVE_SUBMISSION_ARTIFACT_POLICY_READ: ProjectPolicyReadResourceContext,
         ActionId.PROJECT_PRE_SUBMIT_CHECKER_POLICY_READ: ProjectPolicyReadResourceContext,
         ActionId.PROJECT_ACTIVE_GUIDE_READ: ProjectActiveGuideReadResourceContext,
         **adapter_bindings.ADAPTER_BINDING_RESOURCE_BY_ACTION,
         **contribution_policies.CONTRIBUTION_POLICY_RESOURCE_BY_ACTION, **checker_registry.CHECKER_REGISTRY_RESOURCE_BY_ACTION,
-        **{
-            action: checker_models.ProjectModelAdministrationResourceContext
-            for action in checker_models.MODEL_ADMIN_ACTIONS
-        },
+        **checker_models.MODEL_ADMIN_RESOURCE_BY_ACTION,
         ActionId.OPERATIONS_CHECKER_RETRY: checker_retry.CheckerRetryResourceContext, **post_submit_deliveries.POST_SUBMIT_DELIVERY_RESOURCE_BY_ACTION,
         **artifact_operator.ARTIFACT_OPERATOR_RESOURCE_BY_ACTION,
         **PROJECT_MUTATION_RESOURCE_BY_ACTION,
@@ -961,12 +950,7 @@ class AuthorizationService:
                 adapter_bindings.finance_authority_grant_filters(action.action_id)
             )
         grant_filters.update({**contribution_policies.policy_finance_grant_filters(action.action_id), **checker_registry.checker_registry_grant_filters(action.action_id)})
-        if action.action_id in (
-            checker_retry.CHECKER_RETRY_ACTIONS
-            | post_submit_deliveries.POST_SUBMIT_DELIVERY_MUTATION_ACTIONS
-            | checker_models.MODEL_ADMIN_ACTIONS
-            | artifact_operator.ARTIFACT_OPERATOR_ACTIONS
-        ):
+        if action.action_id in checker_retry.CHECKER_RETRY_ACTIONS | post_submit_deliveries.POST_SUBMIT_DELIVERY_MUTATION_ACTIONS | checker_models.MODEL_ADMIN_ACTIONS | artifact_operator.ARTIFACT_OPERATOR_ACTIONS:
             grant_filters["allowed_roles"] = (AdminRole.OPERATOR,)
         matched = await self._admin.find_effective_grant(
             context.actor_profile_id,
