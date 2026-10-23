@@ -348,6 +348,9 @@ fn selector_from_configuration(
         .iter()
         .filter(|key| configuration.contains_key(**key))
         .count();
+    if configuration.contains_key("trial_execution") {
+        return Err("nested trial authority forbidden");
+    }
     if configuration
         .keys()
         .any(|key| key.starts_with("trial_") && !KEYS.contains(&key.as_str()))
@@ -355,13 +358,9 @@ fn selector_from_configuration(
         return Err("trial selectors invalid");
     }
     if present == 0 {
-        return if configuration.contains_key("trial_execution") {
-            Err("nested trial authority forbidden")
-        } else {
-            Ok(None)
-        };
+        return Ok(None);
     }
-    if present != KEYS.len() || configuration.contains_key("trial_execution") {
+    if present != KEYS.len() {
         return Err("trial selectors incomplete");
     }
     let string = |key| {
@@ -414,6 +413,11 @@ mod tests {
             Err("trial selectors incomplete")
         );
         value = serde_json::json!({"trial_execution": {}});
+        assert_eq!(
+            selector_from_configuration(value.as_object().unwrap()),
+            Err("nested trial authority forbidden")
+        );
+        value["trial_profile_id"] = Value::String("018f6f49-66b8-7d2a-bf4d-0e2eeaa00001".into());
         assert_eq!(
             selector_from_configuration(value.as_object().unwrap()),
             Err("nested trial authority forbidden")
