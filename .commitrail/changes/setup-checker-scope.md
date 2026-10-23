@@ -102,3 +102,7 @@ The corrected proof checks both corrections, terminal persistence without a
 proposal, sanitized feedback and zero further calls on exact replay. Its malformed,
 schema-invalid and unsafe-prose cases retain distinct invalid-output causes. All
 three passed against isolated PostgreSQL; database and role cleanup was confirmed.
+Independent replay caught that ordinary model serialization omitted a nullable
+provider-required member and masked the unsafe-prose case. The fixture now uses
+the existing strict provider-payload helper and asserts exact per-case diagnostic
+paths and codes, so a wrong validation layer cannot satisfy the database proof.
