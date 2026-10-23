@@ -31,7 +31,9 @@ backend/CLI/MCP/release-image
 workflows and their test-lane/evidence owners; release-image verification and
 focused tests; `backend/scripts/behavior_ownership.py`, its focused regression
 tests, and `.ci/behavior-ownership/partition.v1.json` for the exact three new
-runtime/topology owner registrations; and this record. The current initiative overview/index and
+runtime/topology owner registrations; the existing public-dispatch, outbox-topology,
+Celery-observability and lane-timing regressions when required to preserve their
+owner boundaries under that topology; and this record. The current initiative overview/index and
 `docs/roadmap_status.md` may be reconciled only for the resulting durable
 capability and next boundary. The dependency change may touch only
 `backend/pyproject.toml` and `backend/uv.lock` plus the focused installation tests.
@@ -147,8 +149,12 @@ again. This adds no queue or task topology.
 This 7,260-second ceiling is a fail-stop backstop, not the normal request timeout;
 the attempt's persisted `timeout_seconds` remains the smaller ordinary whole-run
 deadline. Add a project-setup topology owner parallel to the existing OUTBOX
-pattern: when the selected runtime uses inference, worker startup and task entry
-require a non-eager prefork process consuming the default queue and reject direct,
+pattern. The Workstream Celery composition marks itself as the project-guide
+consumer, and only a marked worker consuming the default queue participates in
+this process-global signal. Starting an unrelated app or a marked worker on a
+different queue cannot clear a validated guide worker's parent custody. When the
+selected runtime uses inference, worker startup and task entry require a non-eager
+prefork process consuming that queue and reject direct,
 eager, solo, thread or greenlet execution before model construction. The guide API
 drill moves its default-queue consumer from solo to prefork without consuming the
 OUTBOX queue. Hosted worker `stop_grace_period` and the shutdown wrapper timeout

@@ -137,17 +137,19 @@ async def test_manual_dispatch_retains_one_human_request_and_one_execution(
             def forbidden_automatic(*args):
                 pytest.fail("manual delivery invoked automatic request authority")
             monkeypatch.setattr(worker, "guide_compilation_request_authority", forbidden_automatic)
-            def deliver():
-                return worker.run_project_guide_compilation.apply(
-                    args=tuple(payload[key] for key in (
-                        "project_id", "guide_id", "source_snapshot_id", "setup_run_id", "setup_generation",
-                    )),
-                    task_id=payload["task_id"], throw=True,
-                ).get()
-            result = deliver()
+            from app.modules.projects.api.guide_compilation import (
+                ProjectGuideCompilationDelivery,
+            )
+
+            async def deliver():
+                return await worker._run_project_guide_compilation(
+                    ProjectGuideCompilationDelivery(**payload)
+                )
+
+            result = await deliver()
             assert result["status"] == "policy_draft_ready", result
             assert runtime.calls == 1
-            assert deliver() == result
+            assert await deliver() == result
             assert runtime.calls == 1
             completed = await client.get(latest_path)
             assert completed.status_code == 200, completed.text

@@ -135,6 +135,7 @@ def _build_redis_delivery_probe_app(
     app.conf.update(
         task_default_queue=topology.PROJECT_GUIDE_QUEUE,
         task_always_eager=False,
+        **{topology.PROJECT_GUIDE_CONSUMER_MARKER: True},
         task_acks_late=True,
         task_acks_on_failure_or_timeout=True,
         task_reject_on_worker_lost=True,
@@ -311,6 +312,7 @@ def worker(
     conf = SimpleNamespace(
         broker_url=broker,
         task_always_eager=eager,
+        **{topology.PROJECT_GUIDE_CONSUMER_MARKER: True},
         worker_disable_prefetch=disable_prefetch,
         visibility_timeout=visibility,
         broker_transport_options={"visibility_timeout": visibility},
@@ -354,8 +356,23 @@ def test_inference_worker_rejects_unsafe_delivery(configured):
 
 
 def test_inference_worker_ignores_processes_without_default_queue():
+    configured = worker()
+    topology.validate_project_setup_worker(configured)
+    validated_parent = topology._validated_parent
     topology.validate_project_setup_worker(worker(queues=("workstream.outbox",)))
-    assert topology._validated_parent is None
+    assert topology._validated_parent == validated_parent
+
+
+def test_global_signal_ignores_unowned_apps_without_resetting_guide_worker():
+    configured = worker()
+    topology.validate_project_setup_worker(configured)
+    validated_parent = topology._validated_parent
+    unrelated = worker()
+    delattr(unrelated.app.conf, topology.PROJECT_GUIDE_CONSUMER_MARKER)
+
+    topology.validate_project_setup_worker(unrelated)
+
+    assert topology._validated_parent == validated_parent
 
 
 def test_manager_authored_runtime_does_not_require_provider_worker_topology(monkeypatch):
@@ -384,6 +401,26 @@ def test_validated_prefork_child_requires_exact_hard_limit(monkeypatch):
         topology.require_project_setup_worker(task)
 
 
+def test_unmarked_task_app_cannot_reuse_validated_parent(monkeypatch):
+    configured = worker(pool="prefork")
+    topology.validate_project_setup_worker(configured)
+    monkeypatch.setattr(topology.os, "getppid", os.getpid)
+    delattr(configured.app.conf, topology.PROJECT_GUIDE_CONSUMER_MARKER)
+
+    with pytest.raises(RuntimeError, match="validated Redis prefork"):
+        topology.require_project_setup_worker(
+            SimpleNamespace(
+                app=configured.app,
+                time_limit=topology.PROJECT_GUIDE_HARD_LIMIT_SECONDS,
+                request=SimpleNamespace(
+                    is_eager=False,
+                    called_directly=False,
+                    timelimit=(topology.PROJECT_GUIDE_HARD_LIMIT_SECONDS, None),
+                ),
+            )
+        )
+
+
 def test_direct_inference_rejects_before_task_body(monkeypatch):
     from app.workers import project_setup
 
@@ -410,6 +447,7 @@ def test_task_and_shared_app_pin_timeout_hierarchy():
     assert run_project_guide_compilation.acks_on_failure_or_timeout is True
     assert run_project_guide_compilation.reject_on_worker_lost is True
     assert celery_app.conf.worker_disable_prefetch is True
+    assert getattr(celery_app.conf, topology.PROJECT_GUIDE_CONSUMER_MARKER) is True
     assert celery_app.conf.visibility_timeout == 7_380
     assert celery_app.conf.broker_transport_options == {"visibility_timeout": 7_380}
     assert celery_app.conf.result_backend_transport_options == {"visibility_timeout": 7_380}

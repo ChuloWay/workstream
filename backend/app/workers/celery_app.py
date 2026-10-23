@@ -5,7 +5,10 @@ from __future__ import annotations
 from celery import Celery
 from kombu import Queue
 from app.workers.outbox_topology import OUTBOX_DELIVERY_TASK, OUTBOX_QUEUE
-from app.workers.project_setup_topology import CELERY_VISIBILITY_TIMEOUT_SECONDS
+from app.workers.project_setup_topology import (
+    CELERY_VISIBILITY_TIMEOUT_SECONDS,
+    PROJECT_GUIDE_CONSUMER_MARKER,
+)
 from celery.signals import beat_init, worker_process_init, worker_process_shutdown, worker_shutdown
 
 from app.adapters.artifacts.internal_workers import (
@@ -135,6 +138,7 @@ def create_celery_app() -> Celery:
         },
         visibility_timeout=CELERY_VISIBILITY_TIMEOUT_SECONDS,
         worker_disable_prefetch=True,
+        **{PROJECT_GUIDE_CONSUMER_MARKER: True},
         beat_schedule={
             "outbox-delivery-recovery": {
                 "task": "workstream.outbox.scan_pending", "schedule": 60.0,

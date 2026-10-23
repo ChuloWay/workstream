@@ -16,6 +16,7 @@ PROJECT_GUIDE_HARD_LIMIT_SECONDS = 7_260
 PROJECT_GUIDE_DRAIN_SECONDS = 7_320
 CELERY_VISIBILITY_TIMEOUT_SECONDS = 7_380
 PROJECT_GUIDE_QUEUE = "celery"
+PROJECT_GUIDE_CONSUMER_MARKER = "workstream_project_guide_consumer"
 _validated_parent: int | None = None
 
 
@@ -33,7 +34,8 @@ def _valid_delivery_settings(app: object) -> bool:
     """Check the exact no-prefetch and visibility settings for guide delivery."""
     conf = app.conf
     return (
-        _redis_url(conf.broker_url)
+        getattr(conf, PROJECT_GUIDE_CONSUMER_MARKER, False) is True
+        and _redis_url(conf.broker_url)
         and conf.worker_disable_prefetch is True
         and conf.visibility_timeout == CELERY_VISIBILITY_TIMEOUT_SECONDS
         and conf.broker_transport_options == {
@@ -49,10 +51,13 @@ def _valid_delivery_settings(app: object) -> bool:
 def validate_project_setup_worker(sender, **_kwargs: object) -> None:
     """Validate inference workers before they can reserve guide work."""
     global _validated_parent
+    if (
+        getattr(sender.app.conf, PROJECT_GUIDE_CONSUMER_MARKER, False) is not True
+        or PROJECT_GUIDE_QUEUE not in sender.app.amqp.queues.consume_from
+    ):
+        return
     _validated_parent = None
     if not _uses_inference():
-        return
-    if PROJECT_GUIDE_QUEUE not in sender.app.amqp.queues.consume_from:
         return
     pool = sender.pool_cls
     if isinstance(pool, str):
