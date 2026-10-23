@@ -89,3 +89,9 @@ and retained source-open evidence across phases. The remaining documentation
 finding was a stale helper docstring; it now states the implemented all-originals
 requirement. These reviews qualify offline service and SDK composition, not live
 provider or deployment behavior. Hosted full-suite verification remains required.
+
+External review also found a stale roadmap scoreboard and parser tests whose
+faults used the removed notes field. The scoreboard now requires fresh proposal
+correction before implementation. Length, Unicode and unsafe-prose faults use a
+supported finding message and assert their intended validation layer, preserving
+the distinct boundaries instead of merely testing unknown-field rejection.

@@ -72,9 +72,9 @@ def test_draft_structure_rejection_is_bounded_and_private(parser, fault):
     elif fault == "wrong_enum":
         payload["status"] = "not a status"
     elif fault == "overlong":
-        payload["setup_notes"] = ["x" * 1001]
+        payload["findings"][0]["message"] = "x" * 1001
     elif fault == "surrogate":
-        payload["setup_notes"] = ["\ud800"]
+        payload["findings"][0]["message"] = "\ud800"
     elif fault in {"nan", "infinity"}:
         payload["submission_artifact_policy"]["maximum_file_size_bytes"] = float(fault)
     raw = json.dumps(payload)
@@ -87,6 +87,12 @@ def test_draft_structure_rejection_is_bounded_and_private(parser, fault):
     elif fault == "oversized":
         raw = " " * 100_001 + raw
     assert parser.parse(raw) is None
+    if fault == "overlong":
+        assert parser.issues == [
+            {"path": ["findings", 0, "message"], "code": "schema_maxLength"}
+        ]
+    elif fault == "surrogate":
+        assert parser.issues == [{"path": [], "code": "invalid_json"}]
 
 
 @pytest.mark.parametrize(
@@ -126,7 +132,7 @@ def _invalid_canonical_payload(fault):
         ]
         payload["requirements"][0]["check_specification"] = specification
     else:
-        payload["setup_notes"] = ["token=private-draft-marker-7391"]
+        payload["findings"][0]["message"] = "token=private-draft-marker-7391"
     return payload
 
 
@@ -136,6 +142,7 @@ def _invalid_canonical_payload(fault):
 async def test_review_can_correct_private_draft_without_relaxing_acceptance(
     monkeypatch,
     caplog,
+    parser,
     fault,
     review,
 ):
@@ -143,6 +150,11 @@ async def test_review_can_correct_private_draft_without_relaxing_acceptance(
     from agents import Runner
 
     payload = _invalid_canonical_payload(fault)
+    if fault == "unsafe":
+        assert parser.parse(json.dumps(payload)) == payload
+        assert parser.canonical_issues(payload) == [
+            {"path": ["findings", 0, "message"], "code": "canonical_constraint"}
+        ]
     parsers = []
     models = []
 
