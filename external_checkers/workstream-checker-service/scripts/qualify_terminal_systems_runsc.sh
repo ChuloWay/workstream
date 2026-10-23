@@ -138,7 +138,7 @@ mkdir -p -- "${COMPOSITION_ROOT}/bin" "${COMPOSITION_ROOT}/input" "${COMPOSITION
 chmod 0700 "${COMPOSITION_ROOT}" "${COMPOSITION_ROOT}/bin" "${COMPOSITION_ROOT}/input" "${COMPOSITION_ROOT}/registry-data"
 
 (
-  cd "${REPOSITORY_ROOT}"
+  cd "${REPOSITORY_ROOT}/external_checkers"
   CARGO_NET_OFFLINE=true CARGO_BUILD_JOBS=1 RUST_MIN_STACK=67108864 cargo build \
     --locked -p workstream-checker-service --bin workstream-checker-service \
     --message-format=json-render-diagnostics >"${BUILD_MESSAGES}"
