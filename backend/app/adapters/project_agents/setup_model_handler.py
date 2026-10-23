@@ -58,7 +58,17 @@ _OPENAI_RESPONSE_FIELDS = frozenset(
     }
 )
 _COUNT_FIELDS = frozenset(
-    {"input", "instructions", "model", "parallel_tool_calls", "tools", "truncation"}
+    {
+        "input",
+        "instructions",
+        "model",
+        "parallel_tool_calls",
+        "reasoning",
+        "text",
+        "tool_choice",
+        "tools",
+        "truncation",
+    }
 )
 _OPENROUTER_CHAT_FIELDS = frozenset(
     {
