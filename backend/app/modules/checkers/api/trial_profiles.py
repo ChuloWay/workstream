@@ -63,6 +63,7 @@ class TrialResourceCeilings:
     maximum_entries_overrun: int
     maximum_step_output_bytes: int
     maximum_observation_bytes: int
+    maximum_receipt_bytes: int
     maximum_frame_bytes: int
     maximum_response_bytes: int
 
@@ -81,6 +82,7 @@ class TrialResourceCeilings:
             for value in (
                 self.maximum_step_output_bytes,
                 self.maximum_observation_bytes,
+                self.maximum_receipt_bytes,
                 self.maximum_frame_bytes,
                 self.maximum_response_bytes,
             )

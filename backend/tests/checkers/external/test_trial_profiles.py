@@ -64,6 +64,7 @@ def profile():
             maximum_entries_overrun=16,
             maximum_step_output_bytes=64 * 1024,
             maximum_observation_bytes=256 * 1024,
+            maximum_receipt_bytes=512 * 1024,
             maximum_frame_bytes=256 * 1024,
             maximum_response_bytes=16 * 1024,
         ),
