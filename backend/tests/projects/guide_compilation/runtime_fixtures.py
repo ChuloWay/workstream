@@ -25,7 +25,7 @@ from app.interfaces.external_services import (
 from app.interfaces.guide_document_tools import GuideTextLocator
 from app.interfaces.project_guide_runtime import ProjectGuideRuntimeConfiguration
 from app.modules.projects.api.guide_documents import OpenGuideDocument
-from .helpers import SOURCE_BYTES, generated_result, runtime_configuration
+from .helpers import SOURCE_BYTES, SOURCE_SHA256, generated_result, runtime_configuration
 from app.interfaces.project_agents import GuideEvidenceRef
 
 
@@ -93,11 +93,11 @@ def scripted_document_access_runtime(
     return document_access(attempt_id, manifest, configuration)
 
 
-def document_tools(session_factory):
+def document_tools(session_factory, *, document_access_factory=None):
     """Bind the test grant/parser to the production PROJECTS receipt owner."""
     return project_guide_document_tools_factory(
         session_factory,
-        document_access_factory=document_access,
+        document_access_factory=document_access_factory or document_access,
         parser_factory=ScriptedParser,
     )
 
@@ -109,7 +109,9 @@ async def record_scripted_document_access(context, capabilities):
         assert result.source_item_id == document.source_item_id
         assert result.document_version_id == document.ingest_id
         assert result.sha256 == document.sha256
-        assert result.text.encode() == SOURCE_BYTES
+        assert result.text
+        if document.sha256 == SOURCE_SHA256:
+            assert result.text.encode() == SOURCE_BYTES
 
 
 async def record_attempt_document_access(sessions, attempt_id, context):

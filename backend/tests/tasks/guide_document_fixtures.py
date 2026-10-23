@@ -3,6 +3,7 @@
 import hashlib
 import os
 from dataclasses import dataclass
+from functools import partial
 from uuid import uuid4
 
 import pytest
@@ -108,7 +109,16 @@ async def activate_uploaded_guide(client, project_id, monkeypatch, *, version="v
         assert stored.status_code == 202, stored.text
         assert stored.json()["sha256"] == "sha256:" + hashlib.sha256(original).hexdigest()
         assert stored.json()["byte_count"] == len(original)
-    await create_policy_bundle_for_guide(client, project_id, guide["id"])
+    from app.adapters.artifacts import guide_document_access_runtime
+
+    await create_policy_bundle_for_guide(
+        client,
+        project_id,
+        guide["id"],
+        document_access_factory=partial(
+            guide_document_access_runtime, db_session.get_session_factory()
+        ),
+    )
     await seed_active_guide_for_downstream_test(
         db_session.get_session_factory(), project_id=project_id, guide_id=guide["id"]
     )

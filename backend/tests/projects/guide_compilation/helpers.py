@@ -117,10 +117,17 @@ def runtime_configuration():
 
 def manager_runtime_configuration():
     """Return the no-inference configuration recorded by manager-authored attempts."""
-    return runtime_configuration().model_copy(update={
-        "runtime_key": "manager_authored", "model_provider": "none",
-        "model_api": "none", "model": "none", "adapter_profile": "{}",
-    })
+    configuration = runtime_configuration()
+    return type(configuration).model_validate(
+        configuration.model_dump(mode="json")
+        | {
+            "runtime_key": "manager_authored",
+            "model_provider": "none",
+            "model_api": "none",
+            "model": "none",
+            "adapter_profile": "{}",
+        }
+    )
 
 
 def context(

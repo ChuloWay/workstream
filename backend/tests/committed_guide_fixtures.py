@@ -244,6 +244,7 @@ async def create_compiled_report_fixture(
     *,
     artifact_proposal=None,
     post_submit_registry_spec=None,
+    document_access_factory=None,
 ) -> str:
     """Project a scripted unified result under real service authority and custody."""
     from app.adapters.auth import (
@@ -381,7 +382,9 @@ async def create_compiled_report_fixture(
     execution = project_guide_compilation_execution_port(
         sessions,
         material_factory=guide_document_manifest_port,
-        document_tools_factory=document_tools(sessions),
+        document_tools_factory=document_tools(
+            sessions, document_access_factory=document_access_factory
+        ),
         checker_capabilities=capabilities,
         authorization_context=guide_compilation_execution_authority,
         runtime_factory=lambda config: Runtime(),
@@ -389,7 +392,9 @@ async def create_compiled_report_fixture(
     receipt = await execution.execute(
         ProjectGuideCompilationExecutionCommand(attempt_id=request.attempt_id)
     )
-    assert receipt.classification is ProjectGuideCompilationExecutionClassification.PERSISTED
+    assert (
+        receipt.classification is ProjectGuideCompilationExecutionClassification.PERSISTED
+    ), receipt.classification.value
     projections = GuideCompilationProjectionService(
         sessions,
         material_factory=guide_document_manifest_port,
