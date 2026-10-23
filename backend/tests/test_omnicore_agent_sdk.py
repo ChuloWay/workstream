@@ -450,6 +450,22 @@ async def test_actual_sdk_tool_loop_retries_and_rebuilds_private_provider_contro
     assert all(body["plugins"] == expected_options["plugins"] for _, body in provider.requests)
     assert all(body["model"] == OMNICORE_MODEL for _, body in provider.requests)
     assert all(body["tools"] == _MODEL_TOOLS for _, body in provider.requests)
+    expected_fields = {
+        "model",
+        "messages",
+        "temperature",
+        "max_tokens",
+        "tools",
+        "usage",
+        "provider",
+        "plugins",
+    }
+    assert all(set(body) == expected_fields for _, body in provider.requests)
+    for request_index in (4, 6):
+        messages = provider.requests[request_index][1]["messages"]
+        assert [message["role"] for message in messages[-2:]] == ["assistant", "tool"]
+        assert set(messages[-2]) == {"role", "tool_calls"}
+        assert set(messages[-1]) == {"role", "content", "tool_call_id"}
     for headers, _body in provider.requests:
         assert headers["authorization"] == "Bearer synthetic-omnicore-test-key"
         assert "http-referer" not in headers
