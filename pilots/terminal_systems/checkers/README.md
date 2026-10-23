@@ -47,11 +47,21 @@ packages, semantic review evidence, or a substitute for the real project journey
 The image build excludes samples and tests. Findings contain fixed messages and
 safe project-relative paths, never raw TOML, commands or exception traces.
 
-After review, publish through the same command with `--publish --account-id`
-and the intended AWS account. Its default destination is
-`workstream-checker-pre-terminal-systems` in `eu-north-1`. Registration, runner
-cache provisioning, corrected proposal approval and activation remain separate
-operations. A local `docker-dev` sample pass is not hosted gVisor evidence.
+Publish through the same command with `--publish --account-id` and the intended
+AWS account. Its default destination is `workstream-checker-pre-terminal-systems`
+in `eu-north-1`. The reviewed implementation was published on 2026-10-23 as:
+
+```text
+094032936130.dkr.ecr.eu-north-1.amazonaws.com/workstream-checker-pre-terminal-systems@sha256:24d8d0ad46e1f10c85d8883ddd29bcc7708501e560df067cdd3fdab34785a83c
+```
+
+The publisher pulled that exact manifest back and passed all seven samples with
+config image ID `sha256:85f32d02a7febd1b476810f5cb7cd0b6056a9b29c377f78e492b005b23a81aef`.
+The local rehearsal registry entry is `01a1665b-892e-7a56-a511-6fd9be45a60a`,
+created through the Operator CLI. These are image publication and registry facts,
+not deployment or activation. Runner cache provisioning, corrected proposal
+approval and activation remain separate operations. Local `docker-dev` samples
+do not establish hosted gVisor isolation.
 
 ## POST prerequisites
 

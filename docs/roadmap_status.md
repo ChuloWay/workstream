@@ -1525,8 +1525,8 @@ accumulated provider resources were deleted. Earlier proposals remain immutable
 and unapproved. This qualification required explicit PM corrections and establishes
 one reviewed handoff, not automatic completeness for arbitrary guides. Ten required
 checks remain unbound suggestions in that immutable proposal. The project-owned
-PRE image now implements both PRE specifications and is locally qualified; it is
-not yet published, registered or bound. The eight POST checks and their model,
+PRE image now implements both PRE specifications, is locally qualified, published
+by digest and registered in the local rehearsal, but remains unbound. The eight POST checks and their model,
 execution and authenticated-material dependencies remain to be implemented.
 Registration, corrected policy binding and approval must precede activation;
 no approved binding, activated guide or contribution outcome is established.
