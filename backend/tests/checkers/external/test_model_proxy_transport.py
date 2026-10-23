@@ -420,3 +420,34 @@ async def test_trial_protocol_shares_listener_without_enlarging_model_limit(tmp_
             assert (await read_frame(reader))["output"] == "ok"
     assert len(trial_requests) == len(model_requests) == 1
     assert not path.exists()
+
+
+def test_trial_manifest_configuration_requires_exact_pair_and_private_proxy(tmp_path):
+    """Selected authority is explicit and never falls back to a guessed profile."""
+    from pydantic import ValidationError
+    from app.core.config import Settings
+    from tests.test_s3_artifact_store import minio_settings
+
+    original = minio_settings(private_prefix="trial-config")
+    base = original.model_dump() | {
+        # Settings deliberately excludes credentials from model_dump.
+        "artifact_s3_access_key_id": original.artifact_s3_access_key_id.get_secret_value(),
+        "artifact_s3_secret_access_key": original.artifact_s3_secret_access_key.get_secret_value(),
+    }
+    selected = {
+        "checker_trial_authority_manifest_path": tmp_path / "trial-authority.json",
+        "checker_trial_authority_manifest_digest": "sha256:" + "a" * 64,
+        "checker_model_proxy_socket": tmp_path / "proxy.sock",
+    }
+    assert Settings.model_validate(base | selected).checker_trial_authority_manifest_path == selected[
+        "checker_trial_authority_manifest_path"
+    ]
+    for field, value in (
+        ("checker_trial_authority_manifest_path", None),
+        ("checker_trial_authority_manifest_digest", None),
+        ("checker_trial_authority_manifest_digest", "latest"),
+        ("checker_trial_authority_manifest_path", Path("relative.json")),
+        ("checker_model_proxy_socket", None),
+    ):
+        with pytest.raises(ValidationError):
+            Settings.model_validate(base | selected | {field: value})

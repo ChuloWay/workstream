@@ -322,7 +322,14 @@ capability of the already selected invocation; it is not a second runner,
 provider, host socket or final-result variant. Six flat approved configuration
 values select the exact profile and projection
 by ID, version and digest. A trusted operator manifest resolves those immutable
-values. The verified ART request binds their configuration to the registry entry,
+values. The backend requires the paired
+`WORKSTREAM_CHECKER_TRIAL_AUTHORITY_MANIFEST_PATH` and
+`WORKSTREAM_CHECKER_TRIAL_AUTHORITY_MANIFEST_DIGEST`; the Rust service loads
+the same canonical manifest and expected digest. Both refuse a missing, changed
+or invalid selected profile. The private backend proxy socket carries the
+closed trial reservation/publication protocol (4 MiB frames) and model sessions
+(1 MiB frames); this host socket is never exposed inside an image.
+The verified ART request binds their configuration to the registry entry,
 checker image, material and current execution. The profile bounds offline
 builder/base/cache identities, operations and aggregate resources; the
 projection selects material roles, visibility and finite ordered step templates.
@@ -344,8 +351,10 @@ Completed observations are published only after owned nested resources and
 scratch are settled. An opaque handle resolves to server-owned, request/material/
 profile/plan/engine-bound facts in the same invocation. When a model assessment
 depends on a trial, the model boundary injects the resolved canonical facts; an
-image-authored copy cannot substitute. Required observations and cleanup also
-guard final result acceptance. CHECKERS allocates one stable trial slot for
+image-authored copy cannot substitute. Every trial that starts must settle its observations and cleanup before
+final result acceptance. A selected capability may remain unused when the
+project check has no applicable trial, such as a revision-only check on the
+initial submission; shared runtime code does not infer project semantics. CHECKERS allocates one stable trial slot for
 the exact Submission and selected binding before execution. The plan and input
 hashes are immutable at that address. ART stores and independently verifies
 the canonical receipt, then binds it to `checker_trial_evidence`. Only that
