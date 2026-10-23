@@ -1001,8 +1001,10 @@ async def test_actual_sdk_deterministic_success_transport_rejection_is_not_retri
     monkeypatch,
     failure_kind,
 ):
-    from app.adapters.project_agents import omnicore_profile
+    from app.adapters.project_agents import omnicore_profile, provider_resilience
 
+    circuit = ProviderCircuit(1, 60)
+    monkeypatch.setattr(provider_resilience, "circuit_for", lambda *_: circuit)
     provider_options: dict[str, object]
     if failure_kind == "content_type":
         provider_options = {"response_content_type": "text/plain"}
@@ -1027,6 +1029,13 @@ async def test_actual_sdk_deterministic_success_transport_rejection_is_not_retri
         finally:
             await runtime.aclose()
     assert len(provider.requests) == 1
+
+    admitted = OmniCoreAgentProjectGuideRuntime._for_test(
+        compilation_context.runtime_configuration,
+        upstream_url="http://127.0.0.1:1/chat/completions",
+    )
+    admitted.admit_execution()
+    await admitted.aclose()
 
 
 async def test_native_cancellation_never_returns_while_sdk_task_remains_live():
