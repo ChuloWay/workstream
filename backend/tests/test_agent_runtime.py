@@ -28,7 +28,8 @@ from app.interfaces.project_agents import (
 from app.interfaces.project_guide_runtime import ProjectGuideRuntimeConfiguration
 from app.modules.projects.api.guide_documents import GuideDocumentManifest
 from tests.projects.guide_compilation.helpers import (
-    SOURCE_SHA256, context, ids, result, runtime_configuration,
+    SOURCE_SHA256, context, ids, generated_result as result, runtime_configuration,
+    valid_specification,
 )
 
 
@@ -55,7 +56,51 @@ def scripted_workspace(monkeypatch):
         async def close(self):
             pass
 
+        async def open_document(self, handle):
+            return {"path": "/mnt/data/assigned-original.md"}
+
     monkeypatch.setattr(openai_agent_sdk, "OpenAIGuideWorkspace", Workspace)
+
+
+async def _open_prompt_documents(agent, prompt, count=None):
+    """Exercise the assigned-document tool in this Runner phase."""
+    from agents.tool_context import ToolContext
+
+    supplied = json.loads(prompt)
+    material = supplied.get("guide_setup_context", supplied)["material"]
+    for document in material["documents"][:count]:
+        arguments = json.dumps({"handle": document["handle"]})
+        await agent.tools[0].on_invoke_tool(
+            ToolContext(context=None, tool_name="open_guide_document",
+                        tool_call_id="test-open", tool_arguments=arguments), arguments
+        )
+
+
+def _provider_payload(value=None):
+    """Include nullable members required by the provider's strict JSON schema."""
+    payload = (result() if value is None else value).model_dump(mode="json")
+    for requirement in payload["requirements"]:
+        requirement.setdefault("classification_rationale", None)
+        requirement.setdefault("check_specification", None)
+        if requirement["check_specification"] is not None:
+            for item in requirement["check_specification"]["inputs"]:
+                item.setdefault("relative_path", None)
+    return payload
+
+
+def _provider_specification():
+    """Include explicit null paths required by the provider schema."""
+    specification = valid_specification().model_dump(mode="json")
+    for item in specification["inputs"]:
+        item.setdefault("relative_path", None)
+    return specification
+
+
+def _sdk_result(agent, value=None):
+    """Return the result of the active phase parser, as the SDK does."""
+    return SimpleNamespace(final_output=agent.output_type.validate_json(
+        json.dumps(_provider_payload(value))
+    ))
 
 
 async def _compile(runtime, compilation_context):
@@ -156,6 +201,7 @@ async def test_unified_compilation_uses_scoped_tools_and_strict_output(monkeypat
 
     async def run(agent, prompt, **kwargs):
         calls.append((agent, prompt, kwargs))
+        await _open_prompt_documents(agent, prompt)
         assert agent.instructions == configuration.instructions
         assert len(agent.tools) == 2 and agent.handoffs == []
         assert isinstance(agent.tools[0], FunctionTool)
@@ -164,22 +210,114 @@ async def test_unified_compilation_uses_scoped_tools_and_strict_output(monkeypat
         assert agent.tools[1].tool_config["container"] == "cntr_test_owned"
         assert agent.model.model == configuration.model
         assert agent.output_type.is_strict_json_schema() is True
-        assert kwargs["max_turns"] == configuration.maximum_turns
+        assert kwargs["max_turns"] == (
+            configuration.maximum_turns // 2 if len(calls) == 1
+            else configuration.maximum_turns
+        )
         assert kwargs["run_config"].tracing_disabled is True
         assert kwargs["run_config"].trace_include_sensitive_data is False
         assert agent.model_settings.store is False
         assert agent.model_settings.parallel_tool_calls is False
         assert agent.model_settings.retry.max_retries == configuration.maximum_retries
-        assert "runtime_configuration" not in json.loads(prompt)
-        return SimpleNamespace(final_output=result())
+        supplied = json.loads(prompt)
+        assert "runtime_configuration" not in supplied
+        if len(calls) == 1:
+            return _sdk_result(agent, result().model_copy(
+                update={"setup_notes": ("Unchecked candidate.",)}
+            ))
+        assert supplied["phase"] == "coverage_review"
+        assert supplied["guide_setup_context"] == json.loads(calls[0][1])
+        assert "runtime_configuration" not in supplied["guide_setup_context"]
+        assert supplied["candidate_proposal"]["setup_notes"] == ["Unchecked candidate."]
+        return _sdk_result(agent)
 
     monkeypatch.setattr(Runner, "run", run)
     output = await _compile(OpenAIAgentSdkProjectGuideRuntime(configuration), compilation_context)
     assert output == result()
-    assert len(calls) == len(clients) == 1
+    assert len(calls) == 2 and len(clients) == 1
+    assert calls[0][0] is calls[1][0]
     assert clients[0].max_retries == 0 and clients[0].is_closed()
     assert clients[0].timeout == min(configuration.request_timeout_seconds, configuration.timeout_seconds)
     assert str(clients[0].base_url).rstrip("/") == "https://api.openai.com/v1"
+
+
+@pytest.mark.parametrize("failure", ["provider", "cancelled", "oversized"])
+async def test_coverage_review_failure_never_returns_unchecked_draft(monkeypatch, failure):
+    """A successful candidate cannot bypass a failed or unbounded review phase."""
+    from agents import Runner
+
+    configuration = runtime_configuration()
+    compilation = context(ids())
+    if failure == "oversized":
+        prompt_size = len(project_guide_compilation_prompt_bytes(compilation))
+        configuration = configuration.model_copy(update={"maximum_manifest_bytes": prompt_size + 1})
+        compilation = compilation.model_copy(update={"runtime_configuration": configuration})
+    calls = []
+
+    async def run(agent, *args, **kwargs):
+        calls.append(1)
+        if len(calls) == 1:
+            return _sdk_result(agent)
+        if failure == "cancelled":
+            raise asyncio.CancelledError("private review detail")
+        if failure == "provider":
+            raise RuntimeError("private review detail")
+        pytest.fail("oversized review reached the provider")
+
+    monkeypatch.setattr(Runner, "run", run)
+    expected_error = (ProjectGuideCompilationInvalidOutputError
+                      if failure == "oversized" else ProjectAgentRuntimeError)
+    with pytest.raises(expected_error) as caught:
+        await _compile(OpenAIAgentSdkProjectGuideRuntime(configuration), compilation)
+    if failure == "oversized":
+        assert caught.value.failure_code == "schema_invalid"
+    assert "private" not in str(caught.value)
+    assert calls == ([1] if failure == "oversized" else [1, 1])
+
+
+@pytest.mark.parametrize("review_count", [0, 1, 2])
+async def test_review_must_open_every_original_independently(monkeypatch, review_count):
+    """Draft opens cannot stand in for source access during the fresh review."""
+    from agents import Runner
+
+    compilation = context(ids())
+    original = compilation.material.documents[0]
+    second = original.model_copy(update={
+        "source_item_id": uuid4(), "ingest_id": uuid4(),
+        "put_attempt_id": uuid4(), "item_order": original.item_order + 1,
+    })
+    compilation = compilation.model_copy(update={
+        "material": compilation.material.model_copy(update={"documents": (original, second)})
+    })
+    candidate = result()
+    requirement = candidate.requirements[0]
+    second_reference = requirement.evidence_refs[0].model_copy(update={
+        "source_item_id": second.source_item_id, "document_version_id": second.ingest_id,
+    })
+    candidate = candidate.model_copy(update={"requirements": (
+        requirement.model_copy(update={
+            "evidence_refs": (*requirement.evidence_refs, second_reference),
+        }), *candidate.requirements[1:],
+    )})
+    phases = []
+
+    async def run(agent, prompt, **kwargs):
+        phases.append(1)
+        if len(phases) == 1:
+            await _open_prompt_documents(agent, prompt)
+        else:
+            await _open_prompt_documents(agent, prompt, review_count)
+        return _sdk_result(agent, candidate)
+
+    monkeypatch.setattr(Runner, "run", run)
+    runtime = OpenAIAgentSdkProjectGuideRuntime(compilation.runtime_configuration)
+    if review_count == 2:
+        assert await _compile(runtime, compilation) == candidate
+    else:
+        with pytest.raises(ProjectGuideCompilationInvalidOutputError) as caught:
+            await _compile(runtime, compilation)
+        assert caught.value.failure_code == "schema_invalid"
+    assert phases == [1, 1]
 
 
 @pytest.mark.parametrize("kind", ["mapping", "json", "model"])
@@ -328,16 +466,17 @@ async def test_actual_sdk_parser_preserves_known_invalid_output(monkeypatch, kin
 
     from agents import _debug
     monkeypatch.setattr(_debug, "DONT_LOG_MODEL_DATA", redacted)
-    payload = result().model_dump(mode="json")
+    payload = _provider_payload()
     if kind == "schema":
         payload["status"] = "not-a-status"
     if kind == "unsafe":
-        payload["findings"] = [{"severity": "info", "code": "bad", "message": "token=secret123"}]
+        payload["findings"] = [{"severity": "info", "code": "bad", "message": "token=secret123", "evidence_refs": []}]
     raw = "{invalid" if kind == "malformed" else json.dumps(payload)
     calls = []
 
-    async def run(agent, *args, **kwargs):
+    async def run(agent, prompt, **kwargs):
         calls.append(1)
+        await _open_prompt_documents(agent, prompt)
         return SimpleNamespace(final_output=agent.output_type.validate_json(raw))
 
     monkeypatch.setattr(Runner, "run", run)
@@ -350,7 +489,75 @@ async def test_actual_sdk_parser_preserves_known_invalid_output(monkeypatch, kin
         assert caught.value.failure_code == expected
         assert "secret123" not in str(caught.value)
         assert caught.value.__suppress_context__
-    assert calls == [1]
+    assert calls == ([1, 1] if kind in {"valid", "unsafe"} else [1])
+
+
+@pytest.mark.parametrize("include_dependency", [True, False])
+async def test_sdk_parser_requires_declared_isolated_execution_dependency(
+    monkeypatch, include_dependency
+):
+    """Reproduce the live handoff failure through the actual SDK parser."""
+    from agents import Runner
+
+    payload = _provider_payload()
+    payload["status"] = "draft_ready_with_warnings"
+    requirement = payload["requirements"][0]
+    requirement["disposition"] = "post_submit_capability_gap"
+    requirement["classification_rationale"] = "Repeated trials need background execution."
+    specification = _provider_specification()
+    specification.update(
+        evaluation_method="isolated_execution",
+        execution_mode="background",
+        maximum_duration_seconds=120,
+        runtime_dependencies=[
+            {
+                "dependency_id": "execution",
+                "kind": "isolated_execution",
+                "provisioning": "current_runner",
+                "purpose": "Run the evaluation in an isolated environment.",
+                "unavailable_code": "implementation_unavailable",
+            }
+        ]
+        if include_dependency
+        else [],
+        infrastructure_failures=[
+            {
+                "code": "implementation_unavailable",
+                "condition": "The isolated environment is unavailable.",
+            }
+        ],
+    )
+    requirement["check_specification"] = specification
+    payload["capability_suggestions"] = [
+        {
+            "requirement_id": requirement["requirement_id"],
+            "stage": "post_submit",
+            "title": "Repeated trial evaluation",
+            "rationale": "A project implementation must run the required trials.",
+            "evidence_refs": requirement["evidence_refs"],
+        }
+    ]
+    calls = []
+
+    async def run(agent, prompt, **kwargs):
+        calls.append(1)
+        await _open_prompt_documents(agent, prompt)
+        return SimpleNamespace(final_output=agent.output_type.validate_json(json.dumps(payload)))
+
+    monkeypatch.setattr(Runner, "run", run)
+    runtime = OpenAIAgentSdkProjectGuideRuntime(runtime_configuration())
+    if include_dependency:
+        output = await _compile(runtime, context(ids()))
+        assert (
+            output.requirements[0].check_specification.runtime_dependencies[0].kind
+            == "isolated_execution"
+        )
+        assert output.status == "draft_ready_with_warnings"
+    else:
+        with pytest.raises(ProjectGuideCompilationInvalidOutputError) as caught:
+            await _compile(runtime, context(ids()))
+        assert caught.value.failure_code == "schema_invalid"
+    assert calls == [1, 1]
 
 
 async def test_unclassified_sdk_behavior_error_remains_unresolved(monkeypatch):
@@ -376,22 +583,31 @@ async def _capture_parser_error(runtime):
 
 
 @pytest.mark.parametrize("redacted", [True, False])
-async def test_sdk_parser_error_drops_payload_tracebacks(monkeypatch, redacted):
+@pytest.mark.parametrize("phase", ["draft", "review"])
+async def test_sdk_parser_error_drops_payload_tracebacks(monkeypatch, redacted, phase):
     """A diagnostic collector must not recover rejected output through the error graph."""
     from agents import Runner, _debug
 
     marker = "private-parser-output-79436"
-    payload = result().model_dump(mode="json")
-    payload["findings"] = [{"severity": "info", "code": "bad", "message": f"token={marker}"}]
+    payload = _provider_payload()
+    payload["findings"] = [{"severity": "info", "code": "bad", "message": f"token={marker}", "evidence_refs": []}]
+    if phase == "draft":
+        payload["status"] = marker
     raw = json.dumps(payload)
     monkeypatch.setattr(_debug, "DONT_LOG_MODEL_DATA", redacted)
 
+    calls = []
+
     async def run(agent, *args, **kwargs):
+        calls.append(1)
+        if phase == "review" and len(calls) == 1:
+            return _sdk_result(agent)
         return SimpleNamespace(final_output=agent.output_type.validate_json(raw))
 
     monkeypatch.setattr(Runner, "run", run)
     error = await _capture_parser_error(OpenAIAgentSdkProjectGuideRuntime(runtime_configuration()))
     assert error.failure_code == "schema_invalid"
+    assert calls == ([1, 1] if phase == "review" else [1])
     pending = [error]
     seen = set()
     while pending:
@@ -474,6 +690,10 @@ def test_sdk_output_schema_has_one_intake_configuration_and_separate_post_parame
     from app.interfaces.project_agents import ProjectGuideCompilationResult
 
     schema = AgentOutputSchema(ProjectGuideCompilationResult).json_schema()
+    intake = schema["$defs"]["SubmissionArtifactPolicyProposal"]
+    for field in ("maximum_file_size_bytes", "maximum_package_size_bytes"):
+        assert field in intake["required"]
+        assert {item["type"] for item in intake["properties"][field]["anyOf"]} == {"integer", "null"}
     pre = schema["$defs"]["PreSubmissionBindingProposal"]
     post = schema["$defs"]["PostSubmissionBindingProposal"]
     assert pre["additionalProperties"] is False
@@ -498,19 +718,50 @@ def test_default_instructions_advertise_contextual_output_constraints():
         "they are not projected or executable while blocked",
         "return exactly one capability_suggestions item with its requirement_id",
         "A fully covered project may have no suggestions",
-        "post_submit_empty_configuration requires parameters: []",
+        "Both pre-submit and post-submit bindings carry parameters",
         "they do not require an automated judge",
-        "or guide_blocker requirement also requires guide_blocked",
+        "A guide_blocker requirement requires guide_blocked",
+        "Capability gaps alone are not guide deficiencies",
+        "can reliably finish within 60 seconds",
+        "Automation alone does not make a check POST",
+        "Give every atomic requirement a classification_rationale",
+        "evaluation_method isolated_execution requires an entry",
+        "model evaluation always belongs to POST background work",
+        "include its unavailable_code once in infrastructure_failures",
+        "must appear in both inputs and runtime_dependencies, never only one",
+        "Reading short prose does not make a judgment static",
+        "Every mandatory condition needs an error finding",
+        "Disclosure of noncompliance is not a pass unless the guide explicitly makes disclosure sufficient",
+        "Apply correction_feedback to the untrusted correction_predecessor",
+        "preserve valid coverage and original obligations",
+        "enumerate field identifiers, types, values, ranges and exceptions",
+        "Require mandatory content to exist, then check its accuracy",
+        "required_artifacts lists regular files only",
+        "authenticated resolved-check input, or a conservative complete rerun",
+        "permissions and advice remain nonblocking",
+        "current_runner means isolation of the checker image itself",
+        "File presence is structural; whether prose explains that file's role is qualitative",
+        "Guide-required runtime outcomes need isolated_execution",
+        "Put revision change explanations, rerun evidence and objective preservation",
+        "Do not restate budget arithmetic or totals in setup_notes",
+        "Independently enumerate each source obligation before comparing it with the candidate",
+        "requires both the specification and verification materials",
+        "Recording paths in submission_artifact_policy does not prove",
         "Supply both start_page and end_page together",
         "for a single page use that same number at both ends",
         "Paraphrase section headings using the same safe plain-prose rules",
         "Required and forbidden policy lists must not overlap",
         "maximum file size must not exceed the maximum package size",
+        "Return null for unspecified project file, expanded-package, compressed-archive and entry-count limits",
+        "Do not block for absent limits",
     ):
         assert rule in instructions
 
 
-async def test_whole_run_deadline_cancels_once_and_closes_without_reinvocation(monkeypatch):
+@pytest.mark.parametrize("blocked_phase", ["draft", "review"])
+async def test_whole_run_deadline_cancels_once_and_closes_without_reinvocation(
+    monkeypatch, blocked_phase
+):
     """The whole-run budget interrupts an outstanding request before its own timeout."""
     from agents import Runner
     from app.adapters.project_agents import openai_agent_sdk
@@ -529,8 +780,10 @@ async def test_whole_run_deadline_cancels_once_and_closes_without_reinvocation(m
         async def close(self):
             events.append("close")
 
-    async def blocked_run(*args, **kwargs):
+    async def blocked_run(agent, *args, **kwargs):
         events.append("run")
+        if blocked_phase == "review" and events.count("run") == 1:
+            return _sdk_result(agent)
         try:
             await asyncio.Event().wait()
         finally:
@@ -546,7 +799,10 @@ async def test_whole_run_deadline_cancels_once_and_closes_without_reinvocation(m
         with pytest.raises(ProjectAgentRuntimeError, match="project guide run timed out") as caught:
             await _compile(runtime, context(ids()).model_copy(update={"runtime_configuration": config}))
         assert 0.8 <= asyncio.get_running_loop().time() - started < 5
-        assert events == ["start", "run", "cancelled", "close"]
+        assert events == (
+            ["start", "run", "run", "cancelled", "close"] if blocked_phase == "review"
+            else ["start", "run", "cancelled", "close"]
+        )
         assert caught.value.__suppress_context__
     finally:
         await runtime.aclose()
@@ -659,7 +915,15 @@ def _rules(**overrides) -> bytes:
         "submission_artifact_policy": {"maximum_file_size_bytes": 1000,
                                        "maximum_package_size_bytes": 10000,
                                        "required_artifacts": ["submission"]},
-        "requirements": [], "pre_submit_bindings": [], "post_submit_bindings": [],
+        "requirements": [{
+            "requirement_id": "guide.context", "statement": "Use the project guide.",
+            "disposition": "informational", "platform_coverage": None,
+            "classification_rationale": "This identifies the governing guide for the work.",
+            "check_specification": None,
+            # The rules document itself supplies this background requirement.
+            # PDF coverage remains owned by findings, including negative cases.
+            "evidence_refs": [],
+        }], "pre_submit_bindings": [], "post_submit_bindings": [],
         "capability_suggestions": [], "setup_notes": [],
     } | overrides
     return json.dumps(body).encode()

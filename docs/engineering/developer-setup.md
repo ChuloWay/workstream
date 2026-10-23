@@ -142,6 +142,12 @@ S3-compatible settings in `.env`. The disabled-store first-run profile does not
 support guide artifact ingestion. Committed original-document readiness runs one compilation
 and stops at findings and draft proposals; manager review/approval remains separate.
 
+Project guides do not need to repeat platform upload limits. Setup leaves absent
+project-specific file, expanded-package, compressed-archive and entry-count
+limits null. ART still enforces its configured platform safety limits and storage
+admission quotas. An explicit project limit adds a restriction; it cannot relax
+platform enforcement. Platform defaults are not copied into frozen project policy.
+
 ## Logs, Shutdown, And Reset
 
 The API and prefork Celery process emit privacy-bounded structured logs and can export
@@ -233,6 +239,53 @@ One project-guide compilation proposes sufficiency findings and separate
 pre-submission and post-submission policies through the OpenAI Agents SDK adapter.
 Use the locked installation and environment-loading commands in
 [Native Unified Guide Inference](#native-unified-guide-inference).
+
+New compilation results also include `classification_rationale` for every atomic
+requirement and one typed `check_specification` for each supported or missing
+PRE/POST check. PRE is reserved for static and other checks that can reliably
+finish within 60 seconds before Submission creation; it may still use durable
+execution and polling. Longer or model-based work belongs to background POST.
+The compiler infers checks from required outcomes rather than requiring guide
+authors to label automation or stages. A missing registered implementation stays
+an engineering gap in a warning-ready draft and blocks activation; only a real
+guide blocker prevents the draft.
+
+The SDK adapter first produces a private structured candidate, then uses a fresh model context
+to check it against the original documents and return the corrected proposal.
+Both phases expose the same strict JSON Schema. The private draft must satisfy
+JSON syntax and structural limits; canonical content constraints are checked
+diagnostically so review can correct them. Diagnostics contain bounded field
+paths and a fixed code, never rejected values or exception messages. Only the
+reviewed output passes through canonical Pydantic and owner validation for
+acceptance. The draft is never persisted, projected or accepted.
+Both phases share one attempt, workspace, client, overall timeout and aggregate
+model-turn/hosted-tool budgets. The draft can use at most half the configured turn
+allowance; review receives the unused remainder. The serialized review input
+(original credential-free context plus candidate) must fit `maximum_manifest_bytes`;
+an oversized candidate is terminal invalid output. The review must reopen every
+cited original, and every assigned original for a ready proposal; draft-phase
+opens cannot satisfy review access.
+A review failure, cancellation, invalid result or exhausted budget does not publish
+the unchecked draft. This is a bounded phase of the same attempt, not a retry of
+an uncertain or terminal invocation. PM review and approval remain separate.
+
+For a manager correction, both phases receive the exact retained predecessor
+proposal alongside feedback. The server validates its project, guide, source,
+generation, finalization and canonical/component hashes against the saved target.
+The body is untrusted comparison material, not evidence or approval. Its existing
+feedback result hash commits it in the attempt identity; materializing the body
+does not rewrite that identity or retained results. The complete prompt, including
+this body, must fit the configured input bound before dispatch. A missing,
+substituted or oversized predecessor fails closed. Provider uncertainty still
+prevents redispatch.
+
+The specification is validated as data: execution mode and duration, material
+inputs, ordered checks, pass conditions, coded findings, positive and negative
+cases, runtime dependencies and infrastructure failures must agree. Current
+images are offline and do not implicitly receive task/guide prose or model access.
+Older retained results remain readable with the new fields absent; new results
+cannot use that historical omission. Invalid new output ends terminally and is
+diagnosed without logging guide or model content.
 
 The Celery worker captures runtime, model provider, model, API, instructions,
 timeout, document limits and tool budgets on the attempt before execution. Credentials stay in

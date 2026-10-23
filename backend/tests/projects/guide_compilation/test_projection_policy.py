@@ -119,6 +119,32 @@ def test_artifact_policy_transform_requires_a_persisted_proposal() -> None:
         _policy_body(cast(AsyncSession, None), None)
 
 
+@pytest.mark.parametrize("file_bytes,package_bytes", [(None, None), (123, None), (None, 456)])
+def test_absent_project_size_limits_remain_null_through_projection(file_bytes, package_bytes):
+    """Guide silence must not freeze platform ceilings into the project policy."""
+    proposal = SubmissionArtifactPolicyProposal(
+        maximum_file_size_bytes=file_bytes,
+        maximum_package_size_bytes=package_bytes,
+    )
+    policy = _policy_body(cast(AsyncSession, None), proposal)
+    assert policy["maximum_file_size_bytes"] == file_bytes
+    assert policy["maximum_package_size_bytes"] == package_bytes
+    assert policy["maximum_archive_size_bytes"] is None
+    assert policy["maximum_archive_entries"] is None
+
+
+@pytest.mark.parametrize("file_bytes,package_bytes", [(0, None), (None, -1), (True, None), (1.5, None), (5, 4)])
+def test_optional_project_size_limits_still_reject_invalid_bounds(file_bytes, package_bytes):
+    """Nullable overrides cannot weaken strict positive and coherent numeric bounds."""
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError):
+        SubmissionArtifactPolicyProposal(
+            maximum_file_size_bytes=file_bytes,
+            maximum_package_size_bytes=package_bytes,
+        )
+
+
 @pytest.mark.parametrize("patch", [
     {"required_artifacts": ("a" * 501,)},
     {"forbidden_artifacts": ("x" * 501,)},

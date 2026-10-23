@@ -1,0 +1,632 @@
+{
+  "canonical_sha256": "6d97279394a216cd086f60f0a7bc204868385848e81b0491139aa63edf3b274c",
+  "components": {
+    "schemas": {
+      "ApiError": {
+        "additionalProperties": false,
+        "description": "Canonical machine-readable API error.",
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "correlation_id": {
+            "title": "Correlation Id",
+            "type": "string"
+          },
+          "details": {
+            "additionalProperties": true,
+            "title": "Details",
+            "type": "object"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "retryable": {
+            "title": "Retryable",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "code",
+          "message",
+          "details",
+          "correlation_id",
+          "retryable"
+        ],
+        "title": "ApiError",
+        "type": "object"
+      },
+      "ApiErrorResponse": {
+        "additionalProperties": false,
+        "description": "Canonical error plus additive legacy compatibility fields.",
+        "properties": {
+          "detail": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          },
+          "error": {
+            "$ref": "#/components/schemas/ApiError"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "title": "ApiErrorResponse",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "additionalProperties": false,
+        "properties": {
+          "detail": {
+            "items": {
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "error": {
+            "$ref": "#/components/schemas/ApiError"
+          }
+        },
+        "required": [
+          "detail",
+          "error"
+        ],
+        "type": "object"
+      },
+      "ProjectGuideResponse": {
+        "additionalProperties": false,
+        "description": "Response schema for project guide records.",
+        "properties": {
+          "activation_operation_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Activation Operation Id"
+          },
+          "approved_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approved By"
+          },
+          "change_summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Change Summary"
+          },
+          "contribution_policy_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contribution Policy Id"
+          },
+          "contribution_policy_version_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contribution Policy Version Id"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by": {
+            "title": "Created By",
+            "type": "string"
+          },
+          "effective_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effective At"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "superseded_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Superseded At"
+          },
+          "task_examples": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ProjectGuideTaskExample"
+                },
+                "maxItems": 100,
+                "minItems": 1,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Task Examples"
+          },
+          "task_examples_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Task Examples Hash"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "project_id",
+          "version",
+          "status",
+          "change_summary",
+          "task_examples",
+          "task_examples_hash",
+          "approved_by",
+          "effective_at",
+          "created_by",
+          "created_at",
+          "updated_at",
+          "superseded_at"
+        ],
+        "title": "ProjectGuideResponse",
+        "type": "object"
+      },
+      "ProjectGuideTaskExample": {
+        "additionalProperties": false,
+        "description": "A starting idea or fuller description; project rules belong in the guide.",
+        "properties": {
+          "content": {
+            "maxLength": 65536,
+            "minLength": 1,
+            "title": "Content",
+            "type": "string"
+          },
+          "labels": {
+            "default": [],
+            "items": {
+              "maxLength": 100,
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 20,
+            "title": "Labels",
+            "type": "array"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          }
+        },
+        "required": [
+          "content"
+        ],
+        "title": "ProjectGuideTaskExample",
+        "type": "object"
+      },
+      "ProjectGuideUpdate": {
+        "additionalProperties": false,
+        "description": "Request schema for editing mutable fields on a draft guide.",
+        "properties": {
+          "change_summary": {
+            "anyOf": [
+              {
+                "maxLength": 1000,
+                "pattern": "^[^\\x00]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Change Summary"
+          }
+        },
+        "title": "ProjectGuideUpdate",
+        "type": "object"
+      }
+    }
+  },
+  "operation": {
+    "operationId": "update_guide_api_v1_projects__project_id__guides__guide_id__patch",
+    "parameters": [
+      {
+        "in": "path",
+        "name": "project_id",
+        "required": true,
+        "schema": {
+          "format": "uuid",
+          "title": "Project Id",
+          "type": "string"
+        }
+      },
+      {
+        "in": "path",
+        "name": "guide_id",
+        "required": true,
+        "schema": {
+          "format": "uuid",
+          "title": "Guide Id",
+          "type": "string"
+        }
+      },
+      {
+        "in": "header",
+        "name": "Idempotency-Key",
+        "required": true,
+        "schema": {
+          "format": "uuid",
+          "title": "Idempotency-Key",
+          "type": "string"
+        }
+      },
+      {
+        "in": "header",
+        "name": "X-Request-ID",
+        "required": false,
+        "schema": {
+          "format": "uuid",
+          "maxLength": 36,
+          "minLength": 36,
+          "type": "string"
+        }
+      },
+      {
+        "in": "header",
+        "name": "X-Correlation-ID",
+        "required": false,
+        "schema": {
+          "format": "uuid",
+          "maxLength": 36,
+          "minLength": 36,
+          "type": "string"
+        }
+      }
+    ],
+    "requestBody": {
+      "content": {
+        "application/json": {
+          "schema": {
+            "$ref": "#/components/schemas/ProjectGuideUpdate"
+          }
+        }
+      },
+      "required": true
+    },
+    "responses": {
+      "200": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ProjectGuideResponse"
+            }
+          }
+        },
+        "description": "Successful Response",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "400": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Invalid request.",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "401": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Authentication failed.",
+        "headers": {
+          "WWW-Authenticate": {
+            "schema": {
+              "type": "string"
+            }
+          },
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "403": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Permission denied.",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "404": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Resource not found.",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "409": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Request conflict.",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "422": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/HTTPValidationError"
+            }
+          }
+        },
+        "description": "Validation Error",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "500": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Internal server error.",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "503": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Identity verification unavailable.",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "security": [
+      {
+        "HTTPBearer": []
+      }
+    ],
+    "summary": "Update Guide",
+    "tags": [
+      "projects"
+    ],
+    "x-workstream-action-id": "project.guide.update"
+  },
+  "source": {
+    "method": "PATCH",
+    "openapi_version": "3.1.0",
+    "path": "/api/v1/projects/{project_id}/guides/{guide_id}",
+    "repository_sha": "a82f0d45e48dae6eb782efcf2844d812521280c3"
+  }
+}

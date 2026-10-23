@@ -45,7 +45,14 @@ from app.modules.projects.guide_compilation.orchestrator import (
 )
 from tests.checkers.external.support import capability_projection
 
-from .helpers import context, identity, manager_runtime_configuration, result, seed_database
+from .helpers import (
+    context,
+    generated_result,
+    identity,
+    manager_runtime_configuration,
+    result,
+    seed_database,
+)
 from .runtime_fixtures import document_access, record_scripted_document_access
 from .test_authorized_request_service import _authorized_service, _request, _seed_human
 
@@ -53,7 +60,7 @@ from .test_authorized_request_service import _authorized_service, _request, _see
 class _Runtime:
     identity = runtime_configuration().adapter_identity
 
-    def __init__(self, outcome=result(), *, delay: float = 0) -> None:
+    def __init__(self, outcome=generated_result(), *, delay: float = 0) -> None:
         self.outcome = outcome
         self.delay = delay
         self.calls = 0
@@ -276,7 +283,7 @@ async def test_concurrent_commands_commit_one_dispatch_and_one_provider_call(
     ("winner_outcome", "expected_classification", "expected_compilations"),
     [
         (
-            result(),
+            generated_result(),
             ProjectGuideCompilationExecutionClassification.PERSISTED,
             1,
         ),
@@ -428,7 +435,7 @@ async def test_accepted_result_recovers_without_a_second_provider_call(
     [
         ProjectGuideCompilationInvalidOutputError("schema_invalid"),
         ProjectGuideCompilationInvalidOutputError("unsafe_text"),
-        result().model_copy(update={"agent_version": "v2"}),
+        generated_result().model_copy(update={"agent_version": "v2"}),
     ],
 )
 async def test_known_invalid_output_terminalizes_without_compilation(

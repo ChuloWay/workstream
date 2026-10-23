@@ -670,10 +670,31 @@ JSON retains the complete public package: exact target and hashes, findings
 with display-only source locations, requirement inventory, proposed intake
 policy, pre-submission intake bindings, distinct post-submission evaluation
 bindings, suggestions, notes and nullable approval/post-policy references.
-Text renders that same complete object with terminal escaping. Private runtime
-document handles are not part of this public projection. Unknown/duplicate
-members, missing/null required facts, malformed nested types or substituted
-identities fail with empty stdout. Integer facts retain the backend range.
+Text starts with concise proposal and approval status, then renders the intake
+policy, findings and evidence document numbers. It groups requirements into
+PRE, POST and non-checker sections and expands each available engineering
+specification into its inputs, ordered steps, pass conditions, coded failure
+findings, positive/negative tests, execution budget, runtime dependencies and
+infrastructure-failure behavior. Suggestions and every setup note follow those
+requirements. Dynamic text remains terminal escaped; private runtime document
+handles are not part of this public projection. Unknown/duplicate members,
+missing/null required facts, malformed nested types or substituted identities
+fail with empty stdout. Integer facts retain the backend range.
+
+New checker requirements can carry a typed `check_specification` and a
+`classification_rationale`. PRE specifications describe bounded work of at most
+60 seconds before Submission creation; POST specifications describe background
+work and may declare up to a one-hour budget. Both PRE and POST bindings can
+show their exact catalogue parameters. Earlier retained proposals may omit the
+two new requirement fields and empty PRE parameters; the reader preserves and
+labels that absence without manufacturing content. When any new field is
+present, its nested object remains closed and strictly validated.
+
+Project file, expanded-package, compressed-archive and entry-count limits may
+be null or omitted. The reader
+preserves those values: absence means no additional project restriction, while
+Workstream's platform upload and archive limits still apply. Explicit project
+limits must remain positive integers within the backend range.
 
 A blocked, warning-bearing or historical (`current=false`) proposal is still a
 successful read (exit 0), not readiness or authority to approve, correct or

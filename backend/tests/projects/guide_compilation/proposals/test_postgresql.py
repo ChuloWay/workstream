@@ -1,26 +1,56 @@
 """Real proposal, approval and correction transactions over finalized setup evidence."""
 
+import json
 from uuid import uuid4
 
 import pytest
 from sqlalchemy import select
 
-from app.core.identifiers import new_record_id
 from app.adapters.artifacts import guide_document_manifest_port
+from app.core.hashing import canonical_json_hash
+from app.core.identifiers import new_record_id
+from app.interfaces.project_agents import (
+    ProjectAgentRuntimeError,
+    project_guide_compilation_prompt_bytes,
+)
+from app.modules.authorization.guide_compilation import (
+    ProjectGuideCompilationAuthorizationAdapter,
+)
+from app.modules.authorization.kernel import AuthorizationService
+from app.modules.authorization.prepared import PreparedAuthorizationService
+from app.modules.authorization.repository import AdminAuthorizationRepository
+from app.modules.authorization.runtime import (
+    ActorStatus,
+    HumanAuthorizationContext,
+    IdentityLinkStatus,
+)
+from app.modules.projects.api import (
+    ProjectGuideCompilationExecutionClassification,
+    ProjectGuideCompilationExecutionCommand,
+)
 from app.modules.projects.api.guide_proposals import (
     GuideProposalApproval,
     GuideProposalCorrection,
     GuideProposalError,
 )
 from app.modules.projects.guide_compilation.models import (
+    ProjectGuideCompilation,
+    ProjectGuideCompilationAttempt,
     ProjectGuideProposalApproval,
     ProjectGuideProposalCorrection,
 )
+from app.modules.projects.guide_compilation.orchestrator import GuideCompilationOrchestrator
 from app.modules.projects.guide_compilation.proposal_service import GuideProposalService
+from app.modules.projects.guide_compilation.request_inputs import CompilationRequestInputs
+from app.modules.projects.guide_compilation.service import GuideCompilationService
+from app.modules.projects.guide_compilation.validation import identity_from_attempt
 from app.modules.projects.guide_setup_continuation import retryable_compilation_dispatch_predicate
 from app.modules.projects.models import ProjectSetupRun
-from tests.projects.guide_compilation.finalization.pg_support import finalize, stored_state
 from tests.checkers.external.support import capability_projection
+from tests.projects.guide_compilation.finalization.pg_support import finalize, stored_state
+from tests.projects.guide_compilation.helpers import runtime_configuration
+from tests.projects.guide_compilation.test_hidden_orchestrator_postgresql import _Runtime, _backend
+
 from .pg_support import ProposalAuthority, proposal_case, read_package
 
 
@@ -195,24 +225,6 @@ async def test_correction_postgresql_replay_creates_one_successor(clean_postgres
 
 
 async def test_correction_uses_canonical_human_request_and_binds_feedback(clean_postgres_database):
-    from app.interfaces.project_agents import project_guide_compilation_prompt_bytes
-    from app.modules.authorization.guide_compilation import (
-        ProjectGuideCompilationAuthorizationAdapter,
-    )
-    from app.modules.authorization.kernel import AuthorizationService
-    from app.modules.authorization.prepared import PreparedAuthorizationService
-    from app.modules.authorization.repository import AdminAuthorizationRepository
-    from app.modules.authorization.runtime import (
-        ActorStatus,
-        HumanAuthorizationContext,
-        IdentityLinkStatus,
-    )
-    from app.modules.projects.guide_compilation.request_inputs import CompilationRequestInputs
-    from app.modules.projects.guide_compilation.service import GuideCompilationService
-    from app.modules.projects.guide_compilation.validation import identity_from_attempt
-    from app.modules.projects.guide_compilation.models import ProjectGuideCompilationAttempt
-    from tests.projects.guide_compilation.helpers import runtime_configuration
-
     async with proposal_case(clean_postgres_database) as (_, factory, command, actor, grant):
         package = await read_package(factory, command, actor, grant)
         correction = await correct(
@@ -278,6 +290,41 @@ async def test_correction_uses_canonical_human_request_and_binds_feedback(clean_
             )
             assert attempt.status == "compilation_reserved"
             assert context.material.source_snapshot_id == package.target.source_snapshot_id
+            predecessor = await session.get(ProjectGuideCompilation, command.compilation_id)
+            prompt = json.loads(project_guide_compilation_prompt_bytes(context))
+            assert prompt["correction_predecessor"] == predecessor.canonical_result
+            assert canonical_json_hash(prompt["correction_predecessor"]) == package.target.result_hash
+            original_identity = (attempt.canonical_input_hash, attempt.provider_idempotency_key)
+        class RecordingFailure(_Runtime):
+            async def compile_project_guide(self, execution_context, capabilities):
+                assert execution_context == context
+                assert execution_context.correction_predecessor.model_dump(mode="json") == predecessor.canonical_result
+                return await super().compile_project_guide(execution_context, capabilities)
+
+        runtime = RecordingFailure(ProjectAgentRuntimeError("transport failed"))
+        backend = _backend(factory)
+        execution = ProjectGuideCompilationExecutionCommand(attempt_id=receipts[0].attempt_id)
+        first = await GuideCompilationOrchestrator(backend, lambda _: runtime).execute(execution)
+        assert first.classification is ProjectGuideCompilationExecutionClassification.PROVIDER_UNRESOLVED
+
+        class RecoveryOnly:
+            async def load(self, attempt_id):
+                return await backend.load(attempt_id)
+
+            def __getattr__(self, name):
+                pytest.fail("uncertain correction reached " + name)
+
+        def forbidden_runtime(_):
+            pytest.fail("uncertain correction created a second runtime")
+
+        assert await GuideCompilationOrchestrator(RecoveryOnly(), forbidden_runtime).execute(execution) == first
+        assert runtime.calls == 1
+        async with factory() as session:
+            retained = await session.get(ProjectGuideCompilation, command.compilation_id)
+            attempt = await session.get(ProjectGuideCompilationAttempt, receipts[0].attempt_id)
+            assert retained.canonical_result == predecessor.canonical_result
+            assert retained.result_hash == package.target.result_hash
+            assert (attempt.canonical_input_hash, attempt.provider_idempotency_key) == original_identity
 
 
 async def test_correction_rejects_authority_for_a_substituted_locator_operation(

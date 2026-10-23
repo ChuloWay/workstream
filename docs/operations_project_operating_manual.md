@@ -131,7 +131,10 @@ manual diagnostic report is neither reused nor linked as compilation output.
 The three former inference steps and sufficiency-run endpoint are removed.
 
 A ready compilation persists separate pre-submission and post-submission
-proposals and stops at a draft. An insufficient guide stops with findings.
+proposals and stops at a draft. Missing required checker implementations produce
+a warning-ready draft with staged capability gaps; those gaps still block
+activation. An insufficient guide with an actual guide blocker or blocking
+finding stops without draft policy projection.
 The latest setup diagnostic reflects durable invalid or unresolved provider
 outcomes without rewriting setup evidence. An uncertain attempt is never
 invoked again. Transport failures retry the same task and attempt. After bounded Celery retries
@@ -301,8 +304,48 @@ approval is public through POL-06B.
 An authorized Project Manager reviews the complete bounded proposal before
 approval. Effective intake combines mandatory platform defaults with approved
 project rules using the canonical CHECKERS compiler. Post-submit policy is a
-separate deterministic projection of the same unified result; no evaluator
-runs during setup or approval.
+separate deterministic projection of the same unified result; no contributor-work
+evaluator runs during setup or approval.
+
+Inference drafts a private structured candidate, then checks coverage against the original documents
+in a fresh model context before returning its corrected proposal. Review can
+correct draft constraint mistakes; only its final output can pass canonical and
+owner validation and become a retained proposal. Both phases
+share the attempt's limits; a failed review cannot publish the unchecked draft.
+This improves the handoff but does not replace the PM's review of source coverage
+and the proposed checks' observable evidence.
+
+For every newly compiled requirement, review `classification_rationale`. A
+supported PRE/POST requirement or capability gap also has one typed
+`check_specification` describing its evaluation method, execution mode and
+duration, inputs, ordered checks, pass conditions, coded work findings,
+positive/negative cases, runtime dependencies and infrastructure failures. PRE
+means the complete check can reliably finish within 60 seconds before Submission
+creation, even if durable execution and polling are used. Longer or model-based
+work belongs to background POST. Automation by itself does not select POST.
+
+| Specification field | Manager and engineering review question |
+| --- | --- |
+| `evaluation_method`, `execution_mode`, `maximum_duration_seconds`, `stage_rationale` | Is this static inspection, isolated execution or model evaluation, and does its complete work fit the proposed PRE/POST stage and budget? |
+| `inputs` | Are all required package, manifest, request-metadata, file, directory or context inputs named and actually available to the runtime? |
+| `check_steps`, `pass_conditions` | Can an implementer build the ordered evaluation and tell unambiguously when it passes? |
+| `failure_findings` | Does each work failure have a stable code, level, condition and contributor-safe message? |
+| `positive_tests`, `negative_tests` | Do representative successes and plausible failures discriminate the intended behavior, with negative cases tied to exact finding codes and verdicts? |
+| `runtime_dependencies`, `infrastructure_failures` | Are tools and services assigned to the current runner, checker implementation or a visible runtime gap, and are non-work failures kept outside contributor verdicts? |
+
+The capability suggestion for a missing implementation points back to this
+requirement and stage; it does not duplicate the specification in free prose.
+
+Confirm that each claimed input is available to the selected runtime. The
+ordinary checker image is offline and receives verified package material,
+manifest, approved configuration and normalized request metadata. Task or guide
+context, a model service and nested sandboxing are dependencies that must be
+explicitly supplied; setup cannot invent them. Missing registered implementations
+remain engineering gaps and must not be relabelled as human review. Workstream's
+default covers only bounded ZIP safety, received-byte/manifest identity,
+high-confidence secret detection and unchanged-work detection. Required files,
+layout, project metadata and project-specific content rules still need project
+checks even when the artifact policy records those rules.
 
 The public exact-compilation review-package operation uses
 `project.guide_compilation.review_package.read` (AUTH-12F4), requiring
@@ -327,6 +370,11 @@ status and lineage pointers; it does not substitute for the authorized package.
 A manager correction preserves finalized history and creates a successor setup
 generation with bounded feedback. It never reopens a finalized run or activates
 the guide. The successor's pre-submission proposal requires its own approval.
+The setup agent receives both the saved feedback and the exact, hash-verified
+predecessor proposal to correct, then checks the originals again. Previous
+proposal text is untrusted context, not a replacement for source evidence or
+approval. Both model phases and their combined input-size limits include it;
+oversized or unavailable predecessor material stops before provider execution.
 
 Timeout or unknown provider acceptance is not a correctable finalized result.
 It remains blocked without another call until the adapter supports verified
@@ -395,6 +443,7 @@ references. A ready result must cite every other guide document at least once.
       "requirement_id": "reviewer_checks_rubric",
       "statement": "A reviewer checks the submission against the rubric.",
       "disposition": "human_review",
+      "classification_rationale": "The guide explicitly assigns this qualitative decision to an authorized human reviewer.",
       "evidence_refs": [{"document": "sha256:<64 lowercase hex of guide.pdf>", "section": "Rubric"}]
     }
   ],
@@ -404,6 +453,20 @@ references. A ready result must cite every other guide document at least once.
   "setup_notes": []
 }
 ```
+
+New manager-authored results follow the same completeness rules as provider
+results: every requirement needs `classification_rationale`, and every supported
+or missing PRE/POST check needs one complete `check_specification`. Human-review,
+platform-covered, lifecycle-policy and guide-blocker requirements omit the
+specification. Capability gaps use `draft_ready_with_warnings`; they do not make
+an otherwise sufficient guide `guide_blocked`, but activation remains unavailable.
+Both PRE and POST binding parameters must conform exactly to the selected
+registry configuration schema.
+
+Historical results remain byte- and hash-stable. Reads and recovery omit the new
+members when an older retained result did not contain them; they never synthesize
+a rationale or specification. Strict completeness applies to newly compiled
+results before persistence and projection.
 
 The runtime opens every assigned original once through the attempt's exact
 document grant and records each read. It allocates no provider container or
