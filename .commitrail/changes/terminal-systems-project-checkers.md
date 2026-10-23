@@ -321,9 +321,48 @@ This extension owns `backend/app/modules/checkers/models.py`,
 `backend/alembic/versions/0061_checker_revision_input.py`,
 `backend/alembic/env.py`, `backend/tests/test_alembic.py`,
 `backend/scripts/schema_baseline_manifest.py`,
+`backend/tests/conftest.py` (expected public-schema fingerprint only),
+`backend/alembic/baseline/v01_baseline_manifest.json`,
 `backend/tests/checkers/external/test_revision_materialization.py` and affected
 schema fingerprints. Migration 0061 follows PILOT-05's shared model owner 0060;
 integrate the committed dependency before migration qualification. No competing
 head or rewritten retained data is allowed. Prove exact SQL/Python digest
 agreement, current-only retained data, selected initial/revised inputs,
 substitution/omission denial and rollback on real PostgreSQL.
+
+Trial runtime composition uses the already verified ART request grant and six
+flat, approved profile/projection selectors. The trusted service resolves them
+against an exact operator-provisioned manifest; partial, unknown, substituted
+or PRE selectors confer no execution authority. This owns
+`external_checkers/workstream-checker-service/src/trial_profiles.rs` (strict
+manifest parser/resolver and inline tests), `src/main.rs`, `src/trial_relay.rs`
+and `src/trial_engine.rs` within that same crate (source-role mapping only).
+No new dependency is needed. Project paths and execution commands stay in the
+project image/projection, outside the shared service. Trial receipt handles
+require durable CHECKERS/ART evidence publication before model assessment.
+
+The retained 0001 baseline SQL and its committed manifest remain unchanged.
+The additive migration advances the current schema; only the test harness's
+current public-schema fingerprint is regenerated from head. Fresh baseline
+parity and intermediate-to-head migration tests prove these separately.
+
+Durable trial evidence closes the concrete retry gap between a completed
+sandbox trial and paid model assessment. CHECKERS allocates one UUIDv7 evidence
+record for an exact submission, binding, trial kind and slot before execution.
+Plan/input/material hashes are immutable facts at that address, not additional
+keys permitting another trial slot. Original lease/request facts are retained
+provenance; each write/read still requires fresh current execution authority.
+ART uses its existing generated-output put/verify/bind/recover pipeline with a
+typed trial subject. A retry recovers the originally committed receipt bytes;
+local scratch handles never become durable references. No paid model effect is
+required to publish a trial, avoiding a circular trial-to-assessment dependency.
+
+Exact owner scope: `backend/app/modules/checkers/api/trial_evidence.py`,
+`backend/app/modules/checkers/trial_evidence.py`,
+`backend/app/modules/checkers/models.py`, and
+`backend/tests/checkers/external/test_trial_evidence.py`. The shared ART and AUTH
+branches are coordinated in PILOT-05; additive owner migration 0062 is scoped
+after 0061 freezes. Verify current TASK-before-CHECKERS custody, distinct
+contributor isolation, concurrent reservation/first-content pinning, mutation
+denial, rollback and loss/recovery of the publication response on PostgreSQL
+and MinIO. No trial handle may authorize model spend without verified bytes.
