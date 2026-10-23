@@ -15,6 +15,7 @@ from trial_transport import CompletedTrial
 
 
 RUNTIME_REQUIREMENT = "runtime_environment_and_verification_trials"
+REVISION_RERUN_REQUIREMENT = "revision_rerun_evidence"
 _LOCAL_HANDOFF_PATH = Path(__file__).with_name("setup-handoff.json")
 _SOURCE_HANDOFF_PATH = Path(__file__).parents[2] / "setup-handoff.json"
 HANDOFF_PATH = (
@@ -32,6 +33,12 @@ _CONDITION_FINDINGS = (
     frozenset({"verification_accepts_invalid_output"}),
     frozenset({"verification_role_dependent"}),
     frozenset({"behavioral_coverage_incomplete", "execution_contract_failure"}),
+)
+_REVISION_CONDITION_FINDINGS = (
+    frozenset({"revision_rerun_missing"}),
+    frozenset({"revision_rerun_missing"}),
+    frozenset({"revision_rerun_missing", "revision_rerun_failure"}),
+    frozenset({"revision_rerun_missing"}),
 )
 _RESOURCE_FAILURES = frozenset(
     {
@@ -61,6 +68,28 @@ class RuntimeAssessmentInput:
 
 def load_runtime_rubric(path: Path = HANDOFF_PATH) -> tuple[dict[str, str], Rubric]:
     """Load the exact retained source rule without treating it as policy authority."""
+    return _load_execution_rubric(
+        RUNTIME_REQUIREMENT, _CONDITION_FINDINGS, path=path
+    )
+
+
+def load_revision_rerun_rubric(
+    path: Path = HANDOFF_PATH,
+) -> tuple[dict[str, str], Rubric]:
+    """Load the exact conditional revision rerun rule."""
+    return _load_execution_rubric(
+        REVISION_RERUN_REQUIREMENT,
+        _REVISION_CONDITION_FINDINGS,
+        path=path,
+    )
+
+
+def _load_execution_rubric(
+    requirement_id: str,
+    condition_findings: tuple[frozenset[str], ...],
+    *,
+    path: Path,
+) -> tuple[dict[str, str], Rubric]:
     try:
         root = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, UnicodeError, json.JSONDecodeError) as exc:
@@ -81,7 +110,7 @@ def load_runtime_rubric(path: Path = HANDOFF_PATH) -> tuple[dict[str, str], Rubr
     matches = [
         item
         for item in root["requirements"]
-        if type(item) is dict and item.get("requirement_id") == RUNTIME_REQUIREMENT
+        if type(item) is dict and item.get("requirement_id") == requirement_id
     ]
     if len(matches) != 1:
         raise RubricError("rubric_invalid")
@@ -113,18 +142,18 @@ def load_runtime_rubric(path: Path = HANDOFF_PATH) -> tuple[dict[str, str], Rubr
         or any(rule.level != "error" for rule in rules.values())
         or not inputs
         or not steps
-        or len(conditions) != len(_CONDITION_FINDINGS)
-        or set().union(*_CONDITION_FINDINGS) != rules.keys()
+        or len(conditions) != len(condition_findings)
+        or set().union(*condition_findings) != rules.keys()
     ):
         raise RubricError("rubric_invalid")
     return source, Rubric(
-        requirement_id=RUNTIME_REQUIREMENT,
+        requirement_id=requirement_id,
         statement=value["statement"],
         inputs=inputs,
         check_steps=steps,
         pass_conditions=conditions,
         findings=rules,
-        condition_findings=_CONDITION_FINDINGS,
+        condition_findings=condition_findings,
     )
 
 
@@ -340,6 +369,7 @@ def _bytes_digest(value: bytes) -> str:
 __all__ = (
     "RuntimeAssessmentInput",
     "TrialAssessmentError",
+    "load_revision_rerun_rubric",
     "load_runtime_rubric",
     "prepare_runtime_assessment",
     "validate_runtime_assessment",

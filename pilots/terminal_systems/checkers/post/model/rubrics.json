@@ -438,6 +438,12 @@
             "message": "Author notes must accurately state the exact reproduction commands used by observed trials."
           },
           {
+            "code": "reproduction_procedure_unavailable",
+            "level": "error",
+            "condition": "An exact procedure needed to compare author claims with authenticated trials is absent or ambiguous, so accuracy cannot be established.",
+            "message": "Author evidence cannot be established without an exact reproducible procedure."
+          },
+          {
             "code": "trial_outcome_discrepant",
             "level": "error",
             "condition": "A claimed trial outcome or revision rerun conflicts with an authenticated observed outcome.",

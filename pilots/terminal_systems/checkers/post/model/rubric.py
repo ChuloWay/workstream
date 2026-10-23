@@ -16,10 +16,10 @@ SUPPORTED_CHECKS = frozenset(
         "difficulty_claim_evidence",
     }
 )
-BLOCKED_CHECKS = {
-    "author_evidence_accuracy": "authenticated_trial_records",
-    "revision_objective_and_explanation": "revision_context",
-}
+AGENT_CHECKS = frozenset(
+    {"author_evidence_accuracy", "revision_objective_and_explanation"}
+)
+BLOCKED_CHECKS = {}
 
 # Each model failure code is valid only for the numbered pass conditions it can
 # disprove. This is deliberately data, rather than a prompt-only convention.
@@ -73,7 +73,12 @@ CONDITION_FINDINGS = {
     ),
     "author_evidence_accuracy": (
         frozenset({"notes_observation_misrepresented"}),
-        frozenset({"reproduction_procedure_discrepant"}),
+        frozenset(
+            {
+                "reproduction_procedure_discrepant",
+                "reproduction_procedure_unavailable",
+            }
+        ),
         frozenset({"trial_outcome_discrepant"}),
         frozenset({"resource_measurement_discrepant"}),
         frozenset({"notes_observation_misrepresented"}),
@@ -197,13 +202,14 @@ def load_rubrics(path: Path = RUBRIC_PATH) -> tuple[dict[str, str], dict[str, Ru
             or set().union(*condition_findings) != rules.keys()
         ):
             raise RubricError("rubric_invalid")
-    if set(loaded) != SUPPORTED_CHECKS | set(BLOCKED_CHECKS):
+    if set(loaded) != SUPPORTED_CHECKS | AGENT_CHECKS | set(BLOCKED_CHECKS):
         raise RubricError("rubric_invalid")
     return source, loaded
 
 
 __all__ = (
     "BLOCKED_CHECKS",
+    "AGENT_CHECKS",
     "FindingRule",
     "Rubric",
     "RubricError",

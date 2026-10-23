@@ -65,18 +65,31 @@ do not establish hosted gVisor isolation.
 
 ## POST prerequisites
 
-The six model specifications and two execution specifications are not yet
-implemented. The user has resumed the minimal budgeted model runtime needed by
-this project. The generic runtime and its Operator provisioning/recovery controls
-are described in [the model runtime runbook](../../../docs/operations_checker_models.md).
-They preserve digest-pinned project images, exact locked configuration and
-Workstream-owned lifecycle decisions. Credentials stay outside the sandbox.
-The project still needs its review images, approved model profile selectors and
-the authorized US$10 lifetime budget before live calls. Offline runtime proofs
-do not establish this project's activation or live provider operation.
+POST engineering is in progress against the retained six model and two execution
+suggestions; those counts describe the historical handoff, not an eligibility
+set or approval. The project agent now has strict material/rubric validation, a
+bounded source-cited plan, invocation-local model-session and execution-socket
+clients, protected build/state projections, and receipt-bound runtime and author
+assessment cores. The shared runner has a generic offline Kaniko/runsc trial
+engine with resource, cancellation, cleanup and recovery controls. Provider-free
+tests and a real engine qualification are development proof only: the complete
+model→trial→retained-receipt→model flow has not yet completed a controlled
+provider qualification, and this POST image has not been published, registered,
+approved or activated.
 
-Execution additionally needs a generic isolated build/trial capability and
-approved offline material. Author-evidence review needs authenticated trial
-records; revision checks need the exact prior work and feedback from their
-owners. The current one-container runner does not supply these capabilities.
-Do not activate this guide or publish passing substitutes while these gaps remain.
+The author-accuracy draft adds `reproduction_procedure_unavailable` for the
+narrow case where an absent or ambiguous exact procedure prevents authenticated
+comparison. It reports incomplete coverage; it does not call healthy runtime
+infrastructure unavailable, invent an unobserved discrepancy, add a guide duty,
+or reuse another requirement's finding. The retained setup handoff remains
+byte-for-byte historical. The #555 owner must include this exact draft finding
+and image contract in a fresh PRE/POST proposal for review before any binding or
+activation.
+
+The shared model-account owner retains provider budget/effect custody and the
+durable receipt resolver. TASK/ART/CHECKERS owners supply authenticated revision
+context and predecessor material; project code does not query their private
+tables. Credentials stay outside the sandbox, nested submitted code receives no
+relay sockets, and all model/trial unavailability remains infrastructure rather
+than a contributor finding. Do not publish passing substitutes or treat this
+engineering checkpoint as the live contribution journey.

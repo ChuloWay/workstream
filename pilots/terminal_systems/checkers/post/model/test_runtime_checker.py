@@ -14,6 +14,7 @@ HERE = Path(__file__).parent
 sys.path.insert(0, str(HERE))
 
 from model_transport import CompletedModelCall  # noqa: E402
+from author_checker import AUTHOR_REQUIREMENT, execute_author_accuracy_check  # noqa: E402
 from runtime_checker import RUNTIME_REQUIREMENT, execute_runtime_check  # noqa: E402
 from trial_plan import project_trial_execution_projection  # noqa: E402
 from trial_transport import CompletedTrial, TrialUnavailable  # noqa: E402
@@ -53,7 +54,7 @@ Restart with `sh tests/restart.sh`.
 """
 
 
-def request() -> dict[str, object]:
+def request(check: str = RUNTIME_REQUIREMENT) -> dict[str, object]:
     return {
         "request_digest": "sha256:" + "1" * 64,
         "registry": {
@@ -62,10 +63,10 @@ def request() -> dict[str, object]:
         },
         "identity": {"phase": "post_submit"},
         "configuration": {
-            "check": RUNTIME_REQUIREMENT,
+            "check": check,
             "trial_execution": project_trial_execution_projection(),
         },
-        "input": {"requirement_id": RUNTIME_REQUIREMENT},
+        "input": {"requirement_id": check},
     }
 
 
@@ -183,7 +184,7 @@ class FakeModelSession:
     def _assessment(prompt: dict[str, object]) -> dict[str, object]:
         return {
             "schema_version": "terminal_systems.model_assessment.v1",
-            "requirement_id": RUNTIME_REQUIREMENT,
+            "requirement_id": prompt["rubric"]["requirement_id"],
             "material_digest": prompt["untrusted_evidence_data"]["material_digest"],
             "conditions": [
                 {
@@ -348,6 +349,33 @@ class RuntimeCheckerTests(unittest.TestCase):
             )
             self.assertEqual(result["outcome"], "infrastructure_failed")
             self.assertEqual(result["infrastructure_failure_code"], "invalid_output")
+
+    def test_author_accuracy_executes_same_invocation_trial_before_assessment(self):
+        session = FakeModelSession()
+        result = execute_author_accuracy_check(
+            request(AUTHOR_REQUIREMENT),
+            self.root,
+            session,
+            trial_from_plan,
+        )
+        self.assertEqual((result["outcome"], result["verdict"]), ("completed", "passed"))
+        self.assertEqual(len(session.calls), 2)
+        self.assertEqual(session.calls[1][1], ("trial_receipt_" + "b" * 32,))
+
+    def test_author_plan_gap_uses_fresh_proposal_finding_without_trial(self):
+        session = FakeModelSession(coverage_complete=False)
+
+        def forbidden(_value):
+            self.fail("an ambiguous procedure cannot be executed")
+
+        result = execute_author_accuracy_check(
+            request(AUTHOR_REQUIREMENT), self.root, session, forbidden
+        )
+        self.assertEqual((result["outcome"], result["verdict"]), ("completed", "failed"))
+        self.assertEqual(
+            [item["code"] for item in result["findings"]],
+            ["reproduction_procedure_unavailable"],
+        )
 
 
 if __name__ == "__main__":

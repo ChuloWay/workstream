@@ -8,10 +8,17 @@ from pathlib import Path
 import sys
 import time
 
+from author_checker import AUTHOR_REQUIREMENT, execute_author_accuracy_check
 from checker import ModelCallUnavailable as CheckerModelUnavailable
 from checker import execute as execute_model_check
 from model_transport import ModelCallUnavailable, ModelSession, ModelSessionError
 from result import canonical, infrastructure_result
+from revision_checker import (
+    REVISION_OBJECTIVE_REQUIREMENT,
+    REVISION_RERUN_REQUIREMENT,
+    execute_revision_objective_check,
+    execute_revision_rerun_check,
+)
 from rubric import BLOCKED_CHECKS, SUPPORTED_CHECKS
 from runtime_checker import RUNTIME_REQUIREMENT, execute_runtime_check
 from trial_transport import TrialTransportError, TrialUnavailable, execute_trial
@@ -83,6 +90,12 @@ def evaluate(
             return value
 
         check = configuration["check"]
+        if check == REVISION_RERUN_REQUIREMENT:
+            return execute_revision_rerun_check(
+                request,
+                material_root,
+                lambda plan: trial_client(plan, timeout_seconds=remaining()),
+            )
         with model_session_factory(timeout_seconds=remaining()) as session:
             if check == RUNTIME_REQUIREMENT:
                 return execute_runtime_check(
@@ -90,6 +103,19 @@ def evaluate(
                     material_root,
                     session,
                     lambda plan: trial_client(plan, timeout_seconds=remaining()),
+                )
+            if check == AUTHOR_REQUIREMENT:
+                return execute_author_accuracy_check(
+                    request,
+                    material_root,
+                    session,
+                    lambda plan: trial_client(plan, timeout_seconds=remaining()),
+                )
+            if check == REVISION_OBJECTIVE_REQUIREMENT:
+                return execute_revision_objective_check(
+                    request,
+                    material_root,
+                    session,
                 )
             if check in SUPPORTED_CHECKS or check in BLOCKED_CHECKS:
 

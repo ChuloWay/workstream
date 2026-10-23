@@ -80,17 +80,17 @@ class CheckerCoreTests(unittest.TestCase):
         self.assertEqual(missing["outcome"], "infrastructure_failed")
         self.assertEqual(missing["findings"], [])
 
-    def test_request_binding_and_missing_owner_inputs_fail_closed(self):
+    def test_request_binding_and_agent_only_checks_fail_closed_in_static_core(self):
         selected = request("solver_brief_and_extension_disclosure")
         selected["input"]["requirement_id"] = "difficulty_claim_evidence"
         invalid = execute(selected, self.root, self.passing_assessment)
         self.assertEqual(invalid["infrastructure_failure_code"], "invalid_output")
 
-        blocked = execute(
+        delegated = execute(
             request("author_evidence_accuracy"), self.root, self.passing_assessment
         )
         self.assertEqual(
-            blocked["infrastructure_failure_code"], "implementation_unavailable"
+            delegated["infrastructure_failure_code"], "invalid_output"
         )
 
 

@@ -19,10 +19,12 @@ from trial_plan import (  # noqa: E402
     TrialPlanError,
     TrialPlanLimits,
     build_plan_prompt,
+    build_revision_rerun_plan,
     build_runtime_trial_plan,
     collect_plan_sources,
     parse_task_metadata,
     project_slot_templates,
+    project_revision_trial_execution_projection,
     project_trial_execution_projection,
     validate_plan_proposal,
 )
@@ -262,6 +264,27 @@ class TrialPlanTests(unittest.TestCase):
         self.assertEqual(by_role["reference"]["projection_kind"], "state_overlay")
         self.assertEqual(by_role["verification"]["projection_kind"], "state_overlay")
         self.assertEqual(projection["slot_templates"], list(project_slot_templates()))
+
+    def test_revision_projection_runs_exact_fresh_reference_then_full_suite(self):
+        projection = project_revision_trial_execution_projection()
+        self.assertEqual(
+            [item["slot_kind"] for item in projection["slot_templates"]],
+            ["revision_reference", "revision_verification"],
+        )
+        self.assertTrue(projection["slot_templates"][0]["fresh_workspace"])
+        self.assertFalse(projection["slot_templates"][1]["fresh_workspace"])
+        revision = build_revision_rerun_plan(
+            self.metadata,
+            TrialPlanLimits(maximum_entries=100, pids=16, maximum_steps=2),
+        )
+        self.assertEqual(
+            [item["slot_kind"] for item in revision["steps"]],
+            ["revision_reference", "revision_verification"],
+        )
+        self.assertEqual(revision["steps"][0]["state_source"], "fresh")
+        self.assertEqual(
+            revision["steps"][1]["state_source"], "revision_reference"
+        )
 
     def test_complete_plan_rejects_missing_reordered_or_invented_procedures(self):
         missing = self.proposal()

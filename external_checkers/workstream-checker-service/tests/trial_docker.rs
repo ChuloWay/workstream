@@ -312,9 +312,9 @@ fn backend_emits_offline_bounded_builder_and_socketless_candidate_specs() {
     assert!(builder
         .iter()
         .any(|item| item == "--context=dir:///workspace/environment"));
-    assert!(!builder.iter().any(|item| {
-        item == "--dockerfile=/workspace/environment/environment/Containerfile"
-    }));
+    assert!(!builder
+        .iter()
+        .any(|item| { item == "--dockerfile=/workspace/environment/environment/Containerfile" }));
     assert_eq!(creates[0].mounts.len(), 3);
     assert_eq!(
         creates[0].mounts[0].class,

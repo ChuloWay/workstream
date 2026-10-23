@@ -17,7 +17,7 @@ sys.path.insert(0, str(HERE))
 from assessment import AssessmentError, build_prompt, validate_assessment  # noqa: E402
 from material import MaterialError, MaterialLimits, collect_material  # noqa: E402
 from result import completed_result, infrastructure_result  # noqa: E402
-from rubric import BLOCKED_CHECKS, SUPPORTED_CHECKS, load_rubrics  # noqa: E402
+from rubric import AGENT_CHECKS, BLOCKED_CHECKS, SUPPORTED_CHECKS, load_rubrics  # noqa: E402
 
 
 HANDOFF = HERE.parents[1] / "setup-handoff.json"
@@ -66,6 +66,20 @@ def projected_handoff() -> dict:
             "purpose": "Supplies the authoritative reference and verification command selectors and working directories.",
         },
     )
+    author_accuracy = next(
+        item
+        for item in projection["requirements"]
+        if item["requirement_id"] == "author_evidence_accuracy"
+    )
+    author_accuracy["check_specification"]["failure_findings"].insert(
+        2,
+        {
+            "code": "reproduction_procedure_unavailable",
+            "level": "error",
+            "condition": "An exact procedure needed to compare author claims with authenticated trials is absent or ambiguous, so accuracy cannot be established.",
+            "message": "Author evidence cannot be established without an exact reproducible procedure.",
+        },
+    )
     return projection
 
 
@@ -75,15 +89,14 @@ class RubricParityTests(unittest.TestCase):
         self.assertEqual(bundled, projected_handoff())
         source, rubrics = load_rubrics()
         self.assertEqual(source, bundled["source"])
-        self.assertEqual(set(rubrics), SUPPORTED_CHECKS | set(BLOCKED_CHECKS))
+        self.assertEqual(
+            set(rubrics), SUPPORTED_CHECKS | AGENT_CHECKS | set(BLOCKED_CHECKS)
+        )
 
     def test_missing_runtime_owner_inputs_remain_explicit(self):
         self.assertEqual(
             BLOCKED_CHECKS,
-            {
-                "author_evidence_accuracy": "authenticated_trial_records",
-                "revision_objective_and_explanation": "revision_context",
-            },
+            {},
         )
 
 

@@ -805,6 +805,83 @@ def project_trial_execution_projection() -> dict[str, object]:
     }
 
 
+def project_revision_trial_execution_projection() -> dict[str, object]:
+    """Return the locked fresh revision-rerun projection."""
+    value = project_trial_execution_projection()
+    value["trial_kind"] = "terminal_systems_revision_rerun"
+    value["slot_templates"] = [
+        {
+            "slot_kind": "revision_reference",
+            "minimum_occurrences": 1,
+            "maximum_occurrences": 1,
+            "seed_roles": ["workspace_seed"],
+            "visible_roles": ["reference"],
+            "fresh_workspace": True,
+            "retain_state_after": ["succeeded"],
+        },
+        {
+            "slot_kind": "revision_verification",
+            "minimum_occurrences": 1,
+            "maximum_occurrences": 1,
+            "seed_roles": [],
+            "visible_roles": ["verification"],
+            "fresh_workspace": False,
+            "retain_state_after": ["succeeded"],
+        },
+    ]
+    return value
+
+
+def build_revision_rerun_plan(
+    metadata: dict[str, object], limits: TrialPlanLimits
+) -> dict[str, object]:
+    """Build the exact guide-ordered fresh reference and full-suite rerun."""
+    if limits.maximum_steps < 2:
+        raise TrialPlanError("invalid_plan_limits")
+    resources = metadata["resources"]
+    reference = metadata["reference"]
+    verification = metadata["verification"]
+    steps = [
+        _step(
+            "revision_reference",
+            "revision_reference",
+            "fresh",
+            reference,
+            resources["reference_timeout_seconds"],
+            ("reference",),
+        ),
+        _step(
+            "revision_verification",
+            "revision_verification",
+            "revision_reference",
+            verification,
+            resources["verification_timeout_seconds"],
+            ("verification",),
+        ),
+    ]
+    total_timeout_ms = (
+        resources["build_timeout_seconds"]
+        + resources["reference_timeout_seconds"]
+        + resources["verification_timeout_seconds"]
+    ) * 1000
+    return {
+        "schema_version": TRIAL_SCHEMA_VERSION,
+        "environment": metadata["environment"],
+        "resources": {
+            "cpu_quota_millis": resources["cpu_millis"],
+            "cpu_time_ms": total_timeout_ms
+            * max(resources["cpu_millis"], 1000)
+            // 1000,
+            "memory_bytes": resources["memory_bytes"],
+            "disk_bytes": resources["disk_bytes"],
+            "maximum_entries": limits.maximum_entries,
+            "pids": limits.pids,
+        },
+        "build_timeout_ms": resources["build_timeout_seconds"] * 1000,
+        "steps": steps,
+    }
+
+
 def _step(
     slot_id: str,
     slot_kind: str,
@@ -830,10 +907,12 @@ __all__ = (
     "TrialPlanLimits",
     "TrialPlanProposal",
     "build_plan_prompt",
+    "build_revision_rerun_plan",
     "build_runtime_trial_plan",
     "collect_plan_sources",
     "parse_task_metadata",
     "project_slot_templates",
+    "project_revision_trial_execution_projection",
     "project_trial_execution_projection",
     "validate_plan_proposal",
 )
