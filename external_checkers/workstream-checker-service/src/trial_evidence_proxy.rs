@@ -65,6 +65,7 @@ struct PublishRequest<'a> {
     operation: &'static str,
     external_request: &'a Value,
     trial_evidence_id: &'a str,
+    project_id: &'a str,
     content_sha256: &'a str,
     byte_count: usize,
     canonical_receipt_utf8: &'a str,
@@ -87,7 +88,7 @@ struct PublishCompleted {
     protocol_version: String,
     operation: String,
     outcome: String,
-    ack: WireCustodyAck,
+    custody_ack: WireCustodyAck,
     failure_code: Option<String>,
 }
 
@@ -159,6 +160,7 @@ struct RetainedReceipt {
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
+#[derive(Serialize)]
 struct WireCustodyAck {
     trial_evidence_id: String,
     owner_digest: String,
@@ -303,6 +305,7 @@ impl TrialEvidenceProxyClient {
                 operation: "publish",
                 external_request: &self.external_request,
                 trial_evidence_id,
+                project_id: &reserved.subject.project_id,
                 content_sha256: &receipt.receipt_digest,
                 byte_count: receipt.byte_count,
                 canonical_receipt_utf8,
@@ -319,7 +322,7 @@ impl TrialEvidenceProxyClient {
                 "protocol_version",
                 "operation",
                 "outcome",
-                "ack",
+                "custody_ack",
                 "failure_code",
             ],
         )?;
@@ -333,7 +336,7 @@ impl TrialEvidenceProxyClient {
             return Err(TrialEvidenceProxyFailure::InvalidResponse);
         }
         custody_ack(
-            completed.ack,
+            completed.custody_ack,
             trial_evidence_id,
             &receipt.receipt_digest,
             receipt.byte_count,
@@ -711,5 +714,50 @@ mod tests {
             true,
         )
         .is_ok());
+    }
+
+    #[test]
+    fn publish_wire_includes_project_and_uses_custody_ack_field() {
+        let external_request = serde_json::json!({"request_digest": digest('a')});
+        let request = serde_json::to_value(PublishRequest {
+            protocol_version: PROTOCOL,
+            operation: "publish",
+            external_request: &external_request,
+            trial_evidence_id: "018f6f49-66b8-7d2a-bf4d-0e2eeaa00006",
+            project_id: "018f6f49-66b8-7d2a-bf4d-0e2eeaa00001",
+            content_sha256: &digest('c'),
+            byte_count: 2,
+            canonical_receipt_utf8: "{}",
+        })
+        .unwrap();
+        assert_eq!(
+            request
+                .as_object()
+                .unwrap()
+                .keys()
+                .cloned()
+                .collect::<std::collections::BTreeSet<_>>(),
+            [
+                "byte_count",
+                "canonical_receipt_utf8",
+                "content_sha256",
+                "external_request",
+                "operation",
+                "project_id",
+                "protocol_version",
+                "trial_evidence_id",
+            ]
+            .iter()
+            .map(|key| key.to_string())
+            .collect::<std::collections::BTreeSet<_>>()
+        );
+        let response = serde_json::json!({
+            "protocol_version": PROTOCOL,
+            "operation": "publish",
+            "outcome": "completed",
+            "custody_ack": wire_ack(digest('d'), false),
+            "failure_code": null,
+        });
+        assert!(serde_json::from_value::<PublishCompleted>(response).is_ok());
     }
 }
