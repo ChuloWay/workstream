@@ -6,6 +6,7 @@ import pytest
 from app.modules.checkers.api.trial_profiles import (
     PinnedTrialProfileCatalog,
     TrialExecutionProjection,
+    TrialMaterialProjection,
     TrialProfileError,
     TrialProfileSelector,
     TrialResourceCeilings,
@@ -38,8 +39,14 @@ def profile():
         builder_image_digest=digest("5"),
         offline_cache_digest=digest("6"),
         approved_base_digests=(digest("7"),),
+        permitted_source_roles=("submission_archive",),
         permitted_material_roles=("candidate_source", "verification"),
         permitted_operations=("run",),
+        permitted_state_retention_outcomes=(
+            "succeeded",
+            "exit_nonzero",
+            "signalled",
+        ),
         builder_capabilities=("CHOWN", "DAC_OVERRIDE", "FOWNER", "SYS_CHROOT"),
         child_capabilities=(),
         child_network="none",
@@ -85,11 +92,31 @@ def configuration(selected=None) -> dict[str, object]:
             "trial_kind": "generic_build_run",
             "allowed_material_roles": ["candidate_source", "verification"],
             "build_context_roles": ["candidate_source"],
+            "material_projections": [
+                {
+                    "role": "candidate_source",
+                    "source_role": "submission_archive",
+                    "projection_kind": "build_context",
+                    "source_relative": ".",
+                    "destination_relative": ".",
+                    "exclusions": ["solution", "tests"],
+                },
+                {
+                    "role": "verification",
+                    "source_role": "submission_archive",
+                    "projection_kind": "state_overlay",
+                    "source_relative": "tests",
+                    "destination_relative": "tests",
+                    "exclusions": [],
+                },
+            ],
             "required_slots": [
                 {
                     "slot_id": "slot_a",
-                    "visible_roles": ["candidate_source"],
+                    "seed_roles": [],
+                    "visible_roles": ["verification"],
                     "fresh_workspace": True,
+                    "retain_state_after": ["succeeded"],
                 }
             ],
         },
@@ -126,7 +153,8 @@ def test_locked_configuration_parses_trial_and_model_selectors_independently():
     projection = trial_projection_from_configuration(configuration(selected))
     assert projection is not None
     assert projection.selector == selected.selector
-    assert projection.required_slots[0].visible_roles == ("candidate_source",)
+    assert projection.required_slots[0].visible_roles == ("verification",)
+    assert projection.material_projections[0].exclusions == ("solution", "tests")
     projection.validate_profile(selected)
 
     without_trial = {
@@ -158,21 +186,77 @@ def test_projection_cannot_exceed_trusted_roles_or_step_count():
     foreign_role = TrialExecutionProjection(
         selector=selected.selector,
         trial_kind="generic_build_run",
+        material_projections=(
+            TrialMaterialProjection(
+                "protected_role",
+                "protected_source",
+                "build_context",
+                ".",
+                ".",
+                (),
+            ),
+        ),
         allowed_material_roles=("protected_role",),
         build_context_roles=("protected_role",),
-        required_slots=(TrialSlotProjection("slot_a", ("protected_role",), True),),
+        required_slots=(TrialSlotProjection("slot_a", (), (), True, ("succeeded",)),),
     )
     with pytest.raises(TrialProfileError, match="exceeds"):
         foreign_role.validate_profile(selected)
 
     too_many = replace(
         foreign_role,
+        material_projections=(
+            TrialMaterialProjection(
+                "candidate_source",
+                "submission_archive",
+                "build_context",
+                ".",
+                ".",
+                (),
+            ),
+        ),
         allowed_material_roles=("candidate_source",),
         build_context_roles=("candidate_source",),
         required_slots=tuple(
-            TrialSlotProjection(f"slot_{index}", ("candidate_source",), True)
+            TrialSlotProjection(f"slot_{index}", (), (), True, ("succeeded",))
             for index in range(selected.limits.maximum_steps + 1)
         ),
     )
     with pytest.raises(TrialProfileError, match="exceeds"):
         too_many.validate_profile(selected)
+
+
+def test_projection_rejects_escape_overlap_shadow_and_unsafe_state_retention():
+    value = configuration()
+    value["trial_execution"]["material_projections"][0]["source_relative"] = "../host"
+    with pytest.raises(TrialProfileError, match="material projection"):
+        trial_projection_from_configuration(value)
+
+    value = configuration()
+    value["trial_execution"]["material_projections"][0]["exclusions"] = [
+        "tests",
+        "tests/fixtures",
+    ]
+    with pytest.raises(TrialProfileError, match="material projection"):
+        trial_projection_from_configuration(value)
+
+    value = configuration()
+    value["trial_execution"]["material_projections"].append(
+        {
+            "role": "workspace_seed",
+            "source_role": "submission_archive",
+            "projection_kind": "state_seed",
+            "source_relative": "workspace",
+            "destination_relative": "tests",
+            "exclusions": [],
+        }
+    )
+    value["trial_execution"]["allowed_material_roles"].append("workspace_seed")
+    value["trial_execution"]["required_slots"][0]["seed_roles"] = ["workspace_seed"]
+    with pytest.raises(TrialProfileError, match="execution projection"):
+        trial_projection_from_configuration(value)
+
+    value = configuration()
+    value["trial_execution"]["required_slots"][0]["retain_state_after"] = ["deadline_exceeded"]
+    with pytest.raises(TrialProfileError, match="slot projection"):
+        trial_projection_from_configuration(value)

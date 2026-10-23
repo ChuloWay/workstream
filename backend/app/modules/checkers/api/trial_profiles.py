@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
+from pathlib import PurePosixPath
 import re
 from types import MappingProxyType
 from typing import Literal, Mapping
@@ -15,6 +16,7 @@ Sha256 = str
 Identifier = str
 _DIGEST = re.compile(r"sha256:[0-9a-f]{64}")
 _IDENTIFIER = re.compile(r"[a-z][a-z0-9_.-]{0,99}")
+_RETAINABLE_OUTCOMES = frozenset({"succeeded", "exit_nonzero", "signalled"})
 
 
 class TrialProfileError(ValueError):
@@ -108,8 +110,12 @@ class TrialExecutionProfile:
     builder_image_digest: Sha256
     offline_cache_digest: Sha256
     approved_base_digests: tuple[Sha256, ...]
+    permitted_source_roles: tuple[Identifier, ...]
     permitted_material_roles: tuple[Identifier, ...]
     permitted_operations: tuple[Literal["run"], ...]
+    permitted_state_retention_outcomes: tuple[
+        Literal["succeeded", "exit_nonzero", "signalled"], ...
+    ]
     builder_capabilities: tuple[Literal["CHOWN", "DAC_OVERRIDE", "FOWNER", "SYS_CHROOT"], ...]
     child_capabilities: tuple[()]
     child_network: Literal["none"]
@@ -128,6 +134,10 @@ class TrialExecutionProfile:
             or self.child_capabilities != ()
             or self.builder_capabilities != ("CHOWN", "DAC_OVERRIDE", "FOWNER", "SYS_CHROOT")
             or self.permitted_operations != ("run",)
+            or not self.permitted_state_retention_outcomes
+            or len(set(self.permitted_state_retention_outcomes))
+            != len(self.permitted_state_retention_outcomes)
+            or not set(self.permitted_state_retention_outcomes) <= _RETAINABLE_OUTCOMES
             or type(self.platform) is not str
             or not re.fullmatch(r"linux/[a-z0-9_.-]{1,32}", self.platform)
         ):
@@ -146,10 +156,12 @@ class TrialExecutionProfile:
             or len(set(self.approved_base_digests)) != len(self.approved_base_digests)
             or any(type(value) is not str or _DIGEST.fullmatch(value) is None for value in digests)
             or not self.permitted_material_roles
+            or not self.permitted_source_roles
+            or len(set(self.permitted_source_roles)) != len(self.permitted_source_roles)
             or len(set(self.permitted_material_roles)) != len(self.permitted_material_roles)
             or any(
                 type(value) is not str or _IDENTIFIER.fullmatch(value) is None
-                for value in self.permitted_material_roles
+                for value in (*self.permitted_source_roles, *self.permitted_material_roles)
             )
             or profile_digest(self) != self.selector.profile_digest
         ):
@@ -161,22 +173,54 @@ class TrialSlotProjection:
     """One ordered project-selected operation with an exact material view."""
 
     slot_id: Identifier
+    seed_roles: tuple[Identifier, ...]
     visible_roles: tuple[Identifier, ...]
     fresh_workspace: bool
+    retain_state_after: tuple[Literal["succeeded", "exit_nonzero", "signalled"], ...]
 
     def __post_init__(self) -> None:
         if (
             type(self.slot_id) is not str
             or _IDENTIFIER.fullmatch(self.slot_id) is None
-            or not self.visible_roles
+            or len(set(self.seed_roles)) != len(self.seed_roles)
             or len(set(self.visible_roles)) != len(self.visible_roles)
             or any(
                 type(value) is not str or _IDENTIFIER.fullmatch(value) is None
-                for value in self.visible_roles
+                for value in (*self.seed_roles, *self.visible_roles)
             )
             or type(self.fresh_workspace) is not bool
+            or not self.retain_state_after
+            or len(set(self.retain_state_after)) != len(self.retain_state_after)
+            or not set(self.retain_state_after) <= _RETAINABLE_OUTCOMES
         ):
             raise TrialProfileError("trial slot projection is invalid")
+
+
+@dataclass(frozen=True, slots=True)
+class TrialMaterialProjection:
+    """One private engine projection from an authorized source-material role."""
+
+    role: Identifier
+    source_role: Identifier
+    projection_kind: Literal["build_context", "state_seed", "state_overlay"]
+    source_relative: str
+    destination_relative: str
+    exclusions: tuple[str, ...]
+
+    def __post_init__(self) -> None:
+        if (
+            type(self.role) is not str
+            or _IDENTIFIER.fullmatch(self.role) is None
+            or type(self.source_role) is not str
+            or _IDENTIFIER.fullmatch(self.source_role) is None
+            or self.projection_kind not in {"build_context", "state_seed", "state_overlay"}
+            or not _safe_relative(self.source_relative, allow_dot=True)
+            or not _safe_relative(self.destination_relative, allow_dot=True)
+            or tuple(sorted(set(self.exclusions))) != self.exclusions
+            or any(not _safe_relative(value, allow_dot=False) for value in self.exclusions)
+            or _paths_overlap(self.exclusions)
+        ):
+            raise TrialProfileError("trial material projection is invalid")
 
 
 @dataclass(frozen=True, slots=True)
@@ -185,16 +229,21 @@ class TrialExecutionProjection:
 
     selector: TrialProfileSelector
     trial_kind: Identifier
+    material_projections: tuple[TrialMaterialProjection, ...]
     allowed_material_roles: tuple[Identifier, ...]
     build_context_roles: tuple[Identifier, ...]
     required_slots: tuple[TrialSlotProjection, ...]
 
     def __post_init__(self) -> None:
         allowed = set(self.allowed_material_roles)
+        projected = {item.role for item in self.material_projections}
         if (
             type(self.trial_kind) is not str
             or _IDENTIFIER.fullmatch(self.trial_kind) is None
             or not allowed
+            or not self.material_projections
+            or len(projected) != len(self.material_projections)
+            or projected != allowed
             or len(allowed) != len(self.allowed_material_roles)
             or any(
                 type(value) is not str or _IDENTIFIER.fullmatch(value) is None
@@ -205,6 +254,51 @@ class TrialExecutionProjection:
             or not self.required_slots
             or len({slot.slot_id for slot in self.required_slots}) != len(self.required_slots)
             or any(not set(slot.visible_roles) <= allowed for slot in self.required_slots)
+            or any(not set(slot.seed_roles) <= allowed for slot in self.required_slots)
+            or any(
+                _paths_overlap(
+                    tuple(
+                        item.destination_relative
+                        for item in self.material_projections
+                        if item.projection_kind == kind
+                    )
+                )
+                for kind in ("build_context", "state_seed", "state_overlay")
+            )
+            or any(
+                next(
+                    item for item in self.material_projections if item.role == role
+                ).projection_kind
+                != "build_context"
+                for role in self.build_context_roles
+            )
+            or any(
+                next(
+                    item for item in self.material_projections if item.role == role
+                ).projection_kind
+                != "state_seed"
+                for slot in self.required_slots
+                for role in slot.seed_roles
+            )
+            or any(
+                next(
+                    item for item in self.material_projections if item.role == role
+                ).projection_kind
+                != "state_overlay"
+                for slot in self.required_slots
+                for role in slot.visible_roles
+            )
+            or any(
+                _paths_overlap(
+                    tuple(
+                        next(
+                            item for item in self.material_projections if item.role == role
+                        ).destination_relative
+                        for role in (*slot.seed_roles, *slot.visible_roles)
+                    )
+                )
+                for slot in self.required_slots
+            )
         ):
             raise TrialProfileError("trial execution projection is invalid")
 
@@ -213,7 +307,13 @@ class TrialExecutionProjection:
         if (
             self.selector != profile.selector
             or not set(self.allowed_material_roles) <= set(profile.permitted_material_roles)
+            or not {item.source_role for item in self.material_projections}
+            <= set(profile.permitted_source_roles)
             or len(self.required_slots) > profile.limits.maximum_steps
+            or any(
+                not set(slot.retain_state_after) <= set(profile.permitted_state_retention_outcomes)
+                for slot in self.required_slots
+            )
         ):
             raise TrialProfileError("trial execution projection exceeds profile")
 
@@ -276,27 +376,54 @@ def trial_projection_from_configuration(
     try:
         if set(projection) != {
             "trial_kind",
+            "material_projections",
             "allowed_material_roles",
             "build_context_roles",
             "required_slots",
         }:
             raise TrialProfileError("trial execution projection is invalid")
         slots = projection["required_slots"]
-        if type(slots) is not list:
+        materials = projection["material_projections"]
+        if type(slots) is not list or type(materials) is not list:
             raise TrialProfileError("trial execution projection is invalid")
+        parsed_materials = []
+        for material in materials:
+            if type(material) is not dict or set(material) != {
+                "role",
+                "source_role",
+                "projection_kind",
+                "source_relative",
+                "destination_relative",
+                "exclusions",
+            }:
+                raise TrialProfileError("trial material projection is invalid")
+            parsed_materials.append(
+                TrialMaterialProjection(
+                    role=material["role"],
+                    source_role=material["source_role"],
+                    projection_kind=material["projection_kind"],
+                    source_relative=material["source_relative"],
+                    destination_relative=material["destination_relative"],
+                    exclusions=_string_tuple(material["exclusions"]),
+                )
+            )
         parsed_slots = []
         for slot in slots:
             if type(slot) is not dict or set(slot) != {
                 "slot_id",
+                "seed_roles",
                 "visible_roles",
                 "fresh_workspace",
+                "retain_state_after",
             }:
                 raise TrialProfileError("trial slot projection is invalid")
             parsed_slots.append(
                 TrialSlotProjection(
                     slot_id=slot["slot_id"],
+                    seed_roles=_string_tuple(slot["seed_roles"]),
                     visible_roles=_string_tuple(slot["visible_roles"]),
                     fresh_workspace=slot["fresh_workspace"],
+                    retain_state_after=_string_tuple(slot["retain_state_after"]),
                 )
             )
         return TrialExecutionProjection(
@@ -306,6 +433,7 @@ def trial_projection_from_configuration(
                 profile_digest=configuration["trial_profile_digest"],
             ),
             trial_kind=projection["trial_kind"],
+            material_projections=tuple(parsed_materials),
             allowed_material_roles=_string_tuple(projection["allowed_material_roles"]),
             build_context_roles=_string_tuple(projection["build_context_roles"]),
             required_slots=tuple(parsed_slots),
@@ -320,6 +448,24 @@ def _string_tuple(value: object) -> tuple[str, ...]:
     if type(value) is not list or any(type(item) is not str for item in value):
         raise TrialProfileError("trial execution projection is invalid")
     return tuple(value)
+
+
+def _safe_relative(value: object, *, allow_dot: bool) -> bool:
+    if type(value) is not str or not value or "\\" in value or "\x00" in value:
+        return False
+    if value == ".":
+        return allow_dot
+    path = PurePosixPath(value)
+    return not path.is_absolute() and all(part not in {"", ".", ".."} for part in path.parts)
+
+
+def _paths_overlap(values: tuple[str, ...]) -> bool:
+    normalized = [() if value == "." else PurePosixPath(value).parts for value in values]
+    for index, left in enumerate(normalized):
+        for right in normalized[index + 1 :]:
+            if left == right or left == right[: len(left)] or right == left[: len(right)]:
+                return True
+    return False
 
 
 class PinnedTrialProfileCatalog:
@@ -352,6 +498,7 @@ __all__ = (
     "PinnedTrialProfileCatalog",
     "TrialExecutionProfile",
     "TrialExecutionProjection",
+    "TrialMaterialProjection",
     "TrialProfileError",
     "TrialProfileSelector",
     "TrialResourceCeilings",
