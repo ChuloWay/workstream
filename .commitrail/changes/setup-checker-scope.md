@@ -18,6 +18,7 @@ The instructions explicitly invite lifecycle and human-review classifications; g
 
 - `backend/app/core/project_guide_instructions.py`, setup contracts in `backend/app/interfaces/`, and `backend/app/adapters/project_agents/`: scope, provider schemas, bounded validation/correction and examples.
 - Affected setup tests, shared fixture callers, current setup documentation and roadmap; this record.
+- `cli/tests/integration/test_guide_approval_public_api.py`: keep its newly inferred proposal fixture within the same removed-field boundary; preserve real approval/replay/authority assertions.
 - `backend/scripts/test_lane_catalogue.py`: register the new setup regression module in the existing complete CI inventory; no execution or gate changes.
 - Existing PROJECTS admission call sites only if needed to enforce the same generation boundary.
 
@@ -116,3 +117,8 @@ Hosted completeness validation found the new setup test module absent from the
 lane catalogue. It is now assigned to the same shared-foundation partition as
 the other setup runtime tests. No runner, selection rule or completeness gate
 changed; the existing recursive inventory test detects the omitted registration.
+
+The real CLI approval regression copied a generated proposal through retained
+serialization, inadvertently making the removed empty notes field explicit. Its
+inference fixture now omits that field; production rejection and all existing
+public approval, replay and fresh-authority assertions remain unchanged.
