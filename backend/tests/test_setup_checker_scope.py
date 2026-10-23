@@ -419,3 +419,19 @@ async def test_empty_original_can_be_read_and_reported_as_blocked(monkeypatch):
     )
     assert output.status == "guide_blocked"
     assert len(calls) == 2
+
+
+async def test_public_api_drill_runtime_emits_admissible_inference():
+    """The actual scripted worker result must satisfy current inference admission."""
+    from scripts.guide_compilation_e2e import E2EProjectGuideRuntime
+    from app.adapters.project_agents.result_validation import validate_project_guide_runtime_result
+    from app.interfaces.project_agents import PROJECT_GUIDE_COMPILATION_AGENT_VERSION
+
+    compilation = context(ids()).model_copy(update={
+        "agent_version": PROJECT_GUIDE_COMPILATION_AGENT_VERSION,
+    })
+    runtime = E2EProjectGuideRuntime(compilation.runtime_configuration)
+    output = await _compile(runtime, compilation)
+    opened = {compilation.material.handle_for(item) for item in compilation.material.documents}
+    assert validate_project_guide_runtime_result(compilation, output, opened) == output
+    assert runtime.calls == 1

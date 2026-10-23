@@ -18,6 +18,7 @@ The instructions explicitly invite lifecycle and human-review classifications; g
 
 - `backend/app/core/project_guide_instructions.py`, setup contracts in `backend/app/interfaces/`, and `backend/app/adapters/project_agents/`: scope, provider schemas, bounded validation/correction and examples.
 - Affected setup tests, shared fixture callers, current setup documentation and roadmap; this record.
+- `backend/scripts/guide_compilation_e2e.py`: align scripted inference with the strict output contract; preserve real source reads, worker delivery, finalization and replay assertions.
 - `cli/tests/integration/test_guide_approval_public_api.py`: keep its newly inferred proposal fixture within the same removed-field boundary; preserve real approval/replay/authority assertions.
 - `backend/scripts/test_lane_catalogue.py`: register the new setup regression module in the existing complete CI inventory; no execution or gate changes.
 - Existing PROJECTS admission call sites only if needed to enforce the same generation boundary.
@@ -146,3 +147,10 @@ file/workspace resources. Historical exact-ID cleanup remains separately owned.
 The related testing runbook, data model and authority specification now distinguish
 current parser access from historical provider allocations and credential-free
 manager-authored execution from inference. No authority behavior changed.
+
+The final API drill, separate from the 16 passing test lanes, exposed one further
+scripted inference fixture emitting explicit notes and a non-check informational
+requirement. The fixture now leaves project checks empty and keeps source coverage
+in its findings; artifact-policy values, real ART reads and worker/finalization
+replay assertions are unchanged. A regression applies trusted generation and
+context validation to the actual drill runtime output.
