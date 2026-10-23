@@ -358,6 +358,11 @@ async def test_post_reservation_archive_failure_remains_recoverable(
             503,
             "pre_submission_attempt_outcome_unresolved",
         ),
+        (
+            SubmissionBundlePreparationInfrastructureUnavailable("deadline_exceeded"),
+            503,
+            "deadline_exceeded",
+        ),
     ),
 )
 async def test_mounted_preparation_preserves_non_feedback_error_boundaries(

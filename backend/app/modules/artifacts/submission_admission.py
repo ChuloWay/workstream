@@ -36,7 +36,7 @@ from app.modules.artifacts.models import (
     SubmissionBundleAdmission,
     SubmissionBundleDurableIntent,
 )
-from app.modules.artifacts.preparation import ArtifactPreparationService
+from app.modules.artifacts.preparation import ArtifactPreparationService, ArtifactPreparationDeadlineError
 from app.modules.artifacts.schemas import (
     ArtifactAdmissionResult,
     ArtifactAuthorityDeniedError,
@@ -862,6 +862,12 @@ class PreparedSubmissionBundlePreparationCommand:
                     durable,
                 )
                 return self._result(result, terminal.execution)
+        except ArtifactPreparationDeadlineError as exc:
+            # No terminal claim is made when intake cleanup was not confirmed.
+            # The existing lease recovery owner resolves an already reserved run.
+            raise SubmissionBundlePreparationInfrastructureUnavailable(
+                "pre_submission_attempt_outcome_unresolved"
+            ) from exc
         except ExternalServiceAdapterError as exc:
             raise SubmissionBundlePreparationInfrastructureUnavailable("implementation_unavailable") from exc
         except SelectedPreSubmitRequestConflict as exc:

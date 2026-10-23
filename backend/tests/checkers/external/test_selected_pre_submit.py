@@ -1118,6 +1118,24 @@ async def test_selected_factory_uses_request_bound_art_grant(tmp_path) -> None:
             self.calls += 1
             return lease
 
+    from app.interfaces.trusted_submission_intake import TrustedDefaultBinding
+    expected_binding = TrustedDefaultBinding(
+        attempt_id=reservation.attempt_id,
+        attempt_request_digest=reservation.request_digest,
+        policy_sha256=reservation.policy_sha256,
+        semantic_manifest_sha256=reservation.semantic_manifest_sha256,
+        default_input_sha256=reservation.default_input_sha256,
+    )
+    evaluate_default = request.intake.evaluate_default
+
+    async def bound_default(binding, value):
+        # The fake is an assertion oracle at the committed owner seam. The
+        # guest itself has no independent access to the reservation database.
+        assert binding == expected_binding
+        assert execution.requests == []
+        return await evaluate_default(binding, value)
+
+    request.intake.evaluate_default = bound_default
     expected_lease = lease
     committed = CommittedAuthority()
     execution = _Execution("passed")
@@ -1159,11 +1177,26 @@ async def test_selected_factory_uses_request_bound_art_grant(tmp_path) -> None:
             assert refusal.value.code == "material_unavailable"
             process.assert_not_awaited()
             assert execution.requests == []
+            for changed_reservation in (
+                replace(reservation, attempt_id=new_record_id()),
+                replace(reservation, attempt_request_digest="sha256:" + "f" * 64),
+            ):
+                with pytest.raises(SelectedPreSubmitInfrastructureUnavailable) as refusal:
+                    await service.materialize_selected_pre_submit(
+                        replace(request, selected_reservation=changed_reservation),
+                        run_id=reservation.attempt_id, lease=lease,
+                        execution_authority=CommittedAuthority(),
+                    )
+                assert refusal.value.code == "material_unavailable"
+                process.assert_not_awaited()
+                assert request.intake.default_bindings == []
+                assert execution.requests == []
         result = await service.materialize_selected_pre_submit(
             replace(request, prepared_authorization=None),
             run_id=reservation.attempt_id, lease=lease, execution_authority=committed,
         )
         assert result.eligible is True
+        assert request.intake.default_bindings == [expected_binding]
         assert committed.calls == 1
         assert len(execution.requests) == 1
         assert execution.requests[0].identity.attempt_id == reservation.attempt_id
@@ -1229,4 +1262,72 @@ async def test_intake_cleanup_precedes_both_project_bindings(tmp_path, cleanup_c
     finally:
         await request.prepared_artifact.close()
         await close()
+        manager.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("intake_cleanup_confirmed", [False, True])
+async def test_preparation_deadline_finalizes_only_after_intake_cleanup(tmp_path, intake_cleanup_confirmed):
+    import asyncio
+    from app.modules.artifacts.preparation import ArtifactPreparationDeadlineError
+    from app.modules.artifacts.selected_pre_submit_execution import SelectedPreSubmitExecutionService
+    from tests.checkers.external.test_selected_pre_submit_service import _Session, _Authority, _Coordinator
+
+    request, _, manager, preparation = await _request(tmp_path)
+    reservation = request.selected_reservation
+    lease = SelectedPreSubmitLeaseFacts(
+        reservation=reservation, lease_id=new_record_id(), lease_generation=1,
+        lease_expires_at=datetime.now(UTC) + timedelta(minutes=2),
+    )
+    entered, drained = asyncio.Event(), asyncio.Event()
+
+    async def blocked(*args):
+        entered.set()
+        try:
+            await asyncio.Event().wait()
+        finally:
+            drained.set()
+
+    execution = _Execution("passed")
+    if intake_cleanup_confirmed:
+        execution.execute = blocked
+    else:
+        request.intake.evaluate_default = blocked
+    order = []
+    session = _Session(order)
+
+    class Coordinator(_Coordinator):
+        async def committed_execution(self, **values):
+            await super().committed_execution(**values)
+            return SimpleNamespace(consume=lambda **kwargs: lease)
+
+    materialization = PreparedBundleMaterializationService(
+        session=session, authorization=SimpleNamespace(), preparation=preparation,
+        checker_execution=SelectedPreSubmitCheckerExecutionAdapter(external_execution=execution),
+        storage_scheme="s3", archive_limits=SubmissionArchiveLimits(),
+    )
+    service = SelectedPreSubmitExecutionService(
+        session=session, coordinator=Coordinator(session, order, lease),
+        authority=_Authority(session, order), materialization=materialization,
+    )
+    # Exercise ART's actual absolute-deadline cancellation and scratch drain.
+    preparation._active[request.prepared_artifact._binding].deadline = asyncio.get_running_loop().time() + 2
+    session.in_transaction = lambda: session.active
+    try:
+        operation = service.execute(reservation=reservation, materialization=request)
+        if intake_cleanup_confirmed:
+            completion = await operation
+            assert completion.terminal.infrastructure_failure_code == "deadline_exceeded"
+            assert completion.terminal.execution is None
+            assert order.count("finalize") == 1
+            assert request.intake.closed
+        else:
+            with pytest.raises(ArtifactPreparationDeadlineError):
+                await operation
+            assert "finalize" not in order
+        assert entered.is_set() and drained.is_set()
+        assert list((tmp_path / "scratch" / "workspaces").iterdir()) == []
+    finally:
+        await request.intake.close()
+        await request.prepared_artifact.close()
         manager.close()
