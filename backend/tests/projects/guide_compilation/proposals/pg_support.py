@@ -255,7 +255,7 @@ async def request_corrected_attempt(factory, actor, correction, *, capabilities=
     from tests.checkers.external.support import capability_projection
     from app.modules.projects.guide_compilation.request_inputs import CompilationRequestInputs
     from app.modules.projects.guide_compilation.service import GuideCompilationService
-    from tests.projects.guide_compilation.helpers import runtime_configuration
+    from tests.projects.guide_compilation.helpers import manager_runtime_configuration
 
     ctx = HumanAuthorizationContext(
         actor_profile_id=actor.actor_profile_id,
@@ -326,7 +326,7 @@ async def finalize_corrected_attempt(factory, values, actor, correction, *, outc
         checker_capabilities=capabilities,
         request_authority=guide_compilation_request_authority,
         execution_authority=guide_compilation_execution_authority,
-        configuration_factory=runtime_configuration,
+        configuration_factory=manager_runtime_configuration,
         model_profiles=lambda _session: None,
         runtime_factory=lambda configuration: runtime,
         sufficiency_authorization_factory=guide_sufficiency_projection_authorization,
