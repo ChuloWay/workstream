@@ -7,8 +7,12 @@ from sqlalchemy import text
 
 from app.core.identifiers import new_record_id
 from app.modules.projects.api.setup_identity import project_guide_compilation_task_id
-from tests.projects.guide_compilation.helpers import runtime_configuration
-from tests.projects.guide_compilation.runtime_fixtures import ScriptedGuideRuntime, document_access
+from tests.projects.guide_compilation.runtime_fixtures import (
+    ScriptedGuideRuntime,
+    scripted_document_access_runtime,
+    scripted_guide_document_parser_factory,
+    scripted_runtime_configuration,
+)
 from .pg_support import proposal_case, seed_review_actor, revoke_review_grant
 from .public_support import proposal_client, proposal_path
 
@@ -43,9 +47,12 @@ async def test_manual_dispatch_retains_one_human_request_and_one_execution(
     monkeypatch.setenv("WORKSTREAM_CELERY_RESULT_BACKEND_URL", "cache+memory://")
     get_settings.cache_clear()
     from app.workers import project_setup as worker
-    monkeypatch.setattr(project_agents, "project_guide_runtime_configuration", lambda settings: runtime_configuration())
-    monkeypatch.setattr(worker, "project_guide_runtime_configuration", lambda settings: runtime_configuration())
-    monkeypatch.setattr(worker, "guide_document_access_runtime", lambda sessions,*args:document_access(*args))
+    monkeypatch.setattr(project_agents, "project_guide_runtime_configuration", scripted_runtime_configuration)
+    monkeypatch.setattr(worker, "project_guide_runtime_configuration", scripted_runtime_configuration)
+    monkeypatch.setattr(worker, "guide_document_access_runtime", scripted_document_access_runtime)
+    monkeypatch.setattr(
+        worker, "guide_document_parser_factory", scripted_guide_document_parser_factory
+    )
     runtime = ScriptedGuideRuntime()
     monkeypatch.setattr(worker, "create_project_guide_runtime", lambda configuration:runtime)
     published = []
