@@ -51,7 +51,6 @@ from .helpers import (
     generated_result,
     identity,
     manager_runtime_configuration,
-    result,
     seed_database,
 )
 from .runtime_fixtures import document_tools, record_scripted_document_access
@@ -800,39 +799,48 @@ async def test_unavailable_authority_returns_only_the_safe_public_code(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "kind, failure_code",
+    "kind, expected_issue",
     [
-        ("malformed", "schema_invalid"),
-        ("schema", "schema_invalid"),
-        ("unsafe", "schema_invalid"),
+        ("malformed", {"path": [], "code": "invalid_json"}),
+        ("schema", {"path": ["status"], "code": "schema_enum"}),
+        (
+            "unsafe",
+            {"path": ["findings", 0, "message"], "code": "canonical_constraint"},
+        ),
     ],
 )
 async def test_sdk_parser_rejection_persists_terminal_without_reinvocation(
     clean_postgres_database,
     monkeypatch,
     kind,
-    failure_code,
+    expected_issue,
 ):
-    """Real SDK rejection persists its exact terminal class and replay makes no call."""
+    """Exhausted output corrections persist terminal failure; replay makes no call."""
     import json
     from types import SimpleNamespace
     from agents import Runner
     from app.adapters.project_agents.openai_agent_sdk import OpenAIAgentSdkProjectGuideRuntime
+    from tests.test_agent_runtime import _provider_payload
 
     from agents import _debug
 
     monkeypatch.setattr(_debug, "DONT_LOG_MODEL_DATA", True)
     monkeypatch.setenv("OPENAI_API_KEY", "unit-test-only")
-    payload = result().model_dump(mode="json")
+    payload = _provider_payload(generated_result())
     if kind == "schema":
         payload["status"] = "not-a-status"
     if kind == "unsafe":
-        payload["findings"] = [{"severity": "info", "code": "bad", "message": "token=secret123"}]
+        payload["findings"][0]["message"] = "token=secret123"
     raw = "{invalid" if kind == "malformed" else json.dumps(payload)
     calls = []
 
-    async def run(agent, *args, **kwargs):
+    async def run(agent, prompt, **kwargs):
         calls.append(1)
+        if len(calls) > 1:
+            feedback = json.loads(prompt)
+            assert feedback["phase"] == "checker_specification"
+            assert feedback["validation_errors"] == [expected_issue]
+            assert "token=secret123" not in prompt
         return SimpleNamespace(final_output=agent.output_type.validate_json(raw))
 
     monkeypatch.setattr(Runner, "run", run)
@@ -848,8 +856,9 @@ async def test_sdk_parser_rejection_persists_terminal_without_reinvocation(
         assert (
             first.classification is ProjectGuideCompilationExecutionClassification.INVALID_TERMINAL
         )
+        assert calls == [1, 1, 1]
         assert await port.execute(command) == first
-        assert calls == [1]
+        assert calls == [1, 1, 1]
         async with factory() as session:
             row = (
                 await session.execute(
@@ -861,6 +870,6 @@ async def test_sdk_parser_rejection_persists_terminal_without_reinvocation(
                     {"id": requested.attempt_id},
                 )
             ).one()
-        assert row == ("compilation_invalid_terminal", failure_code, None, 0)
+        assert row == ("compilation_invalid_terminal", "schema_invalid", None, 0)
     finally:
         await engine.dispose()

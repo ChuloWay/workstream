@@ -38,13 +38,15 @@ def require_result_sources_opened(
     result: ProjectGuideCompilationResult,
     opened_handles: frozenset[str] | set[str],
 ) -> None:
-    """Require cited originals to have been opened within the relevant trusted phase."""
+    """Require every assigned and cited original within the relevant trusted phase."""
     if not opened_handles:
         raise ValueError("compilation has no opened document evidence")
     document_handles = {
         (item.source_item_id, item.ingest_id): context.material.handle_for(item)
         for item in context.material.documents
     }
+    if not set(document_handles.values()) <= set(opened_handles):
+        raise ValueError("compilation did not open every assigned original")
     references = (
         *(ref for finding in result.findings for ref in finding.evidence_refs),
         *(ref for requirement in result.requirements for ref in requirement.evidence_refs),

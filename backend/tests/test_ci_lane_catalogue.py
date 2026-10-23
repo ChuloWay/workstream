@@ -268,8 +268,8 @@ def test_semantic_family_membership_has_an_independent_fingerprint() -> None:
     """A catalogue-internal move across semantic families must fail this contract."""
     expected = {
         "shared": (
-            258,
-            "6dac9695511a0cafc5aa32daa590857c84e38a6410630546e8ce02b4e5263324",
+            259,
+            "c8a0538c251f77fc1893ed8aa76feff8fa2134cf8e9b5a049f32fbabd5226277",
         ),
         "project": (
             213,

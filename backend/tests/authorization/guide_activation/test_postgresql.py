@@ -1,5 +1,7 @@
 """Real database activation, denial, atomicity and retained-evidence replay."""
 
+from tests.projects.guide_compilation.helpers import manager_runtime_configuration
+
 from uuid import uuid4
 
 import pytest
@@ -102,6 +104,7 @@ async def test_live_activation_keeps_product_readiness_guards(clean_postgres_dat
         clean_postgres_database,
         human_review_required=human_review_required,
         compilation_outcome=compilation_outcome,
+        configuration=manager_runtime_configuration() if not human_review_required else None,
     ) as (factory, command, actor, _, _, _):
         before = await activation_state(factory)
         variants = [command] if not human_review_required else [

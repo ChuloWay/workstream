@@ -21,7 +21,6 @@ from app.interfaces.external_services import (
     ExternalServiceAdapterIdentity,
 )
 from app.interfaces.project_agents import (
-    AtomicGuideRequirement,
     ProjectGuideAgentRuntime,
     ProjectGuideCompilationResult, CompilationFinding, GuideEvidenceRef,
     SubmissionArtifactPolicyProposal,
@@ -80,19 +79,11 @@ class E2EProjectGuideRuntime:
                 maximum_file_size_bytes=1_000_000,
                 maximum_package_size_bytes=5_000_000,
             ),
-            requirements=(AtomicGuideRequirement(
-                requirement_id="guide.context",
-                statement="Use the assigned project guide.",
-                disposition="informational",
-                classification_rationale=(
-                    "This identifies the governing source for the scripted API contract drill."
-                ),
-                evidence_refs=tuple(refs),
-            ),),
+            # This drill proposes no project checks; findings retain source coverage.
+            requirements=(),
             pre_submit_bindings=(),
             post_submit_bindings=(),
             capability_suggestions=(),
-            setup_notes=(),
             agent_name=PROJECT_GUIDE_COMPILATION_AGENT_NAME,
             agent_version=PROJECT_GUIDE_COMPILATION_AGENT_VERSION,
             schema_version=PROJECT_GUIDE_COMPILATION_SCHEMA_VERSION,

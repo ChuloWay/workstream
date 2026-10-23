@@ -249,19 +249,21 @@ guide blocker prevents the draft.
 
 The SDK adapter first produces a private structured candidate, then uses a fresh model context
 to check it against the original documents and return the corrected proposal.
-Both phases expose the same strict JSON Schema. The private draft must satisfy
-JSON syntax and structural limits; canonical content constraints are checked
-diagnostically so review can correct them. Diagnostics contain bounded field
-paths and a fixed code, never rejected values or exception messages. Only the
-reviewed output passes through canonical Pydantic and owner validation for
-acceptance. The draft is never persisted, projected or accepted.
+Every draft, review and correction is checked against the same strict JSON Schema,
+canonical content rules, owner context and source identities. Bounded field paths
+and fixed error codes permit at most two corrections across both phases; rejected
+values and exception messages are never returned. The private draft is never
+persisted, projected or accepted. Only the validated final review can become a
+retained proposal.
 Both phases share one attempt, trusted document tools, client, overall timeout and
 aggregate model-turn/tool budgets. The draft can use at most half the configured turn
 allowance; review receives the unused remainder. The serialized review input
 (original credential-free context plus candidate) must fit `maximum_manifest_bytes`;
-an oversized candidate is terminal invalid output. The review must reopen every
-cited original, and every assigned original for a ready proposal; draft-phase
-opens cannot satisfy review access.
+an oversized candidate is terminal invalid output. Every phase and correction must
+initially read every assigned original, including for blocked proposals. Only a
+read at offset zero returning text, or proving a genuinely empty original, counts
+as initial observation. Search supports revisiting content; it cannot establish
+initial observation. Earlier phases cannot supply later phases' observation.
 A review failure, cancellation, invalid result or exhausted budget does not publish
 the unchecked draft. This is a bounded phase of the same attempt, not a retry of
 an uncertain or terminal invocation. PM review and approval remain separate.
@@ -281,8 +283,11 @@ inputs, ordered checks, pass conditions, coded findings, positive and negative
 cases, runtime dependencies and infrastructure failures must agree. Current
 images are offline and do not implicitly receive task/guide prose or model access.
 Older retained results remain readable with the new fields absent; new results
-cannot use that historical omission. Invalid new output ends terminally and is
-diagnosed without logging guide or model content.
+cannot use that historical omission. Known invalid inference output receives at
+most two corrections across drafting and review, using bounded field paths and
+error codes within the original execution budget. Exhaustion ends terminally;
+provider uncertainty is never retried as an output correction. Diagnostics never
+log guide or model content.
 
 The Celery worker captures runtime, model provider, model, API, instructions,
 timeout, document limits and tool budgets on the attempt before execution. Credentials stay in

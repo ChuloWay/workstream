@@ -1,5 +1,7 @@
 """C3: readiness evaluates activation's own conditions, reports activation's refusal code, and writes nothing."""
 
+from tests.projects.guide_compilation.helpers import manager_runtime_configuration
+
 from contextlib import asynccontextmanager
 from dataclasses import replace
 from types import SimpleNamespace
@@ -138,7 +140,7 @@ async def test_human_requirement_under_disabled_review_reports_activations_refus
     )
     outcome = outcome.model_copy(update={"requirements": (requirement,)})
     async with activation_case(
-        clean_postgres_database, human_review_required=False, compilation_outcome=outcome,
+        clean_postgres_database, human_review_required=False, compilation_outcome=outcome, configuration=manager_runtime_configuration(),
     ) as (factory, command, actor, grant, _, _):
         result = await _readiness(factory, *_ids(command))
         assert [item.reason for item in result.unmet] == ["human_review_required_by_guide"]
@@ -163,7 +165,7 @@ async def test_disposition_check_is_the_one_activation_runs(clean_postgres_datab
         await original(self, conditions, replace(locked, result=locked.result.model_copy(update={"requirements": ()})), *args)
 
     async with activation_case(
-        clean_postgres_database, human_review_required=False, compilation_outcome=outcome,
+        clean_postgres_database, human_review_required=False, compilation_outcome=outcome, configuration=manager_runtime_configuration(),
     ) as (factory, command, _, _, _, _):
         monkeypatch.setattr(GuideActivationService, "_readiness", omit_disposition)
         assert (await _readiness(factory, *_ids(command))).ready

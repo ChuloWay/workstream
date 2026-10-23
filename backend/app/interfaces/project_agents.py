@@ -140,6 +140,16 @@ class RequirementDisposition(StrEnum):
     INFORMATIONAL = "informational"
 
 
+GENERATED_REQUIREMENT_DISPOSITIONS = frozenset({
+    RequirementDisposition.PLATFORM_COVERED,
+    RequirementDisposition.SUPPORTED_PRE_SUBMIT,
+    RequirementDisposition.PRE_SUBMIT_CAPABILITY_GAP,
+    RequirementDisposition.SUPPORTED_POST_SUBMIT,
+    RequirementDisposition.POST_SUBMIT_CAPABILITY_GAP,
+    RequirementDisposition.GUIDE_BLOCKER,
+})
+
+
 class GuideEvidenceRef(BaseModel):
     """Untrusted page/section attribution bound to an exact original document version."""
 
@@ -617,8 +627,9 @@ class AtomicGuideRequirement(BaseModel):
             "supported_post_submit for longer background evaluation. Use the matching "
             "capability gap when the required implementation is unavailable; a gap keeps "
             "the proposal warning-ready but blocks activation. Use human_review only for "
-            "authorized human judgment, and project_lifecycle_policy for project operation "
-            "outside submission evaluation. Revision explanation, rerun evidence and objective "
+            "retained historical evidence only. Newly generated requirements are limited to "
+            "PRE and POST checks, exact platform coverage and check-definition blockers. "
+            "Do not propose human-review or project-management policy. Revision explanation, rerun evidence and objective "
             "preservation remain separately checkable work requirements, not lifecycle. "
             "A guide_blocker requires guide_blocked and no "
             "artifact policy."
@@ -889,7 +900,7 @@ def project_guide_compilation_prompt_bytes(context: ProjectGuideCompilationConte
     ).encode("utf-8")
 
 
-_COMPLETE_COMPILATION_RESULT_FIELDS = frozenset(ProjectGuideCompilationResult.model_fields)
+_COMPLETE_COMPILATION_RESULT_FIELDS = frozenset(ProjectGuideCompilationResult.model_fields) - {"setup_notes"}
 
 
 def require_complete_project_guide_compilation_result(
@@ -905,8 +916,9 @@ def require_complete_generated_specifications(
     result: ProjectGuideCompilationResult,
 ) -> None:
     """Require an actionable typed handoff on newly generated requirements."""
-    if result.status != "guide_blocked" and not result.requirements:
-        raise ValueError("ready compilation requires a requirement inventory")
+    if (context.runtime_configuration.uses_inference
+            and "setup_notes" in result.model_fields_set):
+        raise ValueError("generated setup notes are outside checker specification scope")
 
     specification_stages = {
         RequirementDisposition.SUPPORTED_PRE_SUBMIT: CompilationStage.PRE_SUBMIT,
@@ -919,6 +931,9 @@ def require_complete_generated_specifications(
         RequirementDisposition.SUPPORTED_POST_SUBMIT,
     }
     for requirement in result.requirements:
+        if (context.runtime_configuration.uses_inference
+                and requirement.disposition not in GENERATED_REQUIREMENT_DISPOSITIONS):
+            raise ValueError("generated requirement is outside PRE and POST checker scope")
         if requirement.classification_rationale is None:
             raise ValueError("generated requirement lacks a classification rationale")
         if not requirement.evidence_refs:

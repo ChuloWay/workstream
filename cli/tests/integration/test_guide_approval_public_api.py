@@ -61,7 +61,7 @@ async def test_approval_public_socket_replay_and_fresh_authority(
 
     # Seed canonical retained compilation/finalization only. Every decision below
     # uses the public socket with production auth/compiler/persistence owners.
-    outcome = compilation_result().model_dump(mode="json")
+    outcome = compilation_result().model_dump(mode="json", exclude={"setup_notes"})
     outcome["status"] = "draft_ready_with_warnings"
     outcome["findings"][0]["severity"] = "warning"
     validated = type(compilation_result()).model_validate(outcome)
