@@ -4,7 +4,7 @@ from collections.abc import AsyncIterable
 from dataclasses import dataclass
 from typing import Annotated, Literal, Protocol
 
-from pydantic import AwareDatetime, Field, StrictInt
+from pydantic import AwareDatetime, Field, StrictInt, model_validator
 
 from app.modules.checkers.api.canonical_values import (
     CheckerValue, ResourceId, Sha256, VersionNumber,
@@ -56,6 +56,7 @@ class TrialEvidenceSelector(CheckerValue):
     """Select the first authorized content at a server-allocated trial address."""
 
     trial_evidence_id: ResourceId
+    project_id: ResourceId
     content_sha256: Sha256
 
 
@@ -74,6 +75,13 @@ class TrialEvidenceReservation(CheckerValue):
     subject: TrialEvidenceStableSubject
     origin: TrialEvidenceOrigin
     slot: TrialEvidenceSlot
+
+    @model_validator(mode="after")
+    def exact_project(self):
+        """The supplied AUTH scope must match the immutable owner subject."""
+        if self.selector.project_id != self.subject.project_id:
+            raise ValueError("trial evidence project differs")
+        return self
 
     @property
     def owner_digest(self) -> str:
@@ -97,6 +105,17 @@ class TrialEvidenceReservationPort(Protocol):
 
     async def resolve(self, selector: TrialEvidenceSelector) -> TrialEvidenceReservation:
         """Return exact facts only under fresh trusted invocation authority."""
+
+
+class TrialEvidenceTicket(CheckerValue):
+    """Pre-execution address; a pinned receipt must be recovered, never regenerated."""
+
+    trial_evidence_id: ResourceId
+    subject: TrialEvidenceStableSubject
+    origin: TrialEvidenceOrigin
+    slot: TrialEvidenceSlot
+    content_sha256: Sha256 | None
+    replayed: bool = Field(strict=True)
 
 
 class TrialEvidenceCustodyAck(CheckerValue):
