@@ -29,6 +29,8 @@ def main() -> int:
     if mode == "output_overflow":
         sys.stdout.write("x" * (request["registry"]["resources"]["maximum_output_bytes"] + 1))
         return 0
+    if Path("/work/input/runtime-wait.txt").exists():
+        time.sleep(30)
     failures: list[str] = []
     manifest = request["input"].get("manifest")
     if manifest is None:

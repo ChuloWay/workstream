@@ -1,0 +1,128 @@
+"""Owned-node fault commands for the opt-in public drill; never imported by production."""
+
+import argparse
+import asyncio
+import hashlib
+import json
+from pathlib import Path
+import signal
+import subprocess
+import time
+from uuid import uuid4
+
+
+def runtime(config, *args):
+    smol = config['smol']
+    return json.loads(subprocess.check_output(
+        [smol['binary'], *args], env={'HOME': smol['home'], 'PATH': '/usr/bin:/bin'},
+        text=True, timeout=15,
+    ))
+
+
+def owned_resources(config):
+    leases = Path(config['socket_path']).parent / 'smol-leases'
+    owner = (leases.parent / '.workstream-checker-owner').read_text().strip()
+    machines = [row for row in runtime(config, 'machine', 'ls', '--json')
+                if row['labels'].get('workstream.external-checker-owner') == owner]
+    groups = [p.name for p in Path(config['smol']['cgroup_root']).iterdir()
+              if p.is_dir() and p.name.startswith('ws-')]
+    return {'leases': [p.name for p in leases.iterdir()],
+            'machines': [row['name'] for row in machines], 'cgroups': groups}
+
+
+async def node_command(root, action):
+    """Send only a closed fixture command to the separately owned host supervisor."""
+    identifier = uuid4().hex
+    request = root / (identifier + '.request')
+    temporary = request.with_suffix('.tmp')
+    temporary.write_text(json.dumps({'action': action}))
+    temporary.replace(request)
+    response = root / (identifier + '.response')
+    deadline = time.monotonic() + 45
+    while time.monotonic() < deadline:
+        if response.exists():
+            result = json.loads(response.read_text())
+            if not result['ok']:
+                raise RuntimeError('owned node fault command failed: ' + action)
+            return result
+        await asyncio.sleep(.1)
+    raise RuntimeError('owned node fault command timed out: ' + action)
+
+
+def serve(config_path, root, unit):
+    """Inject only project-start faults on a dedicated empty node and restore on exit."""
+    from shutil import copyfile
+
+    original = config_path.read_bytes()
+    config = json.loads(original)
+    assert not any(owned_resources(config).values()), 'node must be drained'
+    root.mkdir(mode=0o700, parents=True, exist_ok=True)
+    wrapper = root / 'runtime-wrapper'
+    copyfile(Path(__file__).with_name('public_runtime_wrapper.py'), wrapper)
+    wrapper.chmod(0o700)
+    project = next(c for c in config['cache'] if c['repository'] == 'workstream-test/public-journey')
+    state = root / 'runtime-mode.json'
+    state.write_text(json.dumps({'failures': 0, 'kill': False}))
+    trace = root / 'runtime-trace.jsonl'
+    trace.touch(mode=0o600)
+    wrapper.with_suffix('.json').write_text(json.dumps({
+        'binary': config['smol']['binary'], 'project_archive': project['smol']['archive'],
+        'mode': str(state), 'trace': str(trace), 'unit': unit,
+    }))
+    changed = json.loads(original)
+    changed['smol']['binary'] = str(wrapper)
+    changed['smol']['binary_sha256'] = 'sha256:' + hashlib.sha256(wrapper.read_bytes()).hexdigest()
+
+    def restart():
+        subprocess.run(['sudo', 'systemctl', 'restart', unit], check=True, timeout=30)
+
+    def stop(_signum, _frame):
+        raise KeyboardInterrupt
+
+    signal.signal(signal.SIGTERM, stop)
+    try:
+        config_path.write_text(json.dumps(changed))
+        restart()
+        (root / 'supervisor-ready').write_text('ready')
+        while True:
+            for request in sorted(root.glob('*.request')):
+                response = request.with_suffix('.response')
+                if response.exists():
+                    continue
+                action = json.loads(request.read_text())['action']
+                result = {'ok': True, 'action': action}
+                try:
+                    if action in {'project_fail_once', 'project_fail_all', 'project_kill', 'clear'}:
+                        failures = {'project_fail_once': 1, 'project_fail_all': -1,
+                                    'project_kill': 0, 'clear': 0}[action]
+                        temporary = state.with_suffix('.tmp')
+                        temporary.write_text(json.dumps({'failures': failures, 'kill': action == 'project_kill'}))
+                        temporary.replace(state)
+                    elif action == 'drained':
+                        deadline = time.monotonic() + 25
+                        while any(owned_resources(config).values()):
+                            if time.monotonic() >= deadline:
+                                raise RuntimeError('owned resources not drained')
+                            time.sleep(.1)
+                        result['resources'] = owned_resources(config)
+                    else:
+                        raise ValueError('unknown fixture action')
+                except Exception:
+                    result['ok'] = False
+                temporary = response.with_suffix('.tmp')
+                temporary.write_text(json.dumps(result))
+                temporary.replace(response)
+            time.sleep(.1)
+    finally:
+        config_path.write_bytes(original)
+        restart()
+        (root / 'supervisor-ready').unlink(missing_ok=True)
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--node-config', type=Path, required=True)
+    parser.add_argument('--root', type=Path, required=True)
+    parser.add_argument('--unit', required=True)
+    args = parser.parse_args()
+    serve(args.node_config, args.root, args.unit)

@@ -623,11 +623,13 @@ async def _ready_admission(client, factory, task_id: str, assignment_id: str,
 
 async def _submit(client, factory, *, task_id: str, assignment_id: str,
                   contributor_token: str, archive: bytes, summary: str,
-                  attestation: str, predecessor_id: str | None) -> dict:
+                  attestation: str, predecessor_id: str | None, before_create=None) -> dict:
     admission_id = await _ready_admission(
         client, factory, task_id, assignment_id, contributor_token,
         archive, summary, attestation, predecessor_id,
     )
+    if before_create is not None:
+        await before_create()
     route = f"/api/v1/tasks/{task_id}/submissions"
     packet = {
         "assignment_id": assignment_id,
@@ -681,12 +683,14 @@ async def _started_public_task(client, *, project_id: str, manager_token: str,
 async def _complete_post(factory, *, submission_id: str,
                          project_id: UUID, recommendation: str,
                          finding_code: str | None = None,
-                         deliver_completion: bool = True) -> tuple[str, UUID]:
+                         deliver_completion: bool = True, successor=None) -> tuple[str, UUID]:
     async with factory() as session:
         dispatch = await session.get(SubmissionDispatch, submission_id)
         _require(dispatch is not None, "atomic Submission dispatch is absent")
         request_event_id = dispatch.evaluation_event_id
         attempt_id = dispatch.evaluation_attempt_id
+    if successor is not None:
+        request_event_id, attempt_id = successor.event_id, successor.run_id
     await _wait_outbox_acknowledged(factory, request_event_id, project_id)
     async with factory() as session:
         run = await session.get(CheckerRun, attempt_id)
@@ -1004,7 +1008,7 @@ async def _public_project(client, factory, env, *, human_review_required, pre_re
 async def _one_mode(client, factory, env, *,
                     human_review_required: bool, operator_id: UUID | None,
                     stop_worker: Callable[[], None] | None = None,
-                    start_worker: Callable[[], Awaitable[None]] | None = None) -> dict:
+                    start_worker: Callable[[], Awaitable[None]] | None = None, fault_root=None) -> dict:
     awards = () if human_review_required else ("project_points",)
     from app.workers.outbox import deliver_event
 
@@ -1082,24 +1086,35 @@ async def _one_mode(client, factory, env, *,
             Submission.task_id == task_id
         )) == 0, "failed intake created a Submission")
 
+    async def fail_post_launch():
+        from experiments.pilot04_external_checker_runtime.public_node_faults import node_command
+        await node_command(fault_root, "project_fail_all")
+
     first_archive = (_with_fixture_file(archive, "post-rejected.txt")
                      if human_review_required else archive)
     saved = await _submit(
         client, factory, task_id=task_id, assignment_id=assignment_id,
         contributor_token=contributor_token, archive=first_archive,
         summary=summary, attestation=attestation, predecessor_id=None,
+        before_create=fail_post_launch if not human_review_required and fault_root else None,
     )
     submission_path = f"/api/v1/tasks/{task_id}/submissions"
     history = await _json(client, "GET", submission_path, contributor_token, 200)
     _require([item["id"] for item in history["items"]] == [saved["submission_id"]],
              "public submission history differs")
     first_submission_id = saved["submission_id"]
+    successor = post_retry = None
+    if not human_review_required and fault_root:
+        from experiments.pilot04_external_checker_runtime.public_runtime_trials import retry_post_outage
+        successor, post_retry = await retry_post_outage(
+            factory, first_submission_id, compilation.project_id, operator_id, fault_root,
+        )
     first_attempt_id, completion_id = await _complete_post(
         factory, submission_id=first_submission_id,
         project_id=compilation.project_id,
         recommendation="needs_revision" if human_review_required else "allow_review",
         finding_code="probe.post_rule_failed" if human_review_required else None,
-        deliver_completion=human_review_required,
+        deliver_completion=human_review_required, successor=successor,
     )
     attempt_id = first_attempt_id
     if human_review_required:
@@ -1210,6 +1225,7 @@ async def _one_mode(client, factory, env, *,
         "intake_failure_code": bad["error"]["code"],
         "external_pre_failure_code": "probe.project_rule_failed",
         "selected_pre_runs": await _pre_runs(factory, task_id),
+        "post_runtime_retry": post_retry,
         "selected_post_attempt_ids": (
             [first_attempt_id, attempt_id] if human_review_required else [attempt_id]
         ),
@@ -1389,6 +1405,10 @@ async def run(database_url: str, image_reference: str, node_config: Path,
         async with httpx.AsyncClient(base_url=origin, timeout=90) as client:
             from experiments.pilot04_external_checker_runtime.public_intake_trials import public_intake_trials
             intake_trials = await public_intake_trials(client, factory, env, root / "intake-trace.jsonl")
+            from experiments.pilot04_external_checker_runtime.public_runtime_trials import public_runtime_trials
+            fault_root = root / "node-control"
+            _require((fault_root / "supervisor-ready").exists(), "owned node supervisor is absent")
+            runtime_trials = await public_runtime_trials(client, factory, env, fault_root)
             true = await _one_mode(client, factory, env,
                                    human_review_required=True,
                                    operator_id=operator.actor_profile_id)
@@ -1396,7 +1416,7 @@ async def run(database_url: str, image_reference: str, node_config: Path,
                                     human_review_required=False,
                                     operator_id=operator.actor_profile_id,
                                     stop_worker=stop_owned_worker,
-                                    start_worker=start_owned_worker)
+                                    start_worker=start_owned_worker, fault_root=fault_root)
         _require(api.poll() is None and worker.poll() is None and beat.poll() is None,
                  "API, prefork worker, or Beat exited during public journey")
         return {"tree_sha": subprocess.check_output(
@@ -1408,7 +1428,7 @@ async def run(database_url: str, image_reference: str, node_config: Path,
                 "scheduled_artifact_scans": True,
                 "public_original_guide_setup": True,
                 "recorded_inference": True,
-                "intake_trials": intake_trials, "human": true, "automatic": false}
+                "runtime_trials": runtime_trials, "intake_trials": intake_trials, "human": true, "automatic": false}
     finally:
         _stop_process(beat)
         for schedule_file in root.glob("beat-schedule*"):
