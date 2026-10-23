@@ -165,9 +165,11 @@ Recovery is a separate, reasoned, audited path.
 | Submission gate repair (planned; unavailable) | `operations.submission_gate.repair` | Operator |
 | Checker recovery-source discovery (active public read) | `operations.status.read` via `operations.checker_retry_source.list` | System Operator for one exact project |
 | Checker terminal-failure retry (active public operation) | `operations.checker.retry` | System Operator under exact terminal-failure guards |
-| Immutable project model profile provisioning | `project.model_profile.manage` via `project.model_profile.provision` | System Operator for the exact project and registered image |
+| Immutable project model profile provisioning | `project.model_profile.manage` via `project.model_profile.provision` | System Operator for the exact project; approved POST policy separately binds the registered image |
 | Lifetime project model budget configuration | `project.model_budget.manage` via `project.model_budget.configure` | System Operator; preserves all outstanding reservations and settled spend |
 | Exact project model-effect inspection | `project.model_budget.manage` via `project.model_usage.read` | System Operator for one exact project/effect; redacted accounting and evidence identities only |
+| Setup model preparation and dispatch (active internal operations) | `project.guide_compilation.model.prepare`, `project.guide_compilation.model.dispatch` | Exact fixed service `workstream.project.setup`; current compilation attempt and snapshotted runtime/profile |
+| Setup model observation and completion (active internal operations) | `project.guide_compilation.model.observe`, `project.guide_compilation.model.complete` | Exact fixed service `workstream.project.setup`; retained paid effect and bounded evidence, with no new dispatch authority |
 | Model-call recovery child authorization | `project.model_call.recovery_child.authorize` | System Operator for an exact proven no-effect or fully settled failed parent; uncertain delivery is ineligible |
 | Review lease force release | `review.lease.force_release` | Operator under WS-REV-001 |
 | Checker revision-context repair (active public operation) | `project.task.manage` via `project.task.revision.repair` | Covered Project Manager |

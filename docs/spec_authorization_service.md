@@ -296,8 +296,8 @@ evaluator integration and activation. ART never writes availability. AUTH-12,
 AUTH-14, and AUTH-15 are not alternate artifact activation paths.
 
 The initial list above contains 75 approved `PermissionId` values. The current
-closed catalogue contains 91 permissions, including the nine model-runtime
-permissions described below. `ActionId` values are a separate
+closed catalogue contains 95 permissions, including the thirteen shared setup/POST
+model-runtime permissions described below. `ActionId` values are a separate
 closed registry layer and are not included in that permission count. AUTH-05A's
 typed and PostgreSQL audit registry accepts the exact historical 49. The three
 approved Operator recovery identifiers, 16 artifact identifiers,
@@ -673,13 +673,13 @@ remain planned and unavailable, and add no migration.
 | `artifact.guide_source.read` | `artifact.guide_source.read` | fixed guide-reader service | exact committed document version and fenced compilation attempt | `03` |
 | `artifact.submission_bundle.prepare` | `submission.create` | assigned contributor | exact task/admission context | `04C2` |
 | `artifact.submission.binding.create` | `artifact.binding.create` | fixed binding service | submission | `05` |
-| `artifact.checker_output.binding.create` | `artifact.binding.create` | fixed binding service | exact paid model-call attempt, private request/response slot and verified content | `06B`, model runtime |
+| `artifact.checker_output.binding.create` | `artifact.binding.create` | fixed binding service | exact setup or POST paid model-call attempt, private request/response slot and verified content | `06B`, model runtime |
 | `artifact.verification.execute` | `artifact.verification.execute` | fixed verifier service | verification job | `02D` |
 | `artifact.pending_work.scan` | `artifact.pending_work.scan` | fixed scheduler service | system pending-work scope | `02D` |
 | `artifact.put_attempt.resolve` | `artifact.put_attempt.resolve` | fixed put-resolver service | put attempt | `02D` |
 | `artifact.pre_submit.checker_input.materialize` | `artifact.checker_input.materialize` | fixed materializer service | exact task, assignment, project/guide/snapshot and locked policy lineage plus plan/catalogue/archive/semantic-manifest identities and current process-local prepared generation; no scratch path/handle is serialized | `04B2/04B3` + `XINT-002-06A` |
 | `artifact.post_submit.checker_input.materialize` | `artifact.checker_input.materialize` | fixed materializer service | checker run and immutable bindings | `06A` |
-| `artifact.checker_output.write` | `artifact.checker_output.write` | fixed checker-output service | exact paid model-call attempt and private request/response slot; request requires current execution, late response requires retained effect custody | `06B`, model runtime |
+| `artifact.checker_output.write` | `artifact.checker_output.write` | fixed checker-output service | exact setup or POST paid model-call attempt and private request/response slot; request requires current owner authority, late response requires retained effect custody | `06B`, model runtime |
 | `artifact.review_packet.materialize` | `artifact.review_packet.materialize` | fixed materializer service | exact active lease and Submission packet | `07A` |
 | `artifact.review_evidence.binding.create` | `artifact.binding.create` | fixed binding service | future REV-owned evidence slot; no approved v0.1 activation | future |
 
@@ -700,7 +700,7 @@ closed:
 | `workstream.artifact.guide_reader` | `artifact.guide_source.read` |
 | `workstream.artifact.materializer` | `artifact.pre_submit.checker_input.materialize`, `artifact.post_submit.checker_input.materialize`, `artifact.review_packet.materialize` |
 | `workstream.artifact.checker_output` | `artifact.checker_output.write` |
-| `workstream.project.setup` | `project.guide_compilation.request_automatic`, `project.guide_compilation.execute`, `project.guide_sufficiency.run`, `project.submission_artifact_policy.derive`, `project.post_submit_checker_policy.derive`, `project.setup_run.update` |
+| `workstream.project.setup` | `project.guide_compilation.request_automatic`, `project.guide_compilation.execute`, `project.guide_compilation.model.prepare`, `project.guide_compilation.model.dispatch`, `project.guide_compilation.model.observe`, `project.guide_compilation.model.complete`, `project.guide_sufficiency.run`, `project.submission_artifact_policy.derive`, `project.post_submit_checker_policy.derive`, `project.setup_run.update` |
 | `workstream.review.preference_expiry` | `review.preference_expiry.run` |
 | `workstream.review.lease_expiry` | `review.lease_expiry.run` |
 | `workstream.review.authority_invalidation_reconciliation` | `review.reconcile.run` |
@@ -794,6 +794,10 @@ exact fixed-service authority and manifest.
 | `task.revision.recover` | `workstream.task.revision_expirer` | Exact retained routing manifest, assigned contributor, locked task context, request digest and optional preparation ID/digest pair; fresh fixed-service authority. Recovery retains the source and exact running/paused clock; exact already-scheduled work is a no-op | PILOT-08 implements bounded retained-source recovery of missing preparation or expiry intent; it may freeze unchanged or blocked context, never authorize an automatic rebase or reset the window |
 | `checker.post_submit.execute` | `workstream.checker.post_submit` | Immutable Submission/request/generation, locked compiled policy, attempt and admitted service; exact pre-I/O authority | Implemented by ARCH-04C/04D2 and invoked by the registered selected request handler |
 | `checker.post_submit.finalize` | `workstream.checker.post_submit` | Exact execution request/fence, accepted result digest, retained material and original execute receipt; fresh post-I/O authority and atomic evidence; current outputs are empty | Implemented by ARCH-04C/04D2 and invoked by the registered selected request handler |
+| `project.guide_compilation.model.prepare` | `workstream.project.setup` | Exact compilation attempt, project/guide/snapshot, setup generation, runtime/profile identity, phase/call index and canonical request hash; fresh setup currentness before MODEL custody | Shared model runtime |
+| `project.guide_compilation.model.dispatch` | `workstream.project.setup` | Prepared setup effect and verified request evidence; fresh attempt authority and atomic reservation in the shared lifetime project account before provider I/O | Shared model runtime |
+| `project.guide_compilation.model.observe` | `workstream.project.setup` | Exact retained setup effect and provider observation digest; records ambiguous delivery without authorizing a new create | Shared model runtime |
+| `project.guide_compilation.model.complete` | `workstream.project.setup` | Exact retained setup effect, terminal digest, verified response evidence and complete usage; settlement or proven no-effect release cannot authorize another dispatch | Shared model runtime |
 | `checker.model_call.grant` | `workstream.checker.post_submit` | Exact current POST execution, locked project/image/profile, stable paid slot, invocation request digest and private token hash; PostgreSQL lease expiry and single consumption | Project model runtime |
 | `checker.model_call.prepare` | `workstream.checker.post_submit` | Current POST execution and stable paid slot with immutable first request hash; AUTH then TASK then CHECKERS custody | Project model runtime |
 | `checker.model_call.dispatch` | `workstream.checker.post_submit` | Current execution, prepared attempt and verified request evidence; atomic lifetime budget reservation and dispatch intent before provider I/O | Project model runtime |
@@ -818,7 +822,7 @@ immutable specification or parent receipt; idempotent replay rechecks authority.
 
 | ActionId | PermissionId | Exact target |
 |---|---|---|
-| `project.model_profile.provision` | `project.model_profile.manage` | Project, exact registered image and immutable provider/model/bounds/pricing profile |
+| `project.model_profile.provision` | `project.model_profile.manage` | Project and immutable provider/model/bounds/pricing profile; POST image binding is separately validated through the approved policy |
 | `project.model_budget.configure` | `project.model_budget.manage` | Project and immutable budget configuration version; lifetime reservations and settled spend are never reset |
 | `project.model_usage.read` | `project.model_budget.manage` | One exact paid effect in the project; redacted owner, budget, usage and ART evidence identities only |
 | `project.model_call.recovery_child.authorize` | `project.model_call.recovery_child.authorize` | Exact current execution and terminal parent receipt; only proven no-effect or fully settled known failure permits a child |
