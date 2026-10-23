@@ -58,9 +58,17 @@ second transport, a global bearer token, a provider SDK, provider credentials,
 budget storage or a paid-effect ledger. Exact proxy fields are not frozen here
 until that owner publishes the typed contract.
 
-Generic isolated build/trial support will use separately declared shared-runtime
-files after ownership coordination. Before any such edit this record will name
-the exact files and bridge contract. The bridge must keep Docker authority and
+Generic isolated build/trial support owns the new
+`external_checkers/workstream-checker-service/src/trial_relay.rs` module after
+coordination with the model-runtime owner. That owner retains the coupled
+`main.rs` invocation-capability assembly, `model_relay.rs`, budget/profile
+owners and every migration; this change does not edit `main.rs` concurrently.
+The trial module publishes a generic typed relay, profile and observation API
+with fake-engine protocol/cancellation tests before the shared composition is
+connected. Backend trial authority/materialization may later extend the existing
+selected-POST, TASK and ART owner files only after their exact file list and
+typed port contract are added here; it will not add a migration. The bridge must
+keep Docker authority and
 prepared offline material outside the untrusted project image, expose only
 invocation-local bounded tools, and prove aggregate time, CPU, memory, PID and
 scratch-disk limits, cancellation, cleanup, no network or host socket in the
