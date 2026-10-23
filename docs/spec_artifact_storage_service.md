@@ -1648,35 +1648,41 @@ one unified Celery compilation. Incomplete or uncertain storage never triggers
 inference. Recovery of a committed upload rechecks current project, guide,
 snapshot and generation before publishing that continuation.
 
-The runtime receives an immutable manifest with opaque document handles. Its
-only source tool opens an assigned handle through a fixed guide-reader service.
-Before provider access, ART locks and checks the draft guide, current snapshot,
-setup generation, fenced attempt, exact ingest/put/receipt, content, replica and
-storage namespace. It stages and verifies the complete original through
-`ArtifactScratchManager` before yielding bytes. Forged, foreign, stale, expired
-or closed grants deny without reading an object. Neither model nor provider
-workspace receives S3 credentials, bucket listing, object keys or URLs.
+The runtime receives an immutable manifest with opaque document handles. Trusted
+bounded `read_document` and `search_document` tools inspect only assigned originals
+through the fixed guide-reader authority and isolated parser. ART locks and checks
+the draft guide, current snapshot, setup generation, fenced attempt, exact
+ingest/put/receipt, content, replica and storage namespace. It stages and verifies
+the original through `ArtifactScratchManager` before yielding bytes. Forged,
+foreign, stale, expired or closed grants deny without reading an object. Models
+receive bounded verified text, never S3 credentials, bucket listings, object keys
+or URLs. Document code is not executed.
 
-The OpenAI Agents SDK adapter stages opened originals into a fresh bounded
-provider workspace with networking disabled. The agent can inspect files in
-multiple tool turns rather than receiving all extracted text in one prompt.
-Runtime, model, instructions, tool bounds and timeouts are independently
-configured and captured in immutable attempt evidence. The default model
-request timeout is 300 seconds; the whole-run timeout is separate.
+The OpenAI Agents SDK adapter uses those neutral tools without allocating provider
+files or workspaces. Runtime, model/provider, instructions, tool bounds and
+timeouts are independently configured and captured in immutable attempt evidence.
+The default model request timeout is 300 seconds; the whole-run timeout is separate.
+PROJECTS records parser-bound source-access receipts. Those receipts prove exact
+source lineage; they do not alone prove that a model phase observed content.
 
-PROJECTS records allocation intent before each provider allocation and the
-returned exact resource identity before the next call. Successful file opens
-bind the exact document version, digest, manifest and fenced attempt. Validated
-findings and policy proposals cite those document versions; ready proposals
-must account for every assigned document. Known malformed structured output
-ends as invalid-terminal evidence. Uncertain provider execution cannot be
-repeated by redelivering the job.
+Every draft, review and correction must pass strict schema, canonical, context and
+source validation. Each phase must initially read every assigned original, for
+ready and blocked results alike. Only offset-zero reads returning text or proving
+a genuinely empty original satisfy initial observation. Search and offset-only
+reads remain audited and budgeted but cannot substitute for initial observation.
+The phase evidence is cleared before each invocation. Validated findings and
+proposals cite exact source versions; ready proposals account for every assigned
+document. Known invalid completed inference output receives at most two value-free
+corrections across draft and review within the original budgets. Exhaustion is
+invalid-terminal; uncertain provider execution is never replayed as correction or
+by redelivering the job.
 
-Cleanup deletes only recorded provider resource IDs, including partial staging.
-A bounded cleanup reconciler retries remaining known resources without model
-inference or source access. Unknown allocation outcomes rely on configured
-provider expiry; cleanup never discovers resources by listing. Scratch has
-aggregate quotas and crash cleanup and is never durable artifact storage.
+Historical provider resources retain their immutable allocation and identity
+receipts. Their separate bounded cleanup reconciler deletes only recorded IDs,
+without inference, source access or discovery by listing. Unknown historical
+allocation outcomes rely on recorded provider expiry. Current neutral inference
+allocates none of these resources. Scratch retains aggregate quotas and crash
+cleanup and is never durable artifact storage.
 
 The setup result contains sufficiency findings and distinct pre-submission and
 post-submission policy proposals. A blocked guide ends at findings; a ready

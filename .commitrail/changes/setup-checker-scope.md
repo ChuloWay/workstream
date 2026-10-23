@@ -137,3 +137,8 @@ and budgeted but do not establish source observation. Regressions exercise both
 phases, correction success/exhaustion, no-match searches and empty/partial reads.
 Current setup and roadmap documentation now describes neutral tools and bounded
 correction before terminal failure.
+
+The final current-spec scan also reconciled the operating manual, developer setup,
+roadmap history and ART guide-binding specification: every phase receives strict
+validation and fresh source observation; neutral inference creates no provider
+file/workspace resources. Historical exact-ID cleanup remains separately owned.

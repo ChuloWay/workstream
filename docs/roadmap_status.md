@@ -1541,12 +1541,12 @@ public journey. The [live setup qualification](../.commitrail/changes/terminal-s
 includes real provider drafts from unchanged guide bytes with all project size/entry
 limits null. Typed proposals expose engineering specifications; the final corrected
 proposal has passed independent source-to-proposal review. Draft path and material-linkage
-errors also exposed a review-boundary problem: canonical draft rejection prevented
-the planned correction phase. Setup now uses a private structurally checked draft,
-then reviews it against the originals under the same attempt budget; only the final
-result can become a proposal. Both phases now reject invalid JSON, unknown fields
-and invalid checker scope before proceeding; up to two error-guided corrections
-share the original attempt budgets. The successful review reopens the originals. PM correction now
+errors exposed a need for bounded output correction. Every draft, review and
+correction now passes strict schema, canonical, context and source checks; only
+the final review can become a proposal. Up to two value-free corrections share
+the original attempt budgets. Each phase must initially read every assigned
+original, including for blocked proposals; searches cannot substitute for those
+reads. PM correction now
 supplies the exact hash-verified predecessor as bounded, untrusted context rather
 than only its identity and feedback. The final real correction successor was
 independently qualified against the unchanged guide as a usable engineering handoff:
