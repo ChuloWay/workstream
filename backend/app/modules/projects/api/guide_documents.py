@@ -12,6 +12,7 @@ import hashlib
 from pydantic import BaseModel, ConfigDict, Field, StrictInt, model_validator
 
 from app.core.hashing import canonical_json_hash
+from app.interfaces.guide_document_tools import GuideDocumentToolPort
 
 GuideDocumentMediaType = Literal[
     "application/pdf",
@@ -177,33 +178,24 @@ class GuideRuntimeCleanupCustody(Protocol):
     async def record_cleanup_failed(self, allocation_id: UUID) -> None: ...
 
 
-class GuideRuntimeResourceCustody(GuideRuntimeCleanupCustody, Protocol):
-    """Attempt-owned allocation and exact-ID cleanup authority, without ORM coupling."""
+@dataclass(frozen=True, slots=True)
+class GuideDocumentAccessReceipt:
+    """Exact successful fixed-parser evidence, without source text."""
 
-    async def begin_allocation(
-        self,
-        *,
-        kind: ProviderResourceKind,
-        document_handle: str | None,
-        parent_provider_id: str | None,
-        expires_at: datetime,
-        source_file_allocation_id: UUID | None = None,
-        container_allocation_id: UUID | None = None,
-    ) -> UUID: ...
+    handle: str
+    source_item_id: UUID
+    document_version_id: UUID
+    sha256: str
+    operation: Literal["read", "search"]
+    parser_request_hash: str
+    parser_response_hash: str
+    parser_build_digest: str
 
-    async def record_allocated(self, allocation_id: UUID, provider_id: str) -> None: ...
 
-    async def record_uncertain(self, allocation_id: UUID) -> None: ...
+class GuideDocumentAccessCustody(Protocol):
+    """PROJECTS-owned successful-access writer hidden from agent runtimes."""
 
-    async def record_document_open(self, handle: str) -> None: ...
-
-    async def record_direct_document_open(self, handle: str) -> None:
-        """Record a provider-free runtime's read of one granted original.
-
-        No provider resource exists, so the evidence has no attachment
-        allocation. Custody refuses it for any attempt that names a provider.
-        """
-        ...
+    async def record_success(self, receipt: GuideDocumentAccessReceipt) -> None: ...
 
     async def opened_handles(self) -> frozenset[str]: ...
 
@@ -211,10 +203,9 @@ class GuideRuntimeResourceCustody(GuideRuntimeCleanupCustody, Protocol):
 
 @dataclass(frozen=True, slots=True)
 class GuideRuntimeCapabilities:
-    """Non-serializable execution capabilities issued only after the dispatch fence."""
+    """The sole non-serializable capability issued to an agent runtime."""
 
-    documents: GuideDocumentGrant
-    resources: GuideRuntimeResourceCustody
+    tools: GuideDocumentToolPort
 
 
 class GuideDocumentAccessFactory(Protocol):
@@ -222,6 +213,17 @@ class GuideDocumentAccessFactory(Protocol):
 
     def __call__(self, attempt_id: UUID, manifest: GuideDocumentManifest,
                  configuration) -> AbstractAsyncContextManager[GuideDocumentGrant]: ...
+
+
+class GuideDocumentToolsFactory(Protocol):
+    """Trusted composition returns only the bounded tool capability to runtimes."""
+
+    def __call__(
+        self,
+        attempt_id: UUID,
+        manifest: GuideDocumentManifest,
+        configuration,
+    ) -> AbstractAsyncContextManager[GuideDocumentToolPort]: ...
 
 
 @dataclass(frozen=True, slots=True)

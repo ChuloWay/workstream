@@ -45,8 +45,8 @@ class HostedReleaseConfigTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory()
         self.root = Path(self.temporary.name)
-        self.runtime_uid = os.getuid() or 10001
-        self.runtime_gid = os.getgid() or 10001
+        self.runtime_uid = 10001
+        self.runtime_gid = 10001
         self.checker_path = self.root / "checker.json"
         self.checker = json.loads(CHECKER_EXAMPLE.read_text(encoding="utf-8"))
         self.checker["sandbox_uid"] = self.runtime_uid
@@ -131,14 +131,27 @@ class HostedReleaseConfigTests(unittest.TestCase):
         preflight.validate_compose(rendered, self.environment)
         self.assertEqual(
             set(rendered["services"]),
-            {"api", "worker", "beat", "checker-service", *preflight.PROOF_SERVICES},
+            {
+                "api",
+                "worker",
+                "beat",
+                "guide-document-parser",
+                "checker-service",
+                *preflight.PROOF_SERVICES,
+            },
         )
         self.assertNotIn("build", rendered["services"]["api"])
         services = rendered["services"]
         evidence = {
             key: self.environment[key] for key in preflight.AWS_S3_EVIDENCE_KEYS
         }
-        for name in ("api", "worker", "beat", "checker-service"):
+        for name in (
+            "api",
+            "worker",
+            "beat",
+            "guide-document-parser",
+            "checker-service",
+        ):
             service = services[name]
             self.assertEqual(service["pull_policy"], "always")
             self.assertTrue(service["init"])
@@ -172,6 +185,9 @@ class HostedReleaseConfigTests(unittest.TestCase):
         self.assertEqual(services["api"]["stop_grace_period"], "30s")
         self.assertEqual(services["worker"]["stop_grace_period"], "1h1m40s")
         self.assertEqual(services["beat"]["stop_grace_period"], "30s")
+        self.assertEqual(
+            services["guide-document-parser"]["stop_grace_period"], "30s"
+        )
         self.assertEqual(services["api"]["ports"][0]["host_ip"], "127.0.0.1")
         expected_secrets = {
             target[0] for target in preflight.SECRET_FILE_TARGETS.values()
@@ -206,6 +222,43 @@ class HostedReleaseConfigTests(unittest.TestCase):
                 else:
                     self.assertNotIn(key, services[name]["environment"])
         self.assertNotIn("secrets", services["checker-service"])
+        parser = services["guide-document-parser"]
+        self.assertEqual(parser["image"], services["api"]["image"])
+        self.assertEqual(parser["user"], "10002:10001")
+        self.assertEqual(parser["network_mode"], "none")
+        self.assertNotIn("secrets", parser)
+        self.assertEqual(
+            parser["environment"],
+            {
+                "WORKSTREAM_RELEASE_ROLE": "parser",
+                "WORKSTREAM_GUIDE_DOCUMENT_PARSER_SOCKET": str(
+                    preflight.GUIDE_SOCKET_PATH
+                ),
+            },
+        )
+        self.assertEqual(parser["mem_limit"], "536870912")
+        self.assertEqual(parser["cpus"], 1)
+        self.assertEqual(parser["pids_limit"], 64)
+        self.assertEqual(
+            preflight._service_mounts(parser)[str(preflight.GUIDE_SOCKET_ROOT)][
+                "read_only"
+            ],
+            False,
+        )
+        worker_mounts = preflight._service_mounts(services["worker"])
+        self.assertTrue(
+            worker_mounts[str(preflight.GUIDE_SOCKET_ROOT)]["read_only"]
+        )
+        for name in (
+            "api",
+            "beat",
+            "checker-service",
+            *preflight.PROOF_SERVICES,
+        ):
+            self.assertNotIn(
+                str(preflight.GUIDE_SOCKET_ROOT),
+                preflight._service_mounts(services[name]),
+            )
         for name in ("api", "worker"):
             mounts = preflight._service_mounts(services[name])
             self.assertEqual(
@@ -521,13 +574,29 @@ class HostedReleaseConfigTests(unittest.TestCase):
             patch.object(compose, "load_checker_config") as load,
             patch.object(compose, "validate_private_host_inputs") as private,
             patch.object(compose, "validate_docker_runtime") as runtime,
-            patch.object(compose, "run_compose", return_value=0) as run,
+            patch.object(compose, "run_shutdown", return_value=0) as shutdown,
         ):
             self.assertEqual(self._compose_main("stop"), (0, ""))
         load.assert_not_called()
         private.assert_not_called()
         runtime.assert_not_called()
-        run.assert_called_once_with(self.environment_path, self.environment, ["stop"])
+        shutdown.assert_called_once_with(self.environment_path, self.environment)
+
+    def test_shutdown_stops_producers_then_worker_then_parser_and_checker(self) -> None:
+        completed = subprocess.CompletedProcess([], 0)
+        with patch.object(preflight.subprocess, "run", return_value=completed) as run:
+            self.assertEqual(
+                preflight.run_shutdown(self.environment_path, self.environment), 0
+            )
+        commands = [call.args[0] for call in run.call_args_list]
+        self.assertEqual(
+            [command[-4:] for command in commands],
+            [
+                ["compose.yml", "stop", "beat", "api"],
+                ["--timeout", "3700", "worker"],
+                ["stop", "guide-document-parser", "checker-service"],
+            ],
+        )
 
     def test_proof_wrapper_runs_only_the_fixed_identity_sequence(self) -> None:
         nonce = "0199f68b-5dc2-7000-8000-000000000001"
@@ -775,8 +844,8 @@ class HostedReleaseConfigTests(unittest.TestCase):
         cases.append(("missing role secret selector", missing_role_secret))
         unrelated_role_secret = copy.deepcopy(rendered)
         unrelated_role_secret["services"]["beat"]["environment"][
-            "OPENAI_API_KEY_FILE"
-        ] = "/run/secrets/openai_api_key"
+            "WORKSTREAM_PROJECT_AGENT_API_KEY_FILE"
+        ] = "/run/secrets/project_agent_api_key"
         cases.append(("unrelated role secret selector", unrelated_role_secret))
         unrelated_role_mount = copy.deepcopy(rendered)
         unrelated_role_mount["services"]["beat"]["secrets"].append(
@@ -890,22 +959,24 @@ class HostedReleaseConfigTests(unittest.TestCase):
     ) -> None:
         scratch = self.root / "scratch"
         socket_root = self.root / "socket"
+        guide_socket_root = self.root / "guide-socket"
         scratch.mkdir(mode=0o700)
         socket_root.mkdir(mode=0o700)
-        os.chown(scratch, self.runtime_uid, self.runtime_gid)
-        os.chown(socket_root, self.runtime_uid, self.runtime_gid)
+        guide_socket_root.mkdir(mode=0o750)
+        host_uid = os.getuid()
+        host_gid = os.getgid()
+        environment = dict(self.environment)
+        environment["WORKSTREAM_RUNTIME_UID"] = str(host_uid)
+        environment["WORKSTREAM_RUNTIME_GID"] = str(host_gid)
         checker = self.root / "private-checker.json"
         checker.write_text("{}", encoding="utf-8")
         checker.chmod(0o400)
-        os.chown(checker, self.runtime_uid, self.runtime_gid)
         secret_paths = []
-        environment = dict(self.environment)
         environment["WORKSTREAM_CHECKER_CONFIG_FILE"] = str(checker)
         for index, key in enumerate(preflight.SECRET_FILE_KEYS):
             secret = self.root / f"secret-{index}"
             secret.write_text(f"private-{index}", encoding="utf-8")
             secret.chmod(0o400)
-            os.chown(secret, self.runtime_uid, self.runtime_gid)
             environment[key] = str(secret)
             secret_paths.append(secret)
         docker_socket = self.root / "docker.sock"
@@ -918,6 +989,14 @@ class HostedReleaseConfigTests(unittest.TestCase):
             with (
                 patch.object(preflight, "SCRATCH_ROOT", scratch),
                 patch.object(preflight, "SOCKET_ROOT", socket_root),
+                patch.object(preflight, "GUIDE_SOCKET_ROOT", guide_socket_root),
+                patch.object(
+                    preflight,
+                    "GUIDE_SOCKET_PATH",
+                    guide_socket_root / "guide.sock",
+                ),
+                patch.object(preflight, "GUIDE_PARSER_UID", host_uid),
+                patch.object(preflight, "GUIDE_PARSER_GID", host_gid),
                 patch.object(preflight, "DOCKER_SOCKET", docker_socket),
             ):
                 preflight.validate_private_host_inputs(environment)
@@ -929,29 +1008,37 @@ class HostedReleaseConfigTests(unittest.TestCase):
             environment["WORKSTREAM_DOCKER_SOCKET_GID"] = str(
                 docker_socket.stat().st_gid
             )
-            scratch_secret = scratch / "openai-secret"
+            scratch_secret = scratch / "project-agent-secret"
             scratch_secret.write_text("private", encoding="utf-8")
             scratch_secret.chmod(0o400)
-            os.chown(scratch_secret, self.runtime_uid, self.runtime_gid)
             scratch_alias = self.root / "scratch-alias"
             scratch_alias.symlink_to(scratch, target_is_directory=True)
-            environment["OPENAI_API_KEY_FILE"] = str(
+            environment["WORKSTREAM_PROJECT_AGENT_API_KEY_FILE"] = str(
                 scratch_alias / scratch_secret.name
             )
             with (
                 patch.object(preflight, "SCRATCH_ROOT", scratch),
                 patch.object(preflight, "SOCKET_ROOT", socket_root),
+                patch.object(preflight, "GUIDE_SOCKET_ROOT", guide_socket_root),
+                patch.object(
+                    preflight,
+                    "GUIDE_SOCKET_PATH",
+                    guide_socket_root / "guide.sock",
+                ),
+                patch.object(preflight, "GUIDE_PARSER_UID", host_uid),
+                patch.object(preflight, "GUIDE_PARSER_GID", host_gid),
                 patch.object(preflight, "DOCKER_SOCKET", docker_socket),
                 self.assertRaisesRegex(
                     preflight.PreflightError, "outside shared roots"
                 ),
             ):
                 preflight.validate_private_host_inputs(environment)
-            environment["OPENAI_API_KEY_FILE"] = str(secret_paths[-1])
+            environment["WORKSTREAM_PROJECT_AGENT_API_KEY_FILE"] = str(
+                secret_paths[-1]
+            )
             socket_identity = socket_root / "negative-key.pem"
             socket_identity.write_text("private", encoding="utf-8")
             socket_identity.chmod(0o400)
-            os.chown(socket_identity, self.runtime_uid, self.runtime_gid)
             negative_key = (
                 "WORKSTREAM_ARTIFACT_S3_ROLES_ANYWHERE_NEGATIVE_PRIVATE_KEY_HOST_FILE"
             )
@@ -960,6 +1047,14 @@ class HostedReleaseConfigTests(unittest.TestCase):
             with (
                 patch.object(preflight, "SCRATCH_ROOT", scratch),
                 patch.object(preflight, "SOCKET_ROOT", socket_root),
+                patch.object(preflight, "GUIDE_SOCKET_ROOT", guide_socket_root),
+                patch.object(
+                    preflight,
+                    "GUIDE_SOCKET_PATH",
+                    guide_socket_root / "guide.sock",
+                ),
+                patch.object(preflight, "GUIDE_PARSER_UID", host_uid),
+                patch.object(preflight, "GUIDE_PARSER_GID", host_gid),
                 patch.object(preflight, "DOCKER_SOCKET", docker_socket),
                 self.assertRaisesRegex(
                     preflight.PreflightError, "outside shared roots"
@@ -971,12 +1066,20 @@ class HostedReleaseConfigTests(unittest.TestCase):
                 "WORKSTREAM_ARTIFACT_S3_ROLES_ANYWHERE_RUNTIME_PRIVATE_KEY_HOST_FILE"
             )
             original_runtime_key = environment[runtime_key]
-            secret_alias = self.root / "openai-secret-runtime-key-alias"
+            secret_alias = self.root / "project-agent-secret-runtime-key-alias"
             os.link(secret_paths[-1], secret_alias)
             environment[runtime_key] = str(secret_alias)
             with (
                 patch.object(preflight, "SCRATCH_ROOT", scratch),
                 patch.object(preflight, "SOCKET_ROOT", socket_root),
+                patch.object(preflight, "GUIDE_SOCKET_ROOT", guide_socket_root),
+                patch.object(
+                    preflight,
+                    "GUIDE_SOCKET_PATH",
+                    guide_socket_root / "guide.sock",
+                ),
+                patch.object(preflight, "GUIDE_PARSER_UID", host_uid),
+                patch.object(preflight, "GUIDE_PARSER_GID", host_gid),
                 patch.object(preflight, "DOCKER_SOCKET", docker_socket),
                 self.assertRaisesRegex(preflight.PreflightError, "distinct files"),
             ):
@@ -988,6 +1091,14 @@ class HostedReleaseConfigTests(unittest.TestCase):
             with (
                 patch.object(preflight, "SCRATCH_ROOT", scratch),
                 patch.object(preflight, "SOCKET_ROOT", socket_root),
+                patch.object(preflight, "GUIDE_SOCKET_ROOT", guide_socket_root),
+                patch.object(
+                    preflight,
+                    "GUIDE_SOCKET_PATH",
+                    guide_socket_root / "guide.sock",
+                ),
+                patch.object(preflight, "GUIDE_PARSER_UID", host_uid),
+                patch.object(preflight, "GUIDE_PARSER_GID", host_gid),
                 patch.object(preflight, "DOCKER_SOCKET", docker_socket),
                 self.assertRaisesRegex(preflight.PreflightError, "distinct files"),
             ):
@@ -1005,6 +1116,14 @@ class HostedReleaseConfigTests(unittest.TestCase):
             with (
                 patch.object(preflight, "SCRATCH_ROOT", scratch),
                 patch.object(preflight, "SOCKET_ROOT", socket_root),
+                patch.object(preflight, "GUIDE_SOCKET_ROOT", guide_socket_root),
+                patch.object(
+                    preflight,
+                    "GUIDE_SOCKET_PATH",
+                    guide_socket_root / "guide.sock",
+                ),
+                patch.object(preflight, "GUIDE_PARSER_UID", host_uid),
+                patch.object(preflight, "GUIDE_PARSER_GID", host_gid),
                 patch.object(preflight, "DOCKER_SOCKET", docker_socket),
                 self.assertRaisesRegex(preflight.PreflightError, "distinct files"),
             ):
@@ -1023,7 +1142,7 @@ class ReleaseSecretLoaderTests(unittest.TestCase):
         "WORKSTREAM_PAGINATION_CURSOR_HMAC_SECRET_FILE": (
             "WORKSTREAM_PAGINATION_CURSOR_HMAC_SECRET"
         ),
-        "OPENAI_API_KEY_FILE": "OPENAI_API_KEY",
+        "WORKSTREAM_PROJECT_AGENT_API_KEY_FILE": "OPENROUTER_API_KEY",
     }
     ROLE_FILES = {
         "api": (
@@ -1035,13 +1154,14 @@ class ReleaseSecretLoaderTests(unittest.TestCase):
         "worker": (
             "WORKSTREAM_DATABASE_URL_FILE",
             "WORKSTREAM_CELERY_BROKER_URL_FILE",
-            "OPENAI_API_KEY_FILE",
+            "WORKSTREAM_PROJECT_AGENT_API_KEY_FILE",
         ),
         "beat": (
             "WORKSTREAM_DATABASE_URL_FILE",
             "WORKSTREAM_CELERY_BROKER_URL_FILE",
         ),
         "proof": ("WORKSTREAM_DATABASE_URL_FILE",),
+        "parser": (),
     }
 
     def _run_loader(
@@ -1052,6 +1172,7 @@ class ReleaseSecretLoaderTests(unittest.TestCase):
         content: str = "safe-value",
         override: tuple[str, Path] | None = None,
         unset_selector: str | None = None,
+        provider: str = "openrouter",
     ) -> subprocess.CompletedProcess[str]:
         environment = os.environ.copy()
         file_names = {
@@ -1059,7 +1180,7 @@ class ReleaseSecretLoaderTests(unittest.TestCase):
             "WORKSTREAM_CELERY_BROKER_URL_FILE": "broker",
             "WORKSTREAM_API_RATE_LIMIT_KEY_SECRET_FILE": "rate",
             "WORKSTREAM_PAGINATION_CURSOR_HMAC_SECRET_FILE": "cursor",
-            "OPENAI_API_KEY_FILE": "openai",
+            "WORKSTREAM_PROJECT_AGENT_API_KEY_FILE": "project-agent",
         }
         for variable, name in file_names.items():
             path = root / name
@@ -1068,14 +1189,23 @@ class ReleaseSecretLoaderTests(unittest.TestCase):
             path.write_text(content, encoding="utf-8")
             path.chmod(0o400)
             environment[variable] = str(path)
-        for secret_name in self.FILE_TO_SECRET.values():
+        for secret_name in {
+            *self.FILE_TO_SECRET.values(),
+            "OPENAI_API_KEY",
+            "OPENROUTER_API_KEY",
+            "WORKSTREAM_PROJECT_AGENT_API_KEY",
+        }:
             environment[secret_name] = "ambient-value-must-not-survive"
         if override is not None:
             environment[override[0]] = str(override[1])
         if unset_selector is not None:
             environment.pop(unset_selector, None)
         environment["WORKSTREAM_RELEASE_ROLE"] = role
+        environment["WORKSTREAM_PROJECT_AGENT_MODEL_PROVIDER"] = provider
         expected = {self.FILE_TO_SECRET[key] for key in self.ROLE_FILES.get(role, ())}
+        if role == "worker" and provider == "openai":
+            expected.remove("OPENROUTER_API_KEY")
+            expected.add("OPENAI_API_KEY")
         environment["EXPECTED_SECRET_NAMES"] = ",".join(sorted(expected))
         environment["EXPECTED_SECRET_SHA256"] = hashlib.sha256(
             content.encode()
@@ -1083,11 +1213,14 @@ class ReleaseSecretLoaderTests(unittest.TestCase):
         program = (
             "import hashlib,os;"
             "expected=set(filter(None,os.environ['EXPECTED_SECRET_NAMES'].split(',')));"
-            f"all_names={set(self.FILE_TO_SECRET.values())!r};"
+            "all_names={'WORKSTREAM_DATABASE_URL','WORKSTREAM_CELERY_BROKER_URL',"
+            "'WORKSTREAM_API_RATE_LIMIT_KEY_SECRET',"
+            "'WORKSTREAM_PAGINATION_CURSOR_HMAC_SECRET','OPENAI_API_KEY',"
+            "'OPENROUTER_API_KEY','WORKSTREAM_PROJECT_AGENT_API_KEY'};"
             "assert all((hashlib.sha256(os.environ[name].encode()).hexdigest()"
             "==os.environ['EXPECTED_SECRET_SHA256']) for name in expected);"
             "assert all(name not in os.environ for name in all_names-expected);"
-            f"assert all(name not in os.environ for name in {set(self.FILE_TO_SECRET)!r});"
+            f"assert all(name not in os.environ for name in {set(self.FILE_TO_SECRET) | {'OPENAI_API_KEY_FILE'}!r});"
             "assert 'WORKSTREAM_RELEASE_ROLE' not in os.environ;"
             "print('loader-ok')"
         )
@@ -1123,13 +1256,21 @@ class ReleaseSecretLoaderTests(unittest.TestCase):
                     self.assertEqual(completed.returncode, 0, completed.stderr)
                     self.assertEqual(completed.stdout, "loader-ok\n")
                     self.assertEqual(completed.stderr, "")
-                    missing = self._run_loader(
-                        root,
-                        role=role,
-                        unset_selector=self.ROLE_FILES[role][0],
-                    )
-                    self.assertNotEqual(missing.returncode, 0)
-                    self.assertIn("required secret file is unavailable", missing.stderr)
+                    if self.ROLE_FILES[role]:
+                        missing = self._run_loader(
+                            root,
+                            role=role,
+                            unset_selector=self.ROLE_FILES[role][0],
+                        )
+                        self.assertNotEqual(missing.returncode, 0)
+                        self.assertIn(
+                            "required secret file is unavailable", missing.stderr
+                        )
+            openai = self._run_loader(root, provider="openai")
+            self.assertEqual(openai.returncode, 0, openai.stderr)
+            unsupported = self._run_loader(root, provider="unknown")
+            self.assertNotEqual(unsupported.returncode, 0)
+            self.assertIn("model provider", unsupported.stderr)
             unknown = self._run_loader(root, role="unknown")
             self.assertNotEqual(unknown.returncode, 0)
             self.assertEqual(unknown.stdout, "")

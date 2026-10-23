@@ -14,6 +14,7 @@ from preflight import (
     parse_environment,
     render_compose,
     run_compose,
+    run_shutdown,
     validate_checker_config,
     validate_compose,
     validate_docker_runtime,
@@ -50,6 +51,12 @@ def main() -> int:
             except ValueError as exc:
                 raise PreflightError("proof group nonce is invalid") from exc
             return run_proof_group(args.env_file, values, group_nonce)
+        if args.compose_arguments and args.compose_arguments[0] == "stop":
+            if args.compose_arguments != ["stop"]:
+                raise PreflightError(
+                    "stop uses the fixed producer, worker, parser/checker sequence"
+                )
+            return run_shutdown(args.env_file, values)
         return run_compose(args.env_file, values, args.compose_arguments)
     except PreflightError as exc:
         print(f"hosted Compose command failed: {exc}", file=sys.stderr)

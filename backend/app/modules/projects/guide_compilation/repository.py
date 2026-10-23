@@ -535,13 +535,13 @@ class GuideCompilationRepository:
         With ``stale_before``, release only a fence set before that instant, so
         a run that may still be in flight elsewhere is left alone.
         """
-        from .runtime_resources import attempt_is_provider_free
+        from .runtime_resources import attempt_uses_inference
 
         attempt = await self._lock_attempt(attempt_id)
         if attempt.status == "compilation_reserved":
             return attempt
         if (attempt.status != "compilation_provider_uncertain"
-                or not attempt_is_provider_free(attempt)):
+                or attempt_uses_inference(attempt)):
             raise GuideCompilationIntegrityError("invalid provider-free fence release")
         if stale_before is not None and attempt.provider_uncertain_at > stale_before:
             return attempt

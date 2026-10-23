@@ -22,6 +22,10 @@ COMPOSE_PATH = Path(__file__).with_name("compose.yml")
 SCRATCH_ROOT = Path("/var/lib/workstream/scratch")
 SOCKET_ROOT = Path("/var/lib/workstream/checker-runtime")
 SOCKET_PATH = SOCKET_ROOT / "checker.sock"
+GUIDE_SOCKET_ROOT = Path("/var/lib/workstream/guide-runtime")
+GUIDE_SOCKET_PATH = GUIDE_SOCKET_ROOT / "guide.sock"
+GUIDE_PARSER_UID = 10002
+GUIDE_PARSER_GID = 10001
 DOCKER_SOCKET = Path("/var/run/docker.sock")
 ROLES_ANYWHERE_CERTIFICATE_TARGET = Path(
     "/run/workstream-roles-anywhere/certificate.pem"
@@ -38,7 +42,7 @@ SECRET_FILE_KEYS = (
     "WORKSTREAM_CELERY_BROKER_URL_FILE",
     "WORKSTREAM_API_RATE_LIMIT_KEY_SECRET_FILE",
     "WORKSTREAM_PAGINATION_CURSOR_HMAC_SECRET_FILE",
-    "OPENAI_API_KEY_FILE",
+    "WORKSTREAM_PROJECT_AGENT_API_KEY_FILE",
 )
 SECRET_FILE_TARGETS = {
     "WORKSTREAM_DATABASE_URL_FILE": ("database_url", "/run/secrets/database_url"),
@@ -54,7 +58,10 @@ SECRET_FILE_TARGETS = {
         "pagination_cursor_hmac",
         "/run/secrets/pagination_cursor_hmac",
     ),
-    "OPENAI_API_KEY_FILE": ("openai_api_key", "/run/secrets/openai_api_key"),
+    "WORKSTREAM_PROJECT_AGENT_API_KEY_FILE": (
+        "project_agent_api_key",
+        "/run/secrets/project_agent_api_key",
+    ),
 }
 ROLE_SECRET_FILE_KEYS = {
     "api": (
@@ -66,7 +73,7 @@ ROLE_SECRET_FILE_KEYS = {
     "worker": (
         "WORKSTREAM_DATABASE_URL_FILE",
         "WORKSTREAM_CELERY_BROKER_URL_FILE",
-        "OPENAI_API_KEY_FILE",
+        "WORKSTREAM_PROJECT_AGENT_API_KEY_FILE",
     ),
     "beat": (
         "WORKSTREAM_DATABASE_URL_FILE",
@@ -93,6 +100,10 @@ FORBIDDEN_RELEASE_KEYS = (
     "WORKSTREAM_ARTIFACT_S3_SECRET_ACCESS_KEY",
     "WORKSTREAM_ARTIFACT_S3_SESSION_TOKEN",
     "WORKSTREAM_ARTIFACT_S3_ENDPOINT_URL",
+    "WORKSTREAM_PROJECT_AGENT_API_KEY",
+    "OPENAI_API_KEY",
+    "OPENROUTER_API_KEY",
+    "OPENAI_BASE_URL",
 )
 FORBIDDEN_RENDERED_KEYS = tuple(
     key for key in FORBIDDEN_RELEASE_KEYS if key != "WORKSTREAM_DEBUG"
@@ -100,7 +111,26 @@ FORBIDDEN_RENDERED_KEYS = tuple(
 EXACT_RELEASE_VALUES = {
     "WORKSTREAM_ARTIFACT_S3_AWS_WORKLOAD_IDENTITY_METHOD": {"roles-anywhere"},
     "WORKSTREAM_TOKEN_INTROSPECTION_MODE": {"disabled"},
+    "WORKSTREAM_PROJECT_AGENT_RUNTIME": {"openai_agents_sdk"},
 }
+PROJECT_AGENT_LIMIT_KEYS = (
+    "WORKSTREAM_PROJECT_AGENT_RUN_TIMEOUT_SECONDS",
+    "WORKSTREAM_PROJECT_AGENT_MAX_MANIFEST_BYTES",
+    "WORKSTREAM_PROJECT_AGENT_MAX_DOCUMENTS",
+    "WORKSTREAM_PROJECT_AGENT_MAX_DOCUMENT_BYTES",
+    "WORKSTREAM_PROJECT_AGENT_MAX_TOTAL_DOCUMENT_BYTES",
+    "WORKSTREAM_PROJECT_AGENT_MAX_TURNS",
+    "WORKSTREAM_PROJECT_AGENT_MAX_TOOL_CALLS",
+    "WORKSTREAM_PROJECT_AGENT_MAX_TOOL_OUTPUT_CHARACTERS",
+)
+PROJECT_AGENT_CONFIGURATION_KEYS = (
+    "WORKSTREAM_PROJECT_AGENT_RUNTIME",
+    "WORKSTREAM_PROJECT_AGENT_MODEL_PROVIDER",
+    "WORKSTREAM_PROJECT_AGENT_MODEL",
+    "WORKSTREAM_PROJECT_AGENT_MODEL_API",
+    "WORKSTREAM_PROJECT_AGENT_RUNTIME_OPTIONS",
+    *PROJECT_AGENT_LIMIT_KEYS,
+)
 TIMEOUT_KEYS = (
     "WORKSTREAM_ARTIFACT_S3_CONNECT_TIMEOUT_SECONDS",
     "WORKSTREAM_ARTIFACT_S3_READ_TIMEOUT_SECONDS",
@@ -165,6 +195,7 @@ REQUIRED_RELEASE_KEYS = (
     "WORKSTREAM_ARTIFACT_S3_PRIVATE_PREFIX",
     "WORKSTREAM_ARTIFACT_S3_AWS_WORKLOAD_IDENTITY_METHOD",
     "WORKSTREAM_CHECKER_CONFIG_FILE",
+    *PROJECT_AGENT_CONFIGURATION_KEYS,
     *ROLES_ANYWHERE_HOST_FILE_KEYS,
     *AWS_S3_EVIDENCE_KEYS,
     *TIMEOUT_KEYS,
@@ -265,6 +296,34 @@ def validate_environment(values: dict[str, str]) -> None:
             raise PreflightError(f"unsupported release setting: {key}")
     for key in TIMEOUT_KEYS:
         _positive_decimal(values, key)
+    for key in PROJECT_AGENT_LIMIT_KEYS:
+        _positive_id(values, key)
+    if _positive_id(values, "WORKSTREAM_RUNTIME_UID") != 10001 or _positive_id(
+        values, "WORKSTREAM_RUNTIME_GID"
+    ) != GUIDE_PARSER_GID:
+        raise PreflightError("hosted backend runtime identity must be 10001:10001")
+    if values["WORKSTREAM_PROJECT_AGENT_MODEL_PROVIDER"] not in {
+        "openai",
+        "openrouter",
+    }:
+        raise PreflightError("unsupported project agent model provider")
+    if values["WORKSTREAM_PROJECT_AGENT_MODEL_API"] not in {
+        "chat_completions",
+        "responses",
+    }:
+        raise PreflightError("unsupported project agent model API")
+    if values["WORKSTREAM_PROJECT_AGENT_MODEL_PROVIDER"] == "openrouter" and values[
+        "WORKSTREAM_PROJECT_AGENT_MODEL_API"
+    ] != "chat_completions":
+        raise PreflightError("OpenRouter hosted releases require chat_completions")
+    try:
+        runtime_options = json.loads(values["WORKSTREAM_PROJECT_AGENT_RUNTIME_OPTIONS"])
+    except json.JSONDecodeError as exc:
+        raise PreflightError("project agent runtime options must be valid JSON") from exc
+    if not isinstance(runtime_options, dict):
+        raise PreflightError("project agent runtime options must be a JSON object")
+    if len(values["WORKSTREAM_PROJECT_AGENT_RUNTIME_OPTIONS"].encode("utf-8")) > 8192:
+        raise PreflightError("project agent runtime options are unbounded")
     if not values["WORKSTREAM_TOKEN_ISSUER"].startswith("https://"):
         raise PreflightError("Flow issuer must use HTTPS")
     if not values["WORKSTREAM_TOKEN_JWKS_URL"].startswith("https://"):
@@ -362,6 +421,27 @@ def validate_private_host_inputs(values: dict[str, str]) -> None:
     gid = _positive_id(values, "WORKSTREAM_RUNTIME_GID")
     _private_metadata(SCRATCH_ROOT, kind="directory", uid=uid, gid=gid, mode=0o700)
     _private_metadata(SOCKET_ROOT, kind="directory", uid=uid, gid=gid, mode=0o700)
+    _private_metadata(
+        GUIDE_SOCKET_ROOT,
+        kind="directory",
+        uid=GUIDE_PARSER_UID,
+        gid=GUIDE_PARSER_GID,
+        mode=0o750,
+    )
+    try:
+        guide_socket = GUIDE_SOCKET_PATH.lstat()
+    except FileNotFoundError:
+        guide_socket = None
+    except OSError as exc:
+        raise PreflightError("guide parser socket identity is unavailable") from exc
+    if guide_socket is not None and (
+        stat.S_ISLNK(guide_socket.st_mode)
+        or not stat.S_ISSOCK(guide_socket.st_mode)
+        or guide_socket.st_uid != GUIDE_PARSER_UID
+        or guide_socket.st_gid != GUIDE_PARSER_GID
+        or stat.S_IMODE(guide_socket.st_mode) != 0o660
+    ):
+        raise PreflightError("guide parser socket has unsafe retained state")
     private_paths = [
         Path(values["WORKSTREAM_CHECKER_CONFIG_FILE"]),
         *(Path(values[key]) for key in SECRET_FILE_KEYS),
@@ -373,6 +453,7 @@ def validate_private_host_inputs(values: dict[str, str]) -> None:
         shared_roots = (
             SCRATCH_ROOT.resolve(strict=True),
             SOCKET_ROOT.resolve(strict=True),
+            GUIDE_SOCKET_ROOT.resolve(strict=True),
         )
         resolved_paths = [path.resolve(strict=True) for path in private_paths]
     except (OSError, RuntimeError) as exc:
@@ -459,7 +540,6 @@ def run_compose(
         "pull",
         "up",
         "ps",
-        "stop",
     }:
         raise PreflightError("unsupported hosted Compose operation")
     try:
@@ -479,6 +559,35 @@ def run_compose(
     except OSError as exc:
         raise PreflightError("hosted Compose operation could not start") from exc
     return completed.returncode
+
+
+def run_shutdown(environment_path: Path, values: dict[str, str]) -> int:
+    """Stop producers, drain the worker, then stop its isolated dependencies."""
+    phases = (
+        ["stop", "beat", "api"],
+        ["stop", "--timeout", "3700", "worker"],
+        ["stop", "guide-document-parser", "checker-service"],
+    )
+    for arguments in phases:
+        try:
+            completed = subprocess.run(
+                [
+                    "docker",
+                    "compose",
+                    "--env-file",
+                    str(environment_path),
+                    "--file",
+                    str(COMPOSE_PATH),
+                    *arguments,
+                ],
+                check=False,
+                env=compose_environment(values),
+            )
+        except OSError as exc:
+            raise PreflightError("hosted Compose shutdown could not start") from exc
+        if completed.returncode != 0:
+            return completed.returncode
+    return 0
 
 
 def run_proof_group(
@@ -603,6 +712,7 @@ def validate_compose(rendered: dict[str, Any], values: dict[str, str]) -> None:
         "api",
         "worker",
         "beat",
+        "guide-document-parser",
         "checker-service",
         *PROOF_SERVICES,
     }:
@@ -636,16 +746,25 @@ def validate_compose(rendered: dict[str, Any], values: dict[str, str]) -> None:
             raise PreflightError(
                 f"release service must use a numeric non-root identity: {name}"
             )
-    if len({service["user"] for service in services.values()}) != 1:
-        raise PreflightError(
-            "release services must share the configured runtime identity"
-        )
+    runtime_identity = (
+        f"{values['WORKSTREAM_RUNTIME_UID']}:{values['WORKSTREAM_RUNTIME_GID']}"
+    )
+    for name in {"api", "worker", "beat", "checker-service", *PROOF_SERVICES}:
+        if services[name]["user"] != runtime_identity:
+            raise PreflightError(f"release service has the wrong runtime identity: {name}")
+    if services["guide-document-parser"]["user"] != (
+        f"{GUIDE_PARSER_UID}:{GUIDE_PARSER_GID}"
+    ):
+        raise PreflightError("guide parser has the wrong isolated identity")
     backend_image = services["api"]["image"]
     if (
         services["worker"]["image"] != backend_image
         or services["beat"]["image"] != backend_image
+        or services["guide-document-parser"]["image"] != backend_image
     ):
-        raise PreflightError("API, worker and Beat must use one exact backend image")
+        raise PreflightError(
+            "API, worker, Beat and guide parser must use one exact backend image"
+        )
     if any(services[name]["image"] != backend_image for name in PROOF_SERVICES):
         raise PreflightError("AWS proof jobs must use the exact backend image")
     runtime_identity_mounts = {
@@ -677,8 +796,13 @@ def validate_compose(rendered: dict[str, Any], values: dict[str, str]) -> None:
             str(DOCKER_SOCKET): (str(DOCKER_SOCKET), False),
         },
         "api": shared_backend_mounts | runtime_identity_mounts,
-        "worker": shared_backend_mounts | runtime_identity_mounts,
+        "worker": shared_backend_mounts
+        | {str(GUIDE_SOCKET_ROOT): (str(GUIDE_SOCKET_ROOT), True)}
+        | runtime_identity_mounts,
         "beat": {},
+        "guide-document-parser": {
+            str(GUIDE_SOCKET_ROOT): (str(GUIDE_SOCKET_ROOT), False),
+        },
         "aws-proof-runtime": runtime_identity_mounts,
         "aws-proof-readiness": {
             str(ROLES_ANYWHERE_CERTIFICATE_TARGET): (
@@ -742,6 +866,65 @@ def validate_compose(rendered: dict[str, Any], values: dict[str, str]) -> None:
         or not re.fullmatch(r"[1-9][0-9]*", checker_groups[0])
     ):
         raise PreflightError("checker controller must use only the Docker socket group")
+    parser = services["guide-document-parser"]
+    parser_environment = parser.get("environment")
+    if (
+        parser.get("network_mode") != "none"
+        or parser.get("ports")
+        or parser.get("secrets")
+        or parser.get("group_add")
+        or str(parser.get("mem_limit")) != "536870912"
+        or str(parser.get("cpus")) not in {"1", "1.0"}
+        or parser.get("pids_limit") != 64
+        or parser.get("stop_grace_period") not in {"30s", "30.0s"}
+        or parser_environment
+        != {
+            "WORKSTREAM_RELEASE_ROLE": "parser",
+            "WORKSTREAM_GUIDE_DOCUMENT_PARSER_SOCKET": str(GUIDE_SOCKET_PATH),
+        }
+        or parser.get("command")
+        != [
+            "python",
+            "-m",
+            "app.adapters.guide_document_tools.service",
+            "--socket",
+            str(GUIDE_SOCKET_PATH),
+        ]
+    ):
+        raise PreflightError("guide parser isolation profile is invalid")
+    parser_health = parser.get("healthcheck", {}).get("test")
+    if parser_health != [
+        "CMD",
+        "python",
+        "-m",
+        "app.adapters.guide_document_tools.service",
+        "--healthcheck",
+        "--socket",
+        str(GUIDE_SOCKET_PATH),
+    ]:
+        raise PreflightError("guide parser healthcheck is invalid")
+    parser_tmpfs = parser.get("tmpfs")
+    if (
+        not isinstance(parser_tmpfs, list)
+        or len(parser_tmpfs) != 1
+        or not isinstance(parser_tmpfs[0], str)
+        or not parser_tmpfs[0].startswith("/tmp:")
+        or not {
+            "mode=0700",
+            "uid=10002",
+            "gid=10001",
+            "size=268435456",
+            "noexec",
+            "nosuid",
+            "nodev",
+        }.issubset(set(parser_tmpfs[0].split(":", 1)[1].split(",")))
+    ):
+        raise PreflightError("guide parser tmpfs is unbounded or unsafe")
+    worker_dependencies = services["worker"].get("depends_on")
+    if not isinstance(worker_dependencies, dict) or worker_dependencies.get(
+        "guide-document-parser"
+    ) != {"condition": "service_healthy", "required": True}:
+        raise PreflightError("worker must wait for a healthy guide parser")
     for name in ("aws-proof-runtime", "aws-proof-readiness", "aws-proof-negative"):
         service = services[name]
         if service.get("profiles") != ["aws-proof"]:
@@ -830,7 +1013,12 @@ def validate_compose(rendered: dict[str, Any], values: dict[str, str]) -> None:
             {
                 key: value
                 for key, value in environment.items()
-                if key not in SECRET_FILE_KEYS and key != "WORKSTREAM_RELEASE_ROLE"
+                if key not in SECRET_FILE_KEYS
+                and key
+                not in {
+                    "WORKSTREAM_RELEASE_ROLE",
+                    "WORKSTREAM_GUIDE_DOCUMENT_PARSER_SOCKET",
+                }
             }
         )
     if any(
@@ -860,6 +1048,19 @@ def validate_compose(rendered: dict[str, Any], values: dict[str, str]) -> None:
     for key, value in exact.items():
         if str(environment.get(key, "")).lower() != value:
             raise PreflightError(f"rendered release environment is unsafe: {key}")
+    for key in PROJECT_AGENT_CONFIGURATION_KEYS:
+        if str(environment.get(key, "")) != values[key]:
+            raise PreflightError(
+                f"rendered project agent configuration differs from release: {key}"
+            )
+    worker_environment = environments["worker"]
+    if worker_environment.get("WORKSTREAM_GUIDE_DOCUMENT_PARSER_SOCKET") != str(
+        GUIDE_SOCKET_PATH
+    ):
+        raise PreflightError("worker lacks the fixed guide parser socket")
+    for name in ("api", "beat"):
+        if "WORKSTREAM_GUIDE_DOCUMENT_PARSER_SOCKET" in environments[name]:
+            raise PreflightError(f"{name} must not receive the guide parser socket")
     if environment.get(
         "WORKSTREAM_ARTIFACT_S3_ROLES_ANYWHERE_ROLE_ARN"
     ) != environment.get("WORKSTREAM_ARTIFACT_S3_RUNTIME_ROLE_ARN"):
@@ -876,7 +1077,9 @@ def validate_compose(rendered: dict[str, Any], values: dict[str, str]) -> None:
         "WORKSTREAM_CELERY_BROKER_URL",
         "WORKSTREAM_API_RATE_LIMIT_KEY_SECRET",
         "WORKSTREAM_PAGINATION_CURSOR_HMAC_SECRET",
+        "WORKSTREAM_PROJECT_AGENT_API_KEY",
         "OPENAI_API_KEY",
+        "OPENROUTER_API_KEY",
     ):
         if key in environment:
             raise PreflightError(f"secret value was interpolated into Compose: {key}")

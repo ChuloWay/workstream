@@ -8,6 +8,7 @@ import time
 from dataclasses import dataclass
 from functools import lru_cache
 
+from app.adapters.project_agents.openai_profile import OpenAIAgentsSdkProfile
 from app.interfaces.project_agents import ProjectAgentRuntimeError
 from app.interfaces.project_guide_runtime import ProjectGuideRuntimeConfiguration
 
@@ -101,12 +102,15 @@ def _provider_circuit(runtime: str, provider: str, api: str, model: str,
     return ProviderCircuit(threshold, cooldown)
 
 
-def circuit_for(configuration: ProjectGuideRuntimeConfiguration) -> ProviderCircuit:
+def circuit_for(
+    configuration: ProjectGuideRuntimeConfiguration,
+    profile: OpenAIAgentsSdkProfile,
+) -> ProviderCircuit:
     """Share health across runtime instances in this worker process."""
     return _provider_circuit(
         configuration.runtime_key, configuration.model_provider, configuration.model_api,
-        configuration.model, configuration.circuit_failure_threshold,
-        configuration.circuit_cooldown_seconds,
+        configuration.model, profile.circuit_failure_threshold,
+        profile.circuit_cooldown_seconds,
     )
 
 
@@ -148,7 +152,7 @@ def transient_provider_failure(error: Exception) -> bool:
     return error.status_code in {408, 409, 429} or 500 <= error.status_code <= 599
 
 
-def model_retry_settings(configuration: ProjectGuideRuntimeConfiguration):
+def model_retry_settings(profile: OpenAIAgentsSdkProfile):
     """Reuse the SDK loop/backoff, supplying only Workstream's replay-safe policy."""
     from agents import ModelRetrySettings, ModelRetryBackoffSettings, retry_policies
     from agents.retry import RetryDecision
@@ -170,17 +174,17 @@ def model_retry_settings(configuration: ProjectGuideRuntimeConfiguration):
         delay = normalized.retry_after
         if delay is not None:
             # Never retry sooner than requested merely to fit the configured cap.
-            if not math.isfinite(delay) or delay < 0 or delay > configuration.retry_max_delay_seconds:
+            if not math.isfinite(delay) or delay < 0 or delay > profile.retry_max_delay_seconds:
                 return RetryDecision(retry=False)
         return RetryDecision(retry=True, delay=delay)
 
     return ModelRetrySettings(
-        max_retries=configuration.maximum_retries,
+        max_retries=profile.maximum_retries,
         backoff=ModelRetryBackoffSettings(
-            initial_delay=configuration.retry_initial_delay_seconds,
-            max_delay=configuration.retry_max_delay_seconds,
-            multiplier=configuration.retry_backoff_multiplier,
-            jitter=configuration.retry_jitter,
+            initial_delay=profile.retry_initial_delay_seconds,
+            max_delay=profile.retry_max_delay_seconds,
+            multiplier=profile.retry_backoff_multiplier,
+            jitter=profile.retry_jitter,
         ),
         policy=retry_policies.all(retry_policies.provider_suggested(), safe_policy),
     )
@@ -189,9 +193,13 @@ def model_retry_settings(configuration: ProjectGuideRuntimeConfiguration):
 class ModelCircuitAdmission:
     """Hold pre-fence admission, preserving it across native retries of one turn."""
 
-    def __init__(self, configuration: ProjectGuideRuntimeConfiguration):
-        self._circuit = circuit_for(configuration)
-        self._lifetime = configuration.timeout_seconds + configuration.cleanup_timeout_seconds
+    def __init__(
+        self,
+        configuration: ProjectGuideRuntimeConfiguration,
+        profile: OpenAIAgentsSdkProfile,
+    ):
+        self._circuit = circuit_for(configuration, profile)
+        self._lifetime = configuration.timeout_seconds
         self._lease = self._circuit.acquire(self._lifetime)
         self._closed = False
         self._model_failed = False

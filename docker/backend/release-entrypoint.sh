@@ -27,7 +27,15 @@ unset WORKSTREAM_DATABASE_URL
 unset WORKSTREAM_CELERY_BROKER_URL
 unset WORKSTREAM_API_RATE_LIMIT_KEY_SECRET
 unset WORKSTREAM_PAGINATION_CURSOR_HMAC_SECRET
+unset WORKSTREAM_PROJECT_AGENT_API_KEY
 unset OPENAI_API_KEY
+unset OPENROUTER_API_KEY
+unset AWS_ACCESS_KEY_ID
+unset AWS_SECRET_ACCESS_KEY
+unset AWS_SESSION_TOKEN
+unset AWS_SHARED_CREDENTIALS_FILE
+unset AWS_CONFIG_FILE
+unset AWS_WEB_IDENTITY_TOKEN_FILE
 
 case "${WORKSTREAM_RELEASE_ROLE:-}" in
     api)
@@ -39,7 +47,18 @@ case "${WORKSTREAM_RELEASE_ROLE:-}" in
     worker)
         load_required_secret WORKSTREAM_DATABASE_URL "${WORKSTREAM_DATABASE_URL_FILE:-}"
         load_required_secret WORKSTREAM_CELERY_BROKER_URL "${WORKSTREAM_CELERY_BROKER_URL_FILE:-}"
-        load_required_secret OPENAI_API_KEY "${OPENAI_API_KEY_FILE:-}"
+        case "${WORKSTREAM_PROJECT_AGENT_MODEL_PROVIDER:-}" in
+            openrouter)
+                load_required_secret OPENROUTER_API_KEY "${WORKSTREAM_PROJECT_AGENT_API_KEY_FILE:-}"
+                ;;
+            openai)
+                load_required_secret OPENAI_API_KEY "${WORKSTREAM_PROJECT_AGENT_API_KEY_FILE:-}"
+                ;;
+            *)
+                echo "trusted project agent model provider is unavailable or unsupported" >&2
+                exit 1
+                ;;
+        esac
         ;;
     beat)
         load_required_secret WORKSTREAM_DATABASE_URL "${WORKSTREAM_DATABASE_URL_FILE:-}"
@@ -47,6 +66,8 @@ case "${WORKSTREAM_RELEASE_ROLE:-}" in
         ;;
     proof)
         load_required_secret WORKSTREAM_DATABASE_URL "${WORKSTREAM_DATABASE_URL_FILE:-}"
+        ;;
+    parser)
         ;;
     *)
         echo "required release role is unavailable or unsupported" >&2
@@ -58,7 +79,11 @@ unset WORKSTREAM_DATABASE_URL_FILE
 unset WORKSTREAM_CELERY_BROKER_URL_FILE
 unset WORKSTREAM_API_RATE_LIMIT_KEY_SECRET_FILE
 unset WORKSTREAM_PAGINATION_CURSOR_HMAC_SECRET_FILE
+unset WORKSTREAM_PROJECT_AGENT_API_KEY_FILE
 unset OPENAI_API_KEY_FILE
+unset AWS_SHARED_CREDENTIALS_FILE
+unset AWS_CONFIG_FILE
+unset AWS_WEB_IDENTITY_TOKEN_FILE
 unset WORKSTREAM_RELEASE_ROLE
 
 exec "$@"

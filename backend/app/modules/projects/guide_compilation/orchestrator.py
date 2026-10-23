@@ -57,10 +57,9 @@ from .service import (
 )
 from app.interfaces.project_guide_runtime import ProjectGuideRuntimeConfiguration
 from app.modules.projects.api.guide_documents import (
-    GuideDocumentAccessFactory,
+    GuideDocumentToolsFactory,
     GuideRuntimeCapabilities,
 )
-from .runtime_resources import SqlAlchemyGuideRuntimeCustody
 from app.interfaces.external_services import ExternalServiceAdapterError
 from app.interfaces.project_agents import (
     ProjectAgentRuntimeError,
@@ -94,32 +93,24 @@ class SqlAlchemyGuideCompilationExecutionBackend:
         material_factory: Callable[[AsyncSession], GuideDocumentManifestPort],
         checker_capabilities: ExternalCheckerCapabilityProjection,
         authorization_context: GuideCompilationAuthorizationContext,
-        document_access_factory: GuideDocumentAccessFactory,
+        document_tools_factory: GuideDocumentToolsFactory,
     ) -> None:
         """Store the owner-supplied ports used by each short transaction."""
         self._session_factory = session_factory
         self._material_factory = material_factory
         self._checker_capabilities = checker_capabilities
         self._authorization_context = authorization_context
-        self._document_access_factory = document_access_factory
+        self._document_tools_factory = document_tools_factory
 
     @asynccontextmanager
     async def capabilities(self, state, context):
         """Issue resources only from the orchestrator's winning dispatch branch."""
-        async with self._document_access_factory(
+        async with self._document_tools_factory(
             state.preflight_facts.attempt_id,
             context.material,
             context.runtime_configuration,
-        ) as documents:
-            yield GuideRuntimeCapabilities(
-                documents=documents,
-                resources=SqlAlchemyGuideRuntimeCustody(
-                    self._session_factory,
-                    state.preflight_facts.attempt_id,
-                    context.material,
-                    context.runtime_configuration.runtime_key,
-                ),
-            )
+        ) as tools:
+            yield GuideRuntimeCapabilities(tools=tools)
 
     async def load(self, attempt_id: UUID) -> CompilationExecutionState:
         """Load one exact attempt and translate storage failures safely."""
@@ -232,7 +223,7 @@ def project_guide_compilation_execution_port(
     checker_capabilities: ExternalCheckerCapabilityProjection,
     authorization_context: GuideCompilationAuthorizationContext,
     runtime_factory: Callable[[ProjectGuideRuntimeConfiguration], ProjectGuideAgentRuntime],
-    document_access_factory: GuideDocumentAccessFactory,
+    document_tools_factory: GuideDocumentToolsFactory,
 ) -> ProjectGuideCompilationExecutionPort:
     """Compose the hidden port from existing owner-supplied dependencies."""
     backend = SqlAlchemyGuideCompilationExecutionBackend(
@@ -240,7 +231,7 @@ def project_guide_compilation_execution_port(
         material_factory=material_factory,
         checker_capabilities=checker_capabilities,
         authorization_context=authorization_context,
-        document_access_factory=document_access_factory,
+        document_tools_factory=document_tools_factory,
     )
     return GuideCompilationOrchestrator(backend, runtime_factory)
 
@@ -303,7 +294,7 @@ class GuideCompilationOrchestrator(ProjectGuideCompilationExecutionPort):
         runtime = None
         try:
             if (
-                not context.runtime_configuration.provider_free
+                context.runtime_configuration.uses_inference
                 and len(project_guide_compilation_prompt_bytes(context))
                 > context.runtime_configuration.maximum_manifest_bytes
             ):
@@ -347,14 +338,14 @@ class GuideCompilationOrchestrator(ProjectGuideCompilationExecutionPort):
                             accepted = True
             except asyncio.CancelledError:
                 if (terminal_receipt is None and not accepted
-                        and context.runtime_configuration.provider_free):
+                        and not context.runtime_configuration.uses_inference):
                     # Reopen before propagating so cancellation cannot strand the attempt.
                     with suppress(Exception):
                         await asyncio.shield(self._backend.release_provider_free(state))
                 raise
             except Exception:  # noqa: BLE001 - preserve known evidence across cleanup failure
                 if terminal_receipt is None and not accepted:
-                    if context.runtime_configuration.provider_free:
+                    if not context.runtime_configuration.uses_inference:
                         # No provider call exists to be uncertain about; reopen and retry.
                         await self._backend.release_provider_free(state)
                         raise ProjectGuideCompilationExecutionError(
@@ -373,12 +364,12 @@ class GuideCompilationOrchestrator(ProjectGuideCompilationExecutionPort):
         """Return a durable result without provider I/O, or select dispatch."""
         if state.classification is CompilationRecoveryClassification.PROVIDER_UNCERTAIN and (
             (configuration := state.runtime_configuration) is not None
-            and configuration.provider_free
+            and not configuration.uses_inference
         ):
             # A provider-free fence left by a crashed or cancelled worker guards no
             # provider call. Reopen it once its run deadline has passed.
             stale_before = datetime.now(UTC) - timedelta(
-                seconds=configuration.timeout_seconds + configuration.cleanup_timeout_seconds
+                seconds=configuration.timeout_seconds
             )
             if await self._backend.release_provider_free(state, stale_before=stale_before):
                 return None

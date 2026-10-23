@@ -39,7 +39,6 @@ from app.interfaces.external_services import (
 )
 from app.interfaces.project_guide_runtime import ProjectGuideRuntimeConfiguration
 from app.modules.projects.api.guide_documents import (
-    GuideRuntimeCleanupCustody,
     GuideDocumentManifest,
     GuideRuntimeCapabilities,
 )
@@ -835,10 +834,6 @@ class ProjectGuideAgentRuntime(ExternalServiceAdapter, Protocol):
 
     def admit_execution(self) -> None:
         """Acquire provider availability admission before the durable execution fence."""
-        ...
-
-    async def cleanup_resources(self, custody: GuideRuntimeCleanupCustody) -> bool:
-        """Reconcile exact owned resources without admitting or executing inference."""
         ...
 
     async def aclose(self) -> None:

@@ -801,12 +801,30 @@ class ProjectGuideRuntimeAllocation(Base):
 
 
 class ProjectGuideDocumentAccess(Base):
-    """Immutable successful original-file access evidence for an exact fenced run."""
+    """Immutable successful original access evidence for an exact fenced run."""
 
     __tablename__ = "project_guide_document_accesses"
     __table_args__ = (
         CheckConstraint("(get_byte(uuid_send(id), 6) >> 4) = 7 and (get_byte(uuid_send(id), 8) & 192) = 128", name="id_uuid7"),
-        UniqueConstraint("attempt_id", "source_item_id", name="uq_guide_document_access"),
+        UniqueConstraint(
+            "attempt_id",
+            "parser_request_hash",
+            name="uq_guide_document_parser_request",
+        ),
+        CheckConstraint(
+            "(access_method='provider_attachment' and attachment_allocation_id is not null "
+            "and operation is null and parser_request_hash is null "
+            "and parser_response_hash is null and parser_build_digest is null) or "
+            "(access_method='direct_original' and attachment_allocation_id is null "
+            "and operation is null and parser_request_hash is null "
+            "and parser_response_hash is null and parser_build_digest is null) or "
+            "(access_method='trusted_parser' and attachment_allocation_id is null "
+            "and operation in ('read','search') "
+            "and parser_request_hash ~ '^sha256:[0-9a-f]{64}$' "
+            "and parser_response_hash ~ '^sha256:[0-9a-f]{64}$' "
+            "and parser_build_digest ~ '^sha256:[0-9a-f]{64}$')",
+            name="ck_guide_document_access_evidence",
+        ),
     )
     id: Mapped[UUID] = mapped_column(Uuid(), primary_key=True)
     attempt_id: Mapped[UUID] = mapped_column(
@@ -814,10 +832,14 @@ class ProjectGuideDocumentAccess(Base):
     )
     source_item_id: Mapped[str] = mapped_column(ForeignKey("guide_source_snapshot_items.id"))
     document_version_id: Mapped[str] = mapped_column(ForeignKey("guide_source_artifact_ingests.id"))
-    # Null only for a provider-free runtime, which stages no provider file.
     attachment_allocation_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("project_guide_runtime_allocations.id")
     )
+    access_method: Mapped[str] = mapped_column(String(32))
+    operation: Mapped[str | None] = mapped_column(String(16))
+    parser_request_hash: Mapped[str | None] = mapped_column(String(71))
+    parser_response_hash: Mapped[str | None] = mapped_column(String(71))
+    parser_build_digest: Mapped[str | None] = mapped_column(String(71))
     manifest_sha256: Mapped[str] = mapped_column(String(71))
     sha256: Mapped[str] = mapped_column(String(71))
     document_handle: Mapped[UUID] = mapped_column(Uuid())

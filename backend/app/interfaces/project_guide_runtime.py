@@ -3,100 +3,140 @@
 from __future__ import annotations
 
 import hashlib
-from typing import Literal
+import json
+import re
+from collections.abc import Mapping
+from typing import TypeAlias
 
-from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt, model_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictInt, model_validator
 
 from app.core.hashing import canonical_json_hash
 from app.interfaces.external_services import ExternalServiceAdapterIdentity
 
-MANAGER_AUTHORED_RUNTIME_KEY = "manager_authored"
-"""The only runtime that performs no inference and allocates no provider resources."""
-PROVIDER_FREE = "none"
-"""Provider, API and model value recorded when no inference runs."""
+NO_INFERENCE_IDENTITY = "none"
+"""Provider, API and model identity recorded when no inference runs."""
 
-ProjectGuideModelProvider = Literal["openai", "none"]
-ProjectGuideModelApi = Literal["responses", "none"]
+MAXIMUM_ADAPTER_PROFILE_BYTES = 8192
+MAXIMUM_ADAPTER_PROFILE_SETTINGS = 32
+MAXIMUM_ADAPTER_PROFILE_STRING_BYTES = 512
+_PROFILE_KEY = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
+
+AdapterProfileValue: TypeAlias = bool | int | str | None
 
 
-def require_project_guide_runtime_pairing(
-    runtime_key: str, model_provider: str, model_api: str, model: str
-) -> None:
-    """Allow the provider-free ``none`` identity only for the manager-authored runtime.
+def canonical_adapter_profile(profile: Mapping[str, object]) -> str:
+    """Return one bounded immutable canonical JSON profile.
 
-    Every other runtime keeps the hosted OpenAI Responses identity with a real
-    model name. The schema trigger on compilation attempts enforces the same
-    rule independently.
+    The selected adapter owns the meaning and exact supported key set. Core only
+    guarantees a small, deterministic scalar map whose persisted value cannot be
+    mutated after the attempt is frozen.
     """
-    provider_free = runtime_key == MANAGER_AUTHORED_RUNTIME_KEY
-    if provider_free:
-        if (model_provider, model_api, model) != (PROVIDER_FREE,) * 3:
-            raise ValueError("manager-authored guide runtime requires provider, API and model none")
-    elif (model_provider, model_api) != ("openai", "responses"):
-        raise ValueError("guide runtime provider and API must be openai and responses")
-    elif model == PROVIDER_FREE:
-        raise ValueError("hosted guide runtime requires a model other than none")
+    if len(profile) > MAXIMUM_ADAPTER_PROFILE_SETTINGS:
+        raise ValueError("project guide adapter profile has too many settings")
+    validated: dict[str, AdapterProfileValue] = {}
+    for key, value in profile.items():
+        if not isinstance(key, str) or _PROFILE_KEY.fullmatch(key) is None:
+            raise ValueError("project guide adapter profile key is invalid")
+        if type(value) not in {bool, int, str, type(None)}:
+            raise ValueError("project guide adapter profile value is invalid")
+        if isinstance(value, str) and len(value.encode("utf-8")) > MAXIMUM_ADAPTER_PROFILE_STRING_BYTES:
+            raise ValueError("project guide adapter profile string is too large")
+        if isinstance(value, int) and not isinstance(value, bool) and abs(value) > 2**53 - 1:
+            raise ValueError("project guide adapter profile integer is out of range")
+        validated[key] = value
+    encoded = json.dumps(
+        validated,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=True,
+        allow_nan=False,
+    )
+    if len(encoded.encode("utf-8")) > MAXIMUM_ADAPTER_PROFILE_BYTES:
+        raise ValueError("project guide adapter profile is too large")
+    return encoded
+
+
+def require_project_guide_inference_identity(
+    model_provider: str, model_api: str, model: str
+) -> bool:
+    """Require an all-``none`` or all-concrete inference identity."""
+    identities = (model_provider, model_api, model)
+    no_inference = all(value == NO_INFERENCE_IDENTITY for value in identities)
+    if not no_inference and any(value == NO_INFERENCE_IDENTITY for value in identities):
+        raise ValueError("guide runtime inference identity must be entirely none or concrete")
+    return not no_inference
 
 
 class ProjectGuideRuntimeConfiguration(BaseModel):
     """Exact trusted configuration captured before authorizing an attempt.
 
-    Instructions are operator-authored evidence, never interpolated secrets or
-    project material. Credentials remain with the selected provider adapter.
+    Credentials and provider endpoints remain with the selected adapter. Its
+    native controls are an immutable canonical JSON scalar map; the selected
+    adapter must reject any unsupported or dishonest profile.
     """
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    capability_key: Literal["project_guide_compilation"] = "project_guide_compilation"
+    capability_key: str = Field(
+        default="project_guide_compilation", pattern=r"^[a-z][a-z0-9_]{0,63}$"
+    )
     runtime_key: str = Field(pattern=r"^[a-z][a-z0-9_]{0,63}$")
-    model_provider: ProjectGuideModelProvider
-    model: str = Field(min_length=1, max_length=200, pattern=r"^[a-zA-Z0-9][a-zA-Z0-9._:/-]*$")
-    model_api: ProjectGuideModelApi
-    instruction_id: Literal["project_guide_compilation"] = "project_guide_compilation"
+    model_provider: str = Field(pattern=r"^[a-z][a-z0-9_.-]{0,63}$")
+    model: str = Field(
+        min_length=1, max_length=200, pattern=r"^[a-zA-Z0-9][a-zA-Z0-9._:/-]*$"
+    )
+    model_api: str = Field(pattern=r"^[a-z][a-z0-9_]{0,63}$")
+    adapter_profile: str = Field(min_length=2, max_length=MAXIMUM_ADAPTER_PROFILE_BYTES)
+    instruction_id: str = Field(
+        default="project_guide_compilation", pattern=r"^[a-z][a-z0-9_]{0,63}$"
+    )
     instruction_version: str = Field(min_length=1, max_length=100)
     instructions: str = Field(min_length=1, max_length=16_000)
     instructions_sha256: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
     timeout_seconds: StrictInt = Field(ge=1, le=7200)
-    request_timeout_seconds: StrictInt = Field(default=300, ge=1, le=1800)
-    maximum_retries: StrictInt = Field(default=2, ge=0, le=5)
-    retry_backoff_multiplier: StrictInt = Field(default=2, ge=1, le=4)
-    retry_jitter: StrictBool = True
-    retry_initial_delay_seconds: StrictInt = Field(default=1, ge=1, le=30)
-    retry_max_delay_seconds: StrictInt = Field(default=30, ge=1, le=120)
-    circuit_failure_threshold: StrictInt = Field(default=3, ge=1, le=20)
-    circuit_cooldown_seconds: StrictInt = Field(default=60, ge=1, le=600)
     maximum_manifest_bytes: StrictInt = Field(default=256_000, ge=1024, le=1_000_000)
     maximum_documents: StrictInt = Field(default=100, ge=1, le=100)
-    maximum_document_bytes: StrictInt = Field(default=64 * 1024 * 1024, ge=1, le=512 * 1024 * 1024)
+    maximum_document_bytes: StrictInt = Field(
+        default=64 * 1024 * 1024, ge=1, le=512 * 1024 * 1024
+    )
     maximum_total_document_bytes: StrictInt = Field(default=512 * 1024 * 1024, ge=1)
-    maximum_turns: StrictInt = Field(default=40, ge=3, le=100)
-    maximum_hosted_tool_calls: StrictInt = Field(default=80, ge=3, le=200)
-    compaction_threshold_tokens: StrictInt = Field(default=32_000, ge=1000, le=100_000)
-    container_expiry_minutes: StrictInt = Field(default=20, ge=10, le=60)
-    file_expiry_seconds: StrictInt = Field(default=3600, ge=3600, le=7200)
-    cleanup_timeout_seconds: StrictInt = Field(default=30, ge=5, le=120)
+    maximum_turns: StrictInt = Field(default=40, ge=1, le=100)
+    maximum_tool_calls: StrictInt = Field(default=80, ge=1, le=200)
+    maximum_tool_output_characters: StrictInt = Field(
+        default=4 * 1024 * 1024, ge=65_536, le=16 * 1024 * 1024
+    )
 
     @model_validator(mode="after")
     def validate_snapshot(self) -> ProjectGuideRuntimeConfiguration:
-        """Bind exact instructions and coherent document limits."""
-        if (
-            self.instructions_sha256
-            != "sha256:" + hashlib.sha256(self.instructions.encode("utf-8")).hexdigest()
-        ):
+        """Bind exact instructions, profile canonicality and coherent limits."""
+        if self.instructions_sha256 != "sha256:" + hashlib.sha256(
+            self.instructions.encode("utf-8")
+        ).hexdigest():
             raise ValueError("project guide instruction hash mismatch")
         if self.maximum_document_bytes > self.maximum_total_document_bytes:
             raise ValueError("document byte limit exceeds the run total")
-        if self.retry_initial_delay_seconds > self.retry_max_delay_seconds:
-            raise ValueError("initial retry delay exceeds maximum")
-        require_project_guide_runtime_pairing(
-            self.runtime_key, self.model_provider, self.model_api, self.model
+        require_project_guide_inference_identity(
+            self.model_provider, self.model_api, self.model
         )
+        try:
+            profile = json.loads(self.adapter_profile)
+        except (TypeError, ValueError):
+            raise ValueError("project guide adapter profile is invalid") from None
+        if not isinstance(profile, dict) or canonical_adapter_profile(profile) != self.adapter_profile:
+            raise ValueError("project guide adapter profile is not canonical")
         return self
 
     @property
-    def provider_free(self) -> bool:
-        """Return whether this attempt runs no inference and owns no provider resources."""
-        return self.model_provider == PROVIDER_FREE
+    def uses_inference(self) -> bool:
+        """Return whether this attempt invokes an inference provider."""
+        return require_project_guide_inference_identity(
+            self.model_provider, self.model_api, self.model
+        )
+
+    def adapter_profile_values(self) -> dict[str, AdapterProfileValue]:
+        """Return a fresh parsed copy for validation by the selected adapter."""
+        values = json.loads(self.adapter_profile)
+        return dict(values)
 
     @property
     def adapter_identity(self) -> ExternalServiceAdapterIdentity:
