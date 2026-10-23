@@ -41,10 +41,21 @@ def _strict_int(value: object) -> bool:
     return type(value) is int
 
 
+def _require_inspectable_material(snapshot: MaterialSnapshot) -> None:
+    # Hashes and inventory prove custody, not semantic contents. Until a typed
+    # media inspector is bound to this image, an opaque selected file makes a
+    # semantic assessment unavailable rather than turning into a work finding.
+    if any(
+        item.kind == "file" and item.content_utf8 is None for item in snapshot.evidence
+    ):
+        raise AssessmentError("material_unavailable")
+
+
 def validate_assessment(
     raw: str, rubric: Rubric, snapshot: MaterialSnapshot
 ) -> tuple[ValidatedFinding, ...]:
     """Accept only a complete rubric decision citing mounted material evidence."""
+    _require_inspectable_material(snapshot)
     try:
         value = json.loads(
             raw,
@@ -130,6 +141,14 @@ def validate_assessment(
             or (status == "not_satisfied" and not finding_numbers)
         ):
             raise AssessmentError("invalid_output")
+        allowed_codes = rubric.condition_findings[number - 1]
+        for finding_number in finding_numbers:
+            finding = findings[finding_number - 1]
+            if (
+                finding.code not in allowed_codes
+                or finding.evidence.evidence_id not in evidence_ids
+            ):
+                raise AssessmentError("invalid_output")
         seen_indices.add(number)
         referenced_findings.update(finding_numbers)
     if sorted(seen_indices) != expected or referenced_findings != set(
@@ -143,6 +162,7 @@ def build_prompt(
     source: dict[str, str], rubric: Rubric, snapshot: MaterialSnapshot
 ) -> str:
     """Build provider-neutral instructions with submission text isolated as data."""
+    _require_inspectable_material(snapshot)
     contract = {
         "role": "Assess only the supplied project rubric against the evidence data.",
         "security": [
@@ -183,7 +203,16 @@ def build_prompt(
             "requirement_id": rubric.requirement_id,
             "statement": rubric.statement,
             "check_steps": rubric.check_steps,
-            "pass_conditions": rubric.pass_conditions,
+            "pass_conditions": [
+                {
+                    "condition_number": number,
+                    "text": condition,
+                    "allowed_finding_codes": sorted(
+                        rubric.condition_findings[number - 1]
+                    ),
+                }
+                for number, condition in enumerate(rubric.pass_conditions, start=1)
+            ],
             "allowed_findings": [
                 {
                     "code": item.code,

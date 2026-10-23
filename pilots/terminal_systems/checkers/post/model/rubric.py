@@ -21,6 +21,73 @@ BLOCKED_CHECKS = {
     "revision_objective_and_explanation": "revision_context",
 }
 
+# Each model failure code is valid only for the numbered pass conditions it can
+# disprove. This is deliberately data, rather than a prompt-only convention.
+CONDITION_FINDINGS = {
+    "solver_brief_and_extension_disclosure": (
+        frozenset({"brief_incomplete"}),
+        frozenset({"brief_hidden_constraint"}),
+        frozenset({"visible_example_undisclosed"}),
+        frozenset({"brief_hidden_constraint"}),
+        frozenset(
+            {
+                "extension_explanation_missing",
+                "extension_adds_undocumented_grading",
+            }
+        ),
+    ),
+    "materials_reproducibility_and_notes": (
+        frozenset(
+            {
+                "notes_rationale_missing",
+                "notes_reference_decisions_missing",
+                "notes_requirement_map_missing",
+                "notes_reproduction_missing",
+                "notes_trial_outcomes_missing",
+                "notes_resource_use_missing",
+                "notes_limitations_missing",
+            }
+        ),
+        frozenset(
+            {
+                "notes_incomplete_repair_method_missing",
+                "notes_incomplete_repair_rejection_explanation_missing",
+            }
+        ),
+        frozenset({"materials_provenance_incomplete"}),
+        frozenset({"prohibited_material_observed"}),
+        frozenset({"additional_directory_unexplained"}),
+        frozenset({"author_only_material_relabelled"}),
+        frozenset(
+            {"dependency_inventory_incomplete", "unpinned_reproducibility_input"}
+        ),
+        frozenset({"reproducibility_condition_incomplete"}),
+    ),
+    "verification_independence": (
+        frozenset({"expected_result_derivation_not_independent"}),
+        frozenset({"expected_result_derivation_not_independent"}),
+        frozenset({"permitted_implementation_rejected"}),
+        frozenset({"undocumented_verification_constraint"}),
+        frozenset({"assertion_weakened_for_reference"}),
+        frozenset({"verification_coverage_unexplained"}),
+    ),
+    "author_evidence_accuracy": (
+        frozenset({"notes_observation_misrepresented"}),
+        frozenset({"reproduction_procedure_discrepant"}),
+        frozenset({"trial_outcome_discrepant"}),
+        frozenset({"resource_measurement_discrepant"}),
+        frozenset({"notes_observation_misrepresented"}),
+    ),
+    "revision_objective_and_explanation": (
+        frozenset({"revision_change_unexplained"}),
+        frozenset({"revision_feedback_unaddressed"}),
+        frozenset({"revision_objective_not_preserved"}),
+    ),
+    "difficulty_claim_evidence": (
+        frozenset({"difficulty_claim_unsupported", "difficulty_evidence_inconsistent"}),
+    ),
+}
+
 
 class RubricError(ValueError):
     """A bundled rubric violates the closed projection contract."""
@@ -42,6 +109,7 @@ class Rubric:
     check_steps: tuple[str, ...]
     pass_conditions: tuple[str, ...]
     findings: dict[str, FindingRule]
+    condition_findings: tuple[frozenset[str], ...]
 
 
 def load_rubrics(path: Path = RUBRIC_PATH) -> tuple[dict[str, str], dict[str, Rubric]]:
@@ -118,7 +186,17 @@ def load_rubrics(path: Path = RUBRIC_PATH) -> tuple[dict[str, str], dict[str, Ru
             check_steps=tuple(steps),
             pass_conditions=tuple(conditions),
             findings=rules,
+            condition_findings=CONDITION_FINDINGS.get(requirement_id, ()),
         )
+        condition_findings = loaded[requirement_id].condition_findings
+        if (
+            len(condition_findings) != len(conditions)
+            or any(
+                not codes or not codes <= rules.keys() for codes in condition_findings
+            )
+            or set().union(*condition_findings) != rules.keys()
+        ):
+            raise RubricError("rubric_invalid")
     if set(loaded) != SUPPORTED_CHECKS | set(BLOCKED_CHECKS):
         raise RubricError("rubric_invalid")
     return source, loaded

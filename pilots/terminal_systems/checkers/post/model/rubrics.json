@@ -298,6 +298,12 @@
             "purpose": "Supplies written rules, every documented command, and permitted implementation variation."
           },
           {
+            "input_id": "task_metadata",
+            "kind": "relative_file",
+            "relative_path": "task.toml",
+            "purpose": "Supplies the authoritative reference and verification command selectors and working directories."
+          },
+          {
             "input_id": "author_notes",
             "kind": "relative_file",
             "relative_path": "AUTHOR_NOTES.md",

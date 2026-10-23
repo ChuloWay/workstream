@@ -30,7 +30,7 @@ LIMITS = MaterialLimits(
 
 def projected_handoff() -> dict:
     value = json.loads(HANDOFF.read_text(encoding="utf-8"))
-    return {
+    projection = {
         "source": value["source"],
         "requirements": [
             {
@@ -52,10 +52,25 @@ def projected_handoff() -> dict:
             and item["check_specification"]["evaluation_method"] == "model_evaluation"
         ],
     }
+    verification = next(
+        item
+        for item in projection["requirements"]
+        if item["requirement_id"] == "verification_independence"
+    )
+    verification["check_specification"]["inputs"].insert(
+        1,
+        {
+            "input_id": "task_metadata",
+            "kind": "relative_file",
+            "relative_path": "task.toml",
+            "purpose": "Supplies the authoritative reference and verification command selectors and working directories.",
+        },
+    )
+    return projection
 
 
 class RubricParityTests(unittest.TestCase):
-    def test_bundled_rubrics_are_exact_retained_handoff_projection(self):
+    def test_bundled_rubrics_are_retained_handoff_plus_source_correction(self):
         bundled = json.loads((HERE / "rubrics.json").read_text(encoding="utf-8"))
         self.assertEqual(bundled, projected_handoff())
         source, rubrics = load_rubrics()
@@ -115,11 +130,11 @@ class MaterialTests(unittest.TestCase):
             "sha256:" + hashlib.sha256(b"print('start')\n").hexdigest(),
         )
 
-    def test_narrow_rubric_omits_unselected_directories(self):
+    def test_verification_rubric_includes_authoritative_task_commands(self):
         rubric = self.rubrics["verification_independence"]
         snapshot = collect_material(self.root, rubric, LIMITS)
         paths = {item.path for item in snapshot.evidence}
-        self.assertNotIn("task.toml", paths)
+        self.assertIn("task.toml", paths)
         self.assertIn("solution/app.py", paths)
         self.assertIn("tests/test_app.py", paths)
 
@@ -144,6 +159,8 @@ class MaterialTests(unittest.TestCase):
         )
         self.assertIsNone(fixture.content_utf8)
         self.assertEqual(fixture.byte_count, 2)
+        with self.assertRaisesRegex(AssessmentError, "material_unavailable"):
+            build_prompt({}, rubric, snapshot)
 
 
 class AssessmentTests(unittest.TestCase):
@@ -227,6 +244,22 @@ class AssessmentTests(unittest.TestCase):
         with self.assertRaisesRegex(AssessmentError, "invalid_output"):
             self.validate(value)
 
+    def test_condition_cannot_borrow_finding_code_or_unlisted_evidence(self):
+        value = self.assessment(failed=True)
+        value["findings"][0]["code"] = "extension_explanation_missing"
+        with self.assertRaisesRegex(AssessmentError, "invalid_output"):
+            self.validate(value)
+
+        author_notes = next(
+            item.evidence_id
+            for item in self.snapshot.evidence
+            if item.path == "AUTHOR_NOTES.md"
+        )
+        value = self.assessment(failed=True)
+        value["findings"][0]["evidence_id"] = author_notes
+        value["findings"][0]["line"] = 1
+        with self.assertRaisesRegex(AssessmentError, "invalid_output"):
+            self.validate(value)
     def test_wrong_material_or_line_is_invalid(self):
         value = self.assessment(failed=True)
         value["material_digest"] = "sha256:" + "0" * 64
@@ -244,7 +277,12 @@ class AssessmentTests(unittest.TestCase):
             prompt["untrusted_evidence_data"]["material_digest"], self.snapshot.digest
         )
         self.assertEqual(
-            prompt["rubric"]["pass_conditions"], list(self.rubric.pass_conditions)
+            [item["text"] for item in prompt["rubric"]["pass_conditions"]],
+            list(self.rubric.pass_conditions),
+        )
+        self.assertEqual(
+            prompt["rubric"]["pass_conditions"][0]["allowed_finding_codes"],
+            ["brief_incomplete"],
         )
         self.assertEqual(
             prompt["output_contract"]["schema_version"],
