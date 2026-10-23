@@ -27,6 +27,10 @@ from app.modules.checkers.api.model_profiles import (
     configured_model_profile_selector,
     require_model_profile_configuration,
 )
+from app.modules.checkers.api.trial_profiles import (
+    TrialProfileError,
+    trial_selector_from_configuration,
+)
 
 
 WORKSTREAM_DEFAULT_EXECUTION_BUDGET_MS = 60_000
@@ -91,6 +95,23 @@ def validated_evaluation_context_roles(
     return selected
 
 
+def validated_trial_configuration(configuration, registry):
+    """Select only an explicitly declared POST trial capability, never a partial pin."""
+    try:
+        selector = trial_selector_from_configuration(configuration)
+    except TrialProfileError as exc:
+        raise ExternalCheckerPolicyError(str(exc)) from exc
+    if selector is None:
+        return None
+    if registry.phase != "post_submit":
+        raise ExternalCheckerPolicyError("trial execution requires post-submit work")
+    properties = registry.configuration_schema.document.get("properties")
+    selected_keys = {key for key in configuration if key.startswith("trial_")}
+    if not isinstance(properties, dict) or not selected_keys.issubset(properties):
+        raise ExternalCheckerPolicyError("checker schema does not declare trial execution")
+    return selector
+
+
 class _PolicyValue(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, revalidate_instances="always")
 
@@ -110,6 +131,7 @@ class LockedExternalCheckerBinding(_PolicyValue):
             raise ExternalCheckerPolicyError("checker binding phase mismatch")
         self.registry.configuration_schema.validate_instance(self.configuration)
         validated_evaluation_context_roles(self.configuration, self.registry)
+        validated_trial_configuration(self.configuration, self.registry)
         try:
             configured_model_profile_selector(self.configuration, stage=self.stage)
         except ModelProfileConfigurationError as exc:

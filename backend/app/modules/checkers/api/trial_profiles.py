@@ -478,6 +478,10 @@ def trial_selector_from_configuration(
     if present != selector_keys or "trial_execution" in configuration:
         raise TrialProfileError("trial execution selector is incomplete")
     try:
+        for name in ("trial_profile_id", "trial_projection_id"):
+            value = configuration[name]
+            if type(value) is not str or str(UUID(value)) != value:
+                raise TrialProfileError("trial execution selector is not canonical")
         return TrialExecutionSelector(
             profile=TrialProfileSelector(
                 profile_id=UUID(configuration["trial_profile_id"]),

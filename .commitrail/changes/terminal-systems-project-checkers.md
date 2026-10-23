@@ -147,6 +147,16 @@ the regression that `project_private_plan.v1` outer output is invalid.
 
 ## Acceptance criteria
 
+Setup and policy integration use the same generic trial contract. The affected
+`project_agents.py` dependency schema and default instructions must describe
+`trial_proxy` for nested execution and its prepared offline material. A supported
+binding must select the complete trial profile/projection; PRE, partial selectors
+and undeclared registry capabilities are rejected. Retained immutable gap
+specifications remain readable, but do not become supported bindings. Project
+execution specifications can also declare model assistance under #492's existing
+model-service dependency. Focused contract tests must exercise these admission
+boundaries before the live-project owner generates or approves a fresh proposal.
+
 - PRE layout checks required regular files and directories at the package root,
   accepting arbitrary task subjects and additional useful directories.
 - Metadata implements the documented types, path containment, command argument
