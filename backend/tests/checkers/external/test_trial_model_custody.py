@@ -38,6 +38,10 @@ from app.interfaces.project_agents import CapabilityParameter
 from app.modules.actors.api import ServiceIdentity
 from app.modules.artifacts.preparation import HARD_MAXIMUM_ARTIFACT_BYTES
 from app.modules.checkers.api.external import ExternalCheckerSchema, external_checker_json_hash
+from app.modules.model_usage.api import (
+    ProjectModelBudgetConfigurationSpec,
+    ProjectModelProfileSpec,
+)
 from app.modules.model_usage.models import ModelUsageEffect
 from tests.checkers.execution.support import (
     ControlledSelectedExecution,
@@ -168,14 +172,18 @@ async def test_trial_receipt_is_art_retained_before_controlled_model_spend(
     profiles = []
 
     async def parameters(_factory, project_id, registry):
-        selected = profile_spec(project_id).model_copy(
-            update={
-                "registry_entry_id": registry.registry_entry_id,
-                "registry_entry_digest": registry.entry_digest,
-                "allowed_tools": ("trial_receipt",),
-                "maximum_tool_calls": 1,
-                "maximum_tool_output_bytes": 1_048_576,
-            }
+        selected = ProjectModelProfileSpec.model_validate(
+            profile_spec(project_id)
+            .model_copy(
+                update={
+                    "registry_entry_id": registry.registry_entry_id,
+                    "registry_entry_digest": registry.entry_digest,
+                    "allowed_tools": ("trial_receipt",),
+                    "maximum_tool_calls": 1,
+                    "maximum_tool_output_bytes": 1_048_576,
+                }
+            )
+            .model_dump(mode="json")
         )
         response = await admin_access.signed.client.post(
             f"/api/v1/operations/projects/{project_id}/model-profiles",
@@ -185,14 +193,17 @@ async def test_trial_receipt_is_art_retained_before_controlled_model_spend(
         assert response.status_code == 201, response.text
         profile = response.json()
         profiles.append(profile)
+        budget_spec = ProjectModelBudgetConfigurationSpec(
+            project_id=project_id,
+            configuration_version=1,
+            authorized_total_nanodollars=10_000_000_000,
+            externally_reconciled_prior_spend_nanodollars=0,
+            lifetime_limit_nanodollars=10_000_000_000,
+        )
         budget = await admin_access.signed.client.post(
             f"/api/v1/operations/projects/{project_id}/model-budget-configurations",
             headers=admin_access.target.headers | {"Idempotency-Key": str(uuid4())},
-            json={
-                "project_id": str(project_id),
-                "configuration_version": 1,
-                "lifetime_limit_nanodollars": 10_000_000_000,
-            },
+            json=budget_spec.model_dump(mode="json"),
         )
         assert budget.status_code == 201, budget.text
         values = trial_values | {
@@ -312,9 +323,7 @@ async def test_trial_receipt_is_art_retained_before_controlled_model_spend(
                 from app.modules.checkers.api.trial_evidence import TrialEvidenceTicket
 
                 typed_ticket = TrialEvidenceTicket.model_validate_json(json.dumps(ticket))
-                receipt = _receipt(
-                    request, grant, typed_ticket, selected_trial_profile, plan
-                )
+                receipt = _receipt(request, grant, typed_ticket, selected_trial_profile, plan)
                 canonical_receipt = json.dumps(
                     receipt, sort_keys=True, separators=(",", ":"), ensure_ascii=False
                 )

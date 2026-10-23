@@ -76,7 +76,7 @@ class RuntimeQualificationPackageTests(unittest.TestCase):
     def test_controlled_interruption_requires_restart_on_retained_state(self) -> None:
         interrupted = self.run_command("sh", "tests/interrupt.sh")
         self.assertEqual(interrupted.returncode, -15)
-        self.assertTrue((self.root / "partial.txt").is_file())
+        self.assertTrue((self.root / "workspace/partial.txt").is_file())
         self.assertNotEqual(self.run_command("sh", "tests/run.sh").returncode, 0)
         self.assertEqual(self.run_command("sh", "tests/restart.sh").returncode, 0)
         self.assertEqual(self.run_command("sh", "tests/run.sh").returncode, 0)

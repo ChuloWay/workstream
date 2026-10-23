@@ -1,3 +1,3 @@
 #!/bin/sh
 set -eu
-rm -f result.txt
+rm -f workspace/result.txt

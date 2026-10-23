@@ -791,7 +791,7 @@ def project_trial_execution_projection() -> dict[str, object]:
                 "source_role": "submission_archive",
                 "projection_kind": "state_seed",
                 "source_relative": "workspace",
-                "destination_relative": ".",
+                "destination_relative": "workspace",
                 "exclusions": [],
             },
             {

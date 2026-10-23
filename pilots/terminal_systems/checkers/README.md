@@ -96,6 +96,30 @@ deliberately records `durable_art_proven=false`, `trial_proven=false`, and
 `runsc_proven=false`; the PostgreSQL/MinIO custody journey and PILOT-00 runsc
 trial qualification are distinct evidence lanes.
 
+The zero-skip composed qualifier is an explicit operator test, not part of the
+ordinary backend test suite. It requires the prepared, stopped, uniquely owned
+PILOT-00 DIND harness plus isolated-test PostgreSQL and MinIO endpoints:
+
+```bash
+WORKSTREAM_TS_RUNSC_STATE_ROOT=/tmp/ws-pilot00-tsengine26 \
+WORKSTREAM_TS_RUNSC_CONTAINER=ws-pilot00-tsengine26-dind \
+WORKSTREAM_TS_RUNSC_RUN_ID=tsengine26 \
+WORKSTREAM_TEST_ADMIN_DATABASE_URL='<isolated-test-admin-url>' \
+WORKSTREAM_TEST_MINIO_ENDPOINT='<isolated-test-minio-endpoint>' \
+  external_checkers/workstream-checker-service/scripts/qualify_terminal_systems_runsc.sh
+```
+
+The wrapper fails rather than skipping when an exact prerequisite is absent. It
+temporarily gives only the outer checker runtime `host-uds=open`, keeps the
+separate submitted-code runtime at `host-uds=none`, binds both identities into
+the trial profile, and restores the owned DIND configuration byte-for-byte. The
+test submits only `post/qualification/runtime_package`: a deliberately small
+package with a pinned Dockerfile, reference, negative mutations, controlled
+interruption and restart procedures. It is integration evidence for the
+production image/service/runtime/custody path, not a delivered project task or
+a substitute for #555's activation and contribution journey. No live provider
+is called.
+
 The author-accuracy draft adds `reproduction_procedure_unavailable` for the
 narrow case where an absent or ambiguous exact procedure prevents authenticated
 comparison. It reports incomplete coverage; it does not call healthy runtime

@@ -126,6 +126,12 @@ only. The reviewable outcome requires the actual generic trial tool plus compose
 resource, cancellation, cleanup and replay/substitution controls. Controlled
 provider qualification follows the approved shared runtime; live spend and the
 project activation/contribution journey remain separately authorized phases.
+Real PostgreSQL revision-material qualification also found that migration 0062's
+deferred predicate omitted the canonical feedback `schema_version`; a tagged
+predicate diagnostic isolated that exact source mismatch. The migration repair
+uses the closed `post_submit_current_result_reference` discriminator, after
+which the existing three-role MinIO regression must replay against the corrected
+schema hash. This is retained validation evidence, not a second test surface.
 
 This shared-boundary change also owns `external_checkers/README.md`,
 `docs/architecture_checker_framework.md`, `docs/architecture_lockdown.md` and
@@ -443,3 +449,21 @@ image identity, request/grant validation, invocation-local socket mounting and
 cleanup without a provider call. It is not durable ART custody proof and does
 not replace the PostgreSQL/MinIO composition test above or the runsc engine
 qualification.
+
+The final controlled-provider qualification owns
+`external_checkers/workstream-checker-service/scripts/qualify_terminal_systems_runsc.sh`
+and
+`external_checkers/workstream-checker-service/tests/terminal_systems_runsc_composition.py`.
+The wrapper may reuse only the explicitly prepared PILOT-00 owned DIND state,
+temporarily replacing and then byte-for-byte restoring that stopped harness's
+daemon configuration. The temporary exact configuration exposes two separately
+identified runtimes: the outer checker uses `host-uds=open` for its two exact
+invocation-local sockets and submitted-code descendants use a distinct
+`host-uds=none` key. The isolated test drives the production Rust service and
+project POST image through real PostgreSQL/MinIO trial custody, the generic
+offline build/run engine and an offline controlled provider. It stages only the
+qualification-only package, never a real Terminal Systems task. The wrapper
+must restore the owned harness configuration, stop a previously stopped
+harness, and remove only its exact inner registry/checker resources on success
+or failure. This is no live provider call, deployment, publication, activation,
+or contribution rehearsal.

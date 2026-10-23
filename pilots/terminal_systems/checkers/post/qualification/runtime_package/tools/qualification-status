@@ -1,6 +1,6 @@
 #!/bin/sh
 set -eu
-if [ -f result.txt ]; then
+if [ -f workspace/result.txt ]; then
   printf 'present\n'
 else
   printf 'absent\n'

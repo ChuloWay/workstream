@@ -1,4 +1,4 @@
 #!/bin/sh
 set -eu
-test -f result.txt
-test "$(cat result.txt)" = 'qualified-result'
+test -f workspace/result.txt
+test "$(cat workspace/result.txt)" = 'qualified-result'

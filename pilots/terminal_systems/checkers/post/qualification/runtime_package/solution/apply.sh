@@ -1,3 +1,3 @@
 #!/bin/sh
 set -eu
-printf 'qualified-result\n' > result.txt
+printf 'qualified-result\n' > workspace/result.txt

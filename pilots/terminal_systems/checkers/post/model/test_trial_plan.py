@@ -261,6 +261,7 @@ class TrialPlanTests(unittest.TestCase):
             item["role"]: item for item in projection["material_projections"]
         }
         self.assertEqual(by_role["workspace_seed"]["source_relative"], "workspace")
+        self.assertEqual(by_role["workspace_seed"]["destination_relative"], "workspace")
         self.assertEqual(by_role["reference"]["projection_kind"], "state_overlay")
         self.assertEqual(by_role["verification"]["projection_kind"], "state_overlay")
         self.assertEqual(projection["slot_templates"], list(project_slot_templates()))

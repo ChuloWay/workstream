@@ -1,4 +1,4 @@
 #!/bin/sh
 set -eu
-test -f partial.txt
-printf 'qualified-result\n' > result.txt
+test -f workspace/partial.txt
+printf 'qualified-result\n' > workspace/result.txt

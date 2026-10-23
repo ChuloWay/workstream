@@ -1,4 +1,4 @@
 #!/bin/sh
 set -eu
-printf 'partial\n' > partial.txt
+printf 'partial\n' > workspace/partial.txt
 kill -TERM "$$"

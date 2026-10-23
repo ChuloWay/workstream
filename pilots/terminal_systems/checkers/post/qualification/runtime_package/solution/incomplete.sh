@@ -1,3 +1,3 @@
 #!/bin/sh
 set -eu
-printf 'incomplete\n' > result.txt
+printf 'incomplete\n' > workspace/result.txt
