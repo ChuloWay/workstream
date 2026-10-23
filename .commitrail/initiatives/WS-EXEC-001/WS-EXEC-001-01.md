@@ -31,6 +31,8 @@ Existing owner files and startup cleanup protect Docker container ownership.
   provisioning commands, plus their tests: one canonical platform identity rule.
 - `backend/scripts/test_lane_catalogue.py`: register the new cache test module
   in the existing shared-foundations lane; preserve strict suite completeness.
+- `backend/scripts/behavior_ownership.py` and its canonical partition: register
+  the two new image/cache command modules without relaxing target completeness.
 - Affected checker receipt validators, configuration, execution contract docs,
   capability ledger and this initiative/index: truthful runtime support.
 
