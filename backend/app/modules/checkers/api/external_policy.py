@@ -369,8 +369,9 @@ async def _resolve(
         try:
             selector = configured_model_profile_selector(configuration, stage=phase)
             specification = requirement.check_specification
-            model_required = (
-                specification is not None and specification.evaluation_method == "model_evaluation"
+            model_required = specification is not None and any(
+                dependency.kind == "model_service"
+                for dependency in specification.runtime_dependencies
             )
             if model_required != (selector is not None):
                 raise ModelProfileConfigurationError(

@@ -324,6 +324,20 @@ schema inventory/fingerprint updates. This continuation does not edit
 PROJECTS owners, or CHECKERS ORM. It adds only the closed setup-model-output
 case; independent trial-evidence types remain outside this branch.
 
+### Exact effect inspection
+
+The shared owner exposes one bounded System Operator read at
+`GET /api/v1/operations/projects/{project_id}/model-usage/effects/{effect_id}`.
+Fresh `project.model_usage.read` authority reuses the existing
+`project.model_budget.manage` permission and binds the request, actor, project
+and exact effect before MODEL-USAGE is read. Missing and foreign effects are
+concealed. The response contains only the typed stable setup/checker owner,
+profile selector, state, reservations/settlement, usage and ART evidence
+identities; it never returns provider response coordinates, request/response
+bytes, credentials, list access or mutation authority. The action/permission
+pair is added to the same linear `0061_model_usage` audit allowlist and the MCP
+authorization-context snapshot.
+
 ## Independent QA, test-delta and CI review
 
 Review dimensions: `qa`, `test_delta`, and `ci_integrity`. Review target:

@@ -194,6 +194,8 @@ def setup_model_session_factory(*, sessions, socket_path: Path | None):
             configuration.model,
         ):
             raise SetupModelProxyUnavailable("setup model profile is unavailable")
+        if not _profile_covers_tool_runtime(profile, configuration):
+            raise SetupModelProxyUnavailable("setup model profile is unavailable")
         if subject != SetupModelProxySubject(
             compilation_attempt_id=subject.compilation_attempt_id,
             project_id=subject.project_id,
@@ -221,6 +223,16 @@ def setup_model_session_factory(*, sessions, socket_path: Path | None):
         )
 
     return open_session
+
+
+def _profile_covers_tool_runtime(profile, configuration) -> bool:
+    """Require the selected profile to cover the fixed setup tool capability."""
+    return (
+        profile.spec.allowed_tools == ("read_document", "search_document")
+        and configuration.maximum_tool_calls <= profile.spec.maximum_tool_calls
+        and configuration.maximum_tool_output_characters * 4
+        <= profile.spec.maximum_tool_output_bytes
+    )
 
 
 def _decode_reply(payload: bytes) -> SetupModelProxyReply:

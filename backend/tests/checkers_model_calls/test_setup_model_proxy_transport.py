@@ -1,17 +1,23 @@
 """Credential-free setup model frames share the private listener without widening it."""
 
+from contextlib import asynccontextmanager
+from dataclasses import replace
 import json
+from types import SimpleNamespace
 
 import pytest
 
 from app.adapters.checkers.model_proxy_transport import ModelProxyTransport
+import app.adapters.project_agents.setup_model_proxy as setup_model_proxy_adapter
 from app.adapters.project_agents.setup_model_proxy import (
     SetupModelProxySession,
     SetupModelProxyUnavailable,
+    setup_model_session_factory,
 )
 from app.core.identifiers import new_record_id
 from app.interfaces.checker_model_proxy import ModelProxyReply
 from app.interfaces.setup_model_proxy import SetupModelProxyReply, SetupModelProxySubject
+from tests.projects.guide_compilation.helpers import runtime_configuration
 
 
 def _sha(label: str) -> str:
@@ -152,3 +158,99 @@ def test_completed_reply_must_fit_after_inner_json_escaping():
             failure_code=None,
             session_exhausted=True,
         )
+
+
+def _tool_session_contract():
+    profile_id = new_record_id()
+    profile_digest = _sha("profile")
+    configuration = runtime_configuration().model_copy(
+        update={
+            "model_profile_id": profile_id,
+            "model_profile_version": 4,
+            "model_profile_digest": profile_digest,
+            "maximum_tool_calls": 3,
+            "maximum_tool_output_characters": 65_536,
+        }
+    )
+    profile = SimpleNamespace(
+        profile_id=profile_id,
+        profile_digest=profile_digest,
+        spec=SimpleNamespace(
+            profile_version=4,
+            provider="openai",
+            api="responses",
+            model_snapshot="test-model",
+            allowed_tools=("read_document", "search_document"),
+            maximum_tool_calls=3,
+            maximum_tool_output_bytes=65_536 * 4,
+            maximum_calls=3,
+            maximum_output_tokens=128,
+            settings=SimpleNamespace(reasoning_effort="medium", text_verbosity="low"),
+            deadline_ms=1_000,
+        ),
+    )
+    subject = replace(
+        _subject(),
+        runtime_configuration_hash=configuration.sha256,
+        profile_id=profile_id,
+        profile_version=4,
+        profile_digest=profile_digest,
+        model="test-model",
+    )
+    return configuration, profile, subject
+
+
+class _Database:
+    @asynccontextmanager
+    async def begin(self):
+        yield
+
+
+@asynccontextmanager
+async def _sessions():
+    yield _Database()
+
+
+def _profile_reader(profile):
+    class Reader:
+        async def read_exact(self, selector, *, project_id):
+            del selector, project_id
+            return profile
+
+    return lambda _database: Reader()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "runtime_limits",
+    (
+        {"maximum_tool_calls": 4},
+        {"maximum_tool_output_characters": 65_537},
+    ),
+)
+async def test_setup_session_rejects_tool_limits_above_profile_before_yield(
+    monkeypatch, tmp_path, runtime_limits
+):
+    configuration, profile, subject = _tool_session_contract()
+    monkeypatch.setattr(setup_model_proxy_adapter, "model_profile_reader", _profile_reader(profile))
+    open_session = setup_model_session_factory(
+        sessions=_sessions, socket_path=tmp_path / "model.sock"
+    )
+
+    yielded = False
+    with pytest.raises(SetupModelProxyUnavailable, match="profile is unavailable"):
+        async with open_session(subject, configuration.model_copy(update=runtime_limits)):
+            yielded = True
+    assert yielded is False
+
+
+@pytest.mark.asyncio
+async def test_setup_session_accepts_exact_profile_tool_limits(monkeypatch, tmp_path):
+    configuration, profile, subject = _tool_session_contract()
+    monkeypatch.setattr(setup_model_proxy_adapter, "model_profile_reader", _profile_reader(profile))
+    open_session = setup_model_session_factory(
+        sessions=_sessions, socket_path=tmp_path / "model.sock"
+    )
+
+    async with open_session(subject, configuration) as session:
+        assert isinstance(session, SetupModelProxySession)

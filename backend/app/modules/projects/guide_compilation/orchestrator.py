@@ -275,11 +275,11 @@ def _setup_model_subject(
     ):
         raise ProjectGuideCompilationExecutionError("runtime_unavailable")
     return SetupModelProxySubject(
-        compilation_attempt_id=state.preflight_facts.attempt_id,
-        project_id=state.identity.project_id,
-        guide_id=state.identity.guide_id,
-        source_snapshot_id=state.identity.source_snapshot_id,
-        setup_run_id=state.identity.setup_run_id,
+        compilation_attempt_id=UUID(str(state.preflight_facts.attempt_id)),
+        project_id=UUID(str(state.identity.project_id)),
+        guide_id=UUID(str(state.identity.guide_id)),
+        source_snapshot_id=UUID(str(state.identity.source_snapshot_id)),
+        setup_run_id=UUID(str(state.identity.setup_run_id)),
         setup_generation=state.identity.setup_generation,
         runtime_configuration_hash=configuration.sha256,
         profile_id=configuration.model_profile_id,

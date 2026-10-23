@@ -320,6 +320,19 @@ class ProjectModelBudgetConfiguration(ModelBudgetProvisioningFacts):
         return self
 
 
+class ModelUsageInspectionFacts(ModelCallValue):
+    """Exact Operator read target committed before model-ledger inspection."""
+
+    project_id: UUID
+    effect_id: UUID
+    actor_profile_id: UUID
+    request_id: UUID
+
+    _decode_public_uuids = field_validator(
+        "project_id", "effect_id", "actor_profile_id", "request_id", mode="before"
+    )(_public_uuid)
+
+
 class ModelPaidSlotKey(ModelCallValue):
     """Paid-effect identity stable across checker leases and retry generations."""
 
@@ -528,9 +541,7 @@ class SetupModelOwnerProfile(ModelCallValue):
 class SetupModelUsageOwnerPort(Protocol):
     """Require the exact current PROJECTS compilation attempt before MODEL locks."""
 
-    async def require_setup_current(
-        self, slot: SetupModelUsageSlotKey
-    ) -> SetupModelOwnerProfile:
+    async def require_setup_current(self, slot: SetupModelUsageSlotKey) -> SetupModelOwnerProfile:
         """Lock and validate the complete setup attempt ancestry."""
         ...
 
@@ -604,9 +615,7 @@ class SetupModelOutputReservation(ModelCallValue):
 class SetupModelOutputReservationPort(Protocol):
     """Resolve current request or retained paid-effect response ART custody."""
 
-    async def resolve(
-        self, selector: SetupModelOutputSelector
-    ) -> SetupModelOutputReservation:
+    async def resolve(self, selector: SetupModelOutputSelector) -> SetupModelOutputReservation:
         """Return exact bounds after the role-specific owner checks."""
         ...
 
@@ -925,6 +934,49 @@ class KnownNoEffectSetupModelUsageEffect(ModelCallValue):
     replayed: bool
 
 
+class ModelUsageEffectInspection(ModelCallValue):
+    """Redacted exact-effect accounting and evidence identities for an Operator."""
+
+    project_id: UUID
+    effect_id: UUID
+    owner_kind: Literal["checker", "setup"]
+    owner: ModelPaidSlotKey | SetupModelUsageSlotKey
+    attempt_number: StrictInt = Field(ge=1)
+    state: Literal[
+        "prepared", "dispatching", "uncertain", "completed", "known_failed", "known_no_effect"
+    ]
+    provider_response_known: bool
+    request_evidence: ModelCallEvidence | None
+    response_evidence: ModelCallEvidence | None
+    usage: ModelCallUsage | None
+    budget_configuration_id: UUID | None
+    budget_configuration_version: StrictInt | None = Field(default=None, ge=1)
+    budget_configuration_digest: Sha256 | None
+    reserved_nanodollars: Nanodollars | None
+    settled_nanodollars: Nanodollars | None
+    uncertainty_digest: Sha256 | None
+    prepared_at: AwareDatetime
+    dispatched_at: AwareDatetime | None
+    terminal_at: AwareDatetime | None
+
+    @model_validator(mode="after")
+    def exact_owner(self) -> Self:
+        expected = "checker" if isinstance(self.owner, ModelPaidSlotKey) else "setup"
+        if self.owner_kind != expected or self.owner.project_id != self.project_id:
+            raise ValueError("model usage inspection owner mismatch")
+        budget = (
+            self.budget_configuration_id,
+            self.budget_configuration_version,
+            self.budget_configuration_digest,
+            self.reserved_nanodollars,
+        )
+        if any(value is not None for value in budget) and not all(
+            value is not None for value in budget
+        ):
+            raise ValueError("model usage inspection budget identity is incomplete")
+        return self
+
+
 def model_retry_terminal_digest(
     terminal: KnownFailedModelCall | KnownNoEffectProof,
 ) -> str:
@@ -1023,6 +1075,14 @@ class ModelCallAdministrationPort(Protocol):
         ...
 
 
+class ModelUsageInspectionPort(Protocol):
+    """Read one exact redacted paid effect without mutation authority."""
+
+    async def inspect_effect(self, facts: ModelUsageInspectionFacts) -> ModelUsageEffectInspection:
+        """Return the authorized effect only when it belongs to the exact project."""
+        ...
+
+
 class ModelCallCurrentExecutionPort(Protocol):
     """Require one current authorized checker execution without granting model effects."""
 
@@ -1060,6 +1120,10 @@ class ModelCallAuthorityPort(Protocol):
 
     async def authorize_budget(self, facts: ModelBudgetProvisioningFacts) -> ModelActionEvidence:
         """Bind budget publication authority to the exact project and configuration."""
+        ...
+
+    async def authorize_usage_read(self, facts: ModelUsageInspectionFacts) -> ModelActionEvidence:
+        """Bind an Operator read to one exact project and paid effect."""
         ...
 
     async def authorize_prepare(
@@ -1166,6 +1230,9 @@ __all__ = (
     "ModelCallRecoveryAttachment",
     "ModelCallUnavailable",
     "ModelCallUsage",
+    "ModelUsageEffectInspection",
+    "ModelUsageInspectionFacts",
+    "ModelUsageInspectionPort",
     "ModelDispatchReservation",
     "ModelEvidenceCustodyPort",
     "ModelEvidenceReservation",

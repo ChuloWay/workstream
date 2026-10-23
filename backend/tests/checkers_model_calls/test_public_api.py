@@ -96,6 +96,13 @@ def test_openapi_exposes_only_exact_operator_model_mutations() -> None:
             assert len(keys) == 1
             assert keys[0]["required"] is True
 
+    read = paths["/api/v1/operations/projects/{project_id}/model-usage/effects/{effect_id}"]["get"]
+    assert read["x-workstream-action-id"] == "project.model_usage.read"
+    assert "requestBody" not in read
+    assert read["responses"]["200"]["content"]["application/json"]["schema"] == {
+        "$ref": "#/components/schemas/ModelUsageEffectInspection"
+    }
+
 
 @pytest.mark.asyncio
 async def test_public_commands_bind_actor_key_project_and_exact_recovery_facts() -> None:

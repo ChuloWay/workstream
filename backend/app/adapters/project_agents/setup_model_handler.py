@@ -406,7 +406,7 @@ class SetupModelProxyHandler:
         response_evidence = await self._store(prepared, "model_response", response_data)
         async with self._sessions() as session, session.begin():
             authority = await self._authorization(session, dispatch.internal_call_request_id)
-            completed = await self._calls(session, authority).complete(
+            await self._calls(session, authority).complete(
                 dispatch.effect,
                 provider_response_id=response.provider_response_id,
                 provider_model_snapshot=response.provider_model,
@@ -725,6 +725,7 @@ def _validate_openrouter_pricing(
     cached_ceiling = 0
     output_ceiling = 0
     for row in pricing_rows:
+        _require_zero_unsupported_fees(row)
         input_ceiling = max(
             input_ceiling,
             _nanodollars(row.get("prompt")),
@@ -742,6 +743,21 @@ def _validate_openrouter_pricing(
         or output_ceiling > pinned.output_nanodollars_per_token
     ):
         raise ModelCallUnavailable("model_profile_provider_unavailable")
+
+
+def _require_zero_unsupported_fees(row: dict) -> None:
+    """Reject advertised charges the token-only ledger cannot reserve."""
+    supported = {
+        "prompt",
+        "completion",
+        "input_cache_read",
+        "input_cache_write",
+        "overrides",
+        "min_prompt_tokens",
+    }
+    for key, value in row.items():
+        if key not in supported and _nanodollars(value) != 0:
+            raise ModelCallUnavailable("model_profile_provider_unavailable")
 
 
 def _nanodollars(value: object) -> int:

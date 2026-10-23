@@ -21,7 +21,12 @@ runtime="${WORKSTREAM_PROJECT_AGENT_RUNTIME:-}"
 provider="${WORKSTREAM_PROJECT_AGENT_MODEL_PROVIDER:-}"
 model_api="${WORKSTREAM_PROJECT_AGENT_MODEL_API:-}"
 model="${WORKSTREAM_PROJECT_AGENT_MODEL:-}"
-if [ "$role" != "parser" ]; then
+if [ "$role" = "model-proxy" ]; then
+    if [ "$sdk_environment" != "agents" ]; then
+        echo "model proxy requires the pinned agents SDK environment" >&2
+        exit 1
+    fi
+elif [ "$role" != "parser" ]; then
     case "$runtime:$sdk_environment" in
         openai_agents_sdk:agents|omnicore_agent:omnicore)
             ;;
@@ -96,8 +101,13 @@ case "$role" in
     worker)
         load_required_secret WORKSTREAM_DATABASE_URL "${WORKSTREAM_DATABASE_URL_FILE:-}"
         load_required_secret WORKSTREAM_CELERY_BROKER_URL "${WORKSTREAM_CELERY_BROKER_URL_FILE:-}"
+        ;;
+    model-proxy)
+        load_required_secret WORKSTREAM_DATABASE_URL "${WORKSTREAM_DATABASE_URL_FILE:-}"
         case "$runtime" in
             manager_authored)
+                echo "manager-authored releases do not run a model proxy" >&2
+                exit 1
                 ;;
             *) case "$provider" in
             openrouter)

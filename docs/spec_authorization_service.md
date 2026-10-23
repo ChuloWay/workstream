@@ -820,12 +820,14 @@ immutable specification or parent receipt; idempotent replay rechecks authority.
 |---|---|---|
 | `project.model_profile.provision` | `project.model_profile.manage` | Project, exact registered image and immutable provider/model/bounds/pricing profile |
 | `project.model_budget.configure` | `project.model_budget.manage` | Project and immutable budget configuration version; lifetime reservations and settled spend are never reset |
+| `project.model_usage.read` | `project.model_budget.manage` | One exact paid effect in the project; redacted owner, budget, usage and ART evidence identities only |
 | `project.model_call.recovery_child.authorize` | `project.model_call.recovery_child.authorize` | Exact current execution and terminal parent receipt; only proven no-effect or fully settled known failure permits a child |
 
 An uncertain delivery is ineligible for a child. Model/provider budget failures
 are infrastructure outcomes, not contributor-fixable failures. Private evidence
-is retained through ART's existing output writer and binding authorities, not a
-new transcript read permission. See [model runtime operations](operations_checker_models.md)
+is retained through ART's existing output writer and binding authorities. The
+exact-effect read returns no transcript bytes, provider coordinate or credential
+and adds no transcript permission. See [model runtime operations](operations_checker_models.md)
 for public routes, effect recovery and verification boundaries.
 
 Human task actions and existing permission mappings are enumerated in

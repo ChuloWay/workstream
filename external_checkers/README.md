@@ -107,13 +107,15 @@ invocation's private grant and request digest. Setup and POST sessions share one
 project-lifetime metered account while retaining distinct typed setup-attempt and
 checker-invocation lineage. The checker container remains on `--network none`.
 
-The dedicated singleton model-proxy worker is optional. Add `model-proxy` to
-the existing backend and agent-loop Compose profiles to enable it. That profile
+The dedicated singleton model-proxy worker is optional for provider-free
+deployments. Add `model-proxy` to the existing backend and agent-loop Compose
+profiles to enable model-backed setup or POST checks. That profile
 sets
 `WORKSTREAM_CHECKER_MODEL_PROXY_SOCKET=/run/ws-model-proxy/model-proxy.sock` and
-binds the listener; the ordinary API, task worker and beat processes do not own
-or mount that socket. An empty value outside the model-proxy process leaves the
-listener disabled. The Rust service configuration must set both
+binds the listener. The setup task worker connects through a read-only mount of
+that socket but never owns it or receives provider credentials; the ordinary API
+and Beat processes do not mount it. An empty value outside the model-proxy and
+authorized setup-worker processes leaves the listener disabled. The Rust service configuration must set both
 `model_proxy_socket` to that same mounted path and `model_relay_root` to a
 daemon-visible private relay directory. The local configuration generator's
 `--enable-model-proxy` switch emits that pair, using

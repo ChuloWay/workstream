@@ -72,10 +72,13 @@ docker build --file docker/checker/Dockerfile.release \
 Both Dockerfiles pin their base images. Each backend build requires one exact SDK
 environment and installs only its committed `agents` or `omnicore` resolution,
 without the development extra. The image records that choice in a root-owned
-read-only marker; startup rejects a configured inference runtime that does not
-match it before reading the provider credential. `manager_authored` is accepted
-in either image with the exact `none/none/none` model tuple and reads no provider
-credential. The backend image
+read-only marker. Select the worker image that matches the configured setup SDK.
+For every inference release, also publish the `agents` build separately as
+`WORKSTREAM_MODEL_PROXY_IMAGE`: the dedicated trusted proxy uses its pinned
+OpenAI 3.x input-count and Responses dependencies for both setup SDKs and POST
+checkers. The proxy rejects any non-`agents` image before reading the provider
+credential. `manager_authored` is accepted in either worker image with the exact
+`none/none/none` model tuple and starts no proxy or credential surface. The backend image
 also installs the official Roles Anywhere helper 1.8.5 at its fixed path, with
 architecture-specific hashes checked during the build and image proof. The
 checker-service build compiles the committed Rust lock and copies the pinned
@@ -112,11 +115,12 @@ create the fixed private directories with these exact identities:
 ```sh
 sudo install -d -m 0700 -o 10001 -g 10001 /var/lib/workstream/scratch
 sudo install -d -m 0700 -o 10001 -g 10001 /var/lib/workstream/checker-runtime
+sudo install -d -m 0700 -o 10001 -g 10001 /var/lib/workstream/model-runtime
 sudo install -d -m 0750 -o 10002 -g 10001 /var/lib/workstream/guide-runtime
 stat -c '%g' /var/run/docker.sock
 ```
 
-The checker runtime directory must be on durable host storage, not `/run`,
+The checker and model runtime directories must be on durable host storage, not `/run`,
 tmpfs or ephemeral container storage. Its private `.workstream-checker-owner`
 file identifies containers recoverable after a service or host restart. Only the
 checker service has a writable mount; API and worker socket mounts are read-only
@@ -136,16 +140,19 @@ development authentication are absent.
 Create each secret selected by the configured runtime as a one-value regular file at the configured path. Make it
 owned by the runtime UID/GID with mode `0400`. The explicit role loader gives the
 API only the database, broker, rate-limit and pagination secrets; the worker
-gets the database and broker. Inference runtimes additionally select and mount
-one project-agent provider credential because the worker hosts setup jobs;
-`manager_authored` must omit that selector, mount and secret definition. Beat
+gets the database and broker. Inference runtimes additionally start one trusted
+model-proxy process. Only that process gets the database, the selected provider
+credential and the runtime ART identity. The setup worker receives a read-only
+mount of `/var/lib/workstream/model-runtime` and the fixed socket selector; it
+receives no provider credential or endpoint override. `manager_authored` omits
+the proxy, selector, mount and secret definition. Beat
 gets the database and broker secrets because its startup guard verifies the
 current artifact-provider activation before scheduling jobs. An absent required selector or unknown role stops
 startup, and an unrelated secret is neither mounted nor loaded. The loader
 independently requires the running identity and mode `0400`, performs no shell
 evaluation and never prints a value. Do not put AWS static keys in these files.
 The provider selector is trusted release configuration. For `openrouter`, the
-entrypoint loads the worker-only file as `OPENROUTER_API_KEY`; for `openai`, it
+entrypoint loads the proxy-only file as `OPENROUTER_API_KEY`; for `openai`, it
 loads the same selector as `OPENAI_API_KEY`. It clears both native variables
 before selecting one and never exports a neutral key variable. The endpoint is
 fixed by the registered adapter and cannot be supplied in the release file.
@@ -157,9 +164,10 @@ same release. The parser receives only its fixed socket selector. The example
 selects `openai_agents_sdk` through OpenRouter with
 `openai/gpt-5.6-terra`; changing a trusted selector requires another reviewed
 release and never changes retained attempt evidence.
-To select `omnicore_agent`, publish and choose the `omnicore` image digest and
-retain OpenRouter with `chat_completions`; ordinary model identity remains a
-reviewed release choice. OpenRouter models with a colon routing suffix and
+To select `omnicore_agent`, publish and choose the `omnicore` worker image digest,
+retain the separate `agents` proxy digest, and retain OpenRouter with
+`chat_completions`; ordinary model identity remains a reviewed release choice.
+OpenRouter models with a colon routing suffix and
 `openrouter/*` router identities are rejected.
 
 Before either OpenRouter-backed runtime receives real guide material, the
@@ -286,9 +294,10 @@ python3 deploy/hosted/compose.py --env-file /etc/workstream/release.env \
 python3 deploy/hosted/compose.py --env-file /etc/workstream/release.env ps
 ```
 
-The API applies forward migrations before serving. The guide parser must pass
-its protocol health check before the worker starts. Worker startup uses the
-existing prefork lifecycle. Beat runs the existing recovery and cleanup
+The API applies forward migrations before serving. The guide parser and trusted
+model proxy must pass their protocol/socket health checks before an inference
+worker starts. Worker startup uses the existing prefork lifecycle. Beat runs the
+existing recovery and cleanup
 schedules. The checker health check requires its private socket and Docker's
 registered runsc runtime. It does not attest cache identity; full preflight
 observes the cache once, and the canonical runner verifies the exact image again
@@ -317,9 +326,10 @@ outage does not change product results. Configuration alone is not that proof.
 
 The wrapper's `stop` operation stops Beat and API first so they cannot produce
 new work, gives the prefork worker its configured 7,320-second graceful window,
-then stops the parser and checker controller. Keeping both socket services alive
-while the worker drains lets cancellation and terminal persistence finish against
-their original dependencies. Guide inference has a 7,260-second process backstop;
+then drains the model proxy before stopping the parser and checker controller.
+Keeping all socket services alive while the worker drains lets cancellation and
+terminal persistence finish against their original dependencies. Guide inference
+has a 7,260-second process backstop;
 the shared Redis transport uses a 7,380-second visibility timeout with prefetch
 disabled. The persisted guide-attempt deadline remains the ordinary, shorter
 execution bound. Celery task hard limits and durable database/outbox custody

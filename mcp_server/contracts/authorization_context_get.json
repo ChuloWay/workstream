@@ -1,5 +1,5 @@
 {
-  "canonical_sha256": "f6bf204e2a075373d1ac737da6ce882057c2da09b89cdc41b5db8d05ac269a72",
+  "canonical_sha256": "0135c6dbb2ade3d6417ad0e32b8e33f9f7202cbe3ff2746ddf07efc6ee6c06f0",
   "components": {
     "schemas": {
       "ActionId": {
@@ -71,6 +71,7 @@
           "project.guide_compilation.model.complete",
           "project.model_profile.provision",
           "project.model_budget.configure",
+          "project.model_usage.read",
           "project.model_call.recovery_child.authorize",
           "outbox.dispatch",
           "actor.service.provision",

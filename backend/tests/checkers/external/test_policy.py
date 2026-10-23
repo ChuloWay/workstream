@@ -300,6 +300,63 @@ async def test_model_configuration_requires_exact_post_profile_scope():
 
 
 @pytest.mark.asyncio
+async def test_isolated_execution_model_dependency_also_requires_exact_profile():
+    project_id = new_record_id()
+    pre = _entry("acme.safe_archive", "pre_submit")
+    post = _entry(
+        "acme.quality_review",
+        "post_submit",
+        _model_configuration_schema(),
+    )
+    profile = _model_profile(project_id, post)
+    proposal = _model_proposal()
+    specification = proposal.requirements[1].check_specification
+    assert specification is not None
+    specification = specification.model_copy(
+        update={
+            "evaluation_method": "isolated_execution",
+            "runtime_dependencies": (
+                CheckRuntimeDependency(
+                    dependency_id="isolated_runtime",
+                    kind="isolated_execution",
+                    provisioning="current_runner",
+                    purpose="Execute the bounded authenticated trial.",
+                    unavailable_code="implementation_unavailable",
+                ),
+                *specification.runtime_dependencies,
+            ),
+        }
+    )
+    requirement = proposal.requirements[1].model_copy(update={"check_specification": specification})
+    proposal = proposal.model_copy(update={"requirements": (proposal.requirements[0], requirement)})
+
+    with pytest.raises(ValueError, match="model evaluation profile"):
+        await compile_external_checker_policies(
+            proposal,
+            _Registry((pre, post)),
+            project_id=project_id,
+            profiles=_Profiles(profile),
+        )
+
+    binding = proposal.post_submit_bindings[0].model_copy(
+        update={
+            "parameters": (
+                CapabilityParameter(name="model_profile_id", value=str(profile.profile_id)),
+                CapabilityParameter(name="model_profile_version", value=1),
+                CapabilityParameter(name="model_profile_digest", value=profile.profile_digest),
+            )
+        }
+    )
+    _, policy = await compile_external_checker_policies(
+        proposal.model_copy(update={"post_submit_bindings": (binding,)}),
+        _Registry((pre, post)),
+        project_id=project_id,
+        profiles=_Profiles(profile),
+    )
+    assert policy.entries[0].configuration["model_profile_id"] == str(profile.profile_id)
+
+
+@pytest.mark.asyncio
 async def test_model_configuration_rejects_partial_pre_and_substituted_profile():
     project_id = new_record_id()
     pre = _entry(

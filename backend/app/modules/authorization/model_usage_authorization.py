@@ -14,6 +14,7 @@ from app.modules.authorization.domain.model_usage import (
     OBSERVE,
     PREPARE,
     PROFILE_PROVISION,
+    USAGE_READ,
     RECOVER,
     RECOVERY_CHILD_AUTHORIZE,
     SETUP_COMPLETE,
@@ -60,6 +61,7 @@ from app.modules.model_usage.api import (
     ModelCallUnavailable,
     ModelPaidSlotKey,
     ModelProfileProvisioningFacts,
+    ModelUsageInspectionFacts,
     PreparedModelCallAttempt,
     PreparedSetupModelUsageEffect,
     SetupModelEffectAuthorityFacts,
@@ -116,6 +118,22 @@ class CheckerModelAuthorization:
             resource,
             facts.operation_id,
             model_action_digest("budget", facts),
+        )
+
+    async def authorize_usage_read(self, facts: ModelUsageInspectionFacts) -> ModelActionEvidence:
+        """Require a current system Operator for one exact redacted effect read."""
+        facts = ModelUsageInspectionFacts.model_validate(facts)
+        self._require_human(facts.actor_profile_id)
+        resource = project_model_admin_resource(
+            USAGE_READ,
+            facts,
+            actor_profile_id=facts.actor_profile_id,
+        )
+        return await self._authorize(
+            USAGE_READ,
+            resource,
+            facts.request_id,
+            model_action_digest("usage_read", facts),
         )
 
     async def authorize_prepare(
