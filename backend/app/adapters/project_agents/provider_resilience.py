@@ -7,10 +7,18 @@ import threading
 import time
 from dataclasses import dataclass
 from functools import lru_cache
+from typing import Protocol
 
 from app.adapters.project_agents.openai_profile import OpenAIAgentsSdkProfile
 from app.interfaces.project_agents import ProjectAgentRuntimeError
 from app.interfaces.project_guide_runtime import ProjectGuideRuntimeConfiguration
+
+
+class CircuitProfile(Protocol):
+    """Runtime-neutral effective controls required by the shared circuit."""
+
+    circuit_failure_threshold: int
+    circuit_cooldown_seconds: int
 
 
 class ProviderCircuitOpen(ProjectAgentRuntimeError):
@@ -104,7 +112,7 @@ def _provider_circuit(runtime: str, provider: str, api: str, model: str,
 
 def circuit_for(
     configuration: ProjectGuideRuntimeConfiguration,
-    profile: OpenAIAgentsSdkProfile,
+    profile: CircuitProfile,
 ) -> ProviderCircuit:
     """Share health across runtime instances in this worker process."""
     return _provider_circuit(
@@ -196,7 +204,7 @@ class ModelCircuitAdmission:
     def __init__(
         self,
         configuration: ProjectGuideRuntimeConfiguration,
-        profile: OpenAIAgentsSdkProfile,
+        profile: CircuitProfile,
     ):
         self._circuit = circuit_for(configuration, profile)
         self._lifetime = configuration.timeout_seconds
@@ -218,9 +226,9 @@ class ModelCircuitAdmission:
             self._lease = None
         self._model_failed = False
 
-    def request_failed(self, error: Exception) -> None:
+    def request_failed(self, transient: bool) -> None:
         # The Runner may still retry this request. Count only when it exits.
-        self._model_failed = transient_provider_failure(error)
+        self._model_failed = transient
 
     def close(self) -> None:
         if self._closed:

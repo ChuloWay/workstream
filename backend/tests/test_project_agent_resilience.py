@@ -231,7 +231,7 @@ def test_circuit_counts_exhausted_turn_once_and_isolates_models(monkeypatch):
     admission = owner.ModelCircuitAdmission(config, profile(config))
     for _ in range(3):
         admission.before_request()
-        admission.request_failed(status_error(429, "rate_limit_exceeded"))
+        admission.request_failed(True)
     admission.close()
     admission.close()
     second = circuit.acquire(1000)

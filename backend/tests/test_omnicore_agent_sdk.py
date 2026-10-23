@@ -24,8 +24,16 @@ from app.adapters.project_agents.omnicore_agent import (
     _validate_request_body,
 )
 from app.adapters.project_agents.openrouter_policy import openrouter_request_options
+from app.adapters.project_agents.provider_resilience import (
+    ProviderCircuit,
+    ProviderCircuitOpen,
+)
 from app.adapters.project_agents.omnicore_profile import (
-    OMNICORE_MODEL,
+    LITELLM_VERSION,
+    OMNICORE_OPENAI_VERSION,
+    OMNICOREAGENT_VERSION,
+    OMNICORE_QUALIFICATION_MODEL,
+    _require_sdk_versions,
     build_omnicore_agent_adapter_profile,
     require_omnicore_agent_adapter_profile,
 )
@@ -52,11 +60,13 @@ class _SyntheticOpenRouter:
         handle: str,
         final_output: str,
         retry_statuses: tuple[int, ...] = (),
+        always_status: int | None = None,
         hang: bool = False,
     ) -> None:
         self.handle = handle
         self.final_output = final_output
         self.retry_statuses = retry_statuses
+        self.always_status = always_status
         self.hang = hang
         self.requests: list[tuple[dict[str, str], dict[str, object]]] = []
         self.received = asyncio.Event()
@@ -104,6 +114,14 @@ class _SyntheticOpenRouter:
                 await reader.read()
                 self.disconnected.set()
                 return
+            if self.always_status is not None:
+                await self._respond(
+                    writer,
+                    self.always_status,
+                    {"error": {"message": "synthetic persistent provider failure"}},
+                    extra_headers={"Retry-After": "0"},
+                )
+                return
             if len(self.requests) <= len(self.retry_statuses):
                 status = self.retry_statuses[len(self.requests) - 1]
                 await self._respond(
@@ -140,7 +158,7 @@ class _SyntheticOpenRouter:
                     "id": f"chatcmpl-{len(self.requests)}",
                     "object": "chat.completion",
                     "created": 1,
-                    "model": OMNICORE_MODEL,
+                    "model": OMNICORE_QUALIFICATION_MODEL,
                     "choices": [
                         {
                             "index": 0,
@@ -187,7 +205,7 @@ def _runtime_context():
             "runtime_key": "omnicore_agent",
             "model_provider": "openrouter",
             "model_api": "chat_completions",
-            "model": OMNICORE_MODEL,
+            "model": OMNICORE_QUALIFICATION_MODEL,
             "adapter_profile": canonical_adapter_profile(build_omnicore_agent_adapter_profile({})),
             "timeout_seconds": 300,
             "maximum_turns": 6,
@@ -260,12 +278,13 @@ def synthetic_credential(monkeypatch):
 async def _send_guard_request(
     base_url: str,
     *,
+    model: str = OMNICORE_QUALIFICATION_MODEL,
     header_override: tuple[str, str] | None = None,
 ) -> bytes:
     parsed = urlparse(base_url)
     request_body = json.dumps(
         {
-            "model": OMNICORE_MODEL,
+            "model": model,
             "messages": [
                 {"role": "system", "content": "Synthetic."},
                 {"role": "user", "content": "Synthetic."},
@@ -332,10 +351,19 @@ def test_profile_provider_and_test_transport_are_closed(monkeypatch):
             )
 
 
+def test_profile_rejects_litellm_distribution_drift():
+    with pytest.raises(ProjectAgentRuntimeConfigurationError, match="does not match"):
+        _require_sdk_versions(
+            OMNICOREAGENT_VERSION,
+            OMNICORE_OPENAI_VERSION,
+            LITELLM_VERSION + ".drifted",
+        )
+
+
 @pytest.mark.parametrize(
     "mutation",
     [
-        lambda body: body.update(models=[OMNICORE_MODEL]),
+        lambda body: body.update(models=[OMNICORE_QUALIFICATION_MODEL]),
         lambda body: body.update(route="alternate"),
         lambda body: body.update(plugins=[]),
         lambda body: body.update(model="openrouter/auto"),
@@ -347,7 +375,7 @@ def test_profile_provider_and_test_transport_are_closed(monkeypatch):
 )
 def test_transport_rejects_each_routing_and_tool_mutation_before_forward(mutation):
     body = {
-        "model": OMNICORE_MODEL,
+        "model": OMNICORE_QUALIFICATION_MODEL,
         "messages": [
             {"role": "system", "content": "Generated synthetic instruction."},
             {"role": "user", "content": "Generated synthetic request."},
@@ -359,12 +387,12 @@ def test_transport_rejects_each_routing_and_tool_mutation_before_forward(mutatio
     }
     mutation(body)
     with pytest.raises(_GuardRejection):
-        _validate_request_body(body)
+        _validate_request_body(body, expected_model=OMNICORE_QUALIFICATION_MODEL)
 
 
 def test_transport_rejects_duplicate_json_members():
     with pytest.raises(ValueError, match="duplicate"):
-        _unique_object([("model", OMNICORE_MODEL), ("model", "openrouter/auto")])
+        _unique_object([("model", OMNICORE_QUALIFICATION_MODEL), ("model", "openrouter/auto")])
 
 
 @pytest.mark.parametrize(
@@ -385,6 +413,7 @@ async def test_transport_header_mutations_never_reach_upstream(header, value):
         profile = require_omnicore_agent_adapter_profile(build_omnicore_agent_adapter_profile({}))
         guard = _LoopbackOpenRouterGuard(
             credential="synthetic-omnicore-test-key",
+            model=OMNICORE_QUALIFICATION_MODEL,
             profile=profile,
             maximum_requests=1,
             io_timeout_seconds=5,
@@ -407,6 +436,7 @@ async def test_transport_stops_oversized_provider_response():
         profile = require_omnicore_agent_adapter_profile(build_omnicore_agent_adapter_profile({}))
         guard = _LoopbackOpenRouterGuard(
             credential="synthetic-omnicore-test-key",
+            model=OMNICORE_QUALIFICATION_MODEL,
             profile=replace(profile, maximum_response_bytes=64),
             maximum_requests=1,
             io_timeout_seconds=5,
@@ -419,6 +449,40 @@ async def test_transport_stops_oversized_provider_response():
         finally:
             await guard.close(5)
     assert len(provider.requests) == 1
+
+
+async def test_transport_binds_the_trusted_configured_model():
+    configured_model = "anthropic/claude-sonnet-4.5"
+    configuration = _runtime_context().runtime_configuration.model_copy(
+        update={"model": configured_model}
+    )
+    runtime = OmniCoreAgentProjectGuideRuntime(configuration)
+    await runtime.aclose()
+
+    async with _SyntheticOpenRouter(
+        handle="00000000-0000-0000-0000-000000000001",
+        final_output='{"synthetic":true}',
+    ) as provider:
+        profile = require_omnicore_agent_adapter_profile(build_omnicore_agent_adapter_profile({}))
+        guard = _LoopbackOpenRouterGuard(
+            credential="synthetic-omnicore-test-key",
+            model=configured_model,
+            profile=profile,
+            maximum_requests=1,
+            io_timeout_seconds=5,
+            upstream=_validated_test_upstream(provider.url, _TEST_UPSTREAM_AUTHORITY),
+        )
+        await guard.start()
+        try:
+            status_line = await _send_guard_request(
+                guard.base_url,
+                model=configured_model,
+            )
+            assert status_line.startswith(b"HTTP/1.1 200")
+        finally:
+            await guard.close(5)
+    assert len(provider.requests) == 1
+    assert provider.requests[0][1]["model"] == configured_model
 
 
 async def test_actual_sdk_tool_loop_retries_and_rebuilds_private_provider_controls(
@@ -448,7 +512,7 @@ async def test_actual_sdk_tool_loop_retries_and_rebuilds_private_provider_contro
     expected_options = openrouter_request_options()
     assert all(body["provider"] == expected_options["provider"] for _, body in provider.requests)
     assert all(body["plugins"] == expected_options["plugins"] for _, body in provider.requests)
-    assert all(body["model"] == OMNICORE_MODEL for _, body in provider.requests)
+    assert all(body["model"] == OMNICORE_QUALIFICATION_MODEL for _, body in provider.requests)
     assert all(body["tools"] == _MODEL_TOOLS for _, body in provider.requests)
     expected_fields = {
         "model",
@@ -497,6 +561,39 @@ async def test_actual_sdk_malformed_output_is_terminal_invalid_output():
     assert len(provider.requests) == 2
 
 
+async def test_exhausted_native_retries_open_shared_provider_circuit(monkeypatch):
+    from app.adapters.project_agents import provider_resilience
+
+    circuit = ProviderCircuit(1, 60)
+    monkeypatch.setattr(provider_resilience, "circuit_for", lambda *_: circuit)
+    compilation_context = _runtime_context()
+    capabilities, _reads, handle = _capabilities(compilation_context)
+    async with _SyntheticOpenRouter(
+        handle=handle,
+        final_output=_provider_output(),
+        always_status=500,
+    ) as provider:
+        runtime = OmniCoreAgentProjectGuideRuntime._for_test(
+            compilation_context.runtime_configuration,
+            upstream_url=provider.url,
+        )
+        runtime.admit_execution()
+        try:
+            with pytest.raises(ProjectAgentRuntimeError, match="run failed"):
+                await runtime.compile_project_guide(compilation_context, capabilities)
+        finally:
+            await runtime.aclose()
+    assert len(provider.requests) == 4
+
+    blocked = OmniCoreAgentProjectGuideRuntime._for_test(
+        compilation_context.runtime_configuration,
+        upstream_url="http://127.0.0.1:1/chat/completions",
+    )
+    with pytest.raises(ProviderCircuitOpen):
+        blocked.admit_execution()
+    await blocked.aclose()
+
+
 async def test_actual_sdk_cancellation_closes_forward_and_runtime_lifecycle():
     compilation_context = _runtime_context()
     capabilities, _reads, handle = _capabilities(compilation_context)
@@ -524,11 +621,16 @@ async def test_actual_sdk_cancellation_closes_forward_and_runtime_lifecycle():
         runtime.admit_execution()
         task = asyncio.create_task(runtime.compile_project_guide(compilation_context, capabilities))
         await asyncio.wait_for(provider.received.wait(), timeout=180)
-        task.cancel()
+        first_closer = asyncio.create_task(runtime.aclose())
+        await asyncio.sleep(0)
+        second_closer = asyncio.create_task(runtime.aclose())
+        first_closer.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await first_closer
+        await second_closer
         with pytest.raises(asyncio.CancelledError):
             await task
         await asyncio.wait_for(provider.disconnected.wait(), timeout=30)
-        await runtime.aclose()
         await runtime.aclose()
         with pytest.raises(ProjectAgentRuntimeError, match="closed"):
             await runtime.compile_project_guide(compilation_context, capabilities)

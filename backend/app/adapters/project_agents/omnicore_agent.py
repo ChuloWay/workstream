@@ -19,13 +19,16 @@ from app.adapters.project_agents.compilation_draft import CompilationDraftParser
 from app.adapters.project_agents.omnicore_profile import (
     LITELLM_VERSION,
     OMNICORE_MAX_TOKENS,
-    OMNICORE_MODEL,
     OMNICORE_PROVIDER_ATTEMPTS,
     OMNICORE_RUNTIME_KEY,
     OmniCoreAgentProfile,
     require_omnicore_agent_adapter_profile,
 )
-from app.adapters.project_agents.openrouter_policy import openrouter_request_options
+from app.adapters.project_agents.openrouter_policy import (
+    openrouter_request_options,
+    require_direct_openrouter_model,
+)
+from app.adapters.project_agents.provider_resilience import ModelCircuitAdmission
 from app.adapters.project_agents.result_validation import (
     require_result_sources_opened,
     validate_project_guide_runtime_result,
@@ -172,10 +175,10 @@ class OmniCoreAgentProjectGuideRuntime:
             configuration.runtime_key != OMNICORE_RUNTIME_KEY
             or configuration.model_provider != "openrouter"
             or configuration.model_api != "chat_completions"
-            or configuration.model != OMNICORE_MODEL
             or not configuration.uses_inference
         ):
             raise ProjectAgentRuntimeConfigurationError("project guide runtime is unsupported")
+        require_direct_openrouter_model(configuration.model)
         if configuration.maximum_turns < 2:
             raise ProjectAgentRuntimeConfigurationError(
                 "project guide runtime requires draft and review turns"
@@ -191,8 +194,9 @@ class OmniCoreAgentProjectGuideRuntime:
         self._configuration = configuration
         self._credential = credential
         self._test_upstream = _validated_test_upstream(_test_upstream, _test_authority)
-        self._admitted = False
+        self._admission: ModelCircuitAdmission | None = None
         self._closed = False
+        self._close_task: asyncio.Task[None] | None = None
         self._running_task: asyncio.Task[Any] | None = None
 
     @classmethod
@@ -218,21 +222,25 @@ class OmniCoreAgentProjectGuideRuntime:
         """Admit one attempt before the durable execution fence."""
         if self._closed:
             raise ProjectAgentRuntimeError("project guide runtime is closed")
-        if self._admitted:
+        if self._admission is not None:
             raise ProjectAgentRuntimeError("project guide runtime admission already acquired")
-        self._admitted = True
+        self._admission = ModelCircuitAdmission(self._configuration, self._profile)
 
     async def aclose(self) -> None:
         """Close idempotently and await any concurrently running compilation."""
-        if self._closed:
-            return
-        self._closed = True
-        self._admitted = False
+        if self._close_task is None:
+            self._closed = True
+            self._close_task = asyncio.create_task(self._finish_close())
+        await asyncio.shield(self._close_task)
+
+    async def _finish_close(self) -> None:
+        """Cancel and join the one compilation while every closer shares this task."""
         task = self._running_task
         if task is not None and task is not asyncio.current_task() and not task.done():
             task.cancel()
-            with suppress(asyncio.CancelledError):
-                await task
+            await asyncio.gather(task, return_exceptions=True)
+        if self._admission is not None:
+            self._admission.close()
 
     async def compile_project_guide(
         self,
@@ -246,7 +254,7 @@ class OmniCoreAgentProjectGuideRuntime:
             )
         if self._closed:
             raise ProjectAgentRuntimeError("project guide runtime is closed")
-        if not self._admitted:
+        if self._admission is None:
             raise ProjectAgentRuntimeError("project guide runtime was not admitted")
         if self._running_task is not None:
             raise ProjectAgentRuntimeError("project guide runtime is already running")
@@ -311,6 +319,7 @@ class OmniCoreAgentProjectGuideRuntime:
         maximum_requests = configuration.maximum_turns * OMNICORE_PROVIDER_ATTEMPTS
         guard = _LoopbackOpenRouterGuard(
             credential=self._credential,
+            model=configuration.model,
             profile=profile,
             maximum_requests=maximum_requests,
             io_timeout_seconds=max(1, min(300, configuration.timeout_seconds)),
@@ -381,6 +390,7 @@ class OmniCoreAgentProjectGuideRuntime:
                 draft_agent,
                 prompt,
                 guard=guard,
+                admission=self._admission,
                 cleanup_timeout_seconds=profile.cleanup_timeout_seconds,
             )
             candidate = draft_parser.parse(draft_output)
@@ -425,6 +435,7 @@ class OmniCoreAgentProjectGuideRuntime:
                 review_agent,
                 review_input,
                 guard=guard,
+                admission=self._admission,
                 cleanup_timeout_seconds=profile.cleanup_timeout_seconds,
             )
             if len(final_output.encode("utf-8")) > configuration.maximum_manifest_bytes:
@@ -536,8 +547,11 @@ async def _run_native_agent(
     query: str,
     *,
     guard: _LoopbackOpenRouterGuard,
+    admission: ModelCircuitAdmission,
     cleanup_timeout_seconds: int,
 ) -> str:
+    admission.before_request()
+    guard.begin_logical_request()
     native_task = asyncio.create_task(
         agent.run(
             query,
@@ -565,13 +579,18 @@ async def _run_native_agent(
         if close_error is not None:
             raise close_error
         raise
+    except Exception:
+        admission.request_failed(guard.transient_failure_exhausted)
+        raise
     if (
         not isinstance(response, dict)
         or response.get("status") != "success"
         or response.get("termination_reason") != "stop"
         or not isinstance(response.get("response"), str)
     ):
+        admission.request_failed(guard.transient_failure_exhausted)
         raise ProjectAgentRuntimeError("project guide native run failed")
+    admission.request_succeeded()
     return response["response"]
 
 
@@ -598,12 +617,14 @@ class _LoopbackOpenRouterGuard:
         self,
         *,
         credential: str,
+        model: str,
         profile: OmniCoreAgentProfile,
         maximum_requests: int,
         io_timeout_seconds: int,
         upstream: _UpstreamTarget | None,
     ) -> None:
         self._credential = credential
+        self._model = model
         self._profile = profile
         self._maximum_requests = maximum_requests
         self._io_timeout_seconds = io_timeout_seconds
@@ -616,13 +637,24 @@ class _LoopbackOpenRouterGuard:
         self._port: int | None = None
         self._requests = 0
         self._active = False
+        self._last_upstream_transient_failure = False
         self._closing = False
+        self._close_task: asyncio.Task[None] | None = None
 
     @property
     def base_url(self) -> str:
         if self._port is None:
             raise RuntimeError("OpenRouter guard is not started")
         return f"http://127.0.0.1:{self._port}/{self._path_token}/v1"
+
+    @property
+    def transient_failure_exhausted(self) -> bool:
+        """Report only the last upstream outcome after the SDK's native retries."""
+        return self._last_upstream_transient_failure
+
+    def begin_logical_request(self) -> None:
+        """Reset phase-local provider health before the native retry owner runs."""
+        self._last_upstream_transient_failure = False
 
     async def start(self) -> None:
         import httpx
@@ -663,9 +695,13 @@ class _LoopbackOpenRouterGuard:
         task.add_done_callback(lambda _task: self._writers.discard(writer))
 
     async def close(self, timeout_seconds: int) -> None:
-        if self._closing:
-            return
-        self._closing = True
+        if self._close_task is None:
+            self._closing = True
+            self._close_task = asyncio.create_task(self._finish_close(timeout_seconds))
+        await asyncio.shield(self._close_task)
+
+    async def _finish_close(self, timeout_seconds: int) -> None:
+        """Join the one bounded listener/forward/client cleanup from every caller."""
         if self._server is not None:
             self._server.close()
         for writer in list(self._writers):
@@ -799,11 +835,13 @@ class _LoopbackOpenRouterGuard:
             raise _GuardRejection(400) from None
         if not isinstance(body, dict):
             raise _GuardRejection(400)
-        _validate_request_body(body)
+        _validate_request_body(body, expected_model=self._model)
         return _ParsedRequest(body=body)
 
     async def _forward(self, request: _ParsedRequest) -> tuple[int, Mapping[str, str], bytes]:
-        outbound = _rebuild_openrouter_body(request.body)
+        import httpx
+
+        outbound = _rebuild_openrouter_body(request.body, model=self._model)
         request_body = json.dumps(
             outbound,
             ensure_ascii=False,
@@ -822,6 +860,9 @@ class _LoopbackOpenRouterGuard:
                 },
                 content=request_body,
             ) as response:
+                self._last_upstream_transient_failure = (
+                    response.status_code in {408, 409, 429} or response.status_code >= 500
+                )
                 chunks: list[bytes] = []
                 size = 0
                 async for chunk in response.aiter_bytes():
@@ -839,6 +880,9 @@ class _LoopbackOpenRouterGuard:
                     and len(value.encode("ascii", errors="ignore")) <= 256
                 }
                 return response.status_code, returned_headers, b"".join(chunks)
+        except httpx.TransportError:
+            self._last_upstream_transient_failure = True
+            raise
         finally:
             self._client.cookies.clear()
 
@@ -878,10 +922,10 @@ class _GuardRejection(Exception):
         self.status = status
 
 
-def _validate_request_body(body: dict[str, Any]) -> None:
+def _validate_request_body(body: dict[str, Any], *, expected_model: str) -> None:
     if set(body) - _ALLOWED_BODY_FIELDS:
         raise _GuardRejection(400)
-    if body.get("model") != OMNICORE_MODEL:
+    if body.get("model") != expected_model:
         raise _GuardRejection(400)
     if body.get("tools") != _MODEL_TOOLS:
         raise _GuardRejection(400)
@@ -968,7 +1012,7 @@ def _validate_tool_call(call: object) -> None:
         raise _GuardRejection(400)
 
 
-def _rebuild_openrouter_body(body: dict[str, Any]) -> dict[str, Any]:
+def _rebuild_openrouter_body(body: dict[str, Any], *, model: str) -> dict[str, Any]:
     rebuilt = {
         key: body[key]
         for key in (
@@ -983,7 +1027,7 @@ def _rebuild_openrouter_body(body: dict[str, Any]) -> dict[str, Any]:
     }
     rebuilt.update(
         {
-            "model": OMNICORE_MODEL,
+            "model": model,
             "tools": _MODEL_TOOLS,
             "usage": {"include": True},
             **openrouter_request_options(),

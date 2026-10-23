@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
+from importlib.metadata import PackageNotFoundError, version as distribution_version
 
 from app.interfaces.project_agents import ProjectAgentRuntimeConfigurationError
 from app.interfaces.project_guide_runtime import AdapterProfileValue
@@ -14,9 +15,11 @@ OMNICORE_PROFILE_KEY = "omnicore_agent.v1"
 OMNICOREAGENT_VERSION = "0.6.0"
 LITELLM_VERSION = "1.106.2"
 OMNICORE_OPENAI_VERSION = "2.54.0"
-OMNICORE_MODEL = "openai/gpt-5.6-terra"
+OMNICORE_QUALIFICATION_MODEL = "openai/gpt-5.6-terra"
 OMNICORE_PROVIDER_RETRIES = 3
 OMNICORE_PROVIDER_ATTEMPTS = OMNICORE_PROVIDER_RETRIES + 1
+OMNICORE_CIRCUIT_FAILURE_THRESHOLD = 3
+OMNICORE_CIRCUIT_COOLDOWN_SECONDS = 60
 OMNICORE_MAX_TOKENS = 16_384
 OMNICORE_TEMPERATURE = 0
 OMNICORE_MAXIMUM_REQUEST_BYTES = 32_000_000
@@ -36,6 +39,8 @@ _DEFAULTS: dict[str, AdapterProfileValue] = {
     "data_collection": "deny",
     "provider_plugin_disable_requests": True,
     "provider_plugin_profile": "openrouter_known_2026_10_23",
+    "circuit_failure_threshold": OMNICORE_CIRCUIT_FAILURE_THRESHOLD,
+    "circuit_cooldown_seconds": OMNICORE_CIRCUIT_COOLDOWN_SECONDS,
     "transport_profile": "closed_loopback.v1",
     "model_max_tokens": OMNICORE_MAX_TOKENS,
     "model_temperature": OMNICORE_TEMPERATURE,
@@ -70,6 +75,8 @@ class OmniCoreAgentProfile:
     cleanup_timeout_seconds: int
     provider_retries: int
     provider_attempts: int
+    circuit_failure_threshold: int
+    circuit_cooldown_seconds: int
 
 
 def build_omnicore_agent_adapter_profile(
@@ -94,17 +101,12 @@ def require_omnicore_agent_adapter_profile(
     try:
         import omnicoreagent
         import openai
-    except ImportError:
+        litellm_version = distribution_version("litellm")
+    except (ImportError, PackageNotFoundError):
         raise ProjectAgentRuntimeConfigurationError(
             "project guide runtime is unavailable"
         ) from None
-    if (
-        omnicoreagent.__version__ != OMNICOREAGENT_VERSION
-        or openai.__version__ != OMNICORE_OPENAI_VERSION
-    ):
-        raise ProjectAgentRuntimeConfigurationError(
-            "project guide runtime SDK installation does not match its profile"
-        )
+    _require_sdk_versions(omnicoreagent.__version__, openai.__version__, litellm_version)
     return OmniCoreAgentProfile(
         maximum_request_bytes=OMNICORE_MAXIMUM_REQUEST_BYTES,
         maximum_response_bytes=OMNICORE_MAXIMUM_RESPONSE_BYTES,
@@ -113,4 +115,22 @@ def require_omnicore_agent_adapter_profile(
         cleanup_timeout_seconds=OMNICORE_CLEANUP_TIMEOUT_SECONDS,
         provider_retries=OMNICORE_PROVIDER_RETRIES,
         provider_attempts=OMNICORE_PROVIDER_ATTEMPTS,
+        circuit_failure_threshold=OMNICORE_CIRCUIT_FAILURE_THRESHOLD,
+        circuit_cooldown_seconds=OMNICORE_CIRCUIT_COOLDOWN_SECONDS,
     )
+
+
+def _require_sdk_versions(
+    omnicoreagent_version: str,
+    openai_version: str,
+    litellm_version: str,
+) -> None:
+    """Reject any installed SDK tuple that differs from the effective profile."""
+    if (
+        omnicoreagent_version != OMNICOREAGENT_VERSION
+        or openai_version != OMNICORE_OPENAI_VERSION
+        or litellm_version != LITELLM_VERSION
+    ):
+        raise ProjectAgentRuntimeConfigurationError(
+            "project guide runtime SDK installation does not match its profile"
+        )
