@@ -13,14 +13,22 @@ services:
 
   model-proxy:
     environment:
-      WORKSTREAM_PROJECT_AGENT_API_KEY_FILE: /run/secrets/project_agent_api_key
+      WORKSTREAM_MODEL_PROXY_OPENAI_API_KEY_FILE: /run/secrets/model_proxy_openai_api_key
+      WORKSTREAM_MODEL_PROXY_OPENROUTER_API_KEY_FILE: /run/secrets/model_proxy_openrouter_api_key
     secrets:
-      - source: project_agent_api_key
-        target: project_agent_api_key
+      - source: model_proxy_openai_api_key
+        target: model_proxy_openai_api_key
+        uid: "${WORKSTREAM_RUNTIME_UID}"
+        gid: "${WORKSTREAM_RUNTIME_GID}"
+        mode: 0400
+      - source: model_proxy_openrouter_api_key
+        target: model_proxy_openrouter_api_key
         uid: "${WORKSTREAM_RUNTIME_UID}"
         gid: "${WORKSTREAM_RUNTIME_GID}"
         mode: 0400
 
 secrets:
-  project_agent_api_key:
-    file: ${WORKSTREAM_PROJECT_AGENT_API_KEY_FILE:?set the private project-agent provider key file}
+  model_proxy_openai_api_key:
+    file: ${WORKSTREAM_MODEL_PROXY_OPENAI_API_KEY_FILE:?set the private model-proxy OpenAI key file}
+  model_proxy_openrouter_api_key:
+    file: ${WORKSTREAM_MODEL_PROXY_OPENROUTER_API_KEY_FILE:?set the private model-proxy OpenRouter key file}

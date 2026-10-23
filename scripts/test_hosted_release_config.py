@@ -902,8 +902,10 @@ class HostedReleaseConfigTests(unittest.TestCase):
             "WORKSTREAM_PROJECT_AGENT_MODEL_API": "none",
             "WORKSTREAM_PROJECT_AGENT_MODEL": "none",
             "WORKSTREAM_PROJECT_AGENT_RUNTIME_OPTIONS": "{}",
+            "WORKSTREAM_MODEL_PROXY_ENABLED": "false",
         }
-        manager.pop("WORKSTREAM_PROJECT_AGENT_API_KEY_FILE")
+        for key in preflight.MODEL_PROXY_SECRET_FILE_KEYS:
+            manager.pop(key)
         preflight.validate_environment(manager)
         for changed in (
             omni | {"WORKSTREAM_PROJECT_AGENT_MODEL_PROVIDER": "openai"},
@@ -929,6 +931,9 @@ class HostedReleaseConfigTests(unittest.TestCase):
             "WORKSTREAM_PROJECT_AGENT_MODEL_API=chat_completions": (
                 "WORKSTREAM_PROJECT_AGENT_MODEL_API=none"
             ),
+            "WORKSTREAM_MODEL_PROXY_ENABLED=true": (
+                "WORKSTREAM_MODEL_PROXY_ENABLED=false"
+            ),
         }
         for old, new in replacements.items():
             manager_text = manager_text.replace(old, new)
@@ -936,7 +941,10 @@ class HostedReleaseConfigTests(unittest.TestCase):
             "\n".join(
                 line
                 for line in manager_text.splitlines()
-                if not line.startswith("WORKSTREAM_PROJECT_AGENT_API_KEY_FILE=")
+                if not line.startswith("WORKSTREAM_MODEL_PROXY_OPENAI_API_KEY_FILE=")
+                and not line.startswith(
+                    "WORKSTREAM_MODEL_PROXY_OPENROUTER_API_KEY_FILE="
+                )
             )
             + "\n"
         )
@@ -948,21 +956,87 @@ class HostedReleaseConfigTests(unittest.TestCase):
         rendered = preflight.render_compose(manager_path, manager)
         preflight.validate_compose(rendered, manager)
 
-        self.assertNotIn("project_agent_api_key", rendered.get("secrets", {}))
+        self.assertNotIn("model_proxy_openai_api_key", rendered.get("secrets", {}))
+        self.assertNotIn("model_proxy_openrouter_api_key", rendered.get("secrets", {}))
         worker = rendered["services"]["worker"]
-        self.assertNotIn("WORKSTREAM_PROJECT_AGENT_API_KEY_FILE", worker["environment"])
+        for key in preflight.MODEL_PROXY_SECRET_FILE_KEYS:
+            self.assertNotIn(key, worker["environment"])
         self.assertNotIn(
-            "project_agent_api_key",
+            "model_proxy_openai_api_key",
+            {item["source"] for item in worker["secrets"]},
+        )
+        self.assertNotIn(
+            "model_proxy_openrouter_api_key",
             {item["source"] for item in worker["secrets"]},
         )
 
         selected = manager | {
-            "WORKSTREAM_PROJECT_AGENT_API_KEY_FILE": str(self.root / "provider")
+            "WORKSTREAM_MODEL_PROXY_OPENAI_API_KEY_FILE": str(self.root / "provider")
         }
-        with self.assertRaisesRegex(
-            preflight.PreflightError, "cannot select a provider credential"
-        ):
+        with self.assertRaisesRegex(preflight.PreflightError, "disabled model proxy"):
             preflight.validate_environment(selected)
+
+    def test_manager_setup_can_enable_post_proxy_with_both_provider_credentials(
+        self,
+    ) -> None:
+        manager_text = self.environment_path.read_text(encoding="utf-8")
+        for old, new in {
+            "WORKSTREAM_PROJECT_AGENT_RUNTIME=openai_agents_sdk": (
+                "WORKSTREAM_PROJECT_AGENT_RUNTIME=manager_authored"
+            ),
+            "WORKSTREAM_PROJECT_AGENT_MODEL_PROVIDER=openrouter": (
+                "WORKSTREAM_PROJECT_AGENT_MODEL_PROVIDER=none"
+            ),
+            "WORKSTREAM_PROJECT_AGENT_MODEL=openai/gpt-5.6-terra": (
+                "WORKSTREAM_PROJECT_AGENT_MODEL=none"
+            ),
+            "WORKSTREAM_PROJECT_AGENT_MODEL_API=chat_completions": (
+                "WORKSTREAM_PROJECT_AGENT_MODEL_API=none"
+            ),
+        }.items():
+            manager_text = manager_text.replace(old, new)
+        manager_path = self.root / "manager-with-post-proxy.env"
+        manager_path.write_text(manager_text, encoding="utf-8")
+        manager = preflight.parse_environment(manager_path)
+
+        preflight.validate_environment(manager)
+        rendered = preflight.render_compose(manager_path, manager)
+        preflight.validate_compose(rendered, manager)
+
+        self.assertIn("model-proxy", rendered["services"])
+        self.assertEqual(
+            {item["source"] for item in rendered["services"]["model-proxy"]["secrets"]},
+            {
+                "database_url",
+                "model_proxy_openai_api_key",
+                "model_proxy_openrouter_api_key",
+            },
+        )
+        worker_environment = rendered["services"]["worker"]["environment"]
+        for key in preflight.MODEL_PROXY_SECRET_FILE_KEYS:
+            self.assertNotIn(key, worker_environment)
+
+    def test_openrouter_setup_keeps_independent_openai_post_credential(self) -> None:
+        self.assertEqual(
+            self.environment["WORKSTREAM_PROJECT_AGENT_MODEL_PROVIDER"], "openrouter"
+        )
+        rendered = preflight.render_compose(self.environment_path, self.environment)
+        preflight.validate_compose(rendered, self.environment)
+
+        proxy = rendered["services"]["model-proxy"]
+        self.assertEqual(
+            {
+                item["source"]
+                for item in proxy["secrets"]
+                if item["source"] != "database_url"
+            },
+            {
+                "model_proxy_openai_api_key",
+                "model_proxy_openrouter_api_key",
+            },
+        )
+        for key in preflight.MODEL_PROXY_SECRET_FILE_KEYS:
+            self.assertNotIn(key, rendered["services"]["worker"]["environment"])
 
     def test_checker_config_rejects_non_hosted_or_substituted_identity(self) -> None:
         cases = {
@@ -1039,8 +1113,8 @@ class HostedReleaseConfigTests(unittest.TestCase):
         cases.append(("missing role secret selector", missing_role_secret))
         unrelated_role_secret = copy.deepcopy(rendered)
         unrelated_role_secret["services"]["beat"]["environment"][
-            "WORKSTREAM_PROJECT_AGENT_API_KEY_FILE"
-        ] = "/run/secrets/project_agent_api_key"
+            "WORKSTREAM_MODEL_PROXY_OPENAI_API_KEY_FILE"
+        ] = "/run/secrets/model_proxy_openai_api_key"
         cases.append(("unrelated role secret selector", unrelated_role_secret))
         unrelated_role_mount = copy.deepcopy(rendered)
         unrelated_role_mount["services"]["beat"]["secrets"].append(
@@ -1168,8 +1242,8 @@ class HostedReleaseConfigTests(unittest.TestCase):
         cases.append(("guide parser socket exposed to proof", proof_parser_socket))
         proof_provider_selector = copy.deepcopy(rendered)
         proof_provider_selector["services"]["aws-proof-coordinate"]["environment"][
-            "WORKSTREAM_PROJECT_AGENT_API_KEY_FILE"
-        ] = "/run/secrets/project_agent_api_key"
+            "WORKSTREAM_MODEL_PROXY_OPENAI_API_KEY_FILE"
+        ] = "/run/secrets/model_proxy_openai_api_key"
         cases.append(("provider selector exposed to proof", proof_provider_selector))
         worker_provider_value = copy.deepcopy(rendered)
         worker_provider_value["services"]["worker"]["environment"][
@@ -1334,7 +1408,7 @@ class HostedReleaseConfigTests(unittest.TestCase):
             scratch_secret.chmod(0o400)
             scratch_alias = self.root / "scratch-alias"
             scratch_alias.symlink_to(scratch, target_is_directory=True)
-            environment["WORKSTREAM_PROJECT_AGENT_API_KEY_FILE"] = str(
+            environment["WORKSTREAM_MODEL_PROXY_OPENROUTER_API_KEY_FILE"] = str(
                 scratch_alias / scratch_secret.name
             )
             with (
@@ -1360,7 +1434,9 @@ class HostedReleaseConfigTests(unittest.TestCase):
                 ),
             ):
                 preflight.validate_private_host_inputs(environment)
-            environment["WORKSTREAM_PROJECT_AGENT_API_KEY_FILE"] = str(secret_paths[-1])
+            environment["WORKSTREAM_MODEL_PROXY_OPENROUTER_API_KEY_FILE"] = str(
+                secret_paths[-1]
+            )
             socket_identity = socket_root / "negative-key.pem"
             socket_identity.write_text("private", encoding="utf-8")
             socket_identity.chmod(0o400)
@@ -1491,7 +1567,8 @@ class ReleaseSecretLoaderTests(unittest.TestCase):
         "WORKSTREAM_PAGINATION_CURSOR_HMAC_SECRET_FILE": (
             "WORKSTREAM_PAGINATION_CURSOR_HMAC_SECRET"
         ),
-        "WORKSTREAM_PROJECT_AGENT_API_KEY_FILE": "OPENROUTER_API_KEY",
+        "WORKSTREAM_MODEL_PROXY_OPENAI_API_KEY_FILE": "OPENAI_API_KEY",
+        "WORKSTREAM_MODEL_PROXY_OPENROUTER_API_KEY_FILE": "OPENROUTER_API_KEY",
     }
     ROLE_FILES = {
         "api": (
@@ -1506,7 +1583,8 @@ class ReleaseSecretLoaderTests(unittest.TestCase):
         ),
         "model-proxy": (
             "WORKSTREAM_DATABASE_URL_FILE",
-            "WORKSTREAM_PROJECT_AGENT_API_KEY_FILE",
+            "WORKSTREAM_MODEL_PROXY_OPENAI_API_KEY_FILE",
+            "WORKSTREAM_MODEL_PROXY_OPENROUTER_API_KEY_FILE",
         ),
         "beat": (
             "WORKSTREAM_DATABASE_URL_FILE",
@@ -1535,7 +1613,10 @@ class ReleaseSecretLoaderTests(unittest.TestCase):
             "WORKSTREAM_CELERY_BROKER_URL_FILE": "broker",
             "WORKSTREAM_API_RATE_LIMIT_KEY_SECRET_FILE": "rate",
             "WORKSTREAM_PAGINATION_CURSOR_HMAC_SECRET_FILE": "cursor",
-            "WORKSTREAM_PROJECT_AGENT_API_KEY_FILE": "project-agent",
+            "WORKSTREAM_MODEL_PROXY_OPENAI_API_KEY_FILE": "model-proxy-openai",
+            "WORKSTREAM_MODEL_PROXY_OPENROUTER_API_KEY_FILE": (
+                "model-proxy-openrouter"
+            ),
         }
         for variable, name in file_names.items():
             path = root / name
@@ -1544,8 +1625,6 @@ class ReleaseSecretLoaderTests(unittest.TestCase):
             path.write_text(content, encoding="utf-8")
             path.chmod(0o400)
             environment[variable] = str(path)
-        if runtime == "manager_authored":
-            environment.pop("WORKSTREAM_PROJECT_AGENT_API_KEY_FILE", None)
         for secret_name in {
             *self.FILE_TO_SECRET.values(),
             "OPENAI_API_KEY",
@@ -1587,9 +1666,6 @@ class ReleaseSecretLoaderTests(unittest.TestCase):
         )
         environment["EXPECT_PARSER_SELECTOR_SCRUB"] = "1" if role == "parser" else "0"
         expected = {self.FILE_TO_SECRET[key] for key in self.ROLE_FILES.get(role, ())}
-        if role == "model-proxy" and provider == "openai":
-            expected.remove("OPENROUTER_API_KEY")
-            expected.add("OPENAI_API_KEY")
         environment["EXPECTED_SECRET_NAMES"] = ",".join(sorted(expected))
         environment["EXPECTED_SECRET_SHA256"] = hashlib.sha256(
             content.encode()
@@ -1679,9 +1755,14 @@ class ReleaseSecretLoaderTests(unittest.TestCase):
                         )
             openai = self._run_loader(root, role="model-proxy", provider="openai")
             self.assertEqual(openai.returncode, 0, openai.stderr)
-            unsupported = self._run_loader(root, role="model-proxy", provider="unknown")
-            self.assertNotEqual(unsupported.returncode, 0)
-            self.assertIn("model provider", unsupported.stderr)
+            setup_provider_independent = self._run_loader(
+                root, role="model-proxy", provider="unknown"
+            )
+            self.assertEqual(
+                setup_provider_independent.returncode,
+                0,
+                setup_provider_independent.stderr,
+            )
             unknown = self._run_loader(root, role="unknown")
             self.assertNotEqual(unknown.returncode, 0)
             self.assertEqual(unknown.stdout, "")
@@ -1703,6 +1784,14 @@ class ReleaseSecretLoaderTests(unittest.TestCase):
                 sdk_environment="agents",
             )
             self.assertEqual(omni_proxy.returncode, 0, omni_proxy.stderr)
+            manager_proxy = self._run_loader(
+                root,
+                role="model-proxy",
+                runtime="manager_authored",
+                provider="none",
+                sdk_environment="agents",
+            )
+            self.assertEqual(manager_proxy.returncode, 0, manager_proxy.stderr)
             for sdk_environment in ("agents", "omnicore"):
                 with self.subTest(
                     runtime="manager_authored", sdk_environment=sdk_environment

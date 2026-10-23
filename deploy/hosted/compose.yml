@@ -306,7 +306,7 @@ services:
 
   model-proxy:
     <<: *backend-runtime
-    profiles: [inference]
+    profiles: [model-proxy]
     image: ${WORKSTREAM_MODEL_PROXY_IMAGE:?set the digest-qualified agents model-proxy image}
     environment:
       <<: *backend-environment
