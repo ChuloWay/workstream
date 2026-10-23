@@ -85,6 +85,8 @@ BEGIN
     RAISE EXCEPTION 'compilation runtime adapter profile is invalid' USING ERRCODE='23514';
   END;
   IF jsonb_typeof(profile) IS DISTINCT FROM 'object'
+     OR config->>'adapter_profile' IS DISTINCT FROM
+       public.project_guide_projection_canonical_json(profile)
      OR (SELECT count(*) FROM jsonb_each(profile)) > 32
      OR EXISTS (
        SELECT 1 FROM jsonb_each(profile) item

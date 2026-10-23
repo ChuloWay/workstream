@@ -42,6 +42,8 @@ obligation before claiming the hosted journey recovered.
   custody, composition and validation; ART `guide_document_access.py` and its
   composition only for trusted exact-read evidence. Keep cross-owner ports.
 - API dependency and Celery worker composition for the same configuration/tool ports.
+- The shared guide-media literal and its PROJECTS/ART/parser consumers, preserving
+  one neutral definition rather than parallel format lists.
 - A fixed document parser service and client under the existing adapter/worker
   conventions, using the release image and a private Unix socket. No generic
   command execution or new network API.
@@ -58,6 +60,9 @@ obligation before claiming the hosted journey recovered.
   one canonical bounded archive implementation.
 - Focused affected tests, ownership/lane inventories, and current guide/runtime,
   deployment, developer and roadmap documentation. No unrelated inventory edits.
+- `.github/workflows/release-images.yml`: select the affected local deployment,
+  drill-readiness and parser-isolation proof in the existing release gate. Preserve
+  frozen installation, complete test execution and existing image checks.
 
 ### Not allowed
 
@@ -105,9 +110,20 @@ obligation before claiming the hosted journey recovered.
    Do not send all guide content up front. Common final validation rejects cited
    unopened sources and mismatched proposals regardless of SDK.
 4. Parse only the currently supported PDF, DOCX, PPTX and Markdown formats in a
-   fixed secret-free, networkless service, nonroot/read-only with bounded
+   fixed secret-free, networkless service with read-only root and bounded
    memory/CPU/PIDs and per-call deadlines. Stream verified bytes over a private
    Unix socket; no shared source paths or durable extracted-content storage.
+   Bootstrap the container as UID/GID 0 with exactly KILL, SETGID and SETUID
+   capabilities, then drop all real/effective/saved broker credentials to
+   UID 10002/GID 10001. The broker retains only those three capabilities to launch
+   and terminate children; inheritable/ambient sets are empty, no-new-privileges
+   remains set and dumpable is zero. Verify this before binding. Two fixed child
+   identities (10003:10003 and 10004:10004), empty supplementary groups and zero
+   capabilities isolate concurrent calls. Child startup reapplies dumpable zero
+   after exec and verifies identity before importing parser libraries or reading
+   input. Existing process-count limits forbid child forks. Reuse a slot only
+   after confirmed exit and reap. A Docker healthcheck drops immediately to the
+   unprivileged socket-client identity and retains no capabilities.
    Use a dedicated socket volume mounted only by parser (read-write) and guide
    worker (read-only), with directory owner/parser UID 10002, worker group 10001,
    directory mode 0750, socket mode 0660. API, Beat, migrations and checker receive
@@ -154,6 +170,18 @@ obligation before claiming the hosted journey recovered.
   locators; a large guide is not silently truncated or sent whole to inference.
 - Real isolated parser tests cover no network/credential/source mount, malformed
   and resource-exhausting inputs, cancellation, concurrent requests and cleanup.
+- Committed release-image proof exercises real broker/child credentials, both
+  simultaneous slots and every supported format. A compromised-child simulation
+  cannot control the broker socket or inspect/signal the broker or sibling; the
+  worker client remains functional. Prove timeout/cancellation reap before slot
+  reuse, startup rejection for invalid identity/capabilities, and a discriminating
+  removal probe. Unprivileged transport fixtures may model only the OS identity
+  boundary; production has no same-UID fallback.
+- SQL profile validation rejects noncanonical inner JSON even when the outer
+  configuration hash matches, with a valid control. Production tool-budget tests
+  enforce call and aggregate-output limits. Conflicting receipt replay preserves
+  the original evidence, and a runtime citing an unread source cannot persist a
+  compilation or successful access receipt.
 - PostgreSQL tests preserve retained facts and reject false source lineage; old
   unresolved work is not redispatched. Remove tests for obsolete OpenAI-only
   implementation requirements while retaining their actual safety guarantees.

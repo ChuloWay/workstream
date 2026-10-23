@@ -43,7 +43,7 @@ Edit it before startup:
 - generate a separate local Flow HMAC secret with `openssl rand -hex 32`.
 
 Set `OPENROUTER_API_KEY` (for the default OpenRouter provider) only when running genuine guide compilation. Keep the
-real key in this ignored file. Without it, the six services and artifact
+real key in this ignored file. Without it, the seven services and artifact
 upload can run, but provider-backed guide setup cannot complete successfully.
 
 Compose rejects a missing project name or required secret instead of silently
@@ -51,7 +51,7 @@ sharing defaults. All published ports bind to `127.0.0.1`. Containers use the
 internal names `postgres:5432`, `redis:6379` and `minio:9000`; host-port changes
 do not alter service-to-service URLs.
 
-## Start and inspect the six services
+## Start and inspect the seven services
 
 ```bash
 docker compose --profile backend up --build --wait
@@ -328,7 +328,7 @@ From the first checkout, stop only its project without deleting volumes:
 docker compose --profile backend down
 ```
 
-In the second checkout, all six services must remain healthy, its project must
+In the second checkout, all seven services must remain healthy, its project must
 still be readable, and its bucket must still be present:
 
 ```bash

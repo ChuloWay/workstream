@@ -121,7 +121,9 @@ ACLs.
 
 The default runtime is `openai_agents_sdk`, with OpenRouter as the inference
 provider and `openai/gpt-5.6-terra` as the model. Runtime, provider, model,
-instructions and runtime-specific options are separate settings. Put
+instructions and runtime-specific options are separate settings. OpenRouter uses
+`WORKSTREAM_PROJECT_AGENT_MODEL_API=chat_completions`, as in both environment
+examples. Put
 `OPENROUTER_API_KEY` only in the ignored local Compose `.env`; the worker receives
 it, while the fixed guide-document parser has no credentials or network.
 Direct OpenAI inference remains an explicit provider selection with its own key;

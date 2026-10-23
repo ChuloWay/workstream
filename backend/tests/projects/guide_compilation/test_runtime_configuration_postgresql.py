@@ -1,5 +1,7 @@
 """Independent SQL enforcement of attempt-bound execution configuration."""
 
+import json
+
 import pytest
 from sqlalchemy import insert, text
 from sqlalchemy.exc import DBAPIError
@@ -85,6 +87,40 @@ async def test_sql_rejects_invalid_runtime_configuration(clean_postgres_database
 
 
 _NO_INFERENCE_IDENTITY = {"model_provider": "none", "model_api": "none", "model": "none"}
+
+
+async def test_sql_rejects_noncanonical_profile_with_valid_configuration_hash(
+    clean_postgres_database,
+):
+    """SQL rejects exactly the profile serialization rejected by runtime recovery."""
+    values = await seed_database(clean_postgres_database)
+    canonical = runtime_configuration().model_dump(mode="json")
+    altered = canonical | {
+        "adapter_profile": json.dumps(json.loads(canonical["adapter_profile"]), indent=2)
+    }
+    assert altered["adapter_profile"] != canonical["adapter_profile"]
+    assert json.loads(altered["adapter_profile"]) == json.loads(canonical["adapter_profile"])
+    engine = create_async_engine(clean_postgres_database)
+    try:
+        async with engine.begin() as connection:
+            with pytest.raises(
+                DBAPIError, match="compilation runtime adapter profile is invalid"
+            ) as error:
+                await connection.execute(
+                    insert(ProjectGuideCompilationAttempt).values(**_row(values, altered))
+                )
+            assert error.value.orig.sqlstate == "23514"
+        async with engine.begin() as connection:
+            await connection.execute(
+                insert(ProjectGuideCompilationAttempt).values(**_row(values, canonical))
+            )
+        async with engine.connect() as connection:
+            stored = await connection.scalar(
+                text("select runtime_configuration::jsonb from project_guide_compilation_attempts")
+            )
+        assert stored == canonical
+    finally:
+        await engine.dispose()
 
 
 @pytest.mark.parametrize(

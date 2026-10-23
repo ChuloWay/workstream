@@ -9,7 +9,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, model_validator
 
-from app.modules.projects.api.guide_documents import GuideDocumentMediaType, LabeledGuideOriginal
+from app.interfaces.guide_document_tools import GuideDocumentMediaType
+from app.modules.projects.api.guide_documents import LabeledGuideOriginal
 
 GuideStatus = Literal["draft", "active", "superseded"]
 GuideDocumentIngestState = Literal["awaiting_upload", "uploaded"]

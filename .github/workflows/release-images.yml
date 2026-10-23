@@ -6,11 +6,16 @@ on:
     paths:
       - '.github/workflows/release-images.yml'
       - 'docker/backend/Dockerfile.release'
+      - 'docker/backend/Dockerfile.dev'
       - 'docker/backend/release-entrypoint.sh'
+      - 'docker-compose.yml'
+      - '.env.example'
       - 'docker/checker/Dockerfile.release'
       - '.dockerignore'
       - 'deploy/hosted/**'
       - 'scripts/*hosted_release*.py'
+      - 'scripts/test_local_guide_runtime.py'
+      - 'scripts/test_guide_document_api_drill.py'
       - 'backend/**'
       - 'external_checkers/**'
 
@@ -64,7 +69,8 @@ jobs:
               tests/test_config.py::test_aws_factory_fails_with_live_proof_before_constructing_provider
           )
           backend/.venv/bin/python -m unittest -v \
-            scripts.test_hosted_release_config scripts.test_hosted_release_images
+            scripts.test_hosted_release_config scripts.test_hosted_release_images \
+            scripts.test_local_guide_runtime scripts.test_guide_document_api_drill
           test -z "$(git status --porcelain)"
       - name: Build exact release images without cache or publication
         timeout-minutes: 42
