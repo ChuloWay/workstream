@@ -18,6 +18,20 @@ class ReleaseImageProofTests(unittest.TestCase):
         workflow = Path(".github/workflows/release-images.yml").read_text(
             encoding="utf-8"
         )
+        built_backend_tags = set(
+            re.findall(
+                r"--file docker/backend/Dockerfile\.release "
+                r"--tag (workstream-backend-[a-z]+-proof)",
+                workflow,
+            )
+        )
+        self.assertEqual(
+            built_backend_tags,
+            {
+                "workstream-backend-agents-proof",
+                "workstream-backend-omnicore-proof",
+            },
+        )
         for environment in ("agents", "omnicore"):
             self.assertEqual(
                 workflow.count(
@@ -30,6 +44,14 @@ class ReleaseImageProofTests(unittest.TestCase):
                 workflow.count(f"--backend-{environment}-image"),
                 1,
             )
+        parser_image = re.search(
+            r"scripts/verify_guide_parser_isolation\.py[\s\\]+"
+            r"--expected-head \"\$SOURCE_SHA\"[\s\\]+"
+            r"--backend-image ([a-z-]+)",
+            workflow,
+        )
+        self.assertIsNotNone(parser_image)
+        self.assertIn(parser_image.group(1), built_backend_tags)
 
     def test_helper_pins_match_runtime_download_and_image_verification(self):
         root = Path(__file__).resolve().parents[1]

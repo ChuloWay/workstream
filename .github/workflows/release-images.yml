@@ -109,7 +109,7 @@ jobs:
           timeout --kill-after=30s 420s backend/.venv/bin/python \
             scripts/verify_guide_parser_isolation.py \
             --expected-head "$SOURCE_SHA" \
-            --backend-image workstream-backend-proof \
+            --backend-image workstream-backend-agents-proof \
             --container-owner "$PROOF_OWNER" \
             --evidence "$RUNNER_TEMP/guide-parser-isolation-evidence.json"
       - name: Remove only this run's smoke containers and prove absence
