@@ -20,6 +20,7 @@ from tests.tasks.submission_dispatch.test_replacement_creation import (
     _create, _creation_request, _ready_replacement,
 )
 from tests.test_submission_predecessor_custody import _fixture_revision_context
+from tests.test_checker_materialization import _limits
 
 
 def _approved_context_proposal(monkeypatch, roles):
@@ -105,7 +106,13 @@ async def test_revision_reads_exact_previous_material_with_per_binding_visibilit
     from tests.test_s3_artifact_store import provision_minio_bucket
 
     await provision_minio_bucket.__wrapped__()
-    async with remediation_source(tmp_path, isolated_database_env, provider="minio") as h:
+    # This composed journey includes two stored archives and two image grants.
+    # The shared 10-second unit fixture is not its execution allowance; retain
+    # a finite integration budget while dedicated tests prove deadline cleanup.
+    async with remediation_source(
+        tmp_path, isolated_database_env, provider="minio",
+        scratch_limits=_limits(total_deadline_seconds=60.0, reservation_ttl_seconds=120.0),
+    ) as h:
         first_result, first_submission = h.result, h.created
         assert first_result.execution.external_members[0].input_receipt is not None
         assert first_result.execution.external_members[1].input_receipt is None
