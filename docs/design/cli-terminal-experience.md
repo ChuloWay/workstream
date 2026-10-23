@@ -1,10 +1,11 @@
-# Workstream terminal experience — proposed screen contract
+# Workstream terminal experience — implemented first slice and proposed extensions
 
-Status: design proposal, not a delivered TUI or a new product/API contract. This
-document defines the experience for an opt-in `workstream tui` in the existing Go
-binary. The explicit commands in [the CLI reference](../../cli/README.md) remain
-the complete, non-interactive interface for humans and agents. Implementation,
-dependency selection and distribution are separate bounded changes.
+Status: WS-CLI-001-48 implements the bounded read-only contributor slice below;
+the broader workspace and mutation experience remains proposed. This is not a
+new product/API contract. The opt-in `workstream tui` shares the existing Go
+binary and public client. Explicit commands in [the CLI reference](../../cli/README.md)
+remain the non-interactive interface for humans and agents. Implementation is
+not a claim of deployment, completed native verification or public distribution.
 
 Source reconciliation: public operations below were checked against `main`
 `7f6a71a69` on 2026-10-23. The release automation from
@@ -12,7 +13,8 @@ Source reconciliation: public operations below were checked against `main`
 is merged; no public binary publication is established. The project catalogue
 in [PR #665](https://github.com/Flow-Research/workstream/pull/665), inspected at
 `4683decf345f0cccf8d6f7f819523514e4f0e8a3`, is still pending, not a delivered
-dependency. Recheck merged owners before implementing any slice.
+dependency. The first slice is reconciled with main `733c752f7`; recheck merged
+owners before implementing any later slice.
 
 ## Product shape
 
@@ -376,14 +378,14 @@ documents an event/model/update/view terminal architecture;
 [Bubbles](https://github.com/charmbracelet/bubbles/blob/main/README.md) provides
 list, viewport, help, and file-picker primitives;
 [Lip Gloss](https://github.com/charmbracelet/lipgloss/blob/main/README.md)
-supports terminal color-profile downsampling. Together their v2 packages are
-a plausible Go implementation candidate, not selected dependencies. Validate
-their exact versions, Windows behavior, accessibility and terminal teardown in
-the implementation change before adding modules.
+supports terminal color-profile downsampling. The first slice selects Bubble
+Tea 2.0.10, Bubbles 2.2.1 and Lip Gloss 2.0.6, with resolved modules in the CLI
+lockfiles. Native terminal verification remains required on all four supported
+targets; accessibility certification is not implied.
 
-### Smallest proposed first implementation slice
+### Implemented first slice
 
-Build an opt-in **read-only contributor workbench** in the existing Go binary:
+The opt-in **read-only contributor workbench** in the existing Go binary provides:
 launch/terminal guard → actor binding → `me projects` page → selected project's
 Ready/active Mine/Submissions page → fresh task or owned Submission detail.
 This first slice uses exactly nine existing typed client reads: `Profile`,

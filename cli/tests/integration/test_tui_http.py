@@ -264,6 +264,7 @@ def test_fresh_failure_clears_private_detail_and_never_prints_reflected_body(sta
         assert b"\x1b]52;c;" not in terminal.raw
         before = len(requests)
         if status == 401:
+            assert PROJECT not in terminal.screen
             terminal.send("g\tnr\r")
             terminal.pump(0.2)
             assert len(requests) == before, "auth-failed session retried automatically"

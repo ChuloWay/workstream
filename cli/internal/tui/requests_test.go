@@ -42,6 +42,9 @@ func TestFresh401BlocksCachedNavigation(t *testing.T) {
 	_, cmd := m.Update(keyMessage("enter"))
 	r := cmd().(response)
 	m.Update(response{request: r.request, err: &api.Failure{Code: "expired", Status: 401}})
+	if m.project != "" || m.request != (request{}) || strings.Contains(m.View().Content, projectID) {
+		t.Fatal("authentication failure retained project or request selectors")
+	}
 	before := len(f.calls)
 	for _, k := range []string{"g", "r", "tab", "enter"} {
 		press(t, m, k)

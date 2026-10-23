@@ -18,8 +18,10 @@ integration suite or prove every deployed backend version.
 Each native job also builds the same source as a native executable and runs the
 complete socket/terminal suite, `cli/tests/integration/test_tui_http.py`, on a
 POSIX PTY (Linux/macOS) or real ConPTY (Windows). These interactive checks cover
-keyboard/help, resize, plain/NO_COLOR, quit/Ctrl+C/pending quit, signal teardown
-and denial/cache clearing; installation smoke alone is not terminal proof.
+keyboard/help, resize, plain/NO_COLOR, quit/Ctrl+C/pending quit and denial/cache
+clearing on every target. POSIX targets additionally test real SIGTERM teardown;
+Windows does not claim POSIX-signal semantics. Installation smoke alone is not
+terminal proof.
 Program-run/output failure cleanup is a separate Go test boundary in
 `cli/internal/command/tui_test.go`, included in the existing native `go test ./...`;
 signal teardown does not prove a program error.

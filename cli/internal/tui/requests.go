@@ -242,6 +242,8 @@ func (m *Model) failed(err error, actorRead bool) {
 		if failure.Status == 401 || (actorRead && failure.Status == 403) {
 			m.blocked = true
 			m.actor = ""
+			m.project = ""
+			m.request = request{}
 		}
 		label := "Unavailable"
 		if failure.Status == 401 || failure.Status == 403 || failure.Status == 404 {
