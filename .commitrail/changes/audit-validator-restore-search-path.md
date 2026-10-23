@@ -1,7 +1,7 @@
 # Restore retained audit evidence under PostgreSQL's empty search path
 
 - Initiative: None
-- Durable disposition: Planned
+- Durable disposition: Complete
 - Intended merge outcome: Standard PostgreSQL backup restoration validates retained authorization audit rows without relying on the restoring session's search path.
 
 ## Intent
@@ -56,7 +56,7 @@ This closes a discovered restore prerequisite under #582; it does not activate a
 
 ## Evidence
 
-- Initial focused PostgreSQL run: seven passed, including four COPY cases, the existing role-vocabulary proof, single-head graph, and immediate-predecessor upgrade. Subsequent custody/downgrade refinements require a fresh run.
+- Final focused PostgreSQL run: ten passed, including four COPY/direct-helper cases, existing role-vocabulary proof, single-head graph, immediate-predecessor upgrade with exact function body/identity preservation, two one-revision downgrade refusals and the canonical schema/reset guard.
 - Isolated restore diagnostic: after correcting the two function paths, a fresh ordinary dump restored without schema interception. All 121 table row counts/digests matched. Owned containers were removed. This does not prove future task/submission/acceptance recovery; those records do not yet exist in this drill.
 - Canonical schema fingerprint regenerated from the migrated PostgreSQL schema; no test selection or CI workflow changed.
 - Roadmap assessment: #582 already retains restore as an outstanding release prerequisite. The repair changes no capability exposure, completion claim or next dependency, so no roadmap edit is needed. Full hosted journey evidence remains outstanding.
