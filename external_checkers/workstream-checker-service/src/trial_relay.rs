@@ -90,7 +90,8 @@ pub(crate) struct TrialProfile {
     pub(crate) maximum_step_timeout_ms: u64,
     pub(crate) maximum_step_output_bytes: usize,
     pub(crate) maximum_observation_bytes: usize,
-    pub(crate) maximum_cpu_millis: u64,
+    pub(crate) maximum_cpu_quota_millis: u64,
+    pub(crate) maximum_cpu_time_ms: u64,
     pub(crate) maximum_memory_bytes: u64,
     pub(crate) maximum_disk_bytes: u64,
     pub(crate) maximum_entries: u64,
@@ -125,7 +126,8 @@ struct TrialEnvironment {
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 struct TrialResources {
-    cpu_millis: u64,
+    cpu_quota_millis: u64,
+    cpu_time_ms: u64,
     memory_bytes: u64,
     disk_bytes: u64,
     maximum_entries: u64,
@@ -164,13 +166,17 @@ pub(crate) struct RoleInventoryDigest {
 
 #[derive(Clone, Debug, Serialize, PartialEq, Eq)]
 pub(crate) struct TrialBuildObservation {
-    pub(crate) completion: String,
+    pub(crate) outcome: TrialOperationOutcome,
     pub(crate) exit_code: Option<i32>,
     pub(crate) signal: Option<i32>,
+    pub(crate) stdout: String,
+    pub(crate) stdout_sha256: String,
+    pub(crate) stderr: String,
+    pub(crate) stderr_sha256: String,
     pub(crate) candidate_image_digest: Option<String>,
     pub(crate) candidate_archive_digest: Option<String>,
     pub(crate) elapsed_ms: u64,
-    pub(crate) cpu_millis: u64,
+    pub(crate) cpu_time_ms: u64,
     pub(crate) peak_memory_bytes: u64,
     pub(crate) peak_pids: u64,
     pub(crate) written_bytes: u64,
@@ -184,7 +190,7 @@ pub(crate) struct TrialStepObservation {
     pub(crate) operation_order: u32,
     pub(crate) workspace_identity: String,
     pub(crate) visible_role_inventory_digests: Vec<RoleInventoryDigest>,
-    pub(crate) completion: String,
+    pub(crate) outcome: TrialOperationOutcome,
     pub(crate) exit_code: Option<i32>,
     pub(crate) signal: Option<i32>,
     pub(crate) stdout: String,
@@ -194,12 +200,27 @@ pub(crate) struct TrialStepObservation {
     pub(crate) workspace_before_sha256: String,
     pub(crate) workspace_after_sha256: String,
     pub(crate) elapsed_ms: u64,
-    pub(crate) cpu_millis: u64,
+    pub(crate) cpu_time_ms: u64,
     pub(crate) peak_memory_bytes: u64,
     pub(crate) peak_pids: u64,
     pub(crate) written_bytes: u64,
     pub(crate) written_entries: u64,
     pub(crate) measurement_method: String,
+}
+
+#[derive(Clone, Copy, Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum TrialOperationOutcome {
+    Succeeded,
+    ExitNonzero,
+    Signalled,
+    DeadlineExceeded,
+    CpuExceeded,
+    MemoryExceeded,
+    PidExceeded,
+    DiskExceeded,
+    OutputExceeded,
+    DependencySkipped,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -487,15 +508,17 @@ impl TrialRelay {
                 receipt_digest: None,
             });
         let cleanup_unsettled = outcome.cleanup_unsettled || !cleanup_paths(&self.paths);
+        let failure = outcome
+            .failure
+            .or(cleanup_unsettled.then_some(TrialRelayFailure::CleanupUnsettled));
+        let receipt_usable = failure.is_none() && outcome.plan_completed;
         TrialRelayFinish {
-            failure: outcome
-                .failure
-                .or(cleanup_unsettled.then_some(TrialRelayFailure::CleanupUnsettled)),
+            failure,
             cleanup_unsettled,
             plan_started: outcome.plan_started,
             plan_completed: outcome.plan_completed,
-            receipt_handle: outcome.receipt_handle,
-            receipt_digest: outcome.receipt_digest,
+            receipt_handle: outcome.receipt_handle.filter(|_| receipt_usable),
+            receipt_digest: outcome.receipt_digest.filter(|_| receipt_usable),
         }
     }
 }
@@ -510,6 +533,7 @@ impl Drop for TrialRelay {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn validate_start(
     relay_root: &Path,
     verified_material_root: &Path,
@@ -638,7 +662,8 @@ fn valid_profile(profile: &TrialProfile) -> bool {
         && profile.maximum_step_output_bytes <= ABSOLUTE_MAXIMUM_FRAME_BYTES
         && profile.maximum_observation_bytes > 0
         && profile.maximum_observation_bytes <= ABSOLUTE_MAXIMUM_FRAME_BYTES
-        && profile.maximum_cpu_millis > 0
+        && profile.maximum_cpu_quota_millis > 0
+        && profile.maximum_cpu_time_ms > 0
         && profile.maximum_memory_bytes > 0
         && profile.maximum_disk_bytes > 0
         && profile.maximum_entries > 0
@@ -686,9 +711,12 @@ fn validate_plan(plan: &TrialPlan, profile: &TrialProfile) -> Result<(), TrialRe
         || plan.build_timeout_ms == 0
         || plan.build_timeout_ms > profile.maximum_build_timeout_ms
         || plan.steps.is_empty()
+        || plan.steps.len() != profile.required_slots.len()
         || plan.steps.len() > profile.maximum_steps
-        || plan.resources.cpu_millis == 0
-        || plan.resources.cpu_millis > profile.maximum_cpu_millis
+        || plan.resources.cpu_quota_millis == 0
+        || plan.resources.cpu_quota_millis > profile.maximum_cpu_quota_millis
+        || plan.resources.cpu_time_ms == 0
+        || plan.resources.cpu_time_ms > profile.maximum_cpu_time_ms
         || plan.resources.memory_bytes == 0
         || plan.resources.memory_bytes > profile.maximum_memory_bytes
         || plan.resources.disk_bytes == 0
@@ -951,11 +979,24 @@ fn validate_execution(
     {
         return Err(TrialRelayFailure::ImplementationUnavailable);
     }
+    let build_succeeded = execution.build.outcome == TrialOperationOutcome::Succeeded;
+    let aggregate_cpu_time_ms = execution
+        .steps
+        .iter()
+        .try_fold(execution.build.cpu_time_ms, |total, item| {
+            total.checked_add(item.cpu_time_ms)
+        });
+    if aggregate_cpu_time_ms.is_none_or(|value| value > plan.resources.cpu_time_ms) {
+        return Err(TrialRelayFailure::ImplementationUnavailable);
+    }
+    let mut successful_slots = HashSet::new();
     for (index, (observation, step)) in execution.steps.iter().zip(&plan.steps).enumerate() {
+        let dependency_succeeded =
+            step.state_source == "fresh" || successful_slots.contains(step.state_source.as_str());
+        let must_skip = !build_succeeded || !dependency_succeeded;
         if observation.slot_id != step.slot_id
             || observation.operation_order != (index + 1) as u32
             || !valid_identifier(&observation.workspace_identity)
-            || !valid_identifier(&observation.completion)
             || !valid_identifier(&observation.measurement_method)
             || !valid_sha256(&observation.stdout_sha256)
             || !valid_sha256(&observation.stderr_sha256)
@@ -969,7 +1010,7 @@ fn validate_execution(
                 .saturating_add(observation.stderr.len())
                 > profile.maximum_step_output_bytes
             || observation.elapsed_ms > step.timeout_ms
-            || observation.cpu_millis > plan.resources.cpu_millis
+            || observation.cpu_time_ms > plan.resources.cpu_time_ms
             || observation.peak_memory_bytes > plan.resources.memory_bytes
             || observation.peak_pids > plan.resources.pids
             || observation.written_bytes > plan.resources.disk_bytes
@@ -978,8 +1019,26 @@ fn validate_execution(
                 &observation.visible_role_inventory_digests,
                 &step.visible_roles,
             )
+            || !valid_operation_outcome(
+                observation.outcome,
+                observation.exit_code,
+                observation.signal,
+                &observation.stdout,
+                &observation.stderr,
+                must_skip,
+            )
+            || (must_skip
+                && (observation.elapsed_ms != 0
+                    || observation.cpu_time_ms != 0
+                    || observation.peak_memory_bytes != 0
+                    || observation.peak_pids != 0
+                    || observation.written_bytes != 0
+                    || observation.written_entries != 0))
         {
             return Err(TrialRelayFailure::ImplementationUnavailable);
+        }
+        if observation.outcome == TrialOperationOutcome::Succeeded {
+            successful_slots.insert(observation.slot_id.as_str());
         }
     }
     Ok(())
@@ -990,8 +1049,16 @@ fn valid_build_observation(
     plan: &TrialPlan,
     profile: &TrialProfile,
 ) -> bool {
-    valid_identifier(&observation.completion)
-        && valid_identifier(&observation.measurement_method)
+    valid_identifier(&observation.measurement_method)
+        && valid_sha256(&observation.stdout_sha256)
+        && valid_sha256(&observation.stderr_sha256)
+        && sha256_text(&observation.stdout) == observation.stdout_sha256
+        && sha256_text(&observation.stderr) == observation.stderr_sha256
+        && observation
+            .stdout
+            .len()
+            .saturating_add(observation.stderr.len())
+            <= profile.maximum_step_output_bytes
         && observation
             .candidate_image_digest
             .as_deref()
@@ -1001,18 +1068,73 @@ fn valid_build_observation(
             .as_deref()
             .is_none_or(valid_sha256)
         && observation.elapsed_ms <= plan.build_timeout_ms
-        && observation.cpu_millis <= plan.resources.cpu_millis
+        && observation.cpu_time_ms <= plan.resources.cpu_time_ms
         && observation.peak_memory_bytes <= plan.resources.memory_bytes
         && observation.peak_pids <= plan.resources.pids
         && observation.written_bytes <= plan.resources.disk_bytes
         && observation.written_entries <= plan.resources.maximum_entries
         && (observation.candidate_image_digest.is_none()
             == observation.candidate_archive_digest.is_none())
-        && observation.candidate_image_digest.is_some()
+        && valid_build_outcome(observation)
         && profile
             .approved_base_digests
             .iter()
             .all(|digest| valid_sha256(digest))
+}
+
+fn valid_build_outcome(observation: &TrialBuildObservation) -> bool {
+    let has_candidate = observation.candidate_image_digest.is_some();
+    match observation.outcome {
+        TrialOperationOutcome::Succeeded => {
+            has_candidate && observation.exit_code == Some(0) && observation.signal.is_none()
+        }
+        TrialOperationOutcome::ExitNonzero => {
+            !has_candidate
+                && observation.exit_code.is_some_and(|value| value != 0)
+                && observation.signal.is_none()
+        }
+        TrialOperationOutcome::Signalled
+        | TrialOperationOutcome::DeadlineExceeded
+        | TrialOperationOutcome::CpuExceeded
+        | TrialOperationOutcome::MemoryExceeded
+        | TrialOperationOutcome::PidExceeded
+        | TrialOperationOutcome::DiskExceeded
+        | TrialOperationOutcome::OutputExceeded => {
+            !has_candidate && observation.exit_code.is_none() && observation.signal.is_some()
+        }
+        TrialOperationOutcome::DependencySkipped => false,
+    }
+}
+
+fn valid_operation_outcome(
+    outcome: TrialOperationOutcome,
+    exit_code: Option<i32>,
+    signal: Option<i32>,
+    stdout: &str,
+    stderr: &str,
+    must_skip: bool,
+) -> bool {
+    if must_skip {
+        return outcome == TrialOperationOutcome::DependencySkipped
+            && exit_code.is_none()
+            && signal.is_none()
+            && stdout.is_empty()
+            && stderr.is_empty();
+    }
+    match outcome {
+        TrialOperationOutcome::Succeeded => exit_code == Some(0) && signal.is_none(),
+        TrialOperationOutcome::ExitNonzero => {
+            exit_code.is_some_and(|value| value != 0) && signal.is_none()
+        }
+        TrialOperationOutcome::Signalled
+        | TrialOperationOutcome::DeadlineExceeded
+        | TrialOperationOutcome::CpuExceeded
+        | TrialOperationOutcome::MemoryExceeded
+        | TrialOperationOutcome::PidExceeded
+        | TrialOperationOutcome::DiskExceeded
+        | TrialOperationOutcome::OutputExceeded => exit_code.is_none() && signal.is_some(),
+        TrialOperationOutcome::DependencySkipped => false,
+    }
 }
 
 fn valid_role_inventory(values: &[RoleInventoryDigest], expected: &[String]) -> bool {

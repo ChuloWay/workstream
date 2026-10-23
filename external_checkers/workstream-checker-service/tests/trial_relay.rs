@@ -148,7 +148,8 @@ fn profile() -> TrialProfile {
         maximum_step_timeout_ms: 1_000,
         maximum_step_output_bytes: 4_096,
         maximum_observation_bytes: 32 * 1024,
-        maximum_cpu_millis: 2_000,
+        maximum_cpu_quota_millis: 2_000,
+        maximum_cpu_time_ms: 10_000,
         maximum_memory_bytes: 128 * 1024 * 1024,
         maximum_disk_bytes: 64 * 1024 * 1024,
         maximum_entries: 1_000,
@@ -171,7 +172,7 @@ fn plan() -> Value {
     json!({
         "schema_version": "workstream.checker_trial_plan.v1",
         "environment": {"dockerfile": "Containerfile", "context": ".", "platform": "linux/amd64"},
-        "resources": {"cpu_millis": 1000, "memory_bytes": 67_108_864, "disk_bytes": 33_554_432, "maximum_entries": 500, "pids": 16},
+        "resources": {"cpu_quota_millis": 1000, "cpu_time_ms": 5000, "memory_bytes": 67_108_864, "disk_bytes": 33_554_432, "maximum_entries": 500, "pids": 16},
         "build_timeout_ms": 1500,
         "steps": [{
             "slot_id": "slot_a", "operation": "run", "state_source": "fresh",
@@ -200,13 +201,17 @@ fn execution(cleanup_confirmed: bool) -> TrialExecution {
             },
         ],
         build: TrialBuildObservation {
-            completion: "completed".into(),
+            outcome: TrialOperationOutcome::Succeeded,
             exit_code: Some(0),
             signal: None,
+            stdout: "built\n".into(),
+            stdout_sha256: text_digest("built\n"),
+            stderr: String::new(),
+            stderr_sha256: text_digest(""),
             candidate_image_digest: Some(digest('e')),
             candidate_archive_digest: Some(digest('f')),
             elapsed_ms: 100,
-            cpu_millis: 50,
+            cpu_time_ms: 50,
             peak_memory_bytes: 1024,
             peak_pids: 2,
             written_bytes: 2048,
@@ -221,7 +226,7 @@ fn execution(cleanup_confirmed: bool) -> TrialExecution {
                 role: "source".into(),
                 digest: digest('c'),
             }],
-            completion: "completed".into(),
+            outcome: TrialOperationOutcome::Succeeded,
             exit_code: Some(0),
             signal: None,
             stdout: "ok\n".into(),
@@ -231,7 +236,7 @@ fn execution(cleanup_confirmed: bool) -> TrialExecution {
             workspace_before_sha256: digest('1'),
             workspace_after_sha256: digest('2'),
             elapsed_ms: 20,
-            cpu_millis: 10,
+            cpu_time_ms: 10,
             peak_memory_bytes: 512,
             peak_pids: 1,
             written_bytes: 64,
@@ -239,6 +244,48 @@ fn execution(cleanup_confirmed: bool) -> TrialExecution {
             measurement_method: "cgroup_v2".into(),
         }],
         cleanup_confirmed,
+    }
+}
+
+fn build_failure_execution() -> TrialExecution {
+    let mut value = execution(true);
+    value.build.outcome = TrialOperationOutcome::ExitNonzero;
+    value.build.exit_code = Some(2);
+    value.build.stdout.clear();
+    value.build.stdout_sha256 = text_digest("");
+    value.build.stderr = "compile error\n".into();
+    value.build.stderr_sha256 = text_digest("compile error\n");
+    value.build.candidate_image_digest = None;
+    value.build.candidate_archive_digest = None;
+    let step = &mut value.steps[0];
+    step.outcome = TrialOperationOutcome::DependencySkipped;
+    step.exit_code = None;
+    step.signal = None;
+    step.stdout.clear();
+    step.stdout_sha256 = text_digest("");
+    step.stderr.clear();
+    step.stderr_sha256 = text_digest("");
+    step.elapsed_ms = 0;
+    step.cpu_time_ms = 0;
+    step.peak_memory_bytes = 0;
+    step.peak_pids = 0;
+    step.written_bytes = 0;
+    step.written_entries = 0;
+    value
+}
+
+struct BuildFailureEngine;
+
+impl TrialEngine for BuildFailureEngine {
+    fn execute(
+        &self,
+        _context: &TrialEngineContext,
+        _plan: &TrialPlan,
+        _deadline: Instant,
+        _invocation_cancelled: &AtomicBool,
+        _relay_cancelled: &AtomicBool,
+    ) -> Result<TrialExecution, TrialEngineFailure> {
+        Ok(build_failure_execution())
     }
 }
 
@@ -346,6 +393,10 @@ fn host_runtime_fields_and_profile_slot_substitution_are_rejected_before_engine(
     assert_plan_rejected(|value| value["steps"][0]["working_directory"] = json!("../host"));
     assert_plan_rejected(|value| value["resources"]["pids"] = json!(33));
     assert_plan_rejected(|value| value["environment"]["platform"] = json!("linux/arm64"));
+    assert_plan_rejected(|value| {
+        let trailing = value["steps"][0].clone();
+        value["steps"].as_array_mut().unwrap().push(trailing);
+    });
 }
 
 #[test]
@@ -427,4 +478,42 @@ fn invocation_cancellation_closes_waiting_relay_without_receipt() {
     assert!(!finish.plan_started && !finish.plan_completed);
     assert_eq!(engine.calls.load(Ordering::Relaxed), 0);
     assert!(publisher.0.lock().unwrap().is_empty());
+}
+
+#[test]
+fn observed_build_failure_publishes_work_evidence_and_skips_dependent_step() {
+    let root = TestRoot::new();
+    let relay_root = root.child("relay");
+    let material_root = root.child("material");
+    let scratch_root = root.child("scratch");
+    let metadata = fs::metadata(&root.0).unwrap();
+    let publisher = Arc::new(FakePublisher::default());
+    let relay = TrialRelay::start(
+        &relay_root,
+        &material_root,
+        &scratch_root,
+        &grant(),
+        &identity(),
+        &profile(),
+        publisher.clone(),
+        Arc::new(BuildFailureEngine),
+        metadata.uid(),
+        metadata.gid(),
+        Instant::now() + Duration::from_secs(2),
+        Arc::new(AtomicBool::new(false)),
+    )
+    .unwrap();
+    let response = exchange(relay.socket_path(), &request(plan()));
+    assert_eq!(response["outcome"], "completed");
+    let publications = publisher.0.lock().unwrap();
+    assert_eq!(
+        publications[0]["execution"]["build"]["outcome"],
+        "exit_nonzero"
+    );
+    assert_eq!(
+        publications[0]["execution"]["steps"][0]["outcome"],
+        "dependency_skipped"
+    );
+    drop(publications);
+    assert_eq!(relay.finish().failure, None);
 }
