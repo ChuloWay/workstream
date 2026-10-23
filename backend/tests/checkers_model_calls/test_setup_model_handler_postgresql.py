@@ -574,7 +574,10 @@ class _ObservedOutputs:
         except Exception as exc:
             self.stages.append(f"store_{role}_failed:{type(exc).__name__}:{exc}")
             raise
-        self.stages.append(f"store_{role}_done")
+        self.stages.append(
+            f"store_{role}_done:{result.status}:"
+            f"receipt={result.verification_receipt_id is not None}"
+        )
         return result
 
 
