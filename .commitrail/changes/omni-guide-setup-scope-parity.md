@@ -2,27 +2,30 @@
 
 - Initiative: None
 - Durable disposition: Planned
-- Intended merge outcome: OmniCoreAgent guide setup generates only the supported checker specification fields and can correct known invalid model output within one bounded attempt, matching the OpenAI SDK runtime's behavior.
+- Intended merge outcome: OmniCoreAgent guide setup generates only supported checker specification fields and corrects known invalid output within one bounded attempt; the current checker-only setup API, worker, and lane-catalogue proofs also pass together.
 
 ## Intent
 
 The first hosted guide setup drill needs useful PRE/POST checker proposals from either registered inference runtime. The merged OpenAI SDK adapter restricts generated output and permits bounded correction, while the Omni adapter still prompts with the historical result schema and terminalizes malformed draft or final output immediately. Shared final validation rejects out-of-scope output; this change does not alter acceptance authority.
 
+The merged checker-only setup contract also exposed stale API source-evidence, Celery test-state, and shared test-catalogue assertions. Their focused repairs are included in this one integration PR; source PRs [#666](https://github.com/Flow-Research/workstream/pull/666) and [#667](https://github.com/Flow-Research/workstream/pull/667) retain the original review history.
+
 ## Bounded change
 
-- Allowed: `backend/app/adapters/project_agents/omnicore_agent.py`, the existing restricted-schema helper in `backend/app/adapters/project_agents/compilation_draft.py` only to accept the native Pydantic schema shape, focused actual-SDK tests in `backend/tests/test_omnicore_agent_sdk.py`, this record, and factual current setup documentation if a capability claim changes.
-- Prohibited: project-agent contract or storage changes, authorization/approval changes, checker execution changes, provider route or retry changes, live inference, credentials, and remote product mutations.
+- Allowed: `backend/app/adapters/project_agents/omnicore_agent.py`, the restricted-schema helper in `backend/app/adapters/project_agents/compilation_draft.py` only for the native Pydantic schema shape, actual-SDK tests in `backend/tests/test_omnicore_agent_sdk.py`, `backend/tests/test_api_contract_e2e.py`, `backend/tests/projects/guide_compilation/test_live_worker.py`, `backend/tests/projects/guide_compilation/test_worker_topology.py`, the independent fingerprint in `backend/tests/test_ci_lane_catalogue.py`, and this combined record.
+- Prohibited: project-agent contract or storage changes, authorization/approval changes, checker execution changes, provider route or retry changes, production Celery changes, CI lane membership/selection/workflow changes, live inference, credentials, and remote product mutations.
 
 ## Acceptance criteria
 
 - Acceptance: Omni presents the restricted generated schema in draft and review; a known invalid draft or final response receives safe bounded correction in the same attempt; corrected output must satisfy the shared contextual validation and reopen assigned originals in its phase; exhausted corrections fail closed; total timeout, model turns, tool quotas, provider attempts, circuit facts, and native cleanup stay bounded. Actual SDK boundary tests demonstrate correction, scope rejection, and failure exhaustion.
+- Integration proof: the API drill verifies exact original references with an empty checker inventory; the worker fixture restores broker mode before the guarded hard-timeout case; the independent lane fingerprint matches the merged shared member without changing lane membership; the combined Backend and public API drills complete on one head.
 
 ## Risk and review routing
 
 - Risk class: L1, untrusted model output and guarded external runtime behavior.
-- Verification: focused actual SDK tests with loopback synthetic provider; relevant guide runtime tests, format/lint/type checks as available; diff, stale wording, markdown links, roadmap impact inspection.
-- Required review: architecture, security, QA, test delta. Plan review precedes product code.
-- Human review focus: restricted schema parity, distinction between corrected known output and provider retry, aggregate turn accounting, source reopening, and failure classification.
+- Verification: focused actual SDK and API tests, ordered worker regressions, full Backend and public API drills on the combined head, format/lint/type checks as available; diff, Commitrail, stale wording, Markdown links, and roadmap impact inspection.
+- Required review: architecture, security, QA, test delta, and CI integrity for the test-custody and catalogue changes. Plan review preceded product code.
+- Human review focus: restricted schema parity, distinction between corrected known output and provider retry, aggregate turn accounting and source reopening; exact API source evidence, Celery broker-mode restoration, and the independent shared-lane fingerprint.
 
 ## Plan
 
@@ -47,3 +50,11 @@ The actual Omni SDK loopback tests exercise valid draft/review, exact restricted
 - No paid model inference, remote product mutation, or hosted proof was performed.
 
 Roadmap assessment: no new public route, enabled runtime, deployed provider, or setup capability is introduced. The current capability ledger already describes strict checking in both phases and separates local qualification from hosted operation. This PR repairs the Omni implementation to honor that existing claim; no roadmap text or spreadsheet export changes are needed.
+
+## Source repair evidence and reconciliation
+
+- [#666](https://github.com/Flow-Research/workstream/pull/666) identified a stale API-drill assertion that indexed `result.requirements[0]` after checker-only setup correctly returned no project checks. The repair retains one exact neutral read and invocation, asserts the empty requirement inventory, and checks source item, original document version, and digest directly. The pre-fix `IndexError` was reproduced; 58 focused API/setup tests passed, and independent mutations to each source-reference field failed the assertion.
+- [#667](https://github.com/Flow-Research/workstream/pull/667) traced a prefork timeout regression to eager Celery settings left on a cached task app by an earlier test fixture. The repair uses existing `sync_task_settings` at fixture entry and exit, asserts broker mode before the hard-timeout case, and preserves provider-once, acknowledgement, and durable-uncertainty checks. The baseline ordered pair had one pass and one `DID NOT RAISE` failure; the repaired pair passed. Both affected modules passed 25 tests with only the separate Redis probe deselected in that focused run. A full isolated `project_lifecycle_c` lane passed 436 nodes with no skips or deselections using PostgreSQL, Redis, and MinIO; hosted aggregate proof remains required.
+- The same #667 investigation found the independent shared-lane fingerprint lagged the merged `test_setup_checker_scope.py` member. Removing only that member reconstructs the old 258 count and digest; the corrected assertion expects 259 members and the current digest without changing lane membership. Its 58-test module passed, and a missing-member mutation failed the assertion.
+
+The original #666 and #667 commits remain in branch history. Their standalone new records are consolidated here so the single combined PR has one bounded Commitrail record. No product capability, public route, runtime registry, or hosted deployment claim changes.
