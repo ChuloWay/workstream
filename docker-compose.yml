@@ -85,8 +85,6 @@ services:
     group_add: ["10001"]
     environment:
       <<: *backend-environment
-      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       WORKSTREAM_GUIDE_DOCUMENT_PARSER_SOCKET: /var/lib/workstream/guide-runtime/guide.sock
     volumes:
       - ./backend:/workspace/backend
@@ -125,6 +123,10 @@ services:
   model-proxy:
     <<: *backend-runtime
     profiles: ["model-proxy"]
+    environment:
+      <<: *backend-environment
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
     command: [python, -m, app.workers.checker_model_proxy]
     stop_grace_period: 125m
     depends_on:

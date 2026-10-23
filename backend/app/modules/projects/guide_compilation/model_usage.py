@@ -32,7 +32,7 @@ class SetupModelUsageCurrent:
                 ProjectGuideCompilationAttempt.setup_generation == key.setup_generation,
                 ProjectGuideCompilationAttempt.runtime_configuration_hash
                 == key.runtime_configuration_hash,
-                ProjectGuideCompilationAttempt.status == "compilation_reserved",
+                ProjectGuideCompilationAttempt.status == "compilation_provider_uncertain",
             )
             .with_for_update()
             .execution_options(populate_existing=True)

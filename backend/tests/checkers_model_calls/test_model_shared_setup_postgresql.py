@@ -1,21 +1,22 @@
 """Focused setup and shared-budget PostgreSQL model-usage proofs."""
 
+from app.modules.model_usage.models import ModelUsageEffect
 from tests.checkers_model_calls.test_model_call_transactions_postgresql import (
     AsyncSession,
     BoundaryPorts,
-    DBAPIError,
     DatabaseFacts,
+    DBAPIError,
     ModelCallBudgetUnavailable,
     ModelCallConflict,
     ModelCallUsage,
     ModelGenerationSettings,
     ModelProfileProvisioningFacts,
+    ModelProfileReader,
     ModelUsageBudgetAccount,
     asyncio,
     canonical_json_hash,
     evidence,
     execution,
-    model_database as _model_database,
     new_record_id,
     provision,
     pytest,
@@ -27,7 +28,9 @@ from tests.checkers_model_calls.test_model_call_transactions_postgresql import (
     text,
     uuid4,
 )
-from app.modules.model_usage.models import ModelUsageEffect
+from tests.checkers_model_calls.test_model_call_transactions_postgresql import (
+    model_database as _model_database,
+)
 
 model_database = _model_database
 
@@ -59,6 +62,67 @@ async def test_profile_publication_is_not_owned_by_a_checker_registry_entry(
         )
     profile = await provision(model_database, BoundaryPorts(), limit=10_000)
     assert profile.spec.project_id == model_database.project_id
+
+
+async def test_setup_profile_selection_pins_latest_matching_identity(
+    model_database: DatabaseFacts,
+) -> None:
+    """New attempts see a matching update; old snapshots and other models do not drift."""
+    ports = BoundaryPorts()
+    first = await provision(model_database, ports, limit=10_000)
+
+    async def publish(spec):
+        facts = ModelProfileProvisioningFacts(
+            operation_id=uuid4(),
+            actor_profile_id=new_record_id(),
+            spec=spec,
+            profile_digest=canonical_json_hash(spec.model_dump(mode="json")),
+        )
+        async with AsyncSession(model_database.engine, expire_on_commit=False) as session:
+            async with session.begin():
+                return await service(session, ports).provision_profile(facts)
+
+    second = await publish(
+        first.spec.model_copy(
+            update={
+                "profile_version": 2,
+                "settings": ModelGenerationSettings(
+                    reasoning_effort="high", text_verbosity="low"
+                ),
+            }
+        )
+    )
+    await publish(
+        first.spec.model_copy(
+            update={
+                "profile_version": 3,
+                "model_snapshot": "gpt-unrelated-2026-10-01",
+            }
+        )
+    )
+
+    async with AsyncSession(model_database.engine, expire_on_commit=False) as session:
+        async with session.begin():
+            reader = ModelProfileReader(session)
+            selected = await reader.read_latest_matching(
+                project_id=model_database.project_id,
+                provider=first.spec.provider,
+                api=first.spec.api,
+                model_snapshot=first.spec.model_snapshot,
+            )
+            pinned = await reader.read_exact(
+                {
+                    "profile_id": first.profile_id,
+                    "profile_version": first.spec.profile_version,
+                    "profile_digest": first.profile_digest,
+                },
+                project_id=model_database.project_id,
+            )
+
+    assert selected.profile_id == second.profile_id
+    assert selected.spec.profile_version == 2
+    assert pinned.profile_id == first.profile_id
+    assert pinned.spec.profile_version == 1
 
 
 async def test_database_guards_recompute_profile_and_budget_digests(

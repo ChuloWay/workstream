@@ -313,14 +313,21 @@ async def finalize_corrected_attempt(factory, values, actor, correction, *, outc
     runtime = ScriptedGuideRuntime()
     if outcome is not None:
         runtime.outcome = outcome
+
+    @asynccontextmanager
+    async def no_model_session(_state, _context):
+        yield None
+
     coordinator = project_guide_compilation_delivery_port(
         factory,
         material_factory=guide_document_manifest_port,
         document_tools_factory=document_tools(factory),
+        model_session_factory=no_model_session,
         checker_capabilities=capabilities,
         request_authority=guide_compilation_request_authority,
         execution_authority=guide_compilation_execution_authority,
         configuration_factory=runtime_configuration,
+        model_profiles=lambda _session: None,
         runtime_factory=lambda configuration: runtime,
         sufficiency_authorization_factory=guide_sufficiency_projection_authorization,
         policy_authorization_factory=artifact_policy_projection_authorization,

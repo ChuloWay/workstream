@@ -210,11 +210,16 @@ def test_published_service_paths_match_the_compose_overlay() -> None:
             "/var/run/docker.sock" not in str(mount)
             for mount in overlay["services"].get(name, {}).get("volumes", ())
         )
-    for name in ("backend", "worker", "beat"):
+    for name in ("backend", "beat"):
         assert all(
             "checker_model_proxy" not in str(mount)
             for mount in overlay["services"][name]["volumes"]
         )
+    worker = overlay["services"]["worker"]
+    assert worker["environment"]["WORKSTREAM_CHECKER_MODEL_PROXY_SOCKET"] == (
+        "/run/ws-model-proxy/model-proxy.sock"
+    )
+    assert "checker_model_proxy:/run/ws-model-proxy:ro" in worker["volumes"]
     assert "checker_model_proxy:/run/ws-model-proxy:ro" in overlay["services"]["checker"]["volumes"]
     assert (
         "checker_model_relay:"

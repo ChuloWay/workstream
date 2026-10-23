@@ -5,9 +5,9 @@ from __future__ import annotations
 import asyncio
 import json
 import os
-from pathlib import Path
 import stat
 import struct
+from pathlib import Path
 from typing import Any
 
 from app.interfaces.checker_model_proxy import (
@@ -17,6 +17,13 @@ from app.interfaces.checker_model_proxy import (
     ModelProxyReply,
     ModelProxyRequest,
     ModelProxyResolvedReceipt,
+)
+from app.interfaces.setup_model_proxy import (
+    SETUP_MODEL_PROXY_PROTOCOL,
+    SetupModelProxyHandler,
+    SetupModelProxyReply,
+    SetupModelProxyRequest,
+    setup_model_proxy_request_from_wire,
 )
 
 
@@ -40,6 +47,7 @@ class ModelProxyTransport:
         *,
         socket_path: Path,
         handler: ModelProxyHandler,
+        setup_handler: SetupModelProxyHandler | None = None,
         maximum_connections: int = 16,
         read_timeout_seconds: float = 2.0,
         write_timeout_seconds: float = 2.0,
@@ -48,6 +56,7 @@ class ModelProxyTransport:
         if (
             not isinstance(socket_path, Path)
             or not callable(handler)
+            or (setup_handler is not None and not callable(setup_handler))
             or type(maximum_connections) is not int
             or not 1 <= maximum_connections <= 256
             or type(read_timeout_seconds) is not float
@@ -60,13 +69,14 @@ class ModelProxyTransport:
             raise ValueError("model proxy transport configuration is invalid")
         self._socket_path = socket_path
         self._handler = handler
+        self._setup_handler = setup_handler
         self._maximum_connections = maximum_connections
         self._read_timeout_seconds = read_timeout_seconds
         self._write_timeout_seconds = write_timeout_seconds
         self._shutdown_timeout_seconds = shutdown_timeout_seconds
         self._server: asyncio.AbstractServer | None = None
         self._connection_tasks: set[asyncio.Task[None]] = set()
-        self._handler_tasks: set[asyncio.Task[ModelProxyReply]] = set()
+        self._handler_tasks: set[asyncio.Task[ModelProxyReply | SetupModelProxyReply]] = set()
         self._parent_identity: tuple[int, int] | None = None
         self._socket_identity: tuple[int, int] | None = None
         self._closing = False
@@ -200,7 +210,9 @@ class ModelProxyTransport:
         if not task.cancelled():
             task.exception()
 
-    def _handler_finished(self, task: asyncio.Task[ModelProxyReply]) -> None:
+    def _handler_finished(
+        self, task: asyncio.Task[ModelProxyReply | SetupModelProxyReply]
+    ) -> None:
         self._handler_tasks.discard(task)
         if not task.cancelled():
             task.exception()
@@ -217,9 +229,14 @@ class ModelProxyTransport:
                 if size == 0 or size > MODEL_PROXY_MAXIMUM_FRAME_BYTES:
                     return
                 payload = await reader.readexactly(size)
-            request = _decode_request(payload)
+            request = _decode_wire_request(payload)
+            handler = self._handler
+            if type(request) is SetupModelProxyRequest:
+                if self._setup_handler is None:
+                    return
+                handler = self._setup_handler
             try:
-                awaitable = self._handler(request)
+                awaitable = handler(request)
             except BaseException:
                 return
             handler_task = asyncio.create_task(
@@ -232,7 +249,7 @@ class ModelProxyTransport:
                 reply = await asyncio.shield(handler_task)
             except BaseException:
                 return
-            if type(reply) is not ModelProxyReply:
+            if type(reply) not in {ModelProxyReply, SetupModelProxyReply}:
                 return
             body = json.dumps(
                 reply.wire_value(),
@@ -317,6 +334,19 @@ def _decode_request(payload: bytes) -> ModelProxyRequest:
             for item in _resolved_receipt_values(value["resolved_receipts"])
         ),
     )
+
+
+def _decode_wire_request(payload: bytes) -> ModelProxyRequest | SetupModelProxyRequest:
+    value = json.loads(
+        payload.decode("utf-8"),
+        parse_constant=_reject_json_constant,
+        object_pairs_hook=_closed_json_object,
+    )
+    if type(value) is not dict:
+        raise ValueError("model proxy request root is invalid")
+    if value.get("protocol_version") == SETUP_MODEL_PROXY_PROTOCOL:
+        return setup_model_proxy_request_from_wire(value)
+    return _decode_request(payload)
 
 
 def _resolved_receipt_values(value: object) -> list[dict[str, object]]:

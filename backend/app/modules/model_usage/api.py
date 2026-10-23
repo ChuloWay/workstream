@@ -21,7 +21,6 @@ from pydantic import (
 
 from app.core.hashing import canonical_json_hash
 
-
 Sha256 = Annotated[StrictStr, Field(pattern=r"^sha256:[0-9a-f]{64}$")]
 Identifier = Annotated[
     StrictStr, Field(min_length=1, max_length=100, pattern=r"^[a-z][a-z0-9_.-]*$")
@@ -898,7 +897,7 @@ class KnownNoEffectProof(ModelCallValue):
 
 
 class CompletedSetupModelUsageEffect(ModelCallValue):
-    """Exact retained setup response and once-settled project cost."""
+    """Exact retained setup response and once-settled project cost or unusable result."""
 
     effect: SetupModelEffectAuthorityFacts
     provider_response_id: ProviderResponseIdentifier
@@ -907,7 +906,7 @@ class CompletedSetupModelUsageEffect(ModelCallValue):
     usage: ModelCallUsage
     settled_nanodollars: Nanodollars
     completed_at: AwareDatetime
-    state: Literal["completed"] = "completed"
+    state: Literal["completed", "known_failed"] = "completed"
     replayed: bool
 
 
@@ -969,7 +968,7 @@ class ModelInvocationGrantFacts(ModelCallValue):
 
 
 class ModelProfileReaderPort(Protocol):
-    """Read one immutable profile by complete identity."""
+    """Read immutable project profiles without mutation authority."""
 
     async def read_exact(
         self,
@@ -978,6 +977,17 @@ class ModelProfileReaderPort(Protocol):
         project_id: UUID,
     ) -> ProjectModelProfile:
         """Resolve the complete selector only for its exact project."""
+        ...
+
+    async def read_latest_matching(
+        self,
+        *,
+        project_id: UUID,
+        provider: str,
+        api: str,
+        model_snapshot: str,
+    ) -> ProjectModelProfile:
+        """Select the highest published version matching one configured identity."""
         ...
 
 
@@ -1130,67 +1140,67 @@ def model_action_digest(action: str, facts: object) -> str:
 
 
 __all__ = (
-    "CompletedSetupModelUsageEffect",
-    "CompletedModelCall",
     "AttachedModelCallAttempt",
+    "CompletedModelCall",
+    "CompletedSetupModelUsageEffect",
+    "KnownFailedModelCall",
     "KnownNoEffectProof",
     "KnownNoEffectSetupModelUsageEffect",
-    "KnownFailedModelCall",
     "ModelActionEvidence",
     "ModelBudgetProvisioningFacts",
-    "ModelCallAuthorityPort",
     "ModelCallAdministrationPort",
+    "ModelCallAuthorityPort",
     "ModelCallBudgetUnavailable",
     "ModelCallConflict",
     "ModelCallCurrentExecutionPort",
-    "ModelCallEvidence",
     "ModelCallEffectAuthorityFacts",
+    "ModelCallEvidence",
     "ModelCallEvidencePort",
     "ModelCallExecutionFacts",
+    "ModelCallRecoveryAttachment",
     "ModelCallUnavailable",
     "ModelCallUsage",
-    "ModelCallRecoveryAttachment",
     "ModelDispatchReservation",
-    "ModelGenerationSettings",
     "ModelEvidenceCustodyPort",
     "ModelEvidenceReservation",
     "ModelEvidenceSelector",
+    "ModelGenerationSettings",
     "ModelInvocationGrantAuthorityPort",
     "ModelInvocationGrantFacts",
     "ModelPaidSlotKey",
     "ModelPricing",
     "ModelProfileProvisioningFacts",
+    "ModelProfileReaderPort",
+    "ModelProfileSelector",
     "ModelRecoveryCandidate",
     "ModelRecoveryChildRequest",
     "ModelRecoveryOwnerFacts",
     "ModelRecoverySourcePort",
-    "ModelProfileReaderPort",
-    "ModelProfileSelector",
     "ObservedSetupModelUsageEffect",
     "PreparedModelCallAttempt",
+    "PreparedSetupModelUsageEffect",
     "ProjectModelBudgetConfiguration",
     "ProjectModelBudgetConfigurationSpec",
     "ProjectModelProfile",
     "ProjectModelProfileSpec",
-    "PreparedSetupModelUsageEffect",
-    "SetupModelDispatchReservation",
-    "SetupModelOutputReservation",
-    "SetupModelOutputReservationPort",
     "SetupModelArtifactOutputPort",
+    "SetupModelDispatchReservation",
+    "SetupModelEffectAuthorityFacts",
     "SetupModelOutputArtifactRequest",
     "SetupModelOutputArtifactResult",
     "SetupModelOutputBindingPort",
     "SetupModelOutputBindingRequest",
     "SetupModelOutputBindingResult",
+    "SetupModelOutputReservation",
+    "SetupModelOutputReservationPort",
     "SetupModelOutputSelector",
     "SetupModelOutputSlot",
-    "SetupModelEffectAuthorityFacts",
+    "SetupModelOwnerProfile",
     "SetupModelUsageAuthorityPort",
     "SetupModelUsageEvidencePort",
-    "SetupModelOwnerProfile",
     "SetupModelUsageOwnerPort",
     "SetupModelUsageSlotKey",
-    "model_usage_cost",
     "model_action_digest",
     "model_retry_terminal_digest",
+    "model_usage_cost",
 )

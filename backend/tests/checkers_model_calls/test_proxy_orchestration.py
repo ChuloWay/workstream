@@ -1,14 +1,15 @@
 """Cross-port call sequencing; PostgreSQL/ART custody have separate integration proof."""
 
-from contextlib import asynccontextmanager
-from datetime import UTC, datetime, timedelta
 import hashlib
 import json
+from contextlib import asynccontextmanager
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
 
+from app.adapters.checkers.model_proxy import CheckerModelProxy
 from app.core.hashing import canonical_json_hash
 from app.core.identifiers import new_record_id
 from app.interfaces.checker_model_provider import (
@@ -33,7 +34,6 @@ from app.modules.model_usage.api import (
     ModelPaidSlotKey,
     ProjectModelProfile,
 )
-from app.adapters.checkers.model_proxy import CheckerModelProxy
 from tests.checkers_model_calls.test_model_call_contract import profile_spec, sha
 
 
@@ -368,6 +368,35 @@ async def test_missing_usage_retains_uncertain_effect_for_later_recovery():
     assert "model_response" not in h.blobs
     assert (await h.invoke()).outcome == "completed"
     assert h.create_count == h.settle_count == 1
+
+
+@pytest.mark.parametrize("extra, expected", [("", "completed"), ("a", "unavailable")])
+async def test_output_byte_bound_settles_incurred_multibyte_response(extra, expected):
+    h = Harness()
+    output = "£" * (h.profile.spec.maximum_output_bytes // 2) + extra
+    h.observation = CheckerModelObservation(
+        reference=h.reference,
+        provider_model=h.profile.spec.model_snapshot,
+        status=CheckerModelProviderStatus.COMPLETED,
+        output_text=output,
+        usage=CheckerModelUsage(20, 5, 10, 2, 30),
+    )
+    h.create_result = CheckerModelCreateResult(
+        CheckerModelCreateOutcome.ACCEPTED,
+        observation=h.observation,
+        known_response=h.reference,
+    )
+
+    reply = await h.invoke()
+
+    assert reply.outcome == expected
+    assert h.create_count == h.settle_count == 1
+    assert h.state == ("known_failed" if extra else "completed")
+    assert "model_response" in h.blobs
+    if extra:
+        assert reply.failure_code == "model_response_too_large"
+        assert (await h.invoke()).outcome == "unavailable"
+        assert h.create_count == h.settle_count == 1
 
 
 async def test_stale_invocation_cannot_read_a_completed_effect():

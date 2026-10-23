@@ -8,6 +8,7 @@ import pytest
 from app.core.config import get_settings
 from app.interfaces.external_services import UnknownExternalServiceProviderError
 from app.workers.task_settings import sync_task_settings
+
 from .helpers import manager_runtime_configuration, runtime_configuration
 
 
@@ -117,16 +118,19 @@ def test_runtime_factory_constructs_manager_authored_runtime_without_provider_cr
     worker, monkeypatch
 ):
     from app.adapters.project_agents.manager_authored import ManagerAuthoredProjectGuideRuntime
-    from app.interfaces.external_services import ExternalServiceConfigurationError
+    from app.adapters.project_agents.openai_agent_sdk import OpenAIAgentSdkProjectGuideRuntime
 
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     configuration = manager_runtime_configuration()
     runtime = worker.create_project_guide_runtime(configuration)
     assert isinstance(runtime, ManagerAuthoredProjectGuideRuntime)
     assert runtime.identity == configuration.adapter_identity
-    # The OpenAI runtime still refuses to start without its credential.
-    with pytest.raises(ExternalServiceConfigurationError):
-        worker.create_project_guide_runtime(runtime_configuration())
+    # Provider credentials belong only to the trusted model proxy; construction
+    # is credential-free and execution still requires the typed model capability.
+    assert isinstance(
+        worker.create_project_guide_runtime(runtime_configuration()),
+        OpenAIAgentSdkProjectGuideRuntime,
+    )
 
 
 def test_stale_coordinator_error_is_rejected_without_transport_retry(worker, monkeypatch):

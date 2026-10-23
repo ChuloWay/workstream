@@ -12,21 +12,23 @@ from uuid import UUID
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-
-from app.modules.projects.api.guide_documents import (
-    GuideDocumentManifestPort,
-    GuideDocumentUnavailable,
-)
+from app.interfaces.external_services import ExternalServiceAdapterError
 from app.interfaces.project_agents import (
+    ProjectAgentRuntimeError,
     ProjectGuideAgentRuntime,
     ProjectGuideCompilationContext,
     ProjectGuideCompilationInvalidOutputError,
     ProjectGuideCompilationResult,
-    require_complete_project_guide_compilation_result,
+    project_guide_compilation_prompt_bytes,
     require_complete_generated_specifications,
+    require_complete_project_guide_compilation_result,
     validate_project_guide_compilation_result,
 )
-from app.modules.checkers.api.external import ExternalCheckerCapabilityProjection
+from app.interfaces.project_guide_runtime import ProjectGuideRuntimeConfiguration
+from app.interfaces.setup_model_proxy import (
+    SetupModelDispatchPort,
+    SetupModelProxySubject,
+)
 from app.modules.authorization.api import (
     ActorIdentityFacts,
     AuthorizationDenied,
@@ -34,12 +36,19 @@ from app.modules.authorization.api import (
     PreparedAuthorizationInvalid,
     ProjectGuideCompilationAuthorizationPort,
 )
+from app.modules.checkers.api.external import ExternalCheckerCapabilityProjection
 from app.modules.projects.api import (
     ProjectGuideCompilationExecutionClassification,
     ProjectGuideCompilationExecutionCommand,
     ProjectGuideCompilationExecutionError,
     ProjectGuideCompilationExecutionPort,
     ProjectGuideCompilationExecutionResult,
+)
+from app.modules.projects.api.guide_documents import (
+    GuideDocumentManifestPort,
+    GuideDocumentToolsFactory,
+    GuideDocumentUnavailable,
+    GuideRuntimeCapabilities,
 )
 
 from .context import build_project_guide_compilation_context
@@ -55,16 +64,6 @@ from .service import (
     CompilationExecutionStateUnavailable,
     GuideCompilationService,
     load_compilation_execution_state,
-)
-from app.interfaces.project_guide_runtime import ProjectGuideRuntimeConfiguration
-from app.modules.projects.api.guide_documents import (
-    GuideDocumentToolsFactory,
-    GuideRuntimeCapabilities,
-)
-from app.interfaces.external_services import ExternalServiceAdapterError
-from app.interfaces.project_agents import (
-    ProjectAgentRuntimeError,
-    project_guide_compilation_prompt_bytes,
 )
 
 
@@ -95,6 +94,10 @@ class SqlAlchemyGuideCompilationExecutionBackend:
         checker_capabilities: ExternalCheckerCapabilityProjection,
         authorization_context: GuideCompilationAuthorizationContext,
         document_tools_factory: GuideDocumentToolsFactory,
+        model_session_factory: Callable[
+            [SetupModelProxySubject | None, ProjectGuideRuntimeConfiguration],
+            AbstractAsyncContextManager[SetupModelDispatchPort | None],
+        ] | None = None,
     ) -> None:
         """Store the owner-supplied ports used by each short transaction."""
         self._session_factory = session_factory
@@ -102,16 +105,26 @@ class SqlAlchemyGuideCompilationExecutionBackend:
         self._checker_capabilities = checker_capabilities
         self._authorization_context = authorization_context
         self._document_tools_factory = document_tools_factory
+        self._model_session_factory = model_session_factory or _no_model_session
+        self._model_session_configured = model_session_factory is not None
 
     @asynccontextmanager
     async def capabilities(self, state, context):
         """Issue resources only from the orchestrator's winning dispatch branch."""
-        async with self._document_tools_factory(
-            state.preflight_facts.attempt_id,
-            context.material,
-            context.runtime_configuration,
-        ) as tools:
-            yield GuideRuntimeCapabilities(tools=tools)
+        model_subject = (
+            _setup_model_subject(state, context.runtime_configuration)
+            if self._model_session_configured
+            else None
+        )
+        async with (
+            self._document_tools_factory(
+                state.preflight_facts.attempt_id,
+                context.material,
+                context.runtime_configuration,
+            ) as tools,
+            self._model_session_factory(model_subject, context.runtime_configuration) as model,
+        ):
+            yield GuideRuntimeCapabilities(tools=tools, model=model)
 
     async def load(self, attempt_id: UUID) -> CompilationExecutionState:
         """Load one exact attempt and translate storage failures safely."""
@@ -225,6 +238,10 @@ def project_guide_compilation_execution_port(
     authorization_context: GuideCompilationAuthorizationContext,
     runtime_factory: Callable[[ProjectGuideRuntimeConfiguration], ProjectGuideAgentRuntime],
     document_tools_factory: GuideDocumentToolsFactory,
+    model_session_factory: Callable[
+        [SetupModelProxySubject | None, ProjectGuideRuntimeConfiguration],
+        AbstractAsyncContextManager[SetupModelDispatchPort | None],
+    ] | None = None,
 ) -> ProjectGuideCompilationExecutionPort:
     """Compose the hidden port from existing owner-supplied dependencies."""
     backend = SqlAlchemyGuideCompilationExecutionBackend(
@@ -233,8 +250,45 @@ def project_guide_compilation_execution_port(
         checker_capabilities=checker_capabilities,
         authorization_context=authorization_context,
         document_tools_factory=document_tools_factory,
+        model_session_factory=model_session_factory,
     )
     return GuideCompilationOrchestrator(backend, runtime_factory)
+
+
+@asynccontextmanager
+async def _no_model_session(_subject, _configuration):
+    """Keep provider-free and isolated owner tests free of production composition."""
+    yield None
+
+
+def _setup_model_subject(
+    state: CompilationExecutionState,
+    configuration: ProjectGuideRuntimeConfiguration,
+) -> SetupModelProxySubject | None:
+    """Project exact attempt/profile lineage into the shared model capability."""
+    if not configuration.uses_inference:
+        return None
+    if (
+        configuration.model_profile_id is None
+        or configuration.model_profile_version is None
+        or configuration.model_profile_digest is None
+    ):
+        raise ProjectGuideCompilationExecutionError("runtime_unavailable")
+    return SetupModelProxySubject(
+        compilation_attempt_id=state.preflight_facts.attempt_id,
+        project_id=state.identity.project_id,
+        guide_id=state.identity.guide_id,
+        source_snapshot_id=state.identity.source_snapshot_id,
+        setup_run_id=state.identity.setup_run_id,
+        setup_generation=state.identity.setup_generation,
+        runtime_configuration_hash=configuration.sha256,
+        profile_id=configuration.model_profile_id,
+        profile_version=configuration.model_profile_version,
+        profile_digest=configuration.model_profile_digest,
+        provider=configuration.model_provider,
+        api=configuration.model_api,
+        model=configuration.model,
+    )
 
 
 class GuideCompilationExecutionBackend(Protocol):
@@ -287,6 +341,7 @@ class GuideCompilationOrchestrator(ProjectGuideCompilationExecutionPort):
     ) -> ProjectGuideCompilationExecutionResult:
         """Execute or safely recover one previously authorized attempt."""
         state = await self._backend.load(command.attempt_id)
+        resuming_metered = _metered_setup_resume(state)
         recovered = await self._recover(state)
         if recovered is not None:
             return recovered
@@ -310,8 +365,8 @@ class GuideCompilationOrchestrator(ProjectGuideCompilationExecutionPort):
                 await runtime.aclose()
             raise ProjectGuideCompilationExecutionError("runtime_unavailable") from None
         try:
-            dispatch = await self._backend.fence(state)
-            if not dispatch.dispatch_permitted:
+            dispatch = None if resuming_metered else await self._backend.fence(state)
+            if dispatch is not None and not dispatch.dispatch_permitted:
                 raced_state = await self._backend.load(command.attempt_id)
                 recovered = await self._recover(raced_state)
                 if recovered is None:
@@ -353,7 +408,9 @@ class GuideCompilationOrchestrator(ProjectGuideCompilationExecutionPort):
                         # No model call exists to be uncertain about; reopen and retry.
                         await self._backend.release_no_inference(state)
                         raise ProjectGuideCompilationExecutionError("runtime_unavailable") from None
-                    return _receipt_result(dispatch)
+                    if dispatch is not None:
+                        return _receipt_result(dispatch)
+                    return _state_result(await self._backend.load(command.attempt_id))
             if terminal_receipt is not None:
                 return _receipt_result(terminal_receipt)
             return _receipt_result(await self._backend.persist(state, context))
@@ -373,6 +430,10 @@ class GuideCompilationOrchestrator(ProjectGuideCompilationExecutionPort):
             stale_before = datetime.now(UTC) - timedelta(seconds=configuration.timeout_seconds)
             if await self._backend.release_no_inference(state, stale_before=stale_before):
                 return None
+        if state.classification is CompilationRecoveryClassification.PROVIDER_UNCERTAIN and (
+            _metered_setup_resume(state)
+        ):
+            return None
         if state.classification in {
             CompilationRecoveryClassification.PERSISTED,
             CompilationRecoveryClassification.INVALID_TERMINAL,
@@ -383,6 +444,19 @@ class GuideCompilationOrchestrator(ProjectGuideCompilationExecutionPort):
             context = await self._backend.context(state)
             return _receipt_result(await self._backend.persist(state, context))
         return None
+
+
+def _metered_setup_resume(state: CompilationExecutionState) -> bool:
+    """Resume only attempts whose every provider effect is guarded by MODEL-USAGE."""
+    configuration = state.runtime_configuration
+    return (
+        state.classification is CompilationRecoveryClassification.PROVIDER_UNCERTAIN
+        and configuration is not None
+        and configuration.uses_inference
+        and configuration.model_profile_id is not None
+        and configuration.model_profile_version is not None
+        and configuration.model_profile_digest is not None
+    )
 
 
 def _require_valid_result(

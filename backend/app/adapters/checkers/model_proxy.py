@@ -1,14 +1,14 @@
 """Durable model-call orchestration for project-owned checker images."""
 
 import asyncio
-from contextlib import AbstractAsyncContextManager
-from collections.abc import Callable
-from dataclasses import asdict
 import hashlib
 import json
+from collections.abc import Callable
+from contextlib import AbstractAsyncContextManager
+from dataclasses import asdict
 from uuid import uuid4
 
-from sqlalchemy import select, func
+from sqlalchemy import func, select
 
 from app.core.hashing import canonical_json_hash
 from app.core.identifiers import new_record_id
@@ -20,24 +20,24 @@ from app.interfaces.checker_model_provider import (
     CheckerModelRequest,
     CheckerModelResponseReference,
 )
-from app.interfaces.checker_model_proxy import ModelProxyRequest, ModelProxyReply
-from app.modules.model_usage.api import (
-    ModelCallEffectAuthorityFacts,
-    ModelCallEvidence,
-    ModelCallBudgetUnavailable,
-    ModelCallUsage,
-    ModelCallUnavailable,
-    ModelProfileSelector,
-    PreparedModelCallAttempt,
-    KnownNoEffectProof,
-    ProjectModelProfile,
-)
+from app.interfaces.checker_model_proxy import ModelProxyReply, ModelProxyRequest
 from app.modules.checkers.api.output_custody import (
     CheckerArtifactOutputPort,
     CheckerOutputArtifactRequest,
     CheckerOutputBindingRequest,
     CheckerOutputSelector,
     CheckerOutputUnavailable,
+)
+from app.modules.model_usage.api import (
+    KnownNoEffectProof,
+    ModelCallBudgetUnavailable,
+    ModelCallEffectAuthorityFacts,
+    ModelCallEvidence,
+    ModelCallUnavailable,
+    ModelCallUsage,
+    ModelProfileSelector,
+    PreparedModelCallAttempt,
+    ProjectModelProfile,
 )
 
 
@@ -324,6 +324,10 @@ class CheckerModelProxy:
                 "observation": asdict(observation),
             }
         )
+        output = observation.output_text
+        oversized_output = output is not None and (
+            len(output.encode("utf-8")) > profile.spec.maximum_output_bytes
+        )
         if len(data) > profile.spec.maximum_response_bytes:
             return _unavailable("model_response_too_large", call_index)
         evidence = await self._store(facts, effect, "model_response", data)
@@ -334,8 +338,10 @@ class CheckerModelProxy:
             output_tokens=raw_usage.output_tokens,
             reasoning_tokens=raw_usage.reasoning_tokens,
         )
-        usable = observation.status is CheckerModelProviderStatus.COMPLETED and bool(
-            observation.output_text
+        usable = (
+            not oversized_output
+            and observation.status is CheckerModelProviderStatus.COMPLETED
+            and bool(observation.output_text)
         )
         async with self._sessions() as session, session.begin():
             authority = await self._authorization(session, effect.internal_call_request_id)
@@ -348,6 +354,8 @@ class CheckerModelProxy:
                 response_evidence=evidence,
                 usage=usage,
             )
+        if oversized_output:
+            return _unavailable("model_response_too_large", call_index)
         if not usable:
             return _unavailable("model_provider_failed", call_index)
         # Fresh current-run attachment gates image access; late completion itself remains retained.
@@ -376,6 +384,10 @@ class CheckerModelProxy:
         if body.get("schema_version") != "workstream.checker_model_response.v1":
             raise ModelCallUnavailable("model_call_response_unavailable")
         output = body["observation"]["output_text"]
+        if not isinstance(output, str) or (
+            len(output.encode("utf-8")) > profile.spec.maximum_output_bytes
+        ):
+            return _unavailable("model_response_too_large", call_index)
         receipt = canonical_json_hash(completed.model_dump(mode="json", exclude={"replayed"}))
         return ModelProxyReply(
             outcome="completed",
