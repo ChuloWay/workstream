@@ -1,33 +1,44 @@
-# Project-image model calls with bounded spend and durable recovery
+# Shared budgeted model access for setup and POST checker agents
 
 - Initiative: None
 - Durable disposition: Planned
-- Intended merge outcome: Give policy-bound external POST images controlled model access, with project spend custody, immutable evidence and recovery that cannot silently repeat a paid call.
+- Intended merge outcome: Give setup inference and policy-bound POST agents one
+  project-funded model-use boundary with authentic workload lineage, immutable
+  evidence and recovery that cannot silently repeat a paid effect.
 
 ## Intent
 
-The user explicitly resumed the minimum PILOT-05 runtime needed by the real
-Terminal Systems project. Six proposed POST specifications require model review.
-The image owns the rubric, prompt and interpretation; Workstream owns authority,
-spend and lifecycle. No project-specific rule belongs in the shared Rust runner.
+The user resumed PILOT-05 for the real Terminal Systems project and then expanded
+its intended outcome to the existing setup inference adapters. POST images own
+their rubrics, bounded agent loops and interpretation; setup retains its existing
+strict draft/review/correction SDK loops. Workstream owns one model-use authority,
+project lifetime budget, provider effect and evidence boundary across both. No
+project rule or generic agent framework belongs in the shared Rust runner.
 
 ## Current behavior
 
-`selected_post_submit_execution.py` executes locked images over an ART callback.
-The Rust service exposes only read-only verified submission material in a
-networkless container. There is no model credential, project spend ledger or
-provider-call recovery. `execution_coordination.py` creates a successor checker
-generation on Operator retry; using that generation as a paid-call key would
-permit duplicate charges. ART already defines generated checker output custody
-ports, but their production reservation path needs inspection before reuse.
+The unmerged branch already proves a checker-only OpenAI Responses call, project
+budget, protected request/response evidence, provider-effect recovery and a
+single-use invocation socket. Current main separately runs OpenAI Agents SDK and
+OmniCoreAgent setup inference directly through their pinned native transports.
+Neither side is the shared boundary: the checker profile is registry-bound and
+one-call, while setup has no durable usage ledger. Generalize the unmerged schema
+directly after main's `0059_neutral_guide_runtime`; do not preserve checker-only
+development names or introduce a second meter.
 
 ## Bounded change
 
 ### Allowed
 
-- CHECKERS model-call contracts, models, repository/service operations and
-  selected POST integration; existing AUTH and TASK ports for fresh execution
-  authority/currentness and Operator provisioning.
+- A provider-neutral MODEL-USAGE owner for project profiles, one project lifetime
+  account, reservations, settlement, paid effects and protected evidence.
+- Strong owner-specific setup and CHECKERS subject contracts. Setup binds the
+  exact compilation attempt, setup generation and snapshotted runtime hash; POST
+  binds exact Submission/requirement/registry/configuration and current run/lease.
+- Existing pinned OpenAI Agents SDK and OmniCoreAgent request boundaries, without
+  replacing either agent loop or forwarding arbitrary HTTP.
+- CHECKERS selected POST integration and existing AUTH, PROJECTS and TASK ports
+  for fresh owner currentness and Operator provisioning.
 - Existing ART generated checker-output custody to retain bounded private
   request/response evidence, with matching authority and read concealment.
 - Typed provider capability under `backend/app/interfaces/`, concrete adapter
@@ -45,23 +56,28 @@ ports, but their production reservation path needs inspection before reuse.
 ### Not allowed
 
 No provider credential or global proxy socket in project images; no contributor
-billing, setup-agent billing, alternate checker implementation kind, project
-rules in Rust, unrestricted provider/model selection, automatic paid retries
-after ambiguous delivery, task/revision spending on infrastructure failures,
-or live model spend beyond the user-confirmed US$10 total rehearsal cap. No merge or
-hosted deployment is authorized. Execution trials and prior-revision material
-remain separately necessary before the entire project can activate.
+or project-owner billing, alternate checker implementation kind, project rules
+in Rust, generic agent framework, arbitrary forwarding proxy, unrestricted
+provider/model selection, automatic paid retry after ambiguous delivery, or
+task/revision spending on infrastructure failures. Historical setup spend lacks
+authenticated pricing/usage facts and must not be guessed as zero or backfilled;
+paid work stays disabled until an Operator provisions an externally reconciled
+remaining allowance within the already-approved US$10 total rehearsal ceiling.
+No live paid call, merge or hosted deployment is authorized here.
 
 ## Design and decisions
 
-An immutable project model profile binds the exact registry entry and digest, provider/API/model
-snapshot, generation parameters, token/deadline ceilings, one allowed call slot
-and immutable integer pricing. Reserve the complete selector triple
+An immutable project model-use profile binds provider/API/model snapshot,
+generation parameters, per-call and whole-run dispatch/token/byte/deadline
+ceilings, supported tool/request shape and immutable integer pricing. The common
+profile is not registry-owned; the POST owner separately binds it to an exact
+registry/image/configuration while setup snapshots the same selector into its
+attempt runtime configuration. Reserve the complete selector triple
 `model_profile_id`, `model_profile_version`, `model_profile_digest` in the flat
 PM-approved image configuration. A typed exact profile reader checks project,
-registry and profile identity during policy compilation, readiness/activation and
-runtime. Partial selectors fail; the existing POST policy hash retains this
-custody without a new checker kind or TASK lineage column.
+provider/API/model and profile identity during policy compilation, setup request,
+readiness/activation and runtime. Partial selectors fail; existing owner hashes
+retain custody without a new checker kind or TASK lineage column.
 The user authorized US$10 total for the Terminal Systems rehearsal; configure
 10,000,000,000 USD nanodollars and preserve all reservations and settled spend
 across retries and configuration versions. No live call may precede enforcement.
@@ -69,12 +85,31 @@ An Operator sets a finite project budget; profiles do not
 allow images to change that budget or choose a different model. Monetary amounts
 use integer USD nanodollars with explicit immutable pricing provenance.
 
-Trusted execution creates a callback-scoped model grant bound to the current
-checker lease, exact Submission, requirement, registry/configuration and profile.
-Rust exposes only an invocation-local socket. A bounded image request supplies
-prompt material; the trusted proxy supplies identity and fixed provider settings.
-The global endpoint and opaque grant never enter image input or logs. The backend
-verifies a completed call receipt before accepting a model-enabled image verdict.
+Each owner allocates a finite phase/call slot before provider I/O; transport
+arrival order and in-memory counters cannot mint durable identities. POST grants
+bind current execution and exact Submission/requirement/registry/configuration.
+Setup grants bind the exact compilation attempt/generation/runtime hash without a
+fabricated CheckerRun. Rust exposes only invocation-local capabilities. Native
+setup wrappers intercept each real pinned-SDK request; project images receive a
+restricted model session. Credentials, global endpoints and opaque backend grants
+never enter image input or logs.
+
+Whole-run reservation is sized for every possible actual provider dispatch,
+including correction and supported retries. Hidden SDK retries are disabled or
+metered individually; ambiguity prohibits the next dispatch. Restart replays
+cached exact provider responses only when canonical request hashes match, so SDK
+state and tool-call identities reconstruct without another paid create. Known
+provider IDs may be retrieved; unknown effects retain reservation and cannot be
+recreated. New children remain limited to proven no-effect or fully settled
+eligible failures.
+
+The common effect row has exactly one SQL-enforced strong owner binding. Checker
+lineage retains composite submission/registry/configuration custody; setup lineage
+uses composite compilation-attempt/project/setup-generation/runtime-hash custody.
+No owner-kind/owner-ID pair or JSON-only lineage is sufficient. AUTH plus the
+affected PROJECTS/TASK owner locks precede MODEL locks; narrow late completion can
+finish an already-paid exact effect without re-entering those owners, while a new
+dispatch always requires fresh owner currentness first.
 
 The paid slot identity is `(project, assignment, submission, submission_version,
 requirement, registry_digest, configuration_hash, profile_version, slot_index)`.
