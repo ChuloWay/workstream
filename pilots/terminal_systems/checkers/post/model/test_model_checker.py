@@ -257,6 +257,23 @@ class AssessmentTests(unittest.TestCase):
         with self.assertRaisesRegex(AssessmentError, "invalid_output"):
             self.validate(value)
 
+    def test_duplicate_keys_non_json_constants_and_wrong_types_are_rejected(self):
+        valid = json.dumps(self.assessment())
+        duplicate_findings = valid.replace(
+            '"findings": []', '"findings": [{"code": NaN}], "findings": []'
+        )
+        for raw in (
+            duplicate_findings,
+            valid.replace('"findings": []', '"findings": NaN'),
+        ):
+            with self.subTest(raw=raw):
+                with self.assertRaisesRegex(AssessmentError, "invalid_output"):
+                    validate_assessment(raw, self.rubric, self.snapshot)
+        value = self.assessment()
+        value["conditions"][0]["status"] = []
+        with self.assertRaisesRegex(AssessmentError, "invalid_output"):
+            self.validate(value)
+
     def request(self) -> dict:
         return {
             "request_digest": "sha256:" + "1" * 64,

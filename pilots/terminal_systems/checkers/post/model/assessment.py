@@ -16,6 +16,19 @@ class AssessmentError(ValueError):
     """Model output is malformed, incomplete, or not bound to actual evidence."""
 
 
+def _closed_object(pairs: list[tuple[str, object]]) -> dict[str, object]:
+    value: dict[str, object] = {}
+    for key, item in pairs:
+        if key in value:
+            raise AssessmentError("invalid_output")
+        value[key] = item
+    return value
+
+
+def _invalid_constant(_value: str) -> object:
+    raise AssessmentError("invalid_output")
+
+
 @dataclass(frozen=True, slots=True)
 class ValidatedFinding:
     code: str
@@ -33,8 +46,12 @@ def validate_assessment(
 ) -> tuple[ValidatedFinding, ...]:
     """Accept only a complete rubric decision citing mounted material evidence."""
     try:
-        value = json.loads(raw)
-    except (UnicodeError, json.JSONDecodeError) as exc:
+        value = json.loads(
+            raw,
+            object_pairs_hook=_closed_object,
+            parse_constant=_invalid_constant,
+        )
+    except (UnicodeError, json.JSONDecodeError, AssessmentError) as exc:
         raise AssessmentError("invalid_output") from exc
     if type(value) is not dict or set(value) != {
         "schema_version",
@@ -95,6 +112,7 @@ def validate_assessment(
             not _strict_int(number)
             or number not in expected
             or number in seen_indices
+            or type(status) is not str
             or status not in {"satisfied", "not_satisfied"}
             or type(evidence_ids) is not list
             or not evidence_ids
