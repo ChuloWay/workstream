@@ -232,7 +232,17 @@ obligation before claiming the hosted journey recovered.
 | Parser process identities isolate concurrent document reads | Clean release-image proof at `898d10712` | All ten cases passed: four formats, separate child identities, denied socket/process access, timeout/cancellation and reuse; owned containers removed and no Git index lock retained | This run predates the normal SIGTERM cleanup repair and does not prove that later boundary. Read-only Git inspection fixes the proof-runner file-limit failure; removing it fails the large-index regression |
 | The public guide drill recognizes unapproved guide lineage | Shared external-client oracle at `c735327fb` | 37 script tests passed; the new valid-response regression rejects the preceding oracle at its exact shape assertion, and fabricated activation/policy IDs remain rejected | An oracle test is not a completed provider-backed guide run |
 | The release parser preserves isolation and cleans up on ordinary container stop | Exact clean-source release image and full Docker proof at `95e02e2d6` | All eleven cases passed, including `sigterm_removes_owned_socket`; image `sha256:ae1e91d6122e6d530f7af146338cd4e2fb7672a6e5793d1087cbafaf16eee5a1` | This synthetic parser proof does not establish a provider-backed guide compilation or the full contribution journey |
-| Historical TASK upgrades and recovery retain their original facts | Five focused PostgreSQL cases and 34 affected shared-restore cases over the fixture repair committed as `96d84725c` | All passed; owned databases and roles removed. Snapshots were captured from `6fa9a9b55`; checksum-bound restore reuses the existing guarded test restore operation | Runner metadata names `d0de1daf9` plus a verified six-file fixture patch, not a clean `96d84725c` checkout. Restoration is setup, not proof that current guide writers create old-schema data |
+| Historical TASK upgrades and recovery retain their original facts | Five focused PostgreSQL cases and 34 affected shared-restore cases on exact clean `43028e38a` | Both batches passed; metadata binds that source and migration 0059, with owned database/role cleanup confirmed. Snapshots come from `6fa9a9b55`; checksum-bound restore reuses the existing guarded test restore operation | Restoration is setup, not proof that current guide writers create old-schema data |
+| The uploaded terminal-project guide reaches manager review through real inference | Public API, durable Celery, real parser and MinIO run on clean `95e02e2d6`, OpenAI Agents SDK with OpenRouter `openai/gpt-5.6-terra` | `policy_draft_ready` / `draft_ready_with_warnings`; 11 requirements, 3 findings, 9 capability suggestions and 23 evidence references; exact-project manager read succeeds and outsider read is concealed; owned database/role/bucket cleanup confirmed | No approval, activation, selected external checker bindings or contribution effects; local test issuer and MinIO do not prove deployed Flow/AWS integration. This run retained validation summaries, not proposal prose |
+
+## Review-driven correction
+
+The aggregate document-tool output bound covers the exact serialized result sent
+to either SDK, including locators and identity metadata. Counting text alone
+understated locator-heavy responses. Construct and reserve that complete result
+before committing successful access evidence or returning it. The regression uses
+the real fixed parser, admits an exact serialized limit and rejects the next
+result without another receipt; it fails against the preceding text-only guard.
 
 ## Reconciliation
 

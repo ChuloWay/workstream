@@ -1399,7 +1399,7 @@ v0.1 is not ready until all of the following are true:
   model quality or deployment readiness. See the [connected proof](../.commitrail/changes/public-guide-to-contribution-proof.md).
   The provider-free `manager_authored` runtime removes the inference dependency
   from local setup (this hosted release still requires the selected provider's
-  `WORKSTREAM_PROJECT_AGENT_API_KEY_FILE`, supplied only to the worker) and
+  `WORKSTREAM_PROJECT_AGENT_API_KEY_FILE`, supplied only to the Celery process) and
   proves nothing about model quality.
 - Publish the reviewed backend and checker-service source builds, substitute
   their registry digests and the approved exact checker cache into the prepared

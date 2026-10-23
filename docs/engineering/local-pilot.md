@@ -61,7 +61,7 @@ docker compose --profile backend exec -T backend python scripts/ensure_local_min
 ```
 
 `ps` must show `backend`, the Celery service, `beat`, `postgres`, `redis`, `minio`
-and `guide-document-parser` healthy. The worker waits for parser health before
+and `guide-document-parser` healthy. The Celery service waits for parser health before
 starting. The Celery command must report `pong`. The bucket command must report
 the configured bucket as ready. API, Celery process and beat receive the same
 `s3_compatible` MinIO configuration and share the Compose-project scratch
