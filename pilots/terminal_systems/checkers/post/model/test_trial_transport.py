@@ -238,11 +238,33 @@ class TrialTransportTests(unittest.TestCase):
             "receipt_digest": None,
             "failure_code": "contributor_failed",
         }
-        for invalid in (duplicate, non_json, unavailable):
+        wrong_typed_failure = dict(unavailable, failure_code=[])
+        missing_outcome = {"protocol_version": "workstream.checker_trial.v1"}
+        wrong_typed_outcome = completed_response(plan())
+        wrong_typed_outcome["observations"]["steps"][0]["outcome"] = []
+        for invalid in (
+            duplicate,
+            non_json,
+            unavailable,
+            wrong_typed_failure,
+            missing_outcome,
+            wrong_typed_outcome,
+        ):
             with self.subTest(invalid=invalid), self.assertRaisesRegex(
                 TrialTransportError, "invalid_response"
             ):
                 self.exchange(invalid)
+
+    def test_nonfinite_or_unrepresentable_timeout_is_rejected_before_connect(self):
+        for timeout in (float("nan"), float("inf"), 10**1000):
+            with self.subTest(timeout=timeout), self.assertRaisesRegex(
+                TrialTransportError, "invalid_request"
+            ):
+                execute_trial(
+                    plan(),
+                    timeout_seconds=timeout,
+                    socket_path="/does/not/exist",
+                )
 
     def test_oversize_or_truncated_frame_fails_closed(self):
         with self.assertRaisesRegex(TrialTransportError, "invalid_response"):

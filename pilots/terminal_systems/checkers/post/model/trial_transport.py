@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import hashlib
 import json
+import math
 import re
 import socket
 import struct
@@ -95,6 +96,15 @@ def _digest(value: object) -> str:
     return "sha256:" + hashlib.sha256(_canonical(value)).hexdigest()
 
 
+def _valid_timeout(value: object) -> bool:
+    if type(value) not in {int, float} or isinstance(value, bool):
+        return False
+    try:
+        return math.isfinite(float(value)) and value > 0
+    except (OverflowError, ValueError):
+        return False
+
+
 def execute_trial(
     plan: dict[str, object],
     *,
@@ -106,9 +116,7 @@ def execute_trial(
     """Execute one closed plan and validate the runner-produced receipt projection."""
     if (
         type(plan) is not dict
-        or type(timeout_seconds) not in {int, float}
-        or isinstance(timeout_seconds, bool)
-        or timeout_seconds <= 0
+        or not _valid_timeout(timeout_seconds)
         or type(maximum_frame_bytes) is not int
         or maximum_frame_bytes < 1
         or maximum_frame_bytes > MAXIMUM_FRAME_BYTES
@@ -145,7 +153,7 @@ def execute_trial(
     finally:
         stream.close()
     response = _decode_response(raw)
-    if response["outcome"] == "unavailable":
+    if response.get("outcome") == "unavailable":
         _validate_unavailable(response)
         raise TrialUnavailable(response["failure_code"])
     return _validate_completed(response, plan)
@@ -188,6 +196,7 @@ def _validate_unavailable(value: dict[str, object]) -> None:
         or value["outcome"] != "unavailable"
         or value["receipt_handle"] is not None
         or value["receipt_digest"] is not None
+        or type(value["failure_code"]) is not str
         or value["failure_code"] not in _FAILURE_CODES
     ):
         raise TrialTransportError("invalid_response")
@@ -307,6 +316,7 @@ def _validate_operation(value: dict[str, object], *, build: bool) -> None:
     if (
         set(value) != expected
         or value.get("terminal_state") != "completed_work"
+        or type(outcome) is not str
         or outcome not in _OUTCOMES
         or value.get("measurements_available") is not True
         or type(value.get("measurement_method")) is not str
