@@ -2,7 +2,9 @@ use std::collections::VecDeque;
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 use std::sync::atomic::AtomicBool;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
@@ -20,6 +22,8 @@ use trial_docker::*;
 use trial_engine::*;
 use trial_relay::*;
 
+static TEST_ROOT_SEQUENCE: AtomicU64 = AtomicU64::new(0);
+
 #[derive(Default)]
 struct FakeControl {
     creates: Mutex<Vec<OwnedContainerCreate>>,
@@ -32,10 +36,13 @@ impl RuntimeControl for FakeControl {
     fn require_image(
         &self,
         config_image_id: &str,
-        _platform_identity_digest: &str,
+        identity: &SandboxBackendIdentity,
+        runtime_key: &str,
         _deadline: Instant,
     ) -> Result<(), RuntimeControlFailure> {
         assert_eq!(config_image_id, digest('4'));
+        assert_eq!(identity.platform_identity_digest, digest('3'));
+        assert_eq!(runtime_key, "runsc");
         Ok(())
     }
 
@@ -167,8 +174,9 @@ struct Root(PathBuf);
 impl Root {
     fn new() -> Self {
         let root = std::env::temp_dir().join(format!(
-            "workstream-trial-docker-test-{}",
-            std::process::id()
+            "workstream-trial-docker-test-{}-{}",
+            std::process::id(),
+            TEST_ROOT_SEQUENCE.fetch_add(1, Ordering::Relaxed),
         ));
         let _ = fs::remove_dir_all(&root);
         fs::create_dir(&root).unwrap();
@@ -342,4 +350,299 @@ fn backend_rejects_runtime_profile_that_would_expose_host_uds() {
         result.err().unwrap().code,
         TrialRelayFailure::InvalidRequest
     );
+}
+
+#[test]
+#[ignore = "requires the owned, pre-provisioned networkless gVisor qualification harness"]
+fn concrete_runtime_builds_and_runs_offline_under_runsc() {
+    let state = PathBuf::from(
+        std::env::var("WORKSTREAM_TRIAL_QUALIFICATION_ROOT")
+            .expect("qualification root must be explicit"),
+    );
+    let platform_identity = std::env::var("WORKSTREAM_TRIAL_PLATFORM_IDENTITY_SHA256")
+        .expect("platform identity must be explicit");
+    let run = state.join("trial-scratch/engine-qualification");
+    let _ = fs::remove_dir_all(&run);
+    fs::create_dir(&run).unwrap();
+    fs::set_permissions(&run, fs::Permissions::from_mode(0o700)).unwrap();
+    let runtime = run.join("runtime");
+    let context = run.join("context");
+    let output = run.join("output");
+    let workspace = run.join("workspace");
+    let deadline_workspace = run.join("deadline-workspace");
+    let source = run.join("source");
+    for path in [
+        &runtime,
+        &context,
+        &output,
+        &workspace,
+        &deadline_workspace,
+        &source,
+    ] {
+        fs::create_dir(path).unwrap();
+        fs::set_permissions(path, fs::Permissions::from_mode(0o700)).unwrap();
+    }
+    fs::write(
+        context.join("Dockerfile"),
+        b"FROM alpine@sha256:c64c687cbea9300178b30c95835354e34c4e4febc4badfe27102879de0483b5e\nCOPY payload.txt /opt/qualification/payload.txt\nUSER 65532:65532\nENTRYPOINT [\"/bin/sh\"]\n",
+    )
+    .unwrap();
+    fs::write(
+        context.join("payload.txt"),
+        b"generic offline qualification\n",
+    )
+    .unwrap();
+    fs::write(source.join("visible.txt"), b"visible role\n").unwrap();
+
+    let identity = SandboxBackendIdentity {
+        engine_identity_digest:
+            "sha256:88a87d5d6d06160d4c144f51f95ec6dd6fe0fc6b02697eb877876683c5b57a91".into(),
+        child_runtime: "runsc".into(),
+        child_runtime_config_digest:
+            "sha256:46429fe1ec5b135d7214c1090c28c75a3175169307ae2981c502015152c3d330".into(),
+        child_host_uds: "none".into(),
+        platform: "linux/amd64".into(),
+        platform_identity_digest: platform_identity,
+        builder_image_digest:
+            "sha256:b8c743a43e82f0cef9956ea09eae79c2d56b51d359b65a736c171624a9fc95e3".into(),
+        offline_cache_digest:
+            "sha256:0d7c48edceae685051d2f60497b0df7f55a0f3f8dd6d29c5e82b9c0cd75a40e1".into(),
+        approved_base_digests: vec![
+            "sha256:c64c687cbea9300178b30c95835354e34c4e4febc4badfe27102879de0483b5e".into(),
+        ],
+    };
+    let control = DockerRuntimeControl::new(
+        PathBuf::from("/usr/local/bin/docker"),
+        runtime,
+        PathBuf::from("/etc/docker/pilot-daemon.json"),
+    )
+    .unwrap();
+    let backend = DockerTrialBackend::new(
+        DockerTrialConfiguration {
+            identity,
+            deployment_owner: "qualification".into(),
+            request_digest: digest('9'),
+            attempt_id: "018f6f49-66b8-7d2a-bf4d-0e2eeaa00026".into(),
+            runtime_key: "runsc".into(),
+            builder_image_id:
+                "sha256:b8c743a43e82f0cef9956ea09eae79c2d56b51d359b65a736c171624a9fc95e3".into(),
+            offline_cache_root: state.join("cache/content"),
+            maximum_candidate_archive_bytes: 64 * 1024 * 1024,
+            candidate_uid: 65532,
+            candidate_gid: 65532,
+        },
+        control,
+    )
+    .unwrap();
+    let owner_id = format!("trial_{}", "a".repeat(32));
+    let cancelled = AtomicBool::new(false);
+    let deadline = Instant::now() + Duration::from_secs(90);
+    let trial_resources = TrialResources {
+        cpu_quota_millis: 1000,
+        cpu_time_ms: 60_000,
+        memory_bytes: 1024 * 1024 * 1024,
+        disk_bytes: 64 * 1024 * 1024,
+        maximum_entries: 10_000,
+        pids: 128,
+    };
+    let execution = (|| {
+        let build = backend.build(
+            &SandboxBuildRequest {
+                owner_id: owner_id.clone(),
+                context_root: context,
+                context_relative: ".".into(),
+                dockerfile_relative: "Dockerfile".into(),
+                output_archive: output.join("candidate.tar"),
+                destination: "workstream-trial:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".into(),
+                platform: "linux/amd64".into(),
+                resources: trial_resources.clone(),
+                timeout_ms: 60_000,
+                maximum_output_bytes: 1024 * 1024,
+                enforcement_overruns: SandboxEnforcementOverruns {
+                    wall_time_ms: 5_000,
+                    cpu_time_ms: 5_000,
+                    memory_bytes: 16 * 1024 * 1024,
+                    pids: 4,
+                    disk_bytes: 8 * 1024 * 1024,
+                    entries: 100,
+                },
+            },
+            deadline,
+            &cancelled,
+            &cancelled,
+        );
+        eprintln!("qualification build result: {build:?}");
+        let build = build?;
+        let candidate = build
+            .observation
+            .candidate_image_digest
+            .clone()
+            .ok_or(SandboxFailure {
+                code: TrialRelayFailure::ImplementationUnavailable,
+                cleanup_unsettled: false,
+            })?;
+        assert_archive_excludes(
+            &output.join("candidate.tar"),
+            &state.join("protected-role/canary.txt"),
+            &run.join("archive-inspection"),
+        );
+        let step = backend.run_step(
+            &SandboxStepRequest {
+                owner_id: owner_id.clone(),
+                slot_id: "generic_offline_probe".into(),
+                candidate_image_digest: candidate,
+                workspace_root: workspace,
+                visible_roles: vec![("source".into(), source)],
+                visible_role_inventory_digests: vec![RoleInventoryDigest {
+                    role: "source".into(),
+                    digest: digest('c'),
+                }],
+                command: vec![
+                    "/bin/sh".into(),
+                    "-ceu".into(),
+                    "test -e /proc/gvisor/kernel_is_gvisor; test \"$(id -u)\" = 65532; test \"$(sed -n 's/^CapEff:[[:space:]]*//p' /proc/self/status)\" = 0000000000000000; test ! -e /var/run/docker.sock; test ! -e /work/execution.sock; test ! -e /work/model.sock; test ! -e /work/input/protected; test -f /work/input/source/visible.txt; if wget -T 1 -qO- http://1.1.1.1 >/dev/null 2>&1; then exit 71; fi; sleep 1; printf 'qualification=pass\\n'".into(),
+                ],
+                working_directory: ".".into(),
+                resources: trial_resources,
+                timeout_ms: 10_000,
+                maximum_output_bytes: 64 * 1024,
+                enforcement_overruns: SandboxEnforcementOverruns {
+                    wall_time_ms: 2_000,
+                    cpu_time_ms: 1_000,
+                    memory_bytes: 16 * 1024 * 1024,
+                    pids: 4,
+                    disk_bytes: 1024 * 1024,
+                    entries: 16,
+                },
+            },
+            1,
+            deadline,
+            &cancelled,
+            &cancelled,
+        );
+        eprintln!("qualification step result: {step:?}");
+        let step = step?;
+        let deadline_step = backend.run_step(
+            &SandboxStepRequest {
+                owner_id: owner_id.clone(),
+                slot_id: "generic_deadline_probe".into(),
+                candidate_image_digest: build.observation.candidate_image_digest.clone().unwrap(),
+                workspace_root: deadline_workspace,
+                visible_roles: vec![("source".into(), run.join("source"))],
+                visible_role_inventory_digests: vec![RoleInventoryDigest {
+                    role: "source".into(),
+                    digest: digest('c'),
+                }],
+                command: vec!["/bin/sh".into(), "-ceu".into(), "sleep 30".into()],
+                working_directory: ".".into(),
+                resources: TrialResources {
+                    cpu_quota_millis: 1000,
+                    cpu_time_ms: 60_000,
+                    memory_bytes: 1024 * 1024 * 1024,
+                    disk_bytes: 64 * 1024 * 1024,
+                    maximum_entries: 10_000,
+                    pids: 128,
+                },
+                timeout_ms: 4_000,
+                maximum_output_bytes: 64 * 1024,
+                enforcement_overruns: SandboxEnforcementOverruns {
+                    wall_time_ms: 5_000,
+                    cpu_time_ms: 1_000,
+                    memory_bytes: 16 * 1024 * 1024,
+                    pids: 4,
+                    disk_bytes: 1024 * 1024,
+                    entries: 16,
+                },
+            },
+            2,
+            deadline,
+            &cancelled,
+            &cancelled,
+        );
+        eprintln!("qualification deadline result: {deadline_step:?}");
+        let deadline_step = deadline_step?;
+        Ok::<_, SandboxFailure>((build, step, deadline_step))
+    })();
+    let cleanup = backend.cleanup(&owner_id, Instant::now() + Duration::from_secs(20));
+    let (build, step, deadline_step) = execution.unwrap();
+    cleanup.unwrap();
+    assert_eq!(build.observation.outcome, TrialOperationOutcome::Succeeded);
+    assert_eq!(step.observation.outcome, TrialOperationOutcome::Succeeded);
+    assert_eq!(step.observation.stdout, "qualification=pass\n");
+    assert_eq!(
+        deadline_step.observation.outcome,
+        TrialOperationOutcome::DeadlineExceeded
+    );
+    let evidence = serde_json::json!({
+        "schema_version": "workstream.trial_docker_qualification.v1",
+        "builder_image": build.observation.candidate_image_digest,
+        "builder_archive": build.observation.candidate_archive_digest,
+        "build_elapsed_ms": build.observation.elapsed_ms,
+        "build_cpu_time_ms": build.observation.cpu_time_ms,
+        "build_peak_memory_bytes": build.observation.peak_memory_bytes,
+        "build_peak_pids": build.observation.peak_pids,
+        "step_elapsed_ms": step.observation.elapsed_ms,
+        "step_cpu_time_ms": step.observation.cpu_time_ms,
+        "step_peak_memory_bytes": step.observation.peak_memory_bytes,
+        "step_peak_pids": step.observation.peak_pids,
+        "step_stdout_sha256": step.observation.stdout_sha256,
+        "deadline_elapsed_ms": deadline_step.observation.elapsed_ms,
+        "deadline_cpu_time_ms": deadline_step.observation.cpu_time_ms,
+        "deadline_outcome": "deadline_exceeded",
+        "measurement_method": step.observation.measurement_method,
+        "protected_layer_canary_absent": true,
+        "cleanup_confirmed": true,
+    });
+    fs::create_dir_all(state.join("results")).unwrap();
+    fs::write(
+        state.join("results/trial-docker-qualification.json"),
+        serde_json::to_vec_pretty(&evidence).unwrap(),
+    )
+    .unwrap();
+}
+
+fn assert_archive_excludes(archive: &Path, canary_path: &Path, inspection: &Path) {
+    let canary = fs::read(canary_path).unwrap();
+    fs::create_dir(inspection).unwrap();
+    let status = Command::new("/bin/tar")
+        .args(["-xf"])
+        .arg(archive)
+        .args(["-C"])
+        .arg(inspection)
+        .status()
+        .unwrap();
+    assert!(status.success());
+    let mut layers = fs::read_dir(inspection)
+        .unwrap()
+        .map(|entry| entry.unwrap().path())
+        .filter(|path| path.extension().is_some_and(|value| value == "gz"))
+        .collect::<Vec<_>>();
+    layers.sort();
+    assert!(!layers.is_empty());
+    for (index, layer) in layers.iter().enumerate() {
+        let root = inspection.join(format!("layer-{index}"));
+        fs::create_dir(&root).unwrap();
+        let status = Command::new("/bin/tar")
+            .args(["-xzf"])
+            .arg(layer)
+            .args(["-C"])
+            .arg(&root)
+            .status()
+            .unwrap();
+        assert!(status.success());
+        assert_tree_excludes(&root, &canary);
+    }
+}
+
+fn assert_tree_excludes(root: &Path, needle: &[u8]) {
+    for entry in fs::read_dir(root).unwrap() {
+        let path = entry.unwrap().path();
+        let metadata = fs::symlink_metadata(&path).unwrap();
+        if metadata.file_type().is_dir() {
+            assert_tree_excludes(&path, needle);
+        } else if metadata.file_type().is_file() {
+            let bytes = fs::read(path).unwrap();
+            assert!(!bytes.windows(needle.len()).any(|window| window == needle));
+        }
+    }
 }
