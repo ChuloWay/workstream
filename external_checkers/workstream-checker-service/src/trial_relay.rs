@@ -115,42 +115,42 @@ pub(crate) struct TrialSlotProfile {
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct TrialPlan {
-    schema_version: String,
-    environment: TrialEnvironment,
-    resources: TrialResources,
-    build_timeout_ms: u64,
-    steps: Vec<TrialStep>,
+    pub(crate) schema_version: String,
+    pub(crate) environment: TrialEnvironment,
+    pub(crate) resources: TrialResources,
+    pub(crate) build_timeout_ms: u64,
+    pub(crate) steps: Vec<TrialStep>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
-struct TrialEnvironment {
-    dockerfile: String,
-    context: String,
-    platform: String,
+pub(crate) struct TrialEnvironment {
+    pub(crate) dockerfile: String,
+    pub(crate) context: String,
+    pub(crate) platform: String,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
-struct TrialResources {
-    cpu_quota_millis: u64,
-    cpu_time_ms: u64,
-    memory_bytes: u64,
-    disk_bytes: u64,
-    maximum_entries: u64,
-    pids: u64,
+pub(crate) struct TrialResources {
+    pub(crate) cpu_quota_millis: u64,
+    pub(crate) cpu_time_ms: u64,
+    pub(crate) memory_bytes: u64,
+    pub(crate) disk_bytes: u64,
+    pub(crate) maximum_entries: u64,
+    pub(crate) pids: u64,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
-struct TrialStep {
-    slot_id: String,
-    operation: String,
-    state_source: String,
-    visible_roles: Vec<String>,
-    command: Vec<String>,
-    working_directory: String,
-    timeout_ms: u64,
+pub(crate) struct TrialStep {
+    pub(crate) slot_id: String,
+    pub(crate) operation: String,
+    pub(crate) state_source: String,
+    pub(crate) visible_roles: Vec<String>,
+    pub(crate) command: Vec<String>,
+    pub(crate) working_directory: String,
+    pub(crate) timeout_ms: u64,
 }
 
 #[derive(Clone, Debug, Serialize, PartialEq, Eq)]

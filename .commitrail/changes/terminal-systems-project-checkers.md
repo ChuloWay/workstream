@@ -68,6 +68,12 @@ owners and every migration; this change does not edit `main.rs` concurrently.
 `external_checkers/workstream-checker-service/tests/trial_relay.rs` compiles
 that otherwise unconnected module and exercises its fake-engine protocol,
 identity, bounds, cancellation and cleanup contracts before shared composition.
+The concrete generic offline implementation is isolated in
+`external_checkers/workstream-checker-service/src/trial_engine.rs` with focused
+`external_checkers/workstream-checker-service/tests/trial_engine.rs` launch,
+classification, resource, role-projection and cleanup tests. It consumes only
+trusted digest-pinned engine inputs and the relay's generic plan; it contains no
+Terminal Systems paths, task names, commands or findings.
 The trial module publishes a generic typed relay, profile and observation API;
 it does not treat relay success as a work verdict. Backend trial authority starts
 in `backend/app/modules/checkers/api/trial_profiles.py`,
