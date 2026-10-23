@@ -20,6 +20,7 @@ from app.adapters.project_agents.omnicore_agent import (
     _LoopbackOpenRouterGuard,
     _MODEL_TOOLS,
     _TEST_UPSTREAM_AUTHORITY,
+    _rebuild_provider_success_body,
     _run_native_agent,
     _unique_object,
     _validated_test_upstream,
@@ -444,6 +445,87 @@ def test_transport_rejects_each_routing_and_tool_mutation_before_forward(mutatio
 def test_transport_rejects_duplicate_json_members():
     with pytest.raises(ValueError, match="duplicate"):
         _unique_object([("model", OMNICORE_QUALIFICATION_MODEL), ("model", "openrouter/auto")])
+
+
+def _provider_tool_response(*, choice_index=0, call_indexes=(0,)) -> bytes:
+    calls = []
+    for position, index in enumerate(call_indexes):
+        call = {
+            "id": f"call_{position}",
+            "type": "function",
+            "function": {
+                "name": "read_document",
+                "arguments": '{"handle":"00000000-0000-0000-0000-000000000001"}',
+            },
+        }
+        if index is not None:
+            call["index"] = index
+        calls.append(call)
+    return json.dumps(
+        {
+            "id": "chatcmpl-index-test",
+            "object": "chat.completion",
+            "created": 1,
+            "model": OMNICORE_QUALIFICATION_MODEL,
+            "choices": [
+                {
+                    "index": choice_index,
+                    "message": {
+                        "role": "assistant",
+                        "content": None,
+                        "tool_calls": calls,
+                    },
+                    "finish_reason": "tool_calls",
+                }
+            ],
+            "usage": {
+                "prompt_tokens": 1,
+                "completion_tokens": 1,
+                "total_tokens": 2,
+            },
+        }
+    ).encode("utf-8")
+
+
+@pytest.mark.parametrize("choice_index", [False, 0.0, "0", 1])
+def test_transport_rejects_non_exact_choice_indexes(choice_index):
+    with pytest.raises(_GuardRejection):
+        _rebuild_provider_success_body(
+            _provider_tool_response(choice_index=choice_index),
+            expected_model=OMNICORE_QUALIFICATION_MODEL,
+        )
+
+
+@pytest.mark.parametrize(
+    "call_indexes",
+    [
+        (False,),
+        (0.0,),
+        ("0",),
+        (1,),
+        (0, True),
+        (0, 1.0),
+    ],
+)
+def test_transport_rejects_non_exact_tool_call_indexes(call_indexes):
+    with pytest.raises(_GuardRejection):
+        _rebuild_provider_success_body(
+            _provider_tool_response(call_indexes=call_indexes),
+            expected_model=OMNICORE_QUALIFICATION_MODEL,
+        )
+
+
+@pytest.mark.parametrize("call_indexes", [(None,), (0,), (0, 1)])
+def test_transport_strips_valid_optional_tool_call_indexes(call_indexes):
+    rebuilt = json.loads(
+        _rebuild_provider_success_body(
+            _provider_tool_response(call_indexes=call_indexes),
+            expected_model=OMNICORE_QUALIFICATION_MODEL,
+        )
+    )
+    calls = rebuilt["choices"][0]["message"]["tool_calls"]
+    assert len(calls) == len(call_indexes)
+    assert all(set(call) == {"id", "type", "function"} for call in calls)
 
 
 @pytest.mark.parametrize(

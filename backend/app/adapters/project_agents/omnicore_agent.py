@@ -1099,7 +1099,11 @@ def _rebuild_provider_success_body(body_bytes: bytes, *, expected_model: str) ->
     if not isinstance(choices, list) or len(choices) != 1:
         raise _GuardRejection(502)
     choice = choices[0]
-    if not isinstance(choice, dict) or choice.get("index") != 0:
+    if (
+        not isinstance(choice, dict)
+        or type(choice.get("index")) is not int
+        or choice["index"] != 0
+    ):
         raise _GuardRejection(502)
     finish_reason = choice.get("finish_reason")
     message = choice.get("message")
@@ -1124,7 +1128,10 @@ def _rebuild_provider_success_body(body_bytes: bytes, *, expected_model: str) ->
                     {"id", "type", "function"},
                     {"id", "type", "function", "index"},
                 )
-                or ("index" in call and call["index"] != index)
+                or (
+                    "index" in call
+                    and (type(call["index"]) is not int or call["index"] != index)
+                )
             ):
                 raise _GuardRejection(502)
             rebuilt_call = {
