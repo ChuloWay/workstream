@@ -163,7 +163,10 @@ class GuideCompilationRepository:
             raise GuideCompilationIntegrityError("finalization guide unavailable")
         await self._session.refresh(guide)
         setup, snapshot = await self._lock_finalization_source(
-            projects, command, guide, exact_setup=exact_setup,
+            projects,
+            command,
+            guide,
+            exact_setup=exact_setup,
         )
         compilation = await self._session.scalar(
             select(ProjectGuideCompilation)
@@ -525,13 +528,13 @@ class GuideCompilationRepository:
         )
         return await self._required_attempt(attempt_id)
 
-    async def release_provider_free_fence(
+    async def release_no_inference_fence(
         self, attempt_id: UUID, *, stale_before: datetime | None = None
     ) -> ProjectGuideCompilationAttempt:
-        """Return a provider-free attempt to reservation after a transient failure.
+        """Return a no-inference attempt to reservation after a transient failure.
 
-        The fence of a provider-free attempt guards no provider call, so no
-        unknown external outcome exists. Hosted attempts keep the one-way fence.
+        The fence guards no model call, so no unknown external outcome exists.
+        Inference attempts keep the one-way fence.
         With ``stale_before``, release only a fence set before that instant, so
         a run that may still be in flight elsewhere is left alone.
         """
@@ -540,9 +543,8 @@ class GuideCompilationRepository:
         attempt = await self._lock_attempt(attempt_id)
         if attempt.status == "compilation_reserved":
             return attempt
-        if (attempt.status != "compilation_provider_uncertain"
-                or attempt_uses_inference(attempt)):
-            raise GuideCompilationIntegrityError("invalid provider-free fence release")
+        if attempt.status != "compilation_provider_uncertain" or attempt_uses_inference(attempt):
+            raise GuideCompilationIntegrityError("invalid no-inference fence release")
         if stale_before is not None and attempt.provider_uncertain_at > stale_before:
             return attempt
         await self._transition(

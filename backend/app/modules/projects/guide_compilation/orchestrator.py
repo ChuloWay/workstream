@@ -147,12 +147,12 @@ class SqlAlchemyGuideCompilationExecutionBackend:
         async with self._authorized_service(state) as (service, actor):
             return await service.fence_dispatch(actor=actor, facts=state.preflight_facts)
 
-    async def release_provider_free(
+    async def release_no_inference(
         self, state: CompilationExecutionState, *, stale_before: datetime | None = None
     ) -> bool:
-        """Reopen a provider-free fence so a transient failure stays retryable."""
+        """Reopen a no-inference fence so a transient failure stays retryable."""
         async with self._authorized_service(state) as (service, actor):
-            return await service.release_provider_free_dispatch(
+            return await service.release_no_inference_dispatch(
                 actor=actor, facts=state.preflight_facts, stale_before=stale_before
             )
 
@@ -250,7 +250,7 @@ class GuideCompilationExecutionBackend(Protocol):
 
     async def fence(self, state: CompilationExecutionState) -> CompilationDispatchReceipt: ...
 
-    async def release_provider_free(
+    async def release_no_inference(
         self, state: CompilationExecutionState, *, stale_before: datetime | None = None
     ) -> bool: ...
 
@@ -299,7 +299,7 @@ class GuideCompilationOrchestrator(ProjectGuideCompilationExecutionPort):
                 and len(project_guide_compilation_prompt_bytes(context))
                 > context.runtime_configuration.maximum_manifest_bytes
             ):
-                # The hosted prompt limit; a provider-free runtime builds no prompt.
+                # The model prompt limit does not apply when no inference request is built.
                 raise ValueError("configured prompt limit exceeded")
             runtime = self._runtime_factory(context.runtime_configuration)
             if runtime.identity != context.runtime_configuration.adapter_identity:
@@ -338,20 +338,21 @@ class GuideCompilationOrchestrator(ProjectGuideCompilationExecutionPort):
                             await self._backend.record_accepted(state, context, result)
                             accepted = True
             except asyncio.CancelledError:
-                if (terminal_receipt is None and not accepted
-                        and not context.runtime_configuration.uses_inference):
+                if (
+                    terminal_receipt is None
+                    and not accepted
+                    and not context.runtime_configuration.uses_inference
+                ):
                     # Reopen before propagating so cancellation cannot strand the attempt.
                     with suppress(Exception):
-                        await asyncio.shield(self._backend.release_provider_free(state))
+                        await asyncio.shield(self._backend.release_no_inference(state))
                 raise
             except Exception:  # noqa: BLE001 - preserve known evidence across cleanup failure
                 if terminal_receipt is None and not accepted:
                     if not context.runtime_configuration.uses_inference:
-                        # No provider call exists to be uncertain about; reopen and retry.
-                        await self._backend.release_provider_free(state)
-                        raise ProjectGuideCompilationExecutionError(
-                            "runtime_unavailable"
-                        ) from None
+                        # No model call exists to be uncertain about; reopen and retry.
+                        await self._backend.release_no_inference(state)
+                        raise ProjectGuideCompilationExecutionError("runtime_unavailable") from None
                     return _receipt_result(dispatch)
             if terminal_receipt is not None:
                 return _receipt_result(terminal_receipt)
@@ -367,12 +368,10 @@ class GuideCompilationOrchestrator(ProjectGuideCompilationExecutionPort):
             (configuration := state.runtime_configuration) is not None
             and not configuration.uses_inference
         ):
-            # A provider-free fence left by a crashed or cancelled worker guards no
-            # provider call. Reopen it once its run deadline has passed.
-            stale_before = datetime.now(UTC) - timedelta(
-                seconds=configuration.timeout_seconds
-            )
-            if await self._backend.release_provider_free(state, stale_before=stale_before):
+            # A no-inference fence left by a crashed or cancelled worker guards no
+            # model call. Reopen it once its run deadline has passed.
+            stale_before = datetime.now(UTC) - timedelta(seconds=configuration.timeout_seconds)
+            if await self._backend.release_no_inference(state, stale_before=stale_before):
                 return None
         if state.classification in {
             CompilationRecoveryClassification.PERSISTED,

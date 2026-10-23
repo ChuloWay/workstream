@@ -77,7 +77,9 @@ class GuideDocumentParserRequest(BaseModel):
     operation: GuideDocumentParserOperation
     offset: StrictInt = Field(default=0, ge=0, le=MAXIMUM_EXTRACTED_CHARACTERS)
     limit: StrictInt = Field(gt=0, le=MAXIMUM_RESULT_CHARACTERS)
-    query: str | None = Field(default=None, min_length=1, max_length=MAXIMUM_SEARCH_QUERY_CHARACTERS)
+    query: str | None = Field(
+        default=None, min_length=1, max_length=MAXIMUM_SEARCH_QUERY_CHARACTERS
+    )
 
     @model_validator(mode="after")
     def validate_operation(self) -> Self:
@@ -126,6 +128,11 @@ class GuideDocumentParserResponse(BaseModel):
 
     def validate_against(self, request: GuideDocumentParserRequest) -> None:
         """Reject any reply not produced for this exact request and parser build."""
+        locator_ranges = tuple((locator.start, locator.end) for locator in self.locators)
+        locators_are_ordered = all(
+            start < end and (index == 0 or self.locators[index - 1].end <= start)
+            for index, (start, end) in enumerate(locator_ranges)
+        )
         if (
             self.request_id != request.request_id
             or self.request_hash != request.request_hash
@@ -135,10 +142,39 @@ class GuideDocumentParserResponse(BaseModel):
             or self.operation != request.operation
             or self.parser_build_digest != FIXED_PARSER_BUILD_DIGEST
             or self.response_hash != _canonical_hash(self.response_hash_payload())
-            or any(locator.end > len(self.text) or locator.start > locator.end for locator in self.locators)
+            or any(
+                locator.end > len(self.text) or locator.start > locator.end
+                for locator in self.locators
+            )
+            or not locators_are_ordered
             or (self.next_offset is not None and self.next_offset > self.total_characters)
         ):
             raise ValueError("guide parser response binding is invalid")
+        if request.operation == "read":
+            consumed_to = request.offset + len(self.text)
+            if (
+                len(self.text) > request.limit
+                or (request.offset >= self.total_characters and (self.text or self.locators))
+                or (self.next_offset is not None and self.next_offset != consumed_to)
+                or (self.next_offset is None and consumed_to < self.total_characters)
+            ):
+                raise ValueError("guide parser read response is invalid")
+        else:
+            assert request.query is not None
+            folded_query = request.query.casefold()
+            if (
+                len(self.locators) > request.limit
+                or bool(self.text) != bool(self.locators)
+                or any(
+                    folded_query not in self.text[locator.start : locator.end].casefold()
+                    for locator in self.locators
+                )
+                or (
+                    self.next_offset is not None
+                    and not request.offset < self.next_offset <= self.total_characters
+                )
+            ):
+                raise ValueError("guide parser search response is invalid")
 
     @classmethod
     def create(

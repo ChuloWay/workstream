@@ -45,7 +45,7 @@ class IsolationTests(unittest.TestCase):
         }
 
     def test_provider_file_cannot_override_isolated_database_identity_or_storage(self):
-        provider = {"OPENAI_API_KEY": "not-a-real-key", "WORKSTREAM_PROJECT_AGENT_MODEL": "configured-model",
+        provider = {"OPENROUTER_API_KEY": "not-a-real-key", "WORKSTREAM_PROJECT_AGENT_MODEL": "configured-model",
                     "WORKSTREAM_DATABASE_URL": "production-database", "WORKSTREAM_AUTH_PROVIDER": "unsafe",
                     "WORKSTREAM_ARTIFACT_S3_BUCKET": "production-bucket"}
         env = {"WORKSTREAM_DATABASE_URL": "isolated-database", "WORKSTREAM_AUTH_PROVIDER": "flow"}
@@ -60,9 +60,22 @@ class IsolationTests(unittest.TestCase):
             self.assertGreater(int(env[f"WORKSTREAM_ARTIFACT_ADMISSION_{scope}_MAXIMUM_BYTES"]), 0)
         self.assertNotIn("not-a-real-key", str(report))
 
+    def test_only_selected_provider_credential_reaches_worker(self):
+        for provider, selected, unselected in (
+            ("openrouter", "OPENROUTER_API_KEY", "OPENAI_API_KEY"),
+            ("openai", "OPENAI_API_KEY", "OPENROUTER_API_KEY"),
+        ):
+            values = {"WORKSTREAM_PROJECT_AGENT_MODEL_PROVIDER": provider,
+                      selected: "selected-secret", unselected: "other-secret"}
+            env = {unselected: "inherited-secret"}
+            with self.subTest(provider=provider), patch.dict(guide.os.environ, self.runtime(), clear=True), patch.object(guide, "dotenv_values", return_value=values):
+                guide.environment(env, {})
+            self.assertEqual(env[selected], "selected-secret")
+            self.assertNotIn(unselected, env)
+
     def test_remote_runtime_is_rejected(self):
         for key in ("WORKSTREAM_TEST_MINIO_ENDPOINT", "WORKSTREAM_DRILL_BROKER_URL"):
-            with self.subTest(key=key), patch.dict(guide.os.environ, self.runtime() | {key: "https://remote.example"}, clear=True), patch.object(guide, "dotenv_values", return_value={"OPENAI_API_KEY": "test"}):
+            with self.subTest(key=key), patch.dict(guide.os.environ, self.runtime() | {key: "https://remote.example"}, clear=True), patch.object(guide, "dotenv_values", return_value={"OPENROUTER_API_KEY": "test"}):
                 with self.assertRaises(guide.api.ProbeFailure):
                     guide.environment({}, {})
 

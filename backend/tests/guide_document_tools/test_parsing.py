@@ -11,6 +11,7 @@ import pytest
 from pypdf import PdfWriter
 
 from app.adapters.guide_document_tools import GuideDocumentParserRequest
+from app.adapters.guide_document_tools.contracts import MAXIMUM_EXTRACTED_CHARACTERS
 from app.adapters.guide_document_tools.parsing import ParserDocumentRejected, parse_document
 
 
@@ -49,13 +50,12 @@ def _archive(entries: list[tuple[str, bytes]], *, compression: int = zipfile.ZIP
 
 def _docx(*blocks: str) -> bytes:
     paragraphs = "".join(
-        f'<w:p><w:r><w:t xml:space="preserve">{value}</w:t></w:r></w:p>'
-        for value in blocks
+        f'<w:p><w:r><w:t xml:space="preserve">{value}</w:t></w:r></w:p>' for value in blocks
     )
     return _archive(
         [
-            ("[Content_Types].xml", b"<Types/>") ,
-            ("_rels/.rels", b"<Relationships/>") ,
+            ("[Content_Types].xml", b"<Types/>"),
+            ("_rels/.rels", b"<Relationships/>"),
             (
                 "word/document.xml",
                 (
@@ -69,8 +69,7 @@ def _docx(*blocks: str) -> bytes:
 
 def _pptx(*slides: str) -> bytes:
     slide_ids = "".join(
-        f'<p:sldId id="{255 + index}" r:id="rId{index}"/>'
-        for index in range(1, len(slides) + 1)
+        f'<p:sldId id="{255 + index}" r:id="rId{index}"/>' for index in range(1, len(slides) + 1)
     )
     relationships = "".join(
         f'<Relationship Id="rId{index}" Target="slides/slide{index}.xml"/>'
@@ -178,6 +177,15 @@ def test_markdown_paging_preserves_original_text_without_silent_truncation() -> 
     second = parse_document(second_request, source)
     assert first.text + second.text == source.decode()
     assert second.next_offset is None
+
+
+def test_extracted_text_over_the_fixed_limit_is_rejected_instead_of_truncated() -> None:
+    source = b"x" * (MAXIMUM_EXTRACTED_CHARACTERS + 1)
+
+    with pytest.raises(ParserDocumentRejected) as rejected:
+        parse_document(_request(source, media_type="text/markdown"), source)
+
+    assert rejected.value.reason == "document_limit_exceeded"
 
 
 def test_search_is_literal_case_insensitive_and_paged_by_source_offset() -> None:
@@ -290,3 +298,17 @@ def test_encrypted_and_malformed_pdfs_are_rejected() -> None:
     with pytest.raises(ParserDocumentRejected) as malformed_rejection:
         parse_document(_request(malformed, media_type="application/pdf"), malformed)
     assert malformed_rejection.value.reason == "document_malformed"
+
+
+def test_pdf_page_limit_is_enforced_before_text_extraction() -> None:
+    output = BytesIO()
+    writer = PdfWriter()
+    for _ in range(501):
+        writer.add_blank_page(width=100, height=100)
+    writer.write(output)
+    source = output.getvalue()
+
+    with pytest.raises(ParserDocumentRejected) as rejected:
+        parse_document(_request(source, media_type="application/pdf"), source)
+
+    assert rejected.value.reason == "document_limit_exceeded"

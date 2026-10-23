@@ -34,7 +34,7 @@ def retryable_compilation_dispatch_predicate() -> ColumnElement[bool]:
             or_(
                 ProjectGuideCompilationAttempt.runtime_configuration.is_(None),
                 ProjectGuideCompilationAttempt.status == "compilation_invalid_terminal",
-                # A provider-free fence guards no provider call; recovery reopens it.
+                # A no-inference fence guards no model call; recovery reopens it.
                 and_(
                     ProjectGuideCompilationAttempt.status == "compilation_provider_uncertain",
                     ProjectGuideCompilationAttempt.runtime_configuration["model_provider"]

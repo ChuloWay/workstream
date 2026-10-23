@@ -39,12 +39,17 @@ def main() -> int:
         validate_compose(render_compose(args.env_file, values), values)
         launch = args.compose_arguments and args.compose_arguments[0] in {"up", "proof"}
         if launch:
-            checker_config = load_checker_config(Path(values["WORKSTREAM_CHECKER_CONFIG_FILE"]))
+            checker_config = load_checker_config(
+                Path(values["WORKSTREAM_CHECKER_CONFIG_FILE"])
+            )
             validate_checker_config(checker_config, values)
             validate_private_host_inputs(values)
             validate_docker_runtime(checker_config, values)
         if args.compose_arguments and args.compose_arguments[0] == "proof":
-            if len(args.compose_arguments) != 3 or args.compose_arguments[1] != "--group-nonce":
+            if (
+                len(args.compose_arguments) != 3
+                or args.compose_arguments[1] != "--group-nonce"
+            ):
                 raise PreflightError("proof requires one explicit group nonce")
             try:
                 group_nonce = UUID(args.compose_arguments[2])

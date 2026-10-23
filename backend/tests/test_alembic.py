@@ -74,6 +74,143 @@ async def _execute(database_url: str, statement: str, *arguments: object) -> Non
         await connection.close()
 
 
+async def _seed_retained_guide_runtime_rows(database_url: str, *, status: str) -> dict[str, object]:
+    """Seed exact 0058 runtime facts without using a post-0058 product writer."""
+    from uuid import UUID
+    from app.core.hashing import canonical_json_hash
+    from app.core.identifiers import new_record_id
+    from tests.projects.guide_compilation.helpers import context, identity, seed_database
+    from tests.projects.guide_compilation.test_runtime_cleanup_postgresql import (
+        _historical_configuration,
+    )
+
+    values = await seed_database(database_url)
+    compilation = context(values)
+    attempt_identity = identity(compilation)
+    document = compilation.material.documents[0]
+    attempt_id = new_record_id()
+    container_id = new_record_id()
+    file_id = new_record_id()
+    attachment_id = new_record_id()
+    access_id = new_record_id()
+    historical = _historical_configuration()
+    configuration_json = json.dumps(historical, separators=(",", ":"), sort_keys=True)
+    provider_uncertain_at = "now()" if status == "compilation_provider_uncertain" else "null"
+    connection = await asyncpg.connect(database_url.replace("+asyncpg", ""))
+    try:
+        await connection.execute(
+            "insert into project_guide_compilation_attempts("
+            "id,project_id,guide_id,guide_version,source_snapshot_id,source_snapshot_hash,"
+            "setup_run_id,setup_generation,canonical_input_hash,guide_material_hash,"
+            "pre_catalogue_id,pre_catalogue_version,pre_catalogue_schema_version,"
+            "pre_catalogue_manifest_hash,post_catalogue_id,post_catalogue_version,"
+            "post_catalogue_schema_version,post_catalogue_manifest_hash,agent_identity,"
+            "agent_version,instruction_version,runtime_configuration,runtime_configuration_hash,"
+            "provider_idempotency_key,status,provider_uncertain_at) values("
+            "$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,"
+            f"$21,$22::json,$23,$24,$25,{provider_uncertain_at})",
+            attempt_id,
+            attempt_identity.project_id,
+            attempt_identity.guide_id,
+            attempt_identity.guide_version,
+            attempt_identity.source_snapshot_id,
+            attempt_identity.source_snapshot_hash,
+            attempt_identity.setup_run_id,
+            attempt_identity.setup_generation,
+            attempt_identity.canonical_input_hash,
+            attempt_identity.guide_material_hash,
+            attempt_identity.pre_catalogue_id,
+            attempt_identity.pre_catalogue_version,
+            attempt_identity.pre_catalogue_schema_version,
+            attempt_identity.pre_catalogue_manifest_hash,
+            attempt_identity.post_catalogue_id,
+            attempt_identity.post_catalogue_version,
+            attempt_identity.post_catalogue_schema_version,
+            attempt_identity.post_catalogue_manifest_hash,
+            attempt_identity.agent_identity,
+            attempt_identity.agent_version,
+            attempt_identity.instruction_version,
+            configuration_json,
+            canonical_json_hash(historical),
+            attempt_identity.provider_idempotency_key(),
+            status,
+        )
+        if status != "compilation_provider_uncertain":
+            return {
+                "attempt_id": attempt_id,
+                "configuration": historical,
+                "configuration_hash": canonical_json_hash(historical),
+            }
+        handle = UUID(compilation.material.handle_for(document))
+        await connection.execute(
+            "insert into project_guide_runtime_allocations("
+            "id,attempt_id,manifest_sha256,runtime_key,kind,state,provider_id,expires_at) "
+            "values($1,$2,$3,'openai_agents_sdk','container','allocated','cntr_retained',"
+            "now()+interval '20 minutes')",
+            container_id,
+            attempt_id,
+            compilation.material.sha256,
+        )
+        await connection.execute(
+            "insert into project_guide_runtime_allocations("
+            "id,attempt_id,manifest_sha256,runtime_key,kind,state,document_handle,provider_id,"
+            "source_item_id,document_version_id,put_attempt_id,content_id,replica_id,"
+            "storage_namespace_id,namespace_fingerprint,sha256,byte_count,media_type,expires_at) "
+            "values($1,$2,$3,'openai_agents_sdk','file','allocated',$4,$5,$6,$7,$8,$9,$10,"
+            "$11,$12,$13,$14,$15,now()+interval '20 minutes')",
+            file_id,
+            attempt_id,
+            compilation.material.sha256,
+            handle,
+            "file-retained",
+            document.source_item_id,
+            document.ingest_id,
+            document.put_attempt_id,
+            document.content_id,
+            document.replica_id,
+            document.storage_namespace_id,
+            document.namespace_fingerprint,
+            document.sha256,
+            document.byte_count,
+            document.media_type,
+        )
+        await connection.execute(
+            "insert into project_guide_runtime_allocations("
+            "id,attempt_id,manifest_sha256,runtime_key,kind,state,document_handle,provider_id,"
+            "parent_provider_id,source_file_allocation_id,container_allocation_id,expires_at) "
+            "values($1,$2,$3,'openai_agents_sdk','attachment','allocated',$4,"
+            "'cfile_retained','cntr_retained',$5,$6,now()+interval '20 minutes')",
+            attachment_id,
+            attempt_id,
+            compilation.material.sha256,
+            handle,
+            file_id,
+            container_id,
+        )
+        await connection.execute(
+            "insert into project_guide_document_accesses("
+            "id,attempt_id,source_item_id,document_version_id,attachment_allocation_id,"
+            "manifest_sha256,sha256,document_handle) values($1,$2,$3,$4,$5,$6,$7,$8)",
+            access_id,
+            attempt_id,
+            document.source_item_id,
+            document.ingest_id,
+            attachment_id,
+            compilation.material.sha256,
+            document.sha256,
+            handle,
+        )
+    finally:
+        await connection.close()
+    return {
+        "attempt_id": attempt_id,
+        "allocation_ids": {container_id, file_id, attachment_id},
+        "access_id": access_id,
+        "configuration": historical,
+        "configuration_hash": canonical_json_hash(historical),
+    }
+
+
 async def _seed_export_resume_rows(database_url: str):
     """Retain real main-owned export membership and its required identity custody."""
     from app.core.identifiers import new_record_id
@@ -82,22 +219,36 @@ async def _seed_export_resume_rows(database_url: str):
     connection = await asyncpg.connect(database_url.replace("+asyncpg", ""))
     try:
         async with connection.transaction():
-            await connection.execute("""
+            await connection.execute(
+                """
                 INSERT INTO public.actor_profiles
                   (id,actor_kind,status,provisioning_method,created_by)
                 VALUES ($1,'human','active','automatic_first_access','migration-resume-test')
-            """, actor)
-            await connection.execute("""
+            """,
+                actor,
+            )
+            await connection.execute(
+                """
                 INSERT INTO public.actor_identity_links
                   (id,actor_profile_id,issuer,subject,subject_kind,status,linked_by,last_verified_at)
                 VALUES ($1,$2,'https://identity.flowresearch.tech',$3,'human','active',
                         'migration-resume-test',clock_timestamp())
-            """, link, actor, str(actor))
-            await connection.execute("""
+            """,
+                link,
+                actor,
+                str(actor),
+            )
+            await connection.execute(
+                """
                 INSERT INTO public.contribution_export_snapshots
                   (id,actor_profile_id,allocation_slot,query_digest,member_ids,created_at,expires_at)
                 VALUES ($1,$2,1,$3,$4,statement_timestamp(),statement_timestamp()+interval '1 hour')
-            """, snapshot, actor, "sha256:" + "a" * 64, [new_record_id(), new_record_id()])
+            """,
+                snapshot,
+                actor,
+                "sha256:" + "a" * 64,
+                [new_record_id(), new_record_id()],
+            )
         return snapshot
     finally:
         await connection.close()
@@ -113,7 +264,8 @@ async def _migration_resume_custody(database_url: str, snapshot_id) -> dict[str,
         assert sentinel is not None
         export = None
         if snapshot_id is not None:
-            export = await connection.fetchrow("""
+            export = await connection.fetchrow(
+                """
                 SELECT to_jsonb(s)::text,to_jsonb(a)::text,to_jsonb(l)::text,
                        s.tableoid::bigint,a.tableoid::bigint,l.tableoid::bigint,
                        s.xmin::text,a.xmin::text,l.xmin::text
@@ -121,10 +273,14 @@ async def _migration_resume_custody(database_url: str, snapshot_id) -> dict[str,
                 JOIN public.actor_profiles a ON a.id=s.actor_profile_id
                 JOIN public.actor_identity_links l ON l.actor_profile_id=a.id
                 WHERE s.id=$1
-            """, snapshot_id)
+            """,
+                snapshot_id,
+            )
             assert export is not None
-        return {"sentinel": tuple(sentinel.values()),
-                "export": tuple(export.values()) if export is not None else None}
+        return {
+            "sentinel": tuple(sentinel.values()),
+            "export": tuple(export.values()) if export is not None else None,
+        }
     finally:
         await connection.close()
 
@@ -136,6 +292,7 @@ def test_v01_graph_has_one_root_and_head() -> None:
 
     assert [revision.revision for revision in revisions] == [
         HEAD_REVISION,
+        "0058_compensation_unit_create",
         "0057_roles_anywhere_custody",
         "0056_manager_authored_runtime",
         "0055_delivery_reconciliation",
@@ -199,7 +356,8 @@ def test_v01_graph_has_one_root_and_head() -> None:
 
 
 async def test_guide_read_upgrade_targets_public_audit_with_shadow_search_path(
-    isolated_database_env, migration_lock,
+    isolated_database_env,
+    migration_lock,
 ):
     """Successful stamping must update public custody, not a visible namesake."""
     from app.db import session as db_session
@@ -216,11 +374,14 @@ async def test_guide_read_upgrade_targets_public_audit_with_shadow_search_path(
         role, database = await connection.fetchrow("select current_user, current_database()")
         assert ROLE_RE.fullmatch(role) and NAME_RE.fullmatch(database)
         try:
-            assert await connection.fetchval(
-                "select setconfig from pg_db_role_setting "
-                "where setrole=(select oid from pg_roles where rolname=current_user) "
-                "and setdatabase=(select oid from pg_database where datname=current_database())"
-            ) is None
+            assert (
+                await connection.fetchval(
+                    "select setconfig from pg_db_role_setting "
+                    "where setrole=(select oid from pg_roles where rolname=current_user) "
+                    "and setdatabase=(select oid from pg_database where datname=current_database())"
+                )
+                is None
+            )
             await connection.execute(f"create schema {shadow}")
             await connection.execute(
                 f"create table {shadow}.audit_events (like public.audit_events including all)"
@@ -252,12 +413,14 @@ async def test_guide_read_upgrade_targets_public_audit_with_shadow_search_path(
             after = await definition("public")
             assert after.count("task.guide.read") == 2
             assert await definition(shadow) == before
-            assert await connection.fetchval(
-                "select version_num from public.alembic_version"
-            ) == HEAD_REVISION
-            assert await connection.fetchval(
-                "select to_regclass($1)", f"{shadow}.alembic_version"
-            ) is None
+            assert (
+                await connection.fetchval("select version_num from public.alembic_version")
+                == HEAD_REVISION
+            )
+            assert (
+                await connection.fetchval("select to_regclass($1)", f"{shadow}.alembic_version")
+                is None
+            )
         finally:
             await connection.execute(
                 f'alter role "{role}" in database "{database}" reset search_path'
@@ -318,29 +481,35 @@ def test_repeated_upgrade_head_preserves_current_database(
     assert after == before
 
 
-@pytest.mark.parametrize("installed_revision", [
-    "0038_task_batch_transitions",
-    "0040_contribution_export_page",
-    "0041_checker_revision_cap",
-    "0042_revision_lineage",
-    "0043_revision_preparation",
-    "0044_outbox_not_before",
-    "0045_task_revision_expiry",
-    "0046_revision_expiry_retry",
-    "0047_revision_recovery",
-    "0048_revision_exhaustion",
-    "0049_attempt_outcome_findings",
-    "0050_contributor_reads",
-    "0051_operational_read_audit",
-    "0052_artifact_provider_proof",
-    "0053_project_reads",
-    "0054_artifact_proof_timing",
-    "0055_delivery_reconciliation",
-    "0056_manager_authored_runtime",
-    "0057_roles_anywhere_custody",
-])
+@pytest.mark.parametrize(
+    "installed_revision",
+    [
+        "0038_task_batch_transitions",
+        "0040_contribution_export_page",
+        "0041_checker_revision_cap",
+        "0042_revision_lineage",
+        "0043_revision_preparation",
+        "0044_outbox_not_before",
+        "0045_task_revision_expiry",
+        "0046_revision_expiry_retry",
+        "0047_revision_recovery",
+        "0048_revision_exhaustion",
+        "0049_attempt_outcome_findings",
+        "0050_contributor_reads",
+        "0051_operational_read_audit",
+        "0052_artifact_provider_proof",
+        "0053_project_reads",
+        "0054_artifact_proof_timing",
+        "0055_delivery_reconciliation",
+        "0056_manager_authored_runtime",
+        "0057_roles_anywhere_custody",
+        "0058_compensation_unit_create",
+    ],
+)
 def test_preceding_head_upgrades_to_current_without_recreation(
-    isolated_database_env: str, migration_lock, installed_revision: str,
+    isolated_database_env: str,
+    migration_lock,
+    installed_revision: str,
 ) -> None:
     """Each supported installed predecessor resumes without recreation or data loss."""
     config = _alembic_config()
@@ -349,14 +518,17 @@ def test_preceding_head_upgrades_to_current_without_recreation(
             _execute(isolated_database_env, "drop schema public cascade; create schema public")
         )
         command.upgrade(config, installed_revision)
-        asyncio.run(_execute(
-            isolated_database_env,
-            "create table migration_resume_sentinel(id integer primary key, value text not null); "
-            "insert into migration_resume_sentinel values (1,'preserve-me')",
-        ))
+        asyncio.run(
+            _execute(
+                isolated_database_env,
+                "create table migration_resume_sentinel(id integer primary key, value text not null); "
+                "insert into migration_resume_sentinel values (1,'preserve-me')",
+            )
+        )
         snapshot_id = (
             asyncio.run(_seed_export_resume_rows(isolated_database_env))
-            if installed_revision != "0038_task_batch_transitions" else None
+            if installed_revision != "0038_task_batch_transitions"
+            else None
         )
         retained = asyncio.run(_migration_resume_custody(isolated_database_env, snapshot_id))
         assert retained["sentinel"][0] == "preserve-me"
@@ -366,17 +538,118 @@ def test_preceding_head_upgrades_to_current_without_recreation(
         after = asyncio.run(_database_snapshot(isolated_database_env))
         command.upgrade(config, "head")
         repeated = asyncio.run(_database_snapshot(isolated_database_env))
-        assert asyncio.run(
-            _migration_resume_custody(isolated_database_env, snapshot_id)
-        ) == retained
+        assert (
+            asyncio.run(_migration_resume_custody(isolated_database_env, snapshot_id)) == retained
+        )
         asyncio.run(_execute(isolated_database_env, "drop table migration_resume_sentinel"))
     assert after["versions"] == [HEAD_REVISION]
     assert after["reference_rows"] == before["reference_rows"]
     assert repeated == after
 
 
+def test_neutral_runtime_upgrade_preserves_retained_provider_facts(
+    isolated_database_env: str, migration_lock
+) -> None:
+    """0059 labels historical access without inventing parser evidence or losing IDs."""
+    config = _alembic_config()
+    with migration_lock():
+        asyncio.run(
+            _execute(isolated_database_env, "drop schema public cascade; create schema public")
+        )
+        command.upgrade(config, "0058_compensation_unit_create")
+        seeded = asyncio.run(
+            _seed_retained_guide_runtime_rows(
+                isolated_database_env, status="compilation_provider_uncertain"
+            )
+        )
+        command.upgrade(config, HEAD_REVISION)
+
+    async def retained():
+        connection = await asyncpg.connect(isolated_database_env.replace("+asyncpg", ""))
+        try:
+            attempt = await connection.fetchrow(
+                "select runtime_configuration::text,runtime_configuration_hash,status "
+                "from project_guide_compilation_attempts where id=$1",
+                seeded["attempt_id"],
+            )
+            allocations = await connection.fetch(
+                "select id,state,provider_id from project_guide_runtime_allocations "
+                "where attempt_id=$1 order by id",
+                seeded["attempt_id"],
+            )
+            access = await connection.fetchrow(
+                "select id,access_method,operation,parser_request_hash,parser_response_hash,"
+                "parser_build_digest from project_guide_document_accesses where id=$1",
+                seeded["access_id"],
+            )
+            return attempt, allocations, access
+        finally:
+            await connection.close()
+
+    attempt, allocations, access = asyncio.run(retained())
+    assert json.loads(attempt["runtime_configuration"]) == seeded["configuration"]
+    assert attempt["runtime_configuration_hash"] == seeded["configuration_hash"]
+    assert attempt["status"] == "compilation_provider_uncertain"
+    assert {row["id"] for row in allocations} == seeded["allocation_ids"]
+    assert {(row["state"], row["provider_id"]) for row in allocations} == {
+        ("allocated", "cntr_retained"),
+        ("allocated", "file-retained"),
+        ("allocated", "cfile_retained"),
+    }
+    assert tuple(access) == (
+        seeded["access_id"],
+        "provider_attachment",
+        None,
+        None,
+        None,
+        None,
+    )
+
+
+def test_neutral_runtime_upgrade_refuses_old_predispatch_inference(
+    isolated_database_env: str, migration_lock
+) -> None:
+    """An old reserved inference attempt cannot cross into a runtime that cannot resume it."""
+    from sqlalchemy.exc import DBAPIError
+
+    config = _alembic_config()
+    with migration_lock():
+        asyncio.run(
+            _execute(isolated_database_env, "drop schema public cascade; create schema public")
+        )
+        command.upgrade(config, "0058_compensation_unit_create")
+        seeded = asyncio.run(
+            _seed_retained_guide_runtime_rows(isolated_database_env, status="compilation_reserved")
+        )
+        before = asyncio.run(_database_snapshot(isolated_database_env))
+        with pytest.raises(
+            DBAPIError,
+            match="old inferred guide attempt requires removed runtime recovery before upgrade",
+        ):
+            command.upgrade(config, HEAD_REVISION)
+        after = asyncio.run(_database_snapshot(isolated_database_env))
+    assert before == after
+    assert after["versions"] == ["0058_compensation_unit_create"]
+
+    async def retained_attempt_exists() -> bool:
+        connection = await asyncpg.connect(isolated_database_env.replace("+asyncpg", ""))
+        try:
+            return bool(
+                await connection.fetchval(
+                    "select exists(select 1 from project_guide_compilation_attempts where id=$1)",
+                    seeded["attempt_id"],
+                )
+            )
+        finally:
+            await connection.close()
+
+    assert asyncio.run(retained_attempt_exists())
+
+
 async def test_roles_anywhere_upgrade_preserves_old_proof_and_refuses_downgrade(
-    tmp_path, isolated_database_env, migration_lock,
+    tmp_path,
+    isolated_database_env,
+    migration_lock,
 ):
     """Old immutable evidence remains byte-stable but cannot authorize current calls."""
     from datetime import timedelta
@@ -398,12 +671,14 @@ async def test_roles_anywhere_upgrade_preserves_old_proof_and_refuses_downgrade(
         async with factory() as session:
             rows = {}
             for table in ("artifact_provider_probe_results", "artifact_provider_activations"):
-                result = await session.execute(text(
-                    f"SELECT (to_jsonb(t)-ARRAY['roles_anywhere_trust_anchor_arn',"
-                    f"'roles_anywhere_trust_anchor_sha256','roles_anywhere_profile_arn',"
-                    f"'roles_anywhere_profile_sha256'])::text,tableoid::bigint,xmin::text "
-                    f"FROM public.{table} t ORDER BY id"
-                ))
+                result = await session.execute(
+                    text(
+                        f"SELECT (to_jsonb(t)-ARRAY['roles_anywhere_trust_anchor_arn',"
+                        f"'roles_anywhere_trust_anchor_sha256','roles_anywhere_profile_arn',"
+                        f"'roles_anywhere_profile_sha256'])::text,tableoid::bigint,xmin::text "
+                        f"FROM public.{table} t ORDER BY id"
+                    )
+                )
                 rows[table] = [tuple(row) for row in result]
             return rows
 
@@ -424,7 +699,8 @@ async def test_roles_anywhere_upgrade_preserves_old_proof_and_refuses_downgrade(
                 ("readiness", "readiness"),
                 ("negative", "negative_access"),
             ):
-                await session.execute(text("""
+                await session.execute(
+                    text("""
                     INSERT INTO artifact_provider_probe_results (
                       id,probe_type,proof_version,result,release_id,namespace_fingerprint,
                       aws_partition,aws_account_id,region,runtime_role_arn,
@@ -441,33 +717,37 @@ async def test_roles_anywhere_upgrade_preserves_old_proof_and_refuses_downgrade(
                       :negative_trust,:bootstrap,:expected,:expected,:bucket_policy,
                       :group_nonce,:evidence,NULL,
                       :started,:completed,:expires)
-                """), {
-                    "id": str(ids[key]), "probe_type": probe_type,
-                    "release_id": "sha256:" + "1" * 64,
-                    "namespace": namespace_fingerprint,
-                    "runtime_role": roles["runtime_immutability"],
-                    "runtime_trust": "sha256:" + "3" * 64,
-                    "runtime_policy": "arn:aws:iam::123456789012:policy/workstream-runtime",
-                    "readiness_role": roles["readiness"],
-                    "readiness_trust": "sha256:" + "4" * 64,
-                    "readiness_policy": "arn:aws:iam::123456789012:policy/workstream-readiness",
-                    "negative_role": roles["negative_access"],
-                    "negative_trust": "sha256:" + "5" * 64,
-                    "bootstrap": "arn:aws:iam::123456789012:role/workstream-bootstrap",
-                    "expected": roles[probe_type],
-                    "bucket_policy": "sha256:" + "2" * 64,
-                    "group_nonce": str(group_nonce),
-                    "evidence": "sha256:" + "7" * 64,
-                    "started": observed_at - timedelta(seconds=offsets[probe_type]),
-                    "completed": observed_at - timedelta(seconds=offsets[probe_type] - 1),
-                    "expires": (
-                        observed_at
-                        - timedelta(seconds=offsets[probe_type])
-                        + timedelta(minutes=15)
-                    ),
-                })
+                """),
+                    {
+                        "id": str(ids[key]),
+                        "probe_type": probe_type,
+                        "release_id": "sha256:" + "1" * 64,
+                        "namespace": namespace_fingerprint,
+                        "runtime_role": roles["runtime_immutability"],
+                        "runtime_trust": "sha256:" + "3" * 64,
+                        "runtime_policy": "arn:aws:iam::123456789012:policy/workstream-runtime",
+                        "readiness_role": roles["readiness"],
+                        "readiness_trust": "sha256:" + "4" * 64,
+                        "readiness_policy": "arn:aws:iam::123456789012:policy/workstream-readiness",
+                        "negative_role": roles["negative_access"],
+                        "negative_trust": "sha256:" + "5" * 64,
+                        "bootstrap": "arn:aws:iam::123456789012:role/workstream-bootstrap",
+                        "expected": roles[probe_type],
+                        "bucket_policy": "sha256:" + "2" * 64,
+                        "group_nonce": str(group_nonce),
+                        "evidence": "sha256:" + "7" * 64,
+                        "started": observed_at - timedelta(seconds=offsets[probe_type]),
+                        "completed": observed_at - timedelta(seconds=offsets[probe_type] - 1),
+                        "expires": (
+                            observed_at
+                            - timedelta(seconds=offsets[probe_type])
+                            + timedelta(minutes=15)
+                        ),
+                    },
+                )
             activation_id = new_record_id()
-            await session.execute(text("""
+            await session.execute(
+                text("""
                 INSERT INTO artifact_provider_activations (
                   id,readiness_result_id,runtime_result_id,negative_result_id,
                   supersedes_activation_id,proof_version,release_id,namespace_fingerprint,
@@ -487,10 +767,14 @@ async def test_roles_anywhere_upgrade_preserves_old_proof_and_refuses_downgrade(
                      artifact_provider_probe_results r,
                      artifact_provider_probe_results n
                 WHERE d.id=:readiness AND r.id=:runtime AND n.id=:negative
-            """), {
-                "activation_id": str(activation_id), "readiness": str(ids["readiness"]),
-                "runtime": str(ids["runtime"]), "negative": str(ids["negative"]),
-            })
+            """),
+                {
+                    "activation_id": str(activation_id),
+                    "readiness": str(ids["readiness"]),
+                    "runtime": str(ids["runtime"]),
+                    "negative": str(ids["negative"]),
+                },
+            )
         return ids, activation_id
 
     with migration_lock():
@@ -509,15 +793,21 @@ async def test_roles_anywhere_upgrade_preserves_old_proof_and_refuses_downgrade(
             await asyncio.to_thread(command.upgrade, _alembic_config(), HEAD_REVISION)
             assert await retained(factory) == before
             async with factory() as session:
-                assert await session.scalar(text("SELECT version_num FROM alembic_version")) == HEAD_REVISION
-                guard = await session.scalar(text(
-                    "SELECT pg_get_functiondef('public.guard_artifact_provider_activation()'::regprocedure)"
-                ))
+                assert (
+                    await session.scalar(text("SELECT version_num FROM alembic_version"))
+                    == HEAD_REVISION
+                )
+                guard = await session.scalar(
+                    text(
+                        "SELECT pg_get_functiondef('public.guard_artifact_provider_activation()'::regprocedure)"
+                    )
+                )
                 assert "clock_timestamp()-runtime.started_at" in guard
                 assert "roles_anywhere_profile_sha256" in guard
                 with pytest.raises(DBAPIError, match="probe result is invalid"):
                     async with session.begin_nested():
-                        await session.execute(text("""
+                        await session.execute(
+                            text("""
                             INSERT INTO artifact_provider_probe_results
                             SELECT :id,probe_type,proof_version,result,release_id,
                               namespace_fingerprint,aws_partition,aws_account_id,region,
@@ -533,33 +823,47 @@ async def test_roles_anywhere_upgrade_preserves_old_proof_and_refuses_downgrade(
                               roles_anywhere_trust_anchor_sha256,
                               roles_anywhere_profile_arn,roles_anywhere_profile_sha256
                             FROM artifact_provider_probe_results WHERE id=:source
-                        """), {
-                            "id": str(new_record_id()), "nonce": str(uuid4()),
-                            "source": str(results["readiness"]),
-                        })
+                        """),
+                            {
+                                "id": str(new_record_id()),
+                                "nonce": str(uuid4()),
+                                "source": str(results["readiness"]),
+                            },
+                        )
             with pytest.raises(
                 ArtifactProviderLiveProofRequiredError,
                 match="requires fresh exact live proof",
             ):
-                await SqlAlchemyArtifactProviderActivationGuard(
-                    factory, settings
-                ).select_for_call(namespace_fingerprint=namespace)
+                await SqlAlchemyArtifactProviderActivationGuard(factory, settings).select_for_call(
+                    namespace_fingerprint=namespace
+                )
             with pytest.raises(RuntimeError, match="cannot be downgraded"):
                 await asyncio.to_thread(
                     command.downgrade, _alembic_config(), "0055_delivery_reconciliation"
                 )
             assert await retained(factory) == before
             async with factory() as session:
-                assert await session.scalar(text("SELECT version_num FROM alembic_version")) == HEAD_REVISION
-                assert await session.scalar(text(
-                    "SELECT pg_get_functiondef('public.guard_artifact_provider_activation()'::regprocedure)"
-                )) == guard
+                assert (
+                    await session.scalar(text("SELECT version_num FROM alembic_version"))
+                    == HEAD_REVISION
+                )
+                assert (
+                    await session.scalar(
+                        text(
+                            "SELECT pg_get_functiondef('public.guard_artifact_provider_activation()'::regprocedure)"
+                        )
+                    )
+                    == guard
+                )
         finally:
             await engine.dispose()
 
 
 async def test_revision_upgrade_retains_policy_source_and_running_window(
-    tmp_path, isolated_database_env, migration_lock, monkeypatch,
+    tmp_path,
+    isolated_database_env,
+    migration_lock,
+    monkeypatch,
 ):
     """A genuine guarded 0047 window survives and remains usable on the new head."""
     from sqlalchemy import select, text
@@ -567,13 +871,17 @@ async def test_revision_upgrade_retains_policy_source_and_running_window(
     from app.modules.tasks.revision.models import TaskRevisionPreparation
     from app.modules.tasks.revision.service import project_current_revision
     from tests.migration_revision_fixtures import (
-        enter_predecessor_owner_shape, insert_0047_preparation, leave_predecessor_owner_shape,
+        enter_predecessor_owner_shape,
+        insert_0047_preparation,
+        leave_predecessor_owner_shape,
         retained_revision_rows,
     )
     from tests.tasks.post_submit_routing.remediation_support import remediation_source
     from tests.tasks.post_submit_routing.support import revision_archive
     from tests.tasks.submission_dispatch.test_replacement_creation import (
-        _create, _creation_request, _ready_replacement,
+        _create,
+        _creation_request,
+        _ready_replacement,
     )
 
     with migration_lock():
@@ -583,17 +891,26 @@ async def test_revision_upgrade_retains_policy_source_and_running_window(
         await enter_predecessor_owner_shape(_execute, isolated_database_env, shape)
         async with remediation_source(tmp_path, isolated_database_env) as h:
             with monkeypatch.context() as patch:
-                patch.setattr("app.modules.tasks.post_submit_routing.outcome.prepare_revision", insert_0047_preparation)
+                patch.setattr(
+                    "app.modules.tasks.post_submit_routing.outcome.prepare_revision",
+                    insert_0047_preparation,
+                )
                 async with h.factory() as session, session.begin():
                     outcome = await task_post_submit_outcome(session, h.factory).apply(
-                        h.envelope, current_generation=None,
+                        h.envelope,
+                        current_generation=None,
                     )
             async with h.factory() as session:
-                assert await session.scalar(text(
-                    "SELECT count(*) FROM pg_trigger t JOIN pg_class c ON c.oid=t.tgrelid "
-                    "JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' "
-                    "AND NOT t.tgisinternal AND t.tgenabled='D'"
-                )) == 0
+                assert (
+                    await session.scalar(
+                        text(
+                            "SELECT count(*) FROM pg_trigger t JOIN pg_class c ON c.oid=t.tgrelid "
+                            "JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' "
+                            "AND NOT t.tgisinternal AND t.tgenabled='D'"
+                        )
+                    )
+                    == 0
+                )
                 before = await retained_revision_rows(session, outcome.routing_manifest_id)
                 source = before["task_revision_preparations"][0][0]
                 assert "remaining_microseconds" not in source
@@ -604,7 +921,10 @@ async def test_revision_upgrade_retains_policy_source_and_running_window(
                 assert await retained_revision_rows(session, outcome.routing_manifest_id) == before
                 preparation = await session.scalar(select(TaskRevisionPreparation))
                 assert preparation.clock_observed_at is None
-                assert preparation.remaining_microseconds is None and preparation.deadline_at is not None
+                assert (
+                    preparation.remaining_microseconds is None
+                    and preparation.deadline_at is not None
+                )
                 view = await project_current_revision(session, preparation)
                 assert view.disposition == "ready" and view.outcome == "kept"
                 assert view.preparation_sha256 == json.loads(source)["preparation_sha256"]
@@ -618,7 +938,12 @@ async def test_revision_upgrade_retains_policy_source_and_running_window(
             assert successor.submission_id != h.created.submission_id
             async with h.factory() as session:
                 retained = await retained_revision_rows(session, outcome.routing_manifest_id)
-                for owner in ("revision_policies", "submissions", "task_revision_preparations", "outbox_events"):
+                for owner in (
+                    "revision_policies",
+                    "submissions",
+                    "task_revision_preparations",
+                    "outbox_events",
+                ):
                     assert retained[owner] == before[owner], owner
 
 
@@ -704,44 +1029,33 @@ def test_current_head_installs_selected_only_checker_custody(
     ):
         assert "schema_version' IS DISTINCT FROM" in definitions[name]
     assert "check_submission_packet" not in definitions["protect_checker_result_custody"]
-    assert "member_results' IS DISTINCT FROM members" not in definitions[
-        "validate_checker_terminal_custody"
-    ]
-    assert "workstream.selected_post_submit_request.v1" in definitions[
-        "submission_dispatch_valid"
-    ]
-    assert "selected_pre_submit_run_id IS NOT NULL" in definitions[
-        "submission_dispatch_valid"
-    ]
+    assert (
+        "member_results' IS DISTINCT FROM members"
+        not in definitions["validate_checker_terminal_custody"]
+    )
+    assert "workstream.selected_post_submit_request.v1" in definitions["submission_dispatch_valid"]
+    assert "selected_pre_submit_run_id IS NOT NULL" in definitions["submission_dispatch_valid"]
     assert "external_plan" not in definitions["require_guide_proposal_approval"]
     assert "->'catalogue'" not in definitions["require_guide_proposal_approval"]
     assert "catalogue_manifest_sha256" not in definitions["require_post_policy_operation"]
-    assert "external_post_submit_policy.v1" in definitions[
-        "require_post_policy_operation"
-    ]
-    assert "checker terminal selected policy differs" in definitions[
-        "validate_checker_terminal_custody"
-    ]
-    assert "result_registry_entry_id" in definitions[
-        "validate_checker_terminal_custody"
-    ]
-    assert "platform_manifest_digest" in definitions[
-        "validate_checker_terminal_custody"
-    ]
-    assert "is distinct from 'external_checker_policies.v1'" in definitions[
-        "external_checker_locked_policies_valid"
-    ].lower()
+    assert "external_post_submit_policy.v1" in definitions["require_post_policy_operation"]
+    assert (
+        "checker terminal selected policy differs"
+        in definitions["validate_checker_terminal_custody"]
+    )
+    assert "result_registry_entry_id" in definitions["validate_checker_terminal_custody"]
+    assert "platform_manifest_digest" in definitions["validate_checker_terminal_custody"]
+    assert (
+        "is distinct from 'external_checker_policies.v1'"
+        in definitions["external_checker_locked_policies_valid"].lower()
+    )
     retired = {
         "guard_pre_submit_attempt": "retained pre-submit attempts are immutable",
-        "guard_pre_submit_evidence_set_creation": (
-            "retained pre-submit evidence is immutable"
-        ),
+        "guard_pre_submit_evidence_set_creation": ("retained pre-submit evidence is immutable"),
         "guard_pre_submit_evidence_result_membership": (
             "retained pre-submit evidence results are immutable"
         ),
-        "require_pre_submit_attempt_evidence": (
-            "retained pre-submit evidence is immutable"
-        ),
+        "require_pre_submit_attempt_evidence": ("retained pre-submit evidence is immutable"),
         "require_pre_submit_result_reconstruction": (
             "retained pre-submit evidence results are immutable"
         ),
@@ -788,10 +1102,14 @@ def test_current_head_installs_submission_lineage_contract(
                 ],
             )
             for required in ("task_assignment_id", "contribution_policy_version_id"):
-                assert await connection.fetchval(
-                    "select is_nullable from information_schema.columns where "
-                    "table_schema='public' and table_name='submissions' and column_name=$1", required,
-                ) == "NO"
+                assert (
+                    await connection.fetchval(
+                        "select is_nullable from information_schema.columns where "
+                        "table_schema='public' and table_name='submissions' and column_name=$1",
+                        required,
+                    )
+                    == "NO"
+                )
             lineage_shape = await connection.fetchval(
                 "select pg_get_constraintdef(c.oid) from pg_constraint c "
                 "join pg_class t on t.oid=c.conrelid "
@@ -839,7 +1157,11 @@ def test_current_head_installs_submission_lineage_contract(
         "task_assignment_id",
     ]
     assert "task_assignment_id" not in lineage_shape
-    for reference in ("submission_bundle_admission_id", "artifact_binding_id", "artifact_content_id"):
+    for reference in (
+        "submission_bundle_admission_id",
+        "artifact_binding_id",
+        "artifact_content_id",
+    ):
         assert f"{reference} IS NULL" in lineage_shape
         assert f"{reference} IS NOT NULL" in lineage_shape
     assert "artifact_content_id IS NOT NULL" in lineage_shape
@@ -874,9 +1196,10 @@ def test_current_head_installs_compensation_binding_lifecycle(
                 "where table_schema='public' and table_name='alembic_version' "
                 "and column_name='version_num'"
             )
-            assert await connection.fetchval(
-                "select version_num from alembic_version"
-            ) == HEAD_REVISION
+            assert (
+                await connection.fetchval("select version_num from alembic_version")
+                == HEAD_REVISION
+            )
             triggers = await connection.fetch(
                 "select tgname from pg_trigger t join pg_class c on c.oid=t.tgrelid "
                 "where c.relname=any($1::text[]) and not t.tgisinternal",
@@ -967,8 +1290,6 @@ def test_current_head_installs_compensation_adapter_identity(
     assert "workstream.compensation.adapter" in asyncio.run(identity_constraint())
 
 
-
-
 def test_manifest_covers_every_required_object_class() -> None:
     manifest = json.loads(_manifest_path().read_text(encoding="utf-8"))
     assert manifest["format"] == "workstream-v01-schema-manifest-1"
@@ -991,16 +1312,12 @@ def test_manifest_covers_every_required_object_class() -> None:
     assert manifest["auxiliary_objects"] == []
 
 
-@pytest.mark.parametrize(
-    "name", ("v01_baseline_manifest.json",)
-)
+@pytest.mark.parametrize("name", ("v01_baseline_manifest.json",))
 def test_committed_schema_manifests_are_compact_canonical_json(name: str) -> None:
     path = _manifest_path().with_name(name)
     payload = path.read_bytes()
     assert payload == canonical_bytes(json.loads(payload))
     assert payload.count(b"\n") == 1
-
-
 
 
 def test_acl_principals_are_closed_and_owner_mapping_is_role_name_independent() -> None:
@@ -1101,10 +1418,15 @@ def test_baseline_sql_splitter_preserves_function_bodies() -> None:
         split_sql_statements("SELECT $$broken")
 
 
-@pytest.mark.parametrize("old_revision", [
-    "0001_v01_baseline", "0030_task_management", "0031_task_queue_authority",
-    "0063_compilation_authority",
-])
+@pytest.mark.parametrize(
+    "old_revision",
+    [
+        "0001_v01_baseline",
+        "0030_task_management",
+        "0031_task_queue_authority",
+        "0063_compilation_authority",
+    ],
+)
 def test_unknown_old_stamp_refuses_before_mutation(
     isolated_database_env: str,
     migration_lock,
@@ -1121,9 +1443,13 @@ def test_unknown_old_stamp_refuses_before_mutation(
                 "create table alembic_version(version_num varchar(128) primary key)",
             )
         )
-        asyncio.run(_execute(
-            isolated_database_env, "insert into alembic_version values ($1)", old_revision,
-        ))
+        asyncio.run(
+            _execute(
+                isolated_database_env,
+                "insert into alembic_version values ($1)",
+                old_revision,
+            )
+        )
         before = asyncio.run(_database_snapshot(isolated_database_env))
         with pytest.raises(RuntimeError, match=RECREATE_GUIDANCE):
             command.upgrade(config, "head")
@@ -1153,13 +1479,25 @@ def test_root_upgrade_refuses_nonempty_unstamped_schema_before_product_ddl(
     assert ("r", "projects") not in snapshot["objects"]
 
 
-@pytest.mark.parametrize("revision,message", [
-    (BASELINE_REVISION, "0001_uuid7_v01 cannot be downgraded; recreate the database"),
-    ("0002_task_queue_authority", "Workstream v0.1 migrations cannot be downgraded; recreate the database"),
-    ("0003_task_read_authority", "Workstream v0.1 migrations cannot be downgraded; recreate the database"),
-    ("0004_task_context_authority", "Workstream v0.1 migrations cannot be downgraded; recreate the database"),
-    (HEAD_REVISION, "Workstream v0.1 migrations cannot be downgraded; recreate the database"),
-])
+@pytest.mark.parametrize(
+    "revision,message",
+    [
+        (BASELINE_REVISION, "0001_uuid7_v01 cannot be downgraded; recreate the database"),
+        (
+            "0002_task_queue_authority",
+            "Workstream v0.1 migrations cannot be downgraded; recreate the database",
+        ),
+        (
+            "0003_task_read_authority",
+            "Workstream v0.1 migrations cannot be downgraded; recreate the database",
+        ),
+        (
+            "0004_task_context_authority",
+            "Workstream v0.1 migrations cannot be downgraded; recreate the database",
+        ),
+        (HEAD_REVISION, "Workstream v0.1 migrations cannot be downgraded; recreate the database"),
+    ],
+)
 def test_downgrade_refuses_without_mutation(
     isolated_database_env: str,
     migration_lock,
@@ -1168,13 +1506,41 @@ def test_downgrade_refuses_without_mutation(
 ) -> None:
     config = _alembic_config()
     with migration_lock():
-        asyncio.run(_execute(isolated_database_env, "drop schema public cascade; create schema public"))
+        asyncio.run(
+            _execute(isolated_database_env, "drop schema public cascade; create schema public")
+        )
         command.upgrade(config, revision)
-        command.upgrade(config, revision)  # Current installed revision remains a valid no-op target.
+        command.upgrade(
+            config, revision
+        )  # Current installed revision remains a valid no-op target.
     before = asyncio.run(_database_snapshot(isolated_database_env))
     assert before["versions"] == [revision]
     with migration_lock(), pytest.raises(RuntimeError, match=message):
         command.downgrade(config, "base")
+    after = asyncio.run(_database_snapshot(isolated_database_env))
+    assert before == after
+
+
+def test_neutral_runtime_one_revision_downgrade_refuses_without_mutation(
+    isolated_database_env: str,
+    migration_lock,
+) -> None:
+    """The retained custody rewrite cannot be partially removed from a live schema."""
+    config = _alembic_config()
+    with migration_lock():
+        asyncio.run(
+            _execute(isolated_database_env, "drop schema public cascade; create schema public")
+        )
+        command.upgrade(config, HEAD_REVISION)
+    before = asyncio.run(_database_snapshot(isolated_database_env))
+    with (
+        migration_lock(),
+        pytest.raises(
+            RuntimeError,
+            match="Workstream v0.1 migrations cannot be downgraded; recreate the database",
+        ),
+    ):
+        command.downgrade(config, "0058_compensation_unit_create")
     after = asyncio.run(_database_snapshot(isolated_database_env))
     assert before == after
 

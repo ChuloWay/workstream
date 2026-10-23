@@ -91,7 +91,9 @@ class GuideDocumentManifest(BaseModel):
         """Mint an opaque selector meaningful only inside this run's exact grant."""
         if document not in self.documents:
             raise ValueError("document is not assigned to this manifest")
-        return str(guide_document_handle(self.setup_run_id, document.source_item_id, document.ingest_id))
+        return str(
+            guide_document_handle(self.setup_run_id, document.source_item_id, document.ingest_id)
+        )
 
     def agent_projection(self) -> dict[str, object]:
         """Expose version references and handles, excluding server storage identities."""
@@ -200,7 +202,6 @@ class GuideDocumentAccessCustody(Protocol):
     async def opened_handles(self) -> frozenset[str]: ...
 
 
-
 @dataclass(frozen=True, slots=True)
 class GuideRuntimeCapabilities:
     """The sole non-serializable capability issued to an agent runtime."""
@@ -211,8 +212,9 @@ class GuideRuntimeCapabilities:
 class GuideDocumentAccessFactory(Protocol):
     """ART composition opens an exact fenced grant with owned scratch lifecycle."""
 
-    def __call__(self, attempt_id: UUID, manifest: GuideDocumentManifest,
-                 configuration) -> AbstractAsyncContextManager[GuideDocumentGrant]: ...
+    def __call__(
+        self, attempt_id: UUID, manifest: GuideDocumentManifest, configuration
+    ) -> AbstractAsyncContextManager[GuideDocumentGrant]: ...
 
 
 class GuideDocumentToolsFactory(Protocol):
@@ -274,11 +276,17 @@ class ProjectGuideDocumentLineage:
 class ProjectGuideDocumentScopePort(Protocol):
     """PROJECTS scope locks live until the composition-owned transaction ends."""
 
-    async def lock_manifest_source(self, request: GuideDocumentManifestRequest) -> ProjectGuideDocumentLineage: ...
+    async def lock_manifest_source(
+        self, request: GuideDocumentManifestRequest
+    ) -> ProjectGuideDocumentLineage: ...
 
-    async def lock_access_attempt(self, attempt_id: UUID, manifest: GuideDocumentManifest) -> None: ...
+    async def lock_access_attempt(
+        self, attempt_id: UUID, manifest: GuideDocumentManifest
+    ) -> None: ...
 
-    async def lock_task_originals(self, request: LockedGuideOriginalsRequest) -> tuple[LabeledGuideOriginal, ...]: ...
+    async def lock_task_originals(
+        self, request: LockedGuideOriginalsRequest
+    ) -> tuple[LabeledGuideOriginal, ...]: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -296,6 +304,11 @@ class GuideDocumentUploadTargetPort(Protocol):
     """Resolve exact creation membership within the caller's AUTH/ART transaction."""
 
     async def resolve(
-        self, project_id: UUID, guide_id: UUID, document_id: UUID, *, for_update: bool,
+        self,
+        project_id: UUID,
+        guide_id: UUID,
+        document_id: UUID,
+        *,
+        for_update: bool,
     ) -> GuideDocumentUploadTarget | None:
         """Return current membership, optionally locking the owning aggregate."""

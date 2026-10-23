@@ -381,7 +381,7 @@ version that selects the new published policy is activated.
 > the manager's separate PRE and POST approvals and guide activation. How rule
 > setup works for this stack is being decided separately. Until it is, no task
 > can be created for the project, and the contributor flow below cannot run.
-> Provider-backed compilation needs `OPENAI_API_KEY`; see the
+> Provider-backed compilation needs `OPENROUTER_API_KEY` (for the default OpenRouter provider); see the
 > [local pilot guide upload](local-pilot.md#declare-and-upload-a-real-guide-document)
 > and the [CLI approval steps](../../cli/README.md#approve-an-exact-pre-submission-proposal).
 

@@ -343,7 +343,7 @@ runner for the now-public upload and setup diagnostic routes. It uses two genuin
 shareable PDFs, an isolated runner-owned PostgreSQL database and MinIO bucket,
 and a separately owned loopback Redis broker and actual Celery worker. It does
 not seed product rows or substitute a model/provider implementation. The private
-provider configuration contributes only `OPENAI_API_KEY` and project-agent
+provider configuration contributes only the explicitly selected provider key and project-agent
 settings, never another worktree's database, authority or storage configuration.
 Install the repository-declared runtime extra first (`uv sync --frozen --extra
 agents --extra dev` from `backend/`) and verify `import agents, openai` succeeds

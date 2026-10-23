@@ -53,7 +53,10 @@ class ProjectGuideCompilationAttempt(Base):
 
     __tablename__ = "project_guide_compilation_attempts"
     __table_args__ = (
-        CheckConstraint("(get_byte(uuid_send(id), 6) >> 4) = 7 and (get_byte(uuid_send(id), 8) & 192) = 128", name="id_uuid7"),
+        CheckConstraint(
+            "(get_byte(uuid_send(id), 6) >> 4) = 7 and (get_byte(uuid_send(id), 8) & 192) = 128",
+            name="id_uuid7",
+        ),
         ForeignKeyConstraint(
             ["source_snapshot_id", "source_snapshot_hash"],
             ["guide_source_snapshots.id", "guide_source_snapshots.bundle_hash"],
@@ -198,7 +201,10 @@ class ProjectGuideCompilationRequestOperation(Base):
 
     __tablename__ = "project_guide_compilation_request_operations"
     __table_args__ = (
-        CheckConstraint("(get_byte(uuid_send(operation_id), 6) >> 4) = 7 and (get_byte(uuid_send(operation_id), 8) & 192) = 128", name="operation_id_uuid7"),
+        CheckConstraint(
+            "(get_byte(uuid_send(operation_id), 6) >> 4) = 7 and (get_byte(uuid_send(operation_id), 8) & 192) = 128",
+            name="operation_id_uuid7",
+        ),
         CheckConstraint(
             "(request_trigger = 'project_manager' and source_mutation_operation_id is null "
             "and source_authorization_decision_event_id is null) or "
@@ -326,7 +332,10 @@ class ProjectGuideCompilation(Base):
 
     __tablename__ = "project_guide_compilations"
     __table_args__ = (
-        CheckConstraint("(get_byte(uuid_send(id), 6) >> 4) = 7 and (get_byte(uuid_send(id), 8) & 192) = 128", name="id_uuid7"),
+        CheckConstraint(
+            "(get_byte(uuid_send(id), 6) >> 4) = 7 and (get_byte(uuid_send(id), 8) & 192) = 128",
+            name="id_uuid7",
+        ),
         UniqueConstraint("attempt_id", name="uq_project_guide_compilation_attempt"),
         UniqueConstraint("id", "attempt_id", name="uq_project_guide_compilation_id_attempt"),
         UniqueConstraint(
@@ -419,7 +428,10 @@ class ProjectGuideComponentProjectionOperation(Base):
 
     __tablename__ = "project_guide_component_projection_operations"
     __table_args__ = (
-        CheckConstraint("(get_byte(uuid_send(operation_id), 6) >> 4) = 7 and (get_byte(uuid_send(operation_id), 8) & 192) = 128", name="operation_id_uuid7"),
+        CheckConstraint(
+            "(get_byte(uuid_send(operation_id), 6) >> 4) = 7 and (get_byte(uuid_send(operation_id), 8) & 192) = 128",
+            name="operation_id_uuid7",
+        ),
         UniqueConstraint(
             "operation_id",
             "compilation_id",
@@ -574,8 +586,14 @@ class ProjectGuideSetupFinalization(Base):
 
     __tablename__ = "project_guide_setup_finalizations"
     __table_args__ = (
-        CheckConstraint("(get_byte(uuid_send(id), 6) >> 4) = 7 and (get_byte(uuid_send(id), 8) & 192) = 128", name="id_uuid7"),
-        CheckConstraint("(get_byte(uuid_send(operation_id), 6) >> 4) = 7 and (get_byte(uuid_send(operation_id), 8) & 192) = 128", name="operation_id_uuid7"),
+        CheckConstraint(
+            "(get_byte(uuid_send(id), 6) >> 4) = 7 and (get_byte(uuid_send(id), 8) & 192) = 128",
+            name="id_uuid7",
+        ),
+        CheckConstraint(
+            "(get_byte(uuid_send(operation_id), 6) >> 4) = 7 and (get_byte(uuid_send(operation_id), 8) & 192) = 128",
+            name="operation_id_uuid7",
+        ),
         ForeignKeyConstraint(
             ["compilation_id", "attempt_id"],
             ["project_guide_compilations.id", "project_guide_compilations.attempt_id"],
@@ -736,7 +754,10 @@ class ProjectGuideRuntimeAllocation(Base):
 
     __tablename__ = "project_guide_runtime_allocations"
     __table_args__ = (
-        CheckConstraint("(get_byte(uuid_send(id), 6) >> 4) = 7 and (get_byte(uuid_send(id), 8) & 192) = 128", name="id_uuid7"),
+        CheckConstraint(
+            "(get_byte(uuid_send(id), 6) >> 4) = 7 and (get_byte(uuid_send(id), 8) & 192) = 128",
+            name="id_uuid7",
+        ),
         UniqueConstraint(
             "attempt_id",
             "kind",
@@ -805,7 +826,10 @@ class ProjectGuideDocumentAccess(Base):
 
     __tablename__ = "project_guide_document_accesses"
     __table_args__ = (
-        CheckConstraint("(get_byte(uuid_send(id), 6) >> 4) = 7 and (get_byte(uuid_send(id), 8) & 192) = 128", name="id_uuid7"),
+        CheckConstraint(
+            "(get_byte(uuid_send(id), 6) >> 4) = 7 and (get_byte(uuid_send(id), 8) & 192) = 128",
+            name="id_uuid7",
+        ),
         UniqueConstraint(
             "attempt_id",
             "parser_request_hash",
@@ -851,7 +875,10 @@ class ProjectGuideProposalApproval(Base):
 
     __tablename__ = "project_guide_proposal_approvals"
     __table_args__ = (
-        CheckConstraint("(get_byte(uuid_send(operation_id), 6) >> 4) = 7 and (get_byte(uuid_send(operation_id), 8) & 192) = 128", name="operation_id_uuid7"),
+        CheckConstraint(
+            "(get_byte(uuid_send(operation_id), 6) >> 4) = 7 and (get_byte(uuid_send(operation_id), 8) & 192) = 128",
+            name="operation_id_uuid7",
+        ),
         Index(
             "uq_proposal_approval_root_guide",
             "guide_id",
@@ -941,7 +968,10 @@ class ProjectGuideProposalCorrection(Base):
 
     __tablename__ = "project_guide_proposal_corrections"
     __table_args__ = (
-        CheckConstraint("(get_byte(uuid_send(operation_id), 6) >> 4) = 7 and (get_byte(uuid_send(operation_id), 8) & 192) = 128", name="operation_id_uuid7"),
+        CheckConstraint(
+            "(get_byte(uuid_send(operation_id), 6) >> 4) = 7 and (get_byte(uuid_send(operation_id), 8) & 192) = 128",
+            name="operation_id_uuid7",
+        ),
         ForeignKeyConstraint(
             ["compilation_id", "project_id", "guide_id"],
             [

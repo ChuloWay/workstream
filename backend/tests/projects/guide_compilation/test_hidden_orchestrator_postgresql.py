@@ -53,7 +53,7 @@ from .helpers import (
     result,
     seed_database,
 )
-from .runtime_fixtures import document_access, record_scripted_document_access
+from .runtime_fixtures import document_tools, record_scripted_document_access
 from .test_authorized_request_service import _authorized_service, _request, _seed_human
 
 
@@ -115,7 +115,7 @@ def _backend(factory):
     return SqlAlchemyGuideCompilationExecutionBackend(
         factory,
         material_factory=guide_document_manifest_port,
-        document_access_factory=document_access,
+        document_tools_factory=document_tools(factory),
         checker_capabilities=capability_projection(),
         authorization_context=_fixed_service_authorization,
     )
@@ -125,7 +125,7 @@ def _port(factory, runtime, *, checker_capabilities=None):
     return project_guide_compilation_execution_port(
         factory,
         material_factory=guide_document_manifest_port,
-        document_access_factory=document_access,
+        document_tools_factory=document_tools(factory),
         checker_capabilities=checker_capabilities or capability_projection(),
         authorization_context=_fixed_service_authorization,
         runtime_factory=lambda configuration: runtime,
@@ -507,7 +507,7 @@ async def test_uncertain_provider_failure_never_redispatches(
 async def test_hosted_provider_fence_cannot_be_reopened(
     clean_postgres_database: str,
 ) -> None:
-    """Only a provider-free attempt may return to reservation; hosted uncertainty is final."""
+    """Only a no-inference attempt may return to reservation; inference uncertainty is final."""
     values = await seed_database(clean_postgres_database)
     requested = await _authorized_attempt(clean_postgres_database, values)
     engine = create_async_engine(clean_postgres_database)
@@ -517,7 +517,7 @@ async def test_hosted_provider_fence_cannot_be_reopened(
         state = await backend.load(requested.attempt_id)
         assert (await backend.fence(state)).dispatch_permitted
         with pytest.raises(ProjectGuideCompilationExecutionError, match="context_unavailable"):
-            await backend.release_provider_free(state)
+            await backend.release_no_inference(state)
         async with factory() as session, session.begin():
             with pytest.raises(DBAPIError, match="provider uncertainty timestamp is immutable"):
                 await session.execute(text(
@@ -536,10 +536,10 @@ class _ManagerRuntime(_Runtime):
 
 
 @pytest.mark.asyncio
-async def test_provider_free_transient_failure_reopens_the_attempt_for_retry(
+async def test_no_inference_transient_failure_reopens_the_attempt_for_retry(
     clean_postgres_database: str,
 ) -> None:
-    """A provider-free attempt has no uncertain provider outcome, so delivery can retry it."""
+    """A no-inference attempt has no uncertain model outcome, so delivery can retry it."""
     values = await seed_database(clean_postgres_database)
     configuration = manager_runtime_configuration()
     requested = await _authorized_attempt(clean_postgres_database, values, configuration)
@@ -568,10 +568,10 @@ async def test_provider_free_transient_failure_reopens_the_attempt_for_retry(
 
 
 @pytest.mark.asyncio
-async def test_provider_free_cancellation_reopens_the_attempt(
+async def test_no_inference_cancellation_reopens_the_attempt(
     clean_postgres_database: str,
 ) -> None:
-    """Cancellation propagates, but never strands a provider-free attempt."""
+    """Cancellation propagates, but never strands a no-inference attempt."""
     values = await seed_database(clean_postgres_database)
     requested = await _authorized_attempt(
         clean_postgres_database, values, manager_runtime_configuration())
@@ -592,7 +592,7 @@ async def test_provider_free_cancellation_reopens_the_attempt(
 
 
 @pytest.mark.asyncio
-async def test_recovery_reopens_only_a_stale_provider_free_fence(
+async def test_recovery_reopens_only_a_stale_no_inference_fence(
     clean_postgres_database: str, monkeypatch,
 ) -> None:
     """A fence left by a crashed worker reopens after its run deadline, not before."""
@@ -635,10 +635,10 @@ async def test_recovery_reopens_only_a_stale_provider_free_fence(
 
 
 @pytest.mark.asyncio
-async def test_provider_free_run_ignores_the_hosted_prompt_limit(
+async def test_no_inference_run_ignores_the_model_prompt_limit(
     clean_postgres_database: str,
 ) -> None:
-    """The prompt limit bounds a hosted model request; a provider-free run sends none."""
+    """The prompt limit bounds a model request; a no-inference run sends none."""
     from app.interfaces.project_agents import project_guide_compilation_prompt_bytes
 
     configuration = manager_runtime_configuration().model_copy(
@@ -720,7 +720,7 @@ async def test_unavailable_authority_returns_only_the_safe_public_code(
         port = project_guide_compilation_execution_port(
             factory,
             material_factory=guide_document_manifest_port,
-            document_access_factory=document_access,
+            document_tools_factory=document_tools(factory),
             checker_capabilities=capability_projection(),
             authorization_context=_unavailable_service_authorization,
             runtime_factory=lambda configuration: runtime,
@@ -776,23 +776,6 @@ async def test_sdk_parser_rejection_persists_terminal_without_reinvocation(
 
     monkeypatch.setattr(Runner, "run", run)
 
-    class ScriptedWorkspace:
-        container_id = "cntr_scripted"
-
-        def __init__(self, client, configuration, manifest, capabilities):
-            self.context = SimpleNamespace(material=manifest)
-            self.capabilities = capabilities
-
-        async def start(self):
-            await record_scripted_document_access(self.context, self.capabilities)
-
-        async def close(self):
-            await self.capabilities.documents.close()
-
-    monkeypatch.setattr(
-        "app.adapters.project_agents.openai_agent_sdk.OpenAIGuideWorkspace",
-        ScriptedWorkspace,
-    )
     values = await seed_database(clean_postgres_database)
     requested = await _authorized_attempt(clean_postgres_database, values)
     engine = create_async_engine(clean_postgres_database)

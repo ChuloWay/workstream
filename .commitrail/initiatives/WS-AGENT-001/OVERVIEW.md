@@ -1,6 +1,6 @@
 # WS-AGENT-001 — Replaceable guide runtimes
 
-- Durable disposition: Planned
+- Disposition: Planned
 
 Workstream must switch agent runtimes and inference providers without changing
 PROJECTS/ART business logic or source-evidence schema. The user explicitly asked
@@ -14,12 +14,12 @@ exact source access, immutable attempt evidence and overall run bounds.
 
 1. [Neutral tools and OpenRouter](WS-AGENT-001-01.md): replace the current hosted
    document path, preserve historical facts/cleanup, qualify OpenAI Agents SDK.
-2. [OmniCoreAgent qualification](WS-AGENT-001-02.md): register the real second
+2. OmniCoreAgent qualification (companion change): register the real second
    runtime, handle its native mechanics inside its adapter, run the same contract
    and live-guide qualification in its isolated dependency environment.
 
 SDK environments may differ; product contracts and core behavior must not.
 No speculative Claude adapter, generic plugin platform, runtime-generated shell
 or future product work. No full hosted journey is claimed by adapter tests.
-Current PR #651's draft-review/checker-specification work must be preserved during
-reconciliation. Retained unresolved provider attempts cannot be reset or rerun.
+Merged PR #651's draft-review/checker-specification behavior remains required
+for every runtime. Retained unresolved provider attempts cannot be reset or rerun.

@@ -20,10 +20,14 @@ def environment(env, report):
     """Copy only approved model settings; never inherit another worktree's database."""
     report["guide_drill_sha256"] = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
     provider = dotenv_values(os.environ["WORKSTREAM_DRILL_PROVIDER_ENV"])
-    if not provider.get("OPENAI_API_KEY"):
+    model_provider = provider.get("WORKSTREAM_PROJECT_AGENT_MODEL_PROVIDER", "openrouter")
+    key_name = {"openrouter": "OPENROUTER_API_KEY", "openai": "OPENAI_API_KEY"}.get(model_provider)
+    if key_name is None or not provider.get(key_name):
         raise api.ProbeFailure("model_key_missing")
+    for key in ("OPENAI_API_KEY", "OPENROUTER_API_KEY"):
+        env.pop(key, None)
     for key, value in provider.items():
-        if key == "OPENAI_API_KEY" or key.startswith("WORKSTREAM_PROJECT_AGENT_"):
+        if key == key_name or key.startswith("WORKSTREAM_PROJECT_AGENT_"):
             if value is not None:
                 env[key] = value
     endpoint = os.environ["WORKSTREAM_TEST_MINIO_ENDPOINT"]

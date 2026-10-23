@@ -25,6 +25,7 @@ from app.adapters.guide_document_tools.parsing import parse_document
 from app.adapters.guide_document_tools.service import (
     GuideDocumentParserService,
     _healthcheck,
+    _remove_owned_stale_socket,
 )
 import app.adapters.guide_document_tools.service as service_module
 from app.interfaces.external_services import (
@@ -46,7 +47,7 @@ def _request(source: bytes, *, offset: int = 0) -> GuideDocumentParserRequest:
     )
 
 
-def _adapter(path: Path, *, timeout: float = 2.0) -> UnixSocketGuideDocumentParserAdapter:
+def _adapter(path: Path, *, timeout: float = 15.0) -> UnixSocketGuideDocumentParserAdapter:
     return UnixSocketGuideDocumentParserAdapter(
         socket_path=path,
         timeout_seconds=timeout,
@@ -108,6 +109,22 @@ def test_factory_uses_the_typed_external_service_identity(tmp_path: Path) -> Non
     )
 
 
+def test_request_contract_rejects_unknown_fields() -> None:
+    source = b"guide"
+    body = _request(source).model_dump(mode="json")
+    body["source_path"] = "/forbidden"
+
+    with pytest.raises(ValueError):
+        GuideDocumentParserRequest.model_validate(body)
+
+
+def test_child_environment_is_fixed_and_contains_no_parent_secrets() -> None:
+    assert service_module._CHILD_ENVIRONMENT == {
+        "PYTHONHASHSEED": "0",
+        "PYTHONIOENCODING": "utf-8",
+    }
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize("wrong", ["hash", "length"])
 async def test_client_rejects_wrong_source_identity_before_transport(
@@ -126,7 +143,10 @@ async def test_client_rejects_wrong_source_identity_before_transport(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("invalid", ["unknown_field", "mismatched_binding", "partial_frame"])
+@pytest.mark.parametrize(
+    "invalid",
+    ["unknown_field", "mismatched_binding", "wrong_response_hash", "partial_frame"],
+)
 async def test_client_rejects_malformed_or_truncated_responses(
     tmp_path: Path,
     invalid: str,
@@ -145,6 +165,9 @@ async def test_client_rejects_malformed_or_truncated_responses(
     elif invalid == "mismatched_binding":
         result["source_sha256"] = "sha256:" + "0" * 64
         response = _response_frame(body)
+    elif invalid == "wrong_response_hash":
+        result["response_hash"] = "sha256:" + "0" * 64
+        response = _response_frame(body)
     else:
         response = struct.pack(">I", 100) + b"{"
     path = tmp_path / "guide.sock"
@@ -158,7 +181,9 @@ async def test_client_rejects_malformed_or_truncated_responses(
 
 
 @pytest.mark.asyncio
-async def test_service_parses_concurrent_sources_without_cross_request_state(tmp_path: Path) -> None:
+async def test_service_parses_concurrent_sources_without_cross_request_state(
+    tmp_path: Path,
+) -> None:
     path = tmp_path / "runtime" / "guide.sock"
     path.parent.mkdir()
     service = _service(path)
@@ -193,6 +218,39 @@ async def test_partial_request_frame_is_aborted(tmp_path: Path) -> None:
         writer.close()
         await writer.wait_closed()
     finally:
+        await service.close()
+
+
+@pytest.mark.asyncio
+async def test_admission_limit_closes_excess_connections(tmp_path: Path) -> None:
+    path = tmp_path / "runtime" / "guide.sock"
+    path.parent.mkdir()
+    path.parent.chmod(0o750)
+    service = GuideDocumentParserService(
+        socket_path=path,
+        maximum_concurrency=1,
+        maximum_admitted_connections=1,
+        request_read_timeout_seconds=1.0,
+        child_timeout_seconds=1.0,
+        expected_uid=os.geteuid(),
+        expected_gid=os.getegid(),
+    )
+    await service.start()
+    first_reader, first_writer = await asyncio.open_unix_connection(path)
+    try:
+        first_writer.write(struct.pack(">I", 100) + b"{")
+        await first_writer.drain()
+        await asyncio.sleep(0.01)
+        second_reader, second_writer = await asyncio.open_unix_connection(path)
+        try:
+            assert await asyncio.wait_for(second_reader.read(), timeout=1.0) == b""
+        finally:
+            second_writer.close()
+            await second_writer.wait_closed()
+    finally:
+        first_writer.close()
+        await first_writer.wait_closed()
+        await first_reader.read()
         await service.close()
 
 
@@ -278,6 +336,43 @@ async def test_service_replaces_only_owned_stale_socket(tmp_path: Path) -> None:
         assert path.is_socket()
     finally:
         await service.close()
+
+
+def test_stale_socket_with_foreign_expected_owner_is_rejected(tmp_path: Path) -> None:
+    path = tmp_path / "guide.sock"
+    stale = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    stale.bind(str(path))
+    stale.close()
+    path.chmod(0o660)
+
+    with pytest.raises(RuntimeError, match="owned socket"):
+        _remove_owned_stale_socket(
+            path,
+            expected_uid=os.geteuid() + 1,
+            expected_gid=os.getegid(),
+        )
+    assert path.is_socket()
+    path.unlink()
+
+
+@pytest.mark.asyncio
+async def test_service_rejects_hard_linked_socket_alias(tmp_path: Path) -> None:
+    directory = tmp_path / "runtime"
+    directory.mkdir()
+    directory.chmod(0o750)
+    path = directory / "guide.sock"
+    alias = directory / "guide-alias.sock"
+    stale = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    stale.bind(str(path))
+    stale.close()
+    path.chmod(0o660)
+    os.link(path, alias)
+
+    with pytest.raises(RuntimeError, match="owned socket"):
+        await _service(path).start()
+
+    path.unlink()
+    alias.unlink()
 
 
 @pytest.mark.asyncio

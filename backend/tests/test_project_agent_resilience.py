@@ -1,6 +1,7 @@
 """Native SDK retry and circuit proof without provider calls."""
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
+from functools import partial
 
 import httpx2
 import pytest
@@ -13,12 +14,28 @@ from openai.types.responses import ResponseFunctionToolCall, ResponseOutputMessa
 from app.adapters.project_agents.provider_resilience import (
     ProviderCircuit, ProviderCircuitOpen, model_retry_settings,
 )
+from app.adapters.project_agents import build_project_guide_adapter_profile
+from app.adapters.project_agents.openai_profile import (
+    require_openai_agents_sdk_adapter_profile,
+)
 from app.core.config import Settings
 from app.core.project_agents import project_guide_runtime_configuration
 
 
 def configuration(**overrides):
-    return project_guide_runtime_configuration(Settings(_env_file=None, **overrides))
+    settings = Settings(_env_file=None, **overrides)
+    return project_guide_runtime_configuration(
+        settings,
+        adapter_profile_builder=partial(
+            build_project_guide_adapter_profile, settings.project_agent_runtime
+        ),
+    )
+
+
+def profile(configuration_):
+    return require_openai_agents_sdk_adapter_profile(
+        configuration_.adapter_profile_values()
+    )
 
 
 def status_error(status, code, **headers):
@@ -68,8 +85,9 @@ def delays(monkeypatch):
 
 
 async def run(model, *, tools=()):
+    config = configuration()
     return await Runner.run(Agent(name="retry-proof", model=model, tools=list(tools),
-        model_settings=ModelSettings(retry=model_retry_settings(configuration()))),
+        model_settings=ModelSettings(retry=model_retry_settings(profile(config)))),
         "test", run_config=RunConfig(tracing_disabled=True, trace_include_sensitive_data=False))
 
 
@@ -197,9 +215,10 @@ def test_expired_or_released_probe_cannot_close_new_outage():
 
 def test_request_deadline_is_independent_and_hashed():
     default = configuration()
-    changed = configuration(project_agent_request_timeout_seconds=25)
-    assert default.model == "gpt-5.6-terra" and default.request_timeout_seconds == 300
-    assert changed.request_timeout_seconds == 25
+    changed = configuration(project_agent_runtime_options={"request_timeout_seconds": 25})
+    assert default.model == "openai/gpt-5.6-terra"
+    assert profile(default).request_timeout_seconds == 300
+    assert profile(changed).request_timeout_seconds == 25
     assert default.timeout_seconds == changed.timeout_seconds == 1800
     assert default.sha256 != changed.sha256
 
@@ -207,8 +226,9 @@ def test_request_deadline_is_independent_and_hashed():
 def test_circuit_counts_exhausted_turn_once_and_isolates_models(monkeypatch):
     from app.adapters.project_agents import provider_resilience as owner
     circuit = ProviderCircuit(2, 60)
-    monkeypatch.setattr(owner, "circuit_for", lambda _: circuit)
-    admission = owner.ModelCircuitAdmission(configuration())
+    monkeypatch.setattr(owner, "circuit_for", lambda *_: circuit)
+    config = configuration()
+    admission = owner.ModelCircuitAdmission(config, profile(config))
     for _ in range(3):
         admission.before_request()
         admission.request_failed(status_error(429, "rate_limit_exceeded"))
@@ -232,8 +252,8 @@ async def test_open_circuit_prevents_product_fence_and_resource_allocation(monke
 
     circuit = ProviderCircuit(1, 60)
     circuit.failed(circuit.acquire(1000))
-    monkeypatch.setattr(owner, "circuit_for", lambda _: circuit)
-    monkeypatch.setenv("OPENAI_API_KEY", "test-only")
+    monkeypatch.setattr(owner, "circuit_for", lambda *_: circuit)
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-only")
     monkeypatch.setattr(module, "project_guide_compilation_prompt_bytes", lambda _: b"manifest")
     calls = []
 
@@ -283,7 +303,9 @@ async def test_cleanup_bypasses_open_inference_circuit(monkeypatch):
     from datetime import datetime, timezone
     from openai import NotFoundError
     from app.adapters.project_agents import provider_resilience as owner
-    from app.adapters.project_agents.openai_workspace import OpenAIGuideWorkspace
+    from app.adapters.project_agents.openai_workspace import (
+        cleanup_recorded_openai_guide_resources,
+    )
     from app.modules.projects.api.guide_documents import GuideRuntimeResource
 
     circuit = ProviderCircuit(1, 60)
@@ -294,10 +316,13 @@ async def test_cleanup_bypasses_open_inference_circuit(monkeypatch):
     calls = []
 
     class Resources:
+        deleted = False
+
         async def cleanup_resources(self):
-            return (resource,)
+            return () if self.deleted else (resource,)
 
         async def record_deleted(self, identifier):
+            self.deleted = True
             calls.append(("record_deleted", identifier))
 
         async def record_cleanup_failed(self, identifier):
@@ -313,7 +338,7 @@ async def test_cleanup_bypasses_open_inference_circuit(monkeypatch):
             raise NotFoundError("gone", response=httpx2.Response(404,
                 request=httpx2.Request("GET", "https://api.openai.com/v1/files/file_assigned")), body=None)
 
-    workspace = OpenAIGuideWorkspace(SimpleNamespace(files=Files()), configuration(),
-        SimpleNamespace(documents=()), SimpleNamespace(resources=Resources()))
-    await workspace._cleanup()
+    assert await cleanup_recorded_openai_guide_resources(
+        SimpleNamespace(files=Files()), Resources()
+    ) is True
     assert calls == [("delete", "file_assigned"), ("retrieve", "file_assigned"), ("record_deleted", allocation)]

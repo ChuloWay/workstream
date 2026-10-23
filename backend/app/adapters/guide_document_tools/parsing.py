@@ -180,9 +180,10 @@ def _parse_pptx(source: bytes) -> _ExtractedDocument:
 
 
 def _parse_pdf(source: bytes) -> _ExtractedDocument:
+    if not source.startswith(b"%PDF-"):
+        _reject("document_malformed")
     try:
         from pypdf import PdfReader
-        from pypdf.errors import PdfReadError
     except ImportError:
         _reject("document_unsupported")
     try:
@@ -204,7 +205,9 @@ def _parse_pdf(source: bytes) -> _ExtractedDocument:
             pages.append((f"page {page_number}", value))
     except ParserDocumentRejected:
         raise
-    except (PdfReadError, OSError, TypeError, ValueError, KeyError, IndexError, RecursionError):
+    except MemoryError:
+        _reject("document_limit_exceeded")
+    except Exception:
         _reject("document_malformed")
     return _join_parts(pages)
 
@@ -243,14 +246,11 @@ def _validated_ooxml(source: bytes, *, expected: str) -> dict[str, bytes]:
                 if info.is_dir():
                     continue
                 total += info.file_size
-                if (
-                    total > _MAXIMUM_DECOMPRESSED_BYTES
-                    or (
-                        info.file_size > 0
-                        and (
-                            info.compress_size == 0
-                            or info.file_size > info.compress_size * _MAXIMUM_COMPRESSION_RATIO
-                        )
+                if total > _MAXIMUM_DECOMPRESSED_BYTES or (
+                    info.file_size > 0
+                    and (
+                        info.compress_size == 0
+                        or info.file_size > info.compress_size * _MAXIMUM_COMPRESSION_RATIO
                     )
                 ):
                     _reject("document_limit_exceeded")
@@ -279,15 +279,16 @@ def _validated_ooxml(source: bytes, *, expected: str) -> dict[str, bytes]:
                     value = bytes(captured)
                     root = _parse_xml(value)
                     if lower.endswith(".rels") and any(
-                        str(element.attrib.get("TargetMode", "")).strip().casefold()
-                        == "external"
+                        str(element.attrib.get("TargetMode", "")).strip().casefold() == "external"
                         for element in root.iter()
                     ):
                         _reject("document_malformed")
                     xml_files[normalized] = value
     except ParserDocumentRejected:
         raise
-    except (OSError, ValueError, zipfile.BadZipFile, RuntimeError, EOFError, NotImplementedError):
+    except MemoryError:
+        _reject("document_limit_exceeded")
+    except Exception:
         _reject("document_malformed")
 
     common = {"[Content_Types].xml", "_rels/.rels"}
@@ -357,9 +358,7 @@ def _read(
         return "", (), None
     end = min(total, offset + limit)
     intersections = [
-        locator
-        for locator in document.locators
-        if locator.end > offset and locator.start < end
+        locator for locator in document.locators if locator.end > offset and locator.start < end
     ]
     if len(intersections) > MAXIMUM_LOCATORS:
         end = max(offset, intersections[MAXIMUM_LOCATORS].start)

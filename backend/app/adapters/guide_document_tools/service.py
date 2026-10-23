@@ -82,6 +82,7 @@ class GuideDocumentParserService:
         self._admitted = 0
         self._server: asyncio.AbstractServer | None = None
         self._socket_inode: tuple[int, int] | None = None
+        self._connection_tasks: set[asyncio.Task[object]] = set()
 
     async def start(self) -> None:
         """Validate socket custody, remove only proven stale state, and bind."""
@@ -105,6 +106,7 @@ class GuideDocumentParserService:
                 not stat.S_ISSOCK(info.st_mode)
                 or info.st_uid != self._expected_uid
                 or info.st_gid != self._expected_gid
+                or info.st_nlink != 1
                 or stat.S_IMODE(info.st_mode) != PARSER_SOCKET_MODE
             ):
                 raise RuntimeError("guide parser socket custody is invalid")
@@ -132,6 +134,11 @@ class GuideDocumentParserService:
             self._server.close()
             await self._server.wait_closed()
             self._server = None
+        tasks = tuple(self._connection_tasks)
+        for task in tasks:
+            task.cancel()
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
         self._remove_own_socket()
 
     def _validate_process_and_directory(self) -> None:
@@ -153,16 +160,24 @@ class GuideDocumentParserService:
         reader: asyncio.StreamReader,
         writer: asyncio.StreamWriter,
     ) -> None:
+        current = asyncio.current_task()
+        if current is not None:
+            self._connection_tasks.add(current)
         if self._admitted >= self._maximum_admitted:
             writer.close()
             await writer.wait_closed()
+            if current is not None:
+                self._connection_tasks.discard(current)
             return
         self._admitted += 1
         try:
-            async with asyncio.timeout(self._request_timeout + self._child_timeout):
+            async with asyncio.timeout(self._request_timeout):
                 metadata_raw = await _read_frame(reader, maximum=MAXIMUM_REQUEST_METADATA_BYTES)
                 metadata = json.loads(metadata_raw)
-                if type(metadata) is not dict or metadata.get("protocol_version") != GUIDE_DOCUMENT_PARSER_PROTOCOL:
+                if (
+                    type(metadata) is not dict
+                    or metadata.get("protocol_version") != GUIDE_DOCUMENT_PARSER_PROTOCOL
+                ):
                     raise ValueError("guide parser request protocol is invalid")
                 if metadata.get("operation") == "health":
                     if set(metadata) != {"protocol_version", "operation"}:
@@ -172,23 +187,28 @@ class GuideDocumentParserService:
                         "status": "ready",
                         "parser_build_digest": FIXED_PARSER_BUILD_DIGEST,
                     }
+                    request = None
+                    source = None
                 else:
-                    if set(metadata) != {"protocol_version", "operation", "request"} or metadata.get(
-                        "operation"
-                    ) != "parse":
+                    if (
+                        set(metadata) != {"protocol_version", "operation", "request"}
+                        or metadata.get("operation") != "parse"
+                    ):
                         raise ValueError("guide parser request shape is invalid")
                     request = GuideDocumentParserRequest.model_validate(metadata["request"])
                     source = await reader.readexactly(request.source_byte_count)
                     if f"sha256:{sha256(source).hexdigest()}" != request.source_sha256:
                         raise ValueError("guide parser source identity is invalid")
-                    async with self._semaphore:
-                        response = await self._run_child(
-                            metadata_raw=metadata_raw,
-                            source=source,
-                            request=request,
-                            disconnect_reader=reader,
-                        )
-                await _write_frame(writer, _json_bytes(response))
+            if request is not None:
+                assert source is not None
+                async with self._semaphore:
+                    response = await self._run_child(
+                        metadata_raw=metadata_raw,
+                        source=source,
+                        request=request,
+                        disconnect_reader=reader,
+                    )
+            await _write_frame(writer, _json_bytes(response))
         except asyncio.CancelledError:
             raise
         except (
@@ -210,6 +230,8 @@ class GuideDocumentParserService:
                 await writer.wait_closed()
             except (ConnectionError, OSError):
                 pass
+            if current is not None:
+                self._connection_tasks.discard(current)
 
     async def _run_child(
         self,
@@ -278,8 +300,10 @@ class GuideDocumentParserService:
             return
         try:
             current = os.lstat(self._socket_path)
-            if (current.st_dev, current.st_ino) == self._socket_inode and stat.S_ISSOCK(
-                current.st_mode
+            if (
+                (current.st_dev, current.st_ino) == self._socket_inode
+                and stat.S_ISSOCK(current.st_mode)
+                and current.st_nlink == 1
             ):
                 self._socket_path.unlink()
         except FileNotFoundError:
@@ -325,6 +349,7 @@ def _remove_owned_stale_socket(path: Path, *, expected_uid: int, expected_gid: i
         not stat.S_ISSOCK(before.st_mode)
         or before.st_uid != expected_uid
         or before.st_gid != expected_gid
+        or before.st_nlink != 1
     ):
         raise RuntimeError("guide parser socket path is not an owned socket")
     probe = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
@@ -344,6 +369,7 @@ def _remove_owned_stale_socket(path: Path, *, expected_uid: int, expected_gid: i
         or not stat.S_ISSOCK(current.st_mode)
         or current.st_uid != expected_uid
         or current.st_gid != expected_gid
+        or current.st_nlink != 1
     ):
         raise RuntimeError("guide parser socket changed during stale check")
     path.unlink()

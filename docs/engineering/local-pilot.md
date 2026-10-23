@@ -42,7 +42,7 @@ Edit it before startup:
   for the API rate-limit and pagination keys;
 - generate a separate local Flow HMAC secret with `openssl rand -hex 32`.
 
-Set `OPENAI_API_KEY` only when running genuine guide compilation. Keep the
+Set `OPENROUTER_API_KEY` (for the default OpenRouter provider) only when running genuine guide compilation. Keep the
 real key in this ignored file. Without it, the six services and artifact
 upload can run, but provider-backed guide setup cannot complete successfully.
 
@@ -272,7 +272,7 @@ curl_with_token "$MANAGER_TOKEN" --fail --silent --show-error \
 docker compose --profile backend logs --since 10m worker beat
 ```
 
-With a valid `OPENAI_API_KEY`, poll that endpoint until `finished_at` is set and
+With a valid `OPENROUTER_API_KEY` (for the default OpenRouter provider), poll that endpoint until `finished_at` is set and
 confirm `output_sufficiency_report_id` is non-null. A failure or unresolved
 provider outcome is evidence to diagnose, not acceptance. Restart the Celery process
 during a pending run and observe the same setup ID afterward to exercise the

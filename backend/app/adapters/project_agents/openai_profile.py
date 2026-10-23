@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
-from importlib.metadata import PackageNotFoundError, version
 
 from app.interfaces.project_agents import ProjectAgentRuntimeConfigurationError
 from app.interfaces.project_guide_runtime import AdapterProfileValue
@@ -30,6 +29,7 @@ _DEFAULTS: dict[str, AdapterProfileValue] = {
     "tracing_disabled": True,
     "provider_fallbacks_allowed": False,
     "data_collection": "deny",
+    "provider_plugins_disabled": True,
 }
 _CONFIGURABLE = frozenset(
     {
@@ -79,12 +79,14 @@ def require_openai_agents_sdk_adapter_profile(
     """Validate the complete frozen profile and the installed SDK pair."""
     profile = _validated_profile(values)
     try:
-        installed_agents = version("openai-agents")
-        installed_openai = version("openai")
-    except PackageNotFoundError:
+        import agents
+        import openai
+    except ImportError:
         raise ProjectAgentRuntimeConfigurationError(
             "project guide runtime is unavailable"
         ) from None
+    installed_agents = agents.__version__
+    installed_openai = openai.__version__
     if (installed_agents, installed_openai) != (
         OPENAI_AGENTS_SDK_VERSION,
         OPENAI_SDK_VERSION,

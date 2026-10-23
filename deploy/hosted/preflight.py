@@ -131,6 +131,15 @@ PROJECT_AGENT_CONFIGURATION_KEYS = (
     "WORKSTREAM_PROJECT_AGENT_RUNTIME_OPTIONS",
     *PROJECT_AGENT_LIMIT_KEYS,
 )
+PROJECT_AGENT_RUNTIME_OPTION_BOUNDS = {
+    "request_timeout_seconds": (1, 1800),
+    "maximum_retries": (0, 5),
+    "retry_backoff_multiplier": (1, 4),
+    "retry_initial_delay_seconds": (1, 30),
+    "retry_max_delay_seconds": (1, 120),
+    "circuit_failure_threshold": (1, 20),
+    "circuit_cooldown_seconds": (1, 600),
+}
 TIMEOUT_KEYS = (
     "WORKSTREAM_ARTIFACT_S3_CONNECT_TIMEOUT_SECONDS",
     "WORKSTREAM_ARTIFACT_S3_READ_TIMEOUT_SECONDS",
@@ -298,9 +307,10 @@ def validate_environment(values: dict[str, str]) -> None:
         _positive_decimal(values, key)
     for key in PROJECT_AGENT_LIMIT_KEYS:
         _positive_id(values, key)
-    if _positive_id(values, "WORKSTREAM_RUNTIME_UID") != 10001 or _positive_id(
-        values, "WORKSTREAM_RUNTIME_GID"
-    ) != GUIDE_PARSER_GID:
+    if (
+        _positive_id(values, "WORKSTREAM_RUNTIME_UID") != 10001
+        or _positive_id(values, "WORKSTREAM_RUNTIME_GID") != GUIDE_PARSER_GID
+    ):
         raise PreflightError("hosted backend runtime identity must be 10001:10001")
     if values["WORKSTREAM_PROJECT_AGENT_MODEL_PROVIDER"] not in {
         "openai",
@@ -312,18 +322,45 @@ def validate_environment(values: dict[str, str]) -> None:
         "responses",
     }:
         raise PreflightError("unsupported project agent model API")
-    if values["WORKSTREAM_PROJECT_AGENT_MODEL_PROVIDER"] == "openrouter" and values[
-        "WORKSTREAM_PROJECT_AGENT_MODEL_API"
-    ] != "chat_completions":
+    if (
+        values["WORKSTREAM_PROJECT_AGENT_MODEL_PROVIDER"] == "openrouter"
+        and values["WORKSTREAM_PROJECT_AGENT_MODEL_API"] != "chat_completions"
+    ):
         raise PreflightError("OpenRouter hosted releases require chat_completions")
     try:
         runtime_options = json.loads(values["WORKSTREAM_PROJECT_AGENT_RUNTIME_OPTIONS"])
     except json.JSONDecodeError as exc:
-        raise PreflightError("project agent runtime options must be valid JSON") from exc
+        raise PreflightError(
+            "project agent runtime options must be valid JSON"
+        ) from exc
     if not isinstance(runtime_options, dict):
         raise PreflightError("project agent runtime options must be a JSON object")
     if len(values["WORKSTREAM_PROJECT_AGENT_RUNTIME_OPTIONS"].encode("utf-8")) > 8192:
         raise PreflightError("project agent runtime options are unbounded")
+    allowed_runtime_options = {
+        *PROJECT_AGENT_RUNTIME_OPTION_BOUNDS,
+        "retry_jitter",
+    }
+    if any(
+        type(key) is not str or key not in allowed_runtime_options
+        for key in runtime_options
+    ):
+        raise PreflightError("project agent runtime options are unsupported")
+    for key, (minimum, maximum) in PROJECT_AGENT_RUNTIME_OPTION_BOUNDS.items():
+        if key not in runtime_options:
+            continue
+        value = runtime_options[key]
+        if type(value) is not int or not minimum <= value <= maximum:
+            raise PreflightError("project agent runtime options are invalid")
+    if (
+        "retry_jitter" in runtime_options
+        and type(runtime_options["retry_jitter"]) is not bool
+    ):
+        raise PreflightError("project agent runtime options are invalid")
+    if runtime_options.get("retry_initial_delay_seconds", 1) > runtime_options.get(
+        "retry_max_delay_seconds", 30
+    ):
+        raise PreflightError("project agent runtime options are invalid")
     if not values["WORKSTREAM_TOKEN_ISSUER"].startswith("https://"):
         raise PreflightError("Flow issuer must use HTTPS")
     if not values["WORKSTREAM_TOKEN_JWKS_URL"].startswith("https://"):
@@ -440,6 +477,7 @@ def validate_private_host_inputs(values: dict[str, str]) -> None:
         or guide_socket.st_uid != GUIDE_PARSER_UID
         or guide_socket.st_gid != GUIDE_PARSER_GID
         or stat.S_IMODE(guide_socket.st_mode) != 0o660
+        or guide_socket.st_nlink != 1
     ):
         raise PreflightError("guide parser socket has unsafe retained state")
     private_paths = [
@@ -751,7 +789,9 @@ def validate_compose(rendered: dict[str, Any], values: dict[str, str]) -> None:
     )
     for name in {"api", "worker", "beat", "checker-service", *PROOF_SERVICES}:
         if services[name]["user"] != runtime_identity:
-            raise PreflightError(f"release service has the wrong runtime identity: {name}")
+            raise PreflightError(
+                f"release service has the wrong runtime identity: {name}"
+            )
     if services["guide-document-parser"]["user"] != (
         f"{GUIDE_PARSER_UID}:{GUIDE_PARSER_GID}"
     ):
@@ -767,6 +807,15 @@ def validate_compose(rendered: dict[str, Any], values: dict[str, str]) -> None:
         )
     if any(services[name]["image"] != backend_image for name in PROOF_SERVICES):
         raise PreflightError("AWS proof jobs must use the exact backend image")
+    for name in (
+        "api",
+        "worker",
+        "beat",
+        "guide-document-parser",
+        *PROOF_SERVICES,
+    ):
+        if services[name].get("entrypoint") is not None:
+            raise PreflightError(f"backend image entrypoint is overridden: {name}")
     runtime_identity_mounts = {
         str(ROLES_ANYWHERE_CERTIFICATE_TARGET): (
             values[
@@ -873,7 +922,24 @@ def validate_compose(rendered: dict[str, Any], values: dict[str, str]) -> None:
         or parser.get("ports")
         or parser.get("secrets")
         or parser.get("group_add")
+        or parser.get("privileged") is True
+        or parser.get("cap_add")
+        or parser.get("devices")
+        or parser.get("device_cgroup_rules")
+        or parser.get("credential_spec")
+        or parser.get("pid")
+        or parser.get("ipc")
+        or parser.get("uts")
+        or parser.get("userns_mode")
+        or parser.get("cgroup")
+        or parser.get("use_api_socket") is True
+        or parser.get("oom_kill_disable") is True
+        or parser.get("security_opt") != ["no-new-privileges:true"]
+        or parser.get("pull_policy") != "always"
+        or parser.get("init") is not True
+        or parser.get("restart") != "on-failure:5"
         or str(parser.get("mem_limit")) != "536870912"
+        or str(parser.get("memswap_limit")) != "536870912"
         or str(parser.get("cpus")) not in {"1", "1.0"}
         or parser.get("pids_limit") != 64
         or parser.get("stop_grace_period") not in {"30s", "30.0s"}
@@ -909,7 +975,7 @@ def validate_compose(rendered: dict[str, Any], values: dict[str, str]) -> None:
         or len(parser_tmpfs) != 1
         or not isinstance(parser_tmpfs[0], str)
         or not parser_tmpfs[0].startswith("/tmp:")
-        or not {
+        or {
             "mode=0700",
             "uid=10002",
             "gid=10001",
@@ -917,7 +983,8 @@ def validate_compose(rendered: dict[str, Any], values: dict[str, str]) -> None:
             "noexec",
             "nosuid",
             "nodev",
-        }.issubset(set(parser_tmpfs[0].split(":", 1)[1].split(",")))
+        }
+        != set(parser_tmpfs[0].split(":", 1)[1].split(","))
     ):
         raise PreflightError("guide parser tmpfs is unbounded or unsafe")
     worker_dependencies = services["worker"].get("depends_on")
@@ -1048,19 +1115,44 @@ def validate_compose(rendered: dict[str, Any], values: dict[str, str]) -> None:
     for key, value in exact.items():
         if str(environment.get(key, "")).lower() != value:
             raise PreflightError(f"rendered release environment is unsafe: {key}")
-    for key in PROJECT_AGENT_CONFIGURATION_KEYS:
-        if str(environment.get(key, "")) != values[key]:
-            raise PreflightError(
-                f"rendered project agent configuration differs from release: {key}"
-            )
+    for name in ("api", "worker", "beat", *PROOF_SERVICES):
+        service_environment = services[name].get("environment")
+        if not isinstance(service_environment, dict):
+            raise PreflightError(f"{name} release environment is unavailable")
+        for key in PROJECT_AGENT_CONFIGURATION_KEYS:
+            if str(service_environment.get(key, "")) != values[key]:
+                raise PreflightError(
+                    "rendered project agent configuration differs from release: "
+                    f"{name}.{key}"
+                )
     worker_environment = environments["worker"]
     if worker_environment.get("WORKSTREAM_GUIDE_DOCUMENT_PARSER_SOCKET") != str(
         GUIDE_SOCKET_PATH
     ):
         raise PreflightError("worker lacks the fixed guide parser socket")
-    for name in ("api", "beat"):
-        if "WORKSTREAM_GUIDE_DOCUMENT_PARSER_SOCKET" in environments[name]:
+    for name in ("api", "beat", "checker-service", *PROOF_SERVICES):
+        service_environment = services[name].get("environment") or {}
+        if not isinstance(service_environment, dict):
+            raise PreflightError(f"{name} release environment is invalid")
+        if "WORKSTREAM_GUIDE_DOCUMENT_PARSER_SOCKET" in service_environment:
             raise PreflightError(f"{name} must not receive the guide parser socket")
+        if "WORKSTREAM_PROJECT_AGENT_API_KEY_FILE" in service_environment:
+            raise PreflightError(
+                f"{name} must not receive the project agent credential selector"
+            )
+    for name, service in services.items():
+        service_environment = service.get("environment") or {}
+        if not isinstance(service_environment, dict):
+            raise PreflightError(f"{name} release environment is invalid")
+        for key in (
+            "WORKSTREAM_PROJECT_AGENT_API_KEY",
+            "OPENAI_API_KEY",
+            "OPENROUTER_API_KEY",
+        ):
+            if key in service_environment:
+                raise PreflightError(
+                    f"secret value was interpolated into Compose: {name}.{key}"
+                )
     if environment.get(
         "WORKSTREAM_ARTIFACT_S3_ROLES_ANYWHERE_ROLE_ARN"
     ) != environment.get("WORKSTREAM_ARTIFACT_S3_RUNTIME_ROLE_ARN"):

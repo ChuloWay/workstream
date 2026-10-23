@@ -267,12 +267,12 @@ def test_semantic_family_membership_has_an_independent_fingerprint() -> None:
     """A catalogue-internal move across semantic families must fail this contract."""
     expected = {
         "shared": (
-            255,
-            "344de96250ca759b503588fada81e0552f80447ad4ba42052f91aeabb154fd56",
+            257,
+            "d4c6203a2e7c4fc033cab97a9bed380119b4fd28e428058066b902a22a144bb9",
         ),
         "project": (
-            210,
-            "9e23ebc7b1631c6e858ae7bdc0425596236cada17b71a12e35afc518da1836b2",
+            211,
+            "ba22b9fe6b2c39de30aa5ca052b924c7238eeaf970fab1c5e88238f4edf62760",
         ),
         "task": (
             95,
@@ -344,9 +344,9 @@ def test_project_lane_ownership_has_an_independent_fingerprint() -> None:
         )
         + "\n"
     )
-    assert len(catalogue.PROJECT_PARTITIONED_MODULES) == 210
+    assert len(catalogue.PROJECT_PARTITIONED_MODULES) == 211
     assert hashlib.sha256(canonical.encode()).hexdigest() == (
-        "1f75e059d08244a1161dfe053003dee2e0e02268e2340943d4cf825d0b4cd0b4"
+        "e0cdfefc2dd2f608b3a78d0dc6edc954cd697b665ec444d3b51075604f6380d2"
     )
 
 

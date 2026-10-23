@@ -400,6 +400,17 @@ ARCH_04F4_RETRY_TARGETS = frozenset({
 MANAGER_AUTHORED_GUIDE_RUNTIME_TARGETS = frozenset({
     "backend/app/adapters/project_agents/manager_authored.py",
 })
+NEUTRAL_GUIDE_RUNTIME_TARGETS = frozenset({
+    "backend/app/adapters/guide_document_tools/child.py",
+    "backend/app/adapters/guide_document_tools/client.py",
+    "backend/app/adapters/guide_document_tools/contracts.py",
+    "backend/app/adapters/guide_document_tools/parsing.py",
+    "backend/app/adapters/guide_document_tools/service.py",
+    "backend/app/adapters/project_agents/openai_profile.py",
+    "backend/app/adapters/project_agents/result_validation.py",
+    "backend/app/adapters/projects/guide_document_tools.py",
+    "backend/app/interfaces/guide_document_tools.py",
+})
 GUIDE_COMPILATION_DRAFT_TARGETS = frozenset({
     "backend/app/adapters/project_agents/compilation_draft.py",
 })
@@ -1083,6 +1094,7 @@ def _validate_additive_partition_transition(
             | ARCH_04F5_DELIVERY_RECONCILIATION_TARGETS
             | MANAGER_AUTHORED_GUIDE_RUNTIME_TARGETS
             | GUIDE_COMPILATION_DRAFT_TARGETS
+            | NEUTRAL_GUIDE_RUNTIME_TARGETS
             | OBSERVABILITY_FOUNDATION_TARGETS
         | ARCH_04E1A_SOURCE_TARGETS
         | ARCH_04D2_AUTHORITY_TARGETS

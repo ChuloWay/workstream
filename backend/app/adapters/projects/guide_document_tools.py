@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Callable
-from contextlib import AbstractAsyncContextManager, asynccontextmanager
+from contextlib import asynccontextmanager
 from uuid import UUID, uuid4
 
 from app.adapters.guide_document_tools.contracts import (
@@ -12,6 +12,7 @@ from app.adapters.guide_document_tools.contracts import (
     GuideDocumentParserRequest,
     GuideDocumentParserResponse,
     MAXIMUM_RESULT_CHARACTERS,
+    MAXIMUM_SOURCE_BYTES,
 )
 from app.interfaces.guide_document_tools import GuideDocumentToolPort, GuideDocumentToolResult
 from app.interfaces.project_guide_runtime import ProjectGuideRuntimeConfiguration
@@ -40,7 +41,7 @@ class TrustedGuideDocumentTools(GuideDocumentToolPort):
             or sum(item.byte_count for item in manifest.documents)
             > configuration.maximum_total_document_bytes
             or any(
-                item.byte_count > configuration.maximum_document_bytes
+                item.byte_count > min(configuration.maximum_document_bytes, MAXIMUM_SOURCE_BYTES)
                 for item in manifest.documents
             )
         ):

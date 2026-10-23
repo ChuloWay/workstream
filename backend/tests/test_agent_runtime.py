@@ -5,13 +5,16 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+from functools import partial
 from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
+import httpx2
 from pydantic import ValidationError
 
 from app.adapters.project_agents.openai_agent_sdk import OpenAIAgentSdkProjectGuideRuntime
+from app.adapters.project_agents import build_project_guide_adapter_profile
 from app.core.config import Settings
 from app.core.project_agents import (
     project_guide_runtime_configuration,
@@ -26,6 +29,7 @@ from app.interfaces.project_agents import (
     project_guide_compilation_prompt_bytes,
 )
 from app.interfaces.project_guide_runtime import ProjectGuideRuntimeConfiguration
+from app.interfaces.guide_document_tools import GuideDocumentToolResult
 from app.modules.projects.api.guide_documents import GuideDocumentManifest
 from tests.projects.guide_compilation.helpers import (
     SOURCE_SHA256, context, ids, generated_result as result, runtime_configuration,
@@ -37,29 +41,7 @@ from tests.projects.guide_compilation.helpers import (
 def model_credentials(monkeypatch):
     """Use a test-only credential; SDK execution is replaced in every invocation test."""
     monkeypatch.setenv("OPENAI_API_KEY", "unit-test-only")
-
-
-@pytest.fixture(autouse=True)
-def scripted_workspace(monkeypatch):
-    """Keep these SDK/parser tests network-free; workspace access has separate proof."""
-    from app.adapters.project_agents import openai_agent_sdk
-
-    class Workspace:
-        container_id = "cntr_test_owned"
-
-        def __init__(self, *args):
-            pass
-
-        async def start(self):
-            pass
-
-        async def close(self):
-            pass
-
-        async def open_document(self, handle):
-            return {"path": "/mnt/data/assigned-original.md"}
-
-    monkeypatch.setattr(openai_agent_sdk, "OpenAIGuideWorkspace", Workspace)
+    monkeypatch.setenv("OPENROUTER_API_KEY", "unit-test-only")
 
 
 async def _open_prompt_documents(agent, prompt, count=None):
@@ -71,7 +53,7 @@ async def _open_prompt_documents(agent, prompt, count=None):
     for document in material["documents"][:count]:
         arguments = json.dumps({"handle": document["handle"]})
         await agent.tools[0].on_invoke_tool(
-            ToolContext(context=None, tool_name="open_guide_document",
+            ToolContext(context=None, tool_name="read_document",
                         tool_call_id="test-open", tool_arguments=arguments), arguments
         )
 
@@ -105,11 +87,57 @@ def _sdk_result(agent, value=None):
 
 async def _compile(runtime, compilation_context):
     """Supply scripted prior document access and always release circuit admission."""
-    async def opened_handles():
-        return frozenset(compilation_context.material.handle_for(document)
-                         for document in compilation_context.material.documents)
+    opened = {
+        compilation_context.material.handle_for(document)
+        for document in compilation_context.material.documents
+    }
 
-    capabilities = SimpleNamespace(resources=SimpleNamespace(opened_handles=opened_handles))
+    async def opened_handles():
+        return frozenset(opened)
+
+    tool_calls = 0
+    tool_output_characters = 0
+
+    async def read_document(handle, *, offset=0, limit=16000):
+        nonlocal tool_calls, tool_output_characters
+        if tool_calls >= compilation_context.runtime_configuration.maximum_tool_calls:
+            raise ValueError("guide document tool call budget exceeded")
+        tool_calls += 1
+        document = next(
+            item
+            for item in compilation_context.material.documents
+            if compilation_context.material.handle_for(item) == handle
+        )
+        opened.add(handle)
+        text = "Assigned guide text."
+        total = tool_output_characters + len(text)
+        if (
+            total
+            > compilation_context.runtime_configuration.maximum_tool_output_characters
+        ):
+            raise ValueError("guide document tool output budget exceeded")
+        tool_output_characters = total
+        return GuideDocumentToolResult(
+            handle=handle,
+            source_item_id=document.source_item_id,
+            document_version_id=document.ingest_id,
+            sha256=document.sha256,
+            operation="read",
+            text=text,
+            locators=(),
+            next_offset=None,
+            total_characters=20,
+        )
+
+    async def search_document(handle, query, *, offset=0, limit=20):
+        value = await read_document(handle, offset=offset, limit=limit)
+        return value.model_copy(update={"operation": "search"})
+
+    capabilities = SimpleNamespace(tools=SimpleNamespace(
+        opened_handles=opened_handles,
+        read_document=read_document,
+        search_document=search_document,
+    ))
     runtime.admit_execution()
     try:
         return await runtime.compile_project_guide(compilation_context, capabilities)
@@ -132,15 +160,67 @@ def test_configuration_concerns_are_independent_and_secret_free():
     settings = Settings(
         project_agent_model="configured-model", project_agent_instructions="Trusted instructions."
     )
-    configuration = project_guide_runtime_configuration(settings)
+    configuration = project_guide_runtime_configuration(
+        settings,
+        adapter_profile_builder=partial(
+            build_project_guide_adapter_profile, settings.project_agent_runtime
+        ),
+    )
     assert configuration.model == "configured-model"
     assert configuration.instructions == "Trusted instructions."
     assert configuration.runtime_key == "openai_agents_sdk"
-    assert "unit-test-only" not in configuration.model_dump_json()
+    snapshot = configuration.model_dump_json()
+    assert all(
+        value not in snapshot
+        for value in ("unit-test-only", "api.openai.com", "openrouter.ai")
+    )
     assert (
         configuration.instructions_sha256
         == "sha256:" + hashlib.sha256(b"Trusted instructions.").hexdigest()
     )
+
+
+def test_adapter_profile_is_closed_effective_sdk_configuration():
+    from app.adapters.project_agents.openai_profile import (
+        OPENAI_AGENTS_SDK_VERSION,
+        OPENAI_SDK_VERSION,
+        require_openai_agents_sdk_adapter_profile,
+    )
+    from app.interfaces.project_guide_runtime import canonical_adapter_profile
+
+    profile = build_project_guide_adapter_profile(
+        "openai_agents_sdk", {"request_timeout_seconds": 25}
+    )
+    assert profile["agents_sdk_version"] == OPENAI_AGENTS_SDK_VERSION
+    assert profile["openai_sdk_version"] == OPENAI_SDK_VERSION
+    assert profile["request_timeout_seconds"] == 25
+    assert profile["store"] is False
+    assert profile["tracing_disabled"] is True
+    assert profile["provider_fallbacks_allowed"] is False
+    assert profile["data_collection"] == "deny"
+    assert profile["provider_plugins_disabled"] is True
+    assert require_openai_agents_sdk_adapter_profile(profile).request_timeout_seconds == 25
+    with pytest.raises(ProjectAgentRuntimeConfigurationError, match="unsupported"):
+        build_project_guide_adapter_profile("openai_agents_sdk", {"base_url": "https://evil"})
+    tampered = runtime_configuration().model_copy(update={
+        "adapter_profile": canonical_adapter_profile(dict(profile) | {"store": True})
+    })
+    with pytest.raises(ProjectAgentRuntimeConfigurationError, match="profile"):
+        OpenAIAgentSdkProjectGuideRuntime(tampered)
+
+
+@pytest.mark.parametrize("model", ["openai/gpt-5.6-terra:online", "openrouter/auto"])
+def test_openrouter_rejects_provider_routed_model_variants(monkeypatch, model):
+    monkeypatch.setenv("OPENROUTER_API_KEY", "unit-test-only")
+    configuration = runtime_configuration().model_copy(
+        update={
+            "model_provider": "openrouter",
+            "model_api": "chat_completions",
+            "model": model,
+        }
+    )
+    with pytest.raises(ProjectAgentRuntimeConfigurationError, match="routing"):
+        OpenAIAgentSdkProjectGuideRuntime(configuration)
 
 
 @pytest.mark.parametrize(
@@ -150,7 +230,7 @@ def test_configuration_concerns_are_independent_and_secret_free():
         {"api_key": "not-allowed"}, {"timeout_seconds": True}, {"timeout_seconds": 0},
         {"maximum_manifest_bytes": 1_000_001}, {"maximum_documents": 101},
         {"request_timeout_seconds": 0}, {"maximum_retries": 6}, {"retry_jitter": 1},
-        {"model": ""}, {"model_provider": "uninstalled"},
+        {"model": ""},
     ],
 )
 def test_runtime_snapshot_rejects_invalid_or_secret_bearing_shapes(patch):
@@ -183,7 +263,7 @@ def test_snapshot_changes_identity_but_is_absent_from_provider_user_prompt():
 
 
 async def test_unified_compilation_uses_scoped_tools_and_strict_output(monkeypatch):
-    from agents import Runner, CodeInterpreterTool, FunctionTool
+    from agents import Runner, FunctionTool
     import openai
 
     clients = []
@@ -204,10 +284,8 @@ async def test_unified_compilation_uses_scoped_tools_and_strict_output(monkeypat
         await _open_prompt_documents(agent, prompt)
         assert agent.instructions == configuration.instructions
         assert len(agent.tools) == 2 and agent.handoffs == []
-        assert isinstance(agent.tools[0], FunctionTool)
-        assert agent.tools[0].name == "open_guide_document"
-        assert isinstance(agent.tools[1], CodeInterpreterTool)
-        assert agent.tools[1].tool_config["container"] == "cntr_test_owned"
+        assert all(isinstance(tool, FunctionTool) for tool in agent.tools)
+        assert [tool.name for tool in agent.tools] == ["read_document", "search_document"]
         assert agent.model.model == configuration.model
         assert agent.output_type.is_strict_json_schema() is True
         assert kwargs["max_turns"] == (
@@ -218,7 +296,10 @@ async def test_unified_compilation_uses_scoped_tools_and_strict_output(monkeypat
         assert kwargs["run_config"].trace_include_sensitive_data is False
         assert agent.model_settings.store is False
         assert agent.model_settings.parallel_tool_calls is False
-        assert agent.model_settings.retry.max_retries == configuration.maximum_retries
+        assert agent.model_settings.extra_body is None
+        assert agent.model_settings.retry.max_retries == 2
+        assert agent.model_settings.context_management is None
+        assert agent.model_settings.response_include is None
         supplied = json.loads(prompt)
         assert "runtime_configuration" not in supplied
         if len(calls) == 1:
@@ -237,8 +318,219 @@ async def test_unified_compilation_uses_scoped_tools_and_strict_output(monkeypat
     assert len(calls) == 2 and len(clients) == 1
     assert calls[0][0] is calls[1][0]
     assert clients[0].max_retries == 0 and clients[0].is_closed()
-    assert clients[0].timeout == min(configuration.request_timeout_seconds, configuration.timeout_seconds)
+    assert clients[0].timeout == 300
     assert str(clients[0].base_url).rstrip("/") == "https://api.openai.com/v1"
+
+
+async def test_actual_sdk_tool_loop_uses_only_openrouter_chat_and_neutral_tools(
+    monkeypatch,
+):
+    """Exercise the installed SDK parser and function-tool loop over captured HTTP."""
+    captured = []
+    payload = json.dumps(_provider_payload())
+    compilation = context(ids())
+    document = compilation.material.documents[0]
+    handle = compilation.material.handle_for(document)
+    responses = iter(
+        [
+            _chat_tool_call("draft-read", "read_document", {"handle": handle}),
+            _chat_text("draft", payload),
+            _chat_tool_call("review-read", "read_document", {"handle": handle}),
+            _chat_text("review", payload),
+        ]
+    )
+
+    async def dispatch(request):
+        body = json.loads(request.content)
+        captured.append((str(request.url), dict(request.headers), body))
+        return httpx2.Response(200, json=next(responses), request=request)
+
+    clients, http_options = _patch_openai_transport(monkeypatch, dispatch)
+    config = compilation.runtime_configuration.model_copy(
+        update={
+            "model_provider": "openrouter",
+            "model_api": "chat_completions",
+            "model": "openai/gpt-5.6-terra",
+        }
+    )
+    compilation = compilation.model_copy(update={"runtime_configuration": config})
+    output = await _compile(OpenAIAgentSdkProjectGuideRuntime(config), compilation)
+    assert output == result()
+    assert len(captured) == 4
+    assert all(url == "https://openrouter.ai/api/v1/chat/completions" for url, _, _ in captured)
+    assert all(headers["authorization"] == "Bearer unit-test-only" for _, headers, _ in captured)
+    for _url, _headers, body in captured:
+        assert body["model"] == "openai/gpt-5.6-terra"
+        assert body["store"] is False
+        assert body["parallel_tool_calls"] is False
+        assert body["provider"] == {
+            "allow_fallbacks": False,
+            "data_collection": "deny",
+        }
+        assert body["plugins"] == [
+            {"id": plugin, "enabled": False}
+            for plugin in (
+                "web",
+                "file-parser",
+                "response-healing",
+                "alignment",
+                "armor",
+                "pareto",
+            )
+        ]
+        assert [tool["function"]["name"] for tool in body["tools"]] == [
+            "read_document",
+            "search_document",
+        ]
+        encoded = json.dumps(body)
+        assert all(token not in encoded for token in (
+            "code_interpreter", "container", "file_search", "s3://", "unit-test-only"
+        ))
+    observed, client = clients[0]
+    owned_http_client = observed.pop("http_client")
+    assert owned_http_client is not None
+    assert observed == {
+        "api_key": "unit-test-only",
+        "base_url": "https://openrouter.ai/api/v1",
+        "max_retries": 0,
+        "timeout": 300,
+    }
+    assert http_options == [{"trust_env": False, "follow_redirects": False}]
+    assert client.is_closed()
+
+
+@pytest.mark.parametrize("failure", ["malformed_schema", "provider_fault", "tool_bound"])
+async def test_actual_sdk_http_failures_are_bounded_and_sanitized(monkeypatch, failure):
+    """Exercise parser, provider and local tool-bound failures through the real Runner."""
+    compilation = context(ids())
+    handle = compilation.material.handle_for(compilation.material.documents[0])
+    calls = []
+    if failure == "malformed_schema":
+        responses = iter([_chat_text("malformed", "{invalid")])
+    elif failure == "tool_bound":
+        responses = iter([
+            _chat_tool_call("first-read", "read_document", {"handle": handle}),
+            _chat_tool_call("second-read", "read_document", {"handle": handle}),
+        ])
+    else:
+        responses = None
+
+    async def dispatch(request):
+        calls.append(str(request.url))
+        if failure == "provider_fault":
+            return httpx2.Response(
+                401,
+                json={"error": {"message": "private", "type": "auth", "code": "invalid_api_key"}},
+                request=request,
+            )
+        return httpx2.Response(200, json=next(responses), request=request)
+
+    clients, _http_options = _patch_openai_transport(monkeypatch, dispatch)
+    updates = {
+        "model_provider": "openrouter",
+        "model_api": "chat_completions",
+        "model": "openai/gpt-5.6-terra",
+    }
+    if failure == "tool_bound":
+        updates["maximum_tool_calls"] = 1
+    config = compilation.runtime_configuration.model_copy(update=updates)
+    compilation = compilation.model_copy(update={"runtime_configuration": config})
+    expected = (
+        ProjectGuideCompilationInvalidOutputError
+        if failure == "malformed_schema"
+        else ProjectAgentRuntimeError
+    )
+    with pytest.raises(expected) as caught:
+        await _compile(OpenAIAgentSdkProjectGuideRuntime(config), compilation)
+    assert "private" not in str(caught.value)
+    assert len(calls) == (2 if failure == "tool_bound" else 1)
+    assert clients[0][1].is_closed()
+
+
+async def test_actual_sdk_http_request_is_cancelled_and_client_closed(monkeypatch):
+    """Caller cancellation reaches the SDK transport and awaits client shutdown."""
+    started = asyncio.Event()
+
+    async def dispatch(_request):
+        started.set()
+        await asyncio.Event().wait()
+
+    clients, _http_options = _patch_openai_transport(monkeypatch, dispatch)
+    compilation = context(ids())
+    config = compilation.runtime_configuration.model_copy(update={
+        "model_provider": "openrouter",
+        "model_api": "chat_completions",
+        "model": "openai/gpt-5.6-terra",
+    })
+    compilation = compilation.model_copy(update={"runtime_configuration": config})
+    task = asyncio.create_task(
+        _compile(OpenAIAgentSdkProjectGuideRuntime(config), compilation)
+    )
+    await started.wait()
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert clients[0][1].is_closed()
+
+
+def _patch_openai_transport(monkeypatch, dispatch):
+    import openai
+
+    client_type = openai.AsyncOpenAI
+    clients = []
+    http_options = []
+
+    def create_http_client(**kwargs):
+        http_options.append(kwargs)
+        return httpx2.AsyncClient(transport=httpx2.MockTransport(dispatch))
+
+    def create_client(**kwargs):
+        observed = dict(kwargs)
+        client = client_type(**kwargs)
+        clients.append((observed, client))
+        return client
+
+    monkeypatch.setattr(openai, "DefaultAsyncHttpx2Client", create_http_client)
+    monkeypatch.setattr(openai, "AsyncOpenAI", create_client)
+    return clients, http_options
+
+
+def _chat_tool_call(identifier, name, arguments):
+    return {
+        "id": f"chatcmpl-{identifier}",
+        "object": "chat.completion",
+        "created": 1_800_000_000,
+        "model": "openai/gpt-5.6-terra",
+        "choices": [{
+            "index": 0,
+            "message": {
+                "role": "assistant",
+                "content": None,
+                "tool_calls": [{
+                    "id": identifier,
+                    "type": "function",
+                    "function": {"name": name, "arguments": json.dumps(arguments)},
+                }],
+            },
+            "finish_reason": "tool_calls",
+        }],
+        "usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
+    }
+
+
+def _chat_text(identifier, text):
+    return {
+        "id": f"chatcmpl-{identifier}",
+        "object": "chat.completion",
+        "created": 1_800_000_000,
+        "model": "openai/gpt-5.6-terra",
+        "choices": [{
+            "index": 0,
+            "message": {"role": "assistant", "content": text},
+            "finish_reason": "stop",
+        }],
+        "usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
+    }
 
 
 @pytest.mark.parametrize("failure", ["provider", "cancelled", "oversized"])
@@ -764,21 +1056,7 @@ async def test_whole_run_deadline_cancels_once_and_closes_without_reinvocation(
 ):
     """The whole-run budget interrupts an outstanding request before its own timeout."""
     from agents import Runner
-    from app.adapters.project_agents import openai_agent_sdk
-
     events = []
-
-    class Workspace:
-        container_id = "cntr_deadline_probe"
-
-        def __init__(self, *args):
-            pass
-
-        async def start(self):
-            events.append("start")
-
-        async def close(self):
-            events.append("close")
 
     async def blocked_run(agent, *args, **kwargs):
         events.append("run")
@@ -789,10 +1067,8 @@ async def test_whole_run_deadline_cancels_once_and_closes_without_reinvocation(
         finally:
             events.append("cancelled")
 
-    monkeypatch.setattr(openai_agent_sdk, "OpenAIGuideWorkspace", Workspace)
     monkeypatch.setattr(Runner, "run", blocked_run)
-    config = runtime_configuration().model_copy(update={"timeout_seconds": 1, "request_timeout_seconds": 300})
-    assert config.request_timeout_seconds == 300
+    config = runtime_configuration().model_copy(update={"timeout_seconds": 1})
     runtime = OpenAIAgentSdkProjectGuideRuntime(config)
     started = asyncio.get_running_loop().time()
     try:
@@ -800,8 +1076,8 @@ async def test_whole_run_deadline_cancels_once_and_closes_without_reinvocation(
             await _compile(runtime, context(ids()).model_copy(update={"runtime_configuration": config}))
         assert 0.8 <= asyncio.get_running_loop().time() - started < 5
         assert events == (
-            ["start", "run", "run", "cancelled", "close"] if blocked_phase == "review"
-            else ["start", "run", "cancelled", "close"]
+            ["run", "run", "cancelled"] if blocked_phase == "review"
+            else ["run", "cancelled"]
         )
         assert caught.value.__suppress_context__
     finally:
@@ -820,9 +1096,6 @@ _MANAGER_PAIR = {"runtime_key": "manager_authored", "model_provider": "none",
         {"model_provider": "none", "model_api": "none"},
         {"model_provider": "none"},
         {"model_api": "none"},
-        _MANAGER_PAIR | {"model_provider": "openai", "model_api": "responses"},
-        _MANAGER_PAIR | {"model_api": "responses"},
-        _MANAGER_PAIR | {"model": "gpt-5.6-terra"},
         {"model": "none"},
     ],
 )
@@ -838,14 +1111,26 @@ def test_provider_none_is_only_valid_for_the_manager_authored_runtime(patch):
 def test_manager_authored_settings_snapshot_records_absent_inference():
     settings = Settings(project_agent_runtime="manager_authored", project_agent_model_provider="none",
                         project_agent_model_api="none", project_agent_model="none")
-    configuration = project_guide_runtime_configuration(settings)
+    configuration = project_guide_runtime_configuration(
+        settings,
+        adapter_profile_builder=partial(
+            build_project_guide_adapter_profile, settings.project_agent_runtime
+        ),
+    )
     assert configuration.model_dump(include=set(_MANAGER_PAIR)) == _MANAGER_PAIR
-    assert configuration.provider_free
+    assert not configuration.uses_inference
+    assert configuration.adapter_profile_values() == {}
     assert ProjectGuideRuntimeConfiguration.model_validate(configuration.model_dump()) == configuration
-    default = project_guide_runtime_configuration(Settings())
+    default_settings = Settings()
+    default = project_guide_runtime_configuration(
+        default_settings,
+        adapter_profile_builder=partial(
+            build_project_guide_adapter_profile, default_settings.project_agent_runtime
+        ),
+    )
     assert (default.runtime_key, default.model_provider, default.model_api) == (
-        "openai_agents_sdk", "openai", "responses")
-    assert not default.provider_free
+        "openai_agents_sdk", "openrouter", "chat_completions")
+    assert default.uses_inference
 
 
 def _manager_material(rules: bytes, *, extra: tuple[bytes, ...] = (), source_ids=()):
@@ -873,36 +1158,45 @@ def _manager_material(rules: bytes, *, extra: tuple[bytes, ...] = (), source_ids
 
 
 class _DirectGrant:
-    """Scripted ART grant and custody recording each direct read once."""
+    """Scripted neutral document tools recording each bounded read."""
 
     def __init__(self, compilation_context, bodies, *, fail=False):
-        from contextlib import asynccontextmanager
-        from io import BytesIO
-        from app.modules.projects.api.guide_documents import OpenGuideDocument
-
         manifest = compilation_context.material
         self.opened, self.recorded = [], []
 
-        @asynccontextmanager
-        async def open_document(handle):
+        async def read_document(handle, *, offset=0, limit=16000):
             if fail:
                 raise RuntimeError("private storage detail")
             self.opened.append(handle)
             document = next(item for item in manifest.documents if manifest.handle_for(item) == handle)
-            with BytesIO(bodies[document.sha256]) as reader:
-                yield OpenGuideDocument(document, reader)
-
-        async def record_direct_document_open(handle):
             self.recorded.append(handle)
+            text = bodies[document.sha256].decode("utf-8", errors="replace")
+            fragment = text[offset:offset + limit]
+            next_offset = offset + len(fragment) if offset + len(fragment) < len(text) else None
+            return GuideDocumentToolResult(
+                handle=handle,
+                source_item_id=document.source_item_id,
+                document_version_id=document.ingest_id,
+                sha256=document.sha256,
+                operation="read",
+                text=fragment,
+                locators=(),
+                next_offset=next_offset,
+                total_characters=len(text),
+            )
 
-        async def forbidden(*args, **kwargs):
-            pytest.fail("provider-free runtime touched provider resource custody")
+        async def search_document(*_args, **_kwargs):
+            pytest.fail("manager-authored runtime searched document text")
+
+        async def opened_handles():
+            return frozenset(self.recorded)
 
         self.capabilities = SimpleNamespace(
-            documents=SimpleNamespace(open=open_document),
-            resources=SimpleNamespace(record_direct_document_open=record_direct_document_open,
-                                      begin_allocation=forbidden, record_allocated=forbidden,
-                                      record_document_open=forbidden),
+            tools=SimpleNamespace(
+                read_document=read_document,
+                search_document=search_document,
+                opened_handles=opened_handles,
+            ),
         )
 
 
@@ -1043,15 +1337,7 @@ async def test_manager_authored_runtime_guards_admission_configuration_and_acces
     assert caught.value.__suppress_context__ and "private" not in str(caught.value)
     assert failing.recorded == []
 
-    class Custody:
-        def __init__(self, rows):
-            self.rows = rows
-
-        async def cleanup_resources(self):
-            return self.rows
-
-    assert await runtime.cleanup_resources(Custody(())) is True
-    assert await runtime.cleanup_resources(Custody(("unexpected",))) is False
+    assert not hasattr(runtime, "cleanup_resources")
 
 
 async def test_manager_authored_runtime_refuses_correction_successors_before_reading(monkeypatch):
@@ -1123,7 +1409,10 @@ async def test_manager_authored_runtime_ignores_non_candidates_and_survives_deep
         with pytest.raises(ProjectGuideCompilationInvalidOutputError) as caught:
             await _manager_compile(compilation_context, grant)
         assert caught.value.failure_code == "schema_invalid"
-        assert len(grant.recorded) == 2
+        assert set(grant.recorded) == {
+            compilation_context.material.handle_for(item)
+            for item in compilation_context.material.documents
+        }
     # Rules JSON stored under a non-Markdown media type is read but never treated as rules.
     compilation_context, bodies = _manager_material(_rules())
     pdf, rules_doc = compilation_context.material.documents
@@ -1136,21 +1425,25 @@ async def test_manager_authored_runtime_ignores_non_candidates_and_survives_deep
 
 
 async def test_manager_authored_runtime_refuses_a_substituted_document_version(monkeypatch):
-    from contextlib import asynccontextmanager
-    from io import BytesIO
-    from app.modules.projects.api.guide_documents import OpenGuideDocument
-
     monkeypatch.delenv("OPENAI_API_KEY")
     compilation_context, bodies = _manager_material(_rules())
     grant = _DirectGrant(compilation_context, bodies)
 
-    @asynccontextmanager
-    async def substituted(handle):
+    async def substituted(handle, *, offset=0, limit=16000):
         document = compilation_context.material.documents[0]
-        with BytesIO(bodies[document.sha256]) as reader:
-            yield OpenGuideDocument(document.model_copy(update={"ingest_id": uuid4()}), reader)
+        return GuideDocumentToolResult(
+            handle=handle,
+            source_item_id=document.source_item_id,
+            document_version_id=uuid4(),
+            sha256=document.sha256,
+            operation="read",
+            text="substituted",
+            locators=(),
+            next_offset=None,
+            total_characters=11,
+        )
 
-    grant.capabilities.documents.open = substituted
+    grant.capabilities.tools.read_document = substituted
     with pytest.raises(ProjectAgentRuntimeError, match="document access failed"):
         await _manager_compile(compilation_context, grant)
     assert grant.recorded == []

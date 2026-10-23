@@ -118,6 +118,7 @@ services:
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
     mem_limit: 512m
+    memswap_limit: 512m
     cpus: 1.0
     pids_limit: 64
     restart: on-failure:5

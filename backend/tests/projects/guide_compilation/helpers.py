@@ -93,7 +93,11 @@ def ids() -> dict[str, UUID]:
 
 def runtime_configuration():
     """Return explicit, non-secret execution settings for isolated test attempts."""
-    from app.interfaces.project_guide_runtime import ProjectGuideRuntimeConfiguration
+    from app.interfaces.project_guide_runtime import (
+        ProjectGuideRuntimeConfiguration,
+        canonical_adapter_profile,
+    )
+    from app.adapters.project_agents import build_project_guide_adapter_profile
 
     instructions = "Inspect assigned originals and propose bounded draft policies."
     return ProjectGuideRuntimeConfiguration(
@@ -101,6 +105,9 @@ def runtime_configuration():
         model_provider="openai",
         model="test-model",
         model_api="responses",
+        adapter_profile=canonical_adapter_profile(
+            build_project_guide_adapter_profile("openai_agents_sdk", {})
+        ),
         instruction_version="v1",
         instructions=instructions,
         instructions_sha256="sha256:" + hashlib.sha256(instructions.encode()).hexdigest(),
@@ -109,10 +116,10 @@ def runtime_configuration():
 
 
 def manager_runtime_configuration():
-    """Return the provider-free configuration recorded by manager-authored attempts."""
+    """Return the no-inference configuration recorded by manager-authored attempts."""
     return runtime_configuration().model_copy(update={
         "runtime_key": "manager_authored", "model_provider": "none",
-        "model_api": "none", "model": "none",
+        "model_api": "none", "model": "none", "adapter_profile": "{}",
     })
 
 

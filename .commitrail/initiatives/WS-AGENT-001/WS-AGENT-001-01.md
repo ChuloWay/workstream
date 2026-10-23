@@ -41,6 +41,7 @@ obligation before claiming the hosted journey recovered.
 - PROJECTS `api/guide_documents.py` and `guide_compilation/` affected models,
   custody, composition and validation; ART `guide_document_access.py` and its
   composition only for trusted exact-read evidence. Keep cross-owner ports.
+- API dependency and Celery worker composition for the same configuration/tool ports.
 - A fixed document parser service and client under the existing adapter/worker
   conventions, using the release image and a private Unix socket. No generic
   command execution or new network API.
@@ -49,7 +50,7 @@ obligation before claiming the hosted journey recovered.
 - `backend/pyproject.toml`, `backend/uv.lock`, applicable dependency installation
   declarations: fixed parser dependencies; reserve the second SDK installation for
   the companion change.
-- `docker/backend/`, `deploy/hosted/`, canonical environment example and focused
+- `docker/backend/`, `deploy/hosted/`, local Compose, canonical environment examples and focused
   deployment tests: worker-only provider credentials and secret-free parser role.
 - Focused affected tests, ownership/lane inventories, and current guide/runtime,
   deployment, developer and roadmap documentation. No unrelated inventory edits.
@@ -132,7 +133,7 @@ obligation before claiming the hosted journey recovered.
 7. Both real adapters remain the overall initiative outcome. First land this
    complete OpenAI SDK/OpenRouter path; the companion adds OmniCore with its own
    dependency environment. Resolver evidence shows published OmniCore 0.6.0 /
-   LiteLLM requires `openai<3`, incompatible with the current `openai==3.11.0`.
+   LiteLLM requires `openai<3`, incompatible with the current `openai==3.37.0`.
    Do not force coinstallation, downgrade unrelated packages or bypass the lock.
    Isolated SDK environments share the exact same Workstream source/contracts.
 
@@ -184,9 +185,10 @@ obligation before claiming the hosted journey recovered.
 
 ## Reconciliation
 
-- Current-source reconciliation: based on main `f23fc7187`. PR #651 changes the
-  same guide adapter, output specifications, draft review and correction inputs.
-  Preserve/reconcile its outcome; do not overwrite that work or call it merged.
+- Current-source reconciliation: incorporates main `3ff69e3a8`, including merged
+  PR #651 setup output specifications, bounded draft review and correction inputs,
+  and #655 guide metadata tools. Preserve those behaviors across both adapters;
+  runtime substitution changes document access, not proposal requirements.
 - Next usable boundary: real two-runtime guide qualification, then the existing
   project-owned checker and contribution journey drill.
 - Remaining risks: no implementation decision may silently weaken SDK behavior,

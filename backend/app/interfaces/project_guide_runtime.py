@@ -39,7 +39,10 @@ def canonical_adapter_profile(profile: Mapping[str, object]) -> str:
             raise ValueError("project guide adapter profile key is invalid")
         if type(value) not in {bool, int, str, type(None)}:
             raise ValueError("project guide adapter profile value is invalid")
-        if isinstance(value, str) and len(value.encode("utf-8")) > MAXIMUM_ADAPTER_PROFILE_STRING_BYTES:
+        if (
+            isinstance(value, str)
+            and len(value.encode("utf-8")) > MAXIMUM_ADAPTER_PROFILE_STRING_BYTES
+        ):
             raise ValueError("project guide adapter profile string is too large")
         if isinstance(value, int) and not isinstance(value, bool) and abs(value) > 2**53 - 1:
             raise ValueError("project guide adapter profile integer is out of range")
@@ -82,9 +85,7 @@ class ProjectGuideRuntimeConfiguration(BaseModel):
     )
     runtime_key: str = Field(pattern=r"^[a-z][a-z0-9_]{0,63}$")
     model_provider: str = Field(pattern=r"^[a-z][a-z0-9_.-]{0,63}$")
-    model: str = Field(
-        min_length=1, max_length=200, pattern=r"^[a-zA-Z0-9][a-zA-Z0-9._:/-]*$"
-    )
+    model: str = Field(min_length=1, max_length=200, pattern=r"^[a-zA-Z0-9][a-zA-Z0-9._:/-]*$")
     model_api: str = Field(pattern=r"^[a-z][a-z0-9_]{0,63}$")
     adapter_profile: str = Field(min_length=2, max_length=MAXIMUM_ADAPTER_PROFILE_BYTES)
     instruction_id: str = Field(
@@ -96,12 +97,10 @@ class ProjectGuideRuntimeConfiguration(BaseModel):
     timeout_seconds: StrictInt = Field(ge=1, le=7200)
     maximum_manifest_bytes: StrictInt = Field(default=256_000, ge=1024, le=1_000_000)
     maximum_documents: StrictInt = Field(default=100, ge=1, le=100)
-    maximum_document_bytes: StrictInt = Field(
-        default=64 * 1024 * 1024, ge=1, le=512 * 1024 * 1024
-    )
+    maximum_document_bytes: StrictInt = Field(default=64 * 1024 * 1024, ge=1, le=512 * 1024 * 1024)
     maximum_total_document_bytes: StrictInt = Field(default=512 * 1024 * 1024, ge=1)
-    maximum_turns: StrictInt = Field(default=40, ge=1, le=100)
-    maximum_tool_calls: StrictInt = Field(default=80, ge=1, le=200)
+    maximum_turns: StrictInt = Field(default=40, ge=3, le=100)
+    maximum_tool_calls: StrictInt = Field(default=80, ge=3, le=200)
     maximum_tool_output_characters: StrictInt = Field(
         default=4 * 1024 * 1024, ge=65_536, le=16 * 1024 * 1024
     )
@@ -109,20 +108,22 @@ class ProjectGuideRuntimeConfiguration(BaseModel):
     @model_validator(mode="after")
     def validate_snapshot(self) -> ProjectGuideRuntimeConfiguration:
         """Bind exact instructions, profile canonicality and coherent limits."""
-        if self.instructions_sha256 != "sha256:" + hashlib.sha256(
-            self.instructions.encode("utf-8")
-        ).hexdigest():
+        if (
+            self.instructions_sha256
+            != "sha256:" + hashlib.sha256(self.instructions.encode("utf-8")).hexdigest()
+        ):
             raise ValueError("project guide instruction hash mismatch")
         if self.maximum_document_bytes > self.maximum_total_document_bytes:
             raise ValueError("document byte limit exceeds the run total")
-        require_project_guide_inference_identity(
-            self.model_provider, self.model_api, self.model
-        )
+        require_project_guide_inference_identity(self.model_provider, self.model_api, self.model)
         try:
             profile = json.loads(self.adapter_profile)
         except (TypeError, ValueError):
             raise ValueError("project guide adapter profile is invalid") from None
-        if not isinstance(profile, dict) or canonical_adapter_profile(profile) != self.adapter_profile:
+        if (
+            not isinstance(profile, dict)
+            or canonical_adapter_profile(profile) != self.adapter_profile
+        ):
             raise ValueError("project guide adapter profile is not canonical")
         return self
 

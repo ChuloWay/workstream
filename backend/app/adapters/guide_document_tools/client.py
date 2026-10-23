@@ -119,7 +119,10 @@ class UnixSocketGuideDocumentParserAdapter:
 
         try:
             body = json.loads(raw)
-            if type(body) is not dict or body.get("protocol_version") != GUIDE_DOCUMENT_PARSER_PROTOCOL:
+            if (
+                type(body) is not dict
+                or body.get("protocol_version") != GUIDE_DOCUMENT_PARSER_PROTOCOL
+            ):
                 raise ValueError("guide parser response protocol is invalid")
             if body.get("status") == "rejected":
                 if set(body) != {"protocol_version", "status", "reason"} or body["reason"] not in {
@@ -146,6 +149,7 @@ class UnixSocketGuideDocumentParserAdapter:
             not stat.S_ISSOCK(info.st_mode)
             or info.st_uid != self._expected_socket_uid
             or info.st_gid != self._expected_socket_gid
+            or info.st_nlink != 1
             or stat.S_IMODE(info.st_mode) != PARSER_SOCKET_MODE
         ):
             raise ValueError("guide parser socket identity is invalid")

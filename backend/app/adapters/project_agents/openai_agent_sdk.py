@@ -1,19 +1,24 @@
-"""OpenAI Agents SDK implementation of the single guide-compilation port."""
+"""OpenAI Agents SDK guide runtime using trusted local document tools only."""
 
 from __future__ import annotations
 
 import asyncio
-import os
 import json
-from dataclasses import replace
-from app.interfaces.external_services import ExternalServiceAdapterIdentity
-from app.modules.projects.api.guide_documents import GuideRuntimeCapabilities
-from app.adapters.project_agents.openai_workspace import OpenAIGuideWorkspace, cleanup_owned_resources
-from app.adapters.project_agents.provider_resilience import (
-    ModelCircuitAdmission, model_retry_settings,
-)
+import os
+
 from app.adapters.project_agents.compilation_draft import CompilationDraftParser
-from app.interfaces.project_guide_runtime import ProjectGuideRuntimeConfiguration
+from app.adapters.project_agents.openai_profile import (
+    require_openai_agents_sdk_adapter_profile,
+)
+from app.adapters.project_agents.provider_resilience import (
+    ModelCircuitAdmission,
+    model_retry_settings,
+)
+from app.adapters.project_agents.result_validation import (
+    require_result_sources_opened,
+    validate_project_guide_runtime_result,
+)
+from app.interfaces.external_services import ExternalServiceAdapterIdentity
 from app.interfaces.project_agents import (
     ProjectAgentRuntimeConfigurationError,
     ProjectAgentRuntimeError,
@@ -22,23 +27,41 @@ from app.interfaces.project_agents import (
     ProjectGuideCompilationResult,
     invalid_compilation_failure_code,
     project_guide_compilation_prompt_bytes,
-    require_complete_generated_specifications,
-    require_complete_project_guide_compilation_result,
-    require_ready_result_cites_every_document,
-    validate_project_guide_compilation_result,
 )
+from app.interfaces.project_guide_runtime import ProjectGuideRuntimeConfiguration
+from app.modules.projects.api.guide_documents import GuideRuntimeCapabilities
 
 
 _INVALID_SCHEMA_OUTPUT = object()
+_OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
+_OPENAI_BASE_URL = "https://api.openai.com/v1"
+_OPENROUTER_DISABLED_PLUGINS = (
+    "web",
+    "file-parser",
+    "response-healing",
+    "alignment",
+    "armor",
+    "pareto",
+)
 
 
 class OpenAIAgentSdkProjectGuideRuntime:
-    """Investigate and review assigned originals in one bounded provider attempt."""
+    """Run the pinned SDK with no provider custody, remote tools or persistent session."""
 
     def __init__(self, configuration: ProjectGuideRuntimeConfiguration) -> None:
-        """Validate the installed adapter and credentials before the dispatch fence."""
-        if configuration.runtime_key != "openai_agents_sdk":
-            raise ProjectAgentRuntimeConfigurationError("project guide runtime is unsupported")
+        """Validate the installed adapter, effective profile and trusted credential."""
+        if configuration.runtime_key != "openai_agents_sdk" or not configuration.uses_inference:
+            raise ProjectAgentRuntimeConfigurationError(
+                "project guide runtime is unsupported"
+            )
+        if configuration.maximum_turns < 2:
+            raise ProjectAgentRuntimeConfigurationError(
+                "project guide runtime requires draft and review turns"
+            )
+        self._provider = _provider_configuration(configuration)
+        self._profile = require_openai_agents_sdk_adapter_profile(
+            configuration.adapter_profile_values()
+        )
         try:
             import agents  # noqa: F401
             import openai  # noqa: F401
@@ -46,30 +69,16 @@ class OpenAIAgentSdkProjectGuideRuntime:
             raise ProjectAgentRuntimeConfigurationError(
                 "project guide runtime is unavailable"
             ) from None
-        if not os.environ.get("OPENAI_API_KEY"):
-            raise ProjectAgentRuntimeConfigurationError(
-                "project guide model credentials are unavailable"
-            )
         self._configuration = configuration
         self._admission: ModelCircuitAdmission | None = None
 
     def admit_execution(self) -> None:
         """Acquire one process-local provider lease before the product dispatch fence."""
         if self._admission is not None:
-            raise ProjectAgentRuntimeError("project guide runtime admission already acquired")
-        self._admission = ModelCircuitAdmission(self._configuration)
-
-    async def cleanup_resources(self, custody) -> bool:
-        """Retry exact recorded cleanup independently of inference circuit admission."""
-        from openai import AsyncOpenAI
-
-        try:
-            async with asyncio.timeout(self._configuration.cleanup_timeout_seconds):
-                async with AsyncOpenAI(max_retries=0, timeout=self._configuration.request_timeout_seconds) as client:
-                    await cleanup_owned_resources(client, custody)
-                    return not await custody.cleanup_resources()
-        except Exception:
-            return False
+            raise ProjectAgentRuntimeError(
+                "project guide runtime admission already acquired"
+            )
+        self._admission = ModelCircuitAdmission(self._configuration, self._profile)
 
     async def aclose(self) -> None:
         """Release pre-fence admission after completion, cancellation, or a lost fence."""
@@ -95,7 +104,9 @@ class OpenAIAgentSdkProjectGuideRuntime:
             raise ProjectAgentRuntimeError("project guide runtime was not admitted")
         prompt = project_guide_compilation_prompt_bytes(context)
         if len(prompt) > self._configuration.maximum_manifest_bytes:
-            raise ProjectAgentRuntimeError("project guide prompt exceeds configured size limit")
+            raise ProjectAgentRuntimeError(
+                "project guide prompt exceeds configured size limit"
+            )
         runtime_failure = None
         invalid_failure = None
         output = None
@@ -115,8 +126,6 @@ class OpenAIAgentSdkProjectGuideRuntime:
             invalid_failure = error.failure_code
         except Exception:
             runtime_failure = "project guide run failed"
-        # Raise outside provider/validation handlers so hidden exception chains
-        # cannot retain source text in their traceback frames.
         if runtime_failure is not None:
             raise ProjectAgentRuntimeError(runtime_failure) from None
         if invalid_failure is not None:
@@ -124,43 +133,39 @@ class OpenAIAgentSdkProjectGuideRuntime:
         if output is _INVALID_SCHEMA_OUTPUT:
             raise ProjectGuideCompilationInvalidOutputError("schema_invalid") from None
         try:
-            return await self._validate_output(context, output, capabilities)
-        except (TypeError, ValueError) as exc:
-            invalid_failure = invalid_compilation_failure_code(exc)
+            opened = await capabilities.tools.opened_handles()
+            return validate_project_guide_runtime_result(context, output, opened)
+        except (TypeError, ValueError) as error:
+            invalid_failure = invalid_compilation_failure_code(error)
         output = None
         raise ProjectGuideCompilationInvalidOutputError(invalid_failure) from None
 
-    async def _validate_output(self, context, output, capabilities):
-        """Keep rejected values out of the sanitized caller's traceback frame."""
-        if isinstance(output, ProjectGuideCompilationResult):
-            result = output
-        elif isinstance(output, str):
-            result = ProjectGuideCompilationResult.model_validate_json(output)
-        else:
-            result = ProjectGuideCompilationResult.model_validate(output)
-        require_complete_project_guide_compilation_result(result)
-        validate_project_guide_compilation_result(context, result)
-        require_complete_generated_specifications(context, result)
-        if result.agent_version != context.agent_version:
-            raise ValueError("compilation result agent version is invalid")
-        opened = await capabilities.resources.opened_handles()
-        _require_opened_sources(context, result, opened)
-        return result
-
-    async def _run(self, context: ProjectGuideCompilationContext, prompt: str,
-                   capabilities: GuideRuntimeCapabilities):
-        """Keep provider resources, tool execution and SDK parsing inside the adapter."""
+    async def _run(
+        self,
+        context: ProjectGuideCompilationContext,
+        prompt: str,
+        capabilities: GuideRuntimeCapabilities,
+    ):
+        """Keep SDK parsing, local tool execution and model requests inside the adapter."""
         from agents import (
-            Agent, AgentOutputSchema, CodeInterpreterTool, ModelSettings,
-            OpenAIResponsesModel, RunConfig, Runner, function_tool,
+            Agent,
+            AgentOutputSchema,
+            ModelSettings,
+            OpenAIChatCompletionsModel,
+            OpenAIResponsesModel,
+            RunConfig,
+            Runner,
+            function_tool,
         )
         from agents.exceptions import ModelBehaviorError
-        from openai import AsyncOpenAI
+        from openai import AsyncOpenAI, DefaultAsyncHttpx2Client
 
         parser_rejected = False
         draft_rejected = False
         configuration = self._configuration
+        profile = self._profile
         admission = self._admission
+        assert admission is not None
 
         class CompilationOutputSchema(AgentOutputSchema):
             """Preserve native SDK parser redaction while identifying known rejection."""
@@ -186,142 +191,241 @@ class OpenAIAgentSdkProjectGuideRuntime:
                 raise ModelBehaviorError("Guide candidate has invalid structure") from None
 
         canonical_schema = CompilationOutputSchema(
-            ProjectGuideCompilationResult, strict_json_schema=True,
+            ProjectGuideCompilationResult, strict_json_schema=True
         )
-        draft_schema = DraftOutputSchema(ProjectGuideCompilationResult, strict_json_schema=True)
+        draft_schema = DraftOutputSchema(
+            ProjectGuideCompilationResult, strict_json_schema=True
+        )
         draft_parser = CompilationDraftParser(
-            canonical_schema.json_schema(), configuration.maximum_manifest_bytes,
+            canonical_schema.json_schema(), configuration.maximum_manifest_bytes
         )
 
-        class BoundedResponsesModel(OpenAIResponsesModel):
-            """Bound hosted work across every model turn and compact carried input."""
+        base_model_class = (
+            OpenAIChatCompletionsModel
+            if configuration.model_api == "chat_completions"
+            else OpenAIResponsesModel
+        )
 
-            hosted_calls = 0
+        class BoundedModel(base_model_class):
+            """Count logical model turns and bind circuit state around native retries."""
+
             model_turns = 0
 
-            async def get_response(self, system_instructions, input, model_settings, tools,
-                                   output_schema, handoffs, tracing, previous_response_id=None,
-                                   conversation_id=None, prompt=None):
-                remaining = configuration.maximum_hosted_tool_calls - self.hosted_calls
-                if (remaining <= 0 or self.model_turns >= configuration.maximum_turns
-                        or previous_response_id is not None or conversation_id is not None):
+            async def get_response(
+                self,
+                system_instructions,
+                input,
+                model_settings,
+                tools,
+                output_schema,
+                handoffs,
+                tracing,
+                previous_response_id=None,
+                conversation_id=None,
+                prompt=None,
+            ):
+                if (
+                    self.model_turns >= configuration.maximum_turns
+                    or previous_response_id is not None
+                    or conversation_id is not None
+                ):
                     raise RuntimeError("guide runtime work boundary exceeded")
-                if isinstance(input, list):
-                    compacted = [i for i, item in enumerate(input)
-                                 if isinstance(item, dict) and item.get("type") == "compaction"]
-                    if compacted:
-                        input = input[compacted[-1]:]
-                model_settings = replace(model_settings, extra_args={"max_tool_calls": remaining})
                 admission.before_request()
                 self.model_turns += 1
                 try:
                     response = await super().get_response(
-                        system_instructions, input, model_settings, tools, output_schema,
-                        handoffs, tracing, previous_response_id=None, conversation_id=None,
+                        system_instructions,
+                        input,
+                        model_settings,
+                        tools,
+                        output_schema,
+                        handoffs,
+                        tracing,
+                        previous_response_id=None,
+                        conversation_id=None,
                         prompt=prompt,
                     )
                 except Exception as error:
                     admission.request_failed(error)
                     raise
                 admission.request_succeeded()
-                self.hosted_calls += sum(
-                    getattr(item, "type", None) == "code_interpreter_call"
-                    for item in response.output
-                )
-                if self.hosted_calls > configuration.maximum_hosted_tool_calls:
-                    raise RuntimeError("guide runtime hosted work limit exceeded")
                 return response
 
-        async with AsyncOpenAI(max_retries=0, timeout=min(configuration.request_timeout_seconds, configuration.timeout_seconds)) as client:
-            workspace = OpenAIGuideWorkspace(client, configuration, context.material, capabilities)
-            try:
-                await workspace.start()
-
-                reviewing = False
-                review_opened = set()
-
-                @function_tool(failure_error_function=None)
-                async def open_guide_document(handle: str) -> str:
-                    """Open one assigned original by opaque handle, returning its workspace path."""
-                    document = await workspace.open_document(handle)
-                    if reviewing:
-                        review_opened.add(handle)
-                    return json.dumps(document)
-
-                agent = Agent(
-                    name="ProjectGuideCompilationAgent",
-                    instructions=configuration.instructions,
-                    model=BoundedResponsesModel(model=configuration.model, openai_client=client),
-                    model_settings=ModelSettings(
-                        store=False, parallel_tool_calls=False,
-                        retry=model_retry_settings(configuration),
-                        response_include=["code_interpreter_call.outputs"],
-                        context_management=[{"type": "compaction",
-                                             "compact_threshold": configuration.compaction_threshold_tokens}],
-                    ),
-                    output_type=draft_schema,
-                    tools=[open_guide_document, CodeInterpreterTool(tool_config={
-                        "type": "code_interpreter", "container": workspace.container_id,
-                    })],
-                    handoffs=[],
+        http_client = DefaultAsyncHttpx2Client(
+            trust_env=False,
+            follow_redirects=False,
+        )
+        client = AsyncOpenAI(
+            api_key=self._provider.api_key,
+            base_url=self._provider.base_url,
+            http_client=http_client,
+            max_retries=0,
+            timeout=profile.request_timeout_seconds,
+        )
+        try:
+            if configuration.model_api == "chat_completions":
+                model = BoundedModel(
+                    model=configuration.model,
+                    openai_client=client,
+                    strict_feature_validation=True,
                 )
-                try:
-                    run_config = RunConfig(tracing_disabled=True, trace_include_sensitive_data=False)
-                    draft = await Runner.run(
-                        agent, prompt, max_turns=configuration.maximum_turns // 2,
-                        run_config=run_config,
-                    )
-                    candidate = draft.final_output
-                    draft = None
-                    if not isinstance(candidate, dict):
-                        return _INVALID_SCHEMA_OUTPUT
-                    review_input = json.dumps({
+            else:
+                model = BoundedModel(model=configuration.model, openai_client=client)
+            review_opened: set[str] = set()
+            reviewing = False
+
+            @function_tool(failure_error_function=None)
+            async def read_document(
+                handle: str, offset: int = 0, limit: int = 16000
+            ) -> str:
+                """Read bounded text from an assigned original using its exact opaque handle."""
+                value = await capabilities.tools.read_document(
+                    handle,
+                    offset=offset,
+                    limit=limit,
+                )
+                if reviewing:
+                    review_opened.add(handle)
+                return value.model_dump_json()
+
+            @function_tool(failure_error_function=None)
+            async def search_document(
+                handle: str, query: str, offset: int = 0, limit: int = 20
+            ) -> str:
+                """Search bounded text in an assigned original using its exact opaque handle."""
+                value = await capabilities.tools.search_document(
+                    handle,
+                    query,
+                    offset=offset,
+                    limit=limit,
+                )
+                if reviewing:
+                    review_opened.add(handle)
+                return value.model_dump_json()
+
+            extra_body = None
+            if configuration.model_provider == "openrouter":
+                extra_body = {
+                    "provider": {
+                        "allow_fallbacks": False,
+                        "data_collection": "deny",
+                    },
+                    "plugins": [
+                        {"id": plugin, "enabled": False}
+                        for plugin in _OPENROUTER_DISABLED_PLUGINS
+                    ],
+                }
+            model_settings = ModelSettings(
+                parallel_tool_calls=False,
+                store=False,
+                timeout=profile.request_timeout_seconds,
+                retry=model_retry_settings(profile),
+                extra_body=extra_body,
+            )
+            agent = Agent(
+                name="ProjectGuideCompilationAgent",
+                instructions=configuration.instructions,
+                model=model,
+                model_settings=model_settings,
+                output_type=draft_schema,
+                tools=[read_document, search_document],
+                handoffs=[],
+            )
+            run_config = RunConfig(
+                tracing_disabled=True,
+                trace_include_sensitive_data=False,
+            )
+            try:
+                draft = await Runner.run(
+                    agent,
+                    prompt,
+                    max_turns=max(1, configuration.maximum_turns // 2),
+                    run_config=run_config,
+                )
+                candidate = draft.final_output
+                draft = None
+                if not isinstance(candidate, dict):
+                    return _INVALID_SCHEMA_OUTPUT
+                review_input = json.dumps(
+                    {
                         "phase": "coverage_review",
                         "guide_setup_context": json.loads(prompt),
                         "candidate_proposal": candidate,
-                        "candidate_validation_issues": draft_parser.canonical_issues(candidate),
-                    }, ensure_ascii=False, allow_nan=False, separators=(",", ":"))
-                    candidate = None
-                    if len(review_input.encode("utf-8")) > configuration.maximum_manifest_bytes:
-                        raise ProjectGuideCompilationInvalidOutputError("schema_invalid")
-                    remaining_turns = configuration.maximum_turns - agent.model.model_turns
-                    if remaining_turns <= 0:
-                        raise RuntimeError("guide review turn budget exhausted")
-                    reviewing = True
-                    agent.output_type = canonical_schema
-                    result = await Runner.run(
-                        agent, review_input, max_turns=remaining_turns,
-                        run_config=run_config,
+                        "candidate_validation_issues": draft_parser.canonical_issues(
+                            candidate
+                        ),
+                    },
+                    ensure_ascii=False,
+                    allow_nan=False,
+                    separators=(",", ":"),
+                )
+                candidate = None
+                if len(review_input.encode("utf-8")) > configuration.maximum_manifest_bytes:
+                    raise ProjectGuideCompilationInvalidOutputError("schema_invalid")
+                remaining_turns = configuration.maximum_turns - model.model_turns
+                if remaining_turns <= 0:
+                    raise RuntimeError("guide review turn budget exhausted")
+                reviewing = True
+                agent.output_type = canonical_schema
+                result = await Runner.run(
+                    agent,
+                    review_input,
+                    max_turns=remaining_turns,
+                    run_config=run_config,
+                )
+            except ModelBehaviorError:
+                if not (parser_rejected or draft_rejected):
+                    raise
+            else:
+                try:
+                    require_result_sources_opened(
+                        context, result.final_output, review_opened
                     )
-                except ModelBehaviorError:
-                    if not (parser_rejected or draft_rejected):
-                        raise
-                else:
-                    try:
-                        _require_opened_sources(context, result.final_output, review_opened)
-                    except ValueError:
-                        raise ProjectGuideCompilationInvalidOutputError("schema_invalid") from None
-                    return result.final_output
-                return _INVALID_SCHEMA_OUTPUT
-            finally:
-                await workspace.close()
+                except ValueError:
+                    raise ProjectGuideCompilationInvalidOutputError(
+                        "schema_invalid"
+                    ) from None
+                return result.final_output
+            return _INVALID_SCHEMA_OUTPUT
+        finally:
+            await client.close()
 
 
-def _require_opened_sources(context, result, opened):
-    """Require this phase to access every cited original and all originals when ready."""
-    if not opened:
-        raise ValueError("compilation has no opened document evidence")
-    document_handles = {
-        (item.source_item_id, item.ingest_id): context.material.handle_for(item)
-        for item in context.material.documents
-    }
-    references = (
-        *(ref for finding in result.findings for ref in finding.evidence_refs),
-        *(ref for requirement in result.requirements for ref in requirement.evidence_refs),
-        *(ref for suggestion in result.capability_suggestions for ref in suggestion.evidence_refs),
-    )
-    cited_handles = {document_handles.get((ref.source_item_id, ref.document_version_id))
-                     for ref in references}
-    if not cited_handles <= opened:
-        raise ValueError("compilation cites unopened source material")
-    require_ready_result_cites_every_document(context, result)
+class _ProviderConfiguration:
+    __slots__ = ("api_key", "base_url")
+
+    def __init__(self, api_key: str, base_url: str) -> None:
+        self.api_key = api_key
+        self.base_url = base_url
+
+
+def _provider_configuration(
+    configuration: ProjectGuideRuntimeConfiguration,
+) -> _ProviderConfiguration:
+    if (
+        configuration.model_provider == "openrouter"
+        and configuration.model_api == "chat_completions"
+    ):
+        normalized_model = configuration.model.lower()
+        if ":" in normalized_model or normalized_model.startswith("openrouter/"):
+            raise ProjectAgentRuntimeConfigurationError(
+                "project guide OpenRouter model routing is unsupported"
+            )
+        credential_name = "OPENROUTER_API_KEY"
+        base_url = _OPENROUTER_BASE_URL
+    elif configuration.model_provider == "openai" and configuration.model_api in {
+        "responses",
+        "chat_completions",
+    }:
+        credential_name = "OPENAI_API_KEY"
+        base_url = _OPENAI_BASE_URL
+    else:
+        raise ProjectAgentRuntimeConfigurationError(
+            "project guide model provider or protocol is unsupported"
+        )
+    api_key = os.environ.get(credential_name)
+    if not api_key:
+        raise ProjectAgentRuntimeConfigurationError(
+            "project guide model credentials are unavailable"
+        )
+    return _ProviderConfiguration(api_key, base_url)

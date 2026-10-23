@@ -32,9 +32,7 @@ def attempt_uses_inference(attempt) -> bool:
     configuration = attempt.runtime_configuration
     if type(configuration) is not dict:
         raise ValueError("guide runtime configuration is unavailable")
-    identities = tuple(
-        configuration.get(name) for name in ("model_provider", "model_api", "model")
-    )
+    identities = tuple(configuration.get(name) for name in ("model_provider", "model_api", "model"))
     if all(value == "none" for value in identities):
         return False
     if all(isinstance(value, str) and value and value != "none" for value in identities):
@@ -94,7 +92,7 @@ class SqlAlchemyGuideRuntimeCleanupCustody:
                     ProjectGuideRuntimeAllocation.manifest_sha256 == self._manifest_sha256,
                     ProjectGuideRuntimeAllocation.runtime_key == self._runtime_key,
                     ProjectGuideRuntimeAllocation.provider_id.is_not(None),
-                    ProjectGuideRuntimeAllocation.state != "deleted",
+                    ProjectGuideRuntimeAllocation.state.in_(("allocated", "cleanup_failed")),
                 )
                 .order_by(
                     ProjectGuideRuntimeAllocation.created_at,
@@ -107,9 +105,7 @@ class SqlAlchemyGuideRuntimeCleanupCustody:
                     kind=row.kind,
                     provider_id=row.provider_id,
                     parent_provider_id=row.parent_provider_id,
-                    document_handle=(
-                        str(row.document_handle) if row.document_handle else None
-                    ),
+                    document_handle=(str(row.document_handle) if row.document_handle else None),
                     expires_at=row.expires_at,
                 )
                 for row in rows
@@ -120,7 +116,11 @@ class SqlAlchemyGuideRuntimeCleanupCustody:
             row = await self._cleanup_allocation(session, allocation_id)
             if row.state == "deleted":
                 return
-            if row.provider_id is None:
+            if row.provider_id is None or row.state not in {
+                "allocated",
+                "cleanup_failed",
+                "deleted",
+            }:
                 raise ValueError("unknown resource deletion cannot be confirmed")
             row.state = "deleted"
             row.deleted_at = datetime.now(UTC)
@@ -128,7 +128,7 @@ class SqlAlchemyGuideRuntimeCleanupCustody:
     async def record_cleanup_failed(self, allocation_id):
         async with self._sessions() as session, session.begin():
             row = await self._cleanup_allocation(session, allocation_id)
-            if row.state != "deleted" and row.provider_id is not None:
+            if row.state in {"allocated", "cleanup_failed"} and row.provider_id is not None:
                 row.state = "cleanup_failed"
 
 
@@ -188,8 +188,7 @@ class SqlAlchemyGuideDocumentAccessCustody:
             existing = await session.scalar(
                 select(ProjectGuideDocumentAccess).where(
                     ProjectGuideDocumentAccess.attempt_id == self._attempt_id,
-                    ProjectGuideDocumentAccess.parser_request_hash
-                    == receipt.parser_request_hash,
+                    ProjectGuideDocumentAccess.parser_request_hash == receipt.parser_request_hash,
                 )
             )
             if existing is not None:
@@ -221,6 +220,7 @@ class SqlAlchemyGuideDocumentAccessCustody:
                 select(ProjectGuideDocumentAccess.document_handle).where(
                     ProjectGuideDocumentAccess.attempt_id == self._attempt_id,
                     ProjectGuideDocumentAccess.manifest_sha256 == self._manifest.sha256,
+                    ProjectGuideDocumentAccess.access_method == "trusted_parser",
                 )
             )
             return frozenset(str(value) for value in handles)
@@ -262,8 +262,7 @@ async def require_compilation_document_access(session, attempt_id, manifest, res
             or row.manifest_sha256 != manifest.sha256
             or row.document_version_id != str(document.ingest_id)
             or row.sha256 != document.sha256
-            or row.document_handle
-            != UUID(manifest.handle_for(document))
+            or row.document_handle != UUID(manifest.handle_for(document))
             or not _valid_access_evidence(row)
         ):
             raise ValueError("compilation document access lineage mismatch")
@@ -278,9 +277,7 @@ async def require_compilation_document_access(session, attempt_id, manifest, res
     cited = {str(ref.source_item_id) for ref in references}
     if not cited <= opened:
         raise ValueError("compilation cites unopened documents")
-    if result.status != "guide_blocked" and (
-        opened != set(documents) or cited != set(documents)
-    ):
+    if result.status != "guide_blocked" and (opened != set(documents) or cited != set(documents)):
         raise ValueError("ready compilation does not account for every document")
 
 
@@ -338,10 +335,7 @@ async def _require_historical_attachment(session, attempt_id, manifest, document
         or attachment.document_handle != row.document_handle
         or file.document_handle != row.document_handle
         or file.manifest_sha256 != manifest.sha256
-        or any(
-            getattr(file, key) != value
-            for key, value in _file_document_facts(document).items()
-        )
+        or any(getattr(file, key) != value for key, value in _file_document_facts(document).items())
     ):
         raise ValueError("compilation provider file lineage mismatch")
 
@@ -391,16 +385,18 @@ async def pending_runtime_resource_cleanup(
             )
             .join(
                 ProjectGuideRuntimeAllocation,
-                ProjectGuideRuntimeAllocation.attempt_id
-                == ProjectGuideCompilationAttempt.id,
+                ProjectGuideRuntimeAllocation.attempt_id == ProjectGuideCompilationAttempt.id,
             )
             .where(
                 ProjectGuideRuntimeAllocation.runtime_key == retained_runtime_key,
                 ProjectGuideRuntimeAllocation.provider_id.is_not(None),
-                ProjectGuideRuntimeAllocation.state != "deleted",
+                ProjectGuideRuntimeAllocation.state.in_(("allocated", "cleanup_failed")),
             )
             .group_by(ProjectGuideCompilationAttempt.id)
-            .order_by(ProjectGuideCompilationAttempt.provider_uncertain_at, ProjectGuideCompilationAttempt.id)
+            .order_by(
+                ProjectGuideCompilationAttempt.provider_uncertain_at,
+                ProjectGuideCompilationAttempt.id,
+            )
             .limit(limit)
         )
     ).all()

@@ -9,7 +9,11 @@ from app.core.hashing import canonical_json_hash
 from app.core.identifiers import new_record_id
 from app.modules.projects.guide_compilation.models import ProjectGuideCompilationAttempt
 from .helpers import (
-    context, identity, manager_runtime_configuration, runtime_configuration, seed_database,
+    context,
+    identity,
+    manager_runtime_configuration,
+    runtime_configuration,
+    seed_database,
 )
 
 
@@ -37,13 +41,16 @@ def _row(values, configuration):
         {"maximum_prompt_bytes": "invalid"},
         {"timeout_seconds": 0},
         {"timeout_seconds": 7201},
-        {"maximum_prompt_bytes": 1023},
-        {"maximum_prompt_bytes": 16777217},
+        {"maximum_manifest_bytes": 1023},
+        {"maximum_manifest_bytes": 1000001},
         {"instructions": "x" * 16001},
         {"instructions_sha256": "sha256:" + "0" * 64},
         {"credential": "not-allowed"},
         {"model_provider": None},
         {"model_api": None},
+        {"adapter_profile": '{"unsupported":[]}'},
+        {"adapter_profile": '{"bad-key":1}'},
+        {"adapter_profile": '{"value":1.5}'},
         {
             "model_provider": "openai_compatible",
             "model_endpoint": "https://user:secret@models.example.test",
@@ -59,7 +66,8 @@ async def test_sql_rejects_invalid_runtime_configuration(clean_postgres_database
     try:
         async with engine.begin() as connection:
             with pytest.raises(
-                DBAPIError, match="compilation (runtime configuration|model endpoint)"
+                DBAPIError,
+                match="compilation (runtime configuration|runtime adapter profile|model endpoint)",
             ) as error:
                 await connection.execute(
                     insert(ProjectGuideCompilationAttempt).values(**_row(values, configuration))
@@ -76,8 +84,7 @@ async def test_sql_rejects_invalid_runtime_configuration(clean_postgres_database
         await engine.dispose()
 
 
-_MANAGER_PAIR = {"runtime_key": "manager_authored", "model_provider": "none",
-                 "model_api": "none", "model": "none"}
+_NO_INFERENCE_IDENTITY = {"model_provider": "none", "model_api": "none", "model": "none"}
 
 
 @pytest.mark.parametrize(
@@ -86,32 +93,41 @@ _MANAGER_PAIR = {"runtime_key": "manager_authored", "model_provider": "none",
         {"model_provider": "none", "model_api": "none"},
         {"model_provider": "none"},
         {"model_api": "none"},
-        {"model_provider": "none", "model_api": "none", "model": "none"},
         {"model": "none"},
-        _MANAGER_PAIR | {"model_provider": "openai", "model_api": "responses"},
-        _MANAGER_PAIR | {"model_provider": "openai"},
-        _MANAGER_PAIR | {"model_api": "responses"},
-        _MANAGER_PAIR | {"model": "gpt-5.6-terra"},
-        _MANAGER_PAIR | {"runtime_key": "manager_authored_preview"},
+        _NO_INFERENCE_IDENTITY | {"model_provider": "openai", "model_api": "responses"},
+        _NO_INFERENCE_IDENTITY | {"model_provider": "openai"},
+        _NO_INFERENCE_IDENTITY | {"model_api": "responses"},
+        _NO_INFERENCE_IDENTITY | {"model": "gpt-5.6-terra"},
     ],
 )
-async def test_sql_accepts_provider_none_only_for_manager_authored(clean_postgres_database, patch):
-    """The trigger independently binds provider/API none to the provider-free runtime."""
+async def test_sql_requires_all_none_or_all_concrete_inference_identity(
+    clean_postgres_database, patch
+):
+    """The trigger enforces inference identity without enumerating runtimes or vendors."""
     values = await seed_database(clean_postgres_database)
     engine = create_async_engine(clean_postgres_database)
     try:
         async with engine.begin() as connection:
-            with pytest.raises(DBAPIError, match="compilation runtime configuration is invalid") as error:
-                await connection.execute(insert(ProjectGuideCompilationAttempt).values(
-                    **_row(values, runtime_configuration().model_dump(mode="json") | patch)))
+            with pytest.raises(
+                DBAPIError, match="compilation runtime configuration is invalid"
+            ) as error:
+                await connection.execute(
+                    insert(ProjectGuideCompilationAttempt).values(
+                        **_row(values, runtime_configuration().model_dump(mode="json") | patch)
+                    )
+                )
             assert error.value.orig.sqlstate == "23514"
         async with engine.begin() as connection:
-            await connection.execute(insert(ProjectGuideCompilationAttempt).values(
-                **_row(values, manager_runtime_configuration().model_dump(mode="json"))))
+            await connection.execute(
+                insert(ProjectGuideCompilationAttempt).values(
+                    **_row(values, manager_runtime_configuration().model_dump(mode="json"))
+                )
+            )
         async with engine.connect() as connection:
-            stored = await connection.scalar(text(
-                "select runtime_configuration::jsonb from project_guide_compilation_attempts"))
-        assert {key: stored[key] for key in _MANAGER_PAIR} == _MANAGER_PAIR
+            stored = await connection.scalar(
+                text("select runtime_configuration::jsonb from project_guide_compilation_attempts")
+            )
+        assert {key: stored[key] for key in _NO_INFERENCE_IDENTITY} == _NO_INFERENCE_IDENTITY
     finally:
         await engine.dispose()
 

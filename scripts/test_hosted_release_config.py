@@ -124,7 +124,9 @@ class HostedReleaseConfigTests(unittest.TestCase):
         self.temporary.cleanup()
 
     def test_valid_configuration_and_rendered_topology(self) -> None:
-        self.assertEqual(str(preflight.SOCKET_ROOT), "/var/lib/workstream/checker-runtime")
+        self.assertEqual(
+            str(preflight.SOCKET_ROOT), "/var/lib/workstream/checker-runtime"
+        )
         preflight.validate_environment(self.environment)
         preflight.validate_checker_config(self.checker, self.environment)
         rendered = preflight.render_compose(self.environment_path, self.environment)
@@ -169,6 +171,18 @@ class HostedReleaseConfigTests(unittest.TestCase):
                 },
                 evidence,
             )
+        project_agent_configuration = {
+            key: self.environment[key]
+            for key in preflight.PROJECT_AGENT_CONFIGURATION_KEYS
+        }
+        for name in ("api", "worker", "beat", *preflight.PROOF_SERVICES):
+            self.assertEqual(
+                {
+                    key: services[name]["environment"][key]
+                    for key in preflight.PROJECT_AGENT_CONFIGURATION_KEYS
+                },
+                project_agent_configuration,
+            )
         api_command = " ".join(services["api"]["command"])
         worker_command = " ".join(services["worker"]["command"])
         self.assertIn("alembic upgrade head", api_command)
@@ -185,9 +199,7 @@ class HostedReleaseConfigTests(unittest.TestCase):
         self.assertEqual(services["api"]["stop_grace_period"], "30s")
         self.assertEqual(services["worker"]["stop_grace_period"], "1h1m40s")
         self.assertEqual(services["beat"]["stop_grace_period"], "30s")
-        self.assertEqual(
-            services["guide-document-parser"]["stop_grace_period"], "30s"
-        )
+        self.assertEqual(services["guide-document-parser"]["stop_grace_period"], "30s")
         self.assertEqual(services["api"]["ports"][0]["host_ip"], "127.0.0.1")
         expected_secrets = {
             target[0] for target in preflight.SECRET_FILE_TARGETS.values()
@@ -237,18 +249,16 @@ class HostedReleaseConfigTests(unittest.TestCase):
             },
         )
         self.assertEqual(parser["mem_limit"], "536870912")
+        self.assertEqual(parser["memswap_limit"], "536870912")
         self.assertEqual(parser["cpus"], 1)
         self.assertEqual(parser["pids_limit"], 64)
-        self.assertEqual(
-            preflight._service_mounts(parser)[str(preflight.GUIDE_SOCKET_ROOT)][
-                "read_only"
-            ],
-            False,
+        self.assertFalse(
+            preflight._service_mounts(parser)[str(preflight.GUIDE_SOCKET_ROOT)].get(
+                "read_only", False
+            )
         )
         worker_mounts = preflight._service_mounts(services["worker"])
-        self.assertTrue(
-            worker_mounts[str(preflight.GUIDE_SOCKET_ROOT)]["read_only"]
-        )
+        self.assertTrue(worker_mounts[str(preflight.GUIDE_SOCKET_ROOT)]["read_only"])
         for name in (
             "api",
             "beat",
@@ -589,13 +599,53 @@ class HostedReleaseConfigTests(unittest.TestCase):
                 preflight.run_shutdown(self.environment_path, self.environment), 0
             )
         commands = [call.args[0] for call in run.call_args_list]
+        self.assertEqual(commands[0][-3:], ["stop", "beat", "api"])
+        self.assertEqual(commands[1][-4:], ["stop", "--timeout", "3700", "worker"])
         self.assertEqual(
-            [command[-4:] for command in commands],
-            [
-                ["compose.yml", "stop", "beat", "api"],
-                ["--timeout", "3700", "worker"],
-                ["stop", "guide-document-parser", "checker-service"],
-            ],
+            commands[2][-3:],
+            ["stop", "guide-document-parser", "checker-service"],
+        )
+
+    def test_shutdown_failure_keeps_later_dependencies_running(self) -> None:
+        for failed_phase in (0, 1):
+            with self.subTest(failed_phase=failed_phase):
+                results = [
+                    subprocess.CompletedProcess([], 17 if index == failed_phase else 0)
+                    for index in range(3)
+                ]
+                with patch.object(
+                    preflight.subprocess, "run", side_effect=results
+                ) as run:
+                    self.assertEqual(
+                        preflight.run_shutdown(
+                            self.environment_path,
+                            self.environment,
+                        ),
+                        17,
+                    )
+                self.assertEqual(run.call_count, failed_phase + 1)
+
+    def test_stop_rejects_caller_selected_service_order(self) -> None:
+        errors = io.StringIO()
+        with (
+            patch.object(
+                sys,
+                "argv",
+                [
+                    "compose.py",
+                    "--env-file",
+                    str(self.environment_path),
+                    "stop",
+                    "worker",
+                ],
+            ),
+            patch.object(compose, "run_shutdown") as shutdown,
+            redirect_stderr(errors),
+        ):
+            self.assertEqual(compose.main(), 1)
+        shutdown.assert_not_called()
+        self.assertIn(
+            "fixed producer, worker, parser/checker sequence", errors.getvalue()
         )
 
     def test_proof_wrapper_runs_only_the_fixed_identity_sequence(self) -> None:
@@ -759,6 +809,32 @@ class HostedReleaseConfigTests(unittest.TestCase):
                 "WORKSTREAM_ARTIFACT_S3_ROLES_ANYWHERE_RUNTIME_CERTIFICATE_HOST_FILE",
                 "runtime-certificate.pem",
             ),
+            "wrong backend UID": ("WORKSTREAM_RUNTIME_UID", "10003"),
+            "unsupported runtime": (
+                "WORKSTREAM_PROJECT_AGENT_RUNTIME",
+                "unregistered_runtime",
+            ),
+            "unsupported provider": (
+                "WORKSTREAM_PROJECT_AGENT_MODEL_PROVIDER",
+                "unregistered_provider",
+            ),
+            "OpenRouter responses mismatch": (
+                "WORKSTREAM_PROJECT_AGENT_MODEL_API",
+                "responses",
+            ),
+            "provider endpoint override": (
+                "WORKSTREAM_PROJECT_AGENT_BASE_URL",
+                "https://attacker.invalid/v1",
+            ),
+            "provider key value": ("OPENROUTER_API_KEY", "private"),
+            "runtime endpoint option": (
+                "WORKSTREAM_PROJECT_AGENT_RUNTIME_OPTIONS",
+                '{"base_url":"https://attacker.invalid/v1"}',
+            ),
+            "runtime options list": (
+                "WORKSTREAM_PROJECT_AGENT_RUNTIME_OPTIONS",
+                "[]",
+            ),
         }
         for label, (key, value) in cases.items():
             with self.subTest(label=label):
@@ -801,6 +877,11 @@ class HostedReleaseConfigTests(unittest.TestCase):
             "registry.example/workstream/backend:latest"
         )
         cases.append(("mutable worker image", mutable))
+        different_parser_image = copy.deepcopy(rendered)
+        different_parser_image["services"]["guide-document-parser"]["image"] = (
+            "registry.example/workstream/backend@sha256:" + "9" * 64
+        )
+        cases.append(("different guide parser image", different_parser_image))
         networked = copy.deepcopy(rendered)
         networked["services"]["checker-service"]["network_mode"] = "default"
         cases.append(("networked checker", networked))
@@ -898,6 +979,81 @@ class HostedReleaseConfigTests(unittest.TestCase):
             copy.deepcopy(rendered["services"]["api"]["volumes"][-1])
         )
         cases.append(("runtime identity exposed to checker", checker_identity))
+        parser_secret = copy.deepcopy(rendered)
+        parser_secret["services"]["guide-document-parser"]["secrets"] = [
+            copy.deepcopy(rendered["services"]["worker"]["secrets"][-1])
+        ]
+        cases.append(("provider secret exposed to parser", parser_secret))
+        parser_network = copy.deepcopy(rendered)
+        parser_network["services"]["guide-document-parser"]["network_mode"] = "default"
+        cases.append(("networked guide parser", parser_network))
+        parser_identity = copy.deepcopy(rendered)
+        parser_identity["services"]["guide-document-parser"]["user"] = "10001:10001"
+        cases.append(("guide parser shares worker identity", parser_identity))
+        parser_resources = copy.deepcopy(rendered)
+        parser_resources["services"]["guide-document-parser"]["pids_limit"] = 65
+        cases.append(("guide parser PID limit drift", parser_resources))
+        privileged_parser = copy.deepcopy(rendered)
+        privileged_parser["services"]["guide-document-parser"]["privileged"] = True
+        cases.append(("privileged guide parser", privileged_parser))
+        parser_capability = copy.deepcopy(rendered)
+        parser_capability["services"]["guide-document-parser"]["cap_add"] = [
+            "SYS_ADMIN"
+        ]
+        cases.append(("guide parser added capability", parser_capability))
+        parser_device = copy.deepcopy(rendered)
+        parser_device["services"]["guide-document-parser"]["devices"] = [
+            "/dev/null:/dev/foreign"
+        ]
+        cases.append(("guide parser device", parser_device))
+        parser_entrypoint = copy.deepcopy(rendered)
+        parser_entrypoint["services"]["guide-document-parser"]["entrypoint"] = [
+            "python"
+        ]
+        cases.append(("guide parser bypasses release entrypoint", parser_entrypoint))
+        worker_entrypoint = copy.deepcopy(rendered)
+        worker_entrypoint["services"]["worker"]["entrypoint"] = ["python"]
+        cases.append(("worker bypasses secret loader", worker_entrypoint))
+        parser_credential_environment = copy.deepcopy(rendered)
+        parser_credential_environment["services"]["guide-document-parser"][
+            "environment"
+        ]["OPENROUTER_API_KEY"] = "private"
+        cases.append(
+            (
+                "provider credential interpolated into parser",
+                parser_credential_environment,
+            )
+        )
+        missing_parser_dependency = copy.deepcopy(rendered)
+        del missing_parser_dependency["services"]["worker"]["depends_on"][
+            "guide-document-parser"
+        ]
+        cases.append(("worker does not wait for parser", missing_parser_dependency))
+        proof_runtime_drift = copy.deepcopy(rendered)
+        proof_runtime_drift["services"]["aws-proof-coordinate"]["environment"][
+            "WORKSTREAM_PROJECT_AGENT_MODEL"
+        ] = "different-model"
+        cases.append(("proof project agent snapshot drift", proof_runtime_drift))
+        proof_parser_socket = copy.deepcopy(rendered)
+        proof_parser_socket["services"]["aws-proof-coordinate"]["environment"][
+            "WORKSTREAM_GUIDE_DOCUMENT_PARSER_SOCKET"
+        ] = str(preflight.GUIDE_SOCKET_PATH)
+        cases.append(("guide parser socket exposed to proof", proof_parser_socket))
+        proof_provider_selector = copy.deepcopy(rendered)
+        proof_provider_selector["services"]["aws-proof-coordinate"]["environment"][
+            "WORKSTREAM_PROJECT_AGENT_API_KEY_FILE"
+        ] = "/run/secrets/project_agent_api_key"
+        cases.append(("provider selector exposed to proof", proof_provider_selector))
+        worker_provider_value = copy.deepcopy(rendered)
+        worker_provider_value["services"]["worker"]["environment"][
+            "OPENROUTER_API_KEY"
+        ] = "private"
+        cases.append(("provider value interpolated into worker", worker_provider_value))
+        api_parser_mount = copy.deepcopy(rendered)
+        api_parser_mount["services"]["api"]["volumes"].append(
+            copy.deepcopy(rendered["services"]["worker"]["volumes"][2])
+        )
+        cases.append(("guide parser socket exposed to API", api_parser_mount))
         for label, changed in cases:
             with self.subTest(label=label), self.assertRaises(preflight.PreflightError):
                 preflight.validate_compose(changed, self.environment)
@@ -1000,6 +1156,36 @@ class HostedReleaseConfigTests(unittest.TestCase):
                 patch.object(preflight, "DOCKER_SOCKET", docker_socket),
             ):
                 preflight.validate_private_host_inputs(environment)
+                guide_listener = socket.socket(socket.AF_UNIX)
+                guide_listener.bind(str(guide_socket_root / "guide.sock"))
+                (guide_socket_root / "guide.sock").chmod(0o660)
+                try:
+                    preflight.validate_private_host_inputs(environment)
+                    guide_socket_alias = self.root / "guide-socket-alias"
+                    os.link(guide_socket_root / "guide.sock", guide_socket_alias)
+                    try:
+                        with self.assertRaisesRegex(
+                            preflight.PreflightError,
+                            "unsafe retained state",
+                        ):
+                            preflight.validate_private_host_inputs(environment)
+                    finally:
+                        guide_socket_alias.unlink()
+                finally:
+                    guide_listener.close()
+                    (guide_socket_root / "guide.sock").unlink()
+                (guide_socket_root / "guide.sock").write_text(
+                    "foreign", encoding="utf-8"
+                )
+                with self.assertRaisesRegex(
+                    preflight.PreflightError, "unsafe retained state"
+                ):
+                    preflight.validate_private_host_inputs(environment)
+                (guide_socket_root / "guide.sock").unlink()
+                guide_socket_root.chmod(0o700)
+                with self.assertRaisesRegex(preflight.PreflightError, "wrong mode"):
+                    preflight.validate_private_host_inputs(environment)
+                guide_socket_root.chmod(0o750)
                 environment["WORKSTREAM_DOCKER_SOCKET_GID"] = str(
                     docker_socket.stat().st_gid + 1
                 )
@@ -1033,9 +1219,7 @@ class HostedReleaseConfigTests(unittest.TestCase):
                 ),
             ):
                 preflight.validate_private_host_inputs(environment)
-            environment["WORKSTREAM_PROJECT_AGENT_API_KEY_FILE"] = str(
-                secret_paths[-1]
-            )
+            environment["WORKSTREAM_PROJECT_AGENT_API_KEY_FILE"] = str(secret_paths[-1])
             socket_identity = socket_root / "negative-key.pem"
             socket_identity.write_text("private", encoding="utf-8")
             socket_identity.chmod(0o400)
@@ -1194,6 +1378,12 @@ class ReleaseSecretLoaderTests(unittest.TestCase):
             "OPENAI_API_KEY",
             "OPENROUTER_API_KEY",
             "WORKSTREAM_PROJECT_AGENT_API_KEY",
+            "WORKSTREAM_ARTIFACT_S3_ACCESS_KEY_ID",
+            "WORKSTREAM_ARTIFACT_S3_SECRET_ACCESS_KEY",
+            "WORKSTREAM_ARTIFACT_S3_SESSION_TOKEN",
+            "WORKSTREAM_FLOW_AUTH_LOCAL_HMAC_SECRET",
+            "WORKSTREAM_DEV_AUTH_TOKEN",
+            "WORKSTREAM_TOKEN_INTROSPECTION_CLIENT_SECRET",
         }:
             environment[secret_name] = "ambient-value-must-not-survive"
         if override is not None:
@@ -1202,6 +1392,13 @@ class ReleaseSecretLoaderTests(unittest.TestCase):
             environment.pop(unset_selector, None)
         environment["WORKSTREAM_RELEASE_ROLE"] = role
         environment["WORKSTREAM_PROJECT_AGENT_MODEL_PROVIDER"] = provider
+        environment["WORKSTREAM_ARTIFACT_S3_ROLES_ANYWHERE_CERTIFICATE_FILE"] = (
+            "/run/private/certificate.pem"
+        )
+        environment["WORKSTREAM_ARTIFACT_S3_ROLES_ANYWHERE_PRIVATE_KEY_FILE"] = (
+            "/run/private/private-key.pem"
+        )
+        environment["EXPECT_PARSER_SELECTOR_SCRUB"] = "1" if role == "parser" else "0"
         expected = {self.FILE_TO_SECRET[key] for key in self.ROLE_FILES.get(role, ())}
         if role == "worker" and provider == "openai":
             expected.remove("OPENROUTER_API_KEY")
@@ -1216,11 +1413,20 @@ class ReleaseSecretLoaderTests(unittest.TestCase):
             "all_names={'WORKSTREAM_DATABASE_URL','WORKSTREAM_CELERY_BROKER_URL',"
             "'WORKSTREAM_API_RATE_LIMIT_KEY_SECRET',"
             "'WORKSTREAM_PAGINATION_CURSOR_HMAC_SECRET','OPENAI_API_KEY',"
-            "'OPENROUTER_API_KEY','WORKSTREAM_PROJECT_AGENT_API_KEY'};"
+            "'OPENROUTER_API_KEY','WORKSTREAM_PROJECT_AGENT_API_KEY',"
+            "'WORKSTREAM_ARTIFACT_S3_ACCESS_KEY_ID',"
+            "'WORKSTREAM_ARTIFACT_S3_SECRET_ACCESS_KEY',"
+            "'WORKSTREAM_ARTIFACT_S3_SESSION_TOKEN',"
+            "'WORKSTREAM_FLOW_AUTH_LOCAL_HMAC_SECRET','WORKSTREAM_DEV_AUTH_TOKEN',"
+            "'WORKSTREAM_TOKEN_INTROSPECTION_CLIENT_SECRET'};"
             "assert all((hashlib.sha256(os.environ[name].encode()).hexdigest()"
             "==os.environ['EXPECTED_SECRET_SHA256']) for name in expected);"
             "assert all(name not in os.environ for name in all_names-expected);"
             f"assert all(name not in os.environ for name in {set(self.FILE_TO_SECRET) | {'OPENAI_API_KEY_FILE'}!r});"
+            "assert os.environ['EXPECT_PARSER_SELECTOR_SCRUB']=='0' or all("
+            "name not in os.environ for name in {"
+            "'WORKSTREAM_ARTIFACT_S3_ROLES_ANYWHERE_CERTIFICATE_FILE',"
+            "'WORKSTREAM_ARTIFACT_S3_ROLES_ANYWHERE_PRIVATE_KEY_FILE'});"
             "assert 'WORKSTREAM_RELEASE_ROLE' not in os.environ;"
             "print('loader-ok')"
         )
