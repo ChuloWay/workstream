@@ -317,11 +317,11 @@ Keep infrastructure failures separate from work failures: missing support/materi
 capacity, deadline, provider failure and invalid output cannot consume revision rounds.
 
 DEPENDENCIES
-Specs grant no access. Images receive verified material, manifest, configuration
-and request metadata, not guide prose, provider
-keys or nested environments. POST model_evaluation requires model_service/model_proxy,
-implementation_unavailable, a registered image and exact profile; else stays
-unbound. Declare unavailable needs explicitly;
+Specs give no access. Images get verified material, manifest, config and
+request, not guide prose, provider keys or nested environments. POST
+model_evaluation requires model_service/model_proxy, implementation_unavailable,
+a registered project image and its exact approved profile; else stays unbound.
+Declare unavailable needs explicitly;
 a supported binding cannot depend on runtime_gap. current_runner isolates the
 checker image only; it supplies no container engine, second sandbox or host socket.
 Follow the schema's exact dependency kind/provisioning/unavailable_code pairs.

@@ -812,6 +812,35 @@ def test_proposal_rejects_pre_model_evaluation_and_validates_post_runtime_gaps(c
         assert_failure(invoke(cli, origin), "invalid_api_response")
 
 
+def test_proposal_accepts_supported_execution_with_model_proxy(cli):
+    from app.modules.projects.api.guide_proposal_package import (
+        GuideProposalReviewPackage,
+    )
+
+    with http_fixture() as (origin, response, _):
+        value = proposal()
+        dependencies = value["result"]["requirements"][1]["check_specification"][
+            "runtime_dependencies"
+        ]
+        dependencies.append(
+            {
+                "dependency_id": "quality_model",
+                "kind": "model_service",
+                "provisioning": "model_proxy",
+                "purpose": "Assess the authenticated execution observations.",
+                "unavailable_code": "implementation_unavailable",
+            }
+        )
+        GuideProposalReviewPackage.model_validate(value)
+        response["body"] = json.dumps(value).encode()
+        accepted = invoke(cli, origin)
+        assert accepted.returncode == 0 and json.loads(accepted.stdout) == value
+
+        dependencies[-1]["provisioning"] = "runtime_gap"
+        response["body"] = json.dumps(value).encode()
+        assert_failure(invoke(cli, origin), "invalid_api_response")
+
+
 def test_proposal_rejects_malformed_nested_types_and_incomplete_policy_identity(cli):
     cases = [
         (("current",), "yes"),
