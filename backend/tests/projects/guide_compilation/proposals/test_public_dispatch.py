@@ -6,6 +6,7 @@ import pytest
 from sqlalchemy import text
 
 from app.core.identifiers import new_record_id
+from app.modules.projects.api.guide_compilation import ProjectGuideCompilationDelivery
 from app.modules.projects.api.setup_identity import project_guide_compilation_task_id
 from tests.projects.guide_compilation.runtime_fixtures import (
     ScriptedGuideRuntime,
@@ -137,10 +138,6 @@ async def test_manual_dispatch_retains_one_human_request_and_one_execution(
             def forbidden_automatic(*args):
                 pytest.fail("manual delivery invoked automatic request authority")
             monkeypatch.setattr(worker, "guide_compilation_request_authority", forbidden_automatic)
-            from app.modules.projects.api.guide_compilation import (
-                ProjectGuideCompilationDelivery,
-            )
-
             async def deliver():
                 return await worker._run_project_guide_compilation(
                     ProjectGuideCompilationDelivery(**payload)
