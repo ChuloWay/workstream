@@ -7,7 +7,7 @@ post-submit invocation. Every created container and image reference is recorded
 and removed explicitly; the probe never scans or prunes Docker state.
 
 Usage:
-  TMPDIR=/dev/shm python3 model_relay_docker.py \
+  TMPDIR=/absolute/daemon-visible/private-directory python3 model_relay_docker.py \
     --service /absolute/path/to/workstream-checker-service
 """
 
@@ -31,7 +31,7 @@ import time
 
 PROTOCOL = "external_checker_service.v1"
 GRANT_PROTOCOL = "workstream.external_checker_material_grant.v1"
-MODEL_PROTOCOL = "workstream.checker_model_proxy.v1"
+MODEL_PROTOCOL = "workstream.model_session.v2"
 MAX_FRAME = 1024 * 1024
 MODEL_GRANT_ID = "model_0123456789abcdef0123456789abcdef"
 MATERIAL_GRANT_ID = "extract_0123456789abcdef0123456789abcdef"
@@ -42,6 +42,8 @@ MODEL_REPLY = {
     "output": "docker-relay-ok",
     "receipt_digest": "sha256:" + "e" * 64,
     "failure_code": None,
+    "call_index": 0,
+    "session_exhausted": True,
 }
 
 
@@ -367,7 +369,7 @@ static int transfer(int fd, void *buffer, size_t length, int writing) {
 }
 
 int main(void) {
-  static const char body[] = "{\"prompt\":\"docker relay proof\"}";
+  static const char body[] = "{\"protocol_version\":\"workstream.model_session.v2\",\"operation\":\"call\",\"call_index\":0,\"prompt\":\"docker relay proof\",\"required_receipt_handles\":[]}";
   struct sockaddr_un address = {0};
   int descriptor = socket(AF_UNIX, SOCK_STREAM, 0);
   if (descriptor < 0) return 20;
@@ -442,7 +444,9 @@ def fake_proxy(
                     "protocol_version": MODEL_PROTOCOL,
                     "grant_id": MODEL_GRANT_ID,
                     "request_digest": expected_digest,
+                    "call_index": 0,
                     "prompt": PROMPT,
+                    "resolved_receipts": [],
                 }
                 if request != expected:
                     raise RuntimeError("proxy received a different closed request")
@@ -690,7 +694,9 @@ def main() -> None:
                             "protocol_version": MODEL_PROTOCOL,
                             "grant_id": MODEL_GRANT_ID,
                             "request_digest": request["request_digest"],
+                            "call_index": 0,
                             "prompt": PROMPT,
+                            "resolved_receipts": [],
                         },
                         "reply": MODEL_REPLY["output"],
                         "checker_container_removed": True,

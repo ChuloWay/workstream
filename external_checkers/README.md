@@ -148,12 +148,14 @@ and makes no provider call:
 ```console
 CARGO_TARGET_DIR=/dev/shm/workstream-checker-target \
   cargo build --locked -p workstream-checker-service
-TMPDIR=/dev/shm python3 \
+TMPDIR=/absolute/daemon-visible/private-directory python3 \
   workstream-checker-service/tests/model_relay_docker.py \
   --service /dev/shm/workstream-checker-target/debug/workstream-checker-service
 ```
 
-Run those commands from `external_checkers/`. The probe never pulls images,
+Run those commands from `external_checkers/`. Set `TMPDIR` to a private directory
+that resolves to the same files in both the command process and the Docker daemon;
+a service-private `/tmp` or `/dev/shm` may not be shared. The probe never pulls images,
 scans Docker state for cleanup, or qualifies the gVisor path. Its fake reply is
 transport evidence only; it does not prove provider execution, budget settlement,
 or a completed product model-evaluation journey.

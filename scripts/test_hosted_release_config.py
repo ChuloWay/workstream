@@ -309,12 +309,18 @@ class HostedReleaseConfigTests(unittest.TestCase):
                 "read_only", False
             )
         )
-        for name in ("api", "beat", "checker-service", *preflight.PROOF_SERVICES):
+        for name in ("api", "beat", *preflight.PROOF_SERVICES):
             self.assertNotIn(
                 model_socket_root,
                 preflight._service_mounts(services[name]),
             )
         checker_mounts = preflight._service_mounts(services["checker-service"])
+        self.assertTrue(checker_mounts[model_socket_root]["read_only"])
+        relay_root = str(preflight.MODEL_RELAY_ROOT)
+        self.assertEqual(checker_mounts[relay_root]["source"], relay_root)
+        self.assertFalse(checker_mounts[relay_root].get("read_only", False))
+        for name in ("api", "worker", "beat", "model-proxy", *preflight.PROOF_SERVICES):
+            self.assertNotIn(relay_root, preflight._service_mounts(services[name]))
         self.assertNotIn(
             str(preflight.ROLES_ANYWHERE_CERTIFICATE_TARGET), checker_mounts
         )
@@ -1057,6 +1063,66 @@ class HostedReleaseConfigTests(unittest.TestCase):
         with self.assertRaises(preflight.PreflightError):
             preflight.validate_checker_config(changed, self.environment)
 
+    def test_model_runtime_requires_usable_host_socket(self) -> None:
+        config = self.checker | {"cache": []}
+        for arguments in ([], ["--host-uds=none"], ["--host-uds=open", "--host-uds=none"]):
+            with self.subTest(arguments=arguments), patch.object(
+                preflight, "_run_json", return_value={"runsc": {"runtimeArgs": arguments}}
+            ):
+                with self.assertRaisesRegex(preflight.PreflightError, "host-uds"):
+                    preflight.validate_docker_runtime(config, self.environment)
+        with patch.object(
+            preflight, "_run_json",
+            return_value={"runsc": {"runtimeArgs": ["--host-uds=open"]}},
+        ):
+            preflight.validate_docker_runtime(config, self.environment)
+        with patch.object(
+            preflight, "_run_json", return_value={"runsc": {"runtimeArgs": []}}
+        ):
+            preflight.validate_docker_runtime(
+                config, self.environment | {"WORKSTREAM_MODEL_PROXY_ENABLED": "false"}
+            )
+
+    def test_checker_model_paths_require_enabled_exact_proxy_topology(self) -> None:
+        for key in ("model_proxy_socket", "model_relay_root"):
+            for replacement in (None, "/tmp/substituted"):
+                with self.subTest(key=key, replacement=replacement):
+                    changed = copy.deepcopy(self.checker)
+                    changed[key] = replacement
+                    with self.assertRaises(preflight.PreflightError):
+                        preflight.validate_checker_config(changed, self.environment)
+        disabled = self.environment | {"WORKSTREAM_MODEL_PROXY_ENABLED": "false"}
+        with self.assertRaises(preflight.PreflightError):
+            preflight.validate_checker_config(self.checker, disabled)
+        ordinary = copy.deepcopy(self.checker)
+        del ordinary["model_proxy_socket"]
+        del ordinary["model_relay_root"]
+        preflight.validate_checker_config(ordinary, disabled)
+
+    def test_rendered_checker_model_relay_cannot_lose_custody(self) -> None:
+        rendered = preflight.render_compose(self.environment_path, self.environment)
+        for target, read_only in (
+            (str(preflight.MODEL_SOCKET_ROOT), False),
+            (str(preflight.MODEL_RELAY_ROOT), True),
+        ):
+            for change in ("remove", "mode", "source"):
+                with self.subTest(target=target, change=change):
+                    changed = copy.deepcopy(rendered)
+                    mounts = changed["services"]["checker-service"]["volumes"]
+                    selected = next(m for m in mounts if m["target"] == target)
+                    if change == "remove":
+                        mounts.remove(selected)
+                    elif change == "mode":
+                        selected["read_only"] = read_only
+                    else:
+                        selected["source"] = "/tmp/substituted"
+                    with self.assertRaises(preflight.PreflightError):
+                        preflight.validate_compose(changed, self.environment)
+        changed = copy.deepcopy(rendered)
+        del changed["services"]["checker-service"]["depends_on"]["model-proxy"]
+        with self.assertRaises(preflight.PreflightError):
+            preflight.validate_compose(changed, self.environment)
+
     def test_rendered_topology_rejects_privilege_and_path_drift(self) -> None:
         rendered = preflight.render_compose(self.environment_path, self.environment)
         cases = []
@@ -1317,10 +1383,12 @@ class HostedReleaseConfigTests(unittest.TestCase):
         scratch = self.root / "scratch"
         socket_root = self.root / "socket"
         model_socket_root = self.root / "model-socket"
+        model_relay_root = self.root / "model-relays"
         guide_socket_root = self.root / "guide-socket"
         scratch.mkdir(mode=0o700)
         socket_root.mkdir(mode=0o700)
         model_socket_root.mkdir(mode=0o700)
+        model_relay_root.mkdir(mode=0o700)
         guide_socket_root.mkdir(mode=0o750)
         host_uid = os.getuid()
         host_gid = os.getgid()
@@ -1349,6 +1417,7 @@ class HostedReleaseConfigTests(unittest.TestCase):
                 patch.object(preflight, "SCRATCH_ROOT", scratch),
                 patch.object(preflight, "SOCKET_ROOT", socket_root),
                 patch.object(preflight, "MODEL_SOCKET_ROOT", model_socket_root),
+                patch.object(preflight, "MODEL_RELAY_ROOT", model_relay_root),
                 patch.object(
                     preflight,
                     "MODEL_SOCKET_PATH",
@@ -1365,6 +1434,10 @@ class HostedReleaseConfigTests(unittest.TestCase):
                 patch.object(preflight, "DOCKER_SOCKET", docker_socket),
             ):
                 preflight.validate_private_host_inputs(environment)
+                model_relay_root.chmod(0o755)
+                with self.assertRaisesRegex(preflight.PreflightError, "wrong mode"):
+                    preflight.validate_private_host_inputs(environment)
+                model_relay_root.chmod(0o700)
                 guide_listener = socket.socket(socket.AF_UNIX)
                 guide_listener.bind(str(guide_socket_root / "guide.sock"))
                 (guide_socket_root / "guide.sock").chmod(0o660)
@@ -1415,6 +1488,7 @@ class HostedReleaseConfigTests(unittest.TestCase):
                 patch.object(preflight, "SCRATCH_ROOT", scratch),
                 patch.object(preflight, "SOCKET_ROOT", socket_root),
                 patch.object(preflight, "MODEL_SOCKET_ROOT", model_socket_root),
+                patch.object(preflight, "MODEL_RELAY_ROOT", model_relay_root),
                 patch.object(
                     preflight,
                     "MODEL_SOCKET_PATH",
@@ -1449,6 +1523,7 @@ class HostedReleaseConfigTests(unittest.TestCase):
                 patch.object(preflight, "SCRATCH_ROOT", scratch),
                 patch.object(preflight, "SOCKET_ROOT", socket_root),
                 patch.object(preflight, "MODEL_SOCKET_ROOT", model_socket_root),
+                patch.object(preflight, "MODEL_RELAY_ROOT", model_relay_root),
                 patch.object(
                     preflight,
                     "MODEL_SOCKET_PATH",
@@ -1480,6 +1555,7 @@ class HostedReleaseConfigTests(unittest.TestCase):
                 patch.object(preflight, "SCRATCH_ROOT", scratch),
                 patch.object(preflight, "SOCKET_ROOT", socket_root),
                 patch.object(preflight, "MODEL_SOCKET_ROOT", model_socket_root),
+                patch.object(preflight, "MODEL_RELAY_ROOT", model_relay_root),
                 patch.object(
                     preflight,
                     "MODEL_SOCKET_PATH",
@@ -1505,6 +1581,7 @@ class HostedReleaseConfigTests(unittest.TestCase):
                 patch.object(preflight, "SCRATCH_ROOT", scratch),
                 patch.object(preflight, "SOCKET_ROOT", socket_root),
                 patch.object(preflight, "MODEL_SOCKET_ROOT", model_socket_root),
+                patch.object(preflight, "MODEL_RELAY_ROOT", model_relay_root),
                 patch.object(
                     preflight,
                     "MODEL_SOCKET_PATH",
@@ -1536,6 +1613,7 @@ class HostedReleaseConfigTests(unittest.TestCase):
                 patch.object(preflight, "SCRATCH_ROOT", scratch),
                 patch.object(preflight, "SOCKET_ROOT", socket_root),
                 patch.object(preflight, "MODEL_SOCKET_ROOT", model_socket_root),
+                patch.object(preflight, "MODEL_RELAY_ROOT", model_relay_root),
                 patch.object(
                     preflight,
                     "MODEL_SOCKET_PATH",
