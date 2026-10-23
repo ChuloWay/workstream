@@ -91,6 +91,40 @@ struct FakeEngine {
     cleanup_confirmed: bool,
 }
 
+struct RetainedPublisher(Mutex<Option<CanonicalTrialReceipt>>);
+
+impl TrialReceiptPublisher for RetainedPublisher {
+    fn reserve_completed(
+        &self,
+        _subject: TrialEvidenceSubject,
+    ) -> Result<TrialReceiptReservation, TrialReceiptPublishFailure> {
+        let receipt = self.0.lock().unwrap().take().unwrap();
+        Ok(TrialReceiptReservation::Retained {
+            trial_evidence_id: "018f6f49-66b8-7d2a-bf4d-0e2eeaa00100".into(),
+            published: PublishedTrialReceipt {
+                receipt_handle: format!("trial_receipt_{}", "b".repeat(32)),
+                custody: TrialReceiptCustodyAck {
+                    binding_id: "018f6f49-66b8-7d2a-bf4d-0e2eeaa00101".into(),
+                    content_id: "018f6f49-66b8-7d2a-bf4d-0e2eeaa00102".into(),
+                    put_attempt_id: "018f6f49-66b8-7d2a-bf4d-0e2eeaa00103".into(),
+                    verification_receipt_id: "018f6f49-66b8-7d2a-bf4d-0e2eeaa00104".into(),
+                    content_sha256: receipt.receipt_digest.clone(),
+                    byte_count: receipt.byte_count,
+                },
+            },
+            receipt,
+        })
+    }
+
+    fn publish_completed(
+        &self,
+        _trial_evidence_id: &str,
+        _receipt: CanonicalTrialReceipt,
+    ) -> Result<PublishedTrialReceipt, TrialReceiptPublishFailure> {
+        panic!("retained receipt must not be republished")
+    }
+}
+
 impl TrialEngine for FakeEngine {
     fn execute(
         &self,
@@ -691,6 +725,62 @@ fn selected_but_unused_trial_capability_finishes_cleanly() {
     assert_eq!(finish.failure, None);
     assert!(!finish.plan_started && !finish.plan_completed);
     assert_eq!(engine.calls.load(Ordering::Relaxed), 0);
+}
+
+#[test]
+fn retained_receipt_skips_engine_and_accepts_new_worker_provenance() {
+    let first = start(true);
+    let first_response = exchange(first.relay.socket_path(), &request(plan()));
+    assert_eq!(first_response["outcome"], "completed");
+    let value = first.publisher.0.lock().unwrap()[0].clone();
+    assert_eq!(first.relay.finish().failure, None);
+    let canonical_bytes = serde_json::to_vec(&value).unwrap();
+    let receipt = CanonicalTrialReceipt {
+        receipt_digest: text_digest(&String::from_utf8(canonical_bytes.clone()).unwrap()),
+        byte_count: canonical_bytes.len(),
+        facts: serde_json::from_value(value).unwrap(),
+        canonical_bytes,
+    };
+
+    let root = TestRoot::new();
+    let metadata = fs::metadata(&root.0).unwrap();
+    let mut retried = identity();
+    retried.request_digest = digest('f');
+    retried.evaluation_request_id = "018f6f49-66b8-7d2a-bf4d-0e2eeaa00200".into();
+    retried.evaluation_generation += 1;
+    retried.checker_run_id = "018f6f49-66b8-7d2a-bf4d-0e2eeaa00201".into();
+    retried.attempt_id = "018f6f49-66b8-7d2a-bf4d-0e2eeaa00202".into();
+    retried.result_id = "018f6f49-66b8-7d2a-bf4d-0e2eeaa00203".into();
+    retried.worker_lease_id = "018f6f49-66b8-7d2a-bf4d-0e2eeaa00204".into();
+    retried.worker_lease_generation += 1;
+    let engine = Arc::new(FakeEngine {
+        calls: AtomicUsize::new(0),
+        cleanup_confirmed: true,
+    });
+    let relay = TrialRelay::start(
+        &root.child("relay"),
+        &root.child("material"),
+        &root.child("scratch"),
+        &retried,
+        &profile(),
+        Arc::new(RetainedPublisher(Mutex::new(Some(receipt)))),
+        engine.clone(),
+        metadata.uid(),
+        metadata.gid(),
+        Instant::now() + Duration::from_secs(2),
+        Arc::new(AtomicBool::new(false)),
+    )
+    .unwrap();
+    let response = exchange(relay.socket_path(), &request(plan()));
+    assert_eq!(response["outcome"], "completed");
+    assert_eq!(
+        response["receipt_handle"],
+        format!("trial_receipt_{}", "b".repeat(32))
+    );
+    assert_eq!(engine.calls.load(Ordering::Relaxed), 0);
+    let finish = relay.finish();
+    assert_eq!(finish.failure, None);
+    assert!(!finish.plan_started && finish.plan_completed);
 }
 
 #[test]
