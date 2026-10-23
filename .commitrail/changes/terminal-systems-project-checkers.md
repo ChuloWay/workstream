@@ -133,6 +133,14 @@ uses the closed `post_submit_current_result_reference` discriminator, after
 which the existing three-role MinIO regression must replay against the corrected
 schema hash. This is retained validation evidence, not a second test surface.
 
+The shared model invocation lineage now has a foreign key to the external
+checker registry. PostgreSQL therefore rejects registry `TRUNCATE` at its
+referential-integrity boundary before the registry's immutable statement
+trigger runs; `UPDATE` and `DELETE` still exercise that trigger directly. The
+regression accepts only those two explicit denial paths and rechecks that the
+registry and audit snapshot is unchanged, so this ordering change does not
+weaken immutability.
+
 `backend/tests/test_checker_evidence_migrations.py` qualifies retained checker,
 checker-model and setup-model ART rows across 0061 to the current head. Current
 ORM fixtures may use only nullable projection columns during arrangement; those

@@ -416,15 +416,25 @@ async def test_registry_rejects_update_delete_truncate_and_unauthorized_insert(
     request = registration_request(actor_profile_id=admin_access.target.id)
     await _register(admin_access, request)
 
+    baseline = await _snapshot()
     for statement in (
         "update external_checker_registry_entries set capability_version='v2'",
         "delete from external_checker_registry_entries",
-        "truncate external_checker_registry_entries",
     ):
         async with db_session.get_session_factory()() as session:
             with pytest.raises(DBAPIError, match="external checker registry is immutable"):
                 async with session.begin():
                     await session.execute(text(statement))
+        assert await _snapshot() == baseline
+
+    async with db_session.get_session_factory()() as session:
+        with pytest.raises(DBAPIError) as truncate_error:
+            async with session.begin():
+                await session.execute(text("truncate external_checker_registry_entries"))
+    truncate_message = str(truncate_error.value)
+    assert "cannot truncate a table referenced in a foreign key constraint" in truncate_message
+    assert 'references "external_checker_registry_entries"' in truncate_message
+    assert await _snapshot() == baseline
 
     spec = registry_spec("post_submit")
     async with db_session.get_session_factory()() as session:
