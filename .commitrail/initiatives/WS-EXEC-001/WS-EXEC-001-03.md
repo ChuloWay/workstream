@@ -1,7 +1,7 @@
 # WS-EXEC-001-03 — Deployment and public microVM journey
 
 - Initiative: WS-EXEC-001
-- Durable disposition: Planned
+- Durable disposition: Complete
 - Intended merge outcome: deploy the typed intake/execution capabilities coherently and prove public upload through durable governed outcome on an isolated self-hosted Smol node.
 
 ## Intent
@@ -176,9 +176,30 @@ public-to-durable custody, retry safety and exact contribution evidence.
 
 ## Evidence
 
-Future proof: existing hosted-release tests extended with missing-intake mutants;
-existing public journey probe extended with explicit node/intake and bounded
-upload/cancel observations; real EC2 KVM/PG/MinIO/Redis execution, exact durable
-readback and source/image custody. No proof is claimed by this plan. Boundary 2
-reviews/integration are still active; this is planning for the already-authorized
-final boundary, not a completed capability or merge permission.
+The isolated EC2 public journey passes on real KVM, PostgreSQL, MinIO and Redis,
+with the API, Celery prefork worker and Beat. It exercises original public guide
+setup/approvals, authorized upload overlap and cancellation, zero/two project PRE
+bindings, first-failure stop, immutable Submission, revision, launch retry/exhaustion,
+controller death/epoch recovery and durable POST failure followed by public Operator
+retry generation 2. Every recovery checks owned cleanup and preserved foreign
+controls. Human review remains pending with no final facts; automatic acceptance
+creates one FinalAcceptance, one submitter ContributionRecord and one 7 PTS award,
+with no Review. Duplicate delivery and late authority revocation preserve those facts.
+Database and MinIO cleanup complete. Source/image/binary identities and exact run
+receipts remain in the PR evidence; no production deployment is inferred.
+
+The public two-binding trial exposed ART's sequential grant-layout defect; its
+repair and discriminating PRE/POST regressions belong to boundary 2. Review also
+strengthened the proof itself: independently supplied node/binary custody, exact
+controller kill and disk cleanup, explicit idle-node checks under optimized Python,
+CI ownership of safety tests, one-slot enforcement, fixture-derived artifact hashes,
+request-correlated execution counts, cancellation resource readback and per-machine
+original retry leases. The timeout trial requires `deadline_exceeded` at the original
+lease expiry, with no in-session retry. Required hosted checks and reviewer freshness
+are reported against the final PR candidate, not stored as durable workflow state.
+
+The 33 hosted configuration tests and focused negative fault-control tests preserve
+existing release gates. The drill intentionally uses recorded guide inference and
+a local Flow verifier fixture; MinIO establishes the S3 protocol, not native AWS
+activation. Intended hosted deployment and actual external-model invocation remain
+separate. No shared EC2 service or product business owner was changed.
