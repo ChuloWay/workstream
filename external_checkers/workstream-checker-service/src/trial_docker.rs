@@ -2012,10 +2012,7 @@ impl<C: RuntimeControl> TrialSandboxBackend for DockerTrialBackend<C> {
             "--cap-add".into(),
             "SYS_CHROOT".into(),
             self.config.builder_image_id.clone(),
-            format!(
-                "--dockerfile=/workspace/{}/{}",
-                request.context_relative, request.dockerfile_relative
-            ),
+            format!("--dockerfile=/workspace/{}", request.dockerfile_relative),
             format!("--context=dir:///workspace/{}", request.context_relative),
             "--cache=true".into(),
             "--cache-dir=/cache".into(),

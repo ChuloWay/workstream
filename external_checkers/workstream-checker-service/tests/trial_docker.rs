@@ -248,8 +248,8 @@ fn backend_emits_offline_bounded_builder_and_socketless_candidate_specs() {
             &SandboxBuildRequest {
                 owner_id: format!("trial_{}", "a".repeat(32)),
                 context_root: context,
-                context_relative: ".".into(),
-                dockerfile_relative: "Containerfile".into(),
+                context_relative: "environment".into(),
+                dockerfile_relative: "environment/Containerfile".into(),
                 output_archive: output.join("candidate.tar"),
                 destination: "workstream-trial:test".into(),
                 platform: "linux/amd64".into(),
@@ -306,6 +306,15 @@ fn backend_emits_offline_bounded_builder_and_socketless_candidate_specs() {
     );
     assert!(!builder.iter().any(|item| item == "--privileged"));
     assert!(!builder.iter().any(|item| item == "--mount"));
+    assert!(builder
+        .iter()
+        .any(|item| item == "--dockerfile=/workspace/environment/Containerfile"));
+    assert!(builder
+        .iter()
+        .any(|item| item == "--context=dir:///workspace/environment"));
+    assert!(!builder.iter().any(|item| {
+        item == "--dockerfile=/workspace/environment/environment/Containerfile"
+    }));
     assert_eq!(creates[0].mounts.len(), 3);
     assert_eq!(
         creates[0].mounts[0].class,
