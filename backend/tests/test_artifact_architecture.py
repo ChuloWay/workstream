@@ -379,7 +379,7 @@ def _assert_concrete_adapter_composition(
         )
     assert Counter(factory_calls) == {
         COMPOSITION_ROOT: 1,
-        CHECKER_COMPOSITION_ROOT: 1,
+        CHECKER_COMPOSITION_ROOT: 2,
         # Inference and retained-resource cleanup are distinct typed capabilities.
         AGENT_COMPOSITION_ROOT: 2,
         OBSERVABILITY_COMPOSITION_ROOT: 1,
