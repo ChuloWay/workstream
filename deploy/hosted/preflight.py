@@ -13,14 +13,22 @@ import re
 import stat
 import subprocess
 import sys
+import time
 from typing import Any
+from uuid import UUID
 
 
 COMPOSE_PATH = Path(__file__).with_name("compose.yml")
 SCRATCH_ROOT = Path("/var/lib/workstream/scratch")
-SOCKET_ROOT = Path("/run/workstream-checker")
+SOCKET_ROOT = Path("/var/lib/workstream/checker-runtime")
 SOCKET_PATH = SOCKET_ROOT / "checker.sock"
 DOCKER_SOCKET = Path("/var/run/docker.sock")
+ROLES_ANYWHERE_CERTIFICATE_TARGET = Path(
+    "/run/workstream-roles-anywhere/certificate.pem"
+)
+ROLES_ANYWHERE_PRIVATE_KEY_TARGET = Path(
+    "/run/workstream-roles-anywhere/private-key.pem"
+)
 DIGEST = re.compile(r"sha256:[0-9a-f]{64}\Z")
 IMAGE_REFERENCE = re.compile(r"[^\s@]+@sha256:[0-9a-f]{64}\Z")
 ENVIRONMENT_KEY = re.compile(r"[A-Z][A-Z0-9_]*\Z")
@@ -60,7 +68,10 @@ ROLE_SECRET_FILE_KEYS = {
         "WORKSTREAM_CELERY_BROKER_URL_FILE",
         "OPENAI_API_KEY_FILE",
     ),
-    "beat": ("WORKSTREAM_CELERY_BROKER_URL_FILE",),
+    "beat": (
+        "WORKSTREAM_DATABASE_URL_FILE",
+        "WORKSTREAM_CELERY_BROKER_URL_FILE",
+    ),
 }
 FORBIDDEN_RELEASE_KEYS = (
     "AWS_ACCESS_KEY_ID",
@@ -87,7 +98,7 @@ FORBIDDEN_RENDERED_KEYS = tuple(
     key for key in FORBIDDEN_RELEASE_KEYS if key != "WORKSTREAM_DEBUG"
 )
 EXACT_RELEASE_VALUES = {
-    "WORKSTREAM_ARTIFACT_S3_AWS_WORKLOAD_IDENTITY_METHOD": {"iam-role"},
+    "WORKSTREAM_ARTIFACT_S3_AWS_WORKLOAD_IDENTITY_METHOD": {"roles-anywhere"},
     "WORKSTREAM_TOKEN_INTROSPECTION_MODE": {"disabled"},
 }
 TIMEOUT_KEYS = (
@@ -111,7 +122,29 @@ AWS_S3_EVIDENCE_KEYS = (
     "WORKSTREAM_ARTIFACT_S3_NEGATIVE_TRUST_POLICY_SHA256",
     "WORKSTREAM_ARTIFACT_S3_BOOTSTRAP_PRINCIPAL_ARN",
     "WORKSTREAM_ARTIFACT_S3_BUCKET_POLICY_SHA256",
+    "WORKSTREAM_ARTIFACT_S3_ROLES_ANYWHERE_TRUST_ANCHOR_ARN",
+    "WORKSTREAM_ARTIFACT_S3_ROLES_ANYWHERE_TRUST_ANCHOR_SHA256",
+    "WORKSTREAM_ARTIFACT_S3_ROLES_ANYWHERE_PROFILE_ARN",
+    "WORKSTREAM_ARTIFACT_S3_ROLES_ANYWHERE_PROFILE_SHA256",
 )
+ROLES_ANYWHERE_HOST_FILE_KEYS = (
+    "WORKSTREAM_ARTIFACT_S3_ROLES_ANYWHERE_RUNTIME_CERTIFICATE_HOST_FILE",
+    "WORKSTREAM_ARTIFACT_S3_ROLES_ANYWHERE_RUNTIME_PRIVATE_KEY_HOST_FILE",
+    "WORKSTREAM_ARTIFACT_S3_ROLES_ANYWHERE_READINESS_CERTIFICATE_HOST_FILE",
+    "WORKSTREAM_ARTIFACT_S3_ROLES_ANYWHERE_READINESS_PRIVATE_KEY_HOST_FILE",
+    "WORKSTREAM_ARTIFACT_S3_ROLES_ANYWHERE_NEGATIVE_CERTIFICATE_HOST_FILE",
+    "WORKSTREAM_ARTIFACT_S3_ROLES_ANYWHERE_NEGATIVE_PRIVATE_KEY_HOST_FILE",
+)
+PROOF_SERVICES = {
+    "aws-proof-runtime": "runtime_immutability",
+    "aws-proof-readiness": "readiness",
+    "aws-proof-negative": "negative_access",
+    "aws-proof-coordinate": "coordinate",
+}
+PROOF_GROUP_TIMEOUT_SECONDS = 120.0
+PROOF_CLEANUP_RESERVE_SECONDS = 10.0
+PROOF_INNER_KILL_AFTER_SECONDS = 5
+PROOF_TIMEOUT_RETURN_CODE = 124
 REQUIRED_RELEASE_KEYS = (
     "COMPOSE_PROJECT_NAME",
     "WORKSTREAM_BACKEND_IMAGE",
@@ -132,6 +165,7 @@ REQUIRED_RELEASE_KEYS = (
     "WORKSTREAM_ARTIFACT_S3_PRIVATE_PREFIX",
     "WORKSTREAM_ARTIFACT_S3_AWS_WORKLOAD_IDENTITY_METHOD",
     "WORKSTREAM_CHECKER_CONFIG_FILE",
+    *ROLES_ANYWHERE_HOST_FILE_KEYS,
     *AWS_S3_EVIDENCE_KEYS,
     *TIMEOUT_KEYS,
     *SECRET_FILE_KEYS,
@@ -167,7 +201,9 @@ def parse_environment(path: Path) -> dict[str, str]:
         key = key.strip()
         value = value.strip()
         if not ENVIRONMENT_KEY.fullmatch(key) or key in values:
-            raise PreflightError(f"release environment line {number} has an invalid key")
+            raise PreflightError(
+                f"release environment line {number} has an invalid key"
+            )
         if len(value) >= 2 and value[0] == value[-1] and value[0] in {'"', "'"}:
             value = value[1:-1]
         values[key] = value
@@ -193,7 +229,9 @@ def _positive_decimal(values: dict[str, str], key: str) -> Decimal:
     try:
         value = Decimal(raw)
     except InvalidOperation as exc:
-        raise PreflightError(f"release setting must be a finite positive number: {key}") from exc
+        raise PreflightError(
+            f"release setting must be a finite positive number: {key}"
+        ) from exc
     if not value.is_finite() or value <= 0:
         raise PreflightError(f"release setting must be a finite positive number: {key}")
     return value
@@ -203,7 +241,9 @@ def validate_environment(values: dict[str, str]) -> None:
     """Validate only invariants introduced by the hosted release profile."""
     unknown = sorted(set(values) - RELEASE_KEYS)
     if unknown:
-        raise PreflightError(f"release environment contains an unsupported key: {unknown[0]}")
+        raise PreflightError(
+            f"release environment contains an unsupported key: {unknown[0]}"
+        )
     for key in REQUIRED_RELEASE_KEYS:
         _required(values, key)
     for key in ("WORKSTREAM_BACKEND_IMAGE", "WORKSTREAM_CHECKER_SERVICE_IMAGE"):
@@ -217,7 +257,9 @@ def validate_environment(values: dict[str, str]) -> None:
         _positive_id(values, key)
     for key in FORBIDDEN_RELEASE_KEYS:
         if values.get(key):
-            raise PreflightError(f"development or static credential setting is forbidden: {key}")
+            raise PreflightError(
+                f"development or static credential setting is forbidden: {key}"
+            )
     for key, allowed in EXACT_RELEASE_VALUES.items():
         if _required(values, key) not in allowed:
             raise PreflightError(f"unsupported release setting: {key}")
@@ -230,6 +272,11 @@ def validate_environment(values: dict[str, str]) -> None:
     endpoint = values.get("WORKSTREAM_OBSERVABILITY_OTLP_ENDPOINT", "")
     if endpoint and not endpoint.startswith("https://"):
         raise PreflightError("production observability endpoint must use HTTPS")
+    identities = [Path(values[key]) for key in ROLES_ANYWHERE_HOST_FILE_KEYS]
+    if any(not path.is_absolute() for path in identities):
+        raise PreflightError("Roles Anywhere host identity paths must be absolute")
+    if len(set(identities)) != len(identities):
+        raise PreflightError("Roles Anywhere host identity paths must be distinct")
 
 
 def load_checker_config(path: Path) -> dict[str, Any]:
@@ -259,9 +306,13 @@ def validate_checker_config(config: dict[str, Any], values: dict[str, str]) -> N
     }
     for key, required in expected.items():
         if config.get(key) != required:
-            raise PreflightError(f"checker configuration has an unsafe release value: {key}")
+            raise PreflightError(
+                f"checker configuration has an unsafe release value: {key}"
+            )
     if config.get("architecture") not in {"amd64", "arm64"}:
-        raise PreflightError("checker architecture is unsupported by this release profile")
+        raise PreflightError(
+            "checker architecture is unsupported by this release profile"
+        )
     cache = config.get("cache")
     if not isinstance(cache, list) or not cache:
         raise PreflightError("checker cache must contain at least one approved image")
@@ -311,15 +362,35 @@ def validate_private_host_inputs(values: dict[str, str]) -> None:
     gid = _positive_id(values, "WORKSTREAM_RUNTIME_GID")
     _private_metadata(SCRATCH_ROOT, kind="directory", uid=uid, gid=gid, mode=0o700)
     _private_metadata(SOCKET_ROOT, kind="directory", uid=uid, gid=gid, mode=0o700)
-    _private_metadata(
+    private_paths = [
         Path(values["WORKSTREAM_CHECKER_CONFIG_FILE"]),
-        kind="file",
-        uid=uid,
-        gid=gid,
-        mode=0o400,
-    )
-    for key in SECRET_FILE_KEYS:
-        _private_metadata(Path(values[key]), kind="file", uid=uid, gid=gid, mode=0o400)
+        *(Path(values[key]) for key in SECRET_FILE_KEYS),
+        *(Path(values[key]) for key in ROLES_ANYWHERE_HOST_FILE_KEYS),
+    ]
+    for path in private_paths:
+        _private_metadata(path, kind="file", uid=uid, gid=gid, mode=0o400)
+    try:
+        shared_roots = (
+            SCRATCH_ROOT.resolve(strict=True),
+            SOCKET_ROOT.resolve(strict=True),
+        )
+        resolved_paths = [path.resolve(strict=True) for path in private_paths]
+    except (OSError, RuntimeError) as exc:
+        raise PreflightError("private host input identity is unavailable") from exc
+    if any(
+        path.is_relative_to(root) for path in resolved_paths for root in shared_roots
+    ):
+        raise PreflightError("private host inputs must remain outside shared roots")
+    try:
+        identities = [path.stat() for path in private_paths]
+    except OSError as exc:
+        raise PreflightError("private host input identity is unavailable") from exc
+    if any(
+        os.path.samestat(left, right)
+        for index, left in enumerate(identities)
+        for right in identities[index + 1 :]
+    ):
+        raise PreflightError("private host inputs must be distinct files")
     try:
         docker_socket = DOCKER_SOCKET.stat()
     except OSError as exc:
@@ -366,6 +437,8 @@ def render_compose(environment_path: Path, values: dict[str, str]) -> dict[str, 
             str(environment_path),
             "-f",
             str(COMPOSE_PATH),
+            "--profile",
+            "aws-proof",
             "config",
             "--format",
             "json",
@@ -382,7 +455,12 @@ def run_compose(
     environment_path: Path, values: dict[str, str], compose_arguments: list[str]
 ) -> int:
     """Run one documented Compose operation with no ambient interpolation."""
-    if not compose_arguments or compose_arguments[0] not in {"pull", "up", "ps", "stop"}:
+    if not compose_arguments or compose_arguments[0] not in {
+        "pull",
+        "up",
+        "ps",
+        "stop",
+    }:
         raise PreflightError("unsupported hosted Compose operation")
     try:
         completed = subprocess.run(
@@ -403,6 +481,80 @@ def run_compose(
     return completed.returncode
 
 
+def run_proof_group(
+    environment_path: Path, values: dict[str, str], group_nonce: UUID
+) -> int:
+    """Run the fixed proof sequence within one bounded, cleanup-reserved window."""
+    deadline = time.monotonic() + PROOF_GROUP_TIMEOUT_SECONDS
+    for service, mode in PROOF_SERVICES.items():
+        container_name = f"workstream-proof-{group_nonce.hex}-{service}"
+        try:
+            command_timeout = (
+                deadline - time.monotonic() - PROOF_CLEANUP_RESERVE_SECONDS
+            )
+            if command_timeout <= PROOF_INNER_KILL_AFTER_SECONDS + 1:
+                return PROOF_TIMEOUT_RETURN_CODE
+            inner_timeout = max(
+                1,
+                int(command_timeout - PROOF_INNER_KILL_AFTER_SECONDS - 1),
+            )
+            completed = subprocess.run(
+                [
+                    "docker",
+                    "compose",
+                    "--env-file",
+                    str(environment_path),
+                    "--file",
+                    str(COMPOSE_PATH),
+                    "--profile",
+                    "aws-proof",
+                    "run",
+                    "--rm",
+                    "--no-deps",
+                    "--name",
+                    container_name,
+                    service,
+                    "/usr/bin/timeout",
+                    "--signal=TERM",
+                    f"--kill-after={PROOF_INNER_KILL_AFTER_SECONDS}s",
+                    f"{inner_timeout}s",
+                    "python",
+                    "-m",
+                    "scripts.aws_artifact_provider_proof",
+                    mode,
+                    "--group-nonce",
+                    str(group_nonce),
+                ],
+                check=False,
+                env=compose_environment(values),
+                timeout=command_timeout,
+            )
+        except subprocess.TimeoutExpired:
+            return PROOF_TIMEOUT_RETURN_CODE
+        except OSError as exc:
+            raise PreflightError("hosted AWS proof job could not start") from exc
+        finally:
+            cleanup_timeout = min(
+                PROOF_CLEANUP_RESERVE_SECONDS,
+                max(0.0, deadline - time.monotonic()),
+            )
+            if cleanup_timeout > 0:
+                try:
+                    subprocess.run(
+                        ["docker", "rm", "--force", container_name],
+                        check=False,
+                        env=compose_environment(values),
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                        timeout=cleanup_timeout,
+                    )
+                except (OSError, subprocess.TimeoutExpired):
+                    pass
+        if completed.returncode != 0:
+            return completed.returncode
+    return 0
+
+
 def _service_mounts(service: dict[str, Any]) -> dict[str, dict[str, Any]]:
     volumes = service.get("volumes")
     if not isinstance(volumes, list):
@@ -414,7 +566,37 @@ def _service_mounts(service: dict[str, Any]) -> dict[str, dict[str, Any]]:
     }
 
 
-def validate_compose(rendered: dict[str, Any]) -> None:
+def _validate_exact_bind_mounts(
+    service_name: str,
+    service: dict[str, Any],
+    expected: dict[str, tuple[str, bool]],
+) -> None:
+    raw_mounts = service.get("volumes")
+    if raw_mounts is None:
+        raw_mounts = []
+    mounts = _service_mounts(service)
+    if (
+        not isinstance(raw_mounts, list)
+        or len(raw_mounts) != len(expected)
+        or len(mounts) != len(expected)
+        or set(mounts) != set(expected)
+    ):
+        raise PreflightError(
+            f"{service_name} bind mounts differ from the release profile"
+        )
+    for target, (source, read_only) in expected.items():
+        mount = mounts[target]
+        if (
+            mount.get("type") != "bind"
+            or mount.get("source") != source
+            or mount.get("read_only", False) is not read_only
+        ):
+            raise PreflightError(
+                f"{service_name} bind mount differs from the release profile: {target}"
+            )
+
+
+def validate_compose(rendered: dict[str, Any], values: dict[str, str]) -> None:
     """Check the rendered release process and privilege topology."""
     services = rendered.get("services")
     if not isinstance(services, dict) or set(services) != {
@@ -422,11 +604,22 @@ def validate_compose(rendered: dict[str, Any]) -> None:
         "worker",
         "beat",
         "checker-service",
+        *PROOF_SERVICES,
     }:
-        raise PreflightError("release Compose services differ from the bounded topology")
+        raise PreflightError(
+            "release Compose services differ from the bounded topology"
+        )
     for name, service in services.items():
         if not isinstance(service, dict) or service.get("build") is not None:
             raise PreflightError(f"release service cannot build at runtime: {name}")
+        if "volumes_from" in service:
+            raise PreflightError(
+                f"release service must not inherit another service's volumes: {name}"
+            )
+        if "configs" in service:
+            raise PreflightError(
+                f"release service must not receive Compose configs: {name}"
+            )
         image = service.get("image")
         if not isinstance(image, str) or not IMAGE_REFERENCE.fullmatch(image):
             raise PreflightError(f"release service image is mutable: {name}")
@@ -437,16 +630,107 @@ def validate_compose(rendered: dict[str, Any]) -> None:
         if "no-new-privileges:true" not in service.get("security_opt", []):
             raise PreflightError(f"release service allows new privileges: {name}")
         user = service.get("user")
-        if (
-            not isinstance(user, str)
-            or not re.fullmatch(r"[1-9][0-9]*:[1-9][0-9]*", user)
+        if not isinstance(user, str) or not re.fullmatch(
+            r"[1-9][0-9]*:[1-9][0-9]*", user
         ):
-            raise PreflightError(f"release service must use a numeric non-root identity: {name}")
+            raise PreflightError(
+                f"release service must use a numeric non-root identity: {name}"
+            )
     if len({service["user"] for service in services.values()}) != 1:
-        raise PreflightError("release services must share the configured runtime identity")
+        raise PreflightError(
+            "release services must share the configured runtime identity"
+        )
     backend_image = services["api"]["image"]
-    if services["worker"]["image"] != backend_image or services["beat"]["image"] != backend_image:
+    if (
+        services["worker"]["image"] != backend_image
+        or services["beat"]["image"] != backend_image
+    ):
         raise PreflightError("API, worker and Beat must use one exact backend image")
+    if any(services[name]["image"] != backend_image for name in PROOF_SERVICES):
+        raise PreflightError("AWS proof jobs must use the exact backend image")
+    runtime_identity_mounts = {
+        str(ROLES_ANYWHERE_CERTIFICATE_TARGET): (
+            values[
+                "WORKSTREAM_ARTIFACT_S3_ROLES_ANYWHERE_RUNTIME_CERTIFICATE_HOST_FILE"
+            ],
+            True,
+        ),
+        str(ROLES_ANYWHERE_PRIVATE_KEY_TARGET): (
+            values[
+                "WORKSTREAM_ARTIFACT_S3_ROLES_ANYWHERE_RUNTIME_PRIVATE_KEY_HOST_FILE"
+            ],
+            True,
+        ),
+    }
+    shared_backend_mounts = {
+        str(SCRATCH_ROOT): (str(SCRATCH_ROOT), False),
+        str(SOCKET_ROOT): (str(SOCKET_ROOT), True),
+    }
+    expected_mounts = {
+        "checker-service": {
+            "/etc/workstream/checker-service.json": (
+                values["WORKSTREAM_CHECKER_CONFIG_FILE"],
+                True,
+            ),
+            str(SCRATCH_ROOT): (str(SCRATCH_ROOT), True),
+            str(SOCKET_ROOT): (str(SOCKET_ROOT), False),
+            str(DOCKER_SOCKET): (str(DOCKER_SOCKET), False),
+        },
+        "api": shared_backend_mounts | runtime_identity_mounts,
+        "worker": shared_backend_mounts | runtime_identity_mounts,
+        "beat": {},
+        "aws-proof-runtime": runtime_identity_mounts,
+        "aws-proof-readiness": {
+            str(ROLES_ANYWHERE_CERTIFICATE_TARGET): (
+                values[
+                    "WORKSTREAM_ARTIFACT_S3_ROLES_ANYWHERE_READINESS_CERTIFICATE_HOST_FILE"
+                ],
+                True,
+            ),
+            str(ROLES_ANYWHERE_PRIVATE_KEY_TARGET): (
+                values[
+                    "WORKSTREAM_ARTIFACT_S3_ROLES_ANYWHERE_READINESS_PRIVATE_KEY_HOST_FILE"
+                ],
+                True,
+            ),
+        },
+        "aws-proof-negative": {
+            str(ROLES_ANYWHERE_CERTIFICATE_TARGET): (
+                values[
+                    "WORKSTREAM_ARTIFACT_S3_ROLES_ANYWHERE_NEGATIVE_CERTIFICATE_HOST_FILE"
+                ],
+                True,
+            ),
+            str(ROLES_ANYWHERE_PRIVATE_KEY_TARGET): (
+                values[
+                    "WORKSTREAM_ARTIFACT_S3_ROLES_ANYWHERE_NEGATIVE_PRIVATE_KEY_HOST_FILE"
+                ],
+                True,
+            ),
+        },
+        "aws-proof-coordinate": {},
+    }
+    for name, mounts in expected_mounts.items():
+        _validate_exact_bind_mounts(name, services[name], mounts)
+    expected_secret_files = {
+        secret_name: values[key]
+        for key, (secret_name, _target) in SECRET_FILE_TARGETS.items()
+    }
+    rendered_secrets = rendered.get("secrets")
+    if not isinstance(rendered_secrets, dict) or set(rendered_secrets) != set(
+        expected_secret_files
+    ):
+        raise PreflightError("release Compose secrets differ from the release profile")
+    for name, expected_file in expected_secret_files.items():
+        secret = rendered_secrets[name]
+        if (
+            not isinstance(secret, dict)
+            or secret.get("file") != expected_file
+            or set(secret) - {"name", "file"}
+        ):
+            raise PreflightError(
+                f"release Compose secret file differs from configuration: {name}"
+            )
     checker = services["checker-service"]
     if checker.get("network_mode") != "none" or checker.get("ports"):
         raise PreflightError("checker controller must be networkless and unpublished")
@@ -458,31 +742,51 @@ def validate_compose(rendered: dict[str, Any]) -> None:
         or not re.fullmatch(r"[1-9][0-9]*", checker_groups[0])
     ):
         raise PreflightError("checker controller must use only the Docker socket group")
-    checker_mounts = _service_mounts(checker)
-    docker_mount = checker_mounts.get(str(DOCKER_SOCKET))
-    material_mount = checker_mounts.get(str(SCRATCH_ROOT))
-    socket_mount = checker_mounts.get(str(SOCKET_ROOT))
-    config_mount = checker_mounts.get("/etc/workstream/checker-service.json")
-    if docker_mount is None or docker_mount.get("source") != str(DOCKER_SOCKET):
-        raise PreflightError("checker controller lacks the exact Docker socket")
-    if material_mount is None or material_mount.get("source") != str(SCRATCH_ROOT):
-        raise PreflightError("checker material path differs between host and controller")
-    if material_mount.get("read_only") is not True:
-        raise PreflightError("checker controller material view must be read-only")
-    if socket_mount is None or socket_mount.get("source") != str(SOCKET_ROOT):
-        raise PreflightError("checker controller lacks the exact private socket path")
-    if socket_mount.get("read_only") is True:
-        raise PreflightError("checker controller socket path must be writable")
-    if config_mount is None or config_mount.get("read_only") is not True:
-        raise PreflightError("checker controller config must be mounted read-only")
-    for name in ("api", "worker"):
-        mounts = _service_mounts(services[name])
-        for path in (SCRATCH_ROOT, SOCKET_ROOT):
-            mount = mounts.get(str(path))
-            if mount is None or mount.get("source") != str(path):
-                raise PreflightError(f"{name} does not preserve exact host path {path}")
-            if mount.get("read_only") is True:
-                raise PreflightError(f"{name} requires a writable private path {path}")
+    for name in ("aws-proof-runtime", "aws-proof-readiness", "aws-proof-negative"):
+        service = services[name]
+        if service.get("profiles") != ["aws-proof"]:
+            raise PreflightError(f"{name} is not isolated behind the proof profile")
+    coordinator = services["aws-proof-coordinate"]
+    if coordinator.get("profiles") != ["aws-proof"]:
+        raise PreflightError("AWS proof coordinator must remain credential-free")
+    expected_roles = {
+        "aws-proof-runtime": "WORKSTREAM_ARTIFACT_S3_RUNTIME_ROLE_ARN",
+        "aws-proof-readiness": "WORKSTREAM_ARTIFACT_S3_READINESS_ROLE_ARN",
+        "aws-proof-negative": "WORKSTREAM_ARTIFACT_S3_NEGATIVE_ROLE_ARN",
+    }
+    for name, role_key in expected_roles.items():
+        environment = services[name].get("environment")
+        if (
+            not isinstance(environment, dict)
+            or environment.get("WORKSTREAM_RELEASE_ROLE") != "proof"
+            or environment.get("WORKSTREAM_DATABASE_URL_FILE")
+            != "/run/secrets/database_url"
+            or environment.get("WORKSTREAM_ARTIFACT_S3_ROLES_ANYWHERE_ROLE_ARN")
+            != environment.get(role_key)
+        ):
+            raise PreflightError(f"{name} selects the wrong proof identity")
+    coordinator_environment = coordinator.get("environment")
+    if (
+        not isinstance(coordinator_environment, dict)
+        or coordinator_environment.get("WORKSTREAM_RELEASE_ROLE") != "proof"
+        or coordinator_environment.get("WORKSTREAM_DATABASE_URL_FILE")
+        != "/run/secrets/database_url"
+    ):
+        raise PreflightError("AWS proof coordinator environment is invalid")
+    for name in PROOF_SERVICES:
+        mounted = services[name].get("secrets")
+        service_uid, service_gid = services[name]["user"].split(":", maxsplit=1)
+        if (
+            not isinstance(mounted, list)
+            or len(mounted) != 1
+            or not isinstance(mounted[0], dict)
+            or mounted[0].get("source") != "database_url"
+            or mounted[0].get("target") != "database_url"
+            or mounted[0].get("uid") != service_uid
+            or mounted[0].get("gid") != service_gid
+            or mounted[0].get("mode") not in (0o400, "0400")
+        ):
+            raise PreflightError(f"{name} must receive only the database secret")
     environments: dict[str, dict[str, Any]] = {}
     for role in ROLE_SECRET_FILE_KEYS:
         environment = services[role].get("environment")
@@ -494,9 +798,13 @@ def validate_compose(rendered: dict[str, Any]) -> None:
         for key, (_, target) in SECRET_FILE_TARGETS.items():
             if key in required_file_keys:
                 if environment.get(key) != target:
-                    raise PreflightError(f"{role} lacks a required secret selector: {key}")
+                    raise PreflightError(
+                        f"{role} lacks a required secret selector: {key}"
+                    )
             elif key in environment:
-                raise PreflightError(f"{role} contains an unrelated secret selector: {key}")
+                raise PreflightError(
+                    f"{role} contains an unrelated secret selector: {key}"
+                )
         mounted = services[role].get("secrets")
         if not isinstance(mounted, list):
             raise PreflightError(f"{role} release secrets are unavailable")
@@ -525,7 +833,9 @@ def validate_compose(rendered: dict[str, Any]) -> None:
                 if key not in SECRET_FILE_KEYS and key != "WORKSTREAM_RELEASE_ROLE"
             }
         )
-    if any(environment != common_environments[0] for environment in common_environments[1:]):
+    if any(
+        environment != common_environments[0] for environment in common_environments[1:]
+    ):
         raise PreflightError("backend roles must share the same non-secret environment")
     environment = environments["api"]
     exact = {
@@ -536,6 +846,13 @@ def validate_compose(rendered: dict[str, Any]) -> None:
         "WORKSTREAM_ARTIFACT_S3_PROVIDER_PROFILE": "aws_s3",
         "WORKSTREAM_ARTIFACT_S3_CREDENTIAL_MODE": "aws_workload_identity",
         "WORKSTREAM_ARTIFACT_S3_ADDRESSING_STYLE": "virtual",
+        "WORKSTREAM_ARTIFACT_S3_AWS_WORKLOAD_IDENTITY_METHOD": "roles-anywhere",
+        "WORKSTREAM_ARTIFACT_S3_ROLES_ANYWHERE_CERTIFICATE_FILE": str(
+            ROLES_ANYWHERE_CERTIFICATE_TARGET
+        ),
+        "WORKSTREAM_ARTIFACT_S3_ROLES_ANYWHERE_PRIVATE_KEY_FILE": str(
+            ROLES_ANYWHERE_PRIVATE_KEY_TARGET
+        ),
         "WORKSTREAM_ARTIFACT_SCRATCH_ROOT": str(SCRATCH_ROOT),
         "WORKSTREAM_EXTERNAL_CHECKER_MATERIAL_ROOT": str(SCRATCH_ROOT),
         "WORKSTREAM_EXTERNAL_CHECKER_SERVICE_SOCKET": str(SOCKET_PATH),
@@ -543,9 +860,17 @@ def validate_compose(rendered: dict[str, Any]) -> None:
     for key, value in exact.items():
         if str(environment.get(key, "")).lower() != value:
             raise PreflightError(f"rendered release environment is unsafe: {key}")
+    if environment.get(
+        "WORKSTREAM_ARTIFACT_S3_ROLES_ANYWHERE_ROLE_ARN"
+    ) != environment.get("WORKSTREAM_ARTIFACT_S3_RUNTIME_ROLE_ARN"):
+        raise PreflightError(
+            "hosted Roles Anywhere identity must select the runtime role"
+        )
     for key in FORBIDDEN_RENDERED_KEYS:
         if environment.get(key):
-            raise PreflightError(f"rendered release contains a forbidden setting: {key}")
+            raise PreflightError(
+                f"rendered release contains a forbidden setting: {key}"
+            )
     for key in (
         "WORKSTREAM_DATABASE_URL",
         "WORKSTREAM_CELERY_BROKER_URL",
@@ -582,7 +907,9 @@ def validate_docker_runtime(config: dict[str, Any], values: dict[str, str]) -> N
             or image.get("Architecture") != entry["architecture"]
             or reference not in image.get("RepoDigests", [])
         ):
-            raise PreflightError("preloaded checker image identity differs from configuration")
+            raise PreflightError(
+                "preloaded checker image identity differs from configuration"
+            )
 
 
 def parse_args() -> argparse.Namespace:
@@ -601,9 +928,11 @@ def main() -> int:
     try:
         values = parse_environment(args.env_file)
         validate_environment(values)
-        checker_config = load_checker_config(Path(values["WORKSTREAM_CHECKER_CONFIG_FILE"]))
+        checker_config = load_checker_config(
+            Path(values["WORKSTREAM_CHECKER_CONFIG_FILE"])
+        )
         validate_checker_config(checker_config, values)
-        validate_compose(render_compose(args.env_file, values))
+        validate_compose(render_compose(args.env_file, values), values)
         if args.configuration_only:
             print(
                 "configuration valid; host identity, runsc/cache, cloud, health and recovery checks skipped"

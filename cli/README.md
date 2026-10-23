@@ -59,6 +59,8 @@ acknowledgements; neither approves policy nor activates a guide.
 | `workstream project guide sufficiency acknowledge-warnings PROJECT_ID GUIDE_ID REPORT_ID --input FILE --idempotency-key UUID` | `POST /api/v1/projects/PROJECT_ID/guides/GUIDE_ID/sufficiency-reports/REPORT_ID/acknowledge-warnings` |
 | `workstream project guide artifact-policy list PROJECT_ID GUIDE_ID` | `GET /api/v1/projects/PROJECT_ID/guides/GUIDE_ID/submission-artifact-policies` |
 | `workstream project guide artifact-policy show PROJECT_ID GUIDE_ID POLICY_ID` | `GET /api/v1/projects/PROJECT_ID/guides/GUIDE_ID/submission-artifact-policies/POLICY_ID` |
+| `workstream project guide artifact-policy create PROJECT_ID GUIDE_ID --input FILE --idempotency-key UUID` | `POST /api/v1/projects/PROJECT_ID/guides/GUIDE_ID/submission-artifact-policies` |
+| `workstream project guide artifact-policy update PROJECT_ID GUIDE_ID POLICY_ID --input FILE --idempotency-key UUID` | `PATCH /api/v1/projects/PROJECT_ID/guides/GUIDE_ID/submission-artifact-policies/POLICY_ID` |
 | `workstream project guide artifact-policy effective PROJECT_ID GUIDE_ID` | `GET /api/v1/projects/PROJECT_ID/guides/GUIDE_ID/effective-submission-artifact-policy` |
 | `workstream project guide pre-submit-policy PROJECT_ID GUIDE_ID` | `GET /api/v1/projects/PROJECT_ID/guides/GUIDE_ID/pre-submit-checker-policy` |
 | `workstream project tasks PROJECT_ID [--status S] [--assignee UUID] [--import-batch UUID] [--updated-since TIME]` | `GET /api/v1/projects/PROJECT_ID/tasks` |
@@ -668,10 +670,31 @@ JSON retains the complete public package: exact target and hashes, findings
 with display-only source locations, requirement inventory, proposed intake
 policy, pre-submission intake bindings, distinct post-submission evaluation
 bindings, suggestions, notes and nullable approval/post-policy references.
-Text renders that same complete object with terminal escaping. Private runtime
-document handles are not part of this public projection. Unknown/duplicate
-members, missing/null required facts, malformed nested types or substituted
-identities fail with empty stdout. Integer facts retain the backend range.
+Text starts with concise proposal and approval status, then renders the intake
+policy, findings and evidence document numbers. It groups requirements into
+PRE, POST and non-checker sections and expands each available engineering
+specification into its inputs, ordered steps, pass conditions, coded failure
+findings, positive/negative tests, execution budget, runtime dependencies and
+infrastructure-failure behavior. Suggestions and every setup note follow those
+requirements. Dynamic text remains terminal escaped; private runtime document
+handles are not part of this public projection. Unknown/duplicate members,
+missing/null required facts, malformed nested types or substituted identities
+fail with empty stdout. Integer facts retain the backend range.
+
+New checker requirements can carry a typed `check_specification` and a
+`classification_rationale`. PRE specifications describe bounded work of at most
+60 seconds before Submission creation; POST specifications describe background
+work and may declare up to a one-hour budget. Both PRE and POST bindings can
+show their exact catalogue parameters. Earlier retained proposals may omit the
+two new requirement fields and empty PRE parameters; the reader preserves and
+labels that absence without manufacturing content. When any new field is
+present, its nested object remains closed and strictly validated.
+
+Project file, expanded-package, compressed-archive and entry-count limits may
+be null or omitted. The reader
+preserves those values: absence means no additional project restriction, while
+Workstream's platform upload and archive limits still apply. Explicit project
+limits must remain positive integers within the backend range.
 
 A blocked, warning-bearing or historical (`current=false`) proposal is still a
 successful read (exit 0), not readiness or authority to approve, correct or
@@ -1375,6 +1398,8 @@ workstream project guide sufficiency create PROJECT_ID GUIDE_ID --input ./report
 workstream project guide sufficiency acknowledge-warnings PROJECT_ID GUIDE_ID REPORT_ID --input ./acknowledgement.json --idempotency-key UUID
 workstream project guide artifact-policy list PROJECT_ID GUIDE_ID --output json
 workstream project guide artifact-policy show PROJECT_ID GUIDE_ID POLICY_ID --output json
+workstream project guide artifact-policy create PROJECT_ID GUIDE_ID --input ./manual-policy.json --idempotency-key UUID
+workstream project guide artifact-policy update PROJECT_ID GUIDE_ID POLICY_ID --input ./manual-successor.json --idempotency-key UUID
 workstream project guide artifact-policy effective PROJECT_ID GUIDE_ID --output json
 workstream project guide pre-submit-policy PROJECT_ID GUIDE_ID --output json
 workstream project submissions PROJECT_ID --status review_pending --updated-since 2026-10-01T00:00:00Z
@@ -1422,6 +1447,35 @@ and exact replay; neither command runs setup, approves policy or activates a
 guide. Retain the same UUID key and unchanged input file for a manual replay
 after an uncertain outcome. These commands do not create or update artifact
 policies.
+
+The two `artifact-policy` writes are manual draft operations for a current
+covering human Project Manager, not a second setup or approval path. Create
+requires a genuinely finalized authoritative setup report for the exact guide
+and a JSON file with `source_snapshot_id`, a caller-chosen `policy_version`
+(not beginning `agent-`), and `policy_body` following the public submission
+artifact-policy schema; `change_summary` is optional. For example:
+
+```json
+{"source_snapshot_id":"SNAPSHOT_UUID","policy_version":"manual-v1","policy_body":{},"change_summary":"Manual draft"}
+```
+
+Update selects one exact current manual draft by `POLICY_ID` and appends a
+successor. Its JSON file must include `expected_policy_hash` copied from that
+draft's exact `policy_hash` and a new `successor_policy_version`; optional
+`policy_body` replaces the body, while omission or explicit `null` retains it. Optional
+`change_summary` replaces the prior summary when supplied. For example:
+
+```json
+{"expected_policy_hash":"sha256:64_lowercase_hex_digits","successor_policy_version":"manual-v2","change_summary":"Revised draft"}
+```
+
+The backend rechecks authority, finalized setup lineage, exact predecessor,
+current draft status, hash precondition and same-key replay on every write.
+Keep the same UUID key and unchanged file for manual replay if a response is
+uncertain; the CLI never retries automatically. A manual policy remains a
+retained draft even after a successful write. It is not the compiled unified
+policy used for approval, effective-policy selection or guide activation;
+`artifact-policy effective` is an observation, not authority for a later write.
 
 `submissions` and `assignments` list every attempt and claim in the project
 with the submitter or contributor and the same fields as `me submissions` and

@@ -7,17 +7,22 @@ responses.
 
 ## Activation boundary
 
-The routes are composed under `/api/v1/operator/artifacts`, but production
-authority remains deny-only while the corresponding Authorization Service
-Operator actions are planned. WS-XINT-002-03 activates only the fixed verifier,
-pending-work scanner, and put resolver through transaction-bound prepared
-authority. It grants no Operator route. Do not add role checks, fallback
-constructors, or artifact-owned grant evaluation.
+The routes under `/api/v1/operator/artifacts` require a current persisted
+system-scoped human Operator grant. AUTH makes a fresh exact action/resource
+decision and retains its audit evidence. JWT role metadata is not authority.
+Reads, including configuration-only readiness, never authorize verification
+retry. Retry has its own action and commits its decisions with the ART recovery
+chain. Missing resources and denied authority share a concealed 404; an
+unavailable decision/audit returns 503. These routes do not expose provider
+objects or activate S3. WS-XINT-002-03 separately activates the fixed verifier,
+pending-work scanner and put resolver through transaction-bound prepared
+authority; it grants no Operator route by itself.
 
 AWS S3 is activation-gated. Configuration supplies only non-secret exact
 release, namespace, role/policy, reviewed trust-policy digest and bucket-policy
-bindings; it cannot assert a pass. API, Celery task-process and Beat startup load
-an exact fresh activation after the
+bindings; Roles Anywhere also binds the exact anchor/profile ARNs and canonical
+state digests. Configuration cannot assert a pass. API, Celery task-process and
+Beat startup load an exact fresh activation after the
 namespace claim and before credential inspection. Every AWS SDK call reloads
 the same activation selected for its logical operation, and ART reloads that ID
 inside any provider-derived terminal transaction.
@@ -80,27 +85,31 @@ readiness run compares them with `GetRole`, rejects shared workload subjects,
 and rejects any trust grant that lets one configured workload role assume
 another.
 
-The readiness and negative roles each accept exactly one closed trust shape:
-one `Allow` statement with one IAM OIDC provider, the exact
-`sts:AssumeRoleWithWebIdentity` action, and `StringEquals` claims containing
-only that provider issuer's exact `sub` plus audience `sts.amazonaws.com`.
-The runtime role may use the same shape, or the Linux VM shape consisting of
-one condition-free `Allow` for service principal `ec2.amazonaws.com` and action
-`sts:AssumeRole`. In the VM shape, the trusted environment provisioner owns the
-instance-profile attachment; untrusted runtime workloads cannot select or
-attach another role. Wildcard subjects, negative or pattern operators,
-missing or foreign audience claims, AWS principals, role chaining, ECS or
-other service principals, additional statements and additional condition keys
-fail activation. A deployment using a different trust shape must change its
-infrastructure to one of these reviewed shapes or land a separately reviewed
-proof extension; the configured digest alone does not make unsupported IAM
-semantics safe.
+For certificate-based external hosting, follow the
+[Roles Anywhere setup guide](operations_aws_roles_anywhere.md). It supplies the
+provisioning and generated configuration flow, private leaf-certificate mounts,
+renewal/revocation steps and separate proof-job instructions. The CA signing key
+stays under administrator-only custody outside all application mounts, including
+when signing and application execution share a server. Application processes
+receive only the runtime leaf identity.
 
-PostgreSQL stores the three pairwise-distinct role ARNs and reviewed trust
-digests and rejects a probe or activation tuple that collapses them. The live
-readiness executor proves the corresponding trust documents and disjoint exact
-OIDC subjects. The database binds those observed digests; it does not
-independently attest external IAM truth after the observation.
+Readiness and negative roles accept either a closed exact OIDC trust or the
+closed Roles Anywhere certificate trust. Runtime also supports the EC2
+instance-profile shape for independently selected AWS hosting. OIDC trust fixes
+issuer, subject and audience. Roles Anywhere trust fixes source account,
+trust-anchor ARN, issuer CN and the role-specific subject CN. Its shared profile
+contains exactly the three roles. Each certificate proves own-role success,
+explicit denial for both other roles, then own-role success again; a network,
+certificate, timeout or malformed helper failure is not an access-denial proof.
+No broad trust, role chaining or ambient credential fallback is supported.
+
+PostgreSQL retains the three distinct role ARNs and trust-policy digests. For
+Roles Anywhere it additionally binds anchor/profile ARNs and canonical state
+digests on every probe and activation, including runtime and terminal checks.
+The readiness executor compares those values to the actual enabled AWS resources
+and CA material. Changed bindings require a fresh matching group. Retained
+historical evidence is preserved; it does not activate the current proof
+contract. Database custody does not replace ongoing external proof.
 
 Do not supply bootstrap credentials or run all modes under one identity. The
 readiness identity may inspect only the exact three role attachments/inline
@@ -178,6 +187,9 @@ HTTP response and audit identifiers.
 `project_id` and reports bounded deployment, project, and optional task usage.
 It never enumerates producer-scope identifiers. It is read-only: it cannot
 release charges, change configuration, or create recovery work.
+`configured_limit_bytes` is `null` when the serving deployment has not
+configured that scope; the persisted `limit_bytes` remains an observed row,
+not permission to admit more bytes or a claim of provider readiness.
 
 Each bounded scope also reports submission-bundle pressure as
 `unbound_ready_count`/`unbound_ready_bytes` and

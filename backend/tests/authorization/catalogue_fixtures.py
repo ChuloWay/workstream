@@ -50,42 +50,42 @@ ART_CUSTODY_EXPECTATIONS = {
     "artifact.binding.read": (
         "artifact.binding.read",
         "WS-AUTH-001-ART-02D-OPERATOR",
-        "planned",
+        "active",
     ),
     "artifact.replica.read": (
         "artifact.replica.read",
         "WS-AUTH-001-ART-02D-OPERATOR",
-        "planned",
+        "active",
     ),
     "artifact.receipt.read": (
         "artifact.receipt.read",
         "WS-AUTH-001-ART-02D-OPERATOR",
-        "planned",
+        "active",
     ),
     "artifact.verification_job.read": (
         "artifact.verification_job.read",
         "WS-AUTH-001-ART-02D-OPERATOR",
-        "planned",
+        "active",
     ),
     "artifact.verification_job.retry": (
         "artifact.verification_job.retry",
         "WS-AUTH-001-ART-02D-OPERATOR",
-        "planned",
+        "active",
     ),
     "artifact.recovery_attempt.read": (
         "artifact.recovery_attempt.read",
         "WS-AUTH-001-ART-02D-OPERATOR",
-        "planned",
+        "active",
     ),
     "artifact.audit.read": (
         "artifact.audit.read",
         "WS-AUTH-001-ART-02D-OPERATOR",
-        "planned",
+        "active",
     ),
     "operations.artifact_storage_admission.read": (
         "operations.status.read",
         "WS-AUTH-001-ART-02D-OPERATOR",
-        "planned",
+        "active",
     ),
     "artifact.verification.execute": (
         "artifact.verification.execute",
@@ -472,6 +472,7 @@ expected = {
     "project.setup_run.update": ("project.guide.manage", "WS-AUTH-001-12B2"), "project.guide.activate": ("project.guide.manage", "WS-AUTH-001-12H"),  # noqa: E501
     **dict.fromkeys((f"compensation.adapter_binding.{op}" for op in ("read", "create", "suspend", "resume")), ("compensation.adapter_binding.manage", "WS-ARCH-001-CP01A")),  # noqa: E501
     **dict.fromkeys((f"contribution.policy.{op}" for op in ("read", "create_draft", "update_draft", "publish", "retire")), ("compensation.policy.manage", "WS-ARCH-001-CP01B")),  # noqa: E501
+    "contribution.compensation_unit.create": ("compensation.policy.manage", "project-points-unit-creation"),
 }
 
 
@@ -482,6 +483,7 @@ AUDIT_ALLOWED_ACTION_VALUES = {
     "checker.pre_submit.finalize",
     "operations.checker.retry",
     "operations.checker_retry_source.list",
+    "operations.artifact_storage_admission.read",
     "operations.post_submit_delivery.list",
     "operations.post_submit_delivery.reconcile",
     "contribution.read_self",
@@ -568,14 +570,21 @@ AUDIT_ALLOWED_ACTION_VALUES = {
     "admin_role_grant.issue",
     "admin_role_grant.list",
     "admin_role_grant.revoke",
+    "artifact.audit.read",
+    "artifact.binding.read",
     "artifact.guide_source.ingest",
     "artifact.guide_source.read",
     "artifact.pending_work.scan",
     "artifact.pre_submit.checker_input.materialize",
     "artifact.put_attempt.resolve",
+    "artifact.receipt.read",
+    "artifact.recovery_attempt.read",
+    "artifact.replica.read",
     "artifact.submission.binding.create",
     "artifact.submission_bundle.prepare",
     "artifact.verification.execute",
+    "artifact.verification_job.read",
+    "artifact.verification_job.retry",
     "authorization.admin_role_definitions.read",
     "authorization.permission_catalogue.read",
     "compensation.adapter_binding.create",
@@ -587,6 +596,7 @@ AUDIT_ALLOWED_ACTION_VALUES = {
     "contribution.policy.read",
     "contribution.policy.retire",
     "contribution.policy.update_draft",
+    "contribution.compensation_unit.create",
     "project.active_guide.read",
     "project.contributor_candidate.list",
     "project.create",

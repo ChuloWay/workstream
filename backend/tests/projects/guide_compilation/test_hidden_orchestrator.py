@@ -33,7 +33,7 @@ from app.modules.projects.guide_compilation.orchestrator import (
     GuideCompilationOrchestrator,
 )
 
-from .helpers import context, identity, ids, persistence_facts, result
+from .helpers import context, generated_result, identity, ids, persistence_facts
 
 
 def _state(
@@ -104,7 +104,7 @@ class _Backend:
     async def record_accepted(self, state, context_value, result_value):
         self.calls.append("record_accepted")
         assert context_value is self.context_value
-        assert result_value == result()
+        assert result_value == generated_result()
         facts = state.preflight_facts
         return CompilationOutcomeReceipt(
             operation_id=facts.operation_id,
@@ -139,7 +139,7 @@ class _Backend:
 class _Runtime:
     identity = runtime_configuration().adapter_identity
 
-    def __init__(self, outcome=result()) -> None:
+    def __init__(self, outcome=generated_result()) -> None:
         self.outcome = outcome
         self.calls = 0
 
@@ -417,7 +417,11 @@ async def test_cleanup_failure_preserves_known_result_without_second_inference(i
     """An ART scope-close failure cannot erase a committed known provider outcome."""
     state = _state(ids(), CompilationRecoveryClassification.RESERVED)
     backend = _Backend(state)
-    runtime = _Runtime(ProjectGuideCompilationInvalidOutputError("schema_invalid") if invalid else result())
+    runtime = _Runtime(
+        ProjectGuideCompilationInvalidOutputError("schema_invalid")
+        if invalid
+        else generated_result()
+    )
 
     @asynccontextmanager
     async def failing_close(_state, _context):

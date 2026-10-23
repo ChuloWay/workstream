@@ -4,6 +4,8 @@ from copy import deepcopy
 import json
 from urllib.parse import quote
 
+import pytest
+
 from test_contributor_task_mutations import canonical_error
 from test_guide_create_http import GUIDE, SETUP
 from test_http_boundary import PROJECT, TOKEN, assert_failure, http_fixture
@@ -25,6 +27,76 @@ def proposal():
         "capability_id": "results.present",
         "capability_version": "v1",
         "stage": "pre_submit",
+        "parameters": [{"name": "required", "value": True}],
+    }
+    pre_specification = {
+        "evaluation_method": "static_inspection",
+        "execution_mode": "bounded_pre_submit",
+        "maximum_duration_seconds": 45,
+        "stage_rationale": "This bounded package inspection can finish before submission.",
+        "inputs": [
+            {
+                "input_id": "submission_package",
+                "kind": "package",
+                "purpose": "Inspect the submitted package.",
+            },
+            {
+                "input_id": "results_file",
+                "kind": "relative_file",
+                "relative_path": "reports/results.json",
+                "purpose": "Read the required results.",
+            },
+        ],
+        "check_steps": ["Open the results file and validate its required fields."],
+        "pass_conditions": ["The required results are present and valid."],
+        "failure_findings": [
+            {
+                "code": "results.missing",
+                "level": "error",
+                "condition": "The results file is absent.",
+                "message": "Add the required results file.",
+            },
+            {
+                "code": "results.extra",
+                "level": "warning",
+                "condition": "The results include an optional extra field.",
+                "message": "Review the optional field.",
+            },
+        ],
+        "positive_tests": ["A package with a complete results file passes."],
+        "negative_tests": [
+            {
+                "name": "missing_results",
+                "scenario": "The package omits the results file.",
+                "expected_verdict": "failed",
+                "expected_finding_codes": ["results.missing"],
+            },
+            {
+                "name": "extra_results_field",
+                "scenario": "The results file includes an optional extra field.",
+                "expected_verdict": "passed",
+                "expected_finding_codes": ["results.extra"],
+            },
+        ],
+        "runtime_dependencies": [
+            {
+                "dependency_id": "results_parser",
+                "kind": "checker_tool",
+                "provisioning": "checker_implementation",
+                "purpose": "Parse and validate the results file.",
+                "unavailable_code": "implementation_unavailable",
+            }
+        ],
+        "infrastructure_failures": [
+            {
+                "code": "material_unavailable",
+                "condition": "The submitted package cannot be read.",
+            },
+            {
+                "code": "implementation_unavailable",
+                "condition": "The required checker implementation is unavailable.",
+            },
+        ],
     }
     return {
         "target": {
@@ -92,18 +164,53 @@ def proposal():
                     "requirement_id": "results",
                     "statement": "Provide evaluation results.",
                     "disposition": "supported_pre_submit",
+                    "classification_rationale": "A bounded static check can evaluate this before submission.",
+                    "check_specification": pre_specification,
                     "platform_coverage": {
                         "capability_id": "submission.zip",
                         "capability_version": "v1",
                         "stage": "pre_submit",
                     },
                     "evidence_refs": [location],
-                }
+                },
+                {
+                    "requirement_id": "quality",
+                    "statement": "Evaluate result quality after submission.",
+                    "disposition": "supported_post_submit",
+                    "classification_rationale": "Execution may take longer than the intake budget.",
+                    "check_specification": pre_specification
+                    | {
+                        "evaluation_method": "isolated_execution",
+                        "execution_mode": "background",
+                        "maximum_duration_seconds": 300,
+                        "stage_rationale": "Run the evaluator in the background.",
+                        "runtime_dependencies": [
+                            {
+                                "dependency_id": "execution_runner",
+                                "kind": "isolated_execution",
+                                "provisioning": "current_runner",
+                                "purpose": "Run the project evaluator offline.",
+                                "unavailable_code": "implementation_unavailable",
+                            }
+                        ],
+                    },
+                    "platform_coverage": None,
+                    "evidence_refs": [location],
+                },
+                {
+                    "requirement_id": "review_decision",
+                    "statement": "A reviewer makes the final decision.",
+                    "disposition": "human_review",
+                    "classification_rationale": "The guide explicitly assigns this judgment to a reviewer.",
+                    "platform_coverage": None,
+                    "evidence_refs": [location],
+                },
             ],
             "pre_submit_bindings": [binding],
             "post_submit_bindings": [
                 binding
                 | {
+                    "requirement_id": "quality",
                     "stage": "post_submit",
                     "parameters": [
                         {"name": "threshold", "value": 0.9},
@@ -182,15 +289,31 @@ def test_proposal_complete_exact_selector_and_terminal_safe_observation(cli):
         response["body"] = json.dumps(value, ensure_ascii=False).encode()
         text = invoke(cli, origin, output="text")
         assert text.returncode == 0 and text.stderr == "", text.stderr
-        assert text.stdout.startswith("Guide proposal (not approval or activation): ")
-        assert (
-            text.stdout.count("\n") == 1
-            and "\x1b" not in text.stdout
-            and "\u202e" not in text.stdout
-        )
+        assert text.stdout.startswith("Guide proposal (inspection only)\nStatus: ")
+        assert "\x1b" not in text.stdout and "\u202e" not in text.stdout
+        assert "\\u000A\\u001B[32m\\u202E" in text.stdout
         assert "9223372036854775808" in text.stdout
-        for name in value:
-            assert f'"{name}"' in text.stdout
+        for section in (
+            "Findings (1)",
+            "Submission artifact policy",
+            "PRE requirements (1)",
+            "POST requirements (1)",
+            "Non-checker requirements (1)",
+            "Check steps",
+            "Pass conditions",
+            "Failure findings",
+            "Positive tests",
+            "Negative tests",
+            "Runtime dependencies",
+            "Infrastructure failures",
+            "Capability suggestions (1)",
+            "Setup notes (1)",
+        ):
+            assert section in text.stdout
+        assert "document 1" in text.stdout
+        assert "results_parser" in text.stdout
+        assert "required=true" in text.stdout
+        assert '"target":' not in text.stdout
         assert (
             len(requests) == 13
             and response["commands"] == []
@@ -276,6 +399,57 @@ def test_proposal_missing_null_unknown_and_private_nested_fields(cli):
         (("result", "findings", 0), ("severity", "code", "message")),
         (("result", "requirements", 0), ("requirement_id", "statement", "disposition")),
         (
+            ("result", "requirements", 0, "check_specification"),
+            (
+                "evaluation_method",
+                "execution_mode",
+                "maximum_duration_seconds",
+                "stage_rationale",
+                "inputs",
+                "check_steps",
+                "pass_conditions",
+                "failure_findings",
+                "positive_tests",
+                "negative_tests",
+                "runtime_dependencies",
+                "infrastructure_failures",
+            ),
+        ),
+        (
+            ("result", "requirements", 0, "check_specification", "inputs", 1),
+            ("input_id", "kind", "purpose", "relative_path"),
+        ),
+        (
+            ("result", "requirements", 0, "check_specification", "failure_findings", 0),
+            ("code", "level", "condition", "message"),
+        ),
+        (
+            ("result", "requirements", 0, "check_specification", "negative_tests", 0),
+            ("name", "scenario", "expected_verdict", "expected_finding_codes"),
+        ),
+        (
+            (
+                "result",
+                "requirements",
+                0,
+                "check_specification",
+                "runtime_dependencies",
+                0,
+            ),
+            ("dependency_id", "kind", "provisioning", "purpose", "unavailable_code"),
+        ),
+        (
+            (
+                "result",
+                "requirements",
+                0,
+                "check_specification",
+                "infrastructure_failures",
+                0,
+            ),
+            ("code", "condition"),
+        ),
+        (
             ("result", "requirements", 0, "platform_coverage"),
             ("capability_id", "capability_version", "stage"),
         ),
@@ -283,6 +457,7 @@ def test_proposal_missing_null_unknown_and_private_nested_fields(cli):
             ("result", "pre_submit_bindings", 0),
             ("requirement_id", "capability_id", "capability_version", "stage"),
         ),
+        (("result", "pre_submit_bindings", 0, "parameters", 0), ("name", "value")),
         (("result", "post_submit_bindings", 0, "parameters", 0), ("name", "value")),
         (
             ("result", "capability_suggestions", 0),
@@ -291,7 +466,7 @@ def test_proposal_missing_null_unknown_and_private_nested_fields(cli):
         (("result", "findings", 0, "evidence_refs", 0), ("document_number",)),
         (
             ("result", "submission_artifact_policy"),
-            ("maximum_file_size_bytes", "maximum_package_size_bytes"),
+            (),
         ),
     ]
     with http_fixture() as (origin, response, _):
@@ -313,6 +488,11 @@ def test_proposal_missing_null_unknown_and_private_nested_fields(cli):
         for field in ("artifact_policy_status",):
             body = deepcopy(value)
             del body[field]
+            response["body"] = json.dumps(body).encode()
+            assert_failure(invoke(cli, origin), "invalid_api_response")
+        for field in ("classification_rationale", "check_specification"):
+            body = deepcopy(value)
+            body["result"]["requirements"][0][field] = None
             response["body"] = json.dumps(body).encode()
             assert_failure(invoke(cli, origin), "invalid_api_response")
         for field in (
@@ -358,6 +538,278 @@ def test_proposal_rejects_null_array_members_and_parameter_objects(cli):
             )
             response["body"] = json.dumps(value).encode()
             assert_failure(invoke(cli, origin), "invalid_api_response")
+
+
+def test_proposal_accepts_backend_canonical_paths(cli):
+    from app.modules.projects.api.guide_proposal_package import (
+        GuideProposalReviewPackage,
+    )
+
+    with http_fixture() as (origin, response, _):
+        for path in (
+            "reports/{summary}",
+            "reports/result}",
+            "reports/Café.txt",
+            "reports/結果.txt",
+            "reports/á" + "\u0301" * 31 + ".txt",
+            "結" * 500,
+        ):
+            value = proposal()
+            value["result"]["requirements"][0]["check_specification"]["inputs"][1][
+                "relative_path"
+            ] = path
+            validated = GuideProposalReviewPackage.model_validate(value)
+            response["body"] = validated.model_dump_json().encode()
+            result = invoke(cli, origin)
+            assert result.returncode == 0
+            actual = json.loads(result.stdout)
+            assert (
+                actual["result"]["requirements"][0]["check_specification"]["inputs"][1][
+                    "relative_path"
+                ]
+                == path
+            )
+
+
+def test_proposal_matches_backend_prose_bounds(cli):
+    from pydantic import ValidationError
+
+    from app.modules.projects.api.guide_proposal_package import (
+        GuideProposalReviewPackage,
+    )
+
+    with http_fixture() as (origin, response, _):
+        for text in (" ", "\t\n", "結" * 1000):
+            value = proposal()
+            value["result"]["requirements"][0]["check_specification"][
+                "stage_rationale"
+            ] = text
+            validated = GuideProposalReviewPackage.model_validate(value)
+            response["body"] = validated.model_dump_json().encode()
+            result = invoke(cli, origin)
+            assert result.returncode == 0
+            assert (
+                json.loads(result.stdout)["result"]["requirements"][0][
+                    "check_specification"
+                ]["stage_rationale"]
+                == text
+            )
+
+        for text in ("", "結" * 1001):
+            value = proposal()
+            value["result"]["requirements"][0]["check_specification"][
+                "stage_rationale"
+            ] = text
+            with pytest.raises(ValidationError):
+                GuideProposalReviewPackage.model_validate(value)
+            response["body"] = json.dumps(value).encode()
+            assert_failure(invoke(cli, origin), "invalid_api_response")
+
+
+def test_proposal_rejects_backend_invalid_unicode_paths(cli):
+    from pydantic import ValidationError
+
+    from app.modules.projects.api.guide_proposal_package import (
+        GuideProposalReviewPackage,
+    )
+
+    with http_fixture() as (origin, response, _):
+        for path in (
+            "reports/\u200bhidden.txt",
+            "reports/a\u0085b.txt",
+            "結" * 501,
+        ):
+            value = proposal()
+            value["result"]["requirements"][0]["check_specification"]["inputs"][1][
+                "relative_path"
+            ] = path
+            with pytest.raises(ValidationError):
+                GuideProposalReviewPackage.model_validate(value)
+            response["body"] = json.dumps(value).encode()
+            assert_failure(invoke(cli, origin), "invalid_api_response")
+
+
+def test_proposal_specification_stage_semantics_and_historical_omission(cli):
+    with http_fixture() as (origin, response, _):
+        historical = proposal()
+        for field in ("classification_rationale", "check_specification"):
+            del historical["result"]["requirements"][0][field]
+        response["body"] = json.dumps(historical).encode()
+        result = invoke(cli, origin)
+        assert result.returncode == 0 and json.loads(result.stdout) == historical
+
+        warning_only = proposal()
+        spec = warning_only["result"]["requirements"][0]["check_specification"]
+        spec["failure_findings"] = [spec["failure_findings"][1]]
+        spec["negative_tests"] = [spec["negative_tests"][1]]
+        response["body"] = json.dumps(warning_only).encode()
+        assert invoke(cli, origin).returncode == 0
+
+        invalid_values = []
+
+        value = proposal()
+        del value["result"]["requirements"][0]["classification_rationale"]
+        invalid_values.append(value)
+
+        value = proposal()
+        del value["result"]["requirements"][0]["check_specification"]
+        invalid_values.append(value)
+
+        value = proposal()
+        value["result"]["requirements"][0]["evidence_refs"] = []
+        invalid_values.append(value)
+
+        value = proposal()
+        value["result"]["requirements"][0]["check_specification"][
+            "maximum_duration_seconds"
+        ] = 61
+        invalid_values.append(value)
+
+        value = proposal()
+        value["result"]["requirements"][0]["check_specification"]["execution_mode"] = (
+            "background"
+        )
+        invalid_values.append(value)
+
+        value = proposal()
+        value["result"]["requirements"][1]["check_specification"][
+            "maximum_duration_seconds"
+        ] = 3601
+        invalid_values.append(value)
+
+        value = proposal()
+        value["result"]["requirements"][0]["check_specification"]["negative_tests"][0][
+            "expected_verdict"
+        ] = "passed"
+        invalid_values.append(value)
+
+        value = proposal()
+        value["result"]["requirements"][0]["check_specification"]["negative_tests"][1][
+            "expected_verdict"
+        ] = "failed"
+        invalid_values.append(value)
+
+        value = proposal()
+        value["result"]["requirements"][0]["check_specification"]["inputs"][1][
+            "relative_path"
+        ] = "../results.json"
+        invalid_values.append(value)
+
+        value = proposal()
+        value["result"]["requirements"][0]["check_specification"][
+            "runtime_dependencies"
+        ][0]["unavailable_code"] = "capacity_exceeded"
+        invalid_values.append(value)
+
+        value = proposal()
+        value["result"]["requirements"][2]["check_specification"] = deepcopy(
+            value["result"]["requirements"][0]["check_specification"]
+        )
+        invalid_values.append(value)
+
+        value = proposal()
+        value["result"]["requirements"][0]["check_specification"]["check_steps"] = []
+        invalid_values.append(value)
+
+        for value in invalid_values:
+            response["body"] = json.dumps(value).encode()
+            assert_failure(invoke(cli, origin), "invalid_api_response")
+
+
+def test_proposal_rejects_pre_model_evaluation_and_validates_post_runtime_gaps(cli):
+    from app.modules.projects.api.guide_proposal_package import (
+        GuideProposalReviewPackage,
+    )
+
+    with http_fixture() as (origin, response, _):
+        value = proposal()
+        requirement = value["result"]["requirements"][0]
+        requirement["disposition"] = "pre_submit_capability_gap"
+        specification = deepcopy(requirement["check_specification"])
+        requirement["check_specification"] = specification
+        specification["evaluation_method"] = "model_evaluation"
+        specification["runtime_dependencies"] = [
+            {
+                "dependency_id": "quality_model",
+                "kind": "model_service",
+                "provisioning": "runtime_gap",
+                "purpose": "Evaluate the submitted results with the configured model.",
+                "unavailable_code": "implementation_unavailable",
+            }
+        ]
+        value["result"]["pre_submit_bindings"] = []
+        value["result"]["capability_suggestions"] = [
+            {
+                "requirement_id": "results",
+                "stage": "pre_submit",
+                "title": "Model quality evaluation",
+                "rationale": "A model service implementation is required.",
+                "evidence_refs": requirement["evidence_refs"],
+            }
+        ]
+        # The public object and specification are otherwise valid. The CLI
+        # rejects only the forbidden PRE placement of model evaluation.
+        GuideProposalReviewPackage.model_validate(value)
+        response["body"] = json.dumps(value).encode()
+        assert_failure(invoke(cli, origin), "invalid_api_response")
+
+        requirement["disposition"] = "post_submit_capability_gap"
+        specification["execution_mode"] = "background"
+        specification["maximum_duration_seconds"] = 300
+        specification["runtime_dependencies"].append(
+            {
+                "dependency_id": "worker_capacity",
+                "kind": "execution_capacity",
+                "provisioning": "runtime_gap",
+                "purpose": "Provide enough background worker time for the evaluation.",
+                "unavailable_code": "capacity_exceeded",
+            }
+        )
+        prepared_dependency = {
+            "dependency_id": "prepared_reference_cache",
+            "kind": "prepared_material",
+            "provisioning": "runtime_gap",
+            "purpose": "Provide the prepared reference cache used by the evaluator.",
+            "unavailable_code": "material_unavailable",
+        }
+        specification["runtime_dependencies"].append(prepared_dependency)
+        specification["inputs"].append(
+            {
+                "input_id": "prepared_reference_cache",
+                "kind": "prepared_material",
+                "purpose": "Read the externally prepared reference cache.",
+            }
+        )
+        specification["infrastructure_failures"].append(
+            {
+                "code": "capacity_exceeded",
+                "condition": "The proposed evaluation exceeds the worker time budget.",
+            }
+        )
+        value["result"]["capability_suggestions"][0]["stage"] = "post_submit"
+        GuideProposalReviewPackage.model_validate(value)
+        response["body"] = json.dumps(value).encode()
+        accepted = invoke(cli, origin)
+        assert accepted.returncode == 0 and json.loads(accepted.stdout) == value
+
+        prepared_input = specification["inputs"].pop()
+        response["body"] = json.dumps(value).encode()
+        assert_failure(invoke(cli, origin), "invalid_api_response")
+        specification["inputs"].append(prepared_input)
+
+        specification["runtime_dependencies"].pop()
+        response["body"] = json.dumps(value).encode()
+        assert_failure(invoke(cli, origin), "invalid_api_response")
+
+        specification["runtime_dependencies"].append(prepared_dependency)
+        prepared_dependency["provisioning"] = "current_runner"
+        response["body"] = json.dumps(value).encode()
+        assert_failure(invoke(cli, origin), "invalid_api_response")
+
+        prepared_dependency["provisioning"] = "runtime_gap"
+        specification["runtime_dependencies"][1]["provisioning"] = "current_runner"
+        response["body"] = json.dumps(value).encode()
+        assert_failure(invoke(cli, origin), "invalid_api_response")
 
 
 def test_proposal_rejects_malformed_nested_types_and_incomplete_policy_identity(cli):
@@ -500,3 +952,30 @@ def test_proposal_intake_integer_field_boundaries(cli):
                 value["result"]["submission_artifact_policy"][field] = boundary
                 response["body"] = json.dumps(value).encode()
                 assert_failure(invoke(cli, origin), "invalid_api_response")
+
+
+def test_proposal_without_project_size_overrides_preserves_nulls(cli):
+    from app.modules.projects.api.guide_proposal_package import (
+        GuideProposalReviewPackage,
+    )
+
+    with http_fixture() as (origin, response, _):
+        for fields in (
+            ("maximum_file_size_bytes",),
+            ("maximum_package_size_bytes",),
+            ("maximum_file_size_bytes", "maximum_package_size_bytes"),
+        ):
+            for omit in (False, True):
+                value = proposal()
+                policy = value["result"]["submission_artifact_policy"]
+                for field in fields:
+                    if omit:
+                        del policy[field]
+                    else:
+                        policy[field] = None
+                GuideProposalReviewPackage.model_validate(value)
+                response["body"] = json.dumps(value).encode()
+                result = invoke(cli, origin)
+                assert result.returncode == 0 and json.loads(result.stdout) == value, (
+                    result.stderr
+                )

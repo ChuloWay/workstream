@@ -6,6 +6,14 @@
     },
     {
       "group": "artifacts",
+      "target": "backend/app/adapters/artifacts/aws_roles_anywhere.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/adapters/artifacts/aws_roles_anywhere_proof.py"
+    },
+    {
+      "group": "artifacts",
       "target": "backend/app/adapters/artifacts/internal_workers.py"
     },
     {
@@ -47,6 +55,10 @@
     {
       "group": "shared",
       "target": "backend/app/adapters/observability.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/adapters/project_agents/compilation_draft.py"
     },
     {
       "group": "lifecycle",
@@ -230,6 +242,10 @@
     },
     {
       "group": "shared",
+      "target": "backend/app/core/aws_roles_anywhere.py"
+    },
+    {
+      "group": "shared",
       "target": "backend/app/core/cancellation.py"
     },
     {
@@ -375,6 +391,10 @@
     {
       "group": "shared",
       "target": "backend/app/modules/api_controls/service.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/modules/artifacts/api/operator_authority.py"
     },
     {
       "group": "artifacts",
@@ -630,6 +650,10 @@
     },
     {
       "group": "auth",
+      "target": "backend/app/modules/authorization/artifact_operator_authorization.py"
+    },
+    {
+      "group": "auth",
       "target": "backend/app/modules/authorization/artifact_project_authority.py"
     },
     {
@@ -671,6 +695,10 @@
     {
       "group": "auth",
       "target": "backend/app/modules/authorization/domain/adapter_bindings.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/domain/artifact_operator.py"
     },
     {
       "group": "auth",
@@ -1226,6 +1254,10 @@
     },
     {
       "group": "lifecycle",
+      "target": "backend/app/modules/contributions/api/compensation_units.py"
+    },
+    {
+      "group": "lifecycle",
       "target": "backend/app/modules/contributions/api/participation.py"
     },
     {
@@ -1331,6 +1363,14 @@
     {
       "group": "lifecycle",
       "target": "backend/app/modules/contributions/service.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/contributions/units/models.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/contributions/units/service.py"
     },
     {
       "group": "shared",
@@ -2134,6 +2174,10 @@
     },
     {
       "group": "shared",
+      "target": "backend/scripts/aws_roles_anywhere_config.py"
+    },
+    {
+      "group": "shared",
       "target": "backend/scripts/behavior_ownership.py"
     },
     {
@@ -2205,6 +2249,10 @@
       "target": "backend/scripts/provision_local_service_actors.py"
     },
     {
+      "group": "lifecycle",
+      "target": "backend/scripts/provision_project_points.py"
+    },
+    {
       "group": "shared",
       "target": "backend/scripts/record_id_collection.py"
     },
@@ -2245,7 +2293,7 @@
       "target": "backend/scripts/validate_test_lane_evidence.py"
     }
   ],
-  "authority_digest": "11000341e55e3e324d368933bf80e3a26dfd0a82a3fdf76c6e8f089e63e38984",
+  "authority_digest": "7add897051f9ac8108873148d449eb71741309349320efd65ce542adaf880ede",
   "protected_base_commit": "7676ce4347db0c9694962a9b587a20765e16eac6",
   "schema": "workstream.behavior-ownership-partition.v1"
 }

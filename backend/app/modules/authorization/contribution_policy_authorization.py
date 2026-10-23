@@ -7,6 +7,7 @@ from uuid import UUID
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.modules.authorization.api import (
+    CompensationUnitCreateAuthorityFacts,
     ContributionPolicyMutationAuthorityFacts,
     ContributionPolicyReadFacts,
     AuthorizationDenied as BoundaryAuthorizationDenied,
@@ -21,6 +22,7 @@ from app.modules.authorization.domain.contribution_policies import (
     CONTRIBUTION_POLICY_RESOURCE_BY_ACTION,
     ContributionPolicyReadResourceContext,
     ContributionPolicyMutationScopeDenialResourceContext,
+    ProjectCompensationUnitCreateResourceContext,
 )
 from app.modules.authorization.kernel import AuthorizationService
 from app.modules.authorization.prepared import (
@@ -77,8 +79,12 @@ class ContributionPolicyAuthorizationAdapter:
             raise BoundaryAuthorizationDenied("contribution-policy authority denied")
         return action
 
-    def _mutation_context(self, facts: ContributionPolicyMutationAuthorityFacts):
+    def _mutation_context(
+        self, facts: ContributionPolicyMutationAuthorityFacts | CompensationUnitCreateAuthorityFacts
+    ):
         """Resolve only the exact action resource from validated public authority facts."""
+        if type(facts) is CompensationUnitCreateAuthorityFacts:
+            return self._unit_context(facts)
         if type(facts) is not ContributionPolicyMutationAuthorityFacts:
             raise BoundaryAuthorizationDenied("contribution-policy authority denied")
         self._assert_human_actor(facts.actor_profile_id)
@@ -102,6 +108,20 @@ class ContributionPolicyAuthorizationAdapter:
                 adapter_binding_ids=facts.resource_facts.adapter_binding_ids,
             )
         return action, CONTRIBUTION_POLICY_RESOURCE_BY_ACTION[action].model_validate(values)
+
+    def _unit_context(self, facts: CompensationUnitCreateAuthorityFacts):
+        """Bind one unit creation to the authenticated actor and its owning project."""
+        self._assert_human_actor(facts.actor_profile_id)
+        # The public facts admit only the unit-creation action identifier.
+        return self._action(str(facts.action_id)), ProjectCompensationUnitCreateResourceContext(
+            resource_type="project",
+            resource_id=facts.project_id,
+            scope_project_id=facts.project_id,
+            operation_id=facts.operation_id,
+            request_digest=facts.request_digest,
+            instrument_type=facts.instrument_type,
+            unit_code=facts.unit_code,
+        )
 
     @staticmethod
     async def _invoke(operation):
@@ -167,7 +187,7 @@ class ContributionPolicyAuthorizationAdapter:
         await self._invoke(lock_scope())
 
     async def prepare_mutation(
-        self, facts: ContributionPolicyMutationAuthorityFacts
+        self, facts: ContributionPolicyMutationAuthorityFacts | CompensationUnitCreateAuthorityFacts
     ) -> PreparedAuthorizationHandle:
         """Prepare transaction-bound authority for one canonical mutation request."""
         action, resource = self._mutation_context(facts)
@@ -186,7 +206,9 @@ class ContributionPolicyAuthorizationAdapter:
         )
 
     async def consume_mutation(
-        self, prepared: object, facts: ContributionPolicyMutationAuthorityFacts
+        self,
+        prepared: object,
+        facts: ContributionPolicyMutationAuthorityFacts | CompensationUnitCreateAuthorityFacts,
     ) -> UUID:
         """Consume exact prepared authority and return the authenticated actor."""
         if type(prepared) is not PreparedAuthorizationHandle:

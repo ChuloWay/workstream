@@ -29,6 +29,7 @@ from workstream_mcp.tools import (
     access_reads,
     actor_lifecycle,
     admin_grants,
+    guides,
     project_grants,
     projects,
 )
@@ -115,6 +116,7 @@ def create_app(settings: Settings) -> Starlette:
     actor_lifecycle_definitions = actor_lifecycle.definitions()
     project_definitions = projects.definitions()
     project_grant_definitions = project_grants.definitions()
+    guide_definitions = guides.definitions()
     gateway: WorkstreamGateway | None = None
 
     async def list_tools(
@@ -131,6 +133,7 @@ def create_app(settings: Settings) -> Starlette:
                 *access_definitions[3:],
                 *project_definitions,
                 *project_grant_definitions,
+                *guide_definitions,
             ]
         )
 
@@ -146,6 +149,7 @@ def create_app(settings: Settings) -> Starlette:
             *actor_lifecycle.TOOL_NAMES,
             *projects.TOOL_NAMES,
             *project_grants.TOOL_NAMES,
+            *guides.TOOL_NAMES,
         }:
             return adapter_failure("unknown_tool", status=404)
         arguments = params.arguments if params.arguments is not None else {}
@@ -185,6 +189,10 @@ def create_app(settings: Settings) -> Starlette:
             )
         if params.name in project_grants.TOOL_NAMES:
             return await project_grants.invoke(
+                gateway, params.name, bearer, correlation_id, arguments
+            )
+        if params.name in guides.TOOL_NAMES:
+            return await guides.invoke(
                 gateway, params.name, bearer, correlation_id, arguments
             )
         return await invoke_context(gateway, bearer, correlation_id, arguments)

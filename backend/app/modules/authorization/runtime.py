@@ -19,7 +19,10 @@ from app.modules.authorization.domain.audit import (
     AuthorizationEvidenceUnavailable as AuthorizationEvidenceUnavailable,
     MatchedAuthorityKind as MatchedAuthorityKind,
 )
-from app.modules.authorization.domain.contribution_policies import ContributionPolicyReadResourceContext, ContributionPolicyMutationResourceContext
+from app.modules.authorization.domain.contribution_policies import (
+    ContributionPolicyReadResourceContext, ContributionPolicyMutationResourceContext,
+    ProjectCompensationUnitCreateResourceContext,
+)
 from app.modules.authorization.domain.adapter_bindings import AdapterBindingMutationResourceContext, AdapterBindingReadResourceContext
 from app.modules.authorization.domain.project_create import ProjectCreateResourceContext
 from app.modules.authorization.domain import (
@@ -51,6 +54,10 @@ from app.modules.authorization.domain.artifact_storage import (
     ArtifactVerificationJobResourceContext as ArtifactVerificationJobResourceContext,
     ArtifactPendingWorkResourceContext as ArtifactPendingWorkResourceContext,
     GuideSourceReadResourceContext as GuideSourceReadResourceContext,
+)
+from app.modules.authorization.domain.artifact_operator import (
+    ArtifactOperatorReadResourceContext,
+    ArtifactOperatorRetryResourceContext,
 )
 from app.modules.authorization.schemas import AdminRole, AdminScope, ProjectRole
 from app.modules.authorization.submission_preparation import SubmissionBundlePreparationPreflightResourceContext, SubmissionBundlePreparationResourceContext
@@ -1112,6 +1119,8 @@ AuthorizationResourceContext = (
     | ArtifactPutAttemptResourceContext
     | ArtifactVerificationJobResourceContext
     | ArtifactPendingWorkResourceContext
+    | ArtifactOperatorReadResourceContext
+    | ArtifactOperatorRetryResourceContext
     | GuideSourceReadResourceContext
     | SubmissionCreationResourceContext | SubmissionBindingResourceContext
     | PreSubmitCheckerInputResourceContext
@@ -1119,6 +1128,7 @@ AuthorizationResourceContext = (
     | SubmissionBundlePreparationResourceContext
     | AdapterBindingReadResourceContext | AdapterBindingMutationResourceContext
     | ContributionPolicyReadResourceContext | ContributionPolicyMutationResourceContext | checker_registry.ExternalCheckerRegistryResourceContext
+    | ProjectCompensationUnitCreateResourceContext
     | checker_retry.CheckerRetryPrepareDenialResourceContext
     | checker_retry.CheckerRetryResourceContext
 )

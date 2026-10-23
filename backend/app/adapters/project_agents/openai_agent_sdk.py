@@ -12,6 +12,7 @@ from app.adapters.project_agents.openai_workspace import OpenAIGuideWorkspace, c
 from app.adapters.project_agents.provider_resilience import (
     ModelCircuitAdmission, model_retry_settings,
 )
+from app.adapters.project_agents.compilation_draft import CompilationDraftParser
 from app.interfaces.project_guide_runtime import ProjectGuideRuntimeConfiguration
 from app.interfaces.project_agents import (
     ProjectAgentRuntimeConfigurationError,
@@ -21,6 +22,7 @@ from app.interfaces.project_agents import (
     ProjectGuideCompilationResult,
     invalid_compilation_failure_code,
     project_guide_compilation_prompt_bytes,
+    require_complete_generated_specifications,
     require_complete_project_guide_compilation_result,
     require_ready_result_cites_every_document,
     validate_project_guide_compilation_result,
@@ -31,7 +33,7 @@ _INVALID_SCHEMA_OUTPUT = object()
 
 
 class OpenAIAgentSdkProjectGuideRuntime:
-    """Investigate assigned originals in one bounded isolated SDK run."""
+    """Investigate and review assigned originals in one bounded provider attempt."""
 
     def __init__(self, configuration: ProjectGuideRuntimeConfiguration) -> None:
         """Validate the installed adapter and credentials before the dispatch fence."""
@@ -138,25 +140,11 @@ class OpenAIAgentSdkProjectGuideRuntime:
             result = ProjectGuideCompilationResult.model_validate(output)
         require_complete_project_guide_compilation_result(result)
         validate_project_guide_compilation_result(context, result)
+        require_complete_generated_specifications(context, result)
         if result.agent_version != context.agent_version:
             raise ValueError("compilation result agent version is invalid")
         opened = await capabilities.resources.opened_handles()
-        if not opened:
-            raise ValueError("compilation has no opened document evidence")
-        document_handles = {
-            (item.source_item_id, item.ingest_id): context.material.handle_for(item)
-            for item in context.material.documents
-        }
-        references = (
-            *(ref for finding in result.findings for ref in finding.evidence_refs),
-            *(ref for requirement in result.requirements for ref in requirement.evidence_refs),
-            *(ref for suggestion in result.capability_suggestions for ref in suggestion.evidence_refs),
-        )
-        cited_handles = {document_handles[(ref.source_item_id, ref.document_version_id)]
-                         for ref in references}
-        if not cited_handles <= opened:
-            raise ValueError("compilation cites unopened source material")
-        require_ready_result_cites_every_document(context, result)
+        _require_opened_sources(context, result, opened)
         return result
 
     async def _run(self, context: ProjectGuideCompilationContext, prompt: str,
@@ -170,6 +158,7 @@ class OpenAIAgentSdkProjectGuideRuntime:
         from openai import AsyncOpenAI
 
         parser_rejected = False
+        draft_rejected = False
         configuration = self._configuration
         admission = self._admission
 
@@ -184,16 +173,38 @@ class OpenAIAgentSdkProjectGuideRuntime:
                     parser_rejected = True
                     raise
 
+        class DraftOutputSchema(AgentOutputSchema):
+            """Keep draft structure strict without rejecting correctable private content."""
+
+            def validate_json(self, json_str: str):
+                nonlocal draft_rejected
+                candidate = draft_parser.parse(json_str)
+                if candidate is not None:
+                    return candidate
+                draft_rejected = True
+                json_str = None
+                raise ModelBehaviorError("Guide candidate has invalid structure") from None
+
+        canonical_schema = CompilationOutputSchema(
+            ProjectGuideCompilationResult, strict_json_schema=True,
+        )
+        draft_schema = DraftOutputSchema(ProjectGuideCompilationResult, strict_json_schema=True)
+        draft_parser = CompilationDraftParser(
+            canonical_schema.json_schema(), configuration.maximum_manifest_bytes,
+        )
+
         class BoundedResponsesModel(OpenAIResponsesModel):
             """Bound hosted work across every model turn and compact carried input."""
 
             hosted_calls = 0
+            model_turns = 0
 
             async def get_response(self, system_instructions, input, model_settings, tools,
                                    output_schema, handoffs, tracing, previous_response_id=None,
                                    conversation_id=None, prompt=None):
                 remaining = configuration.maximum_hosted_tool_calls - self.hosted_calls
-                if remaining <= 0 or previous_response_id is not None or conversation_id is not None:
+                if (remaining <= 0 or self.model_turns >= configuration.maximum_turns
+                        or previous_response_id is not None or conversation_id is not None):
                     raise RuntimeError("guide runtime work boundary exceeded")
                 if isinstance(input, list):
                     compacted = [i for i, item in enumerate(input)
@@ -202,6 +213,7 @@ class OpenAIAgentSdkProjectGuideRuntime:
                         input = input[compacted[-1]:]
                 model_settings = replace(model_settings, extra_args={"max_tool_calls": remaining})
                 admission.before_request()
+                self.model_turns += 1
                 try:
                     response = await super().get_response(
                         system_instructions, input, model_settings, tools, output_schema,
@@ -225,10 +237,16 @@ class OpenAIAgentSdkProjectGuideRuntime:
             try:
                 await workspace.start()
 
+                reviewing = False
+                review_opened = set()
+
                 @function_tool(failure_error_function=None)
                 async def open_guide_document(handle: str) -> str:
                     """Open one assigned original by opaque handle, returning its workspace path."""
-                    return json.dumps(await workspace.open_document(handle))
+                    document = await workspace.open_document(handle)
+                    if reviewing:
+                        review_opened.add(handle)
+                    return json.dumps(document)
 
                 agent = Agent(
                     name="ProjectGuideCompilationAgent",
@@ -241,24 +259,69 @@ class OpenAIAgentSdkProjectGuideRuntime:
                         context_management=[{"type": "compaction",
                                              "compact_threshold": configuration.compaction_threshold_tokens}],
                     ),
-                    output_type=CompilationOutputSchema(ProjectGuideCompilationResult,
-                                                        strict_json_schema=True),
+                    output_type=draft_schema,
                     tools=[open_guide_document, CodeInterpreterTool(tool_config={
                         "type": "code_interpreter", "container": workspace.container_id,
                     })],
                     handoffs=[],
                 )
                 try:
+                    run_config = RunConfig(tracing_disabled=True, trace_include_sensitive_data=False)
+                    draft = await Runner.run(
+                        agent, prompt, max_turns=configuration.maximum_turns // 2,
+                        run_config=run_config,
+                    )
+                    candidate = draft.final_output
+                    draft = None
+                    if not isinstance(candidate, dict):
+                        return _INVALID_SCHEMA_OUTPUT
+                    review_input = json.dumps({
+                        "phase": "coverage_review",
+                        "guide_setup_context": json.loads(prompt),
+                        "candidate_proposal": candidate,
+                        "candidate_validation_issues": draft_parser.canonical_issues(candidate),
+                    }, ensure_ascii=False, allow_nan=False, separators=(",", ":"))
+                    candidate = None
+                    if len(review_input.encode("utf-8")) > configuration.maximum_manifest_bytes:
+                        raise ProjectGuideCompilationInvalidOutputError("schema_invalid")
+                    remaining_turns = configuration.maximum_turns - agent.model.model_turns
+                    if remaining_turns <= 0:
+                        raise RuntimeError("guide review turn budget exhausted")
+                    reviewing = True
+                    agent.output_type = canonical_schema
                     result = await Runner.run(
-                        agent, prompt, max_turns=configuration.maximum_turns,
-                        run_config=RunConfig(tracing_disabled=True, trace_include_sensitive_data=False),
+                        agent, review_input, max_turns=remaining_turns,
+                        run_config=run_config,
                     )
                 except ModelBehaviorError:
-                    if not parser_rejected:
+                    if not (parser_rejected or draft_rejected):
                         raise
                 else:
+                    try:
+                        _require_opened_sources(context, result.final_output, review_opened)
+                    except ValueError:
+                        raise ProjectGuideCompilationInvalidOutputError("schema_invalid") from None
                     return result.final_output
                 return _INVALID_SCHEMA_OUTPUT
             finally:
                 await workspace.close()
 
+
+def _require_opened_sources(context, result, opened):
+    """Require this phase to access every cited original and all originals when ready."""
+    if not opened:
+        raise ValueError("compilation has no opened document evidence")
+    document_handles = {
+        (item.source_item_id, item.ingest_id): context.material.handle_for(item)
+        for item in context.material.documents
+    }
+    references = (
+        *(ref for finding in result.findings for ref in finding.evidence_refs),
+        *(ref for requirement in result.requirements for ref in requirement.evidence_refs),
+        *(ref for suggestion in result.capability_suggestions for ref in suggestion.evidence_refs),
+    )
+    cited_handles = {document_handles.get((ref.source_item_id, ref.document_version_id))
+                     for ref in references}
+    if not cited_handles <= opened:
+        raise ValueError("compilation cites unopened source material")
+    require_ready_result_cites_every_document(context, result)

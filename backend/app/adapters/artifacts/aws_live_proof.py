@@ -17,6 +17,13 @@ from botocore.exceptions import BotoCoreError, ClientError
 from app.adapters.artifacts.s3_compatible import (
     create_isolated_aws_workload_identity_session,
 )
+from app.adapters.artifacts.aws_roles_anywhere_proof import (
+    ROLES_ANYWHERE_CA_ISSUER_COMMON_NAME,
+    ROLES_ANYWHERE_PROFILE_DURATION_SECONDS,
+    normalize_roles_anywhere_profile,
+    normalize_roles_anywhere_trust_anchor,
+    validate_roles_anywhere_trust_policy,
+)
 from app.core.config import Settings
 from app.core.hashing import canonical_json_hash
 from app.interfaces.artifacts import ArtifactConfigurationError
@@ -71,7 +78,7 @@ class AwsArtifactLiveProof:
         if settings.artifact_s3_provider_profile != "aws_s3":
             raise ArtifactConfigurationError("AWS artifact proof requires native AWS settings")
         self._settings = settings
-        self._session = session or create_isolated_aws_workload_identity_session(settings)
+        self._session = session
         self._config = AioConfig(
             connect_timeout=settings.artifact_s3_connect_timeout_seconds,
             read_timeout=settings.artifact_s3_read_timeout_seconds,
@@ -89,8 +96,26 @@ class AwsArtifactLiveProof:
         """Bind STS identity first, then execute only the selected fixed call set."""
         expected = self._expected_principal(probe_type)
         observed: str | None = None
-        evidence: dict[str, object] = {"suite": "aws-s3-live-v1", "mode": probe_type}
+        evidence: dict[str, object] = {
+            "suite": "aws-s3-identity-custody",
+            "mode": probe_type,
+        }
         try:
+            if self._settings.artifact_s3_aws_workload_identity_method == "roles-anywhere":
+                if self._settings.artifact_s3_roles_anywhere_role_arn != expected:
+                    raise ArtifactConfigurationError(
+                        "Roles Anywhere identity does not match the selected proof mode"
+                    )
+            if self._session is None:
+                self._session = create_isolated_aws_workload_identity_session(
+                    self._settings,
+                    required_roles_anywhere_role_arn=(
+                        expected
+                        if self._settings.artifact_s3_aws_workload_identity_method
+                        == "roles-anywhere"
+                        else None
+                    ),
+                )
             observed = await self._observe_principal(expected)
             if observed != expected:
                 return self._failed(probe_type, expected, observed, "identity_mismatch", evidence)
@@ -102,6 +127,25 @@ class AwsArtifactLiveProof:
                 evidence.update(await self._negative_access(group_nonce))
             else:
                 raise ArtifactConfigurationError("AWS artifact proof mode is invalid")
+            if self._settings.artifact_s3_aws_workload_identity_method == "roles-anywhere":
+                from app.adapters.artifacts.aws_roles_anywhere import (
+                    prove_roles_anywhere_role_isolation,
+                )
+
+                isolation = await prove_roles_anywhere_role_isolation(self._settings)
+                evidence.update(
+                    {
+                        "roles_anywhere_initial_own_role": (
+                            isolation.initial_own_role_succeeded
+                        ),
+                        "roles_anywhere_other_roles_denied": (
+                            isolation.other_roles_access_denied
+                        ),
+                        "roles_anywhere_final_own_role": (
+                            isolation.final_own_role_succeeded
+                        ),
+                    }
+                )
         except (
             ArtifactConfigurationError,
             BotoCoreError,
@@ -283,6 +327,8 @@ class AwsArtifactLiveProof:
                 lifecycle.get("Rules", []), self._settings.artifact_s3_private_prefix
             )
         await self._validate_iam()
+        if self._settings.artifact_s3_aws_workload_identity_method == "roles-anywhere":
+            await self._validate_roles_anywhere_resources()
         await self._validate_access_analyzer(policy_text)
         await self._prove_object_denials(key, content)
         await self._prove_anonymous_denials(key, content)
@@ -296,6 +342,11 @@ class AwsArtifactLiveProof:
             "owner_only_acl": True,
             "lifecycle_safe": True,
             "iam_exact": True,
+            **(
+                {"roles_anywhere_resources_exact": True}
+                if self._settings.artifact_s3_aws_workload_identity_method == "roles-anywhere"
+                else {}
+            ),
             "access_analyzer": True,
             "readiness_object_access_denied": True,
             "anonymous_object_access_denied": True,
@@ -336,10 +387,28 @@ class AwsArtifactLiveProof:
                 trust_policy = _load_policy(role_data.get("AssumeRolePolicyDocument"))
                 if canonical_json_hash(trust_policy) != expected_trust_digest:
                     raise ArtifactConfigurationError("AWS IAM role trust policy digest differs")
-                trust_subjects[role_arn] = _trust_policy_subjects(
-                    trust_policy,
-                    workload_roles=workload_roles,
-                )
+                if (
+                    self._settings.artifact_s3_aws_workload_identity_method
+                    == "roles-anywhere"
+                ):
+                    anchor_arn = self._required(
+                        self._settings.artifact_s3_roles_anywhere_trust_anchor_arn
+                    )
+                    validate_roles_anywhere_trust_policy(
+                        trust_policy,
+                        trust_anchor_arn=anchor_arn,
+                        account_id=role_arn.split(":", 5)[4],
+                        issuer_common_name=ROLES_ANYWHERE_CA_ISSUER_COMMON_NAME,
+                        subject_common_name=role_name,
+                    )
+                    trust_subjects[role_arn] = frozenset(
+                        {("roles-anywhere", role_name)}
+                    )
+                else:
+                    trust_subjects[role_arn] = _trust_policy_subjects(
+                        trust_policy,
+                        workload_roles=workload_roles,
+                    )
                 if role_arn != runtime_role and any(
                     subject_kind == "service" for subject_kind, _subject in trust_subjects[role_arn]
                 ):
@@ -383,6 +452,38 @@ class AwsArtifactLiveProof:
                     _validate_runtime_policy(parsed, self._settings)
                 else:
                     _validate_readiness_policy(parsed, self._settings)
+
+    async def _validate_roles_anywhere_resources(self) -> None:
+        """Bind readiness to the enabled anchor CA and shared closed profile state."""
+        anchor_arn = self._required(
+            self._settings.artifact_s3_roles_anywhere_trust_anchor_arn
+        )
+        profile_arn = self._required(self._settings.artifact_s3_roles_anywhere_profile_arn)
+        region = self._required(self._settings.artifact_s3_region)
+        async with self._session.create_client(
+            "rolesanywhere", region_name=region, config=self._config
+        ) as client:
+            anchor_response = await client.get_trust_anchor(trustAnchorId=_arn_resource_id(anchor_arn))
+            profile_response = await client.get_profile(profileId=_arn_resource_id(profile_arn))
+        _anchor, anchor_sha256 = normalize_roles_anywhere_trust_anchor(
+            anchor_response,
+            expected_arn=anchor_arn,
+            expected_issuer_common_name=ROLES_ANYWHERE_CA_ISSUER_COMMON_NAME,
+        )
+        _profile, profile_sha256 = normalize_roles_anywhere_profile(
+            profile_response,
+            expected_arn=profile_arn,
+            expected_role_arns=(
+                self._required(self._settings.artifact_s3_runtime_role_arn),
+                self._required(self._settings.artifact_s3_readiness_role_arn),
+                self._required(self._settings.artifact_s3_negative_role_arn),
+            ),
+            expected_duration_seconds=ROLES_ANYWHERE_PROFILE_DURATION_SECONDS,
+        )
+        if anchor_sha256 != self._settings.artifact_s3_roles_anywhere_trust_anchor_sha256:
+            raise ArtifactConfigurationError("AWS Roles Anywhere trust anchor digest differs")
+        if profile_sha256 != self._settings.artifact_s3_roles_anywhere_profile_sha256:
+            raise ArtifactConfigurationError("AWS Roles Anywhere profile digest differs")
 
     async def _validate_access_analyzer(self, bucket_policy_text: str) -> None:
         """Require a finding-free bucket policy that grants no public object access."""
@@ -530,6 +631,14 @@ def _canonical_observed_role_arn(observed: str, expected: str) -> str:
     expected_name = expected_parts[5].rsplit("/", 1)[-1]
     assumed_parts = observed_parts[5].split("/")
     return expected if len(assumed_parts) == 3 and assumed_parts[1] == expected_name else observed
+
+
+def _arn_resource_id(arn: str) -> str:
+    """Return the exact terminal identifier from a validated Roles Anywhere ARN."""
+    resource_id = arn.rsplit("/", 1)[-1]
+    if not resource_id or resource_id == arn or any(marker in resource_id for marker in ("*", "?")):
+        raise ArtifactConfigurationError("AWS Roles Anywhere resource ARN is invalid")
+    return resource_id
 
 
 async def _require_client_error(call: Any, allowed_codes: set[str]) -> None:
@@ -709,6 +818,17 @@ def _validate_readiness_policy(policy: dict[str, Any], settings: Settings) -> No
     expected.update((action, role) for action in _ROLE_INSPECTION_ACTIONS for role in roles)
     expected.update((action, arn) for action in _POLICY_INSPECTION_ACTIONS for arn in policies)
     expected.update((action, "*") for action in _ANALYZER_ACTIONS)
+    if settings.artifact_s3_aws_workload_identity_method == "roles-anywhere":
+        anchor = settings.artifact_s3_roles_anywhere_trust_anchor_arn
+        profile = settings.artifact_s3_roles_anywhere_profile_arn
+        if anchor is None or profile is None:
+            raise ArtifactConfigurationError("AWS Roles Anywhere readiness resources are absent")
+        expected.update(
+            {
+                ("rolesanywhere:GetTrustAnchor", anchor),
+                ("rolesanywhere:GetProfile", profile),
+            }
+        )
     if None in roles or None in policies or _allowed_pairs(policy) != frozenset(expected):
         raise ArtifactConfigurationError("AWS readiness policy permissions differ")
 
@@ -751,13 +871,22 @@ def _validate_bucket_policy(policy: dict[str, Any], settings: Settings) -> None:
 
 
 def _has_only_sse_s3(rules: object) -> bool:
+    """Require AES256 while accepting AWS's separate, typed encryption metadata."""
     if not isinstance(rules, list) or len(rules) != 1 or not isinstance(rules[0], dict):
         return False
-    default = rules[0].get("ApplyServerSideEncryptionByDefault")
+    rule = rules[0]
+    # Bucket keys affect SSE-KMS, not the exact AES256 default required here.
+    if "BucketKeyEnabled" in rule and type(rule["BucketKeyEnabled"]) is not bool:
+        return False
+    if "BlockedEncryptionTypes" in rule and rule["BlockedEncryptionTypes"] != {
+        "EncryptionType": ["SSE-C"]
+    }:
+        return False
     return (
-        default == {"SSEAlgorithm": "AES256"}
-        and rules[0].get("BucketKeyEnabled") in {None, False}
-        and set(rules[0]) <= {"ApplyServerSideEncryptionByDefault", "BucketKeyEnabled"}
+        rule.get("ApplyServerSideEncryptionByDefault") == {"SSEAlgorithm": "AES256"}
+        and set(rule) <= {
+            "ApplyServerSideEncryptionByDefault", "BucketKeyEnabled", "BlockedEncryptionTypes"
+        }
     )
 
 

@@ -268,6 +268,7 @@ class ActionId(StrEnum):
     CONTRIBUTION_POLICY_UPDATE_DRAFT = "contribution.policy.update_draft"
     CONTRIBUTION_POLICY_PUBLISH = "contribution.policy.publish"
     CONTRIBUTION_POLICY_RETIRE = "contribution.policy.retire"
+    CONTRIBUTION_COMPENSATION_UNIT_CREATE = "contribution.compensation_unit.create"
     CONTRIBUTION_READ_SELF = "contribution.read_self"
     CONTRIBUTION_READ_PROJECT = "contribution.read_project"
     ACTOR_PROJECT_LIST = "actor.project.list"
@@ -396,6 +397,7 @@ class ActionOwner(StrEnum):
     XINT_003_08B = "WS-XINT-003-08B"
     ARCH_CP01A = "WS-ARCH-001-CP01A"
     ARCH_CP01B = "WS-ARCH-001-CP01B"
+    PROJECT_POINTS_UNIT_CREATION = "project-points-unit-creation"
 
 
 @unique
@@ -682,30 +684,18 @@ ACTION_DEFINITIONS = (
         ActionOwner.XINT_003_08A,
     ),
     _active(ActionId.REVIEW_LIFECYCLE_ACTIVATION_MANAGE, PermissionId.OPERATIONS_RECONCILE_RUN, ActionOwner.XINT_003_08B),
-    _planned(ActionId.ARTIFACT_BINDING_READ, PermissionId.ARTIFACT_BINDING_READ, ActionOwner.AUTH_ART_02D_OPERATOR),
-    _planned(ActionId.ARTIFACT_REPLICA_READ, PermissionId.ARTIFACT_REPLICA_READ, ActionOwner.AUTH_ART_02D_OPERATOR),
-    _planned(ActionId.ARTIFACT_RECEIPT_READ, PermissionId.ARTIFACT_RECEIPT_READ, ActionOwner.AUTH_ART_02D_OPERATOR),
-    _planned(
-        ActionId.ARTIFACT_VERIFICATION_JOB_READ,
-        PermissionId.ARTIFACT_VERIFICATION_JOB_READ,
-        ActionOwner.AUTH_ART_02D_OPERATOR,
-    ),
-    _planned(
-        ActionId.ARTIFACT_VERIFICATION_JOB_RETRY,
-        PermissionId.ARTIFACT_VERIFICATION_JOB_RETRY,
-        ActionOwner.AUTH_ART_02D_OPERATOR,
-    ),
-    _planned(
-        ActionId.ARTIFACT_RECOVERY_ATTEMPT_READ,
-        PermissionId.ARTIFACT_RECOVERY_ATTEMPT_READ,
-        ActionOwner.AUTH_ART_02D_OPERATOR,
-    ),
-    _planned(ActionId.ARTIFACT_AUDIT_READ, PermissionId.ARTIFACT_AUDIT_READ, ActionOwner.AUTH_ART_02D_OPERATOR),
-    _planned(
-        ActionId.OPERATIONS_ARTIFACT_STORAGE_ADMISSION_READ,
-        PermissionId.OPERATIONS_STATUS_READ,
-        ActionOwner.AUTH_ART_02D_OPERATOR,
-    ),
+    _active(ActionId.ARTIFACT_BINDING_READ, PermissionId.ARTIFACT_BINDING_READ, ActionOwner.AUTH_ART_02D_OPERATOR),
+    _active(ActionId.ARTIFACT_REPLICA_READ, PermissionId.ARTIFACT_REPLICA_READ, ActionOwner.AUTH_ART_02D_OPERATOR),
+    _active(ActionId.ARTIFACT_RECEIPT_READ, PermissionId.ARTIFACT_RECEIPT_READ, ActionOwner.AUTH_ART_02D_OPERATOR),
+    _active(ActionId.ARTIFACT_VERIFICATION_JOB_READ,
+            PermissionId.ARTIFACT_VERIFICATION_JOB_READ, ActionOwner.AUTH_ART_02D_OPERATOR),
+    _active(ActionId.ARTIFACT_VERIFICATION_JOB_RETRY,
+            PermissionId.ARTIFACT_VERIFICATION_JOB_RETRY, ActionOwner.AUTH_ART_02D_OPERATOR),
+    _active(ActionId.ARTIFACT_RECOVERY_ATTEMPT_READ,
+            PermissionId.ARTIFACT_RECOVERY_ATTEMPT_READ, ActionOwner.AUTH_ART_02D_OPERATOR),
+    _active(ActionId.ARTIFACT_AUDIT_READ, PermissionId.ARTIFACT_AUDIT_READ, ActionOwner.AUTH_ART_02D_OPERATOR),
+    _active(ActionId.OPERATIONS_ARTIFACT_STORAGE_ADMISSION_READ,
+            PermissionId.OPERATIONS_STATUS_READ, ActionOwner.AUTH_ART_02D_OPERATOR),
     _active(ActionId.ARTIFACT_GUIDE_SOURCE_INGEST, PermissionId.ARTIFACT_GUIDE_SOURCE_INGEST, ActionOwner.XINT_002_04A),
     _active(ActionId.ARTIFACT_GUIDE_SOURCE_READ, PermissionId.ARTIFACT_GUIDE_SOURCE_READ, ActionOwner.XINT_002_04B),
     _active(ActionId.ARTIFACT_SUBMISSION_BUNDLE_PREPARE, PermissionId.SUBMISSION_CREATE, ActionOwner.XINT_002_05A),
@@ -759,29 +749,23 @@ ACTION_DEFINITIONS = (
         PermissionId.ARTIFACT_BINDING_CREATE,
         ActionOwner.XINT_002_07,
     ),
-    _active(
-        ActionId.COMPENSATION_ADAPTER_BINDING_READ,
-        PermissionId.COMPENSATION_ADAPTER_BINDING_MANAGE,
-        ActionOwner.ARCH_CP01A,
-    ),
-    _active(
-        ActionId.COMPENSATION_ADAPTER_BINDING_CREATE,
-        PermissionId.COMPENSATION_ADAPTER_BINDING_MANAGE,
-        ActionOwner.ARCH_CP01A,
-    ),
-    _active(
-        ActionId.COMPENSATION_ADAPTER_BINDING_SUSPEND,
-        PermissionId.COMPENSATION_ADAPTER_BINDING_MANAGE,
-        ActionOwner.ARCH_CP01A,
-    ),
-    _active(
-        ActionId.COMPENSATION_ADAPTER_BINDING_RESUME,
-        PermissionId.COMPENSATION_ADAPTER_BINDING_MANAGE,
-        ActionOwner.ARCH_CP01A,
+    *(
+        _active(action, PermissionId.COMPENSATION_ADAPTER_BINDING_MANAGE, ActionOwner.ARCH_CP01A)
+        for action in (
+            ActionId.COMPENSATION_ADAPTER_BINDING_READ,
+            ActionId.COMPENSATION_ADAPTER_BINDING_CREATE,
+            ActionId.COMPENSATION_ADAPTER_BINDING_SUSPEND,
+            ActionId.COMPENSATION_ADAPTER_BINDING_RESUME,
+        )
     ),
     *(
         _active(action, PermissionId.COMPENSATION_POLICY_MANAGE, ActionOwner.ARCH_CP01B)
         for action in _CONTRIBUTION_POLICY_ACTION_IDS
+    ),
+    _active(
+        ActionId.CONTRIBUTION_COMPENSATION_UNIT_CREATE,
+        PermissionId.COMPENSATION_POLICY_MANAGE,
+        ActionOwner.PROJECT_POINTS_UNIT_CREATION,
     ),
 )
 
@@ -834,7 +818,7 @@ HISTORICAL_PERMISSION_IDS = PERMISSION_IDS - NEW_PERMISSION_IDS
 
 def _require_catalogue_counts() -> None:
     """Keep the closed action inventory and permission boundary exact."""
-    if len(PERMISSION_IDS) != 82 or len(ACTION_IDS) != 176:
+    if len(PERMISSION_IDS) != 82 or len(ACTION_IDS) != 177:
         raise RuntimeError("authorization catalogue count mismatch")
     if len(HISTORICAL_PERMISSION_IDS) != 49 or len(NEW_PERMISSION_IDS) != 33:
         raise RuntimeError("authorization permission boundary mismatch")
@@ -891,6 +875,7 @@ _ACTIVE_ACTION_BOUNDARY = frozenset({
     ActionId.OUTBOX_DISPATCH,
     ActionId.PROJECT_GUIDE_ACTIVATE,
     *_CONTRIBUTION_POLICY_ACTION_IDS,
+    ActionId.CONTRIBUTION_COMPENSATION_UNIT_CREATE,
     ActionId.REVIEW_LIFECYCLE_ACTIVATION_MANAGE,
     *GUIDE_PROPOSAL_ACTION_IDS,
     *POST_POLICY_MUTATION_ACTION_IDS,
@@ -943,6 +928,14 @@ _ACTIVE_ACTION_BOUNDARY = frozenset({
     ActionId.PROJECT_EFFECTIVE_SUBMISSION_ARTIFACT_POLICY_READ,
     ActionId.PROJECT_PRE_SUBMIT_CHECKER_POLICY_READ,
     ActionId.PROJECT_ACTIVE_GUIDE_READ,
+    ActionId.ARTIFACT_BINDING_READ,
+    ActionId.ARTIFACT_REPLICA_READ,
+    ActionId.ARTIFACT_RECEIPT_READ,
+    ActionId.ARTIFACT_VERIFICATION_JOB_READ,
+    ActionId.ARTIFACT_VERIFICATION_JOB_RETRY,
+    ActionId.ARTIFACT_RECOVERY_ATTEMPT_READ,
+    ActionId.ARTIFACT_AUDIT_READ,
+    ActionId.OPERATIONS_ARTIFACT_STORAGE_ADMISSION_READ,
     ActionId.ARTIFACT_GUIDE_SOURCE_INGEST,
     ActionId.ARTIFACT_GUIDE_SOURCE_READ,
     ActionId.ARTIFACT_SUBMISSION_BUNDLE_PREPARE,

@@ -86,14 +86,15 @@ async def test_live_activation_keeps_product_readiness_guards(clean_postgres_dat
     compilation_outcome = None
     if not human_review_required:
         from app.interfaces.project_agents import AtomicGuideRequirement
-        from tests.projects.guide_compilation.helpers import result
+        from tests.projects.guide_compilation.helpers import generated_result
 
-        proposal = result()
+        proposal = generated_result()
         compilation_outcome = proposal.model_copy(update={"requirements": (
             AtomicGuideRequirement(
                 requirement_id="human_quality",
                 statement="An authorized reviewer must assess the final quality.",
                 disposition="human_review",
+                classification_rationale="The guide requires an authorized human decision.",
                 evidence_refs=proposal.findings[0].evidence_refs,
             ),
         )})

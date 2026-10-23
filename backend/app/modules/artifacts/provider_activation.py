@@ -27,7 +27,7 @@ from app.modules.artifacts.models import (
     ArtifactProviderProbeResult,
 )
 
-AWS_ARTIFACT_PROOF_VERSION = "aws-s3-live-v1"
+AWS_ARTIFACT_PROOF_VERSION = "aws-s3-identity-custody"
 _REQUIRED_PROBE_TYPES = (
     "readiness",
     "runtime_immutability",
@@ -47,6 +47,28 @@ def _required(value: str | None, name: str) -> str:
             f"AWS artifact activation {name} is unavailable"
         )
     return value
+
+
+def _roles_anywhere_custody(
+    settings: Settings,
+) -> tuple[str | None, str | None, str | None, str | None]:
+    """Return the all-present or all-absent mutable Roles Anywhere binding."""
+    values = (
+        settings.artifact_s3_roles_anywhere_trust_anchor_arn,
+        settings.artifact_s3_roles_anywhere_trust_anchor_sha256,
+        settings.artifact_s3_roles_anywhere_profile_arn,
+        settings.artifact_s3_roles_anywhere_profile_sha256,
+    )
+    if settings.artifact_s3_aws_workload_identity_method == "roles-anywhere":
+        if any(value is None for value in values):
+            raise ArtifactProviderLiveProofRequiredError(
+                "AWS artifact activation Roles Anywhere custody is incomplete"
+            )
+    elif any(value is not None for value in values):
+        raise ArtifactProviderLiveProofRequiredError(
+            "AWS artifact activation has foreign Roles Anywhere custody"
+        )
+    return values
 
 
 def expected_artifact_probe_principal(
@@ -74,6 +96,7 @@ def _activation_filters(
     namespace_fingerprint: str,
 ) -> tuple[object, ...]:
     """Return the exact non-secret deployment tuple used by every activation read."""
+    anchor_arn, anchor_sha256, profile_arn, profile_sha256 = _roles_anywhere_custody(settings)
     return (
         ArtifactProviderActivation.proof_version == AWS_ARTIFACT_PROOF_VERSION,
         ArtifactProviderActivation.release_id == _required(settings.release_id, "release"),
@@ -104,6 +127,10 @@ def _activation_filters(
             settings.artifact_s3_negative_trust_policy_sha256,
             "negative trust policy",
         ),
+        ArtifactProviderActivation.roles_anywhere_trust_anchor_arn == anchor_arn,
+        ArtifactProviderActivation.roles_anywhere_trust_anchor_sha256 == anchor_sha256,
+        ArtifactProviderActivation.roles_anywhere_profile_arn == profile_arn,
+        ArtifactProviderActivation.roles_anywhere_profile_sha256 == profile_sha256,
         ArtifactProviderActivation.bootstrap_principal_arn
         == _required(settings.artifact_s3_bootstrap_principal_arn, "bootstrap principal"),
         ArtifactProviderActivation.bucket_policy_sha256
@@ -162,6 +189,7 @@ async def record_artifact_provider_probe_result(
     arn_parts = expected_principal_arn.split(":", 5)
     if len(arn_parts) != 6 or arn_parts[0] != "arn" or not arn_parts[4].isdigit():
         raise ArtifactProviderLiveProofRequiredError("AWS artifact probe principal is invalid")
+    anchor_arn, anchor_sha256, profile_arn, profile_sha256 = _roles_anywhere_custody(settings)
     result = ArtifactProviderProbeResult(
         id=str(new_record_id()),
         probe_type=probe_type,
@@ -198,6 +226,10 @@ async def record_artifact_provider_probe_result(
             settings.artifact_s3_negative_trust_policy_sha256,
             "negative trust policy",
         ),
+        roles_anywhere_trust_anchor_arn=anchor_arn,
+        roles_anywhere_trust_anchor_sha256=anchor_sha256,
+        roles_anywhere_profile_arn=profile_arn,
+        roles_anywhere_profile_sha256=profile_sha256,
         bootstrap_principal_arn=_required(
             settings.artifact_s3_bootstrap_principal_arn,
             "bootstrap principal",
@@ -334,6 +366,7 @@ async def coordinate_artifact_provider_activation(
     """Create one immutable activation from an exact unexpired three-probe group."""
     if settings.artifact_s3_provider_profile != "aws_s3" or type(group_nonce) is not UUID:
         raise ArtifactProviderLiveProofRequiredError("AWS artifact proof group is invalid")
+    anchor_arn, anchor_sha256, profile_arn, profile_sha256 = _roles_anywhere_custody(settings)
     rows = tuple(
         (
             await session.scalars(
@@ -372,6 +405,14 @@ async def coordinate_artifact_provider_activation(
                         settings.artifact_s3_negative_trust_policy_sha256,
                         "negative trust policy",
                     ),
+                    ArtifactProviderProbeResult.roles_anywhere_trust_anchor_arn
+                    == anchor_arn,
+                    ArtifactProviderProbeResult.roles_anywhere_trust_anchor_sha256
+                    == anchor_sha256,
+                    ArtifactProviderProbeResult.roles_anywhere_profile_arn
+                    == profile_arn,
+                    ArtifactProviderProbeResult.roles_anywhere_profile_sha256
+                    == profile_sha256,
                     ArtifactProviderProbeResult.bootstrap_principal_arn
                     == _required(
                         settings.artifact_s3_bootstrap_principal_arn,
@@ -419,6 +460,10 @@ async def coordinate_artifact_provider_activation(
         "readiness_policy_arn",
         "negative_role_arn",
         "negative_trust_policy_sha256",
+        "roles_anywhere_trust_anchor_arn",
+        "roles_anywhere_trust_anchor_sha256",
+        "roles_anywhere_profile_arn",
+        "roles_anywhere_profile_sha256",
         "bootstrap_principal_arn",
         "bucket_policy_sha256",
         "group_nonce",
@@ -477,6 +522,10 @@ async def coordinate_artifact_provider_activation(
         readiness_policy_arn=canonical.readiness_policy_arn,
         negative_role_arn=canonical.negative_role_arn,
         negative_trust_policy_sha256=canonical.negative_trust_policy_sha256,
+        roles_anywhere_trust_anchor_arn=canonical.roles_anywhere_trust_anchor_arn,
+        roles_anywhere_trust_anchor_sha256=canonical.roles_anywhere_trust_anchor_sha256,
+        roles_anywhere_profile_arn=canonical.roles_anywhere_profile_arn,
+        roles_anywhere_profile_sha256=canonical.roles_anywhere_profile_sha256,
         bootstrap_principal_arn=canonical.bootstrap_principal_arn,
         bucket_policy_sha256=canonical.bucket_policy_sha256,
         group_nonce=canonical.group_nonce,

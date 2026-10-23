@@ -16,6 +16,7 @@ from app.interfaces.project_agents import (
     PROJECT_GUIDE_COMPILATION_AGENT_VERSION,
     ProjectGuideCompilationContext,
     canonical_project_guide_compilation_context_bytes,
+    project_guide_compilation_prompt_bytes,
 )
 from app.modules.checkers.api.external import ExternalCheckerCapabilityProjection
 from app.modules.projects.models import GuideSourceSnapshot, ProjectGuide
@@ -78,7 +79,7 @@ async def build_project_guide_compilation_context(
             setup_generation=identity.setup_generation,
             checker_capabilities=checker_capabilities,
             runtime_configuration=state.runtime_configuration,
-            correction_feedback=await _correction_feedback(session, identity.setup_run_id),
+            correction_input=await _correction_input(session, identity.setup_run_id),
         )
         if CompilationAttemptIdentity.from_context(context) != identity:
             raise GuideCompilationIntegrityError("compilation context identity mismatch")
@@ -94,7 +95,7 @@ def compilation_context_from_material(
     setup_generation,
     checker_capabilities: ExternalCheckerCapabilityProjection,
     runtime_configuration: ProjectGuideRuntimeConfiguration,
-    correction_feedback=None,
+    correction_input=None,
 ) -> ProjectGuideCompilationContext:
     """Build the one bounded context used by both request and execution."""
     if (
@@ -116,7 +117,8 @@ def compilation_context_from_material(
     except ValueError:
         raise GuideCompilationIntegrityError("guide task examples are unavailable") from None
     context = ProjectGuideCompilationContext(
-        correction_feedback=correction_feedback,
+        correction_feedback=correction_input.feedback if correction_input else None,
+        correction_predecessor=correction_input.predecessor if correction_input else None,
         task_examples=examples,
         material=loaded,
         setup_run_id=setup_run_id,
@@ -130,13 +132,18 @@ def compilation_context_from_material(
     if (
         len(canonical_project_guide_compilation_context_bytes(context))
         > MAXIMUM_PROJECT_GUIDE_COMPILATION_PROMPT_BYTES
+        or (
+            not runtime_configuration.provider_free
+            and len(project_guide_compilation_prompt_bytes(context))
+            > runtime_configuration.maximum_manifest_bytes
+        )
     ):
         raise GuideCompilationIntegrityError("compilation context exceeds its limit")
     return context
 
 
-async def _correction_feedback(session, setup_run_id):
+async def _correction_input(session, setup_run_id):
     """Load downstream feedback without a context/repository import cycle."""
-    from .correction_feedback import load_correction_feedback
+    from .correction_feedback import load_correction_input
 
-    return await load_correction_feedback(session, setup_run_id)
+    return await load_correction_input(session, setup_run_id)

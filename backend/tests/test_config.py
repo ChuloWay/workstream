@@ -1664,6 +1664,13 @@ async def test_aws_lifespan_claims_namespace_then_requires_activation_before_pro
     assert events == ["namespace", "activation"]
 
 
+def test_schema_validator_is_a_direct_production_dependency() -> None:
+    """Core checker and guide contracts must not depend on a development extra."""
+    manifest = tomllib.loads((Path(__file__).parents[1] / "pyproject.toml").read_text())
+    assert "jsonschema==4.26.0" in manifest["project"]["dependencies"]
+    assert importlib.metadata.version("jsonschema") == "4.26.0"
+
+
 def test_s3_dependency_manifest_and_installed_versions_are_exact() -> None:
     manifest = tomllib.loads((Path(__file__).parents[1] / "pyproject.toml").read_text())
 

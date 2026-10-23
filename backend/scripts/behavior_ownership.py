@@ -103,8 +103,17 @@ CHECKER_IMAGE_PUBLISH_TARGETS = frozenset({
 })
 AWS_ARTIFACT_ACTIVATION_TARGETS = frozenset({
     "backend/app/adapters/artifacts/aws_live_proof.py",
+    "backend/app/adapters/artifacts/aws_roles_anywhere.py",
+    "backend/app/adapters/artifacts/aws_roles_anywhere_proof.py",
+    "backend/app/core/aws_roles_anywhere.py",
     "backend/app/modules/artifacts/provider_activation.py",
     "backend/scripts/aws_artifact_provider_proof.py",
+    "backend/scripts/aws_roles_anywhere_config.py",
+})
+AUTH_ART_OPERATOR_TARGETS = frozenset({
+    "backend/app/modules/artifacts/api/operator_authority.py",
+    "backend/app/modules/authorization/artifact_operator_authorization.py",
+    "backend/app/modules/authorization/domain/artifact_operator.py",
 })
 PILOT_READ_1_TARGETS = frozenset({
     "backend/app/modules/tasks/submission_attempts.py",
@@ -305,6 +314,14 @@ LOCAL_AGENT_LOOP_TARGETS = frozenset(
         "backend/scripts/transition_review_lifecycle.py",
     }
 )
+COMPENSATION_UNIT_TARGETS = frozenset(
+    {
+        "backend/app/modules/contributions/api/compensation_units.py",
+        "backend/app/modules/contributions/units/service.py",
+        "backend/app/modules/contributions/units/models.py",
+        "backend/scripts/provision_project_points.py",
+    }
+)
 MODULE_PUBLIC_API_FOUNDATION_TARGETS = frozenset(
     {
         "backend/app/api/routes/artifact_submissions.py",
@@ -387,6 +404,9 @@ ARCH_04F4_RETRY_TARGETS = frozenset({
 })
 MANAGER_AUTHORED_GUIDE_RUNTIME_TARGETS = frozenset({
     "backend/app/adapters/project_agents/manager_authored.py",
+})
+GUIDE_COMPILATION_DRAFT_TARGETS = frozenset({
+    "backend/app/adapters/project_agents/compilation_draft.py",
 })
 ARCH_04F5_DELIVERY_RECONCILIATION_TARGETS = frozenset({
     "backend/app/modules/authorization/domain/post_submit_deliveries.py",
@@ -998,6 +1018,7 @@ def _validate_additive_partition_transition(
         | PILOT_08_REVISION_TARGETS
         | PILOT_READ_1_TARGETS
         | AWS_ARTIFACT_ACTIVATION_TARGETS
+        | AUTH_ART_OPERATOR_TARGETS
         | CHECKER_IMAGE_PUBLISH_TARGETS
         | PILOT_READ_2_TARGETS
         | PILOT_READ_3_TARGETS
@@ -1015,6 +1036,7 @@ def _validate_additive_partition_transition(
         | PILOT_04_SELECTED_FLOW_TARGETS
         | LOCAL_PILOT_HELPER_TARGETS
         | LOCAL_AGENT_LOOP_TARGETS
+        | COMPENSATION_UNIT_TARGETS
         | MODULE_BOUNDARY_FOUNDATION_TARGETS
         | MODULE_PUBLIC_API_FOUNDATION_TARGETS
         | POL_03A_CALLABLE_TARGETS
@@ -1066,6 +1088,7 @@ def _validate_additive_partition_transition(
             | ARCH_04F4_RETRY_TARGETS
             | ARCH_04F5_DELIVERY_RECONCILIATION_TARGETS
             | MANAGER_AUTHORED_GUIDE_RUNTIME_TARGETS
+            | GUIDE_COMPILATION_DRAFT_TARGETS
             | OBSERVABILITY_FOUNDATION_TARGETS
         | ARCH_04E1A_SOURCE_TARGETS
         | ARCH_04D2_AUTHORITY_TARGETS

@@ -128,12 +128,13 @@ async def test_archived_project_reports_activations_refusal_first(clean_postgres
 
 async def test_human_requirement_under_disabled_review_reports_activations_refusal(clean_postgres_database):
     from app.interfaces.project_agents import AtomicGuideRequirement
-    from tests.projects.guide_compilation.helpers import result as compiled
+    from tests.projects.guide_compilation.helpers import generated_result as compiled
 
     outcome = compiled()
     requirement = AtomicGuideRequirement(
         requirement_id="human_quality", statement="An authorized reviewer must assess the final quality.",
-        disposition="human_review", evidence_refs=outcome.findings[0].evidence_refs,
+        disposition="human_review",
+        classification_rationale="The guide requires an authorized human decision.", evidence_refs=outcome.findings[0].evidence_refs,
     )
     outcome = outcome.model_copy(update={"requirements": (requirement,)})
     async with activation_case(
@@ -147,12 +148,13 @@ async def test_human_requirement_under_disabled_review_reports_activations_refus
 async def test_disposition_check_is_the_one_activation_runs(clean_postgres_database, monkeypatch):
     """Removing the shared check removes it from readiness too: one code path, not a copy."""
     from app.interfaces.project_agents import AtomicGuideRequirement
-    from tests.projects.guide_compilation.helpers import result as compiled
+    from tests.projects.guide_compilation.helpers import generated_result as compiled
 
     outcome = compiled()
     requirement = AtomicGuideRequirement(
         requirement_id="human_quality", statement="An authorized reviewer must assess the final quality.",
-        disposition="human_review", evidence_refs=outcome.findings[0].evidence_refs,
+        disposition="human_review",
+        classification_rationale="The guide requires an authorized human decision.", evidence_refs=outcome.findings[0].evidence_refs,
     )
     outcome = outcome.model_copy(update={"requirements": (requirement,)})
     original = GuideActivationService._readiness

@@ -2587,6 +2587,22 @@ def test_manager_authored_runtime_ownership_admits_only_its_adapter():
         )
 
 
+def test_partition_allows_only_exact_guide_compilation_draft_target():
+    targets = ownership.GUIDE_COMPILATION_DRAFT_TARGETS
+    assert targets == {"backend/app/adapters/project_agents/compilation_draft.py"}
+    retained = "backend/app/core/config.py"
+    trusted = _partition([retained])
+    ownership._validate_additive_partition_transition(
+        _partition(sorted({retained, *targets})), trusted,
+    )
+    with pytest.raises(ownership.BehaviorOwnershipError, match="untrusted_partition_change"):
+        ownership._validate_additive_partition_transition(
+            _partition(sorted({retained, *targets,
+                               "backend/app/adapters/project_agents/compilation_draft_neighbor.py"})),
+            trusted,
+        )
+
+
 def test_revision_ownership_does_not_allow_a_parallel_exhaustion_writer():
     retained = "backend/app/core/config.py"
     trusted = _partition([retained])
@@ -2604,9 +2620,14 @@ def test_aws_activation_ownership_accepts_only_exact_targets():
     retained = "backend/app/core/config.py"
     additions = {
         "backend/app/adapters/artifacts/aws_live_proof.py",
+        "backend/app/adapters/artifacts/aws_roles_anywhere.py",
+        "backend/app/adapters/artifacts/aws_roles_anywhere_proof.py",
+        "backend/app/core/aws_roles_anywhere.py",
         "backend/app/modules/artifacts/provider_activation.py",
         "backend/scripts/aws_artifact_provider_proof.py",
+        "backend/scripts/aws_roles_anywhere_config.py",
     }
+    assert ownership.AWS_ARTIFACT_ACTIVATION_TARGETS == additions
     trusted = _partition([retained])
     current = _partition(sorted({retained, *additions}))
     ownership._validate_additive_partition_transition(current, trusted)
@@ -2630,3 +2651,32 @@ def test_aws_activation_ownership_accepts_only_exact_targets():
         changed["authority_digest"] = ownership._digest(authority)
         with pytest.raises(ownership.BehaviorOwnershipError, match="untrusted_partition_change"):
             ownership._validate_additive_partition_transition(changed, trusted)
+
+
+def test_art_operator_ownership_accepts_only_exact_new_modules():
+    retained = "backend/app/core/config.py"
+    additions = {
+        "backend/app/modules/artifacts/api/operator_authority.py",
+        "backend/app/modules/authorization/artifact_operator_authorization.py",
+        "backend/app/modules/authorization/domain/artifact_operator.py",
+    }
+    assert ownership.AUTH_ART_OPERATOR_TARGETS == additions
+    trusted = _partition([retained])
+    current = _partition(sorted({retained, *additions}))
+    ownership._validate_additive_partition_transition(current, trusted)
+
+    unapproved = "backend/app/modules/authorization/domain/artifact_operator_override.py"
+    with pytest.raises(ownership.BehaviorOwnershipError, match="untrusted_partition_change"):
+        ownership._validate_additive_partition_transition(
+            _partition(sorted({retained, *additions, unapproved})), trusted,
+        )
+
+    for target in additions:
+        wrong_group = _partition(sorted({retained, *additions}))
+        for assignment in wrong_group["assignments"]:
+            if assignment["target"] == target:
+                assignment["group"] = "shared"
+        authority = {key: value for key, value in wrong_group.items() if key != "authority_digest"}
+        wrong_group["authority_digest"] = ownership._digest(authority)
+        with pytest.raises(ownership.BehaviorOwnershipError, match="untrusted_partition_change"):
+            ownership._validate_additive_partition_transition(wrong_group, trusted)

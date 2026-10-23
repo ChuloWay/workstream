@@ -333,7 +333,7 @@ async def test_sdk_model_turn_enforces_compaction_and_hosted_work_budget(monkeyp
     from agents import Runner, OpenAIResponsesModel
     from app.adapters.project_agents.openai_agent_sdk import OpenAIAgentSdkProjectGuideRuntime
     from app.interfaces.project_agents import ProjectAgentRuntimeError
-    from tests.test_agent_runtime import _compile
+    from tests.test_agent_runtime import _compile, _open_prompt_documents, _sdk_result
 
     monkeypatch.setenv('OPENAI_API_KEY', 'unit-test-only')
     compilation = context(ids())
@@ -346,6 +346,8 @@ async def test_sdk_model_turn_enforces_compaction_and_hosted_work_budget(monkeyp
             pass
         async def close(self):
             pass
+        async def open_document(self, handle):
+            return {"path": "/mnt/data/assigned-original.md"}
 
     monkeypatch.setattr('app.adapters.project_agents.openai_agent_sdk.OpenAIGuideWorkspace',
                         lambda *_: Workspace())
@@ -360,6 +362,7 @@ async def test_sdk_model_turn_enforces_compaction_and_hosted_work_budget(monkeyp
     monkeypatch.setattr(OpenAIResponsesModel, 'get_response', response)
 
     async def run(agent, prompt, **kwargs):
+        await _open_prompt_documents(agent, prompt)
         if fault == 'exhausted':
             agent.model.hosted_calls = config.maximum_hosted_tool_calls
         supplied = [{'type': 'message', 'content': 'old'}, {'type': 'compaction'},
@@ -367,9 +370,10 @@ async def test_sdk_model_turn_enforces_compaction_and_hosted_work_budget(monkeyp
         await agent.model.get_response(agent.instructions, supplied, agent.model_settings,
             agent.tools, agent.output_type, [], None,
             previous_response_id='foreign' if fault == 'continuation' else None)
-        assert agent.model.hosted_calls == 1
-        from tests.projects.guide_compilation.helpers import result
-        return SimpleNamespace(final_output=result())
+        assert agent.model.hosted_calls == len(observed)
+        assert agent.model.model_turns == len(observed)
+        from tests.projects.guide_compilation.helpers import generated_result
+        return _sdk_result(agent, generated_result())
 
     monkeypatch.setattr(Runner, 'run', run)
     runtime = OpenAIAgentSdkProjectGuideRuntime(config)
@@ -381,8 +385,11 @@ async def test_sdk_model_turn_enforces_compaction_and_hosted_work_budget(monkeyp
     if fault in ('continuation', 'exhausted'):
         assert observed == []
     else:
-        assert observed == [([{'type': 'compaction'}, {'type': 'message', 'content': 'current'}],
-                             {'max_tool_calls': config.maximum_hosted_tool_calls})]
+        expected = [([{'type': 'compaction'}, {'type': 'message', 'content': 'current'}],
+                     {'max_tool_calls': config.maximum_hosted_tool_calls})]
+        if fault is None:
+            expected.append((expected[0][0], {'max_tool_calls': config.maximum_hosted_tool_calls - 1}))
+        assert observed == expected
 
 
 @pytest.mark.parametrize('failed', [False, True])

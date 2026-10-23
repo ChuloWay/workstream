@@ -98,7 +98,7 @@ class ContributionRuleInput(BaseModel):
 
 
 class ProjectCompensationUnitInput(BaseModel):
-    """Structural project-unit facts; 03B exposes no lifecycle command."""
+    """Structural project-unit facts validated before unit creation."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 

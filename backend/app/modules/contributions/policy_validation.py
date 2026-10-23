@@ -8,6 +8,7 @@ from uuid import UUID
 from app.core.hashing import canonical_json_hash
 from app.modules.compensation.api import CompensationInstrumentType
 from app.modules.contributions.api import (
+    CompensationUnitAction,
     ContributionPolicyConflict,
     PolicyAction,
     PolicyDefinitionInput,
@@ -49,7 +50,7 @@ def _json_value(value: object) -> object:
     return value
 
 
-def policy_request_digest(action: PolicyAction, request: object) -> str:
+def policy_request_digest(action: PolicyAction | CompensationUnitAction, request: object) -> str:
     """Hash one immutable command without leaking Python-only value types."""
     return canonical_json_hash(
         {

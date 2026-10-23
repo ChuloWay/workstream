@@ -27,7 +27,7 @@ controller container's mount namespace, resolves checker bind sources:
 
 ```text
 /var/lib/workstream/scratch
-/run/workstream-checker/checker.sock
+/var/lib/workstream/checker-runtime/checker.sock
 ```
 
 Do not replace either path with a named volume or another in-container path.
@@ -47,7 +47,9 @@ docker build --file docker/checker/Dockerfile.release \
 ```
 
 Both Dockerfiles pin their base images. The backend build installs the committed
-Python resolution with the agent runtime and without the development extra. The
+Python resolution with the agent runtime and without the development extra. It
+also installs the official Roles Anywhere helper 1.8.5 at its fixed path, with
+architecture-specific hashes checked during the build and image proof. The
 checker-service build compiles the committed Rust lock and copies the pinned
 Docker client. A local build tag is build evidence only; the release file must
 contain the registry-resolved digest after publication. The backend build's uv
@@ -78,9 +80,20 @@ fixed private directories with that runtime identity:
 
 ```sh
 sudo install -d -m 0700 -o 10001 -g 10001 /var/lib/workstream/scratch
-sudo install -d -m 0700 -o 10001 -g 10001 /run/workstream-checker
+sudo install -d -m 0700 -o 10001 -g 10001 /var/lib/workstream/checker-runtime
 stat -c '%g' /var/run/docker.sock
 ```
+
+The checker runtime directory must be on durable host storage, not `/run`,
+tmpfs or ephemeral container storage. Its private `.workstream-checker-owner`
+file identifies containers recoverable after a service or host restart. Only the
+checker service has a writable mount; API and worker socket mounts are read-only
+so clients can connect but cannot replace recovery custody. Preserve the file
+with the directory; never clone it into another live deployment. Before
+changing or deleting this directory, drain checker work and verify cleanup of
+its exact owned containers. If custody was lost, reconcile independently verified
+container IDs; a new owner will not adopt old containers. See
+[container recovery ownership](../../external_checkers/README.md#container-recovery-ownership).
 
 Copy `release.env.example` to an operator-owned non-secret environment file and
 replace every example identity. The file contains paths and public configuration,
@@ -92,30 +105,38 @@ Create each secret as a one-value regular file at the configured path. Make it
 owned by the runtime UID/GID with mode `0400`. The explicit role loader gives the
 API only the database, broker, rate-limit and pagination secrets; the worker
 gets the database, broker and OpenAI secrets because it hosts setup jobs; Beat
-gets only the broker secret. An absent required selector or unknown role stops
+gets the database and broker secrets because its startup guard verifies the
+current artifact-provider activation before scheduling jobs. An absent required selector or unknown role stops
 startup, and an unrelated secret is neither mounted nor loaded. The loader
 independently requires the running identity and mode `0400`, performs no shell
-evaluation and never prints a value. Do not put AWS static keys in these files:
-the runtime uses the selected AWS workload identity. This first single-host
-profile requires the dedicated host's IAM role; web-identity token and
-container-role transports need a different reviewed topology and fail this
-preflight.
+evaluation and never prints a value. Do not put AWS static keys in these files.
+This external-host profile selects Roles Anywhere and mounts the runtime leaf
+certificate/key read-only into API and worker. Beat keeps only its database and
+broker secrets: its startup guard validates the stored provider activation and
+namespace without constructing the S3 adapter or signing helper. The checker
+controller receives no AWS identity. Three profile-gated proof jobs receive
+their own leaf pairs one at a time; the coordinator receives no certificate.
+EC2 instance-role authentication remains an independent native-AWS application
+method, but it is not this hosted topology. Follow the complete CA, AWS, renewal
+and revocation procedure in
+[`docs/operations_aws_roles_anywhere.md`](../../docs/operations_aws_roles_anywhere.md).
 
 Set the immutable release digest and every exact AWS role, managed-policy,
-trust-policy and bucket-policy identity from the approved release evidence. The release wrapper allowlists these eleven non-secret values
-and the shared Compose environment passes them unchanged to API, worker and Beat.
+trust-policy, Roles Anywhere resource and bucket-policy identity from the
+approved release evidence. The release wrapper allowlists these non-secret
+values and the shared Compose environment passes them unchanged to API, worker
+and Beat.
 The integrated canonical application `Settings` from #582/PR #592 defines
 these fields and validates their format and relationships. That owner rejects a malformed digest or ARN, a mixed AWS partition/account, reused
 workload roles or trust-policy digests, or reused managed policies when any of
 those processes starts. Preflight checks presence and rendered custody only so
 it does not create a second IAM-policy validator.
 
-The #582 proof command will load this exact Settings contract after its owner is
-merged. Its readiness, runtime-immutability and negative-access modes require
-distinct active IAM identities, so they must not be run through the long-lived
-API, worker or Beat identity. The dedicated proof-job profile is pending the
-stable #493 integration; this release configuration does not invent an interim
-Compose service or claim that the three proof modes have run.
+The proof command loads this exact Settings contract with distinct active IAM
+identities. Run the wrapper's fixed `proof --group-nonce <uuid>` operation. It
+executes runtime immutability, readiness, negative access and then the
+credential-free coordinator. Arbitrary Compose `run` commands remain outside
+the wrapper. A locally rendered job is still not live AWS evidence.
 
 The example S3 and completion timeouts are unmeasured starting values supplied
 by the current #582 contract:

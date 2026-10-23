@@ -71,14 +71,14 @@ func validAdminReason(reason string) bool {
 // Python str.strip treats these four ASCII separators as whitespace in
 // addition to Unicode White_Space. Keep local input checks aligned with the
 // public Pydantic validators; the backend still makes the final decision.
-func adminPythonStrip(value string) string {
+func pythonStrip(value string) string {
 	return strings.TrimFunc(value, func(r rune) bool {
 		return unicode.IsSpace(r) || (r >= '\x1c' && r <= '\x1f')
 	})
 }
 
 func validLifecycleReason(reason string) bool {
-	normalized := adminPythonStrip(reason)
+	normalized := pythonStrip(reason)
 	return utf8.ValidString(reason) && len(normalized) >= 1 && len(normalized) <= 500 && !strings.ContainsRune(reason, 0)
 }
 
@@ -101,7 +101,7 @@ func (c *Client) ProvisionServiceActor(ctx context.Context, body json.RawMessage
 	var input serviceActorInput
 	if err := validAdminMutationBody(body, &input, []string{"service_identity", "subject", "reason"}); err != nil ||
 		!validServiceIdentity(input.ServiceIdentity) || len(input.Subject) == 0 || len(input.Subject) > 200 ||
-		adminPythonStrip(input.Subject) != input.Subject || strings.ContainsRune(input.Subject, 0) ||
+		pythonStrip(input.Subject) != input.Subject || strings.ContainsRune(input.Subject, 0) ||
 		!utf8.ValidString(input.Subject) || !utf8.ValidString(input.Reason) || len(input.Reason) < 1 || len(input.Reason) > 500 ||
 		!validAdminKey(key) {
 		return result, errors.New("--input must contain a service identity, bounded subject and provision reason; --idempotency-key must be a UUID")

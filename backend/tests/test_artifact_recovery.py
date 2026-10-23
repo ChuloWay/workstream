@@ -35,12 +35,11 @@ from app.modules.artifacts.models import (
 )
 from app.modules.artifacts.repository import ArtifactRepository
 from app.modules.artifacts.schemas import (
-    ArtifactRecoveryAuthorizationEvidence,
     ArtifactRecoveryConflictError,
     ArtifactRecoveryIneligibleError,
     ArtifactAuthorityDeniedError,
-    DenyArtifactRecoveryAuthority,
 )
+from app.modules.artifacts.api.operator_authority import ArtifactRecoveryAuthorizationEvidence
 from app.modules.artifacts.service import (
     ArtifactRecoveryService,
     ArtifactStorageOrchestrator,
@@ -88,10 +87,15 @@ class _DenyTerminalArtifactAuthority(_AllowArtifactAuthority):
 class _AllowRecoveryAuthority:
     async def authorize(self, **_values: object) -> ArtifactRecoveryAuthorizationEvidence:
         return ArtifactRecoveryAuthorizationEvidence(
-            action_id=ActionId.ARTIFACT_VERIFICATION_JOB_RETRY,
+            action_id=ActionId.ARTIFACT_VERIFICATION_JOB_RETRY.value,
             permission_id=PermissionId.ARTIFACT_VERIFICATION_JOB_RETRY.value,
             decision_id=new_record_id(),
         )
+
+
+class _DenyRecoveryAuthority:
+    async def authorize(self, **_values: object):
+        raise ArtifactAuthorityDeniedError("artifact recovery action denied")
 
 
 class _AllowThenDenyRecoveryAuthority(_AllowRecoveryAuthority):
@@ -312,7 +316,7 @@ async def test_checker_recovery_denial_has_no_effects_and_replay_requires_author
             request = _request(context, project_id, task_id, source, submission_id=submission_id)
             with pytest.raises(ArtifactAuthorityDeniedError):
                 await ArtifactRecoveryService(
-                    session, settings, DenyArtifactRecoveryAuthority()
+                    session, settings, _DenyRecoveryAuthority()
                 ).retry_verification(request)
             assert await session.scalar(select(func.count(ArtifactRecoveryAttempt.id))) == 0
             assert (
@@ -329,7 +333,7 @@ async def test_checker_recovery_denial_has_no_effects_and_replay_requires_author
             ).retry_verification(request)
             with pytest.raises(ArtifactAuthorityDeniedError):
                 await ArtifactRecoveryService(
-                    session, settings, DenyArtifactRecoveryAuthority()
+                    session, settings, _DenyRecoveryAuthority()
                 ).retry_verification(request)
             assert await session.scalar(select(func.count(ArtifactRecoveryAttempt.id))) == 1
             assert (

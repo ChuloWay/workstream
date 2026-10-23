@@ -26,6 +26,12 @@ from app.modules.artifacts.models import (
 from app.modules.projects.models import GuideSourceArtifactIngest
 from app.modules.projects.api.guide_documents import GuideDocumentManifest, GuideDocumentVersion
 from app.interfaces.project_agents import (
+    AtomicGuideRequirement,
+    CheckFailureFinding,
+    CheckInfrastructureFailure,
+    CheckInput,
+    CheckNegativeTest,
+    CheckSpecification,
     CompilationFinding,
     GuideEvidenceRef,
     ProjectGuideCompilationContext,
@@ -188,6 +194,67 @@ def result() -> ProjectGuideCompilationResult:
         agent_version="v1",
         schema_version="project_guide_compilation_result.v1",
     )
+
+
+def valid_specification() -> CheckSpecification:
+    """Return one actionable static check that fits the bounded PRE stage."""
+    return CheckSpecification(
+        evaluation_method="static_inspection",
+        execution_mode="bounded_pre_submit",
+        maximum_duration_seconds=10,
+        stage_rationale="Static package inspection completes within the intake budget.",
+        inputs=(
+            CheckInput(
+                input_id="submitted_package",
+                kind="package",
+                purpose="Submitted work to inspect.",
+            ),
+        ),
+        check_steps=("Inspect the package manifest for the required item.",),
+        pass_conditions=("The required item is present.",),
+        failure_findings=(
+            CheckFailureFinding(
+                code="required_item_missing",
+                level="error",
+                condition="The required item is absent.",
+                message="The submitted work is missing a required item.",
+            ),
+        ),
+        positive_tests=("A package containing the required item passes.",),
+        negative_tests=(
+            CheckNegativeTest(
+                name="missing_required_item",
+                scenario="A package omits the required item.",
+                expected_verdict="failed",
+                expected_finding_codes=("required_item_missing",),
+            ),
+        ),
+        runtime_dependencies=(),
+        infrastructure_failures=(
+            CheckInfrastructureFailure(
+                code="invalid_output",
+                condition="The checker returns a malformed result.",
+            ),
+        ),
+    )
+
+
+def generated_result() -> ProjectGuideCompilationResult:
+    """Return a valid new-generation result without changing retained fixtures."""
+    requirement = AtomicGuideRequirement(
+        requirement_id="review_scope",
+        statement="The guide provides background for claim review.",
+        disposition="informational",
+        classification_rationale="This material explains the review scope.",
+        evidence_refs=(
+            GuideEvidenceRef(
+                source_item_id=SOURCE_ITEM_ID,
+                document_version_id=DOCUMENT_VERSION_ID,
+                sha256=SOURCE_SHA256,
+            ),
+        ),
+    )
+    return result().model_copy(update={"requirements": (requirement,)})
 
 
 def identity(
@@ -365,7 +432,10 @@ async def _seed_snapshot_item(engine: AsyncEngine, values: dict[str, UUID]) -> N
 
 
 async def _seed_artifact_custody(
-    session: AsyncSession, values: dict[str, UUID], namespace=None
+    session: AsyncSession,
+    values: dict[str, UUID],
+    namespace=None,
+    provider_object_ref: str | None = None,
 ) -> None:
     from datetime import datetime, timezone
 
@@ -407,7 +477,7 @@ async def _seed_artifact_custody(
         namespace_fingerprint=namespace_row.namespace_fingerprint,
         adapter=namespace_row.adapter,
         provider_profile=namespace_row.provider_profile,
-        provider_object_ref=f"fixtures/{CONTENT_ID}",
+        provider_object_ref=provider_object_ref or f"fixtures/{CONTENT_ID}",
         verification_state="pending",
         availability_state="unknown",
         integrity_state="unknown",
@@ -459,7 +529,12 @@ async def _seed_artifact_custody(
 
 
 async def seed_database(
-    database_url: str, *, generations: int = 1, guide_version="v1", namespace=None
+    database_url: str,
+    *,
+    generations: int = 1,
+    guide_version="v1",
+    namespace=None,
+    provider_object_ref: str | None = None,
 ) -> dict[str, UUID]:
     """Seed only canonical parent rows needed by hidden persistence tests."""
     values = ids()
@@ -469,7 +544,12 @@ async def seed_database(
         await _seed_snapshot_item(engine, values)
         factory = async_sessionmaker(engine, expire_on_commit=False)
         async with factory() as session, session.begin():
-            await _seed_artifact_custody(session, values, namespace)
+            await _seed_artifact_custody(
+                session,
+                values,
+                namespace,
+                provider_object_ref,
+            )
     finally:
         await engine.dispose()
     return values

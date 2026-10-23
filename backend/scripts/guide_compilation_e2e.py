@@ -10,6 +10,7 @@ from app.core.config import get_settings
 from app.core.project_agents import project_guide_runtime_configuration
 from app.interfaces.external_services import ExternalServiceAdapterFactory
 from app.interfaces.project_agents import (
+    AtomicGuideRequirement,
     ProjectGuideAgentRuntime,
     ProjectGuideCompilationResult, CompilationFinding, GuideEvidenceRef,
     SubmissionArtifactPolicyProposal,
@@ -79,7 +80,15 @@ class E2EProjectGuideRuntime:
                 maximum_file_size_bytes=1_000_000,
                 maximum_package_size_bytes=5_000_000,
             ),
-            requirements=(),
+            requirements=(AtomicGuideRequirement(
+                requirement_id="guide.context",
+                statement="Use the assigned project guide.",
+                disposition="informational",
+                classification_rationale=(
+                    "This identifies the governing source for the scripted API contract drill."
+                ),
+                evidence_refs=tuple(refs),
+            ),),
             pre_submit_bindings=(),
             post_submit_bindings=(),
             capability_suggestions=(),
