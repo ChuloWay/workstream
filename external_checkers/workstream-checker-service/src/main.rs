@@ -498,7 +498,6 @@ fn run() -> Result<(), String> {
     let mut config: ServiceConfig =
         serde_json::from_slice(&bytes).map_err(|_| "configuration invalid")?;
     load_trial_profiles(&mut config)?;
-    load_trial_runtime(&mut config)?;
     let listener = prepare_listener(&mut config)?;
     serve_connections(&config, listener.incoming(), SOCKET_IO_TIMEOUT)
 }
@@ -700,7 +699,7 @@ fn read_trial_authority_manifest_after_open(
     }
     after_open();
     let mut bytes = Vec::with_capacity(before.len() as usize);
-    file.by_ref()
+    Read::by_ref(&mut file)
         .take(MAXIMUM_BYTES + 1)
         .read_to_end(&mut bytes)
         .map_err(|_| "trial authority manifest unavailable")?;
@@ -745,6 +744,11 @@ fn prepare_listener(config: &mut ServiceConfig) -> Result<OwnedSocketListener, S
     validate_config(config)?;
     cleanup_stale_runtime_files(config)?;
     cleanup_stale_checker_containers(config)?;
+    // Trial recovery can remove Docker resources recorded by a prior process.
+    // It must therefore remain behind the same socket-parent custody as the
+    // checker-container recovery above. A listener is not accepted until both
+    // recovery domains have settled.
+    load_trial_runtime(config)?;
     Ok(listener)
 }
 
@@ -3167,6 +3171,90 @@ mod tests {
         assert!(!docker_marker.exists());
 
         fs::remove_file(stale_runtime).unwrap();
+        drop(first);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn losing_startup_cannot_recover_live_trial_resources() {
+        let (root, mut config) = test_config();
+        let proxy_root = root.join("proxy");
+        let relay_root = root.join("relay");
+        let runtime_root = root.join("trial-runtime");
+        let trial_relay_root = root.join("trial-relay");
+        let scratch_root = root.join("trial-scratch");
+        let cache_root = root.join("offline-cache");
+        for directory in [
+            &proxy_root,
+            &relay_root,
+            &runtime_root,
+            &trial_relay_root,
+            &scratch_root,
+            &cache_root,
+        ] {
+            fs::create_dir(directory).unwrap();
+            fs::set_permissions(directory, fs::Permissions::from_mode(0o700)).unwrap();
+        }
+        let proxy_path = proxy_root.join("proxy.sock");
+        let _proxy = UnixListener::bind(&proxy_path).unwrap();
+        fs::set_permissions(&proxy_path, fs::Permissions::from_mode(0o600)).unwrap();
+        let runtime_configuration = root.join("runsc-trial.toml");
+        fs::write(&runtime_configuration, b"rootless = false\n").unwrap();
+        fs::write(
+            &config.docker_binary,
+            b"#!/bin/sh\ncase \"$1 $2\" in\n  \"container ls\") exit 0;;\n  \"info --format\") printf '{\"runsc\":{}}'; exit 0;;\nesac\nexit 2\n",
+        )
+        .unwrap();
+        config.runtime = "runsc".into();
+        config.isolation_mode = "gvisor".into();
+        config.model_proxy_socket = Some(proxy_path);
+        config.model_relay_root = Some(relay_root);
+        config.trial_profiles = Some(TrialProfileCatalog::empty_for_test());
+        config.trial_runtime = Some(TrialRuntimeConfiguration {
+            relay_root: trial_relay_root,
+            scratch_root,
+            runtime_root: runtime_root.clone(),
+            runtime_configuration,
+            outer_runtime_config_digest: format!("sha256:{}", "1".repeat(64)),
+            offline_cache_root: cache_root,
+            deployment_owner: "deployment_a".into(),
+            runtime_key: "runsc-trial".into(),
+            builder_image_id: format!("sha256:{}", "2".repeat(64)),
+            maximum_candidate_archive_bytes: 1024,
+            candidate_uid: config.sandbox_uid,
+            candidate_gid: config.sandbox_gid,
+        });
+
+        let first = prepare_listener(&mut config).unwrap();
+        let first_control = config.trial_control.as_ref().unwrap().clone();
+        let journal =
+            trial_docker::persist_runtime_journal_for_test(&runtime_root, "deployment_a").unwrap();
+        let journal_before = fs::read(&journal).unwrap();
+        let live_resource = root.join("live-trial-resource");
+        let docker_called = root.join("docker-called-by-loser");
+        fs::write(&live_resource, b"live").unwrap();
+        fs::write(
+            &config.docker_binary,
+            format!(
+                "#!/bin/sh\ntouch '{}'\nrm -f '{}'\nexit 2\n",
+                docker_called.display(),
+                live_resource.display(),
+            ),
+        )
+        .unwrap();
+
+        assert_eq!(
+            prepare_listener(&mut config).unwrap_err(),
+            "socket custody unavailable"
+        );
+        assert!(Arc::ptr_eq(
+            config.trial_control.as_ref().unwrap(),
+            &first_control
+        ));
+        assert!(!docker_called.exists());
+        assert_eq!(fs::read(&journal).unwrap(), journal_before);
+        assert_eq!(fs::read(&live_resource).unwrap(), b"live");
+
         drop(first);
         fs::remove_dir_all(root).unwrap();
     }

@@ -21,6 +21,7 @@ const TRIAL_PLAN_SCHEMA: &str = "workstream.checker_trial_plan.v1";
 const TRIAL_RECEIPT_SCHEMA: &str = "workstream.checker_trial_receipt.v1";
 const INVOCATION_DIRECTORY_PREFIX: &str = ".trial-";
 const ABSOLUTE_MAXIMUM_FRAME_BYTES: usize = 4 * 1024 * 1024;
+const ABSOLUTE_MAXIMUM_RECEIPT_BYTES: usize = 1024 * 1024;
 static INVOCATION_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -861,7 +862,7 @@ pub(crate) fn valid_profile(profile: &TrialProfile) -> bool {
         && profile.maximum_observation_bytes > 0
         && profile.maximum_observation_bytes <= ABSOLUTE_MAXIMUM_FRAME_BYTES
         && profile.maximum_receipt_bytes > 0
-        && profile.maximum_receipt_bytes <= ABSOLUTE_MAXIMUM_FRAME_BYTES
+        && profile.maximum_receipt_bytes <= ABSOLUTE_MAXIMUM_RECEIPT_BYTES
         && profile.maximum_cpu_quota_millis > 0
         && profile.maximum_cpu_time_ms > 0
         && profile.maximum_wall_time_overrun_ms > 0

@@ -154,6 +154,8 @@ def test_runtime_split_and_no_swap_are_closed_trusted_profile_rules():
         )
     with pytest.raises(TrialProfileError, match="invalid"):
         replace(selected, child_capabilities=("SYS_ADMIN",))
+    with pytest.raises(TrialProfileError, match="byte ceiling"):
+        replace(selected.limits, maximum_receipt_bytes=1024 * 1024 + 1)
 
 
 def test_locked_configuration_parses_trial_and_model_selectors_independently():

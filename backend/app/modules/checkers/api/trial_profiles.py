@@ -108,11 +108,10 @@ class TrialResourceCeilings:
             for value in (
                 self.maximum_step_output_bytes,
                 self.maximum_observation_bytes,
-                self.maximum_receipt_bytes,
                 self.maximum_frame_bytes,
                 self.maximum_response_bytes,
             )
-        ):
+        ) or self.maximum_receipt_bytes > 1024 * 1024:
             raise TrialProfileError("trial byte ceiling is invalid")
 
 

@@ -16,6 +16,13 @@ use trial_relay::*;
 
 static TEST_SEQUENCE: AtomicUsize = AtomicUsize::new(0);
 
+#[test]
+fn profile_rejects_receipts_larger_than_durable_custody_limit() {
+    let mut selected = profile();
+    selected.maximum_receipt_bytes = 1024 * 1024 + 1;
+    assert!(!valid_profile(&selected));
+}
+
 struct TestRoot(PathBuf);
 
 impl TestRoot {

@@ -239,6 +239,13 @@ pub(crate) struct TrialProfileCatalog {
 }
 
 impl TrialProfileCatalog {
+    #[cfg(test)]
+    pub(crate) fn empty_for_test() -> Self {
+        Self {
+            entries: Vec::new(),
+        }
+    }
+
     pub(crate) fn from_bytes(bytes: &[u8], expected_digest: &str) -> Result<Self, &'static str> {
         if bytes.is_empty()
             || bytes.len() > MAXIMUM_MANIFEST_BYTES
