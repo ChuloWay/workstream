@@ -63,9 +63,12 @@ Generic isolated build/trial support owns the new
 coordination with the model-runtime owner. That owner retains the coupled
 `main.rs` invocation-capability assembly, `model_relay.rs`, budget/profile
 owners and every migration; this change does not edit `main.rs` concurrently.
-The trial module publishes a generic typed relay, profile and observation API
-with fake-engine protocol/cancellation tests before the shared composition is
-connected. Backend trial authority/materialization may later extend the existing
+`external_checkers/workstream-checker-service/tests/trial_relay.rs` compiles
+that otherwise unconnected module and exercises its fake-engine protocol,
+identity, bounds, cancellation and cleanup contracts before shared composition.
+The trial module publishes a generic typed relay, profile and observation API;
+it does not treat relay success as a work verdict. Backend trial
+authority/materialization may later extend the existing
 selected-POST, TASK and ART owner files only after their exact file list and
 typed port contract are added here; it will not add a migration. The bridge must
 keep Docker authority and
