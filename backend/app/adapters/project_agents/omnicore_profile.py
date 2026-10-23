@@ -100,6 +100,8 @@ def require_omnicore_agent_adapter_profile(
     try:
         import omnicoreagent
         import openai
+        # LiteLLM has no public top-level version attribute. Its static version
+        # module avoids the repository-prohibited dynamic import metadata surface.
         from litellm._version import version as litellm_version
     except ImportError:
         raise ProjectAgentRuntimeConfigurationError(
