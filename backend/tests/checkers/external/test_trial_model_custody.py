@@ -10,6 +10,7 @@ import hashlib
 import json
 from pathlib import Path
 import struct
+import time
 from uuid import UUID, uuid4
 
 from sqlalchemy import func, select
@@ -53,6 +54,7 @@ from tests.checkers.execution.support import (
 from tests.checkers.external.test_trial_evidence import _owner, _subject, _trial_fixture
 from tests.checkers.external.test_trial_profiles import configuration, profile as trial_profile
 from tests.checkers.external.test_trial_policy import trial_specification
+from tests.checkers.external.test_revision_materialization import DiagnosticMaterialization
 from tests.checkers_model_calls.test_composed_execution import model_review_specification
 from tests.checkers_model_calls.test_public_api import profile_spec
 from tests.post_submit_materialization_helpers import material_fixture
@@ -250,7 +252,13 @@ async def test_trial_receipt_is_art_retained_before_controlled_model_spend(
         ),
     ) as h:
         await provision_post_submit_service(h.factory, ServiceIdentity.ARTIFACT_CHECKER_OUTPUT)
+        h.service = DiagnosticMaterialization(h.service)
         creates = []
+        stages: list[tuple[str, float]] = []
+        started = time.monotonic()
+
+        def stage(name: str) -> None:
+            stages.append((name, round(time.monotonic() - started, 3)))
 
         class Provider:
             async def create(self, model_request):
@@ -325,6 +333,7 @@ async def test_trial_receipt_is_art_retained_before_controlled_model_spend(
 
         class Driver(ControlledSelectedExecution):
             async def execute(self, request, grant, *, model_grant=None):
+                stage("driver_entered")
                 assert model_grant is not None
                 plan = {"steps": [{"slot_id": "generic_run:0"}]}
                 subject = _subject(request, projected).model_copy(
@@ -340,6 +349,7 @@ async def test_trial_receipt_is_art_retained_before_controlled_model_spend(
                     },
                 )
                 assert reserved["outcome"] == "completed", reserved
+                stage("trial_reserved")
                 ticket = reserved["ticket"]
                 from app.modules.checkers.api.trial_evidence import TrialEvidenceTicket
 
@@ -363,6 +373,7 @@ async def test_trial_receipt_is_art_retained_before_controlled_model_spend(
                     },
                 )
                 assert published["outcome"] == "completed", published
+                stage("trial_published")
                 model = await _exchange(
                     socket_path,
                     {
@@ -381,6 +392,7 @@ async def test_trial_receipt_is_art_retained_before_controlled_model_spend(
                 )
                 assert model["outcome"] == "completed", model
                 assert model["output"] == '{"verdict":"passed"}'
+                stage("model_completed")
                 replay = await _exchange(
                     socket_path,
                     {
@@ -391,6 +403,7 @@ async def test_trial_receipt_is_art_retained_before_controlled_model_spend(
                     },
                 )
                 assert replay["retained_receipt"]["canonical_receipt_utf8"] == canonical_receipt
+                stage("trial_recovered")
                 return await super().execute(request, grant)
 
         await reserve(h)
@@ -408,8 +421,17 @@ async def test_trial_receipt_is_art_retained_before_controlled_model_spend(
                 ),
             )
             result = await executor.evaluate_post_submission(h.request)
-            replayed_result = await executor.evaluate_post_submission(h.request)
-        assert result.outcome == "completed"
+            stage("first_evaluation_returned")
+            replayed_result = (
+                await executor.evaluate_post_submission(h.request)
+                if result.outcome == "completed"
+                else None
+            )
+            stage("replay_evaluation_returned")
+        assert result.outcome == "completed", json.dumps(
+            {"result": result.model_dump(mode="json"), "stages": stages},
+            sort_keys=True,
+        )
         assert replayed_result == result
         assert len(creates) == 1
         provider_prompt = json.loads(creates[0].prompt)
