@@ -153,6 +153,8 @@ def qualify(image: str) -> None:
                 errors[0] if errors else None
             )
         created = False
+        primary_error: BaseException | None = None
+        cleanup_error: BaseException | None = None
         try:
             subprocess.run(
                 [
@@ -186,6 +188,8 @@ def qualify(image: str) -> None:
                 ],
                 check=True,
                 stdout=subprocess.DEVNULL,
+                stderr=subprocess.PIPE,
+                timeout=30,
             )
             created = True
             completed = subprocess.run(
@@ -204,40 +208,68 @@ def qualify(image: str) -> None:
                 or result.get("request_digest") != "sha256:" + "1" * 64
             ):
                 raise RuntimeError("POST image did not return the controlled passing result")
-            state = json.loads(
-                subprocess.check_output(
-                    ["docker", "inspect", "--format", "{{json .State}}", name], text=True
-                )
+            inspected = subprocess.run(
+                ["docker", "inspect", "--format", "{{json .State}}", name],
+                check=True,
+                capture_output=True,
+                text=True,
+                timeout=10,
             )
+            state = json.loads(inspected.stdout)
             if state.get("Running") or state.get("OOMKilled") or state.get("ExitCode") != 0:
                 raise RuntimeError("POST image did not exit cleanly")
+        except BaseException as exc:
+            primary_error = exc
         finally:
             if created:
-                subprocess.run(
-                    ["docker", "rm", "--force", name],
-                    check=False,
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                )
+                try:
+                    removed = subprocess.run(
+                        ["docker", "rm", "--force", name],
+                        check=True,
+                        capture_output=True,
+                        text=True,
+                        timeout=15,
+                    )
+                    if removed.stdout.strip() != name:
+                        raise RuntimeError("Docker did not confirm the owned container removal")
+                except BaseException as exc:
+                    cleanup_error = RuntimeError(
+                        "POST smoke container removal failed"
+                    )
+                    cleanup_error.__cause__ = exc
             server.join(10)
-        if server.is_alive():
-            raise RuntimeError("controlled model server did not terminate")
-        if errors:
-            raise RuntimeError("controlled model exchange failed") from errors[0]
-        remaining = subprocess.check_output(
-            [
-                "docker",
-                "container",
-                "ls",
-                "--all",
-                "--quiet",
-                "--filter",
-                f"name=^/{name}$",
-            ],
-            text=True,
-        )
-        if remaining.strip():
-            raise RuntimeError("POST smoke container cleanup is incomplete")
+        if server.is_alive() and primary_error is None:
+            primary_error = RuntimeError("controlled model server did not terminate")
+        if errors and primary_error is None:
+            primary_error = RuntimeError("controlled model exchange failed")
+            primary_error.__cause__ = errors[0]
+        try:
+            remaining = subprocess.run(
+                [
+                    "docker",
+                    "container",
+                    "ls",
+                    "--all",
+                    "--quiet",
+                    "--filter",
+                    f"name=^/{name}$",
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            if remaining.stdout.strip():
+                raise RuntimeError("POST smoke container cleanup is incomplete")
+        except BaseException as exc:
+            if cleanup_error is None:
+                cleanup_error = exc
+        if primary_error is not None:
+            if cleanup_error is not None:
+                primary_error.add_note(f"cleanup also failed: {cleanup_error!r}")
+            raise primary_error
+        if cleanup_error is not None:
+            raise cleanup_error
 
 
 def main() -> int:
