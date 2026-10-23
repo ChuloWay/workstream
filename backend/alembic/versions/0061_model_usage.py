@@ -982,6 +982,7 @@ def _upgrade_authorization_vocabulary() -> None:
         ),
         ("project.model_profile.provision", "project.model_profile.manage"),
         ("project.model_budget.configure", "project.model_budget.manage"),
+        ("project.model_usage.read", "project.model_budget.manage"),
         (
             "project.model_call.recovery_child.authorize",
             "project.model_call.recovery_child.authorize",

@@ -181,6 +181,7 @@ class ActionId(StrEnum):
     PROJECT_GUIDE_COMPILATION_MODEL_COMPLETE = "project.guide_compilation.model.complete"
     PROJECT_MODEL_PROFILE_PROVISION = "project.model_profile.provision"
     PROJECT_MODEL_BUDGET_CONFIGURE = "project.model_budget.configure"
+    PROJECT_MODEL_USAGE_READ = "project.model_usage.read"
     PROJECT_MODEL_CALL_RECOVERY_CHILD_AUTHORIZE = "project.model_call.recovery_child.authorize"
     OUTBOX_DISPATCH = "outbox.dispatch"
     ACTOR_SERVICE_PROVISION = "actor.service.provision"
@@ -564,7 +565,7 @@ HISTORICAL_PERMISSION_IDS = PERMISSION_IDS - NEW_PERMISSION_IDS
 
 def _require_catalogue_counts() -> None:
     """Keep the closed action inventory and permission boundary exact."""
-    if len(PERMISSION_IDS) != 95 or len(ACTION_IDS) != 190:
+    if len(PERMISSION_IDS) != 95 or len(ACTION_IDS) != 191:
         raise RuntimeError("authorization catalogue count mismatch")
     if len(HISTORICAL_PERMISSION_IDS) != 49 or len(NEW_PERMISSION_IDS) != 46:
         raise RuntimeError("authorization permission boundary mismatch")
@@ -718,6 +719,7 @@ _ACTIVE_ACTION_BOUNDARY = frozenset(
         ActionId.PROJECT_GUIDE_COMPILATION_MODEL_COMPLETE,
         ActionId.PROJECT_MODEL_PROFILE_PROVISION,
         ActionId.PROJECT_MODEL_BUDGET_CONFIGURE,
+        ActionId.PROJECT_MODEL_USAGE_READ,
         ActionId.PROJECT_MODEL_CALL_RECOVERY_CHILD_AUTHORIZE,
         ActionId.CHECKER_PRE_SUBMIT_EXECUTE,
         ActionId.CHECKER_PRE_SUBMIT_FINALIZE,

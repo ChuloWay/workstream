@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.auth import checker_model_authorization
 from app.adapters.checkers import model_call_service
+from app.adapters.model_usage import model_usage_inspection
 from app.api.deps.auth import get_auth_verification_result
 from app.api.deps.authorization import (
     ResolvedActor,
@@ -30,6 +31,9 @@ from app.modules.model_usage.api import (
     ModelCallConflict,
     ModelCallUnavailable,
     ModelProfileProvisioningFacts,
+    ModelUsageEffectInspection,
+    ModelUsageInspectionFacts,
+    ModelUsageInspectionPort,
     ModelRecoveryChildRequest,
     PreparedModelCallAttempt,
     ProjectModelBudgetConfiguration,
@@ -94,6 +98,7 @@ class CheckerModelAdminCommands:
     service: ModelCallAdministrationPort
     actor_profile_id: UUID
     operation_id: UUID
+    inspection: ModelUsageInspectionPort | None = None
 
     async def provision_profile(
         self, project_id: UUID, spec: ProjectModelProfileSpec
@@ -120,6 +125,18 @@ class CheckerModelAdminCommands:
                 actor_profile_id=self.actor_profile_id,
                 spec=spec,
                 configuration_digest=canonical_json_hash(spec.model_dump(mode="json")),
+            )
+        )
+
+    async def inspect_effect(self, project_id: UUID, effect_id: UUID) -> ModelUsageEffectInspection:
+        if self.inspection is None:
+            raise ModelCallUnavailable("model_usage_inspection_unavailable")
+        return await self.inspection.inspect_effect(
+            ModelUsageInspectionFacts(
+                project_id=project_id,
+                effect_id=effect_id,
+                actor_profile_id=self.actor_profile_id,
+                request_id=self.operation_id,
             )
         )
 
@@ -158,6 +175,7 @@ async def _model_admin_operation(
             try:
                 yield CheckerModelAdminCommands(
                     service=model_call_service(session, authority),
+                    inspection=model_usage_inspection(session, authority=authority),
                     actor_profile_id=context.actor_profile_id,
                     operation_id=operation_id,
                 )
@@ -172,7 +190,12 @@ async def _model_admin_operation(
     except ModelCallConflict as exc:
         raise _error(409) from exc
     except ModelCallUnavailable as exc:
-        status_code = 404 if str(exc) == "model_call_authority_unavailable" else 503
+        status_code = (
+            404
+            if str(exc)
+            in {"model_call_authority_unavailable", "model_usage_inspection_unavailable"}
+            else 503
+        )
         raise _error(status_code) from exc
     except SQLAlchemyError as exc:
         raise _error(503) from exc
@@ -209,11 +232,29 @@ async def get_checker_model_recovery_commands(
         yield commands
 
 
+async def get_checker_model_read_commands(
+    request: Request,
+    resolved: Annotated[ResolvedActor, Depends(get_authorization_actor)],
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> AsyncIterator[CheckerModelAdminCommands]:
+    """Compose one exact human Operator model-usage read."""
+    request_id, correlation_id = (UUID(value) for value in request_ids(request))
+    async with _model_admin_operation(
+        request,
+        request_id,
+        resolved,
+        session,
+        correlation_id=correlation_id,
+    ) as commands:
+        yield commands
+
+
 __all__ = (
     "MODEL_ADMIN_IDEMPOTENCY_PARAMETER",
     "CheckerModelAdminCommands",
     "get_checker_model_admin_commands",
     "get_checker_model_recovery_commands",
+    "get_checker_model_read_commands",
     "require_model_admin_human",
     "require_model_admin_key",
     "require_model_recovery_human",

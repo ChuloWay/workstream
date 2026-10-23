@@ -16,6 +16,7 @@ from app.modules.model_usage.api import (
     ModelCallExecutionFacts,
     ModelPaidSlotKey,
     ModelProfileProvisioningFacts,
+    ModelUsageInspectionFacts,
     PreparedModelCallAttempt,
     PreparedSetupModelUsageEffect,
     SetupModelEffectAuthorityFacts,
@@ -26,6 +27,7 @@ from app.modules.model_usage.api import (
 
 PROFILE_PROVISION = ActionId.PROJECT_MODEL_PROFILE_PROVISION
 BUDGET_CONFIGURE = ActionId.PROJECT_MODEL_BUDGET_CONFIGURE
+USAGE_READ = ActionId.PROJECT_MODEL_USAGE_READ
 RECOVERY_CHILD_AUTHORIZE = ActionId.PROJECT_MODEL_CALL_RECOVERY_CHILD_AUTHORIZE
 PREPARE = ActionId.CHECKER_MODEL_CALL_PREPARE
 DISPATCH = ActionId.CHECKER_MODEL_CALL_DISPATCH
@@ -38,7 +40,9 @@ SETUP_DISPATCH = ActionId.PROJECT_GUIDE_COMPILATION_MODEL_DISPATCH
 SETUP_OBSERVE = ActionId.PROJECT_GUIDE_COMPILATION_MODEL_OBSERVE
 SETUP_COMPLETE = ActionId.PROJECT_GUIDE_COMPILATION_MODEL_COMPLETE
 
-MODEL_ADMIN_ACTIONS = frozenset({PROFILE_PROVISION, BUDGET_CONFIGURE, RECOVERY_CHILD_AUTHORIZE})
+MODEL_ADMIN_ACTIONS = frozenset(
+    {PROFILE_PROVISION, BUDGET_CONFIGURE, USAGE_READ, RECOVERY_CHILD_AUTHORIZE}
+)
 CHECKER_MODEL_CALL_ACTIONS = frozenset({PREPARE, DISPATCH, RECOVER, OBSERVE, COMPLETE, GRANT})
 SETUP_MODEL_USAGE_ACTIONS = frozenset(
     {SETUP_PREPARE, SETUP_DISPATCH, SETUP_OBSERVE, SETUP_COMPLETE}
@@ -173,6 +177,7 @@ SetupRuntimeFacts = (
 AdminFacts = (
     ModelProfileProvisioningFacts
     | ModelBudgetProvisioningFacts
+    | ModelUsageInspectionFacts
     | ModelCallRecoveryChildAuthorityFacts
 )
 
@@ -227,6 +232,7 @@ class ProjectModelAdministrationResourceContext(BaseModel):
         expected = {
             PROFILE_PROVISION: ModelProfileProvisioningFacts,
             BUDGET_CONFIGURE: ModelBudgetProvisioningFacts,
+            USAGE_READ: ModelUsageInspectionFacts,
             RECOVERY_CHILD_AUTHORIZE: ModelCallRecoveryChildAuthorityFacts,
         }.get(self.action_id)
         if expected is None or type(self.facts) is not expected:
@@ -427,6 +433,8 @@ def _admin_identity(facts: AdminFacts, actor_profile_id: UUID) -> tuple[UUID, UU
         return facts.spec.project_id, facts.operation_id, facts.actor_profile_id
     if type(facts) is ModelCallRecoveryChildAuthorityFacts:
         return facts.project_id, facts.parent_attempt_id, actor_profile_id
+    if type(facts) is ModelUsageInspectionFacts:
+        return facts.project_id, facts.effect_id, facts.actor_profile_id
     raise ValueError("invalid project model administration facts")
 
 
@@ -459,6 +467,7 @@ __all__ = (
     "SETUP_MODEL_USAGE_ACTIONS",
     "SETUP_OBSERVE",
     "SETUP_PREPARE",
+    "USAGE_READ",
     "SetupModelCompleteAuthorityFacts",
     "SetupModelDispatchAuthorityFacts",
     "SetupModelObserveAuthorityFacts",

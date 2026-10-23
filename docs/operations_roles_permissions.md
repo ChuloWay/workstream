@@ -167,6 +167,7 @@ Recovery is a separate, reasoned, audited path.
 | Checker terminal-failure retry (active public operation) | `operations.checker.retry` | System Operator under exact terminal-failure guards |
 | Immutable project model profile provisioning | `project.model_profile.manage` via `project.model_profile.provision` | System Operator for the exact project and registered image |
 | Lifetime project model budget configuration | `project.model_budget.manage` via `project.model_budget.configure` | System Operator; preserves all outstanding reservations and settled spend |
+| Exact project model-effect inspection | `project.model_budget.manage` via `project.model_usage.read` | System Operator for one exact project/effect; redacted accounting and evidence identities only |
 | Model-call recovery child authorization | `project.model_call.recovery_child.authorize` | System Operator for an exact proven no-effect or fully settled failed parent; uncertain delivery is ineligible |
 | Review lease force release | `review.lease.force_release` | Operator under WS-REV-001 |
 | Checker revision-context repair (active public operation) | `project.task.manage` via `project.task.revision.repair` | Covered Project Manager |

@@ -135,7 +135,11 @@ ART_CUSTODY_EXPECTATIONS = {
         "WS-XINT-002-06A",
         "active",
     ),
-    "artifact.submission.binding.create": ("artifact.binding.create", "WS-AUTH-001-ART-05", "active"),
+    "artifact.submission.binding.create": (
+        "artifact.binding.create",
+        "WS-AUTH-001-ART-05",
+        "active",
+    ),
     "artifact.post_submit.checker_input.materialize": (
         "artifact.checker_input.materialize",
         "WS-AUTH-001-ART-06A",
@@ -248,7 +252,8 @@ REV_CUSTODY_EXPECTATIONS = {
     ),
 }
 
-historical_permissions = frozenset("""actor.profile.read_self actor.profile.update_self actor.profile.read_any
+historical_permissions = frozenset(
+    """actor.profile.read_self actor.profile.update_self actor.profile.read_any
     actor.profile.suspend actor.profile.reactivate actor.profile.deactivate
     actor.identity_link.read actor.identity_link.revoke actor.identity_link.reactivate
     actor.service.provision admin_role.read admin_role.grant admin_role.revoke
@@ -262,7 +267,8 @@ historical_permissions = frozenset("""actor.profile.read_self actor.profile.upda
     compensation.adapter_binding.manage compensation.award.read
     compensation.delivery.reconcile operations.status.read operations.timer.run
     operations.reconcile.run operations.outbox.retry operations.projection.rebuild
-    audit.read audit.export""".split())
+    audit.read audit.export""".split()
+)
 
 new_permissions = frozenset(
     """
@@ -288,18 +294,35 @@ new_permissions = frozenset(
 
 expected = {
     "actor.project.list": ("actor.profile.read_self", "PILOT-READ-2"),
-    **dict.fromkeys((
-        "actor.assignment.list", "actor.submission.list", "actor.work_summary.read",
-        "task.submission_bundle_preparation.list", "task.submission_bundle_preparation.read",
-    ), ("submission.read_own", "PILOT-READ-2")),
-    **dict.fromkeys((
-        "project.guide.list", "project.guide.read", "project.guide.activation_readiness.read",
-        "project.guide.document.read",
-    ), ("project.guide.manage", "PILOT-READ-3")),
-    **dict.fromkeys((
-        "project.submission.list", "project.assignment.list", "project.summary.read",
-        "project.task.import_batch.list", "project.submission_bundle_preparation.list",
-    ), ("project.task.manage", "PILOT-READ-3")),
+    **dict.fromkeys(
+        (
+            "actor.assignment.list",
+            "actor.submission.list",
+            "actor.work_summary.read",
+            "task.submission_bundle_preparation.list",
+            "task.submission_bundle_preparation.read",
+        ),
+        ("submission.read_own", "PILOT-READ-2"),
+    ),
+    **dict.fromkeys(
+        (
+            "project.guide.list",
+            "project.guide.read",
+            "project.guide.activation_readiness.read",
+            "project.guide.document.read",
+        ),
+        ("project.guide.manage", "PILOT-READ-3"),
+    ),
+    **dict.fromkeys(
+        (
+            "project.submission.list",
+            "project.assignment.list",
+            "project.summary.read",
+            "project.task.import_batch.list",
+            "project.submission_bundle_preparation.list",
+        ),
+        ("project.task.manage", "PILOT-READ-3"),
+    ),
     "contribution.policy.list": ("compensation.policy.manage", "PILOT-READ-3"),
     "contribution.read_self": ("contribution.read_self", "PILOT-10"),
     "contribution.read_project": ("contribution.read_project", "PILOT-10"),
@@ -334,6 +357,7 @@ expected = {
     ),
     "project.model_profile.provision": ("project.model_profile.manage", "PILOT-05"),
     "project.model_budget.configure": ("project.model_budget.manage", "PILOT-05"),
+    "project.model_usage.read": ("project.model_budget.manage", "PILOT-05"),
     "project.model_call.recovery_child.authorize": (
         "project.model_call.recovery_child.authorize",
         "PILOT-05",
@@ -348,11 +372,17 @@ expected = {
     "project.submission.read": ("project.task.manage", "task-checker-auth-cleanup"),
     "project.submission.checker_run.list": ("project.task.manage", "task-checker-auth-cleanup"),
     "project.checker_run.read": ("project.task.manage", "task-checker-auth-cleanup"),
-    "task.assignment.authority_reconcile": ("task.assignment.authority_reconcile", "WS-ARCH-001-03C1"),
+    "task.assignment.authority_reconcile": (
+        "task.assignment.authority_reconcile",
+        "WS-ARCH-001-03C1",
+    ),
     "outbox.dispatch": ("outbox.dispatch", "WS-AUTH-001-OUTBOX-01"),
     "actor.profile.read_self": ("actor.profile.read_self", "WS-AUTH-001-07B"),
     "actor.profile.update_self": ("actor.profile.update_self", "WS-AUTH-001-07B"),
-    "operations.task.start_override": ("operations.task.start_override", "task-project-grant-authorization"),
+    "operations.task.start_override": (
+        "operations.task.start_override",
+        "task-project-grant-authorization",
+    ),
     "task.claim": ("task.claim", "task-project-grant-authorization"),
     "task.start": ("task.claim", "task-project-grant-authorization"),
     "task.work_context.read": ("task.queue.read", "task-project-grant-authorization"),
@@ -384,13 +414,16 @@ expected = {
     ),
     "operations.checker.retry": ("operations.checker.retry", "WS-AUTH-001-14"),
     "operations.checker_retry_source.list": (
-        "operations.status.read", "WS-AUTH-001-14",
+        "operations.status.read",
+        "WS-AUTH-001-14",
     ),
     "operations.post_submit_delivery.list": (
-        "operations.status.read", "WS-AUTH-001-14",
+        "operations.status.read",
+        "WS-AUTH-001-14",
     ),
     "operations.post_submit_delivery.reconcile": (
-        "operations.reconcile.run", "WS-AUTH-001-14",
+        "operations.reconcile.run",
+        "WS-AUTH-001-14",
     ),
     "submission.create": ("submission.create", "WS-AUTH-001-14"),
     **{
@@ -465,10 +498,16 @@ expected = {
     "project.guide.create": ("project.guide.manage", "WS-AUTH-001-12D"),
     "project.guide.update": ("project.guide.manage", "WS-AUTH-001-12D"),
     "project.guide_source_snapshot.create": ("project.guide.manage", "WS-AUTH-001-12D"),
-    "project.guide_compilation.request_automatic": ("project.guide_compilation.execute", "WS-AUTH-001-12I"),
+    "project.guide_compilation.request_automatic": (
+        "project.guide_compilation.execute",
+        "WS-AUTH-001-12I",
+    ),
     "project.guide_compilation.request": ("project.guide_compilation.request", "WS-AUTH-001-12I"),
     "project.guide_compilation.review_package.read": ("project.guide.manage", "WS-AUTH-001-12F4"),
-    "project.guide_compilation.correction.request": ("project.guide_compilation.request", "WS-AUTH-001-12F4"),
+    "project.guide_compilation.correction.request": (
+        "project.guide_compilation.request",
+        "WS-AUTH-001-12F4",
+    ),
     "project.guide_compilation.execute": ("project.guide_compilation.execute", "WS-AUTH-001-12I"),
     "project.review_policy.update": (
         "project.review_policy.manage",
@@ -494,9 +533,9 @@ expected = {
         "project.effective_policy.manage",
         "WS-AUTH-001-12F2",
     ),
-        "project.submission_artifact_policy.derive": (
-            "project.effective_policy.manage",
-            "WS-AUTH-001-12F3",
+    "project.submission_artifact_policy.derive": (
+        "project.effective_policy.manage",
+        "WS-AUTH-001-12F3",
     ),
     "project.submission_artifact_policy.update": (
         "project.effective_policy.manage",
@@ -518,10 +557,23 @@ expected = {
         "project.effective_policy.manage",
         "WS-AUTH-001-12G",
     ),
-    "project.setup_run.update": ("project.guide.manage", "WS-AUTH-001-12B2"), "project.guide.activate": ("project.guide.manage", "WS-AUTH-001-12H"),  # noqa: E501
-    **dict.fromkeys((f"compensation.adapter_binding.{op}" for op in ("read", "create", "suspend", "resume")), ("compensation.adapter_binding.manage", "WS-ARCH-001-CP01A")),  # noqa: E501
-    **dict.fromkeys((f"contribution.policy.{op}" for op in ("read", "create_draft", "update_draft", "publish", "retire")), ("compensation.policy.manage", "WS-ARCH-001-CP01B")),  # noqa: E501
-    "contribution.compensation_unit.create": ("compensation.policy.manage", "project-points-unit-creation"),
+    "project.setup_run.update": ("project.guide.manage", "WS-AUTH-001-12B2"),
+    "project.guide.activate": ("project.guide.manage", "WS-AUTH-001-12H"),  # noqa: E501
+    **dict.fromkeys(
+        (f"compensation.adapter_binding.{op}" for op in ("read", "create", "suspend", "resume")),
+        ("compensation.adapter_binding.manage", "WS-ARCH-001-CP01A"),
+    ),  # noqa: E501
+    **dict.fromkeys(
+        (
+            f"contribution.policy.{op}"
+            for op in ("read", "create_draft", "update_draft", "publish", "retire")
+        ),
+        ("compensation.policy.manage", "WS-ARCH-001-CP01B"),
+    ),  # noqa: E501
+    "contribution.compensation_unit.create": (
+        "compensation.policy.manage",
+        "project-points-unit-creation",
+    ),
 }
 
 

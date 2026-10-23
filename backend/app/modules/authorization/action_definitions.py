@@ -677,6 +677,11 @@ ACTION_DEFINITIONS = (
         ActionOwner.PILOT_05,
     ),
     _active(
+        ActionId.PROJECT_MODEL_USAGE_READ,
+        PermissionId.PROJECT_MODEL_BUDGET_MANAGE,
+        ActionOwner.PILOT_05,
+    ),
+    _active(
         ActionId.PROJECT_MODEL_CALL_RECOVERY_CHILD_AUTHORIZE,
         PermissionId.PROJECT_MODEL_CALL_RECOVERY_CHILD_AUTHORIZE,
         ActionOwner.PILOT_05,

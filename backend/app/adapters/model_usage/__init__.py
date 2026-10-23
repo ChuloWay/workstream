@@ -7,6 +7,12 @@ def model_profile_reader(session):
     return ModelProfileReader(session)
 
 
+def model_usage_inspection(session, *, authority):
+    from app.modules.model_usage.inspection import ModelUsageInspectionService
+
+    return ModelUsageInspectionService(session, authority)
+
+
 def model_call_service(session, *, authority, current_execution, evidence):
     from app.modules.model_usage.service import ModelCallService
 
@@ -63,6 +69,7 @@ __all__ = (
     "model_evidence_custody",
     "model_invocation_grants",
     "model_profile_reader",
+    "model_usage_inspection",
     "model_recovery_sources",
     "setup_model_usage_service",
     "setup_model_output_reservations",
