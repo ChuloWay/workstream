@@ -31,6 +31,7 @@ MAX_FILES = 4096
 MAX_BYTES = 64 * 1024 * 1024
 OUTPUT_LIMIT = 2 * 1024 * 1024
 LOADER = "/usr/local/bin/workstream-release-entrypoint"
+SDK_ENVIRONMENT_MARKER = "/etc/workstream/project-agent-sdk-environment"
 ROLES_ANYWHERE_HELPER = "/usr/local/bin/aws_signing_helper"
 PROOF_COMMAND_TIMEOUT = "/usr/bin/timeout"
 ROLES_ANYWHERE_HELPER_SHA256 = {
@@ -118,7 +119,7 @@ def canonical_name(name: str) -> str:
     return re.sub(r"[-_.]+", "-", name).lower()
 
 
-def expected_packages(root: Path) -> dict[str, str]:
+def expected_packages(root: Path, sdk_environment: str) -> dict[str, str]:
     # uv owns dependency resolution. This only evaluates its exported markers.
     from packaging.requirements import Requirement
 
@@ -131,7 +132,7 @@ def expected_packages(root: Path) -> dict[str, str]:
             "--frozen",
             "--offline",
             "--extra",
-            "agents",
+            sdk_environment,
             "--no-dev",
             "--no-hashes",
             "--no-header",
@@ -167,6 +168,22 @@ def installed_packages() -> dict[str, str]:
     return packages
 
 
+def read_sdk_environment_marker() -> str:
+    """Read the immutable root-owned SDK environment marker."""
+    marker = Path(SDK_ENVIRONMENT_MARKER)
+    marker_info = marker.lstat()
+    require(
+        stat.S_ISREG(marker_info.st_mode)
+        and marker_info.st_uid == 0
+        and marker_info.st_gid == 0
+        and stat.S_IMODE(marker_info.st_mode) == 0o444,
+        "SDK environment marker differs",
+    )
+    value = marker.read_text(encoding="utf-8").strip()
+    require(value in {"agents", "omnicore"}, "SDK environment marker differs")
+    return value
+
+
 def inside_backend() -> dict:
     require(os.getuid() == 10001, "backend runtime user changed")
     require(stat.S_IMODE(Path(LOADER).lstat().st_mode) == 0o555, "loader mode changed")
@@ -189,12 +206,14 @@ def inside_backend() -> dict:
         "helper identity changed",
     )
     checked(["/bin/uv", "--no-cache", "pip", "check", "--python", sys.executable])
+    sdk_environment = read_sdk_environment_marker()
     return {
         "source": source_inventory(Path("/workspace/backend")),
         "loader": file_hash(Path(LOADER)),
         "roles_anywhere_helper": helper_hash,
         "proof_command_timeout": True,
         "packages": installed_packages(),
+        "sdk_environment": sdk_environment,
     }
 
 
@@ -210,12 +229,22 @@ def inside_checker() -> dict:
     }
 
 
-def verify_backend(actual: dict, inventory: dict, packages: dict, loader: str) -> None:
+def verify_backend(
+    actual: dict,
+    inventory: dict,
+    packages: dict,
+    loader: str,
+    sdk_environment: str,
+) -> None:
     require(actual["source"] == inventory, "backend source inventory differs")
     require(
         actual["packages"] == packages, "backend production package closure differs"
     )
     require(actual["loader"] == loader, "backend secret loader differs")
+    require(
+        actual["sdk_environment"] == sdk_environment,
+        "backend SDK environment marker differs",
+    )
     require(
         actual["roles_anywhere_helper"] in ROLES_ANYWHERE_HELPER_SHA256.values(),
         "Roles Anywhere helper differs",
@@ -359,13 +388,77 @@ def inspect_image(image: str, role: str, owner: str) -> dict:
         checked(["docker", "rm", "--force", name])
 
 
+def verify_backend_entrypoint(image: str, sdk_environment: str, owner: str) -> None:
+    """Exercise neutral parser startup and fail-closed inference SDK binding."""
+    require(sdk_environment in {"agents", "omnicore"}, "SDK environment differs")
+    wrong_runtime = (
+        "omnicore_agent" if sdk_environment == "agents" else "openai_agents_sdk"
+    )
+    cases = (
+        (
+            "parser",
+            ["WORKSTREAM_RELEASE_ROLE=parser"],
+            0,
+            b"",
+        ),
+        (
+            "mismatched-worker",
+            [
+                "WORKSTREAM_RELEASE_ROLE=worker",
+                f"WORKSTREAM_PROJECT_AGENT_RUNTIME={wrong_runtime}",
+            ],
+            1,
+            b"project agent runtime does not match the installed SDK environment\n",
+        ),
+    )
+    for case, environment, expected_status, expected_stderr in cases:
+        name = "workstream-release-proof-" + uuid.uuid4().hex
+        command = [
+            "docker",
+            "run",
+            "--name",
+            name,
+            "--label",
+            owner_label(owner),
+            "--network",
+            "none",
+            "--read-only",
+            "--cap-drop",
+            "ALL",
+            "--security-opt",
+            "no-new-privileges",
+            "--memory",
+            "256m",
+            "--cpus",
+            "1",
+            "--pids-limit",
+            "32",
+            "--tmpfs",
+            "/tmp:rw,noexec,nosuid,nodev,size=1m",
+        ]
+        for setting in environment:
+            command.extend(("--env", setting))
+        command.extend((image, "/bin/true"))
+        try:
+            result = run(command)
+            require(
+                result.returncode == expected_status
+                and result.stdout == b""
+                and result.stderr == expected_stderr,
+                f"backend {case} entrypoint behavior differs",
+            )
+        finally:
+            checked(["docker", "rm", "--force", name])
+
+
 def write_evidence(path: Path, evidence: dict) -> None:
     require(
         set(evidence)
         == {
             "source_sha",
             "tree_sha",
-            "backend_image_id",
+            "backend_agents_image_id",
+            "backend_omnicore_image_id",
             "checker_image_id",
             "backend_source_sha256",
             "backend_lock_sha256",
@@ -403,7 +496,8 @@ def main() -> None:
     parser.add_argument("--expected-head")
     parser.add_argument("--container-owner")
     parser.add_argument("--cleanup-owner")
-    parser.add_argument("--backend-image")
+    parser.add_argument("--backend-agents-image")
+    parser.add_argument("--backend-omnicore-image")
     parser.add_argument("--checker-image")
     parser.add_argument("--evidence", type=Path)
     args = parser.parse_args()
@@ -423,12 +517,20 @@ def main() -> None:
     require(head == args.expected_head, "proof checkout differs from requested head")
     require(not checked(["git", "status", "--porcelain"]), "proof checkout is dirty")
     inventory = source_inventory(root / "backend")
-    packages = expected_packages(root)
+    agents_packages = expected_packages(root, "agents")
+    omnicore_packages = expected_packages(root, "omnicore")
     loader = file_hash(root / "docker/backend/release-entrypoint.sh")
-    backend_id = image_metadata(args.backend_image, "backend")
+    backend_agents_id = image_metadata(args.backend_agents_image, "backend")
+    backend_omnicore_id = image_metadata(args.backend_omnicore_image, "backend")
     checker_id = image_metadata(args.checker_image, "checker")
-    backend = inspect_image(backend_id, "backend", args.container_owner)
-    verify_backend(backend, inventory, packages, loader)
+    backend_agents = inspect_image(backend_agents_id, "backend", args.container_owner)
+    verify_backend(backend_agents, inventory, agents_packages, loader, "agents")
+    verify_backend_entrypoint(backend_agents_id, "agents", args.container_owner)
+    backend_omnicore = inspect_image(
+        backend_omnicore_id, "backend", args.container_owner
+    )
+    verify_backend(backend_omnicore, inventory, omnicore_packages, loader, "omnicore")
+    verify_backend_entrypoint(backend_omnicore_id, "omnicore", args.container_owner)
     checker = inspect_image(checker_id, "checker", args.container_owner)
     verify_checker(checker)
     require(
@@ -443,7 +545,8 @@ def main() -> None:
         {
             "source_sha": head,
             "tree_sha": checked(["git", "rev-parse", "HEAD^{tree}"]).decode().strip(),
-            "backend_image_id": backend_id,
+            "backend_agents_image_id": backend_agents_id,
+            "backend_omnicore_image_id": backend_omnicore_id,
             "checker_image_id": checker_id,
             "backend_source_sha256": hashlib.sha256(
                 json.dumps(inventory, sort_keys=True).encode()
@@ -452,7 +555,7 @@ def main() -> None:
             "checker_lock_sha256": file_hash(root / "external_checkers/Cargo.lock"),
             "loader_sha256": loader,
             "checker_binary_sha256": checker["binary"],
-            "roles_anywhere_helper_sha256": backend["roles_anywhere_helper"],
+            "roles_anywhere_helper_sha256": backend_agents["roles_anywhere_helper"],
         },
     )
     print("Release image source, packages, metadata and bounded smoke checks passed.")

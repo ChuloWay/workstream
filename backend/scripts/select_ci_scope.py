@@ -19,6 +19,7 @@ from scripts.test_lane_catalogue import LANES
 
 
 ALL_LANES = tuple(lane.name for lane in LANES)
+SDK_ENVIRONMENT_BY_LANE = {lane.name: lane.sdk_environment for lane in LANES}
 
 
 @dataclass(frozen=True)
@@ -56,7 +57,16 @@ class CiScope:
             "minio_image": _boolean(self.minio_image),
             "lanes_required": _boolean(self.lanes_required),
             "lane_matrix": json.dumps(
-                {"lane": list(matrix_lanes)}, separators=(",", ":")
+                {
+                    "include": [
+                        {
+                            "lane": lane,
+                            "sdk_environment": SDK_ENVIRONMENT_BY_LANE[lane],
+                        }
+                        for lane in matrix_lanes
+                    ]
+                },
+                separators=(",", ":"),
             ),
             "scope_reason": self.reason,
             "mcp_contract": _boolean(self.mcp_contract),

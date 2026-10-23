@@ -540,8 +540,9 @@ overrides. Tests poison every nonselected source and prove that it is never
 read, executed, or contacted. This is an allowlisted workload-identity
 contract, not authority to use the ambient SDK default chain.
 
-Chunk 02B1 pins the async S3 SDK pair to `aiobotocore==3.7.0` and
-`botocore==1.43.0`. An SDK upgrade is a reviewed contract change because
+The current async S3 SDK pair is pinned to `aiobotocore==3.8.0` and
+`botocore==1.43.3`. The bounded uplift preserves the real MinIO protocol suite
+in the OmniCore dependency environment. An SDK upgrade is a reviewed contract change because
 credential-provider precedence and refresh windows are operational behavior.
 
 ### Runtime Eligibility After Chunk 02B1

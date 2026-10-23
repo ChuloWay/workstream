@@ -1675,10 +1675,10 @@ def test_schema_validator_is_a_direct_production_dependency() -> None:
 def test_s3_dependency_manifest_and_installed_versions_are_exact() -> None:
     manifest = tomllib.loads((Path(__file__).parents[1] / "pyproject.toml").read_text())
 
-    assert "aiobotocore==3.7.0" in manifest["project"]["dependencies"]
-    assert "botocore==1.43.0" in manifest["project"]["dependencies"]
-    assert importlib.metadata.version("aiobotocore") == "3.7.0"
-    assert importlib.metadata.version("botocore") == "1.43.0"
+    assert "aiobotocore==3.8.0" in manifest["project"]["dependencies"]
+    assert "botocore==1.43.3" in manifest["project"]["dependencies"]
+    assert importlib.metadata.version("aiobotocore") == "3.8.0"
+    assert importlib.metadata.version("botocore") == "1.43.3"
 
 
 @pytest.mark.parametrize("value", [None, "", "x" * 513])
