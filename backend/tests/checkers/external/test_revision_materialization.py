@@ -41,8 +41,8 @@ def _approved_context_proposal(monkeypatch, roles):
         ),
     }).model_dump())
 
-    def outcome(*args):
-        generated = original(*args)
+    def outcome(*args, **kwargs):
+        generated = original(*args, **kwargs)
         binding = generated.post_submit_bindings[0]
         configured = binding.model_copy(update={"parameters": (
             CapabilityParameter(name=VERSION, value="v1"),
@@ -96,7 +96,7 @@ async def test_revision_reads_exact_previous_material_with_per_binding_visibilit
         await _fixture_revision_context(h)
         prepared, admission_id = await _ready_replacement(h, revision_archive(h.data))
         created = await _create(h, _creation_request(h, prepared, admission_id))
-        async with h.factory() as session:
+        async with h.factory() as session, session.begin():
             envelope = await evaluation_coordinator(session).read_reserved_evaluation(
                 project_id=h.request.project_id, task_id=h.request.task_id,
                 submission_id=created.submission_id, request_id=created.evaluation_request_id,
@@ -104,8 +104,10 @@ async def test_revision_reads_exact_previous_material_with_per_binding_visibilit
         h.request = envelope.request
         adapter = InspectingExecution(h.scratch)
         executor = live_executor(h, selected_execution=adapter)
+        h.store.opens.clear()
         completed = await executor.evaluate_post_submission(h.request)
         assert completed.outcome == "completed"
+        assert len(h.store.opens) == 1 + int("predecessor_submission_archive" in roles)
         assert len(adapter.requests) == 2
         scoped, current_only = adapter.requests
         context = scoped.input["evaluation_context"]
@@ -128,6 +130,28 @@ async def test_revision_reads_exact_previous_material_with_per_binding_visibilit
         assert len(current_only.materials) == 1
         assert adapter.manifests[1]["visible_roles"] == ["submission_archive"]
         assert adapter.manifests[1]["evaluation_context_sha256"] is None
+        from sqlalchemy import text
+        from sqlalchemy.exc import IntegrityError
+
+        async with h.factory() as session:
+            retained = (await session.execute(text(
+                "SELECT input_context_custody,public.checker_input_receipt_valid(r) AS valid "
+                "FROM public.checker_runs r WHERE id=:id"
+            ), {"id": completed.attempt_id})).one()
+            assert retained.valid is True
+            assert retained.input_context_custody["evaluation_context"] == context
+            assert (retained.input_context_custody["predecessor"] is not None) == (
+                "predecessor_submission_archive" in roles
+            )
+        for expression in (
+            "NULL",
+            "jsonb_set(input_context_custody,'{evaluation_context,source,preparation_sha256}',to_jsonb(CAST(:wrong AS text)))",
+        ):
+            with pytest.raises(IntegrityError):
+                async with h.factory() as session, session.begin():
+                    await session.execute(text(
+                        "UPDATE public.checker_runs SET input_context_custody=" + expression + " WHERE id=:id"
+                    ), {"id": completed.attempt_id, "wrong": "sha256:" + "f" * 64})
         assert list((h.scratch / "workspaces").iterdir()) == []
         assert not h.preparation._active
         prior_calls, prior_opens = len(adapter.requests), len(h.store.opens)

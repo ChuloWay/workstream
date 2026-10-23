@@ -28,10 +28,12 @@ from app.modules.checkers.api.external import (
     ExternalCheckerExecutionRequest,
     PostSubmitExternalCheckerMaterial,
 )
-from app.modules.checkers.api.evaluation_context import PostSubmitEvaluationContext
+from app.modules.checkers.api.evaluation_context import (
+    PostSubmitEvaluationContext, PostSubmitInputContextCustody, PostSubmitPredecessorCustody,
+    validate_input_context_custody,
+)
 from app.modules.checkers.api.external_policy import (
     LockedExternalCheckerBinding,
-    selected_evaluation_context_roles,
 )
 
 
@@ -63,38 +65,21 @@ class MaterializationFacts(MaterializationMaterialFacts):
     predecessor: MaterializationMaterialFacts | None = None
 
 
-def _context_material_authority(facts: MaterializationFacts) -> None:
-    """Bind optional historical facts to the exact union of approved binding selections."""
-    request = facts.execution.request
-    selections = tuple(
-        selected_evaluation_context_roles(item.configuration, item.stage)
-        for item in request.policy.entries
-    )
-    if (facts.evaluation_context is not None) != any(item is not None for item in selections):
-        raise ValueError("materialization context selection differs")
-    context = facts.evaluation_context
-    if context is None or context.kind == "initial":
-        if facts.predecessor is not None:
-            raise ValueError("initial materialization cannot include prior material")
-        return
-    prior, source = context.predecessor, context.source.evaluation
-    roles = {role for selection in selections if selection is not None for role in selection}
-    if (
-        source.project_id != request.project_id
-        or source.task_id != request.task_id
-        or prior.submission_id == request.submission_id
-        or prior.submission_version + 1 != request.submission_version
-        or (context.feedback is not None) != ("predecessor_findings" in roles)
-        or context.feedback is not None
-        and context.feedback.source.assignment_id != request.assignment_id
-        or (facts.predecessor is not None) != ("predecessor_submission_archive" in roles)
-    ):
-        raise ValueError("materialization revision context differs")
-    if facts.predecessor is not None and any(
-        getattr(facts.predecessor.material, name) != getattr(prior, name)
-        for name in type(prior).model_fields
-    ):
-        raise ValueError("materialization predecessor custody differs")
+def materialization_input_context(facts: MaterializationFacts) -> PostSubmitInputContextCustody | None:
+    """Use one closed witness for authorization, terminal publication and replay."""
+    custody = None
+    if facts.evaluation_context is not None:
+        prior = facts.predecessor
+        custody = PostSubmitInputContextCustody(
+            evaluation_context=facts.evaluation_context,
+            predecessor=PostSubmitPredecessorCustody(
+                **prior.material.model_dump(), **prior.model_dump(exclude={"material"}),
+            ) if prior is not None else None,
+        )
+    elif facts.predecessor is not None:
+        raise ValueError("prior material requires selected context")
+    validate_input_context_custody(facts.execution.request, custody)
+    return custody
 
 
 def materialization_authority_digest(facts: MaterializationFacts) -> str:
@@ -119,14 +104,12 @@ def materialization_authority_digest(facts: MaterializationFacts) -> str:
         request.byte_count,
     ):
         raise ValueError("materialization authority identity mismatch")
-    _context_material_authority(facts)
+    input_context = materialization_input_context(facts)
     retained = facts.model_dump(
         mode="json", exclude={"execution", "evaluation_context", "predecessor"}
     )
-    if facts.evaluation_context is not None:
-        retained["evaluation_context"] = facts.evaluation_context.model_dump(mode="json")
-    if facts.predecessor is not None:
-        retained["predecessor"] = facts.predecessor.model_dump(mode="json")
+    if input_context is not None:
+        retained["input_context_custody"] = input_context.model_dump(mode="json")
     return canonical_json_hash(
         {
             "domain": "workstream.authorization.post_submit_materialization",
@@ -225,6 +208,7 @@ class PostSubmissionMaterializationResult:
     semantic_manifest_sha256: str
     evaluation: PostSubmissionExecutionResult
     input_materialization_evidence_id: UUID
+    input_context_custody: PostSubmitInputContextCustody | None = None
 
 
 class PostSubmissionMaterializationPort(Protocol):

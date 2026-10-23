@@ -173,7 +173,8 @@ async def test_exact_materialization_reads_verified_original_and_revokes_view(tm
         assert set(asdict(material)) == {"submission_id", "submission_version", "admission_id", "binding_id",
                                         "content_id", "replica_id", "content_sha256", "byte_count",
                                         "semantic_manifest_sha256", "evaluation",
-                                        "input_materialization_evidence_id"}
+                                        "input_materialization_evidence_id", "input_context_custody"}
+        assert material.input_context_custody is None
 
 
 async def test_post_external_grant_binds_native_submission_art_and_lease(

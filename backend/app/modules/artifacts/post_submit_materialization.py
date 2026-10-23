@@ -18,6 +18,7 @@ from app.modules.checkers.api.materialization import (
     PostSubmissionMaterialConsumer, PostSubmissionMaterializationResult,
     PostSubmissionMaterializationUnavailable, PostSubmissionMaterializationFailure,
     SubmissionMaterialEntry, MaterializationFacts, MaterializationMaterialFacts, MaterializationAuthorityPort, PreparedMaterialization,
+    materialization_input_context,
 )
 from app.modules.artifacts.post_submit_selection import (
     PostSubmissionMaterialSelection, read_post_submission_facts,
@@ -504,4 +505,5 @@ class PostSubmissionMaterializer:
             semantic_manifest_sha256=current.semantic_manifest_sha256,
             evaluation=evaluation,
             input_materialization_evidence_id=evidence_id,
+            input_context_custody=materialization_input_context(materialization_facts),
         )

@@ -366,3 +366,24 @@ after 0061 freezes. Verify current TASK-before-CHECKERS custody, distinct
 contributor isolation, concurrent reservation/first-content pinning, mutation
 denial, rollback and loss/recovery of the publication response on PostgreSQL
 and MinIO. No trial handle may authorize model spend without verified bytes.
+
+The private trial callback extends the existing framed checker proxy with a
+closed `workstream.trial_evidence_proxy.v1` reserve/publish protocol. The trusted
+listener allows at most 4 MiB for this protocol, while model frames remain
+bounded to 1 MiB. Images never receive the host proxy socket. A reservation
+reply either authorizes the one plan or returns the original ART-verified
+receipt for replay. Publishing requires exact current execution and the first
+pinned content; lost responses recover the existing put/binding. This owns
+`backend/app/interfaces/checker_trial_proxy.py`,
+`backend/app/adapters/checkers/trial_proxy.py`, and
+`backend/tests/checkers/external/test_trial_proxy.py`. Shared transport/runtime
+composition is coordinated with PILOT-05. No provider call or network access is
+introduced by the trial protocol itself.
+
+Trial owner persistence owns additive
+`backend/alembic/versions/0062_checker_trial_evidence.py`, existing migration
+preflight/graph tests, and `backend/tests/conftest.py` (head fingerprint and
+exact new table reset/deletion inventories). The same migration adds only the
+shared ART trial-subject foreign keys agreed with PILOT-05. Retain one linear
+chain after 0061, preserve historical model-output rows, and verify supported
+intermediate upgrades and immutable terminal evidence without baseline edits.

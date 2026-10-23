@@ -118,6 +118,67 @@ class PostSubmitEvaluationContext(CheckerValue):
         return self
 
 
+class PostSubmitPredecessorCustody(PostSubmitEvaluationPredecessor):
+    """Verified prior ART custody retained with the exact input authority receipt."""
+
+    admission_id: ResourceId
+    binding_id: ResourceId
+    content_id: ResourceId
+    replica_id: ResourceId
+    evidence_id: ResourceId
+    verification_receipt_id: ResourceId
+    verification_job_id: ResourceId
+    verification_generation: VersionNumber
+    namespace_fingerprint: Sha256
+    semantic_manifest_id: ResourceId
+
+
+class PostSubmitInputContextCustody(CheckerValue):
+    """Detached selected context; current archive custody keeps its existing shape."""
+
+    evaluation_context: PostSubmitEvaluationContext
+    predecessor: PostSubmitPredecessorCustody | None
+
+    @model_validator(mode="after")
+    def exact_prior(self) -> Self:
+        """Retain only the prior archive named by the verified source context."""
+        context = self.evaluation_context
+        if self.predecessor is not None and (
+            context.predecessor is None
+            or any(getattr(self.predecessor, name) != getattr(context.predecessor, name)
+                   for name in PostSubmitEvaluationPredecessor.model_fields)
+        ):
+            raise ValueError("input context prior custody differs")
+        return self
+
+
+def validate_input_context_custody(request, custody: PostSubmitInputContextCustody | None) -> None:
+    """Require exactly the context and byte roles selected by the locked policy."""
+    selections = tuple(validated_evaluation_context_roles(binding.configuration, binding.registry)
+                       for binding in request.policy.entries)
+    if (custody is not None) != any(item is not None for item in selections):
+        raise ValueError("materialization context selection differs")
+    if custody is None:
+        return
+    context = custody.evaluation_context
+    if context.kind == "initial":
+        if custody.predecessor is not None:
+            raise ValueError("initial materialization cannot include prior material")
+        return
+    prior, source = context.predecessor, context.source.evaluation
+    roles = {role for selection in selections if selection is not None for role in selection}
+    if (
+        source.project_id != request.project_id
+        or source.task_id != request.task_id
+        or prior.submission_id == request.submission_id
+        or prior.submission_version + 1 != request.submission_version
+        or (context.feedback is not None) != ("predecessor_findings" in roles)
+        or context.feedback is not None and context.feedback.source.assignment_id != request.assignment_id
+        or (custody.predecessor is not None) != ("predecessor_submission_archive" in roles)
+    ):
+        raise ValueError("materialization revision context differs")
+
+
 def validate_post_evaluation_materials(request) -> PostSubmitEvaluationContext | None:
     """Close requested roles against typed context after schema/hash validation."""
     selected = validated_evaluation_context_roles(request.configuration, request.registry)
