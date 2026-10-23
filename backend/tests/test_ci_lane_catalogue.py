@@ -76,6 +76,7 @@ def test_checker_delivery_and_routing_preparation_partition_every_node_once() ->
         "tests/checkers/external/test_policy.py",
         "tests/checkers/external/test_selected_post_submit.py",
         "tests/checkers/external/test_selected_pre_submit.py",
+        "tests/checkers/external/test_selected_intake_lifecycle.py",
         "tests/checkers/external/test_selected_pre_submit_coordination.py",
         "tests/checkers/external/test_selected_pre_submit_service.py",
         "tests/checkers/external/test_selected_preparation_command.py",
@@ -271,8 +272,8 @@ def test_semantic_family_membership_has_an_independent_fingerprint() -> None:
             "bd5a55d9c6f31af99b0ded200616fd1c324e7966d7e711c8bad42bbca81c1f79",
         ),
         "project": (
-            212,
-            "11225020885fa570a1faf96c0cf37a604a0f9ec17e799794fa52a1b189f87283",
+            213,
+            "5d43f2a2945c1f491dd56ab4ffd5c1b1f4112a8dda045260ed6733a215f5f726",
         ),
         "task": (
             95,
@@ -344,9 +345,9 @@ def test_project_lane_ownership_has_an_independent_fingerprint() -> None:
         )
         + "\n"
     )
-    assert len(catalogue.PROJECT_PARTITIONED_MODULES) == 212
+    assert len(catalogue.PROJECT_PARTITIONED_MODULES) == 213
     assert hashlib.sha256(canonical.encode()).hexdigest() == (
-        "ef5d13776cc1686b98538ee01b496f420391c9c4574f0e6017b9bd395a2da32f"
+        "b473f7f3df14aa872b3a2b63ea9fbf3f287b29824769bc1f926f37535129fd50"
     )
 
 

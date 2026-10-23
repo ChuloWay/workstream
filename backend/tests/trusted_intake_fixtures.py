@@ -28,6 +28,7 @@ class LocalIntakeSession:
         self.data = None
         self.inspection = None
         self.events = []
+        self.default_bindings = []
         self.identity = TrustedIntakeIdentity(
             "sha256:" + "1" * 64,
             "sha256:" + "2" * 64,
@@ -73,6 +74,7 @@ class LocalIntakeSession:
 
     async def evaluate_default(self, binding, value):
         assert self.events[-1] == "export" and not self.closed
+        self.default_bindings.append(binding)
         self.events.append("default")
         return evaluate_verified_archive(value, self)
 

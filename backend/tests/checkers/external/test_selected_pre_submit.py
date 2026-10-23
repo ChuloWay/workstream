@@ -1074,30 +1074,6 @@ async def test_selected_admission_binds_unchanged_work_to_current_task_rules(
 @pytest.mark.asyncio
 async def test_selected_factory_uses_request_bound_art_grant(tmp_path) -> None:
     request, inspector, manager, preparation = await _request(tmp_path)
-    policy = request.external_policy
-    entries = tuple(
-        SubmissionMaterialEntry(
-            item.normalized_path,
-            item.entry_type.value,
-            item.byte_count,
-            item.sha256,
-            item.executable,
-        )
-        for item in request.manifest.entries
-    )
-    request = replace(
-        request, external_policy=policy,
-        default_checker_input=WorkstreamDefaultCheckerInput(
-            archive_sha256=request.prepared_artifact.commitment.sha256,
-            archive_byte_count=request.prepared_artifact.commitment.byte_count,
-            archive_media_type="application/zip",
-            semantic_manifest_sha256=request.manifest.sha256,
-            entries=entries, predecessor=None, predecessor_exists=False,
-            current_predecessor=None,
-            current_rules_sha256=request.selected_reservation.admission_lineage.rules_sha256,
-            predecessor_rules_sha256=None, packet=request.packet,
-        ),
-    )
     reservation = request.selected_reservation
     lease = SelectedPreSubmitLeaseFacts(
         reservation=reservation, lease_id=new_record_id(), lease_generation=1,
@@ -1118,6 +1094,24 @@ async def test_selected_factory_uses_request_bound_art_grant(tmp_path) -> None:
             self.calls += 1
             return lease
 
+    from app.interfaces.trusted_submission_intake import TrustedDefaultBinding
+    expected_binding = TrustedDefaultBinding(
+        attempt_id=reservation.attempt_id,
+        attempt_request_digest=reservation.request_digest,
+        policy_sha256=reservation.policy_sha256,
+        semantic_manifest_sha256=reservation.semantic_manifest_sha256,
+        default_input_sha256=reservation.default_input_sha256,
+    )
+    evaluate_default = request.intake.evaluate_default
+
+    async def bound_default(binding, value):
+        # The fake is an assertion oracle at the committed owner seam. The
+        # guest itself has no independent access to the reservation database.
+        assert binding == expected_binding
+        assert execution.requests == []
+        return await evaluate_default(binding, value)
+
+    request.intake.evaluate_default = bound_default
     expected_lease = lease
     committed = CommittedAuthority()
     execution = _Execution("passed")
@@ -1159,11 +1153,26 @@ async def test_selected_factory_uses_request_bound_art_grant(tmp_path) -> None:
             assert refusal.value.code == "material_unavailable"
             process.assert_not_awaited()
             assert execution.requests == []
+            for changed_reservation in (
+                replace(reservation, attempt_id=new_record_id()),
+                replace(reservation, attempt_request_digest="sha256:" + "f" * 64),
+            ):
+                with pytest.raises(SelectedPreSubmitInfrastructureUnavailable) as refusal:
+                    await service.materialize_selected_pre_submit(
+                        replace(request, selected_reservation=changed_reservation),
+                        run_id=reservation.attempt_id, lease=lease,
+                        execution_authority=CommittedAuthority(),
+                    )
+                assert refusal.value.code == "material_unavailable"
+                process.assert_not_awaited()
+                assert request.intake.default_bindings == []
+                assert execution.requests == []
         result = await service.materialize_selected_pre_submit(
             replace(request, prepared_authorization=None),
             run_id=reservation.attempt_id, lease=lease, execution_authority=committed,
         )
         assert result.eligible is True
+        assert request.intake.default_bindings == [expected_binding]
         assert committed.calls == 1
         assert len(execution.requests) == 1
         assert execution.requests[0].identity.attempt_id == reservation.attempt_id
@@ -1172,61 +1181,4 @@ async def test_selected_factory_uses_request_bound_art_grant(tmp_path) -> None:
         )
     finally:
         await request.prepared_artifact.close()
-        manager.close()
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("cleanup_confirmed", [True, False])
-async def test_intake_cleanup_precedes_both_project_bindings(tmp_path, cleanup_confirmed):
-    from app.interfaces.external_services import ExternalServiceUnavailableError
-
-    request, _, manager, preparation = await _request(tmp_path)
-    first = _policy()
-    bindings = (first.entries[0], first.entries[0].model_copy(update={"requirement_id": "project.second_rule"}))
-    body = {"schema_version": "external_pre_submit_policy.v1",
-            "workstream_default": first.workstream_default.model_dump(mode="json"),
-            "entries": [binding.model_dump(mode="json") for binding in bindings]}
-    policy = LockedExternalPreSubmitPolicy(workstream_default=first.workstream_default,
-                                          entries=bindings, policy_sha256=canonical_json_hash(body))
-    identity, material, default_input = _execution_context(request, policy)
-    events = []
-    close = request.intake.close
-
-    async def confirm_cleanup():
-        assert request.intake.events[-1] == "default"
-        events.append("cleanup")
-        if not cleanup_confirmed:
-            raise ExternalServiceUnavailableError()
-        await close()
-
-    request.intake.close = confirm_cleanup
-
-    class OrderedExecution(_Execution):
-        async def execute(self, command, grant):
-            assert request.intake.closed
-            assert events[0] == "cleanup"
-            events.append(command.input["requirement_id"])
-            return await super().execute(command, grant)
-
-    grants, execution = _GrantIssuer(), OrderedExecution("passed")
-    processor = _processor(request=request, policy=policy, default_input=default_input,
-                           identity=identity, material=material, grants=grants, execution=execution)
-    try:
-        operation = preparation._process_prepared_submission(
-            request.prepared_artifact, processor, reserved_bytes=request.manifest.total_expanded_bytes,
-            maximum_entries=request.manifest.entry_count)
-        if cleanup_confirmed:
-            result = await operation
-            assert result.eligible
-            assert [member.requirement_id for member in result.external_members] == [binding.requirement_id for binding in bindings]
-            assert events == ["cleanup", "project.archive_rules", "project.second_rule"]
-        else:
-            with pytest.raises(SelectedPreSubmitInfrastructureUnavailable):
-                await operation
-            assert events == ["cleanup"]
-            assert grants.requests == execution.requests == []
-        assert list((tmp_path / "scratch" / "workspaces").iterdir()) == []
-    finally:
-        await request.prepared_artifact.close()
-        await close()
         manager.close()

@@ -23,6 +23,7 @@ from app.interfaces.external_checker_execution import (
 from app.modules.artifacts.schemas import ArtifactAuthorityDeniedError
 from app.modules.artifacts.preparation import (
     ArtifactPreparationService,
+    ArtifactPreparationDeadlineError,
     ExternalMaterialFile,
     ExternalMaterialGrantRequest,
 )
@@ -270,6 +271,7 @@ class _TrustedPreSubmitProcessor:
         self._aborted = False
         self._view = None
         self._active = None
+        self.intake_cleanup_confirmed = False
 
     def abort(self) -> None:
         self._aborted = True
@@ -302,6 +304,7 @@ class _TrustedPreSubmitProcessor:
             self._active = asyncio.create_task(request.intake.evaluate_default(binding, request.default_checker_input))
             default = await self._active
             await request.intake.close()
+            self.intake_cleanup_confirmed = True
             if self._aborted:
                 raise asyncio.CancelledError
             return await self._checker.process(self._view, default)
@@ -490,18 +493,26 @@ class PreparedBundleMaterializationService:
                 attempt_request_digest=reservation.request_digest,
             )
         )
-        result = await self._preparation._process_prepared_submission(
-            request.prepared_artifact,
-            _TrustedPreSubmitProcessor(
-                request=request, checker=processor, limits=self._archive_limits,
-                grants=_PreSubmitExternalGrantIssuer(
-                    preparation=self._preparation, prepared=request.prepared_artifact,
-                    request=request, claim=_SelectedGrantClaim(run_id, reservation.request_digest),
-                ),
+        trusted_processor = _TrustedPreSubmitProcessor(
+            request=request, checker=processor, limits=self._archive_limits,
+            grants=_PreSubmitExternalGrantIssuer(
+                preparation=self._preparation, prepared=request.prepared_artifact,
+                request=request, claim=_SelectedGrantClaim(run_id, reservation.request_digest),
             ),
-            reserved_bytes=request.manifest.total_expanded_bytes,
-            maximum_entries=request.manifest.entry_count + 1,
         )
+        try:
+            result = await self._preparation._process_prepared_submission(
+                request.prepared_artifact,
+                trusted_processor,
+                reserved_bytes=request.manifest.total_expanded_bytes,
+                maximum_entries=request.manifest.entry_count + 1,
+            )
+        except ArtifactPreparationDeadlineError as exc:
+            # ART has drained the callback and verified scratch cleanup. Only a
+            # confirmed intake close permits immediate terminal finalization.
+            if not trusted_processor.intake_cleanup_confirmed:
+                raise
+            raise SelectedPreSubmitInfrastructureUnavailable("deadline_exceeded") from exc
         if type(result) is not SelectedPreSubmitExecutionFacts:
             raise SelectedPreSubmitInfrastructureUnavailable("material_unavailable")
         return result
