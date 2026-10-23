@@ -12,7 +12,7 @@ readonly CONTAINER="${WORKSTREAM_TS_RUNSC_CONTAINER:?set the owned DIND containe
 readonly RUN_ID="${WORKSTREAM_TS_RUNSC_RUN_ID:?set the prepared PILOT-00 run ID}"
 readonly CHECKER_IMAGE="${WORKSTREAM_TS_RUNSC_CHECKER_IMAGE:-ws-terminal-systems-post:qualification}"
 readonly REGISTRY_IMAGE="${WORKSTREAM_TS_RUNSC_REGISTRY_IMAGE:-registry:2}"
-readonly INNER_ROOT="/workstream-state"
+readonly INNER_ROOT="${STATE_ROOT}"
 readonly COMPOSITION_ROOT="${STATE_ROOT}/terminal-systems-runsc-composition"
 readonly INNER_COMPOSITION_ROOT="${INNER_ROOT}/terminal-systems-runsc-composition"
 readonly ORIGINAL_CONFIG="$(mktemp /tmp/ws493-runsc-daemon.XXXXXX.json)"
@@ -34,14 +34,15 @@ cleanup() {
   set +e
   if [[ "${STARTED}" == 1 ]]; then
     docker exec "${CONTAINER}" sh -ceu '
-      if test -s /workstream-state/terminal-systems-runsc-composition/registry.pid; then
-        kill "$(cat /workstream-state/terminal-systems-runsc-composition/registry.pid)" 2>/dev/null || true
+      composition_root="$1"
+      if test -s "${composition_root}/registry.pid"; then
+        kill "$(cat "${composition_root}/registry.pid")" 2>/dev/null || true
       fi
       docker container ls -aq --filter label=workstream.external-checker=true | xargs -r docker rm -f >/dev/null
       docker container ls -aq --filter label=workstream.trial.deployment-owner=terminal-systems-runsc-qualification | xargs -r docker rm -f >/dev/null
       docker images --format "{{.Repository}}:{{.Tag}}" --filter reference="workstream-trial:*" \
         | xargs -r docker image rm >/dev/null
-    ' || status=1
+    ' sh "${INNER_COMPOSITION_ROOT}" || status=1
     docker exec "${CONTAINER}" docker image rm \
       127.0.0.1:5000/terminal-systems-post:qualification \
       "${CHECKER_IMAGE}" \
@@ -73,6 +74,7 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 [[ "${STATE_ROOT}" == /* ]]
+[[ "${STATE_ROOT}" =~ ^/tmp/ws-pilot00-[a-z0-9-]+$ ]]
 [[ "${RUN_ID}" =~ ^[a-z0-9][a-z0-9-]{0,30}$ ]]
 [[ "${CONTAINER}" =~ ^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$ ]]
 [[ -n "${WORKSTREAM_TEST_ADMIN_DATABASE_URL:-}" ]]
@@ -100,7 +102,7 @@ if inspection["Config"]["Labels"].get("org.workstream.pilot00.run") != run_id:
     raise SystemExit("qualification container has the wrong owner label")
 if inspection["State"]["Running"]:
     raise SystemExit("qualification requires the owned DIND container to be stopped")
-mounts = [item["Source"] for item in inspection["Mounts"] if item["Destination"] == "/workstream-state"]
+mounts = [item["Source"] for item in inspection["Mounts"] if item["Destination"] == root]
 if mounts != [root]:
     raise SystemExit("qualification container has the wrong shared-state mount")
 PY
@@ -191,13 +193,13 @@ docker cp "${EXTRACT_CONTAINER}:/bin/registry" "${COMPOSITION_ROOT}/bin/registry
 docker rm "${EXTRACT_CONTAINER}" >/dev/null
 EXTRACT_CREATED=0
 chmod 0555 "${COMPOSITION_ROOT}/bin/registry"
-cat >"${COMPOSITION_ROOT}/registry.yml" <<'YAML'
+cat >"${COMPOSITION_ROOT}/registry.yml" <<YAML
 version: 0.1
 log:
   level: error
 storage:
   filesystem:
-    rootdirectory: /workstream-state/terminal-systems-runsc-composition/registry-data
+    rootdirectory: ${INNER_COMPOSITION_ROOT}/registry-data
 http:
   addr: 127.0.0.1:5000
 YAML
@@ -220,15 +222,17 @@ test -z "$(docker exec "${CONTAINER}" docker container ls -aq --filter label=wor
 test -z "$(docker exec "${CONTAINER}" docker container ls -aq --filter label=workstream.trial=true)"
 test -z "$(docker exec "${CONTAINER}" docker images -q --filter reference='workstream-trial:*')"
 docker exec "${CONTAINER}" sh -ceu '
+  inner_root="$1"
+  composition_root="$2"
   chgrp 1000 /var/run/docker.sock
   chmod 0660 /var/run/docker.sock
-  chown -R 1000:1000 /workstream-state/terminal-systems-runsc-composition
-  chmod 0711 /workstream-state
-  nohup /workstream-state/terminal-systems-runsc-composition/bin/registry serve \
-    /workstream-state/terminal-systems-runsc-composition/registry.yml \
-    >/workstream-state/terminal-systems-runsc-composition/registry.log 2>&1 &
-  echo $! >/workstream-state/terminal-systems-runsc-composition/registry.pid
-'
+  chown -R 1000:1000 "${composition_root}"
+  chmod 0711 "${inner_root}"
+  nohup "${composition_root}/bin/registry" serve \
+    "${composition_root}/registry.yml" \
+    >"${composition_root}/registry.log" 2>&1 &
+  echo $! >"${composition_root}/registry.pid"
+' sh "${INNER_ROOT}" "${INNER_COMPOSITION_ROOT}"
 for _attempt in $(seq 1 30); do
   if docker exec "${CONTAINER}" sh -ceu 'wget -q -O /dev/null http://127.0.0.1:5000/v2/'; then
     break
