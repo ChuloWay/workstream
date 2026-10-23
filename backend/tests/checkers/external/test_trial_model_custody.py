@@ -1,4 +1,8 @@
-"""Real owner/ART/model composition driven through the production private transport."""
+"""Real owner/ART/model custody driven through the production private transport.
+
+The normalized receipt is synthesized at this Python driver boundary. Rust
+relay/engine and project-image execution are qualified separately.
+"""
 
 from contextlib import asynccontextmanager
 import asyncio
@@ -50,16 +54,17 @@ from tests.test_checker_materialization import _limits
 
 
 async def _exchange(path: Path, payload: dict) -> dict:
-    reader, writer = await asyncio.open_unix_connection(path)
-    try:
-        body = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
-        writer.write(struct.pack(">I", len(body)) + body)
-        await writer.drain()
-        size = struct.unpack(">I", await reader.readexactly(4))[0]
-        return json.loads(await reader.readexactly(size))
-    finally:
-        writer.close()
-        await writer.wait_closed()
+    async with asyncio.timeout(15):
+        reader, writer = await asyncio.open_unix_connection(path)
+        try:
+            body = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
+            writer.write(struct.pack(">I", len(body)) + body)
+            await writer.drain()
+            size = struct.unpack(">I", await reader.readexactly(4))[0]
+            return json.loads(await reader.readexactly(size))
+        finally:
+            writer.close()
+            await writer.wait_closed()
 
 
 def _combined_fixture():
@@ -167,6 +172,7 @@ async def test_trial_receipt_is_art_retained_before_controlled_model_spend(
             update={
                 "registry_entry_id": registry.registry_entry_id,
                 "registry_entry_digest": registry.entry_digest,
+                "allowed_tools": ("trial_receipt",),
                 "maximum_tool_calls": 1,
                 "maximum_tool_output_bytes": 1_048_576,
             }
@@ -305,7 +311,7 @@ async def test_trial_receipt_is_art_retained_before_controlled_model_spend(
                 ticket = reserved["ticket"]
                 from app.modules.checkers.api.trial_evidence import TrialEvidenceTicket
 
-                typed_ticket = TrialEvidenceTicket.model_validate(ticket)
+                typed_ticket = TrialEvidenceTicket.model_validate_json(json.dumps(ticket))
                 receipt = _receipt(
                     request, grant, typed_ticket, selected_trial_profile, plan
                 )

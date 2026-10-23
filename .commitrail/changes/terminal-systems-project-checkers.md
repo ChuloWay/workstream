@@ -424,18 +424,16 @@ Trial storage integration and private transport qualification own
 of the first content pin, exact replay/read, private protocol routing and
 separate model/trial frame ceilings without a live provider call.
 
-The final provider-free process composition proof owns the new focused test
-`backend/tests/checkers/external/test_trial_model_rust_composition.py`. It may
+The provider-free durable-custody composition proof owns the new focused test
+`backend/tests/checkers/external/test_trial_model_custody.py`. It may
 reuse the existing PostgreSQL/MinIO material fixture, production private proxy
 transport, real CHECKERS/ART trial handler, real model grant/ledger owner, and a
-controlled provider from the existing model-call tests. It launches the built
-Rust checker service as the process under test and must exercise one generic
-trial publication followed by receipt-resolved model assessment, plus exact
-retained-byte replay without a second trial or paid effect. It introduces no
-live provider call, deployment setting, image publication, policy activation,
-or alternative durable acknowledgment. Real runsc engine qualification remains
-the separately recorded PILOT-00 harness proof until the same process journey
-is executed with its existing pinned cache and runtime identities.
+controlled provider from the existing model-call tests. Its Python driver
+synthesizes one normalized receipt, then exercises generic trial publication,
+receipt-resolved model assessment and exact retained-byte replay without a
+second trial or paid effect. It does not prove the Rust relay or engine. It
+introduces no live provider call, deployment setting, image publication,
+policy activation, or alternative durable acknowledgment.
 
 The complementary service-boundary qualifier owns
 `external_checkers/workstream-checker-service/tests/terminal_systems_post_composition.py`.
