@@ -15,42 +15,24 @@ from tests.test_agent_runtime import _compile, _open_prompt_documents, _sdk_resu
 from tests.projects.guide_compilation.test_correction_context import correction_context
 
 
-@pytest.mark.parametrize("boundary", ["model_turns", "hosted_calls", "within_budget"])
+@pytest.mark.parametrize("boundary", ["model_turns", "tool_calls", "within_budget"])
 async def test_coverage_review_cannot_reset_the_attempt_work_budget(monkeypatch, boundary):
     """Even a runner overrunning its phase allowance cannot make an extra provider call."""
     from agents import OpenAIResponsesModel, Runner
 
     monkeypatch.setenv("OPENAI_API_KEY", "unit-test-only")
-    events = []
     responses = []
     phases = []
-
-    class Workspace:
-        container_id = "cntr_budget_probe"
-
-        async def start(self):
-            events.append("start")
-
-        async def close(self):
-            events.append("close")
-
-        async def open_document(self, handle):
-            return {"path": "/mnt/data/assigned-original.md"}
-
-    monkeypatch.setattr(
-        "app.adapters.project_agents.openai_agent_sdk.OpenAIGuideWorkspace",
-        lambda *_: Workspace(),
-    )
     config = runtime_configuration().model_copy(
         update={
             "maximum_turns": 6 if boundary == "model_turns" else 10,
-            "maximum_hosted_tool_calls": 4 if boundary == "hosted_calls" else 8,
+            "maximum_tool_calls": 1 if boundary == "tool_calls" else 8,
         }
     )
 
     async def response(self, *args, **kwargs):
         responses.append(self)
-        return SimpleNamespace(output=[SimpleNamespace(type="code_interpreter_call")])
+        return SimpleNamespace(output=[SimpleNamespace(type="message")])
 
     monkeypatch.setattr(OpenAIResponsesModel, "get_response", response)
 
@@ -84,10 +66,13 @@ async def test_coverage_review_cannot_reset_the_attempt_work_budget(monkeypatch,
     else:
         with pytest.raises(ProjectAgentRuntimeError, match="project guide run failed"):
             await _compile(runtime, compilation)
-    assert phases == [config.maximum_turns // 2, config.maximum_turns - 3]
-    assert len(responses) == {"model_turns": 6, "hosted_calls": 4, "within_budget": 7}[boundary]
+    assert phases == (
+        [config.maximum_turns // 2]
+        if boundary == "tool_calls"
+        else [config.maximum_turns // 2, config.maximum_turns - 3]
+    )
+    assert len(responses) == {"model_turns": 6, "tool_calls": 3, "within_budget": 7}[boundary]
     assert all(model is responses[0] for model in responses)
-    assert events == ["start", "close"]
 
 
 async def test_oversize_predecessor_is_rejected_before_provider_execution(monkeypatch):

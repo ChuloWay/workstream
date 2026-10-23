@@ -302,7 +302,7 @@ async def finalize_corrected_attempt(factory, values, actor, correction, *, outc
     from tests.projects.guide_compilation.helpers import runtime_configuration
     from tests.projects.guide_compilation.runtime_fixtures import (
         ScriptedGuideRuntime,
-        document_access,
+        document_tools,
     )
 
     async with factory() as session, session.begin():
@@ -316,7 +316,7 @@ async def finalize_corrected_attempt(factory, values, actor, correction, *, outc
     coordinator = project_guide_compilation_delivery_port(
         factory,
         material_factory=guide_document_manifest_port,
-        document_access_factory=document_access,
+        document_tools_factory=document_tools(factory),
         checker_capabilities=capabilities,
         request_authority=guide_compilation_request_authority,
         execution_authority=guide_compilation_execution_authority,
@@ -421,7 +421,12 @@ async def revoke_review_grant(factory, actor, grant):
 
 
 async def seed_selected_review_revision_inputs(
-    factory, command, actor, *, human_review_required=True, max_revision_rounds=2,
+    factory,
+    command,
+    actor,
+    *,
+    human_review_required=True,
+    max_revision_rounds=2,
 ):
     """Select valid review/revision inputs through their authorized mutation owner."""
     from app.modules.actors.models import ActorProfile, ActorIdentityLink

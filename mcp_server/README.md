@@ -1,6 +1,6 @@
 # Workstream MCP Adapter
 
-An independently installed adapter exposing twenty-five tools under the caller's authority:
+An independently installed adapter exposing twenty-seven tools under the caller's authority:
 
 - `workstream_profile_get` calls `GET /api/v1/actors/me`.
 - `workstream_profile_update` calls the unkeyed `PATCH /api/v1/actors/me`.
@@ -43,6 +43,10 @@ An independently installed adapter exposing twenty-five tools under the caller's
   `POST /api/v1/projects/{project_id}/guides`.
 - `workstream_guides_update` calls keyed
   `PATCH /api/v1/projects/{project_id}/guides/{guide_id}`.
+- `workstream_review_policy_put` calls keyed and preconditioned
+  `PUT /api/v1/projects/{project_id}/guides/{guide_id}/review-policy`.
+- `workstream_revision_policy_put` calls keyed and preconditioned
+  `PUT /api/v1/projects/{project_id}/guides/{guide_id}/revision-policy`.
 
 Each call forwards the caller's bearer to its fixed public Workstream operation.
 There are no MCP resources or prompts. Workstream, not the adapter, owns every
@@ -153,6 +157,16 @@ and lifecycle fields are rejected by its closed input schema. Both mutations
 require caller-supplied UUID idempotency keys and rely on Workstream for project
 authority, draft-state checks, version uniqueness and durable replay.
 
+Policy mutation takes a closed review or revision body, a typed UUID
+`idempotency_key` and an explicit `if_match` string. Use
+`"no-current-policy"` for the initial policy or retain the exact selector for the
+currently selected policy. The adapter forwards both values unchanged as
+`Idempotency-Key` and `If-Match`; it never discovers, generates, trims or repairs
+them. Omitted optional policy fields remain omitted. Workstream owns defaults,
+review-mode inheritance, immutable lineage, stale/malformed preconditions,
+authorization and replay. Policy reads, selector recovery, approval and
+activation are outside this catalogue.
+
 ## Deployment Boundary
 
 Build from this directory only:
@@ -175,7 +189,7 @@ retries. A mutation transport failure, upstream 5xx response, or unexpected
 success/redirect response is reported as non-retryable uncertain execution.
 Connections may be pooled, but
 caller credentials and results are not shared or cached. Response validation is
-pinned to the twenty-five selected public contracts in `contracts/`; upstream drift
+pinned to the twenty-seven selected public contracts in `contracts/`; upstream drift
 must be reviewed, not silently accepted. There is no fallback service or
 backend-private import.
 
@@ -192,10 +206,10 @@ Real API tests require the repository's isolated PostgreSQL runner, controlled
 fixture identities and a separate installed adapter process. Never supply a
 production database or real user token to a test. Integration and container
 commands are recorded in the additive MCP workflow and the
-[current chunk record](../.commitrail/initiatives/WS-MCP-002/WS-MCP-002-08.md).
+[current chunk record](../.commitrail/initiatives/WS-MCP-002/WS-MCP-002-09.md).
 Selected schemas are compared with the running backend OpenAPI operations;
 custom admission, lifecycle and exact-project semantics are exercised separately.
 
 Local fixture evidence does not certify the deployed Flow provider, a public
-gateway or all MCP clients. The remaining 2 mapped tools belong to later
-bounded changes in the [initiative](../.commitrail/initiatives/WS-MCP-002/OVERVIEW.md).
+gateway or all MCP clients. The assembled release proof remains a later bounded
+change in the [initiative](../.commitrail/initiatives/WS-MCP-002/OVERVIEW.md).

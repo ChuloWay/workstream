@@ -25,7 +25,6 @@ from tests.test_agent_runtime import (
     _provider_payload,
     _provider_specification,
     model_credentials,  # noqa: F401
-    scripted_workspace,  # noqa: F401
 )
 
 
@@ -125,7 +124,7 @@ def _invalid_canonical_payload(fault):
     return payload
 
 
-@pytest.mark.usefixtures("model_credentials", "scripted_workspace")
+@pytest.mark.usefixtures("model_credentials")
 @pytest.mark.parametrize("fault", ["path", "material", "unsafe"])
 @pytest.mark.parametrize("review", ["corrected", "unchanged", "provider_error"])
 async def test_review_can_correct_private_draft_without_relaxing_acceptance(

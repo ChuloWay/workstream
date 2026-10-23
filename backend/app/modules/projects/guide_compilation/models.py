@@ -53,7 +53,10 @@ class ProjectGuideCompilationAttempt(Base):
 
     __tablename__ = "project_guide_compilation_attempts"
     __table_args__ = (
-        CheckConstraint("(get_byte(uuid_send(id), 6) >> 4) = 7 and (get_byte(uuid_send(id), 8) & 192) = 128", name="id_uuid7"),
+        CheckConstraint(
+            "(get_byte(uuid_send(id), 6) >> 4) = 7 and (get_byte(uuid_send(id), 8) & 192) = 128",
+            name="id_uuid7",
+        ),
         ForeignKeyConstraint(
             ["source_snapshot_id", "source_snapshot_hash"],
             ["guide_source_snapshots.id", "guide_source_snapshots.bundle_hash"],
@@ -198,7 +201,10 @@ class ProjectGuideCompilationRequestOperation(Base):
 
     __tablename__ = "project_guide_compilation_request_operations"
     __table_args__ = (
-        CheckConstraint("(get_byte(uuid_send(operation_id), 6) >> 4) = 7 and (get_byte(uuid_send(operation_id), 8) & 192) = 128", name="operation_id_uuid7"),
+        CheckConstraint(
+            "(get_byte(uuid_send(operation_id), 6) >> 4) = 7 and (get_byte(uuid_send(operation_id), 8) & 192) = 128",
+            name="operation_id_uuid7",
+        ),
         CheckConstraint(
             "(request_trigger = 'project_manager' and source_mutation_operation_id is null "
             "and source_authorization_decision_event_id is null) or "
@@ -326,7 +332,10 @@ class ProjectGuideCompilation(Base):
 
     __tablename__ = "project_guide_compilations"
     __table_args__ = (
-        CheckConstraint("(get_byte(uuid_send(id), 6) >> 4) = 7 and (get_byte(uuid_send(id), 8) & 192) = 128", name="id_uuid7"),
+        CheckConstraint(
+            "(get_byte(uuid_send(id), 6) >> 4) = 7 and (get_byte(uuid_send(id), 8) & 192) = 128",
+            name="id_uuid7",
+        ),
         UniqueConstraint("attempt_id", name="uq_project_guide_compilation_attempt"),
         UniqueConstraint("id", "attempt_id", name="uq_project_guide_compilation_id_attempt"),
         UniqueConstraint(
@@ -419,7 +428,10 @@ class ProjectGuideComponentProjectionOperation(Base):
 
     __tablename__ = "project_guide_component_projection_operations"
     __table_args__ = (
-        CheckConstraint("(get_byte(uuid_send(operation_id), 6) >> 4) = 7 and (get_byte(uuid_send(operation_id), 8) & 192) = 128", name="operation_id_uuid7"),
+        CheckConstraint(
+            "(get_byte(uuid_send(operation_id), 6) >> 4) = 7 and (get_byte(uuid_send(operation_id), 8) & 192) = 128",
+            name="operation_id_uuid7",
+        ),
         UniqueConstraint(
             "operation_id",
             "compilation_id",
@@ -574,8 +586,14 @@ class ProjectGuideSetupFinalization(Base):
 
     __tablename__ = "project_guide_setup_finalizations"
     __table_args__ = (
-        CheckConstraint("(get_byte(uuid_send(id), 6) >> 4) = 7 and (get_byte(uuid_send(id), 8) & 192) = 128", name="id_uuid7"),
-        CheckConstraint("(get_byte(uuid_send(operation_id), 6) >> 4) = 7 and (get_byte(uuid_send(operation_id), 8) & 192) = 128", name="operation_id_uuid7"),
+        CheckConstraint(
+            "(get_byte(uuid_send(id), 6) >> 4) = 7 and (get_byte(uuid_send(id), 8) & 192) = 128",
+            name="id_uuid7",
+        ),
+        CheckConstraint(
+            "(get_byte(uuid_send(operation_id), 6) >> 4) = 7 and (get_byte(uuid_send(operation_id), 8) & 192) = 128",
+            name="operation_id_uuid7",
+        ),
         ForeignKeyConstraint(
             ["compilation_id", "attempt_id"],
             ["project_guide_compilations.id", "project_guide_compilations.attempt_id"],
@@ -736,7 +754,10 @@ class ProjectGuideRuntimeAllocation(Base):
 
     __tablename__ = "project_guide_runtime_allocations"
     __table_args__ = (
-        CheckConstraint("(get_byte(uuid_send(id), 6) >> 4) = 7 and (get_byte(uuid_send(id), 8) & 192) = 128", name="id_uuid7"),
+        CheckConstraint(
+            "(get_byte(uuid_send(id), 6) >> 4) = 7 and (get_byte(uuid_send(id), 8) & 192) = 128",
+            name="id_uuid7",
+        ),
         UniqueConstraint(
             "attempt_id",
             "kind",
@@ -801,12 +822,36 @@ class ProjectGuideRuntimeAllocation(Base):
 
 
 class ProjectGuideDocumentAccess(Base):
-    """Immutable successful original-file access evidence for an exact fenced run."""
+    """Immutable successful original access evidence for an exact fenced run."""
 
     __tablename__ = "project_guide_document_accesses"
     __table_args__ = (
-        CheckConstraint("(get_byte(uuid_send(id), 6) >> 4) = 7 and (get_byte(uuid_send(id), 8) & 192) = 128", name="id_uuid7"),
-        UniqueConstraint("attempt_id", "source_item_id", name="uq_guide_document_access"),
+        CheckConstraint(
+            "(get_byte(uuid_send(id), 6) >> 4) = 7 and (get_byte(uuid_send(id), 8) & 192) = 128",
+            name="id_uuid7",
+        ),
+        UniqueConstraint(
+            "attempt_id",
+            "parser_request_hash",
+            name="uq_guide_document_parser_request",
+        ),
+        CheckConstraint(
+            "(access_method='provider_attachment' and attachment_allocation_id is not null "
+            "and operation is null and parser_request_hash is null "
+            "and parser_response_hash is null and parser_build_digest is null) or "
+            "(access_method='direct_original' and attachment_allocation_id is null "
+            "and operation is null and parser_request_hash is null "
+            "and parser_response_hash is null and parser_build_digest is null) or "
+            "(access_method='trusted_parser' and attachment_allocation_id is null "
+            "and operation is not null and operation in ('read','search') "
+            "and parser_request_hash is not null "
+            "and parser_request_hash ~ '^sha256:[0-9a-f]{64}$' "
+            "and parser_response_hash is not null "
+            "and parser_response_hash ~ '^sha256:[0-9a-f]{64}$' "
+            "and parser_build_digest is not null "
+            "and parser_build_digest ~ '^sha256:[0-9a-f]{64}$')",
+            name="ck_guide_document_access_evidence",
+        ),
     )
     id: Mapped[UUID] = mapped_column(Uuid(), primary_key=True)
     attempt_id: Mapped[UUID] = mapped_column(
@@ -814,10 +859,14 @@ class ProjectGuideDocumentAccess(Base):
     )
     source_item_id: Mapped[str] = mapped_column(ForeignKey("guide_source_snapshot_items.id"))
     document_version_id: Mapped[str] = mapped_column(ForeignKey("guide_source_artifact_ingests.id"))
-    # Null only for a provider-free runtime, which stages no provider file.
     attachment_allocation_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("project_guide_runtime_allocations.id")
     )
+    access_method: Mapped[str] = mapped_column(String(32))
+    operation: Mapped[str | None] = mapped_column(String(16))
+    parser_request_hash: Mapped[str | None] = mapped_column(String(71))
+    parser_response_hash: Mapped[str | None] = mapped_column(String(71))
+    parser_build_digest: Mapped[str | None] = mapped_column(String(71))
     manifest_sha256: Mapped[str] = mapped_column(String(71))
     sha256: Mapped[str] = mapped_column(String(71))
     document_handle: Mapped[UUID] = mapped_column(Uuid())
@@ -829,7 +878,10 @@ class ProjectGuideProposalApproval(Base):
 
     __tablename__ = "project_guide_proposal_approvals"
     __table_args__ = (
-        CheckConstraint("(get_byte(uuid_send(operation_id), 6) >> 4) = 7 and (get_byte(uuid_send(operation_id), 8) & 192) = 128", name="operation_id_uuid7"),
+        CheckConstraint(
+            "(get_byte(uuid_send(operation_id), 6) >> 4) = 7 and (get_byte(uuid_send(operation_id), 8) & 192) = 128",
+            name="operation_id_uuid7",
+        ),
         Index(
             "uq_proposal_approval_root_guide",
             "guide_id",
@@ -919,7 +971,10 @@ class ProjectGuideProposalCorrection(Base):
 
     __tablename__ = "project_guide_proposal_corrections"
     __table_args__ = (
-        CheckConstraint("(get_byte(uuid_send(operation_id), 6) >> 4) = 7 and (get_byte(uuid_send(operation_id), 8) & 192) = 128", name="operation_id_uuid7"),
+        CheckConstraint(
+            "(get_byte(uuid_send(operation_id), 6) >> 4) = 7 and (get_byte(uuid_send(operation_id), 8) & 192) = 128",
+            name="operation_id_uuid7",
+        ),
         ForeignKeyConstraint(
             ["compilation_id", "project_id", "guide_id"],
             [

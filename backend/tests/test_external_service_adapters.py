@@ -350,7 +350,13 @@ def test_project_guide_composition_constructs_only_the_selected_runtime(
     def forbidden(_configuration):
         raise AssertionError("unselected runtime was constructed")
 
-    monkeypatch.setattr(composition, "OpenAIAgentSdkProjectGuideRuntime", forbidden)
+    from dataclasses import replace
+
+    monkeypatch.setitem(
+        composition._RUNTIMES,
+        "openai_agents_sdk",
+        replace(composition._RUNTIMES["openai_agents_sdk"], runtime_builder=forbidden),
+    )
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     configuration = manager_runtime_configuration()
 

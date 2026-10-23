@@ -6,6 +6,7 @@ for current product capability.
 
 | Initiative | Durable disposition | Next usable boundary |
 |---|---|---|
+| [WS-AGENT-001](initiatives/WS-AGENT-001/OVERVIEW.md) | Planned | Neutral document tools and the OpenAI Agents SDK/OpenRouter original-guide qualification are delivered. Next: qualify the OmniCoreAgent companion against the same contract, then resume the hosted contribution journey. |
 | [WS-DB-002](initiatives/WS-DB-002/OVERVIEW.md) | Complete | Shared UUIDv7 record generation, native-UUID relationships and fresh v0.1 baseline; natural-owner retry custody and aligned CI/local setup |
 | [WS-MCP-002](initiatives/WS-MCP-002/OVERVIEW.md) | Planned | Twenty-three tools through WS-MCP-002-07: self-service, administrative access, actor/identity lifecycle, project shells and participation; 4 tools remain and WS-MCP-002-08 guide documents is next |
 | [WS-CLI-001](initiatives/WS-CLI-001/OVERVIEW.md) | Planned | Public Go CLI setup, contributor/manager workflows, administrative and operational commands, Finance policies and contribution exports are detailed in the overview; -43 completes the artifact Operator client and proves the connected local unpaid automated-acceptance journey. -44 prepares four native release archives and a gated manual publisher; protected environment and immutable-tag ruleset verification, first tag/publication and public-asset audit remain. Public human-review controls, hosted proof and optional TUI are separate. Current revision context never substitutes for historical evidence. |

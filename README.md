@@ -269,35 +269,36 @@ ACLs.
 
 ### Native Unified Guide Inference
 
-Set `WORKSTREAM_PROJECT_AGENT_MODEL=gpt-5.6-terra` (or your chosen supported model)
-and `OPENAI_API_KEY` in ignored `backend/.env`. Runtime, provider/API protocol,
-model and instructions are separate settings in `backend/.env.example`.
-Prepare the ignored root `.env` as described in the Docker workflow and start
-backing services using its port and credential settings. Put native backend and
-provider settings in ignored `backend/.env`, then install the agent runtime and
-load that file into API and Celery worker:
+The default runtime is `openai_agents_sdk`, with OpenRouter as the inference
+provider and `openai/gpt-5.6-terra` as the model. Runtime, provider, model,
+instructions and runtime-specific options are separate settings. OpenRouter uses
+`WORKSTREAM_PROJECT_AGENT_MODEL_API=chat_completions`, as in both environment
+examples. Put
+`OPENROUTER_API_KEY` only in the ignored local Compose `.env`; the Celery worker receives
+it, while the fixed guide-document parser has no credentials or network.
+Direct OpenAI inference remains an explicit provider selection with its own key;
+there is no automatic provider fallback.
+
+Use the containerized Celery worker for connected guide inference so untrusted document
+parsing runs in its separate, bounded service:
 
 ```bash
-docker compose up -d --wait postgres redis minio
-cd backend
-uv sync --locked --extra dev --extra agents
-uv run --env-file .env uvicorn app.main:app --reload
-# In another terminal, from backend/:
-uv run --env-file .env celery -A app.workers.celery_app worker --pool=prefork -Q celery --beat --loglevel=info
+# From the repository root, after preparing the private .env:
+docker compose --profile backend up -d --build --wait
 ```
 
-The model key must be in the process environment; `--env-file` supplies it without
-shell-exporting or printing it. For connected guide testing, start Postgres,
-Redis and MinIO, create the private bucket as described below, and enable the
-S3-compatible settings in `.env`. The disabled-store first-run profile does not
-support guide artifact ingestion. Committed original-document readiness runs one compilation
-and stops at findings and draft proposals; manager review/approval remains separate.
+This starts the API, Celery worker, Beat and parser with the backing services. Native
+API-only development remains supported, but starting a native Celery process
+alone does not provide the isolated parser. The parser supports bounded read and
+search over the exact assigned Markdown, PDF, DOCX and PPTX originals; it exposes
+no shell or model-selected storage paths. Rebuild the local image after changing
+parser code. Committed original-document readiness runs one compilation and
+stops at findings and proposals; manager review and approval remain separate.
 
 To compile guides without any model provider, select the manager-authored
-runtime instead. In this native workflow it needs no `OPENAI_API_KEY` and no
-`agents` extra, makes no network call and allocates no provider resources. The
-hosted release configuration still requires its OpenAI key file regardless of
-runtime:
+runtime instead. It makes no inference request and allocates no provider
+resources. It uses the same isolated document tools. The hosted deployment's
+provider-key file requirement is described in its release guide:
 
 ```bash
 WORKSTREAM_PROJECT_AGENT_RUNTIME=manager_authored
@@ -306,8 +307,8 @@ WORKSTREAM_PROJECT_AGENT_MODEL_API=none
 WORKSTREAM_PROJECT_AGENT_MODEL=none
 ```
 
-Settings and the database both reject `none` with any other runtime, and this
-runtime with any provider other than `none`. The manager uploads a rules
+The selected adapter validates its configuration before dispatch; the database
+binds the complete immutable configuration to the attempt. The manager uploads a rules
 document (conventionally labelled `workstream-rules.json`, declared as
 `text/markdown`) with the guide originals; a person, a script or any AI provider
 outside Workstream can write it. The runtime opens and records every original,
@@ -426,21 +427,24 @@ timeout, document limits and tool budgets on the attempt before execution. Crede
 the Celery worker environment. `WORKSTREAM_PROJECT_AGENT_INSTRUCTIONS` and
 `WORKSTREAM_PROJECT_AGENT_INSTRUCTION_VERSION` configure trusted instructions;
 omitting the text selects the repository's canonical compilation instructions.
-The current adapter uses OpenAI Responses with a private Code Interpreter
-workspace. `WORKSTREAM_PROJECT_AGENT_MODEL=gpt-5.6-terra` selects the model
-independently of the runtime and instructions. Changing that setting requires
-verifying the chosen model supports the configured tools and structured output.
-`WORKSTREAM_PROJECT_AGENT_REQUEST_TIMEOUT_SECONDS` defaults to 300 seconds per
-provider request. `WORKSTREAM_PROJECT_AGENT_RUN_TIMEOUT_SECONDS` defaults to 1,800
-seconds for the whole run, including retry waits. The Agents SDK retries a model
-request at most twice, with exponential backoff and jitter capped at 30 seconds.
-Only proven pre-transmission failures, explicit temporary rate limits, or
-provider-confirmed safe replay are eligible. Billing, authentication, invalid
-output, denied document access, and unknown dispatched outcomes do not retry.
-A process-local circuit opens after three exhausted transient model requests,
-then admits one recovery probe after 60 seconds. Cleanup remains available.
-The corresponding retry and circuit settings are listed in `backend/.env.example`.
-The runtime adapter is selected through the shared typed adapter factory.
+The OpenAI Agents SDK uses explicit read/search function tools over verified
+originals; it no longer uploads guide files to OpenAI or creates hosted containers.
+Changing the inference provider does not change PROJECTS document custody or the
+proposal contract. The attempt records a validated adapter profile with the exact
+SDK versions and effective settings. `WORKSTREAM_PROJECT_AGENT_RUNTIME_OPTIONS`
+is a JSON object; unsupported options fail before dispatch. For this adapter,
+`request_timeout_seconds` defaults to 300 and `maximum_retries` to 2. The shared
+`WORKSTREAM_PROJECT_AGENT_RUN_TIMEOUT_SECONDS` defaults to 1,800 seconds and
+includes retry waits. Only known safe transient failures are retried; uncertain
+provider outcomes remain fenced. The existing circuit breaker retains bounded
+backoff and recovery behavior. Native SDK retry behavior belongs to that adapter,
+not a universal promise for every future runtime.
+
+The runtime adapter is selected through the shared typed adapter factory. The
+core grants only bounded document tools and validates the returned proposal;
+it does not depend on a vendor SDK's files, containers or session objects. Retained
+historical OpenAI resource IDs remain available solely for exact cleanup, using
+the original provider credential, without redispatching uncertain attempts.
 The registered runtimes are `openai_agents_sdk` (the default) and the
 provider-free `manager_authored` runtime described above; the latter has no
 retry or circuit settings because it makes no provider request.
@@ -468,7 +472,7 @@ ARCH-04D2 supplies exact service authority and ARCH-04E1A supplies source-only
 facts/types. PILOT-04 registers selected production request/completion routing;
 ARCH-04E3-B activates supported false-policy guides. The bounded local public
 durable-runtime drill starts from public guide inputs with recorded inference.
-The local Celery command above includes Beat; start it before creating guide sources.
+The connected Compose configuration includes Beat; start it before creating guide sources.
 
 The Beat scheduler must run alongside the Celery execution processes so
 artifact pending-work, verified guide-continuation and post-policy approval scans can recover

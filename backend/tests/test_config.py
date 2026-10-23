@@ -712,12 +712,13 @@ _MANAGER_AUTHORED_ENVIRONMENT = {
 }
 
 
-def test_project_agent_settings_default_to_openai_and_load_manager_authored_pairing(
+def test_project_agent_settings_default_to_openrouter_and_load_no_inference_identity(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     default = Settings()
     assert (default.project_agent_runtime, default.project_agent_model_provider,
-            default.project_agent_model_api) == ("openai_agents_sdk", "openai", "responses")
+            default.project_agent_model_api, default.project_agent_model) == (
+        "openai_agents_sdk", "openrouter", "chat_completions", "openai/gpt-5.6-terra")
     for name, value in _MANAGER_AUTHORED_ENVIRONMENT.items():
         monkeypatch.setenv(name, value)
     settings = Settings()
@@ -728,9 +729,9 @@ def test_project_agent_settings_default_to_openai_and_load_manager_authored_pair
 
 @pytest.mark.parametrize(
     "omitted",
-    sorted(_MANAGER_AUTHORED_ENVIRONMENT),
+    sorted(set(_MANAGER_AUTHORED_ENVIRONMENT) - {"WORKSTREAM_PROJECT_AGENT_RUNTIME"}),
 )
-def test_project_agent_settings_reject_any_partial_provider_free_pairing(
+def test_project_agent_settings_reject_any_partial_no_inference_identity(
     monkeypatch: pytest.MonkeyPatch, omitted: str
 ) -> None:
     for name, value in _MANAGER_AUTHORED_ENVIRONMENT.items():
