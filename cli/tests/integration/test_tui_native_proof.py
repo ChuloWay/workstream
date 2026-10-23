@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+import tui_native_proof
 from tui_native_proof import ProofError, Reports, run_tests, validate, verify
 
 
@@ -212,3 +213,43 @@ def test_wasxfail_presence_is_not_lost():
     observer.pytest_runtest_logreport(Report())
     assert observer.reports[0]["has_wasxfail"] is True
     assert observer.reports[0]["wasxfail"] == ""
+
+
+@pytest.mark.parametrize(
+    ("error", "detail"),
+    [
+        (ProofError("receipt count differs"), "ProofError: receipt count differs"),
+        (OSError("credential_canary_private_path"), "OSError"),
+        (ValueError("credential_canary_private_payload"), "ValueError"),
+    ],
+)
+def test_main_rejection_discloses_only_fixed_proof_reason(
+    tmp_path, monkeypatch, capsys, error, detail
+):
+    monkeypatch.setattr(
+        tui_native_proof.sys,
+        "argv",
+        [
+            "tui_native_proof.py",
+            "verify",
+            "--output",
+            str(tmp_path),
+            "--source",
+            BINDING["source"],
+            "--platform",
+            BINDING["platform"],
+            "--run-id",
+            BINDING["run_id"],
+            "--run-attempt",
+            BINDING["run_attempt"],
+        ],
+    )
+
+    def reject(*args):
+        raise error
+
+    monkeypatch.setattr(tui_native_proof, "verify", reject)
+    assert tui_native_proof.main() == 1
+    output = capsys.readouterr()
+    assert output.out == ""
+    assert output.err == f"native terminal proof rejected: {detail}\n"

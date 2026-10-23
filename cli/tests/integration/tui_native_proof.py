@@ -202,7 +202,11 @@ def main():
         count = verify(args.output, binding)
         print(f"Validated native terminal proof: {count} tests; {args.platform}")
     except (ProofError, OSError, ValueError, KeyError, TypeError) as exc:
-        print(f"native terminal proof rejected: {type(exc).__name__}", file=sys.stderr)
+        detail = f": {exc}" if isinstance(exc, ProofError) else ""
+        print(
+            f"native terminal proof rejected: {type(exc).__name__}{detail}",
+            file=sys.stderr,
+        )
         return 1
     return 0
 
