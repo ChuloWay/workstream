@@ -31,6 +31,7 @@ from app.adapters.project_agents.provider_resilience import (
 )
 from app.adapters.project_agents.omnicore_profile import (
     LITELLM_VERSION,
+    OMNICORE_CIRCUIT_FAILURE_THRESHOLD,
     OMNICORE_OPENAI_VERSION,
     OMNICOREAGENT_VERSION,
     OMNICORE_QUALIFICATION_MODEL,
@@ -161,7 +162,7 @@ class _SyntheticOpenRouter:
                     "id": f"chatcmpl-{len(self.requests)}",
                     "object": "chat.completion",
                     "created": 1,
-                    "model": OMNICORE_QUALIFICATION_MODEL,
+                    "model": body["model"],
                     "choices": [
                         {
                             "index": 0,
@@ -603,9 +604,17 @@ async def test_exhausted_native_retries_open_shared_provider_circuit(monkeypatch
 )
 async def test_actual_sdk_provider_error_body_never_reaches_logs_or_exception(
     caplog,
+    monkeypatch,
     status,
     expected_attempts,
 ):
+    from app.adapters.project_agents import provider_resilience
+
+    monkeypatch.setattr(
+        provider_resilience,
+        "circuit_for",
+        lambda *_: ProviderCircuit(OMNICORE_CIRCUIT_FAILURE_THRESHOLD, 60),
+    )
     marker = f"private-guide-marker-{status}"
     compilation_context = _runtime_context()
     capabilities, _reads, handle = _capabilities(compilation_context)
