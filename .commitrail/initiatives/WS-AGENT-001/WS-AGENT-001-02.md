@@ -25,7 +25,7 @@ test environments, focused actual-SDK contract tests and synthetic loopback proo
 the existing project-setup Celery task's hard process limit and focused prefork
 termination proof, its runtime-aware prefork topology guard, and the public guide
 API drill's worker pool; the shared Celery Redis visibility configuration and
-startup check; the existing backend Dockerfiles and entrypoint; local and hosted
+no-prefetch startup check; the existing backend Dockerfiles and entrypoint; local and hosted
 composition, preflight, shutdown bounds and release examples;
 backend/CLI/MCP/release-image
 workflows and their test-lane/evidence owners; release-image verification and
@@ -166,6 +166,18 @@ short visibility value redelivers before the task boundary, then show the suppor
 ordering keeps one delivery through hard-timeout acknowledgement and child
 replacement. This covers Celery's shortest-visibility-wins rule for every
 Workstream participant using that broker.
+Because Redis visibility starts when a message is reserved rather than when a
+prefork child begins it, the shared app also pins
+`worker_disable_prefetch=true`. Inference project-setup startup/task validation
+requires the effective Redis transport and no-prefetch behavior; it rejects
+brokers where Celery ignores this control. This prevents a third long task from
+aging invisibly in the parent while both concurrency-two children are occupied,
+without adding another queue. Hosted preflight and release tests bind the same
+transport and setting. The real Redis discriminator saturates two children and
+publishes at least a third long late-ack task: its bad control demonstrates early
+redelivery of a reserved waiting message, while the supported control proves the
+third message is not reserved until a process is available and then remains one
+delivery through hard-timeout acknowledgement.
 A hanging probe must cover the case where upstream consumes the complete body and
 never responds. A fake upstream is injectable only by trusted test composition,
 must be loopback-only, and is never accepted from product configuration.
@@ -322,6 +334,11 @@ image claim; synthetic CI does not replace it.
   7,380 seconds across worker, Beat and publishers. Startup/preflight rejects a
   shorter participant, and a real time-scaled Redis/prefork proof distinguishes
   early redelivery from the supported single-delivery hard-timeout path.
+- Inference worker startup requires effective Redis
+  `worker_disable_prefetch=true`. The concurrency-two/three-task Redis proof shows
+  the third task is not reserved while both children are occupied, then remains a
+  single delivery across its own hard-timeout boundary; preflight and release tests
+  reject transport or no-prefetch drift.
 - Static registration makes `omnicore_agent` selectable through the same typed
   factory and effective-profile path. The release marker rejects a mismatched SDK
   image before role startup, preserves `manager_authored` in either image and never
