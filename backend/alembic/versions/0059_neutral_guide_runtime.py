@@ -59,7 +59,7 @@ BEGIN
              OR ((config->>'model_provider')<>'none' AND (config->>'model_api')<>'none'
                  AND (config->>'model')<>'none'))
      OR jsonb_typeof(config->'adapter_profile') IS DISTINCT FROM 'string'
-     OR length(config->>'adapter_profile') NOT BETWEEN 2 AND 8192
+     OR octet_length(config->>'adapter_profile') NOT BETWEEN 2 AND 8192
      OR config->>'instruction_id' IS DISTINCT FROM 'project_guide_compilation'
      OR jsonb_typeof(config->'instruction_version') IS DISTINCT FROM 'string'
      OR length(config->>'instruction_version') NOT BETWEEN 1 AND 100

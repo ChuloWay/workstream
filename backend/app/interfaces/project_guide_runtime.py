@@ -39,11 +39,11 @@ def canonical_adapter_profile(profile: Mapping[str, object]) -> str:
             raise ValueError("project guide adapter profile key is invalid")
         if type(value) not in {bool, int, str, type(None)}:
             raise ValueError("project guide adapter profile value is invalid")
-        if (
-            isinstance(value, str)
-            and len(value.encode("utf-8")) > MAXIMUM_ADAPTER_PROFILE_STRING_BYTES
-        ):
-            raise ValueError("project guide adapter profile string is too large")
+        if isinstance(value, str):
+            if "\x00" in value:
+                raise ValueError("project guide adapter profile string contains a null character")
+            if len(value.encode("utf-8")) > MAXIMUM_ADAPTER_PROFILE_STRING_BYTES:
+                raise ValueError("project guide adapter profile string is too large")
         if isinstance(value, int) and not isinstance(value, bool) and abs(value) > 2**53 - 1:
             raise ValueError("project guide adapter profile integer is out of range")
         validated[key] = value
@@ -51,7 +51,7 @@ def canonical_adapter_profile(profile: Mapping[str, object]) -> str:
         validated,
         sort_keys=True,
         separators=(",", ":"),
-        ensure_ascii=True,
+        ensure_ascii=False,
         allow_nan=False,
     )
     if len(encoded.encode("utf-8")) > MAXIMUM_ADAPTER_PROFILE_BYTES:
