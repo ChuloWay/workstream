@@ -251,3 +251,82 @@ user approved a hard US$10 aggregate rehearsal cap; enforce it before live calls
 Review current main and open migrations before allocating a
 revision number. Required execution trials and authenticated prior-work context
 must still be supplied before final guide activation.
+
+## Independent QA, test-delta and CI review
+
+Review dimensions: `qa`, `test_delta`, and `ci_integrity`. Review target:
+base and merge base `6fa9a9b557fa3ae22c16af67bca25dc868f67b38`, frozen head
+`57b3619a22fb23995d663cb747a074e93af9225f`. The start snapshot and the
+end-of-evidence snapshot both reported that exact head, `final_ready: true`, and
+a clean worktree. This section is the only worktree mutation made after the end
+snapshot. The final merge differs from runtime commit `63614e145` only in the
+separate terminal-systems PRE change record and roadmap prose; this review did
+not repeat the PRE review.
+
+Verdict: **PASS WITH LOW RISKS** for the three review dimensions. No runtime,
+test-selection, or required-job defect was confirmed. Finding `QA-CI-001` is a
+non-blocking reliability risk in one Rust unit test. Publication remains
+separately blocked on Commitrail branch reconciliation: comparison with main
+includes the PRE record, while comparison with the PRE head includes the newer
+main record. That gate must not be weakened.
+
+### Finding
+
+- **QA-CI-001 — severity Low; confidence high; non-blocking — timing-sensitive
+  relay assertion.** Target `57b3619a2`; location
+  `external_checkers/workstream-checker-service/src/model_relay.rs:891` and
+  `:910`; failure pattern `FP-TIME-BOUNDARY-FLAKE`. The required exact-head
+  Rust workspace invocation failed once because
+  `distinct_invocations_and_frame_bounds_do_not_cross` did not observe
+  `first.finish().failed`. The test gives the relay only 100 ms to accept and
+  classify the oversized frame. The exact node passed immediately in
+  isolation, passed 30 further isolated repetitions, and the whole 44-test
+  workspace passed on rerun. This does not establish a relay runtime failure,
+  but a loaded runner can produce a false required-check failure. Use a
+  deterministic readiness handshake, or a materially larger deadline while
+  retaining a separate elapsed-time bound. Verification should repeat the
+  workspace under scheduler load and show the oversized-frame assertion still
+  reaches the intended branch.
+
+### Atomic traceability
+
+| Behavior atom | Production owner and changed boundary | Discriminating evidence | Result and custody |
+| --- | --- | --- | --- |
+| A published POST profile fixes provider, API, model snapshot, token ceiling, pricing and maximum reservation before spend. | `backend/app/modules/checkers/model_calls/profiles.py`, `backend/app/modules/checkers/model_calls/service.py:550`, `backend/app/adapters/checkers/model_provider.py:113` | Exact-head contract, provider-adapter, proxy-orchestration and AUTH selection; source inspection of stored background response creation and strict usage normalization. | Pass in the reviewer-run 76-test selection. This is controlled-provider contract evidence, not a live-provider claim. |
+| One stable paid slot survives checker retry; ambiguous provider effects are not recreated; lifetime reserved plus settled spend cannot exceed the project ceiling. | `backend/app/modules/checkers/model_calls/service.py:683`, `:911`, `:1186`; migration `0059_checker_model_runtime.py` | Exact-head owned PostgreSQL/MinIO nodes `minio-retry-retains-paid-effect` and `test_concurrent_dispatch_reserves_one_lifetime_budget`. | Pass. Metadata binds schema `0059`, head `57b3619a2`, owned PG and MinIO namespaces, and successful cleanup. |
+| Request and response evidence stays in private ART custody and completion consumes the retained paid effect. | `backend/app/adapters/checkers/model_proxy.py:142`, `:231`, `:276`; ART model-call evidence and binding modules | The exact MinIO composed node exercises real local PostgreSQL and MinIO with the controlled proxy/provider/image boundary; canonical ART, lineage, rollback, currentness and old-tail cases were also inspected in the supplied artifacts. | Exact composed boundary passes. The broader supplied artifacts were produced on the same runtime tree before commit/final-doc merge and are producer-attested rather than self-authenticating exact-head proof. |
+| Operator recovery creates a bounded authorized child only after proven no-effect or fully settled failure. | `backend/app/modules/checkers/model_calls/service.py:607`, `:1045`, `:1102`; checker retry source | Exact-head composed `operator-recovers-no-effect`; supplied six-case composed artifact additionally covers settled-failure recovery. | No-effect recovery passes at exact head. Settled-failure coverage is inspected producer-attested evidence and is not promoted to exact-head execution. |
+| Prepared checker-output AUTH accepts its JSON packet while still rejecting string-coerced integers. | `backend/app/modules/authorization/domain/checker_outputs.py:213`; `backend/tests/authorization/checker_models/test_contracts.py:141` | Exact-head positive tests plus an in-memory old strict-Python-decoder mutant. | Pass; both WRITE and BIND tests fail at the intended validation assertion under the mutant, before no unrelated setup. |
+| A checker image receives one invocation-local relay socket, with no network, a read-only root and a closed response contract. | `external_checkers/workstream-checker-service/src/model_relay.rs:1`, service container arguments, `docker-compose.agent-loop.yml:59` and `:103` | Exact-head Python transport tests, exact-head Rust workspace rerun, exact Compose render, and inspected real-Docker relay proof. | Controlled boundaries pass, subject to `QA-CI-001`. The Docker artifact proves Docker only; it is not gVisor qualification. |
+| CLI and MCP surfaces preserve the public model-operation and authorization vocabulary. | `cli/internal/api/checker_models.go`, `cli/internal/api/checker_operations.go`, MCP contracts and access-read tests | Inspected CLI operation artifact (including Go build/vet) and corrected MCP contract artifact, plus actual-backend permission/role evidence supplied by the producer. | Pass within artifact custody. GitHub authentication was invalid, so no hosted check result was available to independently bind these runs to the PR. |
+| The changed cross-cutting surface selects all required backend, external checker, MinIO, CLI, MCP and semantic-lane jobs. | `backend/scripts/select_ci_scope.py:121`, `backend/scripts/test_lane_catalogue.py:485`, `.github/workflows/backend.yml` | Reviewer executed the selector on the exact base/head pair; it returned `unknown_or_cross_cutting_path` with every required boolean true and the full lane matrix. Catalogue ownership and the final required-job aggregator were inspected. | Pass. No hosted workflow was run during this review. |
+
+### Evidence executed by this reviewer
+
+- `/dev/shm/model-qa-exact-head-minio-v5.log` and `.json`: three selected
+  tests passed against a fresh owned PostgreSQL database and MinIO namespace;
+  tree, migration head, provisioning, probe and cleanup fields are present.
+- `/dev/shm/model-qa-exact-head-pure.log`: 76 selected contract, runtime,
+  proxy, provider, transport and authorization tests passed.
+- `/dev/shm/model-qa-parser-mutant-exact.log`: the old decoder produced both
+  expected failures, killing the targeted regression mutant.
+- `/dev/shm/model-qa-exact-head-rust.log`: the first workspace run exposed
+  `QA-CI-001`; `/dev/shm/model-qa-exact-head-rust-retry.log` passed the isolated
+  node, 30 additional repetitions passed, and
+  `/dev/shm/model-qa-exact-head-rust-rerun.log` passed the workspace rerun.
+- Exact-head Compose rendering passed the proxy/socket/network/read-only mount
+  assertions. Exact base/head CI selection produced
+  `/dev/shm/model-qa-ci-scope-*.out` with full scope.
+- `/dev/shm/model-qa-end-target.json` records the clean final evidence
+  snapshot before this required review-record write.
+
+### Inspected evidence and remaining limits
+
+The review also inspected the supplied composed, ledger/recovery, signed-public,
+canonical ART, old-tail, retained-upgrade, provider/proxy, output-contract,
+CLI, MCP, Rust and real-Docker artifacts. The original old-tail artifact was
+excluded because its database was cleaned too early; only `tail-v2` was used.
+Test names and counts were not treated as runtime proof: assertions, setup
+completion, metadata custody and owner code were inspected. No live provider
+call, hosted CI run, gVisor run, or complete real-project execution occurred,
+so this verdict makes none of those claims.
