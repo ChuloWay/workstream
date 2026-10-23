@@ -7,6 +7,7 @@ import pytest
 from app.adapters.checkers import evaluation_coordinator
 from app.core.identifiers import new_record_id
 from app.interfaces.project_agents import CapabilityParameter
+from app.modules.artifacts.preparation import HARD_MAXIMUM_ARTIFACT_BYTES
 from app.modules.checkers.api.external import ExternalCheckerSchema, external_checker_json_hash
 from app.modules.checkers.api.external_policy import (
     EVALUATION_CONTEXT_ROLES_KEY as ROLES,
@@ -112,11 +113,17 @@ async def test_revision_reads_exact_previous_material_with_per_binding_visibilit
 
     await provision_minio_bucket.__wrapped__()
     # This composed journey includes two stored archives and two image grants.
-    # The shared 10-second unit fixture is not its execution allowance; retain
-    # a finite integration budget while dedicated tests prove deadline cleanup.
+    # Match the production aggregate allowance: two archive reservations plus
+    # their bounded extraction workspace must coexist. The smaller one-archive
+    # unit fixture has no room left for extraction after reserving a predecessor.
+    # Dedicated capacity and deadline tests retain the rejection/cleanup proof.
     async with remediation_source(
         tmp_path, isolated_database_env, provider="minio",
-        scratch_limits=_limits(total_deadline_seconds=60.0, reservation_ttl_seconds=120.0),
+        scratch_limits=_limits(
+            aggregate_reserved_bytes=4 * HARD_MAXIMUM_ARTIFACT_BYTES,
+            maximum_files=8, maximum_concurrency=4,
+            total_deadline_seconds=60.0, reservation_ttl_seconds=120.0,
+        ),
     ) as h:
         first_result, first_submission = h.result, h.created
         assert first_result.execution.external_members[0].input_receipt is not None
