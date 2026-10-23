@@ -112,6 +112,4 @@ def test_omnicore_selection_retains_base_python_support_and_requires_python_312(
         "litellm==1.106.2; python_version >= '3.12'",
         "openai==2.54.0; python_version >= '3.12'",
     ]
-    assert project["tool"]["uv"]["conflicts"] == [
-        [{"extra": "agents"}, {"extra": "omnicore"}]
-    ]
+    assert project["tool"]["uv"]["conflicts"] == [[{"extra": "agents"}, {"extra": "omnicore"}]]

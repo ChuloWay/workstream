@@ -17,6 +17,4 @@ def test_omnicore_profile_rejects_agents_sdk_environment() -> None:
         ProjectAgentRuntimeConfigurationError,
         match="^project guide runtime is unavailable$",
     ):
-        require_omnicore_agent_adapter_profile(
-            build_omnicore_agent_adapter_profile({})
-        )
+        require_omnicore_agent_adapter_profile(build_omnicore_agent_adapter_profile({}))

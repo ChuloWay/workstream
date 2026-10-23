@@ -25,6 +25,7 @@ from app.adapters.project_agents.omnicore_profile import (
     OmniCoreAgentProfile,
     require_omnicore_agent_adapter_profile,
 )
+from app.adapters.project_agents.openrouter_policy import openrouter_request_options
 from app.adapters.project_agents.result_validation import (
     require_result_sources_opened,
     validate_project_guide_runtime_result,
@@ -45,14 +46,6 @@ from app.modules.projects.api.guide_documents import GuideRuntimeCapabilities
 
 _INVALID_SCHEMA_OUTPUT = object()
 _OPENROUTER_CHAT_COMPLETIONS_URL = "https://openrouter.ai/api/v1/chat/completions"
-_OPENROUTER_PLUGINS = (
-    "web",
-    "file-parser",
-    "response-healing",
-    "alignment",
-    "armor",
-    "pareto",
-)
 _READ_DESCRIPTION = "Read bounded text from an assigned original using its exact opaque handle."
 _SEARCH_DESCRIPTION = "Search bounded text in an assigned original using its exact opaque handle."
 _READ_SCHEMA = {
@@ -993,11 +986,7 @@ def _rebuild_openrouter_body(body: dict[str, Any]) -> dict[str, Any]:
             "model": OMNICORE_MODEL,
             "tools": _MODEL_TOOLS,
             "usage": {"include": True},
-            "provider": {
-                "allow_fallbacks": False,
-                "data_collection": "deny",
-            },
-            "plugins": [{"id": plugin, "enabled": False} for plugin in _OPENROUTER_PLUGINS],
+            **openrouter_request_options(),
         }
     )
     return rebuilt

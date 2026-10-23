@@ -18,12 +18,12 @@ from app.adapters.project_agents.omnicore_agent import (
     _GuardRejection,
     _LoopbackOpenRouterGuard,
     _MODEL_TOOLS,
-    _OPENROUTER_PLUGINS,
     _TEST_UPSTREAM_AUTHORITY,
     _unique_object,
     _validated_test_upstream,
     _validate_request_body,
 )
+from app.adapters.project_agents.openrouter_policy import openrouter_request_options
 from app.adapters.project_agents.omnicore_profile import (
     OMNICORE_MODEL,
     build_omnicore_agent_adapter_profile,
@@ -445,12 +445,9 @@ async def test_actual_sdk_tool_loop_retries_and_rebuilds_private_provider_contro
     assert outcome == generated_result()
     assert reads == [handle, handle]
     assert len(provider.requests) == 7
-    assert all(
-        body["provider"] == {"allow_fallbacks": False, "data_collection": "deny"}
-        for _, body in provider.requests
-    )
-    expected_plugins = [{"id": plugin, "enabled": False} for plugin in _OPENROUTER_PLUGINS]
-    assert all(body["plugins"] == expected_plugins for _, body in provider.requests)
+    expected_options = openrouter_request_options()
+    assert all(body["provider"] == expected_options["provider"] for _, body in provider.requests)
+    assert all(body["plugins"] == expected_options["plugins"] for _, body in provider.requests)
     assert all(body["model"] == OMNICORE_MODEL for _, body in provider.requests)
     assert all(body["tools"] == _MODEL_TOOLS for _, body in provider.requests)
     for headers, _body in provider.requests:
