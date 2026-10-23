@@ -75,6 +75,9 @@ pub(crate) struct TrialProfile {
     pub(crate) checker_image_digest: String,
     pub(crate) configuration_sha256: String,
     pub(crate) engine_identity_digest: String,
+    pub(crate) child_runtime: String,
+    pub(crate) child_runtime_config_digest: String,
+    pub(crate) child_host_uds: String,
     pub(crate) platform: String,
     pub(crate) platform_identity_digest: String,
     pub(crate) builder_image_digest: String,
@@ -646,6 +649,9 @@ fn valid_profile(profile: &TrialProfile) -> bool {
         && valid_sha256(&profile.checker_image_digest)
         && valid_sha256(&profile.configuration_sha256)
         && valid_sha256(&profile.engine_identity_digest)
+        && profile.child_runtime == "runsc"
+        && valid_sha256(&profile.child_runtime_config_digest)
+        && profile.child_host_uds == "none"
         && valid_sha256(&profile.platform_identity_digest)
         && valid_sha256(&profile.builder_image_digest)
         && valid_sha256(&profile.offline_cache_digest)

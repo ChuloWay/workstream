@@ -56,6 +56,21 @@ struct FakeBackend {
 }
 
 impl TrialSandboxBackend for Arc<FakeBackend> {
+    fn identity(&self) -> SandboxBackendIdentity {
+        let profile = profile();
+        SandboxBackendIdentity {
+            engine_identity_digest: profile.engine_identity_digest,
+            child_runtime: profile.child_runtime,
+            child_runtime_config_digest: profile.child_runtime_config_digest,
+            child_host_uds: profile.child_host_uds,
+            platform: profile.platform,
+            platform_identity_digest: profile.platform_identity_digest,
+            builder_image_digest: profile.builder_image_digest,
+            offline_cache_digest: profile.offline_cache_digest,
+            approved_base_digests: profile.approved_base_digests,
+        }
+    }
+
     fn build(
         &self,
         request: &SandboxBuildRequest,
@@ -138,6 +153,9 @@ fn profile() -> TrialProfile {
         checker_image_digest: digest('3'),
         configuration_sha256: digest('4'),
         engine_identity_digest: digest('5'),
+        child_runtime: "runsc".into(),
+        child_runtime_config_digest: digest('5'),
+        child_host_uds: "none".into(),
         platform: "linux/amd64".into(),
         platform_identity_digest: digest('6'),
         builder_image_digest: digest('7'),

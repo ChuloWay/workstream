@@ -29,6 +29,8 @@ pub(crate) struct SandboxBuildRequest {
     pub(crate) platform: String,
     pub(crate) resources: TrialResources,
     pub(crate) timeout_ms: u64,
+    pub(crate) maximum_output_bytes: usize,
+    pub(crate) enforcement_overruns: SandboxEnforcementOverruns,
 }
 
 #[derive(Clone, Debug)]
@@ -43,6 +45,18 @@ pub(crate) struct SandboxStepRequest {
     pub(crate) working_directory: String,
     pub(crate) resources: TrialResources,
     pub(crate) timeout_ms: u64,
+    pub(crate) maximum_output_bytes: usize,
+    pub(crate) enforcement_overruns: SandboxEnforcementOverruns,
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct SandboxEnforcementOverruns {
+    pub(crate) wall_time_ms: u64,
+    pub(crate) cpu_time_ms: u64,
+    pub(crate) memory_bytes: u64,
+    pub(crate) pids: u64,
+    pub(crate) disk_bytes: u64,
+    pub(crate) entries: u64,
 }
 
 #[derive(Clone, Debug)]
@@ -61,7 +75,22 @@ pub(crate) struct SandboxFailure {
     pub(crate) cleanup_unsettled: bool,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct SandboxBackendIdentity {
+    pub(crate) engine_identity_digest: String,
+    pub(crate) child_runtime: String,
+    pub(crate) child_runtime_config_digest: String,
+    pub(crate) child_host_uds: String,
+    pub(crate) platform: String,
+    pub(crate) platform_identity_digest: String,
+    pub(crate) builder_image_digest: String,
+    pub(crate) offline_cache_digest: String,
+    pub(crate) approved_base_digests: Vec<String>,
+}
+
 pub(crate) trait TrialSandboxBackend: Send + Sync + 'static {
+    fn identity(&self) -> SandboxBackendIdentity;
+
     fn build(
         &self,
         request: &SandboxBuildRequest,
@@ -143,6 +172,19 @@ impl<B: TrialSandboxBackend> GenericTrialEngine<B> {
         relay_cancelled: &AtomicBool,
     ) -> Result<TrialExecution, TrialEngineFailure> {
         require_available(deadline, invocation_cancelled, relay_cancelled)?;
+        let backend = self.backend.identity();
+        if backend.engine_identity_digest != context.profile.engine_identity_digest
+            || backend.child_runtime != context.profile.child_runtime
+            || backend.child_runtime_config_digest != context.profile.child_runtime_config_digest
+            || backend.child_host_uds != context.profile.child_host_uds
+            || backend.platform != context.profile.platform
+            || backend.platform_identity_digest != context.profile.platform_identity_digest
+            || backend.builder_image_digest != context.profile.builder_image_digest
+            || backend.offline_cache_digest != context.profile.offline_cache_digest
+            || backend.approved_base_digests != context.profile.approved_base_digests
+        {
+            return Err(implementation_failure());
+        }
         let inventories = inspect_roles(
             &context.verified_material_root,
             &context.profile.allowed_material_roles,
@@ -177,6 +219,8 @@ impl<B: TrialSandboxBackend> GenericTrialEngine<B> {
                     platform: plan.environment.platform.clone(),
                     resources: plan.resources.clone(),
                     timeout_ms: plan.build_timeout_ms,
+                    maximum_output_bytes: context.profile.maximum_step_output_bytes,
+                    enforcement_overruns: overruns(context),
                 },
                 deadline,
                 invocation_cancelled,
@@ -251,6 +295,8 @@ impl<B: TrialSandboxBackend> GenericTrialEngine<B> {
                             working_directory: step.working_directory.clone(),
                             resources: plan.resources.clone(),
                             timeout_ms: step.timeout_ms,
+                            maximum_output_bytes: context.profile.maximum_step_output_bytes,
+                            enforcement_overruns: overruns(context),
                         },
                         (index + 1) as u32,
                         deadline,
@@ -278,6 +324,17 @@ impl<B: TrialSandboxBackend> GenericTrialEngine<B> {
             steps,
             cleanup_confirmed: false,
         })
+    }
+}
+
+fn overruns(context: &TrialEngineContext) -> SandboxEnforcementOverruns {
+    SandboxEnforcementOverruns {
+        wall_time_ms: context.profile.maximum_wall_time_overrun_ms,
+        cpu_time_ms: context.profile.maximum_cpu_time_overrun_ms,
+        memory_bytes: context.profile.maximum_memory_overrun_bytes,
+        pids: context.profile.maximum_pids_overrun,
+        disk_bytes: context.profile.maximum_disk_overrun_bytes,
+        entries: context.profile.maximum_entries_overrun,
     }
 }
 

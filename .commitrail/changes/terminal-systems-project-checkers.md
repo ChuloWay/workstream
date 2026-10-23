@@ -74,6 +74,13 @@ The concrete generic offline implementation is isolated in
 classification, resource, role-projection and cleanup tests. It consumes only
 trusted digest-pinned engine inputs and the relay's generic plan; it contains no
 Terminal Systems paths, task names, commands or findings.
+`external_checkers/workstream-checker-service/src/trial_docker.rs` and
+`external_checkers/workstream-checker-service/tests/trial_docker.rs` own the
+generic offline Kaniko/descendant-runsc launch policy and a narrow
+module-neutral runtime-control seam. The model-runtime owner will move the
+existing bounded command, ownership journal, observation and recovery
+implementation from `main.rs` behind that seam during shared assembly; this
+change does not duplicate or concurrently edit those coupled primitives.
 The trial module publishes a generic typed relay, profile and observation API;
 it does not treat relay success as a work verdict. Backend trial authority starts
 in `backend/app/modules/checkers/api/trial_profiles.py`,
