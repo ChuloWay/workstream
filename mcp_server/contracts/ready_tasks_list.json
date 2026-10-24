@@ -1,5 +1,5 @@
 {
-  "canonical_sha256": "f1e90c0db15ea2d49692911ea2eb802ced52ab390c688925fab85111d7d1b145",
+  "canonical_sha256": "ead8bdfc961a29c7050252c3c71c00dd3f572331e93c5c65bfc3cf142fb9ed18",
   "components": {
     "schemas": {
       "ApiError": {
@@ -7,24 +7,19 @@
         "description": "Canonical machine-readable API error.",
         "properties": {
           "code": {
-            "title": "Code",
             "type": "string"
           },
           "correlation_id": {
-            "title": "Correlation Id",
             "type": "string"
           },
           "details": {
             "additionalProperties": true,
-            "title": "Details",
             "type": "object"
           },
           "message": {
-            "title": "Message",
             "type": "string"
           },
           "retryable": {
-            "title": "Retryable",
             "type": "boolean"
           }
         },
@@ -35,7 +30,6 @@
           "correlation_id",
           "retryable"
         ],
-        "title": "ApiError",
         "type": "object"
       },
       "ApiErrorResponse": {
@@ -48,8 +42,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Detail"
+            ]
           },
           "error": {
             "$ref": "#/components/schemas/ApiError"
@@ -58,7 +51,6 @@
         "required": [
           "error"
         ],
-        "title": "ApiErrorResponse",
         "type": "object"
       },
       "ContributorTaskQueueResponse": {
@@ -69,7 +61,6 @@
             "items": {
               "$ref": "#/components/schemas/ReadyTaskSummary"
             },
-            "title": "Items",
             "type": "array"
           },
           "next_cursor": {
@@ -80,12 +71,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Next Cursor"
+            ]
           },
           "project_id": {
             "format": "uuid",
-            "title": "Project Id",
             "type": "string"
           }
         },
@@ -94,7 +83,6 @@
           "items",
           "next_cursor"
         ],
-        "title": "ContributorTaskQueueResponse",
         "type": "object"
       },
       "HTTPValidationError": {
@@ -117,14 +105,12 @@
         "type": "object"
       },
       "ReadyTaskSummary": {
-        "description": "Detached contributor summary without source, actor or policy internals.",
         "properties": {
           "compensation": {
             "$ref": "#/components/schemas/TaskCompensationTerms"
           },
           "created_at": {
             "format": "date-time",
-            "title": "Created At",
             "type": "string"
           },
           "difficulty": {
@@ -135,8 +121,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Difficulty"
+            ]
           },
           "estimated_time_minutes": {
             "anyOf": [
@@ -146,24 +131,20 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Estimated Time Minutes"
+            ]
           },
           "project_id": {
             "format": "uuid",
-            "title": "Project Id",
             "type": "string"
           },
           "skill_tags": {
             "items": {
               "type": "string"
             },
-            "title": "Skill Tags",
             "type": "array"
           },
           "task_id": {
             "format": "uuid",
-            "title": "Task Id",
             "type": "string"
           },
           "task_type": {
@@ -174,11 +155,9 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Task Type"
+            ]
           },
           "title": {
-            "title": "Title",
             "type": "string"
           }
         },
@@ -193,26 +172,21 @@
           "created_at",
           "compensation"
         ],
-        "title": "ReadyTaskSummary",
         "type": "object"
       },
       "TaskCompensationAward": {
-        "description": "One contributor-safe exact award value in a TASK response.",
         "properties": {
           "instrument": {
             "enum": [
               "money",
               "project_points"
             ],
-            "title": "Instrument",
             "type": "string"
           },
           "quantity": {
-            "title": "Quantity",
             "type": "string"
           },
           "unit": {
-            "title": "Unit",
             "type": "string"
           }
         },
@@ -221,11 +195,9 @@
           "unit",
           "quantity"
         ],
-        "title": "TaskCompensationAward",
         "type": "object"
       },
       "TaskCompensationTerms": {
-        "description": "The two complete locked contribution rules disclosed by TASK.",
         "properties": {
           "accepted_submission": {
             "anyOf": [
@@ -239,8 +211,7 @@
                 },
                 "type": "array"
               }
-            ],
-            "title": "Accepted Submission"
+            ]
           },
           "completed_review": {
             "anyOf": [
@@ -254,12 +225,10 @@
                 },
                 "type": "array"
               }
-            ],
-            "title": "Completed Review"
+            ]
           },
           "contribution_policy_version_id": {
             "format": "uuid",
-            "title": "Contribution Policy Version Id",
             "type": "string"
           }
         },
@@ -268,7 +237,6 @@
           "accepted_submission",
           "completed_review"
         ],
-        "title": "TaskCompensationTerms",
         "type": "object"
       }
     }
@@ -283,7 +251,6 @@
         "required": true,
         "schema": {
           "format": "uuid",
-          "title": "Project Id",
           "type": "string"
         }
       },
@@ -295,7 +262,6 @@
           "default": 50,
           "maximum": 100,
           "minimum": 1,
-          "title": "Limit",
           "type": "integer"
         }
       },
@@ -312,8 +278,7 @@
             {
               "type": "null"
             }
-          ],
-          "title": "Cursor"
+          ]
         }
       },
       {
@@ -570,6 +535,6 @@
     "method": "GET",
     "openapi_version": "3.1.0",
     "path": "/api/v1/projects/{project_id}/tasks/ready",
-    "repository_sha": "bb39ac10aed24e3484f3155706f7a8902ef97694"
+    "repository_sha": "2e6cee003dd6bf811d20557808d77cc7061776d5"
   }
 }

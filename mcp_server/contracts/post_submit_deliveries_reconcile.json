@@ -1,0 +1,619 @@
+{
+  "canonical_sha256": "d46d082b8e1a768b590ba01523f7ce4479bc777e5fd4ebf4d6ad289821b4c244",
+  "components": {
+    "schemas": {
+      "ApiError": {
+        "additionalProperties": false,
+        "description": "Canonical machine-readable API error.",
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "correlation_id": {
+            "title": "Correlation Id",
+            "type": "string"
+          },
+          "details": {
+            "additionalProperties": true,
+            "title": "Details",
+            "type": "object"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "retryable": {
+            "title": "Retryable",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "code",
+          "message",
+          "details",
+          "correlation_id",
+          "retryable"
+        ],
+        "title": "ApiError",
+        "type": "object"
+      },
+      "ApiErrorResponse": {
+        "additionalProperties": false,
+        "description": "Canonical error plus additive legacy compatibility fields.",
+        "properties": {
+          "detail": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          },
+          "error": {
+            "$ref": "#/components/schemas/ApiError"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "title": "ApiErrorResponse",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "additionalProperties": false,
+        "properties": {
+          "detail": {
+            "items": {
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "error": {
+            "$ref": "#/components/schemas/ApiError"
+          }
+        },
+        "required": [
+          "detail",
+          "error"
+        ],
+        "type": "object"
+      },
+      "PostSubmitDeliveryRequest": {
+        "additionalProperties": false,
+        "description": "Public reason for one exact uncertain-delivery reconciliation.",
+        "properties": {
+          "reason": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason"
+        ],
+        "title": "PostSubmitDeliveryRequest",
+        "type": "object"
+      },
+      "PostSubmitDeliveryResult": {
+        "additionalProperties": false,
+        "description": "Public immutable reconciliation receipt.",
+        "properties": {
+          "authorization_decision_id": {
+            "format": "uuid",
+            "title": "Authorization Decision Id",
+            "type": "string"
+          },
+          "source": {
+            "$ref": "#/components/schemas/PostSubmitDeliverySource"
+          },
+          "successor": {
+            "$ref": "#/components/schemas/PostSubmitDeliverySuccessor"
+          }
+        },
+        "required": [
+          "source",
+          "successor",
+          "authorization_decision_id"
+        ],
+        "title": "PostSubmitDeliveryResult",
+        "type": "object"
+      },
+      "PostSubmitDeliverySource": {
+        "additionalProperties": false,
+        "description": "Privacy-bounded finalized delivery identity and source classification.",
+        "properties": {
+          "aggregate_id": {
+            "format": "uuid",
+            "title": "Aggregate Id",
+            "type": "string"
+          },
+          "checker_run_id": {
+            "format": "uuid",
+            "title": "Checker Run Id",
+            "type": "string"
+          },
+          "claim_generation": {
+            "minimum": 1.0,
+            "title": "Claim Generation",
+            "type": "integer"
+          },
+          "classification": {
+            "enum": [
+              "committed",
+              "retry_safe",
+              "unresolved"
+            ],
+            "title": "Classification",
+            "type": "string"
+          },
+          "delivery_state": {
+            "const": "dead_letter",
+            "default": "dead_letter",
+            "title": "Delivery State",
+            "type": "string"
+          },
+          "error_code": {
+            "const": "INVOKE_OUTCOME_UNKNOWN",
+            "default": "INVOKE_OUTCOME_UNKNOWN",
+            "title": "Error Code",
+            "type": "string"
+          },
+          "evaluation_generation": {
+            "minimum": 1.0,
+            "title": "Evaluation Generation",
+            "type": "integer"
+          },
+          "evaluation_request_id": {
+            "format": "uuid",
+            "title": "Evaluation Request Id",
+            "type": "string"
+          },
+          "event_id": {
+            "format": "uuid",
+            "title": "Event Id",
+            "type": "string"
+          },
+          "event_type": {
+            "enum": [
+              "PostSubmissionEvaluationRequested",
+              "PostSubmissionEvaluationCompleted"
+            ],
+            "title": "Event Type",
+            "type": "string"
+          },
+          "event_version": {
+            "const": 1,
+            "title": "Event Version",
+            "type": "integer"
+          },
+          "finalized_at": {
+            "format": "date-time",
+            "title": "Finalized At",
+            "type": "string"
+          },
+          "payload_digest": {
+            "pattern": "^sha256:[0-9a-f]{64}$",
+            "title": "Payload Digest",
+            "type": "string"
+          },
+          "project_id": {
+            "format": "uuid",
+            "title": "Project Id",
+            "type": "string"
+          },
+          "reconciliation_event_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reconciliation Event Id"
+          },
+          "reconciliation_state": {
+            "anyOf": [
+              {
+                "enum": [
+                  "pending",
+                  "active",
+                  "acknowledged",
+                  "held"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reconciliation State"
+          }
+        },
+        "required": [
+          "project_id",
+          "event_id",
+          "event_type",
+          "event_version",
+          "aggregate_id",
+          "evaluation_request_id",
+          "checker_run_id",
+          "evaluation_generation",
+          "claim_generation",
+          "payload_digest",
+          "finalized_at",
+          "classification"
+        ],
+        "title": "PostSubmitDeliverySource",
+        "type": "object"
+      },
+      "PostSubmitDeliverySuccessor": {
+        "additionalProperties": false,
+        "description": "The sole immutable child event appended for an original UNKNOWN attempt.",
+        "properties": {
+          "classification": {
+            "enum": [
+              "committed",
+              "retry_safe"
+            ],
+            "title": "Classification",
+            "type": "string"
+          },
+          "event_id": {
+            "format": "uuid",
+            "title": "Event Id",
+            "type": "string"
+          },
+          "occurred_at": {
+            "format": "date-time",
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "payload_digest": {
+            "pattern": "^sha256:[0-9a-f]{64}$",
+            "title": "Payload Digest",
+            "type": "string"
+          }
+        },
+        "required": [
+          "event_id",
+          "payload_digest",
+          "occurred_at",
+          "classification"
+        ],
+        "title": "PostSubmitDeliverySuccessor",
+        "type": "object"
+      }
+    }
+  },
+  "operation": {
+    "description": "Append or exactly replay the sole authorized reconciliation child.",
+    "operationId": "reconcile_uncertain_post_submit_delivery_api_v1_operations_projects__project_id__post_submit_deliveries__event_id__reconcile_post",
+    "parameters": [
+      {
+        "in": "path",
+        "name": "project_id",
+        "required": true,
+        "schema": {
+          "format": "uuid",
+          "title": "Project Id",
+          "type": "string"
+        }
+      },
+      {
+        "in": "path",
+        "name": "event_id",
+        "required": true,
+        "schema": {
+          "format": "uuid",
+          "title": "Event Id",
+          "type": "string"
+        }
+      },
+      {
+        "in": "header",
+        "name": "Idempotency-Key",
+        "required": true,
+        "schema": {
+          "format": "uuid",
+          "type": "string"
+        }
+      },
+      {
+        "in": "header",
+        "name": "X-Request-ID",
+        "required": false,
+        "schema": {
+          "format": "uuid",
+          "maxLength": 36,
+          "minLength": 36,
+          "type": "string"
+        }
+      },
+      {
+        "in": "header",
+        "name": "X-Correlation-ID",
+        "required": false,
+        "schema": {
+          "format": "uuid",
+          "maxLength": 36,
+          "minLength": 36,
+          "type": "string"
+        }
+      }
+    ],
+    "requestBody": {
+      "content": {
+        "application/json": {
+          "schema": {
+            "$ref": "#/components/schemas/PostSubmitDeliveryRequest"
+          }
+        }
+      },
+      "required": true
+    },
+    "responses": {
+      "201": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/PostSubmitDeliveryResult"
+            }
+          }
+        },
+        "description": "Successful Response",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "400": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Invalid request.",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "401": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Authentication failed.",
+        "headers": {
+          "WWW-Authenticate": {
+            "schema": {
+              "type": "string"
+            }
+          },
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "403": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Permission denied.",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "404": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Resource not found.",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "409": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Request conflict.",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "422": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/HTTPValidationError"
+            }
+          }
+        },
+        "description": "Validation Error",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "500": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Internal server error.",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "503": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Identity verification unavailable.",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "security": [
+      {
+        "HTTPBearer": []
+      }
+    ],
+    "summary": "Reconcile Uncertain Post Submit Delivery",
+    "tags": [
+      "checkers"
+    ],
+    "x-workstream-action-id": "operations.post_submit_delivery.reconcile"
+  },
+  "schema_version": 1,
+  "source": {
+    "action_id": "operations.post_submit_delivery.reconcile",
+    "backend_git_sha": "bb39ac10aed24e3484f3155706f7a8902ef97694",
+    "method": "POST",
+    "openapi_version": "3.1.0",
+    "path": "/api/v1/operations/projects/{project_id}/post-submit-deliveries/{event_id}/reconcile"
+  }
+}

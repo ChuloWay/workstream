@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+import base64
+import hashlib
 import json
 import re
 from dataclasses import dataclass
@@ -13,12 +15,15 @@ from jsonschema import Draft202012Validator, ValidationError  # type: ignore[imp
 
 from workstream_mcp.config import Settings
 from workstream_mcp.errors import SafeFailure
+from workstream_mcp.limits import GUIDE_DOCUMENT_MEDIA_TYPES
 from workstream_mcp.schemas import (
     access_read_output_validator,
     actor_lifecycle_output_validator,
     admin_grant_output_validator,
     authorization_context_output_validator,
+    checker_artifact_output_validator,
     contribution_policy_output_validator,
+    guide_lifecycle_output_validator,
     guide_output_validator,
     policy_output_validator,
     profile_output_validator,
@@ -132,12 +137,220 @@ WORKSPACE_READ_PATHS = {
     "active_guide_get": "/api/v1/projects/{project_id}/active-guide",
     "ready_tasks_list": "/api/v1/projects/{project_id}/tasks/ready",
 }
+GUIDE_LIFECYCLE_OPERATIONS = {
+    "project_guides_list": ("GET", "/api/v1/projects/{project_id}/guides", 200),
+    "project_guide_get": ("GET", "/api/v1/projects/{project_id}/guides/{guide_id}", 200),
+    "guide_activate": ("POST", "/api/v1/projects/{project_id}/guides/{guide_id}/activate", 200),
+    "guide_activation_readiness_get": (
+        "GET",
+        "/api/v1/projects/{project_id}/guides/{guide_id}/activation-readiness",
+        200,
+    ),
+    "guide_proposal_correct": (
+        "POST",
+        "/api/v1/projects/{project_id}/guides/{guide_id}/compilations/{compilation_id}/corrections",
+        201,
+    ),
+    "guide_correction_dispatch": (
+        "POST",
+        "/api/v1/projects/{project_id}/guides/{guide_id}/compilations/{compilation_id}/corrections/{correction_operation_id}/dispatch",
+        202,
+    ),
+    "guide_post_policy_get": (
+        "GET",
+        "/api/v1/projects/{project_id}/guides/{guide_id}/compilations/{compilation_id}/post-submission-policies/{policy_id}",
+        200,
+    ),
+    "guide_post_policy_approve": (
+        "POST",
+        "/api/v1/projects/{project_id}/guides/{guide_id}/compilations/{compilation_id}/post-submission-policies/{policy_id}/approval",
+        200,
+    ),
+    "guide_post_policy_correct": (
+        "POST",
+        "/api/v1/projects/{project_id}/guides/{guide_id}/compilations/{compilation_id}/post-submission-policies/{policy_id}/corrections",
+        201,
+    ),
+    "guide_pre_submission_approve": (
+        "POST",
+        "/api/v1/projects/{project_id}/guides/{guide_id}/compilations/{compilation_id}/pre-submission-approval",
+        200,
+    ),
+    "guide_proposal_get": (
+        "GET",
+        "/api/v1/projects/{project_id}/guides/{guide_id}/compilations/{compilation_id}/proposal",
+        200,
+    ),
+    "guide_document_upload": (
+        "POST",
+        "/api/v1/projects/{project_id}/guides/{guide_id}/documents/{document_id}/content",
+        202,
+    ),
+    "guide_document_content_get": (
+        "GET",
+        "/api/v1/projects/{project_id}/guides/{guide_id}/documents/{document_id}/content",
+        200,
+    ),
+    "guide_effective_submission_artifact_policy_get": (
+        "GET",
+        "/api/v1/projects/{project_id}/guides/{guide_id}/effective-submission-artifact-policy",
+        200,
+    ),
+    "guide_pre_submit_checker_policy_get": (
+        "GET",
+        "/api/v1/projects/{project_id}/guides/{guide_id}/pre-submit-checker-policy",
+        200,
+    ),
+    "guide_setup_latest_get": (
+        "GET",
+        "/api/v1/projects/{project_id}/guides/{guide_id}/setup-runs/latest",
+        200,
+    ),
+    "guide_submission_artifact_policies_list": (
+        "GET",
+        "/api/v1/projects/{project_id}/guides/{guide_id}/submission-artifact-policies",
+        200,
+    ),
+    "guide_submission_artifact_policy_create": (
+        "POST",
+        "/api/v1/projects/{project_id}/guides/{guide_id}/submission-artifact-policies",
+        201,
+    ),
+    "guide_submission_artifact_policy_get": (
+        "GET",
+        "/api/v1/projects/{project_id}/guides/{guide_id}/submission-artifact-policies/{policy_id}",
+        200,
+    ),
+    "guide_submission_artifact_policy_update": (
+        "PATCH",
+        "/api/v1/projects/{project_id}/guides/{guide_id}/submission-artifact-policies/{policy_id}",
+        200,
+    ),
+    "guide_sufficiency_reports_list": (
+        "GET",
+        "/api/v1/projects/{project_id}/guides/{guide_id}/sufficiency-reports",
+        200,
+    ),
+    "guide_sufficiency_report_create": (
+        "POST",
+        "/api/v1/projects/{project_id}/guides/{guide_id}/sufficiency-reports",
+        201,
+    ),
+    "guide_sufficiency_report_get": (
+        "GET",
+        "/api/v1/projects/{project_id}/guides/{guide_id}/sufficiency-reports/{report_id}",
+        200,
+    ),
+    "guide_sufficiency_warnings_acknowledge": (
+        "POST",
+        "/api/v1/projects/{project_id}/guides/{guide_id}/sufficiency-reports/{report_id}/acknowledge-warnings",
+        200,
+    ),
+}
+CHECKER_ARTIFACT_OPERATIONS = {
+    "submission_checker_runs_list": (
+        "GET",
+        "/api/v1/submissions/{submission_id}/checker-runs",
+        200,
+    ),
+    "submission_checker_runs_get": (
+        "GET",
+        "/api/v1/submissions/{submission_id}/checker-runs/{checker_run_id}",
+        200,
+    ),
+    "project_checker_runs_list": (
+        "GET",
+        "/api/v1/projects/{project_id}/submissions/{submission_id}/checker-runs",
+        200,
+    ),
+    "project_checker_runs_get": (
+        "GET",
+        "/api/v1/projects/{project_id}/submissions/{submission_id}/checker-runs/{checker_run_id}",
+        200,
+    ),
+    "checker_retry_sources_list": (
+        "GET",
+        "/api/v1/operations/projects/{project_id}/checker-retry-sources",
+        200,
+    ),
+    "checker_runs_retry": (
+        "POST",
+        "/api/v1/operations/projects/{project_id}/checker-runs/{source_run_id}/retry",
+        201,
+    ),
+    "post_submit_deliveries_list": (
+        "GET",
+        "/api/v1/operations/projects/{project_id}/post-submit-deliveries",
+        200,
+    ),
+    "post_submit_deliveries_reconcile": (
+        "POST",
+        "/api/v1/operations/projects/{project_id}/post-submit-deliveries/{event_id}/reconcile",
+        201,
+    ),
+    "checker_registry_read": (
+        "GET",
+        "/api/v1/operations/external-checker-registry/{registry_entry_id}",
+        200,
+    ),
+    "checker_registry_register": (
+        "POST",
+        "/api/v1/operations/external-checker-registry",
+        201,
+    ),
+    "artifact_readiness_get": ("GET", "/api/v1/operator/artifacts/readiness", 200),
+    "artifact_bindings_list": ("GET", "/api/v1/operator/artifacts/bindings", 200),
+    "artifact_replicas_list": (
+        "GET",
+        "/api/v1/operator/artifacts/contents/{content_id}/replicas",
+        200,
+    ),
+    "artifact_receipts_list": (
+        "GET",
+        "/api/v1/operator/artifacts/replicas/{replica_id}/receipts",
+        200,
+    ),
+    "artifact_verification_job_get": (
+        "GET",
+        "/api/v1/operator/artifacts/verification-jobs/{verification_job_id}",
+        200,
+    ),
+    "artifact_verification_job_retry": (
+        "POST",
+        "/api/v1/operator/artifacts/verification-jobs/{verification_job_id}/retry",
+        202,
+    ),
+    "artifact_recovery_attempt_get": (
+        "GET",
+        "/api/v1/operator/artifacts/recovery-attempts/{recovery_attempt_id}",
+        200,
+    ),
+    "artifact_admission_usage_get": (
+        "GET",
+        "/api/v1/operator/artifacts/admission-usage",
+        200,
+    ),
+    "artifact_audit_events_list": (
+        "GET",
+        "/api/v1/operator/artifacts/audit-events",
+        200,
+    ),
+}
+_CHECKER_ARTIFACT_MUTATIONS = frozenset(
+    {
+        "checker_runs_retry",
+        "post_submit_deliveries_reconcile",
+        "checker_registry_register",
+        "artifact_verification_job_retry",
+    }
+)
 
 
 @dataclass(frozen=True, slots=True)
 class GatewayResult:
     data: dict[str, Any] | None = None
     failure: SafeFailure | None = None
+    correlation_id: str | None = None
 
 
 class ResponseTooLarge(Exception):
@@ -201,7 +414,11 @@ class WorkstreamGateway:
         path = ACCESS_READ_PATHS[name]
         if "{actor_profile_id}" in path:
             path = path.format(actor_profile_id=quote(arguments["actor_profile_id"], safe=""))
-        params = {key: str(value) for key, value in arguments.items() if key != "actor_profile_id"}
+        params = {
+            key: str(value)
+            for key, value in arguments.items()
+            if value is not None and key != "actor_profile_id"
+        }
         return await self._request(
             "GET",
             path,
@@ -339,7 +556,7 @@ class WorkstreamGateway:
         params = {
             key: str(value)
             for key, value in arguments.items()
-            if key not in {"project_id", "grant_id"}
+            if value is not None and key not in {"project_id", "grant_id"}
         }
         outcome = await self._request(
             "GET",
@@ -577,7 +794,7 @@ class WorkstreamGateway:
         params = {
             key: str(value)
             for key, value in arguments.items()
-            if key != "project_id"
+            if value is not None and key != "project_id"
         }
         if name in {"contributions_list", "project_contributions_export"}:
             params["format"] = "json"
@@ -635,7 +852,7 @@ class WorkstreamGateway:
         params = {
             key: str(value)
             for key, value in arguments.items()
-            if key not in {"project_id", "policy_id"}
+            if value is not None and key not in {"project_id", "policy_id"}
         }
         outcome = await self._request(
             "GET",
@@ -809,6 +1026,479 @@ class WorkstreamGateway:
             and prior_number == version_number
         )
 
+    async def guide_lifecycle(
+        self,
+        name: str,
+        bearer: str,
+        arguments: dict[str, Any],
+        correlation_id: str | None = None,
+        *,
+        upload: bytes | None = None,
+    ) -> GatewayResult:
+        """Dispatch one fixed guide route and bind returned selectors."""
+        method, path_template, expected_status = GUIDE_LIFECYCLE_OPERATIONS[name]
+        selectors = set(re.findall(r"{([a-z_]+)}", path_template))
+        path = path_template
+        for selector in selectors:
+            value = arguments.get(selector)
+            if not isinstance(value, str):  # guarded by the tool schema
+                return self._invalid_read_response(correlation_id)
+            path = path.replace(f"{{{selector}}}", quote(value, safe=""))
+        if name == "guide_document_content_get":
+            return await self._request_binary(
+                path,
+                bearer,
+                correlation_id,
+            )
+        query = {
+            key: str(value)
+            for key, value in arguments.items()
+            if value is not None
+            and key not in selectors
+            and key
+            not in {
+                "body",
+                "content_base64",
+                "media_type",
+                "idempotency_key",
+            }
+        }
+        mutation = method != "GET"
+        outcome = await self._request(
+            method,
+            path,
+            bearer,
+            guide_lifecycle_output_validator(name),
+            correlation_id,
+            json_body=arguments.get("body"),
+            params=query or None,
+            idempotency_key=arguments.get("idempotency_key"),
+            expected_status=expected_status,
+            mutation=mutation,
+            raw_body=upload,
+            content_type=arguments.get("media_type"),
+            array_envelope=name
+            in {
+                "guide_submission_artifact_policies_list",
+                "guide_sufficiency_reports_list",
+            },
+            operation_timeout_seconds=(
+                self._settings.document_timeout_seconds
+                if name == "guide_document_upload"
+                else None
+            ),
+        )
+        if outcome.failure is not None:
+            return outcome
+        data = outcome.data or {}
+        if name == "guide_document_upload":
+            digest = f"sha256:{hashlib.sha256(upload or b'').hexdigest()}"
+            matches = (
+                upload is not None
+                and self._same_uuid(data.get("document_id"), arguments["document_id"])
+                and data.get("sha256") == digest
+                and data.get("byte_count") == len(upload)
+                and data.get("status") in {"document_stored", "object_confirmed"}
+            )
+        else:
+            matches = self._guide_lifecycle_response_matches(name, data, arguments)
+        if matches:
+            return outcome
+        return GatewayResult(
+            failure=SafeFailure(
+                "workstream_execution_uncertain" if mutation else "invalid_api_response",
+                status=502,
+                correlation_id=outcome.correlation_id or correlation_id,
+            )
+        )
+
+    async def _request_binary(
+        self,
+        path: str,
+        bearer: str,
+        correlation_id: str | None,
+    ) -> GatewayResult:
+        request_id = correlation_id or str(uuid4())
+        try:
+            async with asyncio.timeout(self._settings.document_timeout_seconds):
+                async with self._slots:
+                    async with self._client.stream(
+                        "GET",
+                        path,
+                        headers={
+                            "Authorization": bearer,
+                            "Accept": ", ".join(GUIDE_DOCUMENT_MEDIA_TYPES),
+                            "Accept-Encoding": "identity",
+                            "X-Request-ID": request_id,
+                        },
+                        timeout=self._settings.document_timeout_seconds,
+                    ) as response:
+                        body = await self._bounded_body(
+                            response, max_bytes=self._settings.max_document_bytes
+                        )
+                        response_id = self._correlation_id(response, request_id)
+                        if response.status_code != 200:
+                            return GatewayResult(
+                                failure=self._api_failure(
+                                    response.status_code,
+                                    body,
+                                    response_id,
+                                )
+                            )
+                        media_type = (
+                            response.headers.get("content-type", "")
+                            .split(";", 1)[0]
+                            .strip()
+                            .lower()
+                        )
+                        if media_type not in GUIDE_DOCUMENT_MEDIA_TYPES or not body:
+                            return self._invalid_read_response(response_id)
+                        return GatewayResult(
+                            data={
+                                "media_type": media_type,
+                                "content_base64": base64.b64encode(body).decode("ascii"),
+                                "byte_count": len(body),
+                                "sha256": f"sha256:{hashlib.sha256(body).hexdigest()}",
+                            },
+                            correlation_id=response_id,
+                        )
+        except asyncio.CancelledError:
+            raise
+        except TimeoutError:
+            return GatewayResult(
+                failure=SafeFailure("workstream_timeout", status=504, retryable=True)
+            )
+        except ResponseTooLarge:
+            return GatewayResult(
+                failure=SafeFailure("workstream_response_too_large", status=502)
+            )
+        except httpx.HTTPError:
+            return GatewayResult(
+                failure=SafeFailure("workstream_unavailable", status=502, retryable=True)
+            )
+        except Exception:  # pragma: no cover
+            return GatewayResult(failure=SafeFailure("adapter_internal_error", status=500))
+
+    @classmethod
+    def _guide_lifecycle_response_matches(
+        cls,
+        name: str,
+        data: dict[str, Any],
+        arguments: dict[str, Any],
+    ) -> bool:
+        """Bind only authoritative response fields for one fixed guide route."""
+
+        def matches(
+            record: object, field: str, argument: str | None = None
+        ) -> bool:
+            argument = argument or field
+            return (
+                isinstance(record, dict)
+                and argument in arguments
+                and cls._same_uuid(record.get(field), arguments[argument])
+            )
+
+        if name == "project_guides_list":
+            return True
+        if name == "project_guide_get":
+            guide = data.get("guide")
+            return matches(guide, "project_id") and matches(guide, "guide_id")
+        if name == "guide_activate":
+            command = data.get("command")
+            target = command.get("target") if isinstance(command, dict) else None
+            proposal = target.get("proposal") if isinstance(target, dict) else None
+            return (
+                matches(proposal, "project_id")
+                and matches(proposal, "guide_id")
+            )
+        if name in {
+            "guide_activation_readiness_get",
+            "guide_effective_submission_artifact_policy_get",
+            "guide_pre_submit_checker_policy_get",
+            "guide_setup_latest_get",
+        }:
+            return matches(data, "project_id") and matches(data, "guide_id")
+        if name in {"guide_proposal_correct", "guide_pre_submission_approve"}:
+            return True
+        if name == "guide_correction_dispatch":
+            return matches(data, "correction_operation_id")
+        if name == "guide_proposal_get":
+            target = data.get("target")
+            return (
+                matches(target, "project_id")
+                and matches(target, "guide_id")
+                and matches(target, "compilation_id")
+            )
+        if name in {
+            "guide_post_policy_get",
+            "guide_post_policy_approve",
+            "guide_post_policy_correct",
+        }:
+            target = data.get("target")
+            proposal = target.get("proposal") if isinstance(target, dict) else None
+            return (
+                matches(target, "policy_id")
+                and matches(proposal, "project_id")
+                and matches(proposal, "guide_id")
+                and matches(proposal, "compilation_id")
+            )
+        if name in {
+            "guide_submission_artifact_policies_list",
+            "guide_submission_artifact_policy_create",
+            "guide_submission_artifact_policy_get",
+            "guide_submission_artifact_policy_update",
+        }:
+            records = data.get("items") if name.endswith("policies_list") else [data]
+            if not isinstance(records, list):
+                return False
+            return all(
+                matches(record, "project_id")
+                and matches(record, "guide_id")
+                and (
+                    "policy_id" not in arguments
+                    or (
+                        matches(record, "supersedes_policy_id", "policy_id")
+                        if name == "guide_submission_artifact_policy_update"
+                        else matches(record, "id", "policy_id")
+                    )
+                )
+                for record in records
+            )
+        if name.startswith("guide_sufficiency"):
+            records = data.get("items") if name.endswith("reports_list") else [data]
+            if not isinstance(records, list):
+                return False
+            return all(
+                matches(record, "project_id")
+                and matches(record, "guide_id")
+                and (
+                    "report_id" not in arguments
+                    or matches(record, "id", "report_id")
+                )
+                for record in records
+            )
+        return False
+
+    async def checker_artifact_operation(
+        self,
+        name: str,
+        bearer: str,
+        arguments: dict[str, Any],
+        correlation_id: str | None = None,
+    ) -> GatewayResult:
+        """Dispatch one reviewed checker or artifact operation."""
+        method, path_template, expected_status = CHECKER_ARTIFACT_OPERATIONS[name]
+        path = path_template
+        consumed: set[str] = set()
+        for key in (
+            "project_id",
+            "submission_id",
+            "checker_run_id",
+            "source_run_id",
+            "event_id",
+            "registry_entry_id",
+            "content_id",
+            "replica_id",
+            "verification_job_id",
+            "recovery_attempt_id",
+        ):
+            marker = "{" + key + "}"
+            if marker in path:
+                path = path.replace(marker, quote(arguments[key], safe=""))
+                consumed.add(key)
+        params = {
+            key: str(value)
+            for key, value in arguments.items()
+            if value is not None
+            and key not in consumed
+            and key not in {"body", "idempotency_key"}
+        }
+        mutation = name in _CHECKER_ARTIFACT_MUTATIONS
+        outcome = await self._request(
+            method,
+            path,
+            bearer,
+            checker_artifact_output_validator(name),
+            correlation_id,
+            json_body=arguments.get("body"),
+            params=params or None,
+            idempotency_key=arguments.get("idempotency_key"),
+            expected_status=expected_status,
+            mutation=mutation,
+        )
+        if outcome.failure is not None:
+            return outcome
+        if not self._checker_artifact_response_matches(name, outcome.data or {}, arguments):
+            return GatewayResult(
+                failure=SafeFailure(
+                    "workstream_execution_uncertain" if mutation else "invalid_api_response",
+                    status=502,
+                    correlation_id=outcome.correlation_id or correlation_id,
+                )
+            )
+        return outcome
+
+    @classmethod
+    def _checker_artifact_response_matches(
+        cls, name: str, data: dict[str, Any], arguments: dict[str, Any]
+    ) -> bool:
+        if name == "artifact_readiness_get":
+            return True
+        if name in {"submission_checker_runs_list", "project_checker_runs_list"}:
+            return cls._items_match(
+                data, {"submission_id": arguments["submission_id"]}, unique="id"
+            )
+        if name in {"submission_checker_runs_get", "project_checker_runs_get"}:
+            return cls._fields_match(
+                data,
+                {
+                    "id": arguments["checker_run_id"],
+                    "submission_id": arguments["submission_id"],
+                },
+            )
+        if name == "checker_retry_sources_list":
+            return cls._same_uuid(
+                data.get("project_id"), arguments["project_id"]
+            ) and cls._items_match(
+                data,
+                {"project_id": arguments["project_id"]},
+                unique="source_run_id",
+                nested="source",
+            )
+        if name == "checker_runs_retry":
+            source = data.get("source")
+            return isinstance(source, dict) and cls._fields_match(
+                source,
+                {
+                    "project_id": arguments["project_id"],
+                    "source_run_id": arguments["source_run_id"],
+                },
+            )
+        if name == "post_submit_deliveries_list":
+            return cls._same_uuid(
+                data.get("project_id"), arguments["project_id"]
+            ) and cls._items_match(
+                data, {"project_id": arguments["project_id"]}, unique="event_id"
+            )
+        if name == "post_submit_deliveries_reconcile":
+            source = data.get("source")
+            return isinstance(source, dict) and cls._fields_match(
+                source,
+                {
+                    "project_id": arguments["project_id"],
+                    "event_id": arguments["event_id"],
+                },
+            )
+        if name == "checker_registry_read":
+            return cls._same_uuid(data.get("registry_entry_id"), arguments["registry_entry_id"])
+        if name == "checker_registry_register":
+            body = arguments["body"]
+            return cls._same_uuid(
+                data.get("registration_operation_id"), arguments["idempotency_key"]
+            ) and cls._payload_contains(data, body)
+        if name == "artifact_bindings_list":
+            return cls._items_match(
+                data,
+                {
+                    "resource_type": arguments["resource_type"],
+                    "resource_id": arguments["resource_id"],
+                },
+                unique="id",
+            )
+        if name == "artifact_replicas_list":
+            return cls._items_match(data, {"content_id": arguments["content_id"]}, unique="id")
+        if name == "artifact_receipts_list":
+            return cls._items_match(data, {"replica_id": arguments["replica_id"]}, unique="id")
+        if name == "artifact_verification_job_get":
+            return cls._same_uuid(data.get("id"), arguments["verification_job_id"])
+        if name == "artifact_verification_job_retry":
+            return cls._same_uuid(
+                data.get("source_verification_job_id"), arguments["verification_job_id"]
+            )
+        if name == "artifact_recovery_attempt_get":
+            return cls._same_uuid(data.get("id"), arguments["recovery_attempt_id"])
+        if name == "artifact_admission_usage_get":
+            return cls._admission_items_match(data, arguments)
+        if name == "artifact_audit_events_list":
+            return cls._items_match(
+                data,
+                {
+                    "entity_type": arguments["resource_type"],
+                    "entity_id": arguments["resource_id"],
+                },
+                unique="id",
+            )
+        return False
+
+    @classmethod
+    def _payload_contains(cls, actual: object, expected: object) -> bool:
+        if isinstance(expected, dict):
+            return isinstance(actual, dict) and all(
+                key in actual and cls._payload_contains(actual[key], value)
+                for key, value in expected.items()
+            )
+        return actual == expected
+
+    @classmethod
+    def _fields_match(cls, item: dict[str, Any], expected: dict[str, str]) -> bool:
+        return all(
+            item.get(key) == value
+            if key in {"resource_type", "entity_type"}
+            else cls._same_uuid(item.get(key), value)
+            for key, value in expected.items()
+        )
+
+    @classmethod
+    def _items_match(
+        cls,
+        data: dict[str, Any],
+        expected: dict[str, str],
+        *,
+        unique: str,
+        nested: str | None = None,
+    ) -> bool:
+        items = data.get("items")
+        if not isinstance(items, list):
+            return False
+        selected: list[dict[str, Any]] = []
+        for item in items:
+            if not isinstance(item, dict):
+                return False
+            candidate = item.get(nested) if nested is not None else item
+            if not isinstance(candidate, dict) or not cls._fields_match(candidate, expected):
+                return False
+            selected.append(candidate)
+        return cls._unique_uuid_field(selected, unique)
+
+    @classmethod
+    def _admission_items_match(
+        cls, data: dict[str, Any], arguments: dict[str, Any]
+    ) -> bool:
+        items = data.get("items")
+        if not isinstance(items, list):
+            return False
+        expected = {
+            "project": arguments["project_id"],
+            **({"task": arguments["task_id"]} if "task_id" in arguments else {}),
+        }
+        seen: set[tuple[str, str]] = set()
+        for item in items:
+            if not isinstance(item, dict):
+                return False
+            scope_type = item.get("scope_type")
+            scope_id = item.get("scope_id")
+            if not isinstance(scope_type, str) or not isinstance(scope_id, str):
+                return False
+            if scope_type in expected and not cls._same_uuid(scope_id, expected[scope_type]):
+                return False
+            if scope_type not in {"deployment", *expected}:
+                return False
+            selector = (scope_type, scope_id)
+            if selector in seen:
+                return False
+            seen.add(selector)
+        return True
+
     @classmethod
     def _policy_lineage_matches(cls, data: dict[str, Any], selector: str) -> bool:
         """Bind a successful immutable policy response to its requested predecessor."""
@@ -914,10 +1604,15 @@ class WorkstreamGateway:
         expected_payload: dict[str, Any] | None = None,
         expected_resource_id: str | None = None,
         mutation: bool = False,
+        raw_body: bytes | None = None,
+        content_type: str | None = None,
+        array_envelope: bool = False,
+        operation_timeout_seconds: float | None = None,
     ) -> GatewayResult:
         request_id = correlation_id or str(uuid4())
+        operation_timeout = operation_timeout_seconds or self._settings.total_timeout_seconds
         try:
-            async with asyncio.timeout(self._settings.total_timeout_seconds):
+            async with asyncio.timeout(operation_timeout):
                 async with self._slots:
                     headers = {
                         "Authorization": bearer,
@@ -929,12 +1624,20 @@ class WorkstreamGateway:
                         headers["Idempotency-Key"] = idempotency_key
                     if if_match is not None:
                         headers["If-Match"] = if_match
+                    if content_type is not None:
+                        headers["Content-Type"] = content_type
                     async with self._client.stream(
                         method,
                         path,
                         headers=headers,
-                        json=json_body,
+                        json=json_body if raw_body is None else None,
+                        content=raw_body,
                         params=params,
+                        timeout=(
+                            operation_timeout_seconds
+                            if operation_timeout_seconds is not None
+                            else httpx.USE_CLIENT_DEFAULT
+                        ),
                     ) as response:
                         body = await self._bounded_body(response)
                         correlation_id = self._correlation_id(response, request_id)
@@ -970,8 +1673,13 @@ class WorkstreamGateway:
                                 )
                             )
                         try:
-                            payload = json.loads(body)
-                            if not isinstance(payload, dict):
+                            decoded = json.loads(body)
+                            payload: dict[str, Any]
+                            if array_envelope and isinstance(decoded, list):
+                                payload = {"items": decoded}
+                            elif isinstance(decoded, dict):
+                                payload = decoded
+                            else:
                                 raise ValueError
                             output_validator.validate(payload)
                         except (ValueError, RecursionError, ValidationError):
@@ -1011,7 +1719,7 @@ class WorkstreamGateway:
                                         correlation_id=correlation_id,
                                     )
                                 )
-                        return GatewayResult(data=payload)
+                        return GatewayResult(data=payload, correlation_id=correlation_id)
         except asyncio.CancelledError:
             raise
         except TimeoutError:
@@ -1063,25 +1771,28 @@ class WorkstreamGateway:
         except Exception:  # pragma: no cover
             return GatewayResult(failure=SafeFailure("adapter_internal_error", status=500))
 
-    async def _bounded_body(self, response: httpx.Response) -> bytes:
+    async def _bounded_body(
+        self, response: httpx.Response, *, max_bytes: int | None = None
+    ) -> bytes:
+        byte_limit = max_bytes or self._settings.max_response_bytes
         content_encoding = response.headers.get("content-encoding", "identity").lower()
         if content_encoding != "identity":
             raise ResponseTooLarge
         content_length = response.headers.get("content-length")
         if content_length is not None:
             try:
-                if int(content_length) > self._settings.max_response_bytes:
+                if int(content_length) > byte_limit:
                     raise ResponseTooLarge
             except ValueError:
                 pass
         if response.is_stream_consumed:
-            if len(response.content) > self._settings.max_response_bytes:
+            if len(response.content) > byte_limit:
                 raise ResponseTooLarge
             return response.content
         body = bytearray()
         async for chunk in response.aiter_raw():
             body.extend(chunk)
-            if len(body) > self._settings.max_response_bytes:
+            if len(body) > byte_limit:
                 raise ResponseTooLarge
         return bytes(body)
 
