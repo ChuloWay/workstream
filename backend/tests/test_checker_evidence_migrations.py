@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from dataclasses import replace
 from pathlib import Path
 
 from alembic import command
@@ -202,7 +203,11 @@ async def _arrange_retained_lineages(
             harness.store,
             setup_values,
         )
-        setup: _Journey = await _journey(storage, admin_access)
+        setup_access = replace(
+            admin_access,
+            target=await admin_access.signed.actor("retained-setup-operator"),
+        )
+        setup: _Journey = await _journey(storage, setup_access)
         assert (await setup.handler().handle(setup.request)).outcome == "unavailable"
         assert (await setup.handler().handle(setup.request)).outcome == "completed"
         setup_effect = await _state(setup)
