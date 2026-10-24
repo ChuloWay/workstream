@@ -515,3 +515,21 @@ or failure. Docker cleanup commands have finite timeouts, and a conflicting
 cleanup container label or image identity must stop cleanup before deletion.
 This is no live provider call, deployment, publication, activation,
 or contribution rehearsal.
+
+Qualification exposed two runtime-custody defects that this same trial owner
+must close before readiness. Disk bytes, entry count, and CPU time are
+whole-invocation ceilings: projections, build context, candidate output, every
+retained workspace, mutable child writes, builder rootfs, and expanded
+candidate layers share one remaining ledger rather than receiving fresh
+per-operation limits. The engine must fail closed before another operation when
+that ledger is exhausted, while operation receipts retain their exact local
+measurements. The runsc builder requires an actually enforced per-container
+root-overlay byte quota plus bounded observation of mutable rootfs entries;
+candidate layers must be streamed and bounded for expanded bytes and entries
+before Docker load. Forced deadline/resource termination must project a
+canonical cause without retaining Docker's synthetic exit 137 or inventing an
+unobserved signal, and the relay validator must accept that truthful shape.
+Focused engine, Docker-control, and relay tests must discriminate aggregate
+copies, retained state, child writes, combined CPU, rootfs writes, expanded
+layers, OOM, deadline and resource termination. No global daemon change,
+provider call, or relaxation of the invocation ceiling is authorized.

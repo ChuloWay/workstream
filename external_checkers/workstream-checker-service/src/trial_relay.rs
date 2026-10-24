@@ -9,8 +9,8 @@ use std::os::unix::ffi::OsStrExt;
 use std::os::unix::fs::{DirBuilderExt, FileTypeExt, MetadataExt, PermissionsExt};
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::{Component, Path, PathBuf};
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 use workstream_checker_sdk::{canonical_hash, canonical_json};
@@ -1537,6 +1537,9 @@ fn validate_execution(
         return Err(TrialRelayFailure::ImplementationUnavailable);
     }
     let mut retained_slots = HashSet::new();
+    let mut consumed_cpu_time_ms = execution.build.cpu_time_ms;
+    let mut invocation_capacity_exhausted =
+        execution.build.outcome == TrialOperationOutcome::DiskExceeded;
     for (index, (observation, step)) in execution.steps.iter().zip(&plan.steps).enumerate() {
         let slot_profile = profile
             .slot_templates
@@ -1545,7 +1548,15 @@ fn validate_execution(
             .ok_or(TrialRelayFailure::ImplementationUnavailable)?;
         let dependency_succeeded =
             step.state_source == "fresh" || retained_slots.contains(step.state_source.as_str());
-        let must_skip = !build_succeeded || !dependency_succeeded;
+        let cpu_exhausted = consumed_cpu_time_ms >= plan.resources.cpu_time_ms;
+        let remaining_cpu_time_ms = plan
+            .resources
+            .cpu_time_ms
+            .saturating_sub(consumed_cpu_time_ms);
+        let must_skip = !build_succeeded
+            || !dependency_succeeded
+            || cpu_exhausted
+            || invocation_capacity_exhausted;
         if observation.slot_id != step.slot_id
             || observation.operation_order != (index + 1) as u32
             || !valid_identifier(&observation.workspace_identity)
@@ -1566,7 +1577,7 @@ fn validate_execution(
                 observation.elapsed_ms,
                 step.timeout_ms,
                 observation.cpu_time_ms,
-                plan.resources.cpu_time_ms,
+                remaining_cpu_time_ms,
                 observation.peak_memory_bytes,
                 plan.resources.memory_bytes,
                 observation.peak_pids,
@@ -1599,6 +1610,10 @@ fn validate_execution(
         {
             return Err(TrialRelayFailure::ImplementationUnavailable);
         }
+        consumed_cpu_time_ms = consumed_cpu_time_ms
+            .checked_add(observation.cpu_time_ms)
+            .ok_or(TrialRelayFailure::ImplementationUnavailable)?;
+        invocation_capacity_exhausted |= observation.outcome == TrialOperationOutcome::DiskExceeded;
         if slot_profile
             .retain_state_after
             .iter()
@@ -1684,14 +1699,16 @@ fn valid_build_outcome(observation: &TrialBuildObservation) -> bool {
                 && observation.exit_code.is_some_and(|value| value != 0)
                 && observation.signal.is_none()
         }
-        TrialOperationOutcome::Signalled
-        | TrialOperationOutcome::DeadlineExceeded
+        TrialOperationOutcome::Signalled => {
+            !has_candidate && observation.exit_code.is_none() && observation.signal.is_some()
+        }
+        TrialOperationOutcome::DeadlineExceeded
         | TrialOperationOutcome::CpuExceeded
         | TrialOperationOutcome::MemoryExceeded
         | TrialOperationOutcome::PidExceeded
         | TrialOperationOutcome::DiskExceeded
         | TrialOperationOutcome::OutputExceeded => {
-            !has_candidate && observation.exit_code.is_none() && observation.signal.is_some()
+            !has_candidate && observation.exit_code.is_none() && observation.signal.is_none()
         }
         TrialOperationOutcome::DependencySkipped => false,
     }
@@ -1734,17 +1751,36 @@ fn valid_measured_resources(
         pids_limit,
         profile.maximum_pids_overrun,
         outcome == TrialOperationOutcome::PidExceeded,
-    ) && measured_limit(
+    ) && valid_disk_measurement(
         written_bytes,
         disk_limit_bytes,
         profile.maximum_disk_overrun_bytes,
-        outcome == TrialOperationOutcome::DiskExceeded,
-    ) && measured_limit(
         written_entries,
         entries_limit,
         profile.maximum_entries_overrun,
         outcome == TrialOperationOutcome::DiskExceeded,
     )
+}
+
+fn valid_disk_measurement(
+    bytes: u64,
+    byte_limit: u64,
+    byte_overrun: u64,
+    entries: u64,
+    entry_limit: u64,
+    entry_overrun: u64,
+    exceeded: bool,
+) -> bool {
+    if exceeded {
+        byte_limit
+            .checked_add(byte_overrun)
+            .is_some_and(|upper| bytes <= upper)
+            && entry_limit
+                .checked_add(entry_overrun)
+                .is_some_and(|upper| entries <= upper)
+    } else {
+        bytes <= byte_limit && entries <= entry_limit
+    }
 }
 
 fn measured_limit(observed: u64, limit: u64, overrun: u64, exceeded: bool) -> bool {
@@ -1788,13 +1824,13 @@ fn valid_operation_outcome(
         TrialOperationOutcome::ExitNonzero => {
             exit_code.is_some_and(|value| value != 0) && signal.is_none()
         }
-        TrialOperationOutcome::Signalled
-        | TrialOperationOutcome::DeadlineExceeded
+        TrialOperationOutcome::Signalled => exit_code.is_none() && signal.is_some(),
+        TrialOperationOutcome::DeadlineExceeded
         | TrialOperationOutcome::CpuExceeded
         | TrialOperationOutcome::MemoryExceeded
         | TrialOperationOutcome::PidExceeded
         | TrialOperationOutcome::DiskExceeded
-        | TrialOperationOutcome::OutputExceeded => exit_code.is_none() && signal.is_some(),
+        | TrialOperationOutcome::OutputExceeded => exit_code.is_none() && signal.is_none(),
         TrialOperationOutcome::DependencySkipped => false,
     }
 }

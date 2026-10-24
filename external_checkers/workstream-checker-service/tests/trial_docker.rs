@@ -4,9 +4,9 @@ use std::fs;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::Mutex;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 #[cfg(not(feature = "trial-docker-qualification"))]
@@ -254,6 +254,9 @@ fn backend_emits_offline_bounded_builder_and_socketless_candidate_specs() {
                 destination: "workstream-trial:test".into(),
                 platform: "linux/amd64".into(),
                 resources: resources(),
+                remaining_cpu_time_ms: 2_000,
+                mutable_disk_bytes: 4096,
+                mutable_entries: 10,
                 timeout_ms: 1000,
                 maximum_output_bytes: 4096,
                 enforcement_overruns: overruns(),
@@ -283,6 +286,9 @@ fn backend_emits_offline_bounded_builder_and_socketless_candidate_specs() {
                 command: vec!["/candidate/check".into(), "case-a".into()],
                 working_directory: ".".into(),
                 resources: resources(),
+                remaining_cpu_time_ms: 2_000,
+                mutable_disk_bytes: 4096,
+                mutable_entries: 10,
                 timeout_ms: 500,
                 maximum_output_bytes: 4096,
                 enforcement_overruns: overruns(),
@@ -297,24 +303,32 @@ fn backend_emits_offline_bounded_builder_and_socketless_candidate_specs() {
     assert_eq!(creates.len(), 2);
     let builder = &creates[0].arguments;
     assert!(builder.windows(2).any(|item| item == ["--network", "none"]));
-    assert!(builder
-        .windows(2)
-        .any(|item| item == ["--runtime", "runsc"]));
+    assert!(
+        builder
+            .windows(2)
+            .any(|item| item == ["--runtime", "runsc"])
+    );
     assert_eq!(
         builder.iter().filter(|item| *item == "--cap-add").count(),
         4
     );
     assert!(!builder.iter().any(|item| item == "--privileged"));
     assert!(!builder.iter().any(|item| item == "--mount"));
-    assert!(builder
-        .iter()
-        .any(|item| item == "--dockerfile=/workspace/environment/Containerfile"));
-    assert!(builder
-        .iter()
-        .any(|item| item == "--context=dir:///workspace/environment"));
-    assert!(!builder
-        .iter()
-        .any(|item| { item == "--dockerfile=/workspace/environment/environment/Containerfile" }));
+    assert!(
+        builder
+            .iter()
+            .any(|item| item == "--dockerfile=/workspace/environment/Containerfile")
+    );
+    assert!(
+        builder
+            .iter()
+            .any(|item| item == "--context=dir:///workspace/environment")
+    );
+    assert!(
+        !builder.iter().any(|item| {
+            item == "--dockerfile=/workspace/environment/environment/Containerfile"
+        })
+    );
     assert_eq!(creates[0].mounts.len(), 3);
     assert_eq!(
         creates[0].mounts[0].class,
@@ -326,9 +340,11 @@ fn backend_emits_offline_bounded_builder_and_socketless_candidate_specs() {
     assert!(!creates[0].mounts[2].readonly);
     let candidate = &creates[1].arguments;
     assert!(candidate.iter().any(|item| item == "--read-only"));
-    assert!(candidate
-        .windows(2)
-        .any(|item| item == ["--user", "65532:65532"]));
+    assert!(
+        candidate
+            .windows(2)
+            .any(|item| item == ["--user", "65532:65532"])
+    );
     assert!(!candidate.iter().any(|item| item.contains("docker.sock")));
     assert!(!candidate.iter().any(|item| item.contains("execution.sock")));
     assert!(!candidate.iter().any(|item| item.contains("model.sock")));
@@ -481,6 +497,9 @@ pub fn concrete_runtime_builds_and_runs_offline_under_runsc() {
                 destination: "workstream-trial:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".into(),
                 platform: "linux/amd64".into(),
                 resources: trial_resources.clone(),
+                remaining_cpu_time_ms: 60_000,
+                mutable_disk_bytes: 64 * 1024 * 1024,
+                mutable_entries: 10_000,
                 timeout_ms: 60_000,
                 maximum_output_bytes: 1024 * 1024,
                 enforcement_overruns: SandboxEnforcementOverruns {
@@ -533,6 +552,9 @@ pub fn concrete_runtime_builds_and_runs_offline_under_runsc() {
                 ],
                 working_directory: ".".into(),
                 resources: trial_resources,
+                remaining_cpu_time_ms: 60_000,
+                mutable_disk_bytes: 64 * 1024 * 1024,
+                mutable_entries: 10_000,
                 timeout_ms: 10_000,
                 maximum_output_bytes: 64 * 1024,
                 enforcement_overruns: SandboxEnforcementOverruns {
@@ -576,6 +598,9 @@ pub fn concrete_runtime_builds_and_runs_offline_under_runsc() {
                     maximum_entries: 10_000,
                     pids: 128,
                 },
+                remaining_cpu_time_ms: 60_000,
+                mutable_disk_bytes: 64 * 1024 * 1024,
+                mutable_entries: 10_000,
                 timeout_ms: 4_000,
                 maximum_output_bytes: 64 * 1024,
                 enforcement_overruns: SandboxEnforcementOverruns {

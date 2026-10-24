@@ -28,6 +28,9 @@ pub(crate) struct SandboxBuildRequest {
     pub(crate) destination: String,
     pub(crate) platform: String,
     pub(crate) resources: TrialResources,
+    pub(crate) remaining_cpu_time_ms: u64,
+    pub(crate) mutable_disk_bytes: u64,
+    pub(crate) mutable_entries: u64,
     pub(crate) timeout_ms: u64,
     pub(crate) maximum_output_bytes: usize,
     pub(crate) enforcement_overruns: SandboxEnforcementOverruns,
@@ -44,6 +47,9 @@ pub(crate) struct SandboxStepRequest {
     pub(crate) command: Vec<String>,
     pub(crate) working_directory: String,
     pub(crate) resources: TrialResources,
+    pub(crate) remaining_cpu_time_ms: u64,
+    pub(crate) mutable_disk_bytes: u64,
+    pub(crate) mutable_entries: u64,
     pub(crate) timeout_ms: u64,
     pub(crate) maximum_output_bytes: usize,
     pub(crate) enforcement_overruns: SandboxEnforcementOverruns,
@@ -198,29 +204,32 @@ impl<B: TrialSandboxBackend> GenericTrialEngine<B> {
             plan.resources.maximum_entries,
             plan.resources.disk_bytes,
         )?;
-        let projections = materialize_projections(context, owned, plan)?;
+        let mut invocation_budget =
+            ProjectionBudget::new(plan.resources.maximum_entries, plan.resources.disk_bytes);
+        let projections = materialize_projections(context, owned, &mut invocation_budget)?;
         let inventories = projection_inventories(
             &projections,
             plan.resources.maximum_entries,
             plan.resources.disk_bytes,
         )?;
         let projected = owned.root.join("context");
-        create_private_directory(&projected)?;
-        let mut projection_budget =
-            ProjectionBudget::new(plan.resources.maximum_entries, plan.resources.disk_bytes);
+        create_accounted_directory(&projected, &mut invocation_budget)?;
         for role in &context.profile.build_context_roles {
             let source = projections.get(role).ok_or_else(implementation_failure)?;
             copy_projection(
                 &source.path,
                 &projected,
                 &source.destination_relative,
-                &mut projection_budget,
+                &mut invocation_budget,
             )?;
         }
         let output = owned.root.join("output");
-        create_private_directory(&output)?;
+        create_accounted_directory(&output, &mut invocation_budget)?;
+        create_accounted_directory(&owned.root.join("workspaces"), &mut invocation_budget)?;
         let archive = output.join("candidate.tar");
         let destination = format!("workstream-trial:{}", &owned.owner_id[6..]);
+        let (build_disk_bytes, build_entries) = invocation_budget.mutable_allowance(&output)?;
+        let mut cpu_time_used = 0_u64;
         let build = self
             .backend
             .build(
@@ -233,6 +242,9 @@ impl<B: TrialSandboxBackend> GenericTrialEngine<B> {
                     destination,
                     platform: plan.environment.platform.clone(),
                     resources: plan.resources.clone(),
+                    remaining_cpu_time_ms: plan.resources.cpu_time_ms,
+                    mutable_disk_bytes: build_disk_bytes,
+                    mutable_entries: build_entries,
                     timeout_ms: plan.build_timeout_ms,
                     maximum_output_bytes: context.profile.maximum_step_output_bytes,
                     enforcement_overruns: overruns(context),
@@ -242,9 +254,21 @@ impl<B: TrialSandboxBackend> GenericTrialEngine<B> {
                 relay_cancelled,
             )
             .map_err(sandbox_failure)?;
+        cpu_time_used = charge_cpu_time(
+            cpu_time_used,
+            build.observation.cpu_time_ms,
+            plan.resources.cpu_time_ms,
+            context.profile.maximum_cpu_time_overrun_ms,
+            build.observation.outcome == TrialOperationOutcome::CpuExceeded,
+        )?;
+        invocation_budget.refresh(
+            &owned.root,
+            context.profile.maximum_disk_overrun_bytes,
+            context.profile.maximum_entries_overrun,
+            build.observation.outcome == TrialOperationOutcome::DiskExceeded,
+        )?;
         let mut steps = Vec::with_capacity(plan.steps.len());
         let mut workspaces: HashMap<String, PathBuf> = HashMap::new();
-        create_private_directory(&owned.root.join("workspaces"))?;
         let inventory_by_role: HashMap<_, _> = inventories
             .iter()
             .map(|item| (item.role.as_str(), item.digest.as_str()))
@@ -259,6 +283,7 @@ impl<B: TrialSandboxBackend> GenericTrialEngine<B> {
                 .candidate_image_digest
                 .clone()
                 .ok_or_else(implementation_failure)?;
+            let mut invocation_capacity_exhausted = false;
             for (index, step) in plan.steps.iter().enumerate() {
                 let slot_profile = context
                     .profile
@@ -267,36 +292,34 @@ impl<B: TrialSandboxBackend> GenericTrialEngine<B> {
                     .find(|template| template.slot_kind == step.slot_kind)
                     .ok_or_else(implementation_failure)?;
                 require_available(deadline, invocation_cancelled, relay_cancelled)?;
+                if cpu_time_used >= plan.resources.cpu_time_ms || invocation_capacity_exhausted {
+                    steps.push(skipped_observation(step, index, &inventory_by_role)?);
+                    continue;
+                }
                 if step.state_source != "fresh" && !workspaces.contains_key(&step.state_source) {
                     steps.push(skipped_observation(step, index, &inventory_by_role)?);
                     continue;
                 }
                 let workspace = owned.root.join("workspaces").join(&step.slot_id);
                 if step.state_source == "fresh" {
-                    create_private_directory(&workspace)?;
-                    let mut budget = ProjectionBudget::new(
-                        plan.resources.maximum_entries,
-                        plan.resources.disk_bytes,
-                    );
+                    create_accounted_directory(&workspace, &mut invocation_budget)?;
                     for role in &slot_profile.seed_roles {
                         let source = projections.get(role).ok_or_else(implementation_failure)?;
                         copy_projection(
                             &source.path,
                             &workspace,
                             &source.destination_relative,
-                            &mut budget,
+                            &mut invocation_budget,
                         )?;
                     }
                 } else {
                     let source = workspaces
                         .get(&step.state_source)
                         .ok_or_else(implementation_failure)?;
-                    let mut budget = ProjectionBudget::new(
-                        plan.resources.maximum_entries,
-                        plan.resources.disk_bytes,
-                    );
-                    copy_tree(source, &workspace, &mut budget)?;
+                    copy_tree(source, &workspace, &mut invocation_budget)?;
                 }
+                let (mutable_disk_bytes, mutable_entries) =
+                    invocation_budget.mutable_allowance(&workspace)?;
                 let visible_roles = step
                     .visible_roles
                     .iter()
@@ -336,6 +359,13 @@ impl<B: TrialSandboxBackend> GenericTrialEngine<B> {
                             command: step.command.clone(),
                             working_directory: step.working_directory.clone(),
                             resources: plan.resources.clone(),
+                            remaining_cpu_time_ms: plan
+                                .resources
+                                .cpu_time_ms
+                                .checked_sub(cpu_time_used)
+                                .ok_or_else(capacity_failure)?,
+                            mutable_disk_bytes,
+                            mutable_entries,
                             timeout_ms: step.timeout_ms,
                             maximum_output_bytes: context.profile.maximum_step_output_bytes,
                             enforcement_overruns: overruns(context),
@@ -347,13 +377,30 @@ impl<B: TrialSandboxBackend> GenericTrialEngine<B> {
                     )
                     .map_err(sandbox_failure)?;
                 let outcome = result.observation.outcome;
+                invocation_capacity_exhausted = outcome == TrialOperationOutcome::DiskExceeded;
+                cpu_time_used = charge_cpu_time(
+                    cpu_time_used,
+                    result.observation.cpu_time_ms,
+                    plan.resources.cpu_time_ms,
+                    context.profile.maximum_cpu_time_overrun_ms,
+                    outcome == TrialOperationOutcome::CpuExceeded,
+                )?;
+                invocation_budget.refresh(
+                    &owned.root,
+                    context.profile.maximum_disk_overrun_bytes,
+                    context.profile.maximum_entries_overrun,
+                    outcome == TrialOperationOutcome::DiskExceeded,
+                )?;
                 steps.push(result.observation);
-                if slot_profile
+                let retain = slot_profile
                     .retain_state_after
                     .iter()
-                    .any(|allowed| allowed == operation_outcome_name(outcome))
-                {
+                    .any(|allowed| allowed == operation_outcome_name(outcome));
+                if retain {
                     workspaces.insert(step.slot_id.clone(), workspace);
+                } else {
+                    fs::remove_dir_all(&workspace).map_err(|_| implementation_failure())?;
+                    invocation_budget.refresh(&owned.root, 0, 0, false)?;
                 }
             }
         }
@@ -487,12 +534,10 @@ struct MaterializedProjection {
 fn materialize_projections(
     context: &TrialEngineContext,
     owned: &OwnedTrialScratch,
-    plan: &TrialPlan,
+    budget: &mut ProjectionBudget,
 ) -> Result<HashMap<String, MaterializedProjection>, TrialEngineFailure> {
     let root = owned.root.join("projections");
-    create_private_directory(&root)?;
-    let mut budget =
-        ProjectionBudget::new(plan.resources.maximum_entries, plan.resources.disk_bytes);
+    create_accounted_directory(&root, budget)?;
     let mut projected = HashMap::new();
     for projection in &context.profile.material_projections {
         let source = context
@@ -505,21 +550,12 @@ fn materialize_projections(
             .iter()
             .map(PathBuf::from)
             .collect::<Vec<_>>();
-        copy_tree_filtered(
-            &source,
-            &destination,
-            Path::new(""),
-            &exclusions,
-            &mut budget,
-        )?;
+        copy_tree_filtered(&source, &destination, Path::new(""), &exclusions, budget)?;
         if projected
-            .insert(
-                projection.role.clone(),
-                MaterializedProjection {
-                    path: destination,
-                    destination_relative: projection.destination_relative.clone(),
-                },
-            )
+            .insert(projection.role.clone(), MaterializedProjection {
+                path: destination,
+                destination_relative: projection.destination_relative.clone(),
+            })
             .is_some()
         {
             return Err(implementation_failure());
@@ -645,6 +681,8 @@ fn operation_outcome_name(outcome: TrialOperationOutcome) -> &'static str {
 
 #[derive(Clone, Copy)]
 struct ProjectionBudget {
+    maximum_entries: u64,
+    maximum_bytes: u64,
     entries_left: u64,
     bytes_left: u64,
 }
@@ -652,6 +690,8 @@ struct ProjectionBudget {
 impl ProjectionBudget {
     fn new(entries: u64, bytes: u64) -> Self {
         Self {
+            maximum_entries: entries,
+            maximum_bytes: bytes,
             entries_left: entries,
             bytes_left: bytes,
         }
@@ -668,6 +708,106 @@ impl ProjectionBudget {
             .ok_or_else(capacity_failure)?;
         Ok(())
     }
+
+    fn mutable_allowance(&self, root: &Path) -> Result<(u64, u64), TrialEngineFailure> {
+        let (root_bytes, root_entries) = owned_tree_usage(root)?;
+        Ok((
+            root_bytes
+                .checked_add(self.bytes_left)
+                .ok_or_else(capacity_failure)?,
+            root_entries
+                .checked_add(self.entries_left)
+                .ok_or_else(capacity_failure)?,
+        ))
+    }
+
+    fn refresh(
+        &mut self,
+        root: &Path,
+        bytes_overrun: u64,
+        entries_overrun: u64,
+        exceeded: bool,
+    ) -> Result<(), TrialEngineFailure> {
+        let (bytes, entries) = owned_tree_usage(root)?;
+        let maximum_bytes = self
+            .maximum_bytes
+            .checked_add(if exceeded { bytes_overrun } else { 0 })
+            .ok_or_else(capacity_failure)?;
+        let maximum_entries = self
+            .maximum_entries
+            .checked_add(if exceeded { entries_overrun } else { 0 })
+            .ok_or_else(capacity_failure)?;
+        if bytes > maximum_bytes || entries > maximum_entries {
+            return Err(capacity_failure());
+        }
+        self.bytes_left = self.maximum_bytes.saturating_sub(bytes);
+        self.entries_left = self.maximum_entries.saturating_sub(entries);
+        Ok(())
+    }
+}
+
+fn owned_tree_usage(root: &Path) -> Result<(u64, u64), TrialEngineFailure> {
+    let metadata = fs::symlink_metadata(root).map_err(|_| implementation_failure())?;
+    if metadata.file_type().is_symlink() || !metadata.file_type().is_dir() {
+        return Err(implementation_failure());
+    }
+    let mut bytes = 0_u64;
+    let mut entries = 0_u64;
+    let mut children = fs::read_dir(root)
+        .map_err(|_| implementation_failure())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|_| implementation_failure())?;
+    children.sort_by_key(std::fs::DirEntry::file_name);
+    for child in children {
+        owned_entry_usage(&child.path(), &mut bytes, &mut entries)?;
+    }
+    Ok((bytes, entries))
+}
+
+fn owned_entry_usage(
+    path: &Path,
+    bytes: &mut u64,
+    entries: &mut u64,
+) -> Result<(), TrialEngineFailure> {
+    let metadata = fs::symlink_metadata(path).map_err(|_| implementation_failure())?;
+    if metadata.file_type().is_symlink() {
+        return Err(implementation_failure());
+    }
+    *entries = entries.checked_add(1).ok_or_else(capacity_failure)?;
+    if metadata.file_type().is_file() {
+        *bytes = bytes
+            .checked_add(metadata.len())
+            .ok_or_else(capacity_failure)?;
+    } else if metadata.file_type().is_dir() {
+        let mut children = fs::read_dir(path)
+            .map_err(|_| implementation_failure())?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|_| implementation_failure())?;
+        children.sort_by_key(std::fs::DirEntry::file_name);
+        for child in children {
+            owned_entry_usage(&child.path(), bytes, entries)?;
+        }
+    } else {
+        return Err(implementation_failure());
+    }
+    Ok(())
+}
+
+fn charge_cpu_time(
+    used: u64,
+    observed: u64,
+    maximum: u64,
+    overrun: u64,
+    exceeded: bool,
+) -> Result<u64, TrialEngineFailure> {
+    let total = used.checked_add(observed).ok_or_else(capacity_failure)?;
+    let allowed = maximum
+        .checked_add(if exceeded { overrun } else { 0 })
+        .ok_or_else(capacity_failure)?;
+    if total > allowed {
+        return Err(capacity_failure());
+    }
+    Ok(total)
 }
 
 fn inspect_roles(
@@ -792,6 +932,14 @@ fn create_private_directory(path: &Path) -> Result<(), TrialEngineFailure> {
     let mut builder = DirBuilder::new();
     builder.mode(0o700);
     builder.create(path).map_err(|_| implementation_failure())
+}
+
+fn create_accounted_directory(
+    path: &Path,
+    budget: &mut ProjectionBudget,
+) -> Result<(), TrialEngineFailure> {
+    budget.charge(0)?;
+    create_private_directory(path)
 }
 
 fn hash_file(path: &Path) -> Result<String, TrialEngineFailure> {

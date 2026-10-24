@@ -804,25 +804,23 @@ impl RuntimeControl for DockerRuntimeControl {
         if measurements.cgroup_samples == 0 {
             return Err(RuntimeControlFailure::InvalidObservation);
         }
-        let termination = forced.unwrap_or_else(|| {
-            if state.oom_killed {
-                RuntimeTermination::MemoryExceeded
-            } else if state.exit_code.is_some_and(|code| code >= 128) {
-                RuntimeTermination::Signalled
-            } else {
-                RuntimeTermination::Exited
-            }
+        let termination = forced.unwrap_or(if state.oom_killed {
+            RuntimeTermination::MemoryExceeded
+        } else {
+            // Docker exposes an exit status here, not the signal provenance.
+            // Statuses >= 128 may also be emitted directly by an application.
+            RuntimeTermination::Exited
         });
         validate_measurement_overruns(&measurements, elapsed_ms, termination, limits)?;
-        let signal = if termination == RuntimeTermination::Signalled {
-            state.exit_code.and_then(|code| code.checked_sub(128))
+        let exit_code = if termination == RuntimeTermination::Exited {
+            state.exit_code
         } else {
             None
         };
         Ok(ObservedContainerExit {
             termination,
-            exit_code: state.exit_code,
-            signal,
+            exit_code,
+            signal: None,
             stdout,
             stderr,
             elapsed_ms,
@@ -1148,14 +1146,10 @@ pub(crate) fn persist_runtime_journal_for_test(
         attempt_id: "018f6f49-66b8-7d2a-bf4d-0e2eeaa00001".into(),
         trial_owner_id: format!("trial_{}", "a".repeat(32)),
     };
-    persist_runtime_journal(
-        root,
-        &owner,
-        &OwnedRuntimeResources {
-            containers: vec!["ws-trial-live-resource".into()],
-            images: Vec::new(),
-        },
-    )?;
+    persist_runtime_journal(root, &owner, &OwnedRuntimeResources {
+        containers: vec!["ws-trial-live-resource".into()],
+        images: Vec::new(),
+    })?;
     runtime_journal_path(root, &owner)
 }
 
@@ -2014,6 +2008,9 @@ impl<C: RuntimeControl> DockerTrialBackend<C> {
     fn limits(
         &self,
         resources: &crate::trial_relay::TrialResources,
+        cpu_time_ms: u64,
+        disk_bytes: u64,
+        entries: u64,
         timeout_ms: u64,
         output_bytes: usize,
         overruns: &SandboxEnforcementOverruns,
@@ -2022,16 +2019,16 @@ impl<C: RuntimeControl> DockerTrialBackend<C> {
         ContainerExecutionLimits {
             deadline,
             operation_timeout_ms: timeout_ms,
-            cpu_time_ms: resources.cpu_time_ms,
+            cpu_time_ms,
             wall_time_overrun_ms: overruns.wall_time_ms,
             cpu_time_overrun_ms: overruns.cpu_time_ms,
             memory_bytes: resources.memory_bytes,
             memory_overrun_bytes: overruns.memory_bytes,
             pids: resources.pids,
             pids_overrun: overruns.pids,
-            disk_bytes: resources.disk_bytes,
+            disk_bytes,
             disk_overrun_bytes: overruns.disk_bytes,
-            entries: resources.maximum_entries,
+            entries,
             entries_overrun: overruns.entries,
             output_bytes,
         }
@@ -2159,6 +2156,9 @@ impl<C: RuntimeControl> TrialSandboxBackend for DockerTrialBackend<C> {
                 &[request.output_archive.parent().unwrap().to_owned()],
                 &self.limits(
                     &request.resources,
+                    request.remaining_cpu_time_ms,
+                    request.mutable_disk_bytes,
+                    request.mutable_entries,
                     request.timeout_ms,
                     request.maximum_output_bytes,
                     &request.enforcement_overruns,
@@ -2259,6 +2259,9 @@ impl<C: RuntimeControl> TrialSandboxBackend for DockerTrialBackend<C> {
                 std::slice::from_ref(&request.workspace_root),
                 &self.limits(
                     &request.resources,
+                    request.remaining_cpu_time_ms,
+                    request.mutable_disk_bytes,
+                    request.mutable_entries,
                     request.timeout_ms,
                     request.maximum_output_bytes,
                     &request.enforcement_overruns,
