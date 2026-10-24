@@ -32,14 +32,20 @@ EXTRACT_CREATED=0
 HOST_CHECKER_BUILT=0
 QUALIFIER_CONTAINER_OWNED=0
 
+cleanup_docker() {
+  timeout --kill-after=5s 30s docker "$@"
+}
+
 remove_composition_root() {
-  if docker inspect "${CLEANER_CONTAINER}" >/dev/null 2>&1; then
-    [[ "$(docker inspect --format '{{index .Config.Labels "workstream.qualifier"}}' "${CLEANER_CONTAINER}")" == "terminal-systems-runsc" ]]
-    [[ "$(docker inspect --format '{{index .Config.Labels "org.workstream.pilot00.run"}}' "${CLEANER_CONTAINER}")" == "${RUN_ID}" ]]
-    [[ "$(docker inspect --format '{{.Image}}' "${CLEANER_CONTAINER}")" == "$(docker image inspect --format '{{.Id}}' "${PREPARED_IMAGE}")" ]]
-    docker rm -f "${CLEANER_CONTAINER}" >/dev/null
+  if cleanup_docker inspect "${CLEANER_CONTAINER}" >/dev/null 2>&1; then
+    [[ "$(cleanup_docker inspect --format '{{index .Config.Labels "workstream.qualifier"}}' "${CLEANER_CONTAINER}")" == "terminal-systems-runsc" ]] || return 1
+    [[ "$(cleanup_docker inspect --format '{{index .Config.Labels "org.workstream.pilot00.run"}}' "${CLEANER_CONTAINER}")" == "${RUN_ID}" ]] || return 1
+    local expected_image
+    expected_image="$(cleanup_docker image inspect --format '{{.Id}}' "${PREPARED_IMAGE}")" || return 1
+    [[ -n "${expected_image}" && "$(cleanup_docker inspect --format '{{.Image}}' "${CLEANER_CONTAINER}")" == "${expected_image}" ]] || return 1
+    cleanup_docker rm -f "${CLEANER_CONTAINER}" >/dev/null || return 1
   fi
-  docker run --rm \
+  cleanup_docker run --rm \
     --name "${CLEANER_CONTAINER}" \
     --label "org.workstream.pilot00.run=${RUN_ID}" \
     --label "workstream.qualifier=terminal-systems-runsc" \
@@ -53,7 +59,7 @@ remove_composition_root() {
     --mount "type=bind,src=${SHARED_ROOT},dst=${INNER_ROOT}" \
     --entrypoint sh \
     "${PREPARED_IMAGE}" -ceu \
-    'rm -rf /workstream-state/terminal-systems-runsc-composition'
+    'rm -rf /workstream-state/terminal-systems-runsc-composition' || return 1
   [[ ! -e "${COMPOSITION_ROOT}" ]]
 }
 
@@ -62,7 +68,7 @@ cleanup() {
   trap - EXIT INT TERM
   set +e
   if [[ "${STARTED}" == 1 ]]; then
-    docker exec "${CONTAINER}" sh -ceu '
+    cleanup_docker exec "${CONTAINER}" sh -ceu '
       composition_root="$1"
       if test -s "${composition_root}/registry.pid"; then
         kill "$(cat "${composition_root}/registry.pid")" 2>/dev/null || true
@@ -72,25 +78,25 @@ cleanup() {
       docker images --format "{{.Repository}}:{{.Tag}}" --filter reference="workstream-trial:*" \
         | xargs -r docker image rm >/dev/null
     ' sh "${INNER_COMPOSITION_ROOT}" || status=1
-    docker exec "${CONTAINER}" docker image rm \
+    cleanup_docker exec "${CONTAINER}" docker image rm \
       127.0.0.1:5000/terminal-systems-post:qualification \
       "${CHECKER_IMAGE}" \
       >/dev/null 2>&1 || status=1
     if [[ -n "${WORKSTREAM_TS_RUNSC_CHECKER_DIGEST:-}" ]]; then
-      docker exec "${CONTAINER}" docker image rm \
+      cleanup_docker exec "${CONTAINER}" docker image rm \
         "127.0.0.1:5000/terminal-systems-post@${WORKSTREAM_TS_RUNSC_CHECKER_DIGEST}" \
         >/dev/null 2>&1 || true
     fi
-    docker stop --time 15 "${CONTAINER}" >/dev/null 2>&1 || status=1
+    cleanup_docker stop --time 15 "${CONTAINER}" >/dev/null 2>&1 || status=1
   fi
   if [[ "${QUALIFIER_CONTAINER_OWNED}" == 1 ]]; then
-    docker rm "${CONTAINER}" >/dev/null 2>&1 || status=1
+    cleanup_docker rm "${CONTAINER}" >/dev/null 2>&1 || status=1
   fi
   if [[ "${EXTRACT_CREATED}" == 1 ]]; then
-    docker rm -f "${EXTRACT_CONTAINER}" >/dev/null 2>&1 || status=1
+    cleanup_docker rm -f "${EXTRACT_CONTAINER}" >/dev/null 2>&1 || status=1
   fi
   if [[ "${HOST_CHECKER_BUILT}" == 1 ]]; then
-    docker image rm "${CHECKER_IMAGE}" >/dev/null 2>&1 || status=1
+    cleanup_docker image rm "${CHECKER_IMAGE}" >/dev/null 2>&1 || status=1
   fi
   if [[ "${CONFIG_REPLACED}" == 1 ]]; then
     cp -- "${ORIGINAL_CONFIG}" "${SHARED_ROOT}/daemon.json" || status=1
