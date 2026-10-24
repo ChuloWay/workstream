@@ -9,31 +9,38 @@ from functools import partial
 from types import SimpleNamespace
 from uuid import uuid4
 
-import pytest
 import httpx2
+import pytest
 from pydantic import ValidationError
 
-from app.adapters.project_agents.openai_agent_sdk import OpenAIAgentSdkProjectGuideRuntime
 from app.adapters.project_agents import build_project_guide_adapter_profile
+from app.adapters.project_agents.openai_agent_sdk import OpenAIAgentSdkProjectGuideRuntime
 from app.core.config import Settings
 from app.core.project_agents import (
     project_guide_runtime_configuration,
 )
 from app.core.project_guide_instructions import PROJECT_GUIDE_INSTRUCTIONS
+from app.interfaces.guide_document_tools import GuideDocumentToolResult
 from app.interfaces.project_agents import (
-    ProjectAgentRuntimeError,
     ProjectAgentRuntimeConfigurationError,
+    ProjectAgentRuntimeError,
     ProjectGuideCompilationInvalidOutputError,
     canonical_project_guide_compilation_context_bytes,
     invalid_compilation_failure_code,
     project_guide_compilation_prompt_bytes,
 )
 from app.interfaces.project_guide_runtime import ProjectGuideRuntimeConfiguration
-from app.interfaces.guide_document_tools import GuideDocumentToolResult
+from app.interfaces.setup_model_proxy import SetupModelProxyReply
 from app.modules.projects.api.guide_documents import GuideDocumentManifest
 from tests.projects.guide_compilation.helpers import (
-    SOURCE_SHA256, context, ids, generated_result as result, runtime_configuration,
+    SOURCE_SHA256,
+    context,
+    ids,
+    runtime_configuration,
     valid_specification,
+)
+from tests.projects.guide_compilation.helpers import (
+    generated_result as result,
 )
 
 
@@ -85,7 +92,38 @@ def _sdk_result(agent, value=None):
     ))
 
 
-async def _compile(runtime, compilation_context, *, document_text="Assigned guide text."):
+class _TestModelSession:
+    maximum_output_tokens = 4096
+    reasoning_effort = "medium"
+    text_verbosity = "low"
+
+    def __init__(self, dispatch=None):
+        self._dispatch = dispatch
+
+    async def dispatch(self, phase, body):
+        if self._dispatch is None:
+            raise AssertionError("test unexpectedly dispatched a model request")
+        response = await self._dispatch(phase, body)
+        return SetupModelProxyReply(
+            outcome="completed",
+            call_index=0,
+            status_code=response.status_code,
+            response_json=json.dumps(
+                response.json(), sort_keys=True, separators=(",", ":")
+            ),
+            response_headers=(),
+            failure_code=None,
+            session_exhausted=False,
+        )
+
+
+async def _compile(
+    runtime,
+    compilation_context,
+    *,
+    document_text="Assigned guide text.",
+    model=None,
+):
     """Supply scripted prior document access and always release circuit admission."""
     opened = {
         compilation_context.material.handle_for(document)
@@ -135,11 +173,14 @@ async def _compile(runtime, compilation_context, *, document_text="Assigned guid
             "operation": "search", "text": value.text if query in value.text else "",
         })
 
-    capabilities = SimpleNamespace(tools=SimpleNamespace(
-        opened_handles=opened_handles,
-        read_document=read_document,
-        search_document=search_document,
-    ))
+    capabilities = SimpleNamespace(
+        tools=SimpleNamespace(
+            opened_handles=opened_handles,
+            read_document=read_document,
+            search_document=search_document,
+        ),
+        model=model or _TestModelSession(),
+    )
     runtime.admit_execution()
     try:
         return await runtime.compile_project_guide(compilation_context, capabilities)
@@ -152,10 +193,10 @@ def test_unified_compilation_instructions_preserve_untrusted_and_lifecycle_bound
         assert text in PROJECT_GUIDE_INSTRUCTIONS
 
 
-def test_runtime_requires_credentials_before_dispatch(monkeypatch):
+def test_runtime_never_requires_provider_credentials(monkeypatch):
     monkeypatch.delenv("OPENAI_API_KEY")
-    with pytest.raises(ProjectAgentRuntimeConfigurationError, match="credentials are unavailable"):
-        OpenAIAgentSdkProjectGuideRuntime(runtime_configuration())
+    runtime = OpenAIAgentSdkProjectGuideRuntime(runtime_configuration())
+    assert runtime.identity.provider_key == "openai_agents_sdk"
 
 
 def test_configuration_concerns_are_independent_and_secret_free():
@@ -273,8 +314,8 @@ def test_snapshot_changes_identity_but_is_absent_from_provider_user_prompt():
 
 
 async def test_unified_compilation_uses_scoped_tools_and_strict_output(monkeypatch):
-    from agents import Runner, FunctionTool
     import openai
+    from agents import FunctionTool, Runner
 
     clients = []
     client_type = openai.AsyncOpenAI
@@ -307,6 +348,8 @@ async def test_unified_compilation_uses_scoped_tools_and_strict_output(monkeypat
         assert agent.model_settings.store is False
         assert agent.model_settings.parallel_tool_calls is False
         assert agent.model_settings.extra_body is None
+        assert agent.model_settings.reasoning.effort == "medium"
+        assert agent.model_settings.verbosity == "low"
         assert agent.model_settings.retry.max_retries == 2
         assert agent.model_settings.context_management is None
         assert agent.model_settings.response_include is None
@@ -327,7 +370,7 @@ async def test_unified_compilation_uses_scoped_tools_and_strict_output(monkeypat
     assert calls[0][0] is calls[1][0]
     assert clients[0].max_retries == 0 and clients[0].is_closed()
     assert clients[0].timeout == 300
-    assert str(clients[0].base_url).rstrip("/") == "https://api.openai.com/v1"
+    assert str(clients[0].base_url).rstrip("/") == "https://model-proxy.invalid/v1"
 
 
 async def test_actual_sdk_tool_loop_uses_only_openrouter_chat_and_neutral_tools(
@@ -348,9 +391,9 @@ async def test_actual_sdk_tool_loop_uses_only_openrouter_chat_and_neutral_tools(
         ]
     )
 
-    async def dispatch(request):
-        body = json.loads(request.content)
-        captured.append((str(request.url), dict(request.headers), body))
+    async def dispatch(phase, body):
+        captured.append((phase, body))
+        request = httpx2.Request("POST", "https://model-proxy.invalid/v1/chat/completions")
         return httpx2.Response(200, json=next(responses), request=request)
 
     clients, http_options = _patch_openai_transport(monkeypatch, dispatch)
@@ -362,15 +405,20 @@ async def test_actual_sdk_tool_loop_uses_only_openrouter_chat_and_neutral_tools(
         }
     )
     compilation = compilation.model_copy(update={"runtime_configuration": config})
-    output = await _compile(OpenAIAgentSdkProjectGuideRuntime(config), compilation)
+    output = await _compile(
+        OpenAIAgentSdkProjectGuideRuntime(config),
+        compilation,
+        model=_TestModelSession(dispatch),
+    )
     assert output == result()
     assert len(captured) == 4
-    assert all(url == "https://openrouter.ai/api/v1/chat/completions" for url, _, _ in captured)
-    assert all(headers["authorization"] == "Bearer unit-test-only" for _, headers, _ in captured)
-    for _url, _headers, body in captured:
+    assert [phase for phase, _ in captured] == ["draft", "draft", "review", "review"]
+    for _phase, body in captured:
         assert body["model"] == "openai/gpt-5.6-terra"
         assert body["store"] is False
         assert body["parallel_tool_calls"] is False
+        assert body["reasoning_effort"] == "medium"
+        assert body["verbosity"] == "low"
         assert body["provider"] == {
             "allow_fallbacks": False,
             "data_collection": "deny",
@@ -398,12 +446,12 @@ async def test_actual_sdk_tool_loop_uses_only_openrouter_chat_and_neutral_tools(
     owned_http_client = observed.pop("http_client")
     assert owned_http_client is not None
     assert observed == {
-        "api_key": "unit-test-only",
-        "base_url": "https://openrouter.ai/api/v1",
+        "api_key": "setup-model-proxy",
+        "base_url": "https://model-proxy.invalid/v1",
         "max_retries": 0,
         "timeout": 300,
     }
-    assert http_options == [{"trust_env": False, "follow_redirects": False}]
+    assert http_options == []
     assert client.is_closed()
 
 
@@ -423,8 +471,9 @@ async def test_actual_sdk_http_failures_are_bounded_and_sanitized(monkeypatch, f
     else:
         responses = None
 
-    async def dispatch(request):
-        calls.append(str(request.url))
+    async def dispatch(_phase, body):
+        calls.append(body["model"])
+        request = httpx2.Request("POST", "https://model-proxy.invalid/v1/chat/completions")
         if failure == "provider_fault":
             return httpx2.Response(
                 401,
@@ -449,7 +498,11 @@ async def test_actual_sdk_http_failures_are_bounded_and_sanitized(monkeypatch, f
         else ProjectAgentRuntimeError
     )
     with pytest.raises(expected) as caught:
-        await _compile(OpenAIAgentSdkProjectGuideRuntime(config), compilation)
+        await _compile(
+            OpenAIAgentSdkProjectGuideRuntime(config),
+            compilation,
+            model=_TestModelSession(dispatch),
+        )
     assert "private" not in str(caught.value)
     assert len(calls) == {"malformed_schema": 3, "tool_bound": 2, "provider_fault": 1}[failure]
     assert clients[0][1].is_closed()
@@ -459,7 +512,7 @@ async def test_actual_sdk_http_request_is_cancelled_and_client_closed(monkeypatc
     """Caller cancellation reaches the SDK transport and awaits client shutdown."""
     started = asyncio.Event()
 
-    async def dispatch(_request):
+    async def dispatch(_phase, _body):
         started.set()
         await asyncio.Event().wait()
 
@@ -472,7 +525,11 @@ async def test_actual_sdk_http_request_is_cancelled_and_client_closed(monkeypatc
     })
     compilation = compilation.model_copy(update={"runtime_configuration": config})
     task = asyncio.create_task(
-        _compile(OpenAIAgentSdkProjectGuideRuntime(config), compilation)
+        _compile(
+            OpenAIAgentSdkProjectGuideRuntime(config),
+            compilation,
+            model=_TestModelSession(dispatch),
+        )
     )
     await started.wait()
     task.cancel()
@@ -774,9 +831,7 @@ async def test_runtime_internal_cancellation_is_sanitized(monkeypatch):
 @pytest.mark.parametrize("redacted", [True, False])
 async def test_actual_sdk_parser_preserves_known_invalid_output(monkeypatch, kind, expected, redacted):
     """Exercise the installed SDK parser before the adapter receives any result."""
-    from agents import Runner
-
-    from agents import _debug
+    from agents import Runner, _debug
     monkeypatch.setattr(_debug, "DONT_LOG_MODEL_DATA", redacted)
     payload = _provider_payload()
     if kind == "schema":
@@ -977,7 +1032,9 @@ async def test_sanitized_error_graph_drops_provider_and_invalid_values(monkeypat
 def test_sdk_output_schema_exposes_the_identifier_rule_to_the_model():
     """The provider sees the same bounded lowercase rule that parsing enforces."""
     import re
+
     from agents import AgentOutputSchema
+
     from app.interfaces.project_agents import ProjectGuideCompilationResult
 
     schema = AgentOutputSchema(ProjectGuideCompilationResult).json_schema()
@@ -1001,6 +1058,7 @@ def test_sdk_output_schema_exposes_the_identifier_rule_to_the_model():
 def test_sdk_output_schema_has_one_intake_configuration_and_separate_post_parameters():
     """Actual SDK schema cannot ask the model for two conflicting intake policies."""
     from agents import AgentOutputSchema
+
     from app.interfaces.project_agents import ProjectGuideCompilationResult
 
     schema = AgentOutputSchema(ProjectGuideCompilationResult).json_schema()
@@ -1041,6 +1099,8 @@ def test_default_instructions_advertise_contextual_output_constraints():
         "Reopen the assigned originals",
         "Leave unspecified project",
         "source_item_id, document_version_id and sha256",
+        "model_evaluation requires model_service",
+        "registered project image and its exact approved profile",
     ):
         assert rule in instructions
     assert "setup_notes" not in instructions
@@ -1133,7 +1193,8 @@ def test_manager_authored_settings_snapshot_records_absent_inference():
 def _manager_material(rules: bytes, *, extra: tuple[bytes, ...] = (), source_ids=()):
     """Return a context with one PDF original, the rules document and optional Markdown."""
     from tests.projects.guide_compilation.helpers import (
-        SOURCE_BYTES, manager_runtime_configuration,
+        SOURCE_BYTES,
+        manager_runtime_configuration,
     )
 
     base = context(ids(), configuration=manager_runtime_configuration())
@@ -1233,6 +1294,7 @@ async def _manager_compile(compilation_context, grant):
 
 async def test_manager_authored_runtime_converts_rules_without_credentials_or_network(monkeypatch):
     import socket
+
     from app.adapters.project_agents.manager_authored import ManagerAuthoredProjectGuideRuntime
 
     monkeypatch.delenv("OPENAI_API_KEY")

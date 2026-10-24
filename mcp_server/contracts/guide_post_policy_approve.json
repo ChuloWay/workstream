@@ -1,0 +1,848 @@
+{
+  "canonical_sha256": "97521dc9eaf62e8bbfcb4be360ff7d071fb7358c364c0c471fcd8c38df616e1e",
+  "components": {
+    "schemas": {
+      "ApiError": {
+        "additionalProperties": false,
+        "description": "Canonical machine-readable API error.",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "correlation_id": {
+            "type": "string"
+          },
+          "details": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "message": {
+            "type": "string"
+          },
+          "retryable": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "code",
+          "message",
+          "details",
+          "correlation_id",
+          "retryable"
+        ],
+        "type": "object"
+      },
+      "ApiErrorResponse": {
+        "additionalProperties": false,
+        "description": "Canonical error plus additive legacy compatibility fields.",
+        "properties": {
+          "detail": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "$ref": "#/components/schemas/ApiError"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "type": "object"
+      },
+      "CompilationComponentHashes": {
+        "additionalProperties": false,
+        "description": "Named canonical hashes for every independently projected component.",
+        "properties": {
+          "artifact_policy_hash": {
+            "pattern": "^sha256:[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "capability_suggestions_hash": {
+            "pattern": "^sha256:[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "post_submit_hash": {
+            "pattern": "^sha256:[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "pre_submit_hash": {
+            "pattern": "^sha256:[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "requirement_inventory_hash": {
+            "pattern": "^sha256:[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "setup_notes_hash": {
+            "pattern": "^sha256:[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "sufficiency_hash": {
+            "pattern": "^sha256:[0-9a-f]{64}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "sufficiency_hash",
+          "artifact_policy_hash",
+          "requirement_inventory_hash",
+          "pre_submit_hash",
+          "post_submit_hash",
+          "capability_suggestions_hash",
+          "setup_notes_hash"
+        ],
+        "type": "object"
+      },
+      "GuideProposalApprovalReceipt": {
+        "additionalProperties": false,
+        "description": "Immutable approval output identity; product rows keep their lifecycle.",
+        "properties": {
+          "acknowledged_warning_hashes": {
+            "items": {
+              "pattern": "^sha256:[0-9a-f]{64}$",
+              "type": "string"
+            },
+            "maxItems": 200,
+            "type": "array"
+          },
+          "artifact_policy_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "effective_policy_hash": {
+            "pattern": "^sha256:[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "effective_policy_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "effective_pre_submit_plan_hash": {
+            "pattern": "^sha256:[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "operation_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "pre_submit_bundle_hash": {
+            "pattern": "^sha256:[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "pre_submit_policy_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "target_digest": {
+            "pattern": "^sha256:[0-9a-f]{64}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "operation_id",
+          "target_digest",
+          "artifact_policy_id",
+          "effective_policy_id",
+          "effective_policy_hash",
+          "pre_submit_policy_id",
+          "pre_submit_bundle_hash",
+          "effective_pre_submit_plan_hash",
+          "acknowledged_warning_hashes"
+        ],
+        "type": "object"
+      },
+      "GuideProposalCorrectionReceipt": {
+        "additionalProperties": false,
+        "description": "One successor allocated for an exact known predecessor.",
+        "properties": {
+          "feedback_hash": {
+            "pattern": "^sha256:[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "operation_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "status": {
+            "const": "correction_requested",
+            "default": "correction_requested",
+            "type": "string"
+          },
+          "successor_setup_generation": {
+            "exclusiveMinimum": 0.0,
+            "type": "integer"
+          },
+          "successor_setup_run_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "target_digest": {
+            "pattern": "^sha256:[0-9a-f]{64}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "operation_id",
+          "target_digest",
+          "successor_setup_run_id",
+          "successor_setup_generation",
+          "feedback_hash"
+        ],
+        "type": "object"
+      },
+      "GuideProposalTarget": {
+        "additionalProperties": false,
+        "description": "The exact displayed source and all independently approved components.",
+        "properties": {
+          "artifact_policy_hash": {
+            "anyOf": [
+              {
+                "pattern": "^sha256:[0-9a-f]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "artifact_policy_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "artifact_projection_operation_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "artifact_projection_output_digest": {
+            "anyOf": [
+              {
+                "pattern": "^sha256:[0-9a-f]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "compilation_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "component_hashes": {
+            "$ref": "#/components/schemas/CompilationComponentHashes"
+          },
+          "finalization_facts_digest": {
+            "pattern": "^sha256:[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "finalization_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "guide_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "guide_version": {
+            "maxLength": 50,
+            "minLength": 1,
+            "type": "string"
+          },
+          "post_catalogue_id": {
+            "maxLength": 160,
+            "minLength": 1,
+            "type": "string"
+          },
+          "post_catalogue_manifest_hash": {
+            "pattern": "^sha256:[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "post_catalogue_schema_version": {
+            "maxLength": 160,
+            "minLength": 1,
+            "type": "string"
+          },
+          "post_catalogue_version": {
+            "maxLength": 100,
+            "minLength": 1,
+            "type": "string"
+          },
+          "pre_catalogue_id": {
+            "maxLength": 160,
+            "minLength": 1,
+            "type": "string"
+          },
+          "pre_catalogue_manifest_hash": {
+            "pattern": "^sha256:[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "pre_catalogue_schema_version": {
+            "maxLength": 160,
+            "minLength": 1,
+            "type": "string"
+          },
+          "pre_catalogue_version": {
+            "maxLength": 100,
+            "minLength": 1,
+            "type": "string"
+          },
+          "project_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "result_hash": {
+            "pattern": "^sha256:[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "setup_generation": {
+            "exclusiveMinimum": 0.0,
+            "type": "integer"
+          },
+          "setup_run_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "source_snapshot_hash": {
+            "pattern": "^sha256:[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "source_snapshot_id": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_id",
+          "guide_id",
+          "compilation_id",
+          "guide_version",
+          "source_snapshot_id",
+          "source_snapshot_hash",
+          "setup_run_id",
+          "setup_generation",
+          "finalization_id",
+          "finalization_facts_digest",
+          "result_hash",
+          "component_hashes",
+          "pre_catalogue_id",
+          "pre_catalogue_version",
+          "pre_catalogue_schema_version",
+          "pre_catalogue_manifest_hash",
+          "post_catalogue_id",
+          "post_catalogue_version",
+          "post_catalogue_schema_version",
+          "post_catalogue_manifest_hash",
+          "artifact_policy_id",
+          "artifact_policy_hash",
+          "artifact_projection_operation_id",
+          "artifact_projection_output_digest"
+        ],
+        "type": "object"
+      },
+      "PostPolicyApprovalInput": {
+        "additionalProperties": false,
+        "description": "Approve only the exact displayed policy; content editing is not approval.",
+        "properties": {
+          "target": {
+            "$ref": "#/components/schemas/PostPolicyTarget-Input"
+          }
+        },
+        "required": [
+          "target"
+        ],
+        "type": "object"
+      },
+      "PostPolicyReceipt": {
+        "additionalProperties": false,
+        "description": "Immutable operation output, including discoverable correction lineage.",
+        "properties": {
+          "correction": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GuideProposalCorrectionReceipt"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "kind": {
+            "enum": [
+              "derive",
+              "approve",
+              "correction"
+            ],
+            "type": "string"
+          },
+          "operation_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "target": {
+            "$ref": "#/components/schemas/PostPolicyTarget-Output"
+          }
+        },
+        "required": [
+          "operation_id",
+          "kind",
+          "target"
+        ],
+        "type": "object"
+      },
+      "PostPolicyTarget-Input": {
+        "additionalProperties": false,
+        "description": "Source, upstream and sole canonical policy hash shown before a decision.",
+        "properties": {
+          "policy_hash": {
+            "pattern": "^sha256:[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "policy_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "predecessor_policy_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "projection_operation_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "proposal": {
+            "$ref": "#/components/schemas/GuideProposalTarget"
+          },
+          "upstream": {
+            "$ref": "#/components/schemas/GuideProposalApprovalReceipt"
+          },
+          "upstream_output_digest": {
+            "pattern": "^sha256:[0-9a-f]{64}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "proposal",
+          "upstream",
+          "upstream_output_digest",
+          "policy_id",
+          "projection_operation_id",
+          "policy_hash"
+        ],
+        "type": "object"
+      },
+      "PostPolicyTarget-Output": {
+        "additionalProperties": false,
+        "description": "Source, upstream and sole canonical policy hash shown before a decision.",
+        "properties": {
+          "policy_hash": {
+            "pattern": "^sha256:[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "policy_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "predecessor_policy_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "projection_operation_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "proposal": {
+            "$ref": "#/components/schemas/GuideProposalTarget"
+          },
+          "upstream": {
+            "$ref": "#/components/schemas/GuideProposalApprovalReceipt"
+          },
+          "upstream_output_digest": {
+            "pattern": "^sha256:[0-9a-f]{64}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "proposal",
+          "upstream",
+          "upstream_output_digest",
+          "policy_id",
+          "projection_operation_id",
+          "policy_hash"
+        ],
+        "type": "object"
+      }
+    }
+  },
+  "operation": {
+    "description": "Separately approve the displayed policy without replacing its body.",
+    "operationId": "approve_post_policy_api_v1_projects__project_id__guides__guide_id__compilations__compilation_id__post_submission_policies__policy_id__approval_post",
+    "parameters": [
+      {
+        "in": "path",
+        "name": "project_id",
+        "required": true,
+        "schema": {
+          "format": "uuid",
+          "type": "string"
+        }
+      },
+      {
+        "in": "path",
+        "name": "guide_id",
+        "required": true,
+        "schema": {
+          "format": "uuid",
+          "type": "string"
+        }
+      },
+      {
+        "in": "path",
+        "name": "compilation_id",
+        "required": true,
+        "schema": {
+          "format": "uuid",
+          "type": "string"
+        }
+      },
+      {
+        "in": "path",
+        "name": "policy_id",
+        "required": true,
+        "schema": {
+          "format": "uuid",
+          "type": "string"
+        }
+      },
+      {
+        "in": "header",
+        "name": "Idempotency-Key",
+        "required": true,
+        "schema": {
+          "format": "uuid",
+          "type": "string"
+        }
+      },
+      {
+        "in": "header",
+        "name": "X-Request-ID",
+        "required": false,
+        "schema": {
+          "format": "uuid",
+          "maxLength": 36,
+          "minLength": 36,
+          "type": "string"
+        }
+      },
+      {
+        "in": "header",
+        "name": "X-Correlation-ID",
+        "required": false,
+        "schema": {
+          "format": "uuid",
+          "maxLength": 36,
+          "minLength": 36,
+          "type": "string"
+        }
+      }
+    ],
+    "requestBody": {
+      "content": {
+        "application/json": {
+          "schema": {
+            "$ref": "#/components/schemas/PostPolicyApprovalInput"
+          }
+        }
+      },
+      "required": true
+    },
+    "responses": {
+      "200": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/PostPolicyReceipt"
+            }
+          }
+        },
+        "description": "Successful Response",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "400": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Invalid request.",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "401": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Authentication failed.",
+        "headers": {
+          "WWW-Authenticate": {
+            "schema": {
+              "type": "string"
+            }
+          },
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "403": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Permission denied.",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "404": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Not Found",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "409": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Conflict",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "422": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Unprocessable Entity",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "500": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Internal server error.",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "503": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Service Unavailable",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "security": [
+      {
+        "HTTPBearer": []
+      }
+    ],
+    "summary": "Approve Post Policy",
+    "tags": [
+      "projects"
+    ],
+    "x-workstream-action-id": "project.post_submit_checker_policy.approve"
+  },
+  "source": {
+    "method": "POST",
+    "openapi_version": "3.1.0",
+    "path": "/api/v1/projects/{project_id}/guides/{guide_id}/compilations/{compilation_id}/post-submission-policies/{policy_id}/approval",
+    "repository_sha": "2e6cee003dd6bf811d20557808d77cc7061776d5"
+  }
+}

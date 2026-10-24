@@ -8,12 +8,11 @@ from importlib.util import resolve_name
 from pathlib import Path
 
 import pytest
-from tests.architecture_ast import imported_symbols_and_calls
 
-from app.interfaces import artifact_operations
 from app.db.base import Base
+from app.interfaces import artifact_operations
 from app.main import create_app
-
+from tests.architecture_ast import imported_symbols_and_calls
 
 BACKEND_ROOT = Path(__file__).parents[1]
 APP_ROOT = BACKEND_ROOT / "app"
@@ -30,6 +29,7 @@ RETIRED_ARTIFACT_MATERIALIZATION_API = (
 )
 COMPOSITION_ROOT = APP_ROOT / "adapters" / "artifacts" / "__init__.py"
 CHECKER_COMPOSITION_ROOT = APP_ROOT / "adapters" / "checkers" / "__init__.py"
+MODEL_RUNTIME_COMPOSITION = APP_ROOT / "adapters" / "checkers" / "model_runtime.py"
 AGENT_COMPOSITION_ROOT = APP_ROOT / "adapters/project_agents/__init__.py"
 GUIDE_PARSER_COMPOSITION_ROOT = APP_ROOT / "adapters/guide_document_tools/__init__.py"
 OBSERVABILITY_COMPOSITION_ROOT = APP_ROOT / "adapters" / "observability.py"
@@ -97,6 +97,7 @@ CONCRETE_ADAPTER_MODULES = {
     "app.adapters.artifacts.local",
     "app.adapters.artifacts.s3_compatible",
     "app.adapters.checkers.external_service",
+    "app.adapters.checkers.model_provider",
 }
 CONCRETE_OBSERVABILITY_MODULES = {
     "opentelemetry.exporter.otlp.proto.http.metric_exporter",
@@ -252,9 +253,9 @@ def test_only_artifact_custody_services_own_provider_execution() -> None:
             node.name: node
             for node in tree.body
             if isinstance(node, ast.ClassDef)
-            and node.name
-            in {
+            and node.name in {
                 "ArtifactStorageOrchestrator",
+                "CheckerArtifactOutputService",
                 "ScopedGuideDocumentGrant",
                 "PostSubmissionMaterializer",
             }
@@ -278,7 +279,12 @@ def test_only_artifact_custody_services_own_provider_execution() -> None:
                     None,
                 )
                 if owner is None or (
-                    owner.name in {"ScopedGuideDocumentGrant", "PostSubmissionMaterializer"}
+                    owner.name
+                    in {
+                        "CheckerArtifactOutputService",
+                        "ScopedGuideDocumentGrant",
+                        "PostSubmissionMaterializer",
+                    }
                     and node.func.attr != "open"
                 ):
                     violations.append(f"{path.relative_to(BACKEND_ROOT)} calls {node.func.attr}")
@@ -363,6 +369,7 @@ def _assert_concrete_adapter_composition(
                 "LocalStorageAdapter",
                 "S3CompatibleArtifactStore",
                 "UnixSocketExternalCheckerAdapter",
+                "OpenAIResponsesCheckerModelProvider",
             }
         )
         agent_calls.extend(path for name in calls if name in AGENT_RUNTIME_CONSTRUCTORS)
@@ -373,18 +380,21 @@ def _assert_concrete_adapter_composition(
         )
     assert Counter(factory_calls) == {
         COMPOSITION_ROOT: 1,
-        CHECKER_COMPOSITION_ROOT: 1,
+        CHECKER_COMPOSITION_ROOT: 2,
         # Inference and retained-resource cleanup are distinct typed capabilities.
         AGENT_COMPOSITION_ROOT: 2,
         OBSERVABILITY_COMPOSITION_ROOT: 1,
         GUIDE_PARSER_COMPOSITION_ROOT: 1,
         GITHUB_COMPOSITION_ROOT: 1,
     }
-    assert adapter_calls == [COMPOSITION_ROOT, S3_ADAPTER_MODULE, CHECKER_COMPOSITION_ROOT]
+    assert adapter_calls == [
+        COMPOSITION_ROOT, S3_ADAPTER_MODULE, CHECKER_COMPOSITION_ROOT, CHECKER_COMPOSITION_ROOT,
+    ]
     assert set(concrete_imports) == {
         COMPOSITION_ROOT,
         CHECKER_COMPOSITION_ROOT,
         AWS_LIVE_PROOF_MODULE,
+        MODEL_RUNTIME_COMPOSITION,
     }
     assert agent_imports == [AGENT_COMPOSITION_ROOT]
     # Constructors are values in the one explicit registration map, invoked only
@@ -672,7 +682,7 @@ def test_checker_output_contract_has_one_canonical_consumer_owner() -> None:
 
     expected_methods = {
         "CheckerOutputBindingPort": {"bind_checker_output"},
-        "CheckerArtifactOutputPort": {"store", "recover"},
+        "CheckerArtifactOutputPort": {"store", "recover", "read_response"},
     }
     for name, methods in expected_methods.items():
         assert {
@@ -745,12 +755,17 @@ def _assert_checker_custody_consumers(
     expected = {
         "app.modules.checkers.api.output_custody": {
             "app/adapters/artifacts/__init__.py",
+                "app/adapters/checkers/model_proxy.py",
+            "app/modules/artifacts/api/checker_output_authority.py",
             "app/modules/artifacts/checker_output_bindings.py",
             "app/modules/artifacts/checker_output_custody.py",
             "app/modules/artifacts/checker_outputs.py",
             "app/modules/artifacts/schemas.py",
             "app/modules/artifacts/service.py",
-            "app/modules/checkers/execution_coordination.py",
+            "app/modules/authorization/checker_output_authorization.py",
+            "app/modules/authorization/domain/checker_outputs.py",
+                "app/modules/checkers/model_usage_custody.py",
+            "app/modules/tasks/post_submit_routing/evaluation_guard.py",
         },
         "app.modules.checkers.api.materialization": {
             "app/modules/authorization/domain/post_submit.py",

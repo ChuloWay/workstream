@@ -191,6 +191,40 @@ def test_api_contract_uses_runner_owned_minio_namespace(
     assert settings.artifact_s3_bucket == "workstream-ci-isolated-012345abcdef"
 
 
+def test_full_api_contract_enables_local_artifacts_for_typed_model_sessions(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Provider-free API consumers still admit the typed setup-model capability."""
+    api_contract = MODULES[0]
+    monkeypatch.setenv("RUNNER_TEMP", str(tmp_path))
+    for key in (
+        "WORKSTREAM_TEST_MINIO_ENDPOINT",
+        "WORKSTREAM_TEST_MINIO_BUCKET",
+        "WORKSTREAM_TEST_MINIO_PREFIX",
+        "WORKSTREAM_ARTIFACT_STORE_BACKEND",
+    ):
+        monkeypatch.delenv(key, raising=False)
+
+    env = api_contract.api_environment()
+    assert env.get("WORKSTREAM_ARTIFACT_STORE_BACKEND", "disabled") == "disabled"
+    assert "WORKSTREAM_CHECKER_MODEL_PROXY_SOCKET" not in env
+    api_contract.configure_scripted_model_session_environment(env)
+
+    assert env["WORKSTREAM_ARTIFACT_STORE_BACKEND"] == "local"
+    assert env["WORKSTREAM_ARTIFACT_LOCAL_ROOT"] != env["WORKSTREAM_ARTIFACT_SCRATCH_ROOT"]
+    assert Path(env["WORKSTREAM_ARTIFACT_LOCAL_ROOT"]).stat().st_mode & 0o777 == 0o700
+    assert Path(env["WORKSTREAM_ARTIFACT_SCRATCH_ROOT"]).stat().st_mode & 0o777 == 0o700
+    assert env["WORKSTREAM_CHECKER_MODEL_PROXY_SOCKET"].startswith(str(tmp_path) + "/")
+    for key, value in env.items():
+        if key.startswith("WORKSTREAM_ARTIFACT_") or key == (
+            "WORKSTREAM_CHECKER_MODEL_PROXY_SOCKET"
+        ):
+            monkeypatch.setenv(key, value)
+    settings = Settings(_env_file=None, environment=env["WORKSTREAM_ENVIRONMENT"])
+    assert settings.artifact_store_backend == "local"
+    assert settings.checker_model_proxy_socket is not None
+
+
 def test_real_api_drill_provisions_exact_guide_artifact_pipeline_services() -> None:
     """The fan-in owns every fixed principal required before guide setup can run."""
     api_contract = MODULES[0]

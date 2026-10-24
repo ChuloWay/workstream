@@ -1,6 +1,6 @@
 # Workstream MCP Adapter
 
-An independently installed adapter exposing forty-seven tools under the caller's authority:
+An independently installed adapter exposing ninety tools under the caller's authority:
 
 - `workstream_profile_get` calls `GET /api/v1/actors/me`.
 - `workstream_profile_update` calls the unkeyed `PATCH /api/v1/actors/me`.
@@ -54,6 +54,13 @@ An independently installed adapter exposing forty-seven tools under the caller's
   selection and one exact version.
 - Four keyed contribution-policy mutations create, replace, publish and retire
   an exact policy version.
+- Twenty-four guide-lifecycle tools cover retained guide reads, bounded verified
+  document bytes, setup and sufficiency records, submission-artifact policies,
+  compiled proposals, corrections, approvals and activation.
+- Ten checker/delivery/registry tools cover contributor and manager checker
+  projections plus deliberate operator retry, reconciliation and registration.
+- Nine operator-artifact tools cover readiness, bindings, replicas, receipts,
+  verification/recovery, admission usage and audit events.
 
 Each call forwards the caller's bearer to its fixed public Workstream operation.
 There are no MCP resources or prompts. Workstream, not the adapter, owns every
@@ -92,6 +99,13 @@ The endpoint is `http://127.0.0.1:8080/mcp`. The default listener is loopback.
 Configuration is read from environment variables; `.env.example` documents
 the settings but is not loaded automatically. No server-wide caller token is
 configured. A separate Workstream API must already be running.
+
+Ordinary JSON responses default to a 64 KiB bound. Guide-document bytes use a
+separate 64 MiB bound and 120-second operation timeout so document transfers do
+not enlarge the memory allowance or timeout for every API call. Configure these
+independently with `WORKSTREAM_MCP_MAX_DOCUMENT_BYTES` and
+`WORKSTREAM_MCP_DOCUMENT_TIMEOUT_SECONDS`; the adapter still buffers one bounded
+document before returning its Base64 representation.
 
 The profile read takes `{}`. Profile update accepts at least one of
 `display_name` and `contact_email`, preserving omission and explicit `null` while
@@ -208,7 +222,7 @@ retries. A mutation transport failure, upstream 5xx response, or unexpected
 success/redirect response is reported as non-retryable uncertain execution.
 Connections may be pooled, but
 caller credentials and results are not shared or cached. Response validation is
-pinned to the forty-seven selected public contracts in `contracts/`; upstream drift
+pinned to the ninety selected public contracts in `contracts/`; upstream drift
 must be reviewed, not silently accepted. There is no fallback service or
 backend-private import.
 

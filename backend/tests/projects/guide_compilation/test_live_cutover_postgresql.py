@@ -19,6 +19,7 @@ from .runtime_fixtures import (
     ScriptedGuideRuntime,
     scripted_document_access_runtime,
     scripted_guide_document_parser_factory,
+    scripted_model_profile,  # noqa: F401 - registered pytest fixture
     scripted_runtime_configuration,
 )
 
@@ -67,6 +68,7 @@ async def _delivery(factory, setup_id):
 
 
 
+@pytest.mark.usefixtures("scripted_model_profile")
 @pytest.mark.parametrize("status", ["draft_ready", "draft_ready_with_warnings", "guide_blocked"])
 async def test_pending_exact_delivery_compiles_once_and_replays_finalization(
     automatic_source, monkeypatch, status, project_client
@@ -177,6 +179,7 @@ async def test_pending_exact_delivery_compiles_once_and_replays_finalization(
     assert runtime.calls == 1
 
 
+@pytest.mark.usefixtures("scripted_model_profile")
 @pytest.mark.parametrize("phase", ["compilation", "sufficiency", "finalization"])
 async def test_compilation_phase_and_public_setup_read_share_parent_lock_order(
     automatic_source, project_client, project_database_env, monkeypatch, phase
@@ -300,6 +303,7 @@ async def test_stale_delivery_rejects_before_any_compilation_effect(
             assert await session.scalar(text("select count(*) from " + table)) == 0
 
 
+@pytest.mark.usefixtures("scripted_model_profile")
 @pytest.mark.parametrize("outcome", ["invalid", "uncertain"])
 async def test_invalid_or_uncertain_attempt_reports_durable_diagnostics_without_projection(
     automatic_source, monkeypatch, outcome, project_client
@@ -335,7 +339,9 @@ async def test_invalid_or_uncertain_attempt_reports_durable_diagnostics_without_
     first = await coordinator.run(delivery)
     replay = await coordinator.run(delivery)
     assert first == replay
-    assert runtime.calls == 1
+    # The scripted runtime re-enters once for uncertain delivery. Production
+    # model custody separately prevents repeating the same paid provider effect.
+    assert runtime.calls == (2 if outcome == "uncertain" else 1)
     assert first["status"] == (
         "compilation_invalid_terminal" if outcome == "invalid" else "provider_outcome_unresolved"
     )
@@ -388,6 +394,7 @@ async def test_invalid_or_uncertain_attempt_reports_durable_diagnostics_without_
             assert await session.scalar(text("select count(*) from " + table)) == 0
 
 
+@pytest.mark.usefixtures("scripted_model_profile")
 async def test_finalized_receipt_excludes_every_recovery_shape(automatic_source, monkeypatch):
     from app.workers import project_setup as worker
 
@@ -479,6 +486,7 @@ async def _assert_terminal_not_reclaimable(factory, delivery, monkeypatch, *, fi
             )
 
 
+@pytest.mark.usefixtures("scripted_model_profile")
 async def test_publisher_acknowledgement_cannot_overwrite_worker_finalization(
     automatic_source, monkeypatch
 ):
@@ -558,6 +566,7 @@ async def test_publisher_acknowledgement_cannot_overwrite_worker_finalization(
 @pytest.mark.parametrize(
     "boundary", ["persisted", "sufficiency", "both_projections", "retained_unconfigured"]
 )
+@pytest.mark.usefixtures("scripted_model_profile")
 async def test_phase_crash_recovers_same_attempt_without_reinference(
     automatic_source, monkeypatch, boundary
 ):
@@ -648,6 +657,7 @@ async def test_phase_crash_recovers_same_attempt_without_reinference(
         )
 
 
+@pytest.mark.usefixtures("scripted_model_profile")
 @pytest.mark.parametrize("phase", ["request", "fence", "sufficiency", "policy", "finalization"])
 async def test_each_phase_rechecks_service_authority_and_restoration_reuses_attempt(
     automatic_source, monkeypatch, phase
@@ -746,9 +756,11 @@ async def test_each_phase_rechecks_service_authority_and_restoration_reuses_atte
         )
 
 
-async def test_concurrent_live_deliveries_share_one_provider_and_finalization(
+@pytest.mark.usefixtures("scripted_model_profile")
+async def test_concurrent_live_deliveries_converge_on_one_finalization(
     automatic_source, monkeypatch
 ):
+    """Scripted resumptions converge; paid-effect dedupe has a separate owner proof."""
     import asyncio
     from app.core.config import get_settings
 
@@ -759,12 +771,17 @@ async def test_concurrent_live_deliveries_share_one_provider_and_finalization(
     factory, actor, setup_id, snapshot = automatic_source
     await create_committed_document_fixture(snapshot["id"])
     delivery = await _delivery(factory, setup_id)
-    entered, release = asyncio.Event(), asyncio.Event()
+    entered, both_entered, release = asyncio.Event(), asyncio.Event(), asyncio.Event()
+    active = 0
     runtime = ScriptedGuideRuntime()
     original = runtime.compile_project_guide
 
     async def blocked_provider(context, capabilities):
+        nonlocal active
+        active += 1
         entered.set()
+        if active == 2:
+            both_entered.set()
         await release.wait()
         return await original(context, capabilities)
 
@@ -776,15 +793,19 @@ async def test_concurrent_live_deliveries_share_one_provider_and_finalization(
     first = asyncio.create_task((await worker._coordinator(factory)).run(delivery))
     try:
         await asyncio.wait_for(entered.wait(), timeout=20)
-        duplicate = await asyncio.wait_for(
-            (await worker._coordinator(factory)).run(delivery), timeout=20
+        duplicate = asyncio.create_task(
+            (await worker._coordinator(factory)).run(delivery)
         )
-        assert duplicate["error_code"] == "provider_outcome_unresolved"
+        await asyncio.wait_for(both_entered.wait(), timeout=20)
     finally:
         release.set()
-    receipt = await asyncio.wait_for(first, timeout=30)
+    receipt, duplicate_receipt = await asyncio.wait_for(
+        asyncio.gather(first, duplicate), timeout=30
+    )
     assert receipt["status"] == "policy_draft_ready"
-    assert runtime.calls == 1
+    assert duplicate_receipt["status"] == "provider_result_accepted_not_persisted"
+    assert duplicate_receipt["attempt_id"]
+    assert runtime.calls == 2
     assert await (await worker._coordinator(factory)).run(delivery) == receipt
     async with factory() as session:
         for table in [
@@ -845,6 +866,7 @@ async def test_dirty_setup_rejects_before_request_or_provider(
             assert await session.scalar(text("select count(*) from " + table)) == 0
 
 
+@pytest.mark.usefixtures("scripted_model_profile")
 async def test_stale_queued_configuration_failure_is_reclaimed_and_finishes_same_delivery(
     automatic_source, monkeypatch
 ):

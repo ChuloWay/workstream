@@ -12,11 +12,6 @@ import socket
 import ssl
 from threading import Event, Thread
 
-from cryptography import x509
-from cryptography.hazmat.primitives import hashes, serialization
-from cryptography.hazmat.primitives.asymmetric import ec
-from cryptography.x509.oid import NameOID
-
 PREFACE = b"PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n"
 
 
@@ -70,6 +65,11 @@ def receive_request(connection):
 @contextmanager
 def goaway_fixture(tmp_path):
     """Observe every fresh TLS connection until the built CLI exits."""
+    from cryptography import x509
+    from cryptography.hazmat.primitives import hashes, serialization
+    from cryptography.hazmat.primitives.asymmetric import ec
+    from cryptography.x509.oid import NameOID
+
     key = ec.generate_private_key(ec.SECP256R1())
     name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "CLI test loopback")])
     now = datetime.now(timezone.utc)

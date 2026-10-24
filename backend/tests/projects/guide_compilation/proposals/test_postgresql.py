@@ -60,6 +60,7 @@ async def approve(factory, command, actor, grant, payload):
             from app.adapters.checkers import (
                 external_checker_capability_projection,
                 external_checker_registry_reader,
+                model_profile_reader,
             )
 
             return await GuideProposalService(
@@ -71,6 +72,7 @@ async def approve(factory, command, actor, grant, payload):
                     grant,
                 ),
                 external_checker_registry_reader(session),
+                model_profile_reader(session),
             ).approve(
                 payload,
                 actor=actor,

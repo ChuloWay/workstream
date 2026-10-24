@@ -9,18 +9,23 @@ from workstream_mcp.schemas import (
     ACTOR_LIFECYCLE_INPUT_SCHEMAS,
     ADMIN_GRANT_INPUT_SCHEMAS,
     AUTHORIZATION_CONTEXT_INPUT_SCHEMA,
+    CHECKER_ARTIFACT_CONTRACT_NAMES,
     CONTRIBUTION_POLICY_INPUT_SCHEMAS,
     EMPTY_INPUT_SCHEMA,
     GUIDE_INPUT_SCHEMAS,
+    GUIDE_LIFECYCLE_CONTRACT_NAMES,
     POLICY_INPUT_SCHEMAS,
     PROFILE_UPDATE_INPUT_SCHEMA,
     PROJECT_GRANT_INPUT_SCHEMAS,
     PROJECT_INPUT_SCHEMAS,
     WORKSPACE_READ_INPUT_SCHEMAS,
     authorization_context_output_schema,
+    checker_artifact_input_schema,
+    guide_lifecycle_input_schema,
     profile_output_schema,
     profile_update_output_schema,
 )
+from workstream_mcp.tools.checker_artifacts import TOOL_NAMES as CHECKER_ARTIFACT_TOOL_NAMES
 from workstream_mcp.tools.context import TOOL_NAME as CONTEXT_TOOL_NAME
 from workstream_mcp.tools.context import definition as context_definition
 from workstream_mcp.tools.profile import (
@@ -111,6 +116,31 @@ def test_mcp_tool_listing_exposes_exactly_the_chunk_catalogue(
         "workstream_contribution_policy_update",
         "workstream_contribution_policy_publish",
         "workstream_contribution_policy_retire",
+        "workstream_project_guides_list",
+        "workstream_project_guide_get",
+        "workstream_guide_activate",
+        "workstream_guide_activation_readiness_get",
+        "workstream_guide_proposal_correct",
+        "workstream_guide_correction_dispatch",
+        "workstream_guide_post_policy_get",
+        "workstream_guide_post_policy_approve",
+        "workstream_guide_post_policy_correct",
+        "workstream_guide_pre_submission_approve",
+        "workstream_guide_proposal_get",
+        "workstream_guide_document_upload",
+        "workstream_guide_document_content_get",
+        "workstream_guide_effective_submission_artifact_policy_get",
+        "workstream_guide_pre_submit_checker_policy_get",
+        "workstream_guide_setup_latest_get",
+        "workstream_guide_submission_artifact_policies_list",
+        "workstream_guide_submission_artifact_policy_create",
+        "workstream_guide_submission_artifact_policy_get",
+        "workstream_guide_submission_artifact_policy_update",
+        "workstream_guide_sufficiency_reports_list",
+        "workstream_guide_sufficiency_report_create",
+        "workstream_guide_sufficiency_report_get",
+        "workstream_guide_sufficiency_warnings_acknowledge",
+        *CHECKER_ARTIFACT_TOOL_NAMES,
     ]
     assert [item["inputSchema"] for item in listed] == [
         EMPTY_INPUT_SCHEMA,
@@ -126,6 +156,11 @@ def test_mcp_tool_listing_exposes_exactly_the_chunk_catalogue(
         *POLICY_INPUT_SCHEMAS.values(),
         *WORKSPACE_READ_INPUT_SCHEMAS.values(),
         *CONTRIBUTION_POLICY_INPUT_SCHEMAS.values(),
+        *(guide_lifecycle_input_schema(name) for name in GUIDE_LIFECYCLE_CONTRACT_NAMES),
+        *(
+            checker_artifact_input_schema(name)
+            for name in CHECKER_ARTIFACT_CONTRACT_NAMES
+        ),
     ]
 
 

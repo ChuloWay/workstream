@@ -43,6 +43,7 @@ def test_unsafe_api_origins_fail_closed(url: str) -> None:
         {"port": 0},
         {"max_request_bytes": True},
         {"max_response_bytes": 1},
+        {"max_document_bytes": 1},
         {"max_header_bytes": 1_048_577},
         {"max_request_frames": 0},
         {"max_in_flight": 0},
@@ -50,8 +51,10 @@ def test_unsafe_api_origins_fail_closed(url: str) -> None:
         {"connect_timeout_seconds": True},
         {"read_timeout_seconds": 0.01},
         {"total_timeout_seconds": 0.01},
+        {"document_timeout_seconds": 0.5},
         {"ingress_timeout_seconds": 181},
         {"connect_timeout_seconds": 5, "read_timeout_seconds": 6, "total_timeout_seconds": 5},
+        {"connect_timeout_seconds": 5, "document_timeout_seconds": 4},
         {"allowed_hosts": ()},
         {"allowed_hosts": ("",)},
         {"allowed_hosts": ("*.example.com:*",)},
@@ -76,6 +79,7 @@ def test_environment_requires_origin_and_parses_all_settings(
     monkeypatch.setenv("WORKSTREAM_MCP_ALLOWED_HOSTS", "example.test:443, localhost:*")
     monkeypatch.setenv("WORKSTREAM_MCP_MAX_REQUEST_BYTES", "2048")
     monkeypatch.setenv("WORKSTREAM_MCP_MAX_RESPONSE_BYTES", "3072")
+    monkeypatch.setenv("WORKSTREAM_MCP_MAX_DOCUMENT_BYTES", "4096")
     monkeypatch.setenv("WORKSTREAM_MCP_MAX_HEADER_BYTES", "4096")
     monkeypatch.setenv("WORKSTREAM_MCP_MAX_REQUEST_FRAMES", "64")
     monkeypatch.setenv("WORKSTREAM_MCP_MAX_IN_FLIGHT", "2")
@@ -83,12 +87,16 @@ def test_environment_requires_origin_and_parses_all_settings(
     monkeypatch.setenv("WORKSTREAM_MCP_CONNECT_TIMEOUT_SECONDS", "2")
     monkeypatch.setenv("WORKSTREAM_MCP_READ_TIMEOUT_SECONDS", "3")
     monkeypatch.setenv("WORKSTREAM_MCP_TOTAL_TIMEOUT_SECONDS", "4")
+    monkeypatch.setenv("WORKSTREAM_MCP_DOCUMENT_TIMEOUT_SECONDS", "30")
     monkeypatch.setenv("WORKSTREAM_MCP_KEEP_ALIVE_SECONDS", "4")
     settings = Settings.from_env()
     assert settings.api_url == "http://127.0.0.1:9000"
     assert settings.port == 9001
     assert settings.allowed_hosts == ("example.test:443", "localhost:*")
     assert settings.max_request_frames == 64
+    assert settings.max_response_bytes == 3072
+    assert settings.max_document_bytes == 4096
+    assert settings.document_timeout_seconds == 30
 
 
 @pytest.mark.parametrize(

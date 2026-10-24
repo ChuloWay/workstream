@@ -1,0 +1,601 @@
+{
+  "canonical_sha256": "60e084ada145f6441ea1c9547ae3fcfe2c59070913f09cbcbdb3190431167e09",
+  "components": {
+    "schemas": {
+      "ApiError": {
+        "additionalProperties": false,
+        "description": "Canonical machine-readable API error.",
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "correlation_id": {
+            "title": "Correlation Id",
+            "type": "string"
+          },
+          "details": {
+            "additionalProperties": true,
+            "title": "Details",
+            "type": "object"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "retryable": {
+            "title": "Retryable",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "code",
+          "message",
+          "details",
+          "correlation_id",
+          "retryable"
+        ],
+        "title": "ApiError",
+        "type": "object"
+      },
+      "ApiErrorResponse": {
+        "additionalProperties": false,
+        "description": "Canonical error plus additive legacy compatibility fields.",
+        "properties": {
+          "detail": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          },
+          "error": {
+            "$ref": "#/components/schemas/ApiError"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "title": "ApiErrorResponse",
+        "type": "object"
+      },
+      "ExternalCheckerRegistryEntry": {
+        "additionalProperties": false,
+        "description": "Published registry identity; publication does not authorize execution.",
+        "properties": {
+          "authorization_decision_event_id": {
+            "format": "uuid",
+            "title": "Authorization Decision Event Id",
+            "type": "string"
+          },
+          "capability_id": {
+            "maxLength": 100,
+            "minLength": 1,
+            "pattern": "^[a-z][a-z0-9_.-]*$",
+            "title": "Capability Id",
+            "type": "string"
+          },
+          "capability_version": {
+            "maxLength": 50,
+            "minLength": 1,
+            "pattern": "^[a-z0-9][a-z0-9_.-]*$",
+            "title": "Capability Version",
+            "type": "string"
+          },
+          "configuration_schema": {
+            "$ref": "#/components/schemas/ExternalCheckerSchema"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "entry_digest": {
+            "pattern": "^sha256:[0-9a-f]{64}$",
+            "title": "Entry Digest",
+            "type": "string"
+          },
+          "image_digest": {
+            "pattern": "^sha256:[0-9a-f]{64}$",
+            "title": "Image Digest",
+            "type": "string"
+          },
+          "input_schema": {
+            "$ref": "#/components/schemas/ExternalCheckerSchema"
+          },
+          "output_schema": {
+            "$ref": "#/components/schemas/ExternalCheckerSchema"
+          },
+          "phase": {
+            "enum": [
+              "pre_submit",
+              "post_submit"
+            ],
+            "title": "Phase",
+            "type": "string"
+          },
+          "registered_by_actor_profile_id": {
+            "format": "uuid",
+            "title": "Registered By Actor Profile Id",
+            "type": "string"
+          },
+          "registration_operation_id": {
+            "format": "uuid",
+            "title": "Registration Operation Id",
+            "type": "string"
+          },
+          "registry_entry_id": {
+            "format": "uuid",
+            "title": "Registry Entry Id",
+            "type": "string"
+          },
+          "resources": {
+            "$ref": "#/components/schemas/ExternalCheckerResourceLimits"
+          }
+        },
+        "required": [
+          "capability_id",
+          "capability_version",
+          "phase",
+          "image_digest",
+          "configuration_schema",
+          "input_schema",
+          "output_schema",
+          "resources",
+          "registry_entry_id",
+          "entry_digest",
+          "registration_operation_id",
+          "registered_by_actor_profile_id",
+          "authorization_decision_event_id",
+          "created_at"
+        ],
+        "title": "ExternalCheckerRegistryEntry",
+        "type": "object"
+      },
+      "ExternalCheckerRegistrySpec": {
+        "additionalProperties": false,
+        "description": "Canonical immutable definition supplied for one external image version.",
+        "properties": {
+          "capability_id": {
+            "maxLength": 100,
+            "minLength": 1,
+            "pattern": "^[a-z][a-z0-9_.-]*$",
+            "title": "Capability Id",
+            "type": "string"
+          },
+          "capability_version": {
+            "maxLength": 50,
+            "minLength": 1,
+            "pattern": "^[a-z0-9][a-z0-9_.-]*$",
+            "title": "Capability Version",
+            "type": "string"
+          },
+          "configuration_schema": {
+            "$ref": "#/components/schemas/ExternalCheckerSchema"
+          },
+          "image_digest": {
+            "pattern": "^sha256:[0-9a-f]{64}$",
+            "title": "Image Digest",
+            "type": "string"
+          },
+          "input_schema": {
+            "$ref": "#/components/schemas/ExternalCheckerSchema"
+          },
+          "output_schema": {
+            "$ref": "#/components/schemas/ExternalCheckerSchema"
+          },
+          "phase": {
+            "enum": [
+              "pre_submit",
+              "post_submit"
+            ],
+            "title": "Phase",
+            "type": "string"
+          },
+          "resources": {
+            "$ref": "#/components/schemas/ExternalCheckerResourceLimits"
+          }
+        },
+        "required": [
+          "capability_id",
+          "capability_version",
+          "phase",
+          "image_digest",
+          "configuration_schema",
+          "input_schema",
+          "output_schema",
+          "resources"
+        ],
+        "title": "ExternalCheckerRegistrySpec",
+        "type": "object"
+      },
+      "ExternalCheckerResourceLimits": {
+        "additionalProperties": false,
+        "description": "Registry-owned finite resource ceilings, not representative defaults.",
+        "properties": {
+          "cpu_millis": {
+            "maximum": 64000.0,
+            "minimum": 100.0,
+            "title": "Cpu Millis",
+            "type": "integer"
+          },
+          "deadline_ms": {
+            "maximum": 3600000.0,
+            "minimum": 100.0,
+            "title": "Deadline Ms",
+            "type": "integer"
+          },
+          "maximum_output_bytes": {
+            "maximum": 65536.0,
+            "minimum": 256.0,
+            "title": "Maximum Output Bytes",
+            "type": "integer"
+          },
+          "memory_bytes": {
+            "maximum": 68719476736.0,
+            "minimum": 16777216.0,
+            "title": "Memory Bytes",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "cpu_millis",
+          "memory_bytes",
+          "deadline_ms",
+          "maximum_output_bytes"
+        ],
+        "title": "ExternalCheckerResourceLimits",
+        "type": "object"
+      },
+      "ExternalCheckerSchema": {
+        "additionalProperties": false,
+        "description": "One bounded self-contained JSON Schema with an exact canonical identity.",
+        "properties": {
+          "document": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "title": "Document",
+            "type": "object"
+          },
+          "schema_id": {
+            "maxLength": 100,
+            "minLength": 1,
+            "pattern": "^[a-z][a-z0-9_.-]*$",
+            "title": "Schema Id",
+            "type": "string"
+          },
+          "schema_sha256": {
+            "pattern": "^sha256:[0-9a-f]{64}$",
+            "title": "Schema Sha256",
+            "type": "string"
+          },
+          "schema_version": {
+            "maxLength": 50,
+            "minLength": 1,
+            "pattern": "^[a-z0-9][a-z0-9_.-]*$",
+            "title": "Schema Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "schema_id",
+          "schema_version",
+          "document",
+          "schema_sha256"
+        ],
+        "title": "ExternalCheckerSchema",
+        "type": "object"
+      },
+      "JsonValue": {}
+    }
+  },
+  "operation": {
+    "description": "Publish or exactly replay one immutable digest-pinned checker entry.",
+    "operationId": "register_external_checker_api_v1_operations_external_checker_registry_post",
+    "parameters": [
+      {
+        "in": "header",
+        "name": "Idempotency-Key",
+        "required": true,
+        "schema": {
+          "format": "uuid",
+          "type": "string"
+        }
+      },
+      {
+        "in": "header",
+        "name": "X-Request-ID",
+        "required": false,
+        "schema": {
+          "format": "uuid",
+          "maxLength": 36,
+          "minLength": 36,
+          "type": "string"
+        }
+      },
+      {
+        "in": "header",
+        "name": "X-Correlation-ID",
+        "required": false,
+        "schema": {
+          "format": "uuid",
+          "maxLength": 36,
+          "minLength": 36,
+          "type": "string"
+        }
+      }
+    ],
+    "requestBody": {
+      "content": {
+        "application/json": {
+          "schema": {
+            "$ref": "#/components/schemas/ExternalCheckerRegistrySpec"
+          }
+        }
+      },
+      "required": true
+    },
+    "responses": {
+      "201": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ExternalCheckerRegistryEntry"
+            }
+          }
+        },
+        "description": "Successful Response",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "400": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Invalid request.",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "401": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Authentication failed.",
+        "headers": {
+          "WWW-Authenticate": {
+            "schema": {
+              "type": "string"
+            }
+          },
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "403": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Forbidden",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "404": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Not Found",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "409": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Conflict",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "422": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Unprocessable Entity",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "500": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Internal server error.",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "503": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Service Unavailable",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "security": [
+      {
+        "HTTPBearer": []
+      }
+    ],
+    "summary": "Register External Checker",
+    "tags": [
+      "checkers"
+    ],
+    "x-workstream-action-id": "checker.registry.register"
+  },
+  "schema_version": 1,
+  "source": {
+    "action_id": "checker.registry.register",
+    "backend_git_sha": "bb39ac10aed24e3484f3155706f7a8902ef97694",
+    "method": "POST",
+    "openapi_version": "3.1.0",
+    "path": "/api/v1/operations/external-checker-registry"
+  }
+}

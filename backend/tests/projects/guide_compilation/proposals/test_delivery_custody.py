@@ -101,7 +101,10 @@ async def test_correction_dispatch_distinguishes_storage_from_conflict(monkeypat
     monkeypatch.setattr(correction_dispatch.GuideCompilationService, "request_correction", request)
     publish = AsyncMock()
     monkeypatch.setattr(correction_dispatch, "dispatch_project_guide_compilation_after_commit", publish)
-    service = correction_dispatch.GuideCorrectionDispatchService(session, object(), object())
+    service = correction_dispatch.GuideCorrectionDispatchService(
+        session, object(), object(), profiles=object()
+    )
+    monkeypatch.setattr(service, "_selected_inputs", AsyncMock(return_value=object()))
     selection = GuideProposalSelection(project_id=uuid4(), guide_id=uuid4(), compilation_id=uuid4())
     actor, operation = object(), uuid4()
     with pytest.raises(GuideProposalError) as error:

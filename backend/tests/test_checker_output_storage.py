@@ -55,11 +55,13 @@ async def _store_verified_output(
             reservation_ttl_seconds=360,
             total_deadline_seconds=300,
         )
-        relationships = await seed_checker_output_relationships(session, namespace, policy_bundle=policy_bundle)
+        relationships = await seed_checker_output_relationships(
+            session, namespace, policy_bundle=policy_bundle
+        )
         async with minted_source(
             source_path,
             payload,
-            media_type="text/plain",
+            media_type="application/json",
             limits=limits,
         ) as source:
             project_id, task_id, checker_run_id, admission = await _admit_checker_output(
@@ -77,14 +79,16 @@ async def _store_verified_output(
                 _AllowArtifactAuthority(),
             )
             await orchestrator.ensure_storage_namespace()
-            assert await orchestrator.execute_committed_put(
-                attempt_id=admission.attempt_id,
-                source=source,
-            ) == "stored_pending_verification"
+            assert (
+                await orchestrator.execute_committed_put(
+                    attempt_id=admission.attempt_id,
+                    source=source,
+                )
+                == "stored_pending_verification"
+            )
             job_id = await session.scalar(
                 select(ArtifactVerificationJob.id).where(
-                    ArtifactVerificationJob.originating_put_attempt_id
-                    == str(admission.attempt_id)
+                    ArtifactVerificationJob.originating_put_attempt_id == str(admission.attempt_id)
                 )
             )
             assert job_id is not None
@@ -98,8 +102,10 @@ async def _store_verified_output(
             )
             attempt = await session.get(ArtifactPutAttempt, str(admission.attempt_id))
             assert attempt is not None and receipt_id is not None
+            assert attempt.model_call_attempt_id is not None
             assert attempt.replica_id is not None
             logical_role = attempt.logical_role
+            model_call_attempt_id = attempt.model_call_attempt_id
             replica_id = attempt.replica_id
             content_id = await session.scalar(
                 text("select content_id from artifact_replicas where id=:replica_id"),
@@ -112,6 +118,7 @@ async def _store_verified_output(
                 project_id=project_id,
                 task_id=task_id,
                 checker_run_id=checker_run_id,
+                model_call_attempt_id=model_call_attempt_id,
                 put_attempt_id=str(admission.attempt_id),
                 verification_job_id=str(job_id),
                 replica_id=str(replica_id),
@@ -140,7 +147,7 @@ async def _verified_output(database_url: str, tmp_path: Path):
             store=store,
             policy_bundle=policy_bundle,
             source_path=tmp_path / "checker-output",
-            payload=b"exact checker output",
+            payload=b'{"result":"exact checker output"}',
         )
         case.settings = settings
         case.store = store
@@ -156,8 +163,8 @@ def _binding_values(case, **changes):
         "id": str(new_record_id()),
         "content_id": case.content_id,
         "project_id": case.project_id,
-        "resource_type": "checker_run",
-        "resource_id": case.checker_run_id,
+        "resource_type": "checker_model_call",
+        "resource_id": case.model_call_attempt_id,
         "logical_role": case.logical_role,
         "scope_version": 1,
         "actor_id": ServiceIdentity.ARTIFACT_CHECKER_OUTPUT.value,
@@ -168,6 +175,16 @@ def _binding_values(case, **changes):
     }
     values.update(changes)
     return values
+
+
+def _historical_checker_run_binding_values(case, **changes):
+    """Build the retained pre-model-call CHECKERS binding used by migration proofs."""
+    return _binding_values(
+        case,
+        resource_type="checker_run",
+        resource_id=case.checker_run_id,
+        **changes,
+    )
 
 
 _INSERT_BINDING = text(
@@ -212,10 +229,7 @@ async def _sealed_chain(session, case) -> tuple[bool, bool, bool]:
         ("artifact_put_attempts", "put_attempt_id"),
     ):
         value = await session.scalar(
-            text(
-                f"select checker_output_custody_sealed from {table} "
-                "where id=:id"
-            ),
+            text(f"select checker_output_custody_sealed from {table} where id=:id"),
             {"id": getattr(case, attribute)},
         )
         values.append(bool(value))
@@ -225,10 +239,7 @@ async def _sealed_chain(session, case) -> tuple[bool, bool, bool]:
 async def _wait_for_lock(session, backend_pid: int) -> None:
     for _ in range(500):
         waiting = await session.scalar(
-            text(
-                "select exists(select 1 from pg_locks "
-                "where pid=:pid and not granted)"
-            ),
+            text("select exists(select 1 from pg_locks where pid=:pid and not granted)"),
             {"pid": backend_pid},
         )
         if waiting:
@@ -245,9 +256,7 @@ async def _transaction(connection, isolation: str):
 
 def _ancestor_update(case, ancestor: str):
     table, attribute, assignment, _trigger, _error = _ANCESTOR_MUTATIONS[ancestor]
-    return text(f"update {table} set {assignment} where id=:id"), {
-        "id": getattr(case, attribute)
-    }
+    return text(f"update {table} set {assignment} where id=:id"), {"id": getattr(case, attribute)}
 
 
 def _invalid_ancestor_update(case, ancestor: str):
@@ -263,9 +272,7 @@ def _invalid_ancestor_update(case, ancestor: str):
         ),
         "replica": "provider_object_ref=provider_object_ref || '-moved'",
     }[ancestor]
-    return text(f"update {table} set {assignment} where id=:id"), {
-        "id": getattr(case, attribute)
-    }
+    return text(f"update {table} set {assignment} where id=:id"), {"id": getattr(case, attribute)}
 
 
 async def _ancestor_without_seal(session, case, ancestor: str):
@@ -331,13 +338,13 @@ async def _binding_first_race(case, ancestor: str, isolation: str) -> None:
     async with case.factory() as session:
         assert await _sealed_chain(session, case) == (True, True, True)
         assert await _ancestor_without_seal(session, case, ancestor) == before
-        assert await session.scalar(
-            text(
-                "select count(*) from artifact_bindings "
-                "where put_attempt_id=:put_attempt_id"
-            ),
-            {"put_attempt_id": case.put_attempt_id},
-        ) == 1
+        assert (
+            await session.scalar(
+                text("select count(*) from artifact_bindings where put_attempt_id=:put_attempt_id"),
+                {"put_attempt_id": case.put_attempt_id},
+            )
+            == 1
+        )
 
 
 async def _update_first_race(case, ancestor: str, isolation: str) -> None:
@@ -381,13 +388,13 @@ async def _update_first_race(case, ancestor: str, isolation: str) -> None:
     async with case.factory() as session:
         assert await _sealed_chain(session, case) == (False, False, False)
         assert await _ancestor_without_seal(session, case, ancestor) != before
-        assert await session.scalar(
-            text(
-                "select count(*) from artifact_bindings "
-                "where put_attempt_id=:put_attempt_id"
-            ),
-            {"put_attempt_id": case.put_attempt_id},
-        ) == 0
+        assert (
+            await session.scalar(
+                text("select count(*) from artifact_bindings where put_attempt_id=:put_attempt_id"),
+                {"put_attempt_id": case.put_attempt_id},
+            )
+            == 0
+        )
 
 
 @pytest.mark.asyncio
@@ -413,12 +420,15 @@ async def test_exact_verified_checker_output_binding_and_generic_binding_remain_
                 ),
             )
         async with case.factory() as session:
-            assert await session.scalar(
-                text(
-                    "select count(*) from artifact_bindings "
-                    "where resource_type in ('checker_run','task')"
+            assert (
+                await session.scalar(
+                    text(
+                        "select count(*) from artifact_bindings "
+                        "where resource_type in ('checker_model_call','task')"
+                    )
                 )
-            ) == 2
+                == 2
+            )
 
 
 @pytest.mark.asyncio
@@ -436,8 +446,7 @@ async def test_checker_binding_rejects_null_verification_terminal_result(
         async with case.factory() as session, session.begin():
             await session.execute(
                 text(
-                    "update artifact_verification_jobs "
-                    "set terminal_result_code=null where id=:id"
+                    "update artifact_verification_jobs set terminal_result_code=null where id=:id"
                 ),
                 {"id": case.verification_job_id},
             )
@@ -450,13 +459,16 @@ async def test_checker_binding_rejects_null_verification_terminal_result(
                 await session.execute(_INSERT_BINDING, _binding_values(case))
         async with case.factory() as session:
             assert await _sealed_chain(session, case) == (False, False, False)
-            assert await session.scalar(
-                text(
-                    "select count(*) from artifact_bindings "
-                    "where put_attempt_id=:put_attempt_id"
-                ),
-                {"put_attempt_id": case.put_attempt_id},
-            ) == 0
+            assert (
+                await session.scalar(
+                    text(
+                        "select count(*) from artifact_bindings "
+                        "where put_attempt_id=:put_attempt_id"
+                    ),
+                    {"put_attempt_id": case.put_attempt_id},
+                )
+                == 0
+            )
 
         async with case.factory() as session:
             mutation = await session.begin()
@@ -477,13 +489,16 @@ async def test_checker_binding_rejects_null_verification_terminal_result(
 
         async with case.factory() as session:
             assert await _sealed_chain(session, case) == (False, False, False)
-            assert await session.scalar(
-                text(
-                    "select count(*) from artifact_bindings "
-                    "where put_attempt_id=:put_attempt_id"
-                ),
-                {"put_attempt_id": case.put_attempt_id},
-            ) == 0
+            assert (
+                await session.scalar(
+                    text(
+                        "select count(*) from artifact_bindings "
+                        "where put_attempt_id=:put_attempt_id"
+                    ),
+                    {"put_attempt_id": case.put_attempt_id},
+                )
+                == 0
+            )
 
 
 @pytest.mark.asyncio
@@ -499,7 +514,7 @@ async def test_checker_binding_rejects_mixed_or_foreign_ancestry(
             store=case.store,
             policy_bundle=case.policy_bundle,
             source_path=tmp_path / "other-checker-output",
-            payload=b"distinct independently verified checker output",
+            payload=b'{"result":"distinct independently verified checker output"}',
         )
         assert case.put_attempt_id != other.put_attempt_id
         assert case.verification_receipt_id != other.verification_receipt_id
@@ -510,13 +525,25 @@ async def test_checker_binding_rejects_mixed_or_foreign_ancestry(
             control = await session.begin_nested()
             await session.execute(_INSERT_BINDING, _binding_values(case))
             await session.execute(_INSERT_BINDING, _binding_values(other))
-            assert await session.scalar(
-                text("select count(*) from artifact_bindings where resource_type='checker_run'")
-            ) == 2
+            assert (
+                await session.scalar(
+                    text(
+                        "select count(*) from artifact_bindings "
+                        "where resource_type='checker_model_call'"
+                    )
+                )
+                == 2
+            )
             await control.rollback()
-            assert await session.scalar(
-                text("select count(*) from artifact_bindings where resource_type='checker_run'")
-            ) == 0
+            assert (
+                await session.scalar(
+                    text(
+                        "select count(*) from artifact_bindings "
+                        "where resource_type='checker_model_call'"
+                    )
+                )
+                == 0
+            )
 
         mixed_lineages = (
             {
@@ -539,9 +566,15 @@ async def test_checker_binding_rejects_mixed_or_foreign_ancestry(
                         _binding_values(case, **mixed),
                     )
         async with case.factory() as session:
-            assert await session.scalar(
-                text("select count(*) from artifact_bindings where resource_type='checker_run'")
-            ) == 0
+            assert (
+                await session.scalar(
+                    text(
+                        "select count(*) from artifact_bindings "
+                        "where resource_type='checker_model_call'"
+                    )
+                )
+                == 0
+            )
 
 
 @pytest.mark.asyncio
@@ -564,9 +597,7 @@ async def test_checker_attempt_static_custody_allows_only_execution_lifecycle(
             ):
                 async with case.factory() as session, session.begin():
                     await session.execute(
-                        text(
-                            f"update artifact_put_attempts set {assignment} where id=:id"
-                        ),
+                        text(f"update artifact_put_attempts set {assignment} where id=:id"),
                         {"id": case.put_attempt_id},
                     )
         with pytest.raises(
@@ -605,25 +636,18 @@ async def test_binding_seals_exact_ancestry_but_preserves_replica_health(
             with pytest.raises(DBAPIError, match="seal requires binding"):
                 async with case.factory() as session, session.begin():
                     await session.execute(
-                        text(
-                            f"update {table} set checker_output_custody_sealed=true "
-                            "where id=:id"
-                        ),
+                        text(f"update {table} set checker_output_custody_sealed=true where id=:id"),
                         {"id": getattr(case, attribute)},
                     )
 
         async with case.factory() as session, session.begin():
             await session.execute(
-                text(
-                    "update artifact_put_attempts set cas_version=cas_version+1 "
-                    "where id=:id"
-                ),
+                text("update artifact_put_attempts set cas_version=cas_version+1 where id=:id"),
                 {"id": case.put_attempt_id},
             )
             await session.execute(
                 text(
-                    "update artifact_verification_jobs set cas_version=cas_version+1 "
-                    "where id=:id"
+                    "update artifact_verification_jobs set cas_version=cas_version+1 where id=:id"
                 ),
                 {"id": case.verification_job_id},
             )
@@ -683,10 +707,13 @@ async def test_binding_seals_exact_ancestry_but_preserves_replica_health(
                 )
                 assert after != before
                 await transaction.rollback()
-                assert await session.scalar(
-                    text(f"select to_jsonb(value) from {table} value where id=:id"),
-                    {"id": getattr(case, attribute)},
-                ) == before
+                assert (
+                    await session.scalar(
+                        text(f"select to_jsonb(value) from {table} value where id=:id"),
+                        {"id": getattr(case, attribute)},
+                    )
+                    == before
+                )
                 await session.rollback()
 
 
@@ -707,10 +734,13 @@ async def test_binding_rollback_removes_all_ancestry_seals(
             await transaction.rollback()
         async with case.factory() as session:
             assert await _sealed_chain(session, case) == (False, False, False)
-            assert await session.scalar(
-                text("select count(*) from artifact_bindings where id=:id"),
-                {"id": binding_id},
-            ) == 0
+            assert (
+                await session.scalar(
+                    text("select count(*) from artifact_bindings where id=:id"),
+                    {"id": binding_id},
+                )
+                == 0
+            )
 
 
 @pytest.mark.parametrize("ancestor", tuple(_ANCESTOR_MUTATIONS))
@@ -732,7 +762,7 @@ async def test_binding_and_ancestor_updates_serialize_fail_closed(
             store=case.store,
             policy_bundle=case.policy_bundle,
             source_path=tmp_path / f"update-first-{ancestor}",
-            payload=f"update-first-{isolation}-{ancestor}".encode(),
+            payload=('{"result":"update-first-' + isolation + "-" + ancestor + '"}').encode(),
         )
         other.engine = case.engine
         await _update_first_race(other, ancestor, isolation)
@@ -760,24 +790,45 @@ async def test_artifact_binding_truncate_custody_blocks_direct_and_cascade_delet
                 async with case.factory() as session, session.begin():
                     await session.execute(text(statement))
             async with case.factory() as session:
-                assert await session.scalar(
-                    text("select count(*) from artifact_bindings where id=:id"),
-                    {"id": binding_id},
-                ) == 1
+                assert (
+                    await session.scalar(
+                        text("select count(*) from artifact_bindings where id=:id"),
+                        {"id": binding_id},
+                    )
+                    == 1
+                )
 
         async with case.factory() as session:
             transaction = await session.begin()
             try:
                 # Isolate the binding trigger from the new inbound packet FK. This
                 # rollback-only probe has no packets; production custody stays intact.
-                assert await session.scalar(text("select count(*) from review_packet_manifests")) == 0
-                await session.execute(text(
-                    "alter table review_packet_manifests drop constraint "
-                    "fk_review_packet_manifests_submission_binding_id_artifa_4ee3"
-                ))
+                assert (
+                    await session.scalar(text("select count(*) from review_packet_manifests")) == 0
+                )
+                await session.execute(
+                    text(
+                        "alter table review_packet_manifests drop constraint "
+                        "fk_review_packet_manifests_submission_binding_id_artifa_4ee3"
+                    )
+                )
                 for table, constraint in (
-                    ("submission_binding_receipts", "fk_submission_binding_receipts_binding_id_artifact_bindings"),
-                    ("submission_dispatches", "fk_submission_dispatches_artifact_binding_id_artifact_bindings"),
+                    (
+                        "model_usage_effects",
+                        "fk_model_usage_effects_request_binding",
+                    ),
+                    (
+                        "model_usage_effects",
+                        "fk_model_usage_effects_response_binding",
+                    ),
+                    (
+                        "submission_binding_receipts",
+                        "fk_submission_binding_receipts_binding_id_artifact_bindings",
+                    ),
+                    (
+                        "submission_dispatches",
+                        "fk_submission_dispatches_artifact_binding_id_artifact_bindings",
+                    ),
                 ):
                     # Canonical creation already retained one receipt. The
                     # FK removal and deliberate truncation roll back together.
@@ -793,18 +844,24 @@ async def test_artifact_binding_truncate_custody_blocks_direct_and_cascade_delet
                     )
                 )
                 await session.execute(text("truncate artifact_bindings"))
-                assert await session.scalar(
-                    text("select count(*) from artifact_bindings where id=:id"),
-                    {"id": binding_id},
-                ) == 0
+                assert (
+                    await session.scalar(
+                        text("select count(*) from artifact_bindings where id=:id"),
+                        {"id": binding_id},
+                    )
+                    == 0
+                )
             finally:
                 await transaction.rollback()
 
         async with case.factory() as session:
-            assert await session.scalar(
-                text("select count(*) from artifact_bindings where id=:id"),
-                {"id": binding_id},
-            ) == 1
+            assert (
+                await session.scalar(
+                    text("select count(*) from artifact_bindings where id=:id"),
+                    {"id": binding_id},
+                )
+                == 1
+            )
             for table in ("submission_binding_receipts", "submission_dispatches"):
                 assert await session.scalar(text(f"select count(*) from {table}")) == 1
             trigger_definition = await session.scalar(
@@ -817,16 +874,26 @@ async def test_artifact_binding_truncate_custody_blocks_direct_and_cascade_delet
             assert trigger_definition is not None
             assert "BEFORE TRUNCATE" in trigger_definition
             assert "EXECUTE FUNCTION reject_artifact_fact_mutation()" in trigger_definition
-            assert await session.scalar(text(
-                "select tgenabled='O' from pg_trigger "
-                "where tgrelid='artifact_bindings'::regclass "
-                "and tgname='trg_artifact_bindings_no_truncate'"
-            )) is True
-            assert await session.scalar(text(
-                "select count(*) from pg_constraint "
-                "where conrelid='review_packet_manifests'::regclass "
-                "and conname='fk_review_packet_manifests_submission_binding_id_artifa_4ee3'"
-            )) == 1
+            assert (
+                await session.scalar(
+                    text(
+                        "select tgenabled='O' from pg_trigger "
+                        "where tgrelid='artifact_bindings'::regclass "
+                        "and tgname='trg_artifact_bindings_no_truncate'"
+                    )
+                )
+                is True
+            )
+            assert (
+                await session.scalar(
+                    text(
+                        "select count(*) from pg_constraint "
+                        "where conrelid='review_packet_manifests'::regclass "
+                        "and conname='fk_review_packet_manifests_submission_binding_id_artifa_4ee3'"
+                    )
+                )
+                == 1
+            )
 
 
 @pytest.mark.asyncio
@@ -847,28 +914,35 @@ async def test_binding_guard_uses_only_artifact_ancestry_and_exact_owner_fks(
             assert "submissions" not in definition
             assert "workstream_tasks" not in definition
             constraints = dict(
-                (await connection.execute(text(
-                    "select conname,pg_get_constraintdef(oid) from pg_constraint "
-                    "where conrelid='artifact_put_attempts'::regclass and conname in "
-                    "('fk_artifact_put_attempts_checker_run_ownership',"
-                    "'fk_artifact_put_attempts_submission_version',"
-                    "'fk_artifact_put_attempts_task_project')"
-                ))).all()
+                (
+                    await connection.execute(
+                        text(
+                            "select conname,pg_get_constraintdef(oid) from pg_constraint "
+                            "where conrelid='artifact_put_attempts'::regclass and conname in "
+                            "('fk_artifact_put_attempts_checker_run_ownership',"
+                            "'fk_artifact_put_attempts_submission_version',"
+                            "'fk_artifact_put_attempts_task_project')"
+                        )
+                    )
+                ).all()
             )
             assert set(constraints) == {
                 "fk_artifact_put_attempts_checker_run_ownership",
                 "fk_artifact_put_attempts_submission_version",
                 "fk_artifact_put_attempts_task_project",
             }
-            assert "FOREIGN KEY (checker_run_id, task_id, submission_id)" in constraints[
-                "fk_artifact_put_attempts_checker_run_ownership"
-            ]
-            assert "FOREIGN KEY (submission_id, task_id, submission_version)" in constraints[
-                "fk_artifact_put_attempts_submission_version"
-            ]
-            assert "FOREIGN KEY (task_id, project_id)" in constraints[
-                "fk_artifact_put_attempts_task_project"
-            ]
+            assert (
+                "FOREIGN KEY (checker_run_id, task_id, submission_id)"
+                in constraints["fk_artifact_put_attempts_checker_run_ownership"]
+            )
+            assert (
+                "FOREIGN KEY (submission_id, task_id, submission_version)"
+                in constraints["fk_artifact_put_attempts_submission_version"]
+            )
+            assert (
+                "FOREIGN KEY (task_id, project_id)"
+                in constraints["fk_artifact_put_attempts_task_project"]
+            )
     finally:
         await engine.dispose()
 
@@ -945,25 +1019,50 @@ async def _restore_pre_0007_schema(connection) -> None:
         )
     )
     await connection.execute(
-        text(
-            "alter table artifact_verification_jobs "
-            "drop column checker_output_custody_sealed"
-        )
+        text("alter table artifact_verification_jobs drop column checker_output_custody_sealed")
+    )
+    await connection.execute(
+        text("alter table artifact_replicas drop column checker_output_custody_sealed")
+    )
+
+
+async def _arrange_historical_checker_run_output(connection, case) -> None:
+    """Convert one controlled current fixture into its retained pre-model lineage."""
+    await connection.execute(
+        text("alter table artifact_put_attempts disable trigger checker_output_put_attempt_custody")
     )
     await connection.execute(
         text(
-            "alter table artifact_replicas "
-            "drop column checker_output_custody_sealed"
-        )
+            "update artifact_put_attempts set checker_run_id=:run, "
+            "model_call_attempt_id=null where id=:attempt"
+        ),
+        {"run": case.checker_run_id, "attempt": case.put_attempt_id},
     )
+    await connection.execute(
+        text("alter table artifact_put_attempts enable trigger checker_output_put_attempt_custody")
+    )
+    # Only this historical fixture may replace current producer coordinates.
+    # Restore the immutable guard before the upgrade/preservation assertions.
+    await connection.execute(text(
+        "alter table artifact_operation_receipts disable trigger "
+        "trg_artifact_operation_receipts_immutable"
+    ))
+    await connection.execute(
+        text(
+            "update artifact_operation_receipts set checker_run_id=:run, "
+            "model_call_attempt_id=null where put_attempt_id=:attempt"
+        ),
+        {"run": case.checker_run_id, "attempt": case.put_attempt_id},
+    )
+    await connection.execute(text(
+        "alter table artifact_operation_receipts enable trigger "
+        "trg_artifact_operation_receipts_immutable"
+    ))
 
 
 def _run_0007_upgrade(connection) -> None:
     module = runpy.run_path(
-        str(
-            Path(__file__).resolve().parents[1]
-            / "alembic/versions/0007_checker_output_custody.py"
-        )
+        str(Path(__file__).resolve().parents[1] / "alembic/versions/0007_checker_output_custody.py")
     )
     with Operations.context(MigrationContext.configure(connection)):
         module["upgrade"]()
@@ -984,6 +1083,7 @@ async def test_migration_refuses_unprovable_or_inconsistent_retained_checker_att
             )
         async with case.factory() as session:
             connection = await session.connection()
+            await _arrange_historical_checker_run_output(connection, case)
             await _restore_pre_0007_schema(connection)
             before = await session.scalar(
                 text("select to_jsonb(a) from artifact_put_attempts a where id=:id"),
@@ -995,10 +1095,13 @@ async def test_migration_refuses_unprovable_or_inconsistent_retained_checker_att
             ):
                 async with connection.begin_nested():
                     await connection.run_sync(_run_0007_upgrade)
-            assert await session.scalar(
-                text("select to_jsonb(a) from artifact_put_attempts a where id=:id"),
-                {"id": case.put_attempt_id},
-            ) == before
+            assert (
+                await session.scalar(
+                    text("select to_jsonb(a) from artifact_put_attempts a where id=:id"),
+                    {"id": case.put_attempt_id},
+                )
+                == before
+            )
 
             await session.execute(
                 text("update artifact_put_attempts set task_id=:task where id=:id"),
@@ -1014,8 +1117,11 @@ async def test_migration_refuses_unprovable_or_inconsistent_retained_checker_att
             ):
                 async with connection.begin_nested():
                     await connection.run_sync(_run_0007_upgrade)
-            assert await session.scalar(
-                text("select to_jsonb(a) from artifact_put_attempts a where id=:id"),
-                {"id": case.put_attempt_id},
-            ) == mismatched
+            assert (
+                await session.scalar(
+                    text("select to_jsonb(a) from artifact_put_attempts a where id=:id"),
+                    {"id": case.put_attempt_id},
+                )
+                == mismatched
+            )
             await session.rollback()

@@ -238,7 +238,7 @@ def test_model_evaluation_requires_post_even_with_a_short_duration(stage: str) -
             {
                 "dependency_id": "model_judge",
                 "kind": "model_service",
-                "provisioning": "runtime_gap",
+                "provisioning": "model_proxy",
                 "purpose": "Evaluate the report against the rubric.",
                 "unavailable_code": "implementation_unavailable",
             }
@@ -271,10 +271,106 @@ def test_model_evaluation_requires_post_even_with_a_short_duration(stage: str) -
     compilation_context = context(ids())
     validate_project_guide_compilation_result(compilation_context, proposal)
     if stage == "pre_submit":
-        with pytest.raises(ValueError, match="model evaluation requires post-submit"):
+        with pytest.raises(ValueError, match="model service requires post-submit"):
             require_complete_generated_specifications(compilation_context, proposal)
     else:
         require_complete_generated_specifications(compilation_context, proposal)
+
+
+def test_model_assisted_isolated_execution_requires_post_submit() -> None:
+    specification = _specification(
+        evaluation_method="isolated_execution",
+        execution_mode="bounded_pre_submit",
+        maximum_duration_seconds=30,
+        runtime_dependencies=[
+            {
+                "dependency_id": "execution_runner",
+                "kind": "isolated_execution",
+                "provisioning": "current_runner",
+                "purpose": "Execute the bounded trial.",
+                "unavailable_code": "implementation_unavailable",
+            },
+            {
+                "dependency_id": "model_judge",
+                "kind": "model_service",
+                "provisioning": "model_proxy",
+                "purpose": "Assess the authenticated trial observations.",
+                "unavailable_code": "implementation_unavailable",
+            },
+        ],
+        infrastructure_failures=[
+            {
+                "code": "implementation_unavailable",
+                "condition": "The execution or model service is unavailable.",
+            }
+        ],
+    )
+    requirement = _requirement(
+        disposition="pre_submit_capability_gap",
+        check_specification=specification.model_dump(mode="json"),
+    )
+    proposal = _with_requirement(requirement).model_copy(
+        update={
+            "status": "draft_ready_with_warnings",
+            "capability_suggestions": (
+                CapabilitySuggestion(
+                    requirement_id=requirement.requirement_id,
+                    stage="pre_submit",
+                    title="Trial assessment",
+                    rationale="The trial requires model-assisted assessment.",
+                    evidence_refs=requirement.evidence_refs,
+                ),
+            ),
+        }
+    )
+
+    with pytest.raises(ValueError, match="model service requires post-submit"):
+        require_complete_generated_specifications(context(ids()), proposal)
+
+
+def test_new_generation_rejects_legacy_model_runtime_gap() -> None:
+    specification = _specification(
+        evaluation_method="model_evaluation",
+        execution_mode="background",
+        runtime_dependencies=[
+            {
+                "dependency_id": "model_judge",
+                "kind": "model_service",
+                "provisioning": "runtime_gap",
+                "purpose": "Evaluate the report against the rubric.",
+                "unavailable_code": "implementation_unavailable",
+            }
+        ],
+        infrastructure_failures=[
+            {
+                "code": "implementation_unavailable",
+                "condition": "The model service is unavailable.",
+            }
+        ],
+    )
+    requirement = _requirement(
+        disposition="post_submit_capability_gap",
+        check_specification=specification.model_dump(mode="json"),
+    )
+    proposal = _with_requirement(requirement).model_copy(
+        update={
+            "status": "draft_ready_with_warnings",
+            "capability_suggestions": (
+                CapabilitySuggestion(
+                    requirement_id=requirement.requirement_id,
+                    stage="post_submit",
+                    title="Report evaluation",
+                    rationale="The project image or exact model profile is unavailable.",
+                    evidence_refs=requirement.evidence_refs,
+                ),
+            ),
+        }
+    )
+
+    # Immutable older results remain decodable, but cannot pass new generation admission.
+    ProjectGuideCompilationResult.model_validate(proposal.model_dump(mode="json"))
+    with pytest.raises(ValueError, match="model service requires model proxy"):
+        require_complete_generated_specifications(context(ids()), proposal)
 
 
 def test_pre_submit_binding_must_fit_the_stage_budget() -> None:

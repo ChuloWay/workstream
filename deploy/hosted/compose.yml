@@ -305,6 +305,46 @@ services:
       retries: 6
       start_period: 30s
 
+  model-proxy:
+    <<: *backend-runtime
+    profiles: [model-proxy]
+    image: ${WORKSTREAM_MODEL_PROXY_IMAGE:?set the digest-qualified agents model-proxy image}
+    environment:
+      <<: *backend-environment
+      WORKSTREAM_RELEASE_ROLE: model-proxy
+      WORKSTREAM_DATABASE_URL_FILE: /run/secrets/database_url
+      WORKSTREAM_CHECKER_MODEL_PROXY_SOCKET: /var/lib/workstream/model-runtime/model.sock
+    secrets:
+      - source: database_url
+        target: database_url
+        uid: "${WORKSTREAM_RUNTIME_UID}"
+        gid: "${WORKSTREAM_RUNTIME_GID}"
+        mode: 0400
+    command: [python, -m, app.workers.checker_model_proxy]
+    volumes:
+      - type: bind
+        source: /var/lib/workstream/scratch
+        target: /var/lib/workstream/scratch
+      - type: bind
+        source: /var/lib/workstream/model-runtime
+        target: /var/lib/workstream/model-runtime
+      - type: bind
+        source: ${WORKSTREAM_ARTIFACT_S3_ROLES_ANYWHERE_RUNTIME_CERTIFICATE_HOST_FILE:?set the private runtime certificate path}
+        target: /run/workstream-roles-anywhere/certificate.pem
+        read_only: true
+      - type: bind
+        source: ${WORKSTREAM_ARTIFACT_S3_ROLES_ANYWHERE_RUNTIME_PRIVATE_KEY_HOST_FILE:?set the private runtime key path}
+        target: /run/workstream-roles-anywhere/private-key.pem
+        read_only: true
+    restart: on-failure:5
+    stop_grace_period: 7320s
+    healthcheck:
+      test: [CMD-SHELL, "test -S /var/lib/workstream/model-runtime/model.sock"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
+
   beat:
     <<: *backend-runtime
     environment:

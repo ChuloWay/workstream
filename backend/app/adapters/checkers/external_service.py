@@ -13,6 +13,7 @@ from app.interfaces.external_checker_execution import (
     ExternalCheckerExecutionResponse,
     ExternalCheckerIsolationReceipt,
     ExternalCheckerMaterialGrant,
+    ExternalCheckerModelGrant,
     ExternalCheckerServiceHealth,
 )
 from app.interfaces.external_services import (
@@ -63,12 +64,20 @@ class UnixSocketExternalCheckerAdapter:
         self,
         request: ExternalCheckerExecutionRequest,
         grant: ExternalCheckerMaterialGrant,
+        *,
+        model_grant: ExternalCheckerModelGrant | None = None,
     ) -> ExternalCheckerExecutionResponse:
         """Exchange one bounded request and revalidate every returned fact."""
         try:
             checked = ExternalCheckerExecutionRequest.model_validate(request)
             if type(grant) is not ExternalCheckerMaterialGrant:
                 raise ValueError("external checker material grant is invalid")
+            if model_grant is not None and (
+                type(model_grant) is not ExternalCheckerModelGrant
+                or checked.identity.phase != "post_submit"
+                or model_grant.binding_digest != checked.request_digest
+            ):
+                raise ValueError("external checker model grant is invalid")
             payload = json.dumps(
                 {
                     "protocol_version": _PROTOCOL,
@@ -78,6 +87,14 @@ class UnixSocketExternalCheckerAdapter:
                         "grant_id": grant.grant_id,
                         "binding_digest": grant.binding_digest,
                     },
+                    "model_grant": (
+                        None
+                        if model_grant is None
+                        else {
+                            "grant_id": model_grant.grant_id,
+                            "binding_digest": model_grant.binding_digest,
+                        }
+                    ),
                 },
                 ensure_ascii=False,
                 allow_nan=False,

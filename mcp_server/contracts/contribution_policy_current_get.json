@@ -1,5 +1,5 @@
 {
-  "canonical_sha256": "685945ee6194281742333e761e2bd6133757f8f816839bff1ed9cf5a1315418f",
+  "canonical_sha256": "bec932db6910a9d0c4cd5562fae96e04f53d417d279a5ed16b2e7068832bfcef",
   "components": {
     "schemas": {
       "ApiError": {
@@ -7,24 +7,19 @@
         "description": "Canonical machine-readable API error.",
         "properties": {
           "code": {
-            "title": "Code",
             "type": "string"
           },
           "correlation_id": {
-            "title": "Correlation Id",
             "type": "string"
           },
           "details": {
             "additionalProperties": true,
-            "title": "Details",
             "type": "object"
           },
           "message": {
-            "title": "Message",
             "type": "string"
           },
           "retryable": {
-            "title": "Retryable",
             "type": "boolean"
           }
         },
@@ -35,7 +30,6 @@
           "correlation_id",
           "retryable"
         ],
-        "title": "ApiError",
         "type": "object"
       },
       "ApiErrorResponse": {
@@ -48,8 +42,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Detail"
+            ]
           },
           "error": {
             "$ref": "#/components/schemas/ApiError"
@@ -58,15 +51,12 @@
         "required": [
           "error"
         ],
-        "title": "ApiErrorResponse",
         "type": "object"
       },
       "ContributionPolicyProjectSelection": {
-        "description": "Current exact selectors; reading them grants no mutation authority.",
         "properties": {
           "contribution_policy_id": {
             "format": "uuid",
-            "title": "Contribution Policy Id",
             "type": "string"
           },
           "current_published_version_id": {
@@ -78,8 +68,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Current Published Version Id"
+            ]
           },
           "open_draft_version_id": {
             "anyOf": [
@@ -90,12 +79,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Open Draft Version Id"
+            ]
           },
           "project_id": {
             "format": "uuid",
-            "title": "Project Id",
             "type": "string"
           }
         },
@@ -105,7 +92,6 @@
           "current_published_version_id",
           "open_draft_version_id"
         ],
-        "title": "ContributionPolicyProjectSelection",
         "type": "object"
       }
     }
@@ -120,7 +106,6 @@
         "required": true,
         "schema": {
           "format": "uuid",
-          "title": "Project Id",
           "type": "string"
         }
       },
@@ -403,6 +388,6 @@
     "method": "GET",
     "openapi_version": "3.1.0",
     "path": "/api/v1/projects/{project_id}/contribution-policies/current",
-    "repository_sha": "bb39ac10aed24e3484f3155706f7a8902ef97694"
+    "repository_sha": "2e6cee003dd6bf811d20557808d77cc7061776d5"
   }
 }

@@ -123,3 +123,16 @@ from app.modules.compensation.awards.models import CompensationAward  # noqa: F4
 from app.modules.reviews.lifecycle.models import JointLifecycleReleaseControl  # noqa: F401
 
 from app.modules.tasks.revision.models import TaskRevisionPreparation, TaskRevisionExpiration, TaskRevisionExhaustion  # noqa: F401
+
+from app.modules.model_usage.models import (  # noqa: F401
+    ModelUsageProfile,
+    ModelUsageBudgetAccount,
+    ModelUsageBudgetConfiguration,
+    CheckerModelUsageEnvelope,
+    CheckerModelUsageSlot,
+    SetupModelUsageEnvelope,
+    SetupModelUsageSlot,
+    ModelUsageEffect,
+    CheckerModelUsageRecovery,
+    CheckerModelInvocationGrant,
+)

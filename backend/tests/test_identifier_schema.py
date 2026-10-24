@@ -23,6 +23,8 @@ NATURAL_PRIMARY_KEYS = {
     "guide_source_extraction_retry_budgets": ("binding_id",),
     "outbox_delivery_attempts": ("event_id", "claim_generation"),
     "project_compensation_units": ("project_id", "instrument_type", "unit_code"),
+    "model_usage_budget_accounts": ("project_id",),
+    "checker_model_invocation_grant_calls": ("grant_id", "call_index"),
 }
 
 
@@ -38,7 +40,8 @@ def test_every_generated_primary_key_uses_native_uuid_and_v7_constraint():
         assert str(key.type.compile(dialect=postgresql.dialect())) == "UUID"
         constraints = {
             constraint.name: str(constraint.sqltext)
-            for constraint in table.constraints if isinstance(constraint, CheckConstraint)
+            for constraint in table.constraints
+            if isinstance(constraint, CheckConstraint)
         }
         assert constraints[f"ck_{table.name}_{key.name}_uuid7"] == (
             f"(get_byte(uuid_send({key.name}), 6) >> 4) = 7 and "
@@ -85,7 +88,8 @@ def test_generated_non_primary_operation_identities_have_version_guards():
         assert isinstance(table.c[column].type, Uuid)
         checks = {
             str(check.name): str(check.sqltext)
-            for check in table.constraints if isinstance(check, CheckConstraint)
+            for check in table.constraints
+            if isinstance(check, CheckConstraint)
         }
         expression = checks[f"ck_{owner}_{column}_uuid7"]
         assert f"(get_byte(uuid_send({column}), 6) >> 4) = 7" in expression

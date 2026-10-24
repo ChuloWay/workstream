@@ -1,0 +1,1584 @@
+{
+  "canonical_sha256": "323f97929e0854a4443a32d66b2195d7d6cbd803f4a8ed0bfb882821d8c0eaf7",
+  "components": {
+    "schemas": {
+      "ApiError": {
+        "additionalProperties": false,
+        "description": "Canonical machine-readable API error.",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "correlation_id": {
+            "type": "string"
+          },
+          "details": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "message": {
+            "type": "string"
+          },
+          "retryable": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "code",
+          "message",
+          "details",
+          "correlation_id",
+          "retryable"
+        ],
+        "type": "object"
+      },
+      "ApiErrorResponse": {
+        "additionalProperties": false,
+        "description": "Canonical error plus additive legacy compatibility fields.",
+        "properties": {
+          "detail": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "$ref": "#/components/schemas/ApiError"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "type": "object"
+      },
+      "CapabilityParameter": {
+        "additionalProperties": false,
+        "description": "Closed flat capability configuration supplied for trusted validation.",
+        "properties": {
+          "name": {
+            "pattern": "^[a-z][a-z0-9_.-]{0,99}$",
+            "type": "string"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "items": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "integer"
+                    },
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "boolean"
+                    }
+                  ]
+                },
+                "maxItems": 50,
+                "minItems": 1,
+                "type": "array"
+              }
+            ]
+          }
+        },
+        "required": [
+          "name",
+          "value"
+        ],
+        "type": "object"
+      },
+      "CheckFailureFinding": {
+        "additionalProperties": false,
+        "description": "One stable work finding an implementation must return when observed.",
+        "properties": {
+          "code": {
+            "description": "Canonical machine identifier, not prose or a file path: start with a lowercase letter, then lowercase letters, digits, underscores, dots or hyphens. Example: results or rights_confirmed.",
+            "maxLength": 100,
+            "minLength": 1,
+            "pattern": "^[a-z][a-z0-9_.-]{0,99}$",
+            "type": "string"
+          },
+          "condition": {
+            "description": "Plain prose only. No URLs, email addresses, credentials, filesystem paths, slash-separated words, code, or executable command names. Spell alternatives with words (for example, 'training and evaluation', not a slash expression). Describe shell instructions and module loading without literal command tokens. Source-defined field identifiers, types, numeric constraints and constants may be described explicitly; put file and directory paths in typed relative_path inputs.",
+            "maxLength": 1000,
+            "minLength": 1,
+            "type": "string"
+          },
+          "level": {
+            "enum": [
+              "warning",
+              "error",
+              "coverage_incomplete"
+            ],
+            "type": "string"
+          },
+          "message": {
+            "description": "Plain prose only. No URLs, email addresses, credentials, filesystem paths, slash-separated words, code, or executable command names. Spell alternatives with words (for example, 'training and evaluation', not a slash expression). Describe shell instructions and module loading without literal command tokens. Source-defined field identifiers, types, numeric constraints and constants may be described explicitly; put file and directory paths in typed relative_path inputs.",
+            "maxLength": 1000,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "level",
+          "condition",
+          "message"
+        ],
+        "type": "object"
+      },
+      "CheckInfrastructureFailure": {
+        "additionalProperties": false,
+        "description": "One non-work failure that must never become a failed work verdict.",
+        "properties": {
+          "code": {
+            "enum": [
+              "capacity_exceeded",
+              "deadline_exceeded",
+              "material_unavailable",
+              "implementation_unavailable",
+              "invalid_output"
+            ],
+            "type": "string"
+          },
+          "condition": {
+            "description": "Plain prose only. No URLs, email addresses, credentials, filesystem paths, slash-separated words, code, or executable command names. Spell alternatives with words (for example, 'training and evaluation', not a slash expression). Describe shell instructions and module loading without literal command tokens. Source-defined field identifiers, types, numeric constraints and constants may be described explicitly; put file and directory paths in typed relative_path inputs.",
+            "maxLength": 1000,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "condition"
+        ],
+        "type": "object"
+      },
+      "CheckInput": {
+        "additionalProperties": false,
+        "description": "One exact material or context input needed by a proposed check.",
+        "properties": {
+          "input_id": {
+            "description": "Canonical machine identifier, not prose or a file path: start with a lowercase letter, then lowercase letters, digits, underscores, dots or hyphens. Example: results or rights_confirmed.",
+            "maxLength": 100,
+            "minLength": 1,
+            "pattern": "^[a-z][a-z0-9_.-]{0,99}$",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "package",
+              "manifest",
+              "request_metadata",
+              "relative_file",
+              "relative_directory",
+              "task_context",
+              "guide_context",
+              "prepared_material"
+            ],
+            "type": "string"
+          },
+          "purpose": {
+            "description": "Plain prose only. No URLs, email addresses, credentials, filesystem paths, slash-separated words, code, or executable command names. Spell alternatives with words (for example, 'training and evaluation', not a slash expression). Describe shell instructions and module loading without literal command tokens. Source-defined field identifiers, types, numeric constraints and constants may be described explicitly; put file and directory paths in typed relative_path inputs.",
+            "maxLength": 1000,
+            "minLength": 1,
+            "type": "string"
+          },
+          "relative_path": {
+            "anyOf": [
+              {
+                "description": "Canonical relative POSIX path inside the submitted package.",
+                "maxLength": 500,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "input_id",
+          "kind",
+          "purpose"
+        ],
+        "type": "object"
+      },
+      "CheckNegativeTest": {
+        "additionalProperties": false,
+        "description": "One representative non-happy path and its exact observable outcome.",
+        "properties": {
+          "expected_finding_codes": {
+            "items": {
+              "description": "Canonical machine identifier, not prose or a file path: start with a lowercase letter, then lowercase letters, digits, underscores, dots or hyphens. Example: results or rights_confirmed.",
+              "maxLength": 100,
+              "minLength": 1,
+              "pattern": "^[a-z][a-z0-9_.-]{0,99}$",
+              "type": "string"
+            },
+            "maxItems": 10,
+            "minItems": 1,
+            "type": "array"
+          },
+          "expected_verdict": {
+            "enum": [
+              "passed",
+              "failed"
+            ],
+            "type": "string"
+          },
+          "name": {
+            "description": "Canonical machine identifier, not prose or a file path: start with a lowercase letter, then lowercase letters, digits, underscores, dots or hyphens. Example: results or rights_confirmed.",
+            "maxLength": 100,
+            "minLength": 1,
+            "pattern": "^[a-z][a-z0-9_.-]{0,99}$",
+            "type": "string"
+          },
+          "scenario": {
+            "description": "Plain prose only. No URLs, email addresses, credentials, filesystem paths, slash-separated words, code, or executable command names. Spell alternatives with words (for example, 'training and evaluation', not a slash expression). Describe shell instructions and module loading without literal command tokens. Source-defined field identifiers, types, numeric constraints and constants may be described explicitly; put file and directory paths in typed relative_path inputs.",
+            "maxLength": 1000,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "scenario",
+          "expected_verdict",
+          "expected_finding_codes"
+        ],
+        "type": "object"
+      },
+      "CheckRuntimeDependency": {
+        "additionalProperties": false,
+        "description": "One implementation or runner dependency and its availability owner.",
+        "properties": {
+          "dependency_id": {
+            "description": "Canonical machine identifier, not prose or a file path: start with a lowercase letter, then lowercase letters, digits, underscores, dots or hyphens. Example: results or rights_confirmed.",
+            "maxLength": 100,
+            "minLength": 1,
+            "pattern": "^[a-z][a-z0-9_.-]{0,99}$",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "checker_tool",
+              "isolated_execution",
+              "nested_sandbox",
+              "task_context",
+              "guide_context",
+              "model_service",
+              "execution_capacity",
+              "prepared_material"
+            ],
+            "type": "string"
+          },
+          "provisioning": {
+            "enum": [
+              "current_runner",
+              "checker_implementation",
+              "runtime_gap"
+            ],
+            "type": "string"
+          },
+          "purpose": {
+            "description": "Plain prose only. No URLs, email addresses, credentials, filesystem paths, slash-separated words, code, or executable command names. Spell alternatives with words (for example, 'training and evaluation', not a slash expression). Describe shell instructions and module loading without literal command tokens. Source-defined field identifiers, types, numeric constraints and constants may be described explicitly; put file and directory paths in typed relative_path inputs.",
+            "maxLength": 1000,
+            "minLength": 1,
+            "type": "string"
+          },
+          "unavailable_code": {
+            "enum": [
+              "capacity_exceeded",
+              "deadline_exceeded",
+              "material_unavailable",
+              "implementation_unavailable",
+              "invalid_output"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "dependency_id",
+          "kind",
+          "provisioning",
+          "purpose",
+          "unavailable_code"
+        ],
+        "type": "object"
+      },
+      "CheckSpecification": {
+        "additionalProperties": false,
+        "description": "Bounded implementation and test handoff for one atomic requirement.",
+        "properties": {
+          "check_steps": {
+            "description": "Implementable steps on the declared inputs. Static inspection needs explicit syntax or deterministic predicates, including source-defined field identifiers, types, values, ranges and exceptions rather than references to documented rules; qualitative free-form comparison needs model evaluation in POST. Never invent a document grammar absent from the guide.",
+            "items": {
+              "description": "Plain prose only. No URLs, email addresses, credentials, filesystem paths, slash-separated words, code, or executable command names. Spell alternatives with words (for example, 'training and evaluation', not a slash expression). Describe shell instructions and module loading without literal command tokens. Source-defined field identifiers, types, numeric constraints and constants may be described explicitly; put file and directory paths in typed relative_path inputs.",
+              "maxLength": 1000,
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 20,
+            "minItems": 1,
+            "type": "array"
+          },
+          "evaluation_method": {
+            "description": "isolated_execution requires a runtime dependency of kind isolated_execution; model_evaluation requires model_service and belongs to POST background work. Model review assesses content; proving runtime outcomes or built-environment properties requires isolated_execution with actual trials and observations.",
+            "enum": [
+              "static_inspection",
+              "isolated_execution",
+              "model_evaluation"
+            ],
+            "type": "string"
+          },
+          "execution_mode": {
+            "enum": [
+              "bounded_pre_submit",
+              "background"
+            ],
+            "type": "string"
+          },
+          "failure_findings": {
+            "items": {
+              "$ref": "#/components/schemas/CheckFailureFinding"
+            },
+            "maxItems": 20,
+            "minItems": 1,
+            "type": "array"
+          },
+          "infrastructure_failures": {
+            "items": {
+              "$ref": "#/components/schemas/CheckInfrastructureFailure"
+            },
+            "maxItems": 5,
+            "minItems": 1,
+            "type": "array"
+          },
+          "inputs": {
+            "description": "All materials needed to observe every pass condition and negative case. Every task_context, guide_context or prepared_material runtime dependency requires an input of that same kind, and vice versa.",
+            "items": {
+              "$ref": "#/components/schemas/CheckInput"
+            },
+            "maxItems": 20,
+            "minItems": 1,
+            "type": "array"
+          },
+          "maximum_duration_seconds": {
+            "description": "Proposed engineering budget for one check execution, not a measured runtime promise. PRE checks must be at most 60 seconds; POST checks may use up to 3600 seconds in background execution.",
+            "maximum": 3600.0,
+            "minimum": 1.0,
+            "type": "integer"
+          },
+          "negative_tests": {
+            "items": {
+              "$ref": "#/components/schemas/CheckNegativeTest"
+            },
+            "maxItems": 10,
+            "minItems": 1,
+            "type": "array"
+          },
+          "pass_conditions": {
+            "description": "Observable outcomes proved by the declared method and inputs. A model's review of claimed execution is not proof of actual execution; a static predicate cannot interpret free-form explanations. Require mandatory content to exist before judging its accuracy; absent required claims cannot pass vacuously.",
+            "items": {
+              "description": "Plain prose only. No URLs, email addresses, credentials, filesystem paths, slash-separated words, code, or executable command names. Spell alternatives with words (for example, 'training and evaluation', not a slash expression). Describe shell instructions and module loading without literal command tokens. Source-defined field identifiers, types, numeric constraints and constants may be described explicitly; put file and directory paths in typed relative_path inputs.",
+              "maxLength": 1000,
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 20,
+            "minItems": 1,
+            "type": "array"
+          },
+          "positive_tests": {
+            "items": {
+              "description": "Plain prose only. No URLs, email addresses, credentials, filesystem paths, slash-separated words, code, or executable command names. Spell alternatives with words (for example, 'training and evaluation', not a slash expression). Describe shell instructions and module loading without literal command tokens. Source-defined field identifiers, types, numeric constraints and constants may be described explicitly; put file and directory paths in typed relative_path inputs.",
+              "maxLength": 1000,
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 10,
+            "minItems": 1,
+            "type": "array"
+          },
+          "runtime_dependencies": {
+            "description": "Declare the evaluation method's required dependency and any task_context, guide_context or prepared_material input dependency. Each of those three kinds must occur in both inputs and runtime_dependencies, never just one. Each unavailable_code must appear in infrastructure_failures.",
+            "items": {
+              "$ref": "#/components/schemas/CheckRuntimeDependency"
+            },
+            "maxItems": 10,
+            "type": "array"
+          },
+          "stage_rationale": {
+            "description": "Plain prose only. No URLs, email addresses, credentials, filesystem paths, slash-separated words, code, or executable command names. Spell alternatives with words (for example, 'training and evaluation', not a slash expression). Describe shell instructions and module loading without literal command tokens. Source-defined field identifiers, types, numeric constraints and constants may be described explicitly; put file and directory paths in typed relative_path inputs.",
+            "maxLength": 1000,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "evaluation_method",
+          "execution_mode",
+          "maximum_duration_seconds",
+          "stage_rationale",
+          "inputs",
+          "check_steps",
+          "pass_conditions",
+          "failure_findings",
+          "positive_tests",
+          "negative_tests",
+          "runtime_dependencies",
+          "infrastructure_failures"
+        ],
+        "type": "object"
+      },
+      "CompilationComponentHashes": {
+        "additionalProperties": false,
+        "description": "Named canonical hashes for every independently projected component.",
+        "properties": {
+          "artifact_policy_hash": {
+            "pattern": "^sha256:[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "capability_suggestions_hash": {
+            "pattern": "^sha256:[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "post_submit_hash": {
+            "pattern": "^sha256:[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "pre_submit_hash": {
+            "pattern": "^sha256:[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "requirement_inventory_hash": {
+            "pattern": "^sha256:[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "setup_notes_hash": {
+            "pattern": "^sha256:[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "sufficiency_hash": {
+            "pattern": "^sha256:[0-9a-f]{64}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "sufficiency_hash",
+          "artifact_policy_hash",
+          "requirement_inventory_hash",
+          "pre_submit_hash",
+          "post_submit_hash",
+          "capability_suggestions_hash",
+          "setup_notes_hash"
+        ],
+        "type": "object"
+      },
+      "CompilationStage": {
+        "description": "Closed checker stages available to unified compilation.",
+        "enum": [
+          "pre_submit",
+          "post_submit"
+        ],
+        "type": "string"
+      },
+      "GuideProposalDisplayResult": {
+        "additionalProperties": false,
+        "description": "The complete validated proposal with only source handles projected away.",
+        "properties": {
+          "agent_name": {
+            "const": "ProjectGuideCompilationAgent",
+            "default": "ProjectGuideCompilationAgent",
+            "type": "string"
+          },
+          "agent_version": {
+            "maxLength": 100,
+            "pattern": "^[a-z][a-z0-9_.-]{0,99}$",
+            "type": "string"
+          },
+          "capability_suggestions": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/GuideProposalSuggestion"
+            },
+            "maxItems": 200,
+            "type": "array"
+          },
+          "findings": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/GuideProposalFinding"
+            },
+            "maxItems": 100,
+            "type": "array"
+          },
+          "post_submit_bindings": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/PostSubmissionBindingProposal"
+            },
+            "maxItems": 200,
+            "type": "array"
+          },
+          "pre_submit_bindings": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/PreSubmissionBindingProposal"
+            },
+            "maxItems": 200,
+            "type": "array"
+          },
+          "requirements": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/GuideProposalRequirement"
+            },
+            "maxItems": 200,
+            "type": "array"
+          },
+          "schema_version": {
+            "const": "project_guide_compilation_result.v1",
+            "default": "project_guide_compilation_result.v1",
+            "type": "string"
+          },
+          "setup_notes": {
+            "default": [],
+            "items": {
+              "description": "Plain prose only. No URLs, email addresses, credentials, filesystem paths, slash-separated words, code, or executable command names. Spell alternatives with words (for example, 'training and evaluation', not a slash expression). Describe shell instructions and module loading without literal command tokens. Source-defined field identifiers, types, numeric constraints and constants may be described explicitly; put file and directory paths in typed relative_path inputs.",
+              "maxLength": 1000,
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 20,
+            "type": "array"
+          },
+          "status": {
+            "enum": [
+              "guide_blocked",
+              "draft_ready",
+              "draft_ready_with_warnings"
+            ],
+            "type": "string"
+          },
+          "submission_artifact_policy": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SubmissionArtifactPolicyProposal"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "status",
+          "agent_version"
+        ],
+        "type": "object"
+      },
+      "GuideProposalEvidenceLocation": {
+        "additionalProperties": false,
+        "description": "Human-readable attribution, not a document retrieval capability.",
+        "properties": {
+          "document_number": {
+            "minimum": 1.0,
+            "type": "integer"
+          },
+          "end_page": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "section": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "start_page": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "document_number",
+          "start_page",
+          "end_page",
+          "section"
+        ],
+        "type": "object"
+      },
+      "GuideProposalFinding": {
+        "additionalProperties": false,
+        "description": "Keep canonical finding validation with a display-only source location.",
+        "properties": {
+          "code": {
+            "pattern": "^[a-z][a-z0-9_.-]{0,99}$",
+            "type": "string"
+          },
+          "evidence_refs": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/GuideProposalEvidenceLocation"
+            },
+            "maxItems": 20,
+            "type": "array"
+          },
+          "message": {
+            "description": "Plain prose only. No URLs, email addresses, credentials, filesystem paths, slash-separated words, code, or executable command names. Spell alternatives with words (for example, 'training and evaluation', not a slash expression). Describe shell instructions and module loading without literal command tokens. Source-defined field identifiers, types, numeric constraints and constants may be described explicitly; put file and directory paths in typed relative_path inputs.",
+            "maxLength": 1000,
+            "minLength": 1,
+            "type": "string"
+          },
+          "severity": {
+            "enum": [
+              "blocking_gap",
+              "warning",
+              "info"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "severity",
+          "code",
+          "message"
+        ],
+        "type": "object"
+      },
+      "GuideProposalRequirement": {
+        "additionalProperties": false,
+        "description": "Keep requirement semantics without returning runtime document selectors.",
+        "properties": {
+          "check_specification": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CheckSpecification"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Typed implementation and test handoff inferred from the required outcome for every supported or capability-gap PRE or POST requirement."
+          },
+          "classification_rationale": {
+            "anyOf": [
+              {
+                "description": "Plain prose only. No URLs, email addresses, credentials, filesystem paths, slash-separated words, code, or executable command names. Spell alternatives with words (for example, 'training and evaluation', not a slash expression). Describe shell instructions and module loading without literal command tokens. Source-defined field identifiers, types, numeric constraints and constants may be described explicitly; put file and directory paths in typed relative_path inputs.",
+                "maxLength": 1000,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Explain the selected ownership and, for a staged check, why its work and runtime fit PRE or POST."
+          },
+          "disposition": {
+            "$ref": "#/components/schemas/RequirementDisposition",
+            "description": "Infer checkable requirements from observable outcomes even when the guide does not call them automated. Use supported_pre_submit for static or other bounded checks that reliably complete within 60 seconds, and supported_post_submit for longer background evaluation. Use the matching capability gap when the required implementation is unavailable; a gap keeps the proposal warning-ready but blocks activation. Use human_review only for retained historical evidence only. Newly generated requirements are limited to PRE and POST checks, exact platform coverage and check-definition blockers. Do not propose human-review or project-management policy. Revision explanation, rerun evidence and objective preservation remain separately checkable work requirements, not lifecycle. A guide_blocker requires guide_blocked and no artifact policy."
+          },
+          "evidence_refs": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/GuideProposalEvidenceLocation"
+            },
+            "maxItems": 20,
+            "type": "array"
+          },
+          "platform_coverage": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PlatformCoverageRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "requirement_id": {
+            "pattern": "^[a-z][a-z0-9_.-]{0,99}$",
+            "type": "string"
+          },
+          "statement": {
+            "description": "Plain prose only. No URLs, email addresses, credentials, filesystem paths, slash-separated words, code, or executable command names. Spell alternatives with words (for example, 'training and evaluation', not a slash expression). Describe shell instructions and module loading without literal command tokens. Source-defined field identifiers, types, numeric constraints and constants may be described explicitly; put file and directory paths in typed relative_path inputs.",
+            "maxLength": 1000,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "requirement_id",
+          "statement",
+          "disposition"
+        ],
+        "type": "object"
+      },
+      "GuideProposalReviewPackage": {
+        "additionalProperties": false,
+        "description": "Exact full proposal and target; currentness grants no mutation authority.",
+        "properties": {
+          "artifact_policy_status": {
+            "anyOf": [
+              {
+                "enum": [
+                  "draft",
+                  "approved",
+                  "superseded"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "current": {
+            "type": "boolean"
+          },
+          "current_approval_operation_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "current_approval_output_digest": {
+            "anyOf": [
+              {
+                "pattern": "^sha256:[0-9a-f]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "post_submit_policy_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "result": {
+            "$ref": "#/components/schemas/GuideProposalDisplayResult"
+          },
+          "target": {
+            "$ref": "#/components/schemas/GuideProposalTarget"
+          },
+          "target_digest": {
+            "pattern": "^sha256:[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "warning_hashes": {
+            "items": {
+              "pattern": "^sha256:[0-9a-f]{64}$",
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "target",
+          "target_digest",
+          "result",
+          "current",
+          "artifact_policy_status",
+          "warning_hashes"
+        ],
+        "type": "object"
+      },
+      "GuideProposalSuggestion": {
+        "additionalProperties": false,
+        "description": "An engineering suggestion retains its evidence's display location.",
+        "properties": {
+          "evidence_refs": {
+            "items": {
+              "$ref": "#/components/schemas/GuideProposalEvidenceLocation"
+            },
+            "maxItems": 20,
+            "minItems": 1,
+            "type": "array"
+          },
+          "rationale": {
+            "description": "Plain prose only. No URLs, email addresses, credentials, filesystem paths, slash-separated words, code, or executable command names. Spell alternatives with words (for example, 'training and evaluation', not a slash expression). Describe shell instructions and module loading without literal command tokens. Source-defined field identifiers, types, numeric constraints and constants may be described explicitly; put file and directory paths in typed relative_path inputs.",
+            "maxLength": 1000,
+            "minLength": 1,
+            "type": "string"
+          },
+          "requirement_id": {
+            "pattern": "^[a-z][a-z0-9_.-]{0,99}$",
+            "type": "string"
+          },
+          "stage": {
+            "$ref": "#/components/schemas/CompilationStage"
+          },
+          "title": {
+            "description": "Plain prose only. No URLs, email addresses, credentials, filesystem paths, slash-separated words, code, or executable command names. Spell alternatives with words (for example, 'training and evaluation', not a slash expression). Describe shell instructions and module loading without literal command tokens. Source-defined field identifiers, types, numeric constraints and constants may be described explicitly; put file and directory paths in typed relative_path inputs.",
+            "maxLength": 1000,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "requirement_id",
+          "stage",
+          "title",
+          "rationale",
+          "evidence_refs"
+        ],
+        "type": "object"
+      },
+      "GuideProposalTarget": {
+        "additionalProperties": false,
+        "description": "The exact displayed source and all independently approved components.",
+        "properties": {
+          "artifact_policy_hash": {
+            "anyOf": [
+              {
+                "pattern": "^sha256:[0-9a-f]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "artifact_policy_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "artifact_projection_operation_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "artifact_projection_output_digest": {
+            "anyOf": [
+              {
+                "pattern": "^sha256:[0-9a-f]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "compilation_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "component_hashes": {
+            "$ref": "#/components/schemas/CompilationComponentHashes"
+          },
+          "finalization_facts_digest": {
+            "pattern": "^sha256:[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "finalization_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "guide_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "guide_version": {
+            "maxLength": 50,
+            "minLength": 1,
+            "type": "string"
+          },
+          "post_catalogue_id": {
+            "maxLength": 160,
+            "minLength": 1,
+            "type": "string"
+          },
+          "post_catalogue_manifest_hash": {
+            "pattern": "^sha256:[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "post_catalogue_schema_version": {
+            "maxLength": 160,
+            "minLength": 1,
+            "type": "string"
+          },
+          "post_catalogue_version": {
+            "maxLength": 100,
+            "minLength": 1,
+            "type": "string"
+          },
+          "pre_catalogue_id": {
+            "maxLength": 160,
+            "minLength": 1,
+            "type": "string"
+          },
+          "pre_catalogue_manifest_hash": {
+            "pattern": "^sha256:[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "pre_catalogue_schema_version": {
+            "maxLength": 160,
+            "minLength": 1,
+            "type": "string"
+          },
+          "pre_catalogue_version": {
+            "maxLength": 100,
+            "minLength": 1,
+            "type": "string"
+          },
+          "project_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "result_hash": {
+            "pattern": "^sha256:[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "setup_generation": {
+            "exclusiveMinimum": 0.0,
+            "type": "integer"
+          },
+          "setup_run_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "source_snapshot_hash": {
+            "pattern": "^sha256:[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "source_snapshot_id": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_id",
+          "guide_id",
+          "compilation_id",
+          "guide_version",
+          "source_snapshot_id",
+          "source_snapshot_hash",
+          "setup_run_id",
+          "setup_generation",
+          "finalization_id",
+          "finalization_facts_digest",
+          "result_hash",
+          "component_hashes",
+          "pre_catalogue_id",
+          "pre_catalogue_version",
+          "pre_catalogue_schema_version",
+          "pre_catalogue_manifest_hash",
+          "post_catalogue_id",
+          "post_catalogue_version",
+          "post_catalogue_schema_version",
+          "post_catalogue_manifest_hash",
+          "artifact_policy_id",
+          "artifact_policy_hash",
+          "artifact_projection_operation_id",
+          "artifact_projection_output_digest"
+        ],
+        "type": "object"
+      },
+      "PlatformCoverageRef": {
+        "additionalProperties": false,
+        "description": "Exact non-selectable phase-owner capability covering a requirement.",
+        "properties": {
+          "capability_id": {
+            "pattern": "^[a-z][a-z0-9_.-]{0,99}$",
+            "type": "string"
+          },
+          "capability_version": {
+            "pattern": "^[a-z][a-z0-9_.-]{0,99}$",
+            "type": "string"
+          },
+          "stage": {
+            "$ref": "#/components/schemas/CompilationStage"
+          }
+        },
+        "required": [
+          "capability_id",
+          "capability_version",
+          "stage"
+        ],
+        "type": "object"
+      },
+      "PostSubmissionBindingProposal": {
+        "additionalProperties": false,
+        "description": "Reference work evaluation capability with its own typed configuration.",
+        "properties": {
+          "capability_id": {
+            "pattern": "^[a-z][a-z0-9_.-]{0,99}$",
+            "type": "string"
+          },
+          "capability_version": {
+            "pattern": "^[a-z][a-z0-9_.-]{0,99}$",
+            "type": "string"
+          },
+          "parameters": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/CapabilityParameter"
+            },
+            "maxItems": 50,
+            "type": "array"
+          },
+          "requirement_id": {
+            "pattern": "^[a-z][a-z0-9_.-]{0,99}$",
+            "type": "string"
+          },
+          "stage": {
+            "$ref": "#/components/schemas/CompilationStage"
+          }
+        },
+        "required": [
+          "requirement_id",
+          "capability_id",
+          "capability_version",
+          "stage"
+        ],
+        "type": "object"
+      },
+      "PreSubmissionBindingProposal": {
+        "additionalProperties": false,
+        "description": "Reference an external intake image with approved typed configuration.",
+        "properties": {
+          "capability_id": {
+            "pattern": "^[a-z][a-z0-9_.-]{0,99}$",
+            "type": "string"
+          },
+          "capability_version": {
+            "pattern": "^[a-z][a-z0-9_.-]{0,99}$",
+            "type": "string"
+          },
+          "parameters": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/CapabilityParameter"
+            },
+            "maxItems": 50,
+            "type": "array"
+          },
+          "requirement_id": {
+            "pattern": "^[a-z][a-z0-9_.-]{0,99}$",
+            "type": "string"
+          },
+          "stage": {
+            "$ref": "#/components/schemas/CompilationStage"
+          }
+        },
+        "required": [
+          "requirement_id",
+          "capability_id",
+          "capability_version",
+          "stage"
+        ],
+        "type": "object"
+      },
+      "RequirementDisposition": {
+        "description": "Closed trusted classifications for one atomic guide requirement.",
+        "enum": [
+          "platform_covered",
+          "supported_pre_submit",
+          "pre_submit_capability_gap",
+          "supported_post_submit",
+          "post_submit_capability_gap",
+          "human_review",
+          "project_lifecycle_policy",
+          "guide_blocker",
+          "informational"
+        ],
+        "type": "string"
+      },
+      "SubmissionArtifactPolicyProposal": {
+        "additionalProperties": false,
+        "description": "Closed submission artifact policy proposed by compilation.",
+        "properties": {
+          "allowed_storage_schemes": {
+            "default": [
+              "artifact"
+            ],
+            "items": {
+              "const": "artifact",
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "attestation_terms": {
+            "default": [],
+            "items": {
+              "description": "Canonical machine identifier, not prose or a file path: start with a lowercase letter, then lowercase letters, digits, underscores, dots or hyphens. Example: results or rights_confirmed.",
+              "maxLength": 100,
+              "minLength": 1,
+              "pattern": "^[a-z][a-z0-9_.-]{0,99}$",
+              "type": "string"
+            },
+            "maxItems": 50,
+            "type": "array"
+          },
+          "forbidden_artifacts": {
+            "default": [],
+            "description": "Relative artifact prohibition patterns, such as secret* or outputs/*.tmp; these are machine fields, not prose.",
+            "items": {
+              "maxLength": 500,
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 100,
+            "type": "array"
+          },
+          "maximum_archive_entries": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Maximum normalized outer ZIP entries, counting files and directory entries including implied parent directories. Omitting a directory record cannot evade the limit. Nested archives count as files, not recursively expanded members. Null adds no project limit; platform safety limits always apply."
+          },
+          "maximum_archive_size_bytes": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Maximum verified byte count of the entire submitted compressed ZIP, including archive metadata; not expanded contents or summed compressed member sizes. Null adds no project limit; platform safety limits always apply."
+          },
+          "maximum_file_size_bytes": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "maximum": 10737418240.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Project-specific maximum expanded bytes per submitted file. Null adds no project limit; platform safety limits always apply."
+          },
+          "maximum_package_size_bytes": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "maximum": 10737418240.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Project-specific maximum total expanded bytes in the submitted ZIP, verified from actual contents; not compressed upload bytes. Null adds no project limit; platform safety limits always apply."
+          },
+          "packaging": {
+            "const": "zip",
+            "default": "zip",
+            "type": "string"
+          },
+          "required_artifacts": {
+            "default": [],
+            "description": "Exact canonical relative POSIX regular-file paths inside the submitted ZIP. Required directories belong in checker specifications, never this hash-required file list. A bare path such as task.toml requires that file at the ZIP root; wrapper/task.toml does not satisfy it. Nested paths such as outputs/answer.md require that exact location. No trailing separators, duplicate paths, traversal, storage references or secret files.",
+            "items": {
+              "maxLength": 500,
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 100,
+            "type": "array"
+          },
+          "required_evidence": {
+            "default": [],
+            "items": {
+              "description": "Canonical machine identifier, not prose or a file path: start with a lowercase letter, then lowercase letters, digits, underscores, dots or hyphens. Example: results or rights_confirmed.",
+              "maxLength": 100,
+              "minLength": 1,
+              "pattern": "^[a-z][a-z0-9_.-]{0,99}$",
+              "type": "string"
+            },
+            "maxItems": 100,
+            "type": "array"
+          }
+        },
+        "type": "object"
+      }
+    }
+  },
+  "operation": {
+    "description": "Read the exact finalized proposal and its approval/correction target.",
+    "operationId": "review_proposal_api_v1_projects__project_id__guides__guide_id__compilations__compilation_id__proposal_get",
+    "parameters": [
+      {
+        "in": "path",
+        "name": "project_id",
+        "required": true,
+        "schema": {
+          "format": "uuid",
+          "type": "string"
+        }
+      },
+      {
+        "in": "path",
+        "name": "guide_id",
+        "required": true,
+        "schema": {
+          "format": "uuid",
+          "type": "string"
+        }
+      },
+      {
+        "in": "path",
+        "name": "compilation_id",
+        "required": true,
+        "schema": {
+          "format": "uuid",
+          "type": "string"
+        }
+      },
+      {
+        "in": "header",
+        "name": "X-Request-ID",
+        "required": false,
+        "schema": {
+          "format": "uuid",
+          "maxLength": 36,
+          "minLength": 36,
+          "type": "string"
+        }
+      },
+      {
+        "in": "header",
+        "name": "X-Correlation-ID",
+        "required": false,
+        "schema": {
+          "format": "uuid",
+          "maxLength": 36,
+          "minLength": 36,
+          "type": "string"
+        }
+      }
+    ],
+    "responses": {
+      "200": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/GuideProposalReviewPackage"
+            }
+          }
+        },
+        "description": "Successful Response",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "400": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Invalid request.",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "401": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Authentication failed.",
+        "headers": {
+          "WWW-Authenticate": {
+            "schema": {
+              "type": "string"
+            }
+          },
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "403": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Permission denied.",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "404": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Not Found",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "409": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Conflict",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "422": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Unprocessable Entity",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "500": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Internal server error.",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "503": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Service Unavailable",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "security": [
+      {
+        "HTTPBearer": []
+      }
+    ],
+    "summary": "Review Proposal",
+    "tags": [
+      "projects"
+    ],
+    "x-workstream-action-id": "project.guide_compilation.review_package.read"
+  },
+  "source": {
+    "method": "GET",
+    "openapi_version": "3.1.0",
+    "path": "/api/v1/projects/{project_id}/guides/{guide_id}/compilations/{compilation_id}/proposal",
+    "repository_sha": "2e6cee003dd6bf811d20557808d77cc7061776d5"
+  }
+}

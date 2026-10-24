@@ -29,7 +29,9 @@ from workstream_mcp.tools import (
     access_reads,
     actor_lifecycle,
     admin_grants,
+    checker_artifacts,
     contribution_policies,
+    guide_lifecycle,
     guides,
     policies,
     project_grants,
@@ -123,6 +125,8 @@ def create_app(settings: Settings) -> Starlette:
     policy_definitions = policies.definitions()
     workspace_read_definitions = workspace_reads.definitions()
     contribution_policy_definitions = contribution_policies.definitions()
+    guide_lifecycle_definitions = guide_lifecycle.definitions()
+    checker_artifact_definitions = checker_artifacts.definitions()
     gateway: WorkstreamGateway | None = None
 
     async def list_tools(
@@ -143,6 +147,8 @@ def create_app(settings: Settings) -> Starlette:
                 *policy_definitions,
                 *workspace_read_definitions,
                 *contribution_policy_definitions,
+                *guide_lifecycle_definitions,
+                *checker_artifact_definitions,
             ]
         )
 
@@ -162,6 +168,8 @@ def create_app(settings: Settings) -> Starlette:
             *policies.TOOL_NAMES,
             *workspace_reads.TOOL_NAMES,
             *contribution_policies.TOOL_NAMES,
+            *guide_lifecycle.TOOL_NAMES,
+            *checker_artifacts.TOOL_NAMES,
         }:
             return adapter_failure("unknown_tool", status=404)
         arguments = params.arguments if params.arguments is not None else {}
@@ -217,6 +225,14 @@ def create_app(settings: Settings) -> Starlette:
             )
         if params.name in contribution_policies.TOOL_NAMES:
             return await contribution_policies.invoke(
+                gateway, params.name, bearer, correlation_id, arguments
+            )
+        if params.name in guide_lifecycle.TOOL_NAMES:
+            return await guide_lifecycle.invoke(
+                gateway, params.name, bearer, correlation_id, arguments
+            )
+        if params.name in checker_artifacts.TOOL_NAMES:
+            return await checker_artifacts.invoke(
                 gateway, params.name, bearer, correlation_id, arguments
             )
         return await invoke_context(gateway, bearer, correlation_id, arguments)

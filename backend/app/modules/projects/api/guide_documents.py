@@ -2,18 +2,20 @@
 
 from __future__ import annotations
 
+import hashlib
 from contextlib import AbstractAsyncContextManager
 from dataclasses import dataclass
 from datetime import datetime
 from typing import BinaryIO, Literal, Protocol
 from uuid import UUID
-import hashlib
 
 from pydantic import BaseModel, ConfigDict, Field, StrictInt, model_validator
 
 from app.core.hashing import canonical_json_hash
 from app.interfaces.external_services import ExternalServiceAdapter
 from app.interfaces.guide_document_tools import GuideDocumentMediaType, GuideDocumentToolPort
+from app.interfaces.setup_model_proxy import SetupModelDispatchPort
+
 DOCUMENT_EXTENSIONS: dict[str, str] = {
     "application/pdf": "pdf",
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
@@ -212,6 +214,7 @@ class GuideRuntimeCapabilities:
     """The sole non-serializable capability issued to an agent runtime."""
 
     tools: GuideDocumentToolPort
+    model: SetupModelDispatchPort | None = None
 
 
 class GuideDocumentAccessFactory(Protocol):

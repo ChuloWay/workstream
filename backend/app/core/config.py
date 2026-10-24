@@ -282,6 +282,7 @@ class Settings(BaseSettings):
     )
     external_checker_service_socket: Path | None = None
     external_checker_material_root: Path | None = None
+    checker_model_proxy_socket: Path | None = None
     external_checker_service_timeout_seconds: float = Field(
         default=3660.0,
         gt=0.0,
@@ -298,6 +299,12 @@ class Settings(BaseSettings):
     # handler budget (SELECTED_POST_HANDLER_TIMEOUT_SECONDS).
     github_facts_total_deadline_seconds: float = Field(default=45.0, gt=0.0, le=120.0)
     github_facts_maximum_attempts: int = Field(default=3, ge=1, le=5)
+
+    @field_validator("checker_model_proxy_socket", mode="before")
+    @classmethod
+    def empty_model_proxy_socket(cls, value: object) -> object:
+        """Allow the local compose overlay to leave model execution disabled."""
+        return None if value == "" else value
 
     artifact_pending_work_scan_interval_seconds: int = Field(default=60, gt=0, le=3600)
     artifact_pending_work_scan_page_size: int = Field(default=100, gt=0, le=1000)
@@ -735,6 +742,11 @@ class Settings(BaseSettings):
                 raise ValueError(
                     "external checker material root must equal the artifact scratch root"
                 )
+        if self.checker_model_proxy_socket is not None:
+            if not self.checker_model_proxy_socket.is_absolute():
+                raise ValueError("checker model proxy socket must be absolute")
+            if self.artifact_store_backend == "disabled":
+                raise ValueError("checker model proxy requires enabled artifact storage")
         if self.artifact_store_backend == "disabled":
             return self
         if any(
