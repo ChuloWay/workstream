@@ -1,5 +1,5 @@
 {
-  "canonical_sha256": "329db0d75341746d78eeb6e35c82e49c552dd13b5fb77c6b99ec23ffb898b490",
+  "canonical_sha256": "40a118bda685cff645c064f71f99ee206fc7a383d03fda4fe142f4b387569d64",
   "components": {
     "schemas": {
       "ApiError": {
@@ -521,6 +521,7 @@
         "type": "object"
       },
       "TaskCompensationAward": {
+        "description": "One contributor-safe exact award value in a TASK response.",
         "properties": {
           "instrument": {
             "enum": [
@@ -544,6 +545,7 @@
         "type": "object"
       },
       "TaskCompensationTerms": {
+        "description": "The two complete locked contribution rules disclosed by TASK.",
         "properties": {
           "accepted_submission": {
             "anyOf": [
@@ -994,6 +996,6 @@
     "method": "GET",
     "openapi_version": "3.1.0",
     "path": "/api/v1/projects/{project_id}/assignments",
-    "repository_sha": "2e6cee003dd6bf811d20557808d77cc7061776d5"
+    "repository_sha": "59c52cc81179611ea316935552cc177f83eec687"
   }
 }

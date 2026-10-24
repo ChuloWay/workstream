@@ -1,5 +1,5 @@
 {
-  "canonical_sha256": "dd86f42609aa25b65b52f8cc749316a15563431d596428ed7415917d515727ba",
+  "canonical_sha256": "d213e85a844b2346abf498f797739f314ae3b31a0ddd84b66a123a92e3d2ea93",
   "components": {
     "schemas": {
       "ApiError": {
@@ -62,6 +62,7 @@
         "type": "string"
       },
       "ContributionPolicyVersionListItem": {
+        "description": "One stored version of the project's policy with its lifecycle instants.",
         "properties": {
           "contribution_policy_id": {
             "format": "uuid",
@@ -173,6 +174,7 @@
         "type": "object"
       },
       "PolicyDefinitionView": {
+        "description": "Server-owned immutable compensation definition facts.",
         "properties": {
           "adapter_binding_id": {
             "format": "uuid",
@@ -202,6 +204,7 @@
         "type": "object"
       },
       "PolicyRuleView": {
+        "description": "Server-owned immutable contribution rule facts.",
         "properties": {
           "compensation_mode": {
             "enum": [
@@ -558,6 +561,6 @@
     "method": "GET",
     "openapi_version": "3.1.0",
     "path": "/api/v1/projects/{project_id}/contribution-policies",
-    "repository_sha": "2e6cee003dd6bf811d20557808d77cc7061776d5"
+    "repository_sha": "59c52cc81179611ea316935552cc177f83eec687"
   }
 }

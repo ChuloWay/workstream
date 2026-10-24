@@ -1,5 +1,5 @@
 {
-  "canonical_sha256": "ead8bdfc961a29c7050252c3c71c00dd3f572331e93c5c65bfc3cf142fb9ed18",
+  "canonical_sha256": "4c01300a25a772dcc59db17069d2efcc6449e2ff228b81787a2085da9028f5c0",
   "components": {
     "schemas": {
       "ApiError": {
@@ -105,6 +105,7 @@
         "type": "object"
       },
       "ReadyTaskSummary": {
+        "description": "Detached contributor summary without source, actor or policy internals.",
         "properties": {
           "compensation": {
             "$ref": "#/components/schemas/TaskCompensationTerms"
@@ -175,6 +176,7 @@
         "type": "object"
       },
       "TaskCompensationAward": {
+        "description": "One contributor-safe exact award value in a TASK response.",
         "properties": {
           "instrument": {
             "enum": [
@@ -198,6 +200,7 @@
         "type": "object"
       },
       "TaskCompensationTerms": {
+        "description": "The two complete locked contribution rules disclosed by TASK.",
         "properties": {
           "accepted_submission": {
             "anyOf": [
@@ -535,6 +538,6 @@
     "method": "GET",
     "openapi_version": "3.1.0",
     "path": "/api/v1/projects/{project_id}/tasks/ready",
-    "repository_sha": "2e6cee003dd6bf811d20557808d77cc7061776d5"
+    "repository_sha": "59c52cc81179611ea316935552cc177f83eec687"
   }
 }

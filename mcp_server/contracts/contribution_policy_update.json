@@ -1,5 +1,5 @@
 {
-  "canonical_sha256": "bfd50b2b3b4ac396e89b73b66a65f218cd6ea5ab6bc5948972ddbe5571d97a19",
+  "canonical_sha256": "150c2b8145c8be16785df48a10479560d42662d4ece245e0f631cad11de6034c",
   "components": {
     "schemas": {
       "ApiError": {
@@ -62,6 +62,7 @@
         "type": "string"
       },
       "ContributionPolicyMutationResult": {
+        "description": "Immutable result reconstructed only from lifecycle-event truth.",
         "properties": {
           "actor_profile_id": {
             "format": "uuid",
@@ -176,6 +177,7 @@
       },
       "PolicyDefinitionInput": {
         "additionalProperties": false,
+        "description": "One requested immutable compensation definition.",
         "properties": {
           "adapter_binding_id": {
             "format": "uuid",
@@ -201,6 +203,7 @@
       },
       "PolicyRuleInput": {
         "additionalProperties": false,
+        "description": "One complete contribution rule replacement.",
         "properties": {
           "compensation_mode": {
             "enum": [
@@ -579,6 +582,6 @@
     "method": "PUT",
     "openapi_version": "3.1.0",
     "path": "/api/v1/projects/{project_id}/contribution-policies/{policy_id}/versions/{version_id}",
-    "repository_sha": "2e6cee003dd6bf811d20557808d77cc7061776d5"
+    "repository_sha": "59c52cc81179611ea316935552cc177f83eec687"
   }
 }

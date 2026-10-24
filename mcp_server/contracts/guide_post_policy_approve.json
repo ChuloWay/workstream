@@ -1,5 +1,5 @@
 {
-  "canonical_sha256": "97521dc9eaf62e8bbfcb4be360ff7d071fb7358c364c0c471fcd8c38df616e1e",
+  "canonical_sha256": "d9b2972fd2444323884f0bac599980b49d4e2d6a416d20415756eb9842d545f9",
   "components": {
     "schemas": {
       "ApiError": {
@@ -362,7 +362,7 @@
         "description": "Approve only the exact displayed policy; content editing is not approval.",
         "properties": {
           "target": {
-            "$ref": "#/components/schemas/PostPolicyTarget-Input"
+            "$ref": "#/components/schemas/PostPolicyTarget"
           }
         },
         "required": [
@@ -397,7 +397,7 @@
             "type": "string"
           },
           "target": {
-            "$ref": "#/components/schemas/PostPolicyTarget-Output"
+            "$ref": "#/components/schemas/PostPolicyTarget"
           }
         },
         "required": [
@@ -407,55 +407,7 @@
         ],
         "type": "object"
       },
-      "PostPolicyTarget-Input": {
-        "additionalProperties": false,
-        "description": "Source, upstream and sole canonical policy hash shown before a decision.",
-        "properties": {
-          "policy_hash": {
-            "pattern": "^sha256:[0-9a-f]{64}$",
-            "type": "string"
-          },
-          "policy_id": {
-            "format": "uuid",
-            "type": "string"
-          },
-          "predecessor_policy_id": {
-            "anyOf": [
-              {
-                "format": "uuid",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "projection_operation_id": {
-            "format": "uuid",
-            "type": "string"
-          },
-          "proposal": {
-            "$ref": "#/components/schemas/GuideProposalTarget"
-          },
-          "upstream": {
-            "$ref": "#/components/schemas/GuideProposalApprovalReceipt"
-          },
-          "upstream_output_digest": {
-            "pattern": "^sha256:[0-9a-f]{64}$",
-            "type": "string"
-          }
-        },
-        "required": [
-          "proposal",
-          "upstream",
-          "upstream_output_digest",
-          "policy_id",
-          "projection_operation_id",
-          "policy_hash"
-        ],
-        "type": "object"
-      },
-      "PostPolicyTarget-Output": {
+      "PostPolicyTarget": {
         "additionalProperties": false,
         "description": "Source, upstream and sole canonical policy hash shown before a decision.",
         "properties": {
@@ -843,6 +795,6 @@
     "method": "POST",
     "openapi_version": "3.1.0",
     "path": "/api/v1/projects/{project_id}/guides/{guide_id}/compilations/{compilation_id}/post-submission-policies/{policy_id}/approval",
-    "repository_sha": "2e6cee003dd6bf811d20557808d77cc7061776d5"
+    "repository_sha": "59c52cc81179611ea316935552cc177f83eec687"
   }
 }
