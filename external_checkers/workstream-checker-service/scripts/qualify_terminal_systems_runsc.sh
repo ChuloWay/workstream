@@ -12,6 +12,9 @@ readonly SHARED_ROOT="${WORKSTREAM_TS_RUNSC_SHARED_ROOT:?set the daemon-visible 
 readonly CONTAINER="${WORKSTREAM_TS_RUNSC_CONTAINER:?set the owned DIND container}"
 readonly PREPARED_CONTAINER="${WORKSTREAM_TS_RUNSC_PREPARED_CONTAINER:?set the stopped prepared DIND container}"
 readonly RUN_ID="${WORKSTREAM_TS_RUNSC_RUN_ID:?set the prepared PILOT-00 run ID}"
+readonly EXPECTED_HEAD="${WORKSTREAM_TS_RUNSC_EXPECTED_HEAD:?set the exact source commit}"
+readonly EXPECTED_TREE="${WORKSTREAM_TS_RUNSC_EXPECTED_TREE:?set the exact source tree}"
+readonly EVIDENCE_PREFIX="${WORKSTREAM_TS_RUNSC_EVIDENCE_PREFIX:?set a fresh absolute evidence prefix}"
 readonly CHECKER_IMAGE="${WORKSTREAM_TS_RUNSC_CHECKER_IMAGE:-ws-terminal-systems-post:qualification}"
 readonly REGISTRY_IMAGE="${WORKSTREAM_TS_RUNSC_REGISTRY_IMAGE:-registry:2}"
 readonly INNER_ROOT="/workstream-state"
@@ -26,9 +29,14 @@ readonly BUILD_MESSAGES="$(mktemp /tmp/ws493-runsc-build.XXXXXX.jsonl)"
 readonly LAUNCHER_MESSAGES="$(mktemp /tmp/ws493-runsc-launcher-build.XXXXXX.jsonl)"
 readonly LAUNCHER_PROGRAM_HEADERS="$(mktemp /tmp/ws493-runsc-launcher.XXXXXX.phdr)"
 readonly LAUNCHER_DYNAMIC="$(mktemp /tmp/ws493-runsc-launcher.XXXXXX.dynamic)"
-readonly METADATA="${WORKSTREAM_TS_RUNSC_METADATA:-/tmp/ws493-terminal-systems-runsc.json}"
-readonly RESULT_LOG="${WORKSTREAM_TS_RUNSC_LOG:-/tmp/ws493-terminal-systems-runsc.log}"
-readonly EXIT_SIDECAR="${WORKSTREAM_TS_RUNSC_EXIT:-/tmp/ws493-terminal-systems-runsc.exit}"
+readonly METADATA="${EVIDENCE_PREFIX}.metadata.json"
+readonly RESULT_LOG="${EVIDENCE_PREFIX}.log"
+readonly EXIT_SIDECAR="${EVIDENCE_PREFIX}.exit"
+readonly JUNIT_XML="${EVIDENCE_PREFIX}.junit.xml"
+readonly FIXTURE_SUMMARY="${EVIDENCE_PREFIX}.fixture-summary.json"
+readonly RESULT_SUMMARY="${EVIDENCE_PREFIX}.result-summary.json"
+readonly RESULT_SUMMARY_SHA256="${EVIDENCE_PREFIX}.result-summary.sha256"
+readonly INVOCATION_ID="$(python3 -c 'import secrets; print(secrets.token_hex(16))')"
 readonly EXTRACT_CONTAINER="ws493-runsc-registry-extract-${RUN_ID}"
 readonly CLEANER_CONTAINER="ws493-runsc-workspace-clean-${RUN_ID}"
 
@@ -37,6 +45,31 @@ CONFIG_REPLACED=0
 EXTRACT_CREATED=0
 HOST_CHECKER_BUILT=0
 QUALIFIER_CONTAINER_OWNED=0
+
+source_guard() {
+  [[ "$(git -C "${REPOSITORY_ROOT}" rev-parse HEAD)" == "${EXPECTED_HEAD}" ]] || return 1
+  [[ "$(git -C "${REPOSITORY_ROOT}" rev-parse 'HEAD^{tree}')" == "${EXPECTED_TREE}" ]] || return 1
+  [[ -z "$(git -C "${REPOSITORY_ROOT}" status --porcelain=v1 --untracked-files=all)" ]]
+}
+
+validate_junit() {
+  python3 - "${JUNIT_XML}" <<'PY'
+import sys
+import xml.etree.ElementTree as ET
+
+root = ET.parse(sys.argv[1]).getroot()
+suites = [root] if root.tag == "testsuite" else list(root.findall("testsuite"))
+if not suites:
+    raise SystemExit("qualification JUnit has no test suite")
+totals = {
+    key: sum(int(suite.attrib.get(key, "0")) for suite in suites)
+    for key in ("tests", "failures", "errors", "skipped")
+}
+cases = sum(len(suite.findall(".//testcase")) for suite in suites)
+if totals != {"tests": 1, "failures": 0, "errors": 0, "skipped": 0} or cases != 1:
+    raise SystemExit(f"qualification JUnit result differs: {totals}, cases={cases}")
+PY
+}
 
 cleanup_docker() {
   timeout --kill-after=5s 30s docker "$@"
@@ -119,10 +152,200 @@ cleanup() {
   # This unique private root is created by this invocation and contains only
   # the trusted service/proxy sockets, never submitted material.
   rm -rf -- "${SOCKET_ROOT}" || status=1
-  printf '%s\n' "${status}" >"${EXIT_SIDECAR}"
+  source_guard || status=1
+  if [[ "${status}" == 0 ]]; then
+    validate_junit || status=1
+    python3 - "${METADATA}" "${EXPECTED_HEAD}" <<'PY' || status=1
+import json
+from pathlib import Path
+import sys
+
+value = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+if (
+    value.get("tree_sha") != sys.argv[2]
+    or value.get("lane") != "trial_composition"
+    or value.get("database_cleanup_complete") is not True
+    or value.get("minio_cleanup_complete") is not True
+):
+    raise SystemExit("qualification metadata is incomplete")
+PY
+    python3 - \
+      "${FIXTURE_SUMMARY}" "${WORKSTREAM_TS_RUNSC_CHECKER_DIGEST}" \
+      "${WORKSTREAM_TS_RUNSC_CHECKER_ID}" "${PLATFORM_IDENTITY}" \
+      "${DUAL_RUNTIME_DIGEST}" "${WORKSTREAM_TS_RUNSC_ENGINE_DIGEST}" \
+      "${WORKSTREAM_TS_RUNSC_LAUNCHER_DIGEST}" \
+      "${WORKSTREAM_TS_RUNSC_BUILDER_ID}" \
+      "${WORKSTREAM_TS_RUNSC_BUILDER_MANIFEST}" \
+      "${WORKSTREAM_TS_RUNSC_CACHE_DIGEST}" <<'PY' || status=1
+import json
+from pathlib import Path
+import stat
+import sys
+from uuid import UUID
+
+path = Path(sys.argv[1])
+metadata = path.lstat()
+raw = path.read_bytes()
+if not stat.S_ISREG(metadata.st_mode) or metadata.st_nlink != 1 or len(raw) > 65536:
+    raise SystemExit("qualification summary is not a bounded regular file")
+value = json.loads(raw)
+canonical = json.dumps(value, sort_keys=True, separators=(",", ":")).encode()
+if raw != canonical:
+    raise SystemExit("qualification summary is not canonical JSON")
+if (
+    value.get("schema_version")
+    != "workstream.terminal_systems_composition_evidence.v1"
+    or value.get("provider_mode") != "controlled"
+    or value.get("guide_to_contribution_proven") is not False
+    or value.get("replay_additional_provider_calls") != 0
+    or value.get("owned_runtime_resources_removed") is not True
+):
+    raise SystemExit("qualification summary mode or completion facts differ")
+expected_runtime = {
+    "platform_identity_digest": sys.argv[4],
+    "outer_configuration_digest": sys.argv[5],
+    "engine_digest": sys.argv[6],
+    "launcher_digest": sys.argv[7],
+    "builder_image_id": sys.argv[8],
+    "builder_manifest": sys.argv[9],
+    "offline_cache_digest": sys.argv[10],
+}
+if value.get("image") != {"digest": sys.argv[2], "id": sys.argv[3]}:
+    raise SystemExit("qualification summary image identity differs")
+runtime = value.get("runtime")
+if not isinstance(runtime, dict) or any(
+    runtime.get(key) != expected for key, expected in expected_runtime.items()
+):
+    raise SystemExit("qualification summary runtime identity differs")
+effects = value.get("model_effects")
+if not isinstance(effects, list) or len(effects) != 4:
+    raise SystemExit("qualification summary model effects differ")
+for effect in effects:
+    if UUID(effect["effect_id"]).version != 7:
+        raise SystemExit("qualification summary effect identity differs")
+    if UUID(effect["request_binding_id"]).version != 7:
+        raise SystemExit("qualification summary request binding differs")
+    if UUID(effect["response_binding_id"]).version != 7:
+        raise SystemExit("qualification summary response binding differs")
+trials = value.get("trials")
+if not isinstance(trials, list) or len(trials) != 2:
+    raise SystemExit("qualification summary retained trials differ")
+for trial in trials:
+    for key in (
+        "trial_evidence_id",
+        "artifact_binding_id",
+        "artifact_content_id",
+        "put_attempt_id",
+        "verification_receipt_id",
+    ):
+        UUID(trial[key])
+    outcomes = trial.get("step_outcomes")
+    if not isinstance(outcomes, dict) or len(outcomes) != 17:
+        raise SystemExit("qualification summary step outcomes differ")
+PY
+  fi
+  local exit_temporary="${EXIT_SIDECAR}.tmp.$$"
+  printf '%s\n' "${status}" >"${exit_temporary}" || status=1
+  mv -- "${exit_temporary}" "${EXIT_SIDECAR}" || status=1
+  if [[ "${status}" == 0 ]]; then
+    python3 - \
+      "${RESULT_SUMMARY}.tmp.$$" "${RESULT_SUMMARY}" "${INVOCATION_ID}" \
+      "${EXPECTED_HEAD}" "${EXPECTED_TREE}" "${RUN_ID}" \
+      "${PLATFORM_IDENTITY}" "${WORKSTREAM_TS_RUNSC_LAUNCHER_DIGEST}" \
+      "${WORKSTREAM_TS_RUNSC_BUILDER_ID}" "${WORKSTREAM_TS_RUNSC_CHECKER_DIGEST}" \
+      "${RESULT_LOG}" "${METADATA}" "${JUNIT_XML}" "${FIXTURE_SUMMARY}" <<'PY' || status=1
+import hashlib
+import json
+from pathlib import Path
+import sys
+
+(
+    temporary,
+    destination,
+    invocation_id,
+    head,
+    tree,
+    run_id,
+    platform,
+    launcher,
+    builder,
+    checker,
+    log_path,
+    metadata_path,
+    junit_path,
+    fixture_summary_path,
+) = sys.argv[1:]
+
+def digest(path: str) -> str:
+    return "sha256:" + hashlib.sha256(Path(path).read_bytes()).hexdigest()
+
+value = {
+    "artifacts": {
+        "junit_sha256": digest(junit_path),
+        "log_sha256": digest(log_path),
+        "metadata_sha256": digest(metadata_path),
+        "qualification_summary_sha256": digest(fixture_summary_path),
+    },
+    "builder_image_id": builder,
+    "checker_image_digest": checker,
+    "cleanup": {"database": True, "docker": True, "minio": True},
+    "invocation_id": invocation_id,
+    "launcher_digest": launcher,
+    "platform_identity_digest": platform,
+    "result": "passed",
+    "run_id": run_id,
+    "schema_version": 1,
+    "source_head": head,
+    "source_tree": tree,
+    "tests": {"errors": 0, "failures": 0, "passed": 1, "skipped": 0},
+}
+encoded = (json.dumps(value, indent=2, sort_keys=True) + "\n").encode()
+Path(temporary).write_bytes(encoded)
+Path(temporary).replace(destination)
+PY
+    if [[ "${status}" == 0 ]]; then
+      local summary_hash
+      summary_hash="$(sha256sum "${RESULT_SUMMARY}" | awk '{print "sha256:" $1}')" || status=1
+      local summary_hash_temporary="${RESULT_SUMMARY_SHA256}.tmp.$$"
+      printf '%s\n' "${summary_hash}" >"${summary_hash_temporary}" || status=1
+      mv -- "${summary_hash_temporary}" "${RESULT_SUMMARY_SHA256}" || status=1
+    fi
+  fi
+  if [[ "${status}" != 0 ]]; then
+    rm -f -- "${RESULT_SUMMARY}" "${RESULT_SUMMARY_SHA256}" \
+      "${RESULT_SUMMARY}.tmp.$$" "${RESULT_SUMMARY_SHA256}.tmp.$$"
+    printf '%s\n' "${status}" >"${EXIT_SIDECAR}.tmp.$$"
+    mv -- "${EXIT_SIDECAR}.tmp.$$" "${EXIT_SIDECAR}"
+  fi
+  cat -- "${RESULT_LOG}" >&3
   exit "${status}"
 }
-trap cleanup EXIT INT TERM
+
+on_signal() {
+  exit 130
+}
+
+[[ "${EXPECTED_HEAD}" =~ ^[a-f0-9]{40}$ ]]
+[[ "${EXPECTED_TREE}" =~ ^[a-f0-9]{40}$ ]]
+[[ "${EVIDENCE_PREFIX}" == /* ]]
+[[ "$(basename "${EVIDENCE_PREFIX}")" =~ ^[A-Za-z0-9._-]+$ ]]
+[[ -d "$(dirname "${EVIDENCE_PREFIX}")" && ! -L "$(dirname "${EVIDENCE_PREFIX}")" ]]
+[[ "${EVIDENCE_PREFIX}" != "${REPOSITORY_ROOT}"/* ]]
+[[ "${EVIDENCE_PREFIX}" != "${COMPOSITION_ROOT}"/* ]]
+[[ -z "${WORKSTREAM_TS_RUNSC_METADATA:-}" ]]
+[[ -z "${WORKSTREAM_TS_RUNSC_LOG:-}" ]]
+[[ -z "${WORKSTREAM_TS_RUNSC_EXIT:-}" ]]
+for evidence_path in \
+  "${METADATA}" "${RESULT_LOG}" "${EXIT_SIDECAR}" "${JUNIT_XML}" \
+  "${FIXTURE_SUMMARY}" "${RESULT_SUMMARY}" "${RESULT_SUMMARY_SHA256}"; do
+  [[ ! -e "${evidence_path}" && ! -L "${evidence_path}" ]]
+done
+exec 3>&1 4>&2
+: >"${RESULT_LOG}"
+exec >"${RESULT_LOG}" 2>&1
+trap cleanup EXIT
+trap on_signal INT TERM
+source_guard
 
 [[ "${STATE_ROOT}" == /* ]]
 [[ "${STATE_ROOT}" =~ ^/tmp/ws-pilot00-[a-z0-9-]+$ ]]
@@ -130,7 +353,7 @@ trap cleanup EXIT INT TERM
 [[ "${CONTAINER}" != "${PREPARED_CONTAINER}" ]]
 [[ "${RUN_ID}" =~ ^[a-z0-9][a-z0-9-]{0,30}$ ]]
 [[ "${CONTAINER}" =~ ^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$ ]]
-[[ "${WORKSTREAM_TS_RUNSC_PREFLIGHT_ONLY:-0}" =~ ^[01]$ ]]
+[[ "${WORKSTREAM_TS_RUNSC_PREFLIGHT_ONLY:-0}" == 0 ]]
 [[ -n "${WORKSTREAM_TEST_ADMIN_DATABASE_URL:-}" ]]
 [[ -n "${WORKSTREAM_TEST_MINIO_ENDPOINT:-}" ]]
 echo "qualification stage=host_identity_preflight"
@@ -496,21 +719,22 @@ export WORKSTREAM_TS_RUNSC_CACHE_DIGEST="$(python3 -c 'import json,sys; print(js
 export WORKSTREAM_TS_RUNSC_ENGINE_DIGEST="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["runsc_binary_sha256"])' "${STATE_ROOT}/prepared-assets.json")"
 export WORKSTREAM_TS_RUNSC_LAUNCHER_PATH="${INNER_COMPOSITION_ROOT}/bin/workstream-trial-launcher"
 export WORKSTREAM_TS_RUNSC_LAUNCHER_DIGEST="sha256:$(sha256sum "${COMPOSITION_ROOT}/bin/workstream-trial-launcher" | cut -d' ' -f1)"
+export WORKSTREAM_TS_RUNSC_SUMMARY_PATH="${FIXTURE_SUMMARY}"
 
-if [[ "${WORKSTREAM_TS_RUNSC_PREFLIGHT_ONLY:-0}" == 1 ]]; then
-  echo "qualification stage=preflight_only_complete"
-  exit 0
-fi
 cd "${REPOSITORY_ROOT}/backend"
 echo "qualification stage=postgresql_minio_runsc_composition"
 set +e
 .venv/bin/python scripts/run_isolated_tests.py \
-  --metadata-json "${METADATA}" --timeout-seconds 900 --lane trial_composition -- \
+  --metadata-json "${METADATA}" --timeout-seconds 900 --lane trial_composition \
+  --tree-sha "${EXPECTED_HEAD}" -- \
   env PYTHONPATH=.:tests .venv/bin/pytest -c pyproject.toml -vv -x \
   -p conftest -p tests.checkers.external.conftest -o faulthandler_timeout=120 \
+  -o junit_family=xunit2 --junitxml "${JUNIT_XML}" \
   ../external_checkers/workstream-checker-service/tests/terminal_systems_runsc_composition.py \
-  >"${RESULT_LOG}" 2>&1
+  2>&1
 readonly TEST_STATUS=$?
 set -e
-cat "${RESULT_LOG}"
+if [[ "${TEST_STATUS}" == 0 ]]; then
+  validate_junit
+fi
 exit "${TEST_STATUS}"
