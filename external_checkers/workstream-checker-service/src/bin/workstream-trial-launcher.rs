@@ -659,6 +659,7 @@ fn spawn_child(
     if pid == 0 {
         unsafe { libc::close(pipe[0]) };
         if unsafe { libc::close(export_fd) } != 0 {
+            write_child_error(pipe[1], &os_failure("close child export descriptor"));
             unsafe { libc::_exit(126) };
         }
         match prepare_child_error_fd(pipe[1]) {
@@ -700,20 +701,8 @@ fn child_exec(command: &[OsString], identity: ChildIdentity, _error_fd: RawFd) -
 }
 
 fn close_other_file_descriptors() -> Result<()> {
-    #[cfg(target_os = "linux")]
-    {
-        let result = unsafe { libc::syscall(libc::SYS_close_range, 4_u32, u32::MAX, 0_u32) };
-        if result == 0 {
-            return Ok(());
-        }
-        let error = io::Error::last_os_error();
-        if !matches!(error.raw_os_error(), Some(libc::ENOSYS | libc::EINVAL)) {
-            return Err(error.into());
-        }
-    }
-    let maximum = unsafe { libc::sysconf(libc::_SC_OPEN_MAX) }.clamp(3, 65_536);
-    for descriptor in 4..maximum {
-        unsafe { libc::close(descriptor as RawFd) };
+    if unsafe { libc::syscall(libc::SYS_close_range, 4_u32, u32::MAX, 0_u32) } != 0 {
+        return Err(os_failure("close inherited descriptors"));
     }
     Ok(())
 }
@@ -725,6 +714,9 @@ fn write_child_error(descriptor: RawFd, error: &LauncherError) {
     }
     while !message.is_empty() {
         let written = unsafe { libc::write(descriptor, message.as_ptr().cast(), message.len()) };
+        if written < 0 && io::Error::last_os_error().kind() == io::ErrorKind::Interrupted {
+            continue;
+        }
         if written <= 0 {
             break;
         }
