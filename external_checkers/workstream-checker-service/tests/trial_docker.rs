@@ -4,9 +4,9 @@ use std::fs;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::sync::Mutex;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 #[cfg(not(feature = "trial-docker-qualification"))]
@@ -303,32 +303,24 @@ fn backend_emits_offline_bounded_builder_and_socketless_candidate_specs() {
     assert_eq!(creates.len(), 2);
     let builder = &creates[0].arguments;
     assert!(builder.windows(2).any(|item| item == ["--network", "none"]));
-    assert!(
-        builder
-            .windows(2)
-            .any(|item| item == ["--runtime", "runsc"])
-    );
+    assert!(builder
+        .windows(2)
+        .any(|item| item == ["--runtime", "runsc"]));
     assert_eq!(
         builder.iter().filter(|item| *item == "--cap-add").count(),
         4
     );
     assert!(!builder.iter().any(|item| item == "--privileged"));
     assert!(!builder.iter().any(|item| item == "--mount"));
-    assert!(
-        builder
-            .iter()
-            .any(|item| item == "--dockerfile=/workspace/environment/Containerfile")
-    );
-    assert!(
-        builder
-            .iter()
-            .any(|item| item == "--context=dir:///workspace/environment")
-    );
-    assert!(
-        !builder.iter().any(|item| {
-            item == "--dockerfile=/workspace/environment/environment/Containerfile"
-        })
-    );
+    assert!(builder
+        .iter()
+        .any(|item| item == "--dockerfile=/workspace/environment/Containerfile"));
+    assert!(builder
+        .iter()
+        .any(|item| item == "--context=dir:///workspace/environment"));
+    assert!(!builder
+        .iter()
+        .any(|item| { item == "--dockerfile=/workspace/environment/environment/Containerfile" }));
     assert_eq!(creates[0].mounts.len(), 3);
     assert_eq!(
         creates[0].mounts[0].class,
@@ -340,11 +332,9 @@ fn backend_emits_offline_bounded_builder_and_socketless_candidate_specs() {
     assert!(!creates[0].mounts[2].readonly);
     let candidate = &creates[1].arguments;
     assert!(candidate.iter().any(|item| item == "--read-only"));
-    assert!(
-        candidate
-            .windows(2)
-            .any(|item| item == ["--user", "65532:65532"])
-    );
+    assert!(candidate
+        .windows(2)
+        .any(|item| item == ["--user", "65532:65532"]));
     assert!(!candidate.iter().any(|item| item.contains("docker.sock")));
     assert!(!candidate.iter().any(|item| item.contains("execution.sock")));
     assert!(!candidate.iter().any(|item| item.contains("model.sock")));

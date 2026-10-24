@@ -1146,10 +1146,14 @@ pub(crate) fn persist_runtime_journal_for_test(
         attempt_id: "018f6f49-66b8-7d2a-bf4d-0e2eeaa00001".into(),
         trial_owner_id: format!("trial_{}", "a".repeat(32)),
     };
-    persist_runtime_journal(root, &owner, &OwnedRuntimeResources {
-        containers: vec!["ws-trial-live-resource".into()],
-        images: Vec::new(),
-    })?;
+    persist_runtime_journal(
+        root,
+        &owner,
+        &OwnedRuntimeResources {
+            containers: vec!["ws-trial-live-resource".into()],
+            images: Vec::new(),
+        },
+    )?;
     runtime_journal_path(root, &owner)
 }
 

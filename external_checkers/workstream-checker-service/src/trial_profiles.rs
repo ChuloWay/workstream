@@ -234,7 +234,7 @@ fn payload_digest<T: Serialize>(value: &T, digest_key: &str) -> Result<String, &
     canonical_hash(&value).map_err(|_| "trial authority manifest invalid")
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(crate) struct TrialProfileCatalog {
     entries: Vec<TrialProfile>,
 }

@@ -227,7 +227,9 @@ if that capability still exists.
 
 The node also accepts the deployment pair `smolvm` / `smol-microvm`. Python still
 uses the single `external_checker_execution/unix_socket` provider; neither a
-project policy nor a checker request can choose the engine. Each execution gets
+project policy nor a checker request can choose the engine. Smol currently
+rejects model/trial callbacks and predecessor-material requests before VM
+admission; those capabilities require the configured Docker/runsc node. Each execution gets
 a fresh VM and the same verified ART grant and JSON result contract. The native
 bootstrap has no Python or shell dependency in a project image.
 

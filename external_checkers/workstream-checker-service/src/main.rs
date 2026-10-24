@@ -2,12 +2,12 @@
 
 mod model_relay;
 mod proxy_transport;
+mod smol;
 mod trial_docker;
 mod trial_engine;
 mod trial_evidence_proxy;
 mod trial_profiles;
 mod trial_relay;
-mod smol;
 
 use model_relay::{
     deserialize_required_model_grant, valid_model_grant, validate_proxy_socket,
@@ -2132,9 +2132,6 @@ fn execute_container_inner(
     client: &UnixStream,
     budget: &mut RequestExecutionBudget,
 ) -> Result<ExecutedChecker, ExecutionFailure> {
-    if config.runtime == "smolvm" {
-        return smol::execute(config, cache, request, workspace, client, budget);
-    }
     let owner = container_owner(config)
         .map_err(|_| ExecutionFailure::ordinary("implementation_unavailable", false))?;
     // Revalidate immediately before handing the path to Docker.
@@ -2142,6 +2139,15 @@ fn execute_container_inner(
         .map_err(|_| ExecutionFailure::ordinary("material_unavailable", false))?;
     if observed_input != grant.input_inventory {
         return Err(ExecutionFailure::ordinary("material_unavailable", false));
+    }
+    if config.runtime == "smolvm" {
+        if grant.predecessor.is_some() || model_mount.is_some() || trial_mount.is_some() {
+            return Err(ExecutionFailure::ordinary(
+                "implementation_unavailable",
+                false,
+            ));
+        }
+        return smol::execute(config, cache, request, &grant.input, client, budget);
     }
     if let (Some(predecessor), Some(expected)) = (&grant.predecessor, &grant.predecessor_inventory)
     {
@@ -4754,7 +4760,7 @@ exit 2
 
     #[test]
     fn container_mounts_only_server_verified_visible_roles() {
-        let (root, config) = test_config();
+        let (root, mut config) = test_config();
         fs::write(
             &config.docker_binary,
             b"#!/bin/sh\nroot=$(dirname \"$0\")\ncase \"$1\" in\n  create) printf '%s\\n' \"$@\" > \"$root/args\"; exit 17;;\n  rm|container) exit 0;;\nesac\nexit 2\n",
@@ -4859,6 +4865,26 @@ exit 2
         let arguments = fs::read_to_string(root.join("args")).unwrap();
         assert!(arguments.contains("dst=/work/input,readonly"));
         assert!(arguments.contains("dst=/work/context/predecessor,readonly"));
+        // Smol has no predecessor projection yet: reject before VM admission.
+        // Without this guard, missing Smol setup reaches Machine::create and
+        // returns cleanup-unsettled, distinguishing a mere incidental failure.
+        config.runtime = "smolvm".into();
+        assert_eq!(
+            execute_container_inner(
+                &config,
+                &config.cache[0],
+                &request,
+                &visible,
+                None,
+                None,
+                &client,
+                &mut budget,
+            ),
+            Err(ExecutionFailure::ordinary(
+                "implementation_unavailable",
+                false
+            ))
+        );
         fs::set_permissions(&current, fs::Permissions::from_mode(0o700)).unwrap();
         fs::set_permissions(&prior, fs::Permissions::from_mode(0o700)).unwrap();
         fs::remove_dir_all(root).unwrap();
