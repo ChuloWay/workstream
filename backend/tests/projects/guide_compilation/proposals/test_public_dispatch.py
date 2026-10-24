@@ -8,6 +8,7 @@ from sqlalchemy import text
 from app.core.identifiers import new_record_id
 from app.modules.projects.api.guide_compilation import ProjectGuideCompilationDelivery
 from app.modules.projects.api.setup_identity import project_guide_compilation_task_id
+from tests.projects.client_fixtures import project_database_env as project_database_env
 from tests.projects.guide_compilation.runtime_fixtures import (
     ScriptedGuideRuntime,
     configure_scripted_model_transport,
@@ -69,14 +70,14 @@ def configure_manual_dispatch(monkeypatch, tmp_path, broker_failure):
 @pytest.mark.parametrize("broker_failure", [False, True])
 @pytest.mark.parametrize("manager_handoff", [False, True])
 async def test_manual_dispatch_retains_one_human_request_and_one_execution(
-    isolated_database_env, monkeypatch, tmp_path, broker_failure, manager_handoff,
+    project_database_env, monkeypatch, tmp_path, broker_failure, manager_handoff,
 ):
     from app.core.config import get_settings
 
     worker, runtime, published = configure_manual_dispatch(
         monkeypatch, tmp_path, broker_failure
     )
-    async with proposal_case(isolated_database_env) as (_, factory, command, actor, grant):
+    async with proposal_case(project_database_env) as (_, factory, command, actor, grant):
         from tests.project_create_fixtures import grant_fixture_admin_role
 
         async with factory() as session, session.begin():

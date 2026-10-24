@@ -15,6 +15,12 @@ from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.identifiers import new_record_id
+from app.modules.authorization.domain.model_usage import (
+    GRANT,
+    ModelCallGrantAuthorityFacts,
+    checker_model_call_resource,
+)
+from app.modules.authorization.domain.resource_digest import authorization_resource_digest
 from app.modules.model_usage.api import (
     ModelActionEvidence,
     ModelCallExecutionFacts,
@@ -27,8 +33,8 @@ from tests.checkers_model_calls.model_usage_pg_support import (
     DatabaseFacts,
     model_database as _ledger_database,
 )
+from tests.checkers_model_calls.model_usage_boundary_support import BoundaryPorts
 from tests.checkers_model_calls.test_model_call_transactions_postgresql import (
-    BoundaryPorts,
     execution,
     provision,
     service,
@@ -88,20 +94,45 @@ class GrantBoundaries:
             evidence_id=self._evidence_id or new_record_id(),
             facts_digest=model_action_digest("grant", facts),
         )
+        actor_id = new_record_id()
+        resource = checker_model_call_resource(
+            GRANT,
+            ModelCallGrantAuthorityFacts(
+                execution=execution_facts,
+                slot=paid_slot,
+                external_request_digest=external_request_digest,
+                token_hash=token_hash,
+            ),
+        )
+        await self._session.execute(
+            text(
+                "insert into actor_profiles(id,actor_kind,status,service_identity) "
+                "values (:id,'service','active','workstream.checker.post_submit')"
+            ),
+            {"id": actor_id},
+        )
         await self._session.execute(
             text(
                 "insert into audit_events(id,event_domain,event_type,actor_ref_kind,actor_id,"
-                "action_id,permission_id,denial_code,after_facts) values "
+                "action_id,permission_id,project_id,resource_type,resource_id,"
+                "denial_code,after_facts) values "
                 "(:id,'authority','SensitiveAuthorizationAllowed','actor_profile',:actor,"
-                ":action,'checker.model_call.grant',null,cast(:after as jsonb)) "
+                ":action,'checker.model_call.grant',:project,:resource_type,:resource_id,"
+                "null,cast(:after as jsonb)) "
                 "on conflict(id) do nothing"
             ),
             {
                 "id": evidence.evidence_id,
-                "actor": str(new_record_id()),
+                "actor": str(actor_id),
                 "action": self._action,
+                "project": str(resource.scope_project_id),
+                "resource_type": resource.resource_type,
+                "resource_id": str(resource.resource_id),
                 "after": json.dumps(
-                    {"allowed": True, "resource_context_digest": sha("grant authority")}
+                    {
+                        "allowed": True,
+                        "resource_context_digest": authorization_resource_digest(resource),
+                    }
                 ),
             },
         )

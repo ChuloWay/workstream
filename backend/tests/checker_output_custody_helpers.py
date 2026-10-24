@@ -73,9 +73,7 @@ from tests.artifact_store_helpers import (
     artifact_admission_limit_settings,
     artifact_preparation_limits,
 )
-from tests.checkers_model_calls.test_model_call_transactions_postgresql import (
-    BoundaryPorts,
-)
+from tests.checkers_model_calls.model_usage_boundary_support import BoundaryPorts
 from tests.checkers_model_calls.test_public_api import profile_spec
 from tests.checkers.execution.support import provision_post_submit_service
 from tests.checkers.external.support import post_registry_spec
