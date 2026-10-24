@@ -202,14 +202,6 @@ def api_environment() -> dict[str, str]:
     env["WORKSTREAM_FLOW_AUTH_AUDIENCE"] = flow_audience
     env["WORKSTREAM_FLOW_AUTH_LOCAL_HMAC_SECRET"] = flow_secret
     env["WORKSTREAM_PROJECT_AGENT_MODEL"] = "api-contract-fixture-model"
-    runtime_token = f"{os.getpid()}-{uuid4().hex}"
-    runner_temp = Path(env.get("RUNNER_TEMP", "/tmp"))
-    model_socket = runner_temp / f"workstream-api-contract-model-{runtime_token}.sock"
-    if os.path.lexists(model_socket):
-        raise RuntimeError("scripted model socket path is not fresh")
-    # The deterministic runtime does not call the capability. A concrete absent
-    # path still proves typed profile/session admission without a provider bypass.
-    env["WORKSTREAM_CHECKER_MODEL_PROXY_SOCKET"] = str(model_socket)
     env["WORKSTREAM_CELERY_TASK_ALWAYS_EAGER"] = "true"
     env["WORKSTREAM_CELERY_BROKER_URL"] = "memory://"
     env["WORKSTREAM_CELERY_RESULT_BACKEND_URL"] = "cache+memory://"
@@ -217,11 +209,12 @@ def api_environment() -> dict[str, str]:
     minio_bucket = env.get("WORKSTREAM_TEST_MINIO_BUCKET")
     minio_prefix = env.get("WORKSTREAM_TEST_MINIO_PREFIX")
     if minio_endpoint and minio_bucket and minio_prefix:
+        scratch_parent = Path(env.get("RUNNER_TEMP", "/tmp"))
         env.update(
             {
                 "WORKSTREAM_ARTIFACT_STORE_BACKEND": "s3_compatible",
                 "WORKSTREAM_ARTIFACT_SCRATCH_ROOT": str(
-                    runner_temp / "workstream-api-contract-scratch"
+                    scratch_parent / "workstream-api-contract-scratch"
                 ),
                 "WORKSTREAM_ARTIFACT_S3_PROVIDER_PROFILE": "minio",
                 "WORKSTREAM_ARTIFACT_S3_REGION": "us-east-1",
@@ -238,22 +231,6 @@ def api_environment() -> dict[str, str]:
                 "WORKSTREAM_ARTIFACT_ADMISSION_DEPLOYMENT_MAXIMUM_BYTES": "67108864",
             }
         )
-    elif env.get("WORKSTREAM_ARTIFACT_STORE_BACKEND", "disabled") == "disabled":
-        env.update(
-            {
-                "WORKSTREAM_ARTIFACT_STORE_BACKEND": "local",
-                "WORKSTREAM_ARTIFACT_LOCAL_ROOT": str(
-                    runner_temp / f"workstream-api-contract-artifacts-{runtime_token}"
-                ),
-                "WORKSTREAM_ARTIFACT_SCRATCH_ROOT": str(
-                    runner_temp / f"workstream-api-contract-scratch-{runtime_token}"
-                ),
-                "WORKSTREAM_ARTIFACT_ADMISSION_TASK_MAXIMUM_BYTES": "67108864",
-                "WORKSTREAM_ARTIFACT_ADMISSION_PRODUCER_MAXIMUM_BYTES": "67108864",
-                "WORKSTREAM_ARTIFACT_ADMISSION_PROJECT_MAXIMUM_BYTES": "67108864",
-                "WORKSTREAM_ARTIFACT_ADMISSION_DEPLOYMENT_MAXIMUM_BYTES": "67108864",
-            }
-        )
     env.setdefault(
         "WORKSTREAM_API_RATE_LIMIT_KEY_SECRET",
         base64.b64encode(os.urandom(32)).decode("ascii"),
@@ -264,6 +241,34 @@ def api_environment() -> dict[str, str]:
     )
     env["PYTHONPATH"] = str(project_root())
     return env
+
+
+def configure_scripted_model_session_environment(env: dict[str, str]) -> None:
+    """Provision the private test paths required only by the full setup drill."""
+    runtime_token = f"{os.getpid()}-{uuid4().hex}"
+    runner_temp = Path(env.get("RUNNER_TEMP", "/tmp"))
+    model_socket = runner_temp / f"workstream-api-contract-model-{runtime_token}.sock"
+    if os.path.lexists(model_socket):
+        raise RuntimeError("scripted model socket path is not fresh")
+    if env.get("WORKSTREAM_ARTIFACT_STORE_BACKEND", "disabled") == "disabled":
+        local_root = runner_temp / f"workstream-api-contract-artifacts-{runtime_token}"
+        scratch_root = runner_temp / f"workstream-api-contract-scratch-{runtime_token}"
+        local_root.mkdir(mode=0o700)
+        scratch_root.mkdir(mode=0o700)
+        env.update(
+            {
+                "WORKSTREAM_ARTIFACT_STORE_BACKEND": "local",
+                "WORKSTREAM_ARTIFACT_LOCAL_ROOT": str(local_root),
+                "WORKSTREAM_ARTIFACT_SCRATCH_ROOT": str(scratch_root),
+                "WORKSTREAM_ARTIFACT_ADMISSION_TASK_MAXIMUM_BYTES": "67108864",
+                "WORKSTREAM_ARTIFACT_ADMISSION_PRODUCER_MAXIMUM_BYTES": "67108864",
+                "WORKSTREAM_ARTIFACT_ADMISSION_PROJECT_MAXIMUM_BYTES": "67108864",
+                "WORKSTREAM_ARTIFACT_ADMISSION_DEPLOYMENT_MAXIMUM_BYTES": "67108864",
+            }
+        )
+    # The deterministic runtime does not call the capability. A concrete absent
+    # path proves typed profile/session admission without a provider bypass.
+    env["WORKSTREAM_CHECKER_MODEL_PROXY_SOCKET"] = str(model_socket)
 
 
 async def exercise_rate_control_contract(env: dict[str, str]) -> None:
@@ -2300,6 +2305,7 @@ async def main(env: dict[str, str]) -> None:
 
 if __name__ == "__main__":
     api_env = api_environment()
+    configure_scripted_model_session_environment(api_env)
     assert_isolated_database_url(api_env["WORKSTREAM_DATABASE_URL"])
     os.environ.update(api_env)
     get_settings.cache_clear()
