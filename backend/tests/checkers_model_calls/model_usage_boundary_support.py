@@ -38,6 +38,7 @@ from app.modules.authorization.domain.model_usage import (
     project_model_admin_resource,
     setup_model_usage_resource,
 )
+from app.modules.authorization.domain.audit_targets import project_authority_audit_target
 from app.modules.authorization.domain.resource_digest import authorization_resource_digest
 from app.modules.model_usage.api import (
     ModelActionEvidence,
@@ -61,6 +62,7 @@ class BoundaryPorts:
     current_checks: int = 0
     events: list[str] = field(default_factory=list)
     corrupt_admin_receipt: bool = False
+    corrupt_runtime_receipt_action: str | None = None
     terminal_receipt_change: str | None = None
 
     def _decision(self, action: str, facts: object) -> ModelActionEvidence:
@@ -241,10 +243,15 @@ class DatabaseBoundaryPorts:
             project_id = getattr(resource, "scope_project_id", None) or getattr(
                 resource, "project_id", None
             )
-            resource_type = resource.resource_type
-            resource_id = resource.resource_id
             if resource_digest is None:
                 resource_digest = authorization_resource_digest(resource)
+            target = project_authority_audit_target(
+                resource,
+                resource.action_id,
+                matched_scope_project_id=project_id,
+            )
+            if target is not None:
+                project_id, resource_type, resource_id, _, _ = target
         await self._session.execute(
             text(
                 "insert into audit_events(id,event_domain,event_type,actor_ref_kind,actor_id,"
@@ -267,7 +274,10 @@ class DatabaseBoundaryPorts:
                         "allowed": True,
                         "resource_context_digest": (
                             sha("substituted-authority")
-                            if actor_id is not None and self._ports.corrupt_admin_receipt
+                            if (
+                                actor_id is not None and self._ports.corrupt_admin_receipt
+                            )
+                            or self._ports.corrupt_runtime_receipt_action == action
                             else resource_digest or sha("authority")
                         ),
                     }
@@ -278,30 +288,30 @@ class DatabaseBoundaryPorts:
 
     async def authorize_profile(self, facts):
         evidence = await self._ports.authorize_profile(facts)
+        resource = project_model_admin_resource(
+            PROFILE_PROVISION, facts, actor_profile_id=facts.actor_profile_id
+        )
         return await self._authority(
             evidence,
             action="project.model_profile.provision",
             permission="project.model_profile.manage",
             actor_id=facts.actor_profile_id,
-            resource_digest=authorization_resource_digest(
-                project_model_admin_resource(
-                    PROFILE_PROVISION, facts, actor_profile_id=facts.actor_profile_id
-                )
-            ),
+            resource=resource,
+            resource_digest=authorization_resource_digest(resource),
         )
 
     async def authorize_budget(self, facts):
         evidence = await self._ports.authorize_budget(facts)
+        resource = project_model_admin_resource(
+            BUDGET_CONFIGURE, facts, actor_profile_id=facts.actor_profile_id
+        )
         return await self._authority(
             evidence,
             action="project.model_budget.configure",
             permission="project.model_budget.manage",
             actor_id=facts.actor_profile_id,
-            resource_digest=authorization_resource_digest(
-                project_model_admin_resource(
-                    BUDGET_CONFIGURE, facts, actor_profile_id=facts.actor_profile_id
-                )
-            ),
+            resource=resource,
+            resource_digest=authorization_resource_digest(resource),
         )
 
     async def authorize_prepare(self, execution, slot, request_sha256):

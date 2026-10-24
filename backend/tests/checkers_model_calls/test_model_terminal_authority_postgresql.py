@@ -18,15 +18,83 @@ from tests.checkers_model_calls.model_usage_boundary_support import (
 )
 from tests.checkers_model_calls.test_model_call_transactions_postgresql import (
     evidence,
+    execution,
     prepare_and_reserve,
     provision,
     service,
     setup_service,
     setup_slot_key,
     sha,
+    slot,
 )
 
 model_database = _model_database
+
+
+@pytest.mark.parametrize(
+    "action",
+    (
+        "checker.model_call.prepare",
+        "checker.model_call.dispatch",
+        "checker.model_call.observe",
+    ),
+)
+async def test_runtime_transition_rejects_foreign_authority_digest(
+    model_database: DatabaseFacts,
+    action: str,
+) -> None:
+    """Each paid transition binds the exact private AUTH resource, not digest shape."""
+    ports = BoundaryPorts()
+    profile = await provision(model_database, ports, limit=10_000)
+    run = execution(model_database)
+    paid_slot = slot(model_database, profile, action.rsplit(".", 1)[-1])
+    request_sha = sha("authority-" + action)
+    request_art = evidence("authority-" + action, request_sha)
+
+    if action == "checker.model_call.prepare":
+        ports.corrupt_runtime_receipt_action = action
+        with pytest.raises(DBAPIError, match="model usage prepare authority is invalid"):
+            async with AsyncSession(model_database.engine, expire_on_commit=False) as session:
+                async with session.begin():
+                    await service(session, ports).prepare_attempt(
+                        run,
+                        paid_slot,
+                        registry_entry_id=model_database.registry_entry_id,
+                        request_sha256=request_sha,
+                    )
+        return
+
+    async with AsyncSession(model_database.engine, expire_on_commit=False) as session:
+        async with session.begin():
+            prepared = await service(session, ports).prepare_attempt(
+                run,
+                paid_slot,
+                registry_entry_id=model_database.registry_entry_id,
+                request_sha256=request_sha,
+            )
+    ports.corrupt_runtime_receipt_action = action
+    if action == "checker.model_call.dispatch":
+        with pytest.raises(DBAPIError, match="invalid dispatched checker model call"):
+            async with AsyncSession(model_database.engine, expire_on_commit=False) as session:
+                async with session.begin():
+                    await service(session, ports).reserve_dispatch(run, prepared, request_art)
+        return
+
+    ports.corrupt_runtime_receipt_action = None
+    async with AsyncSession(model_database.engine, expire_on_commit=False) as session:
+        async with session.begin():
+            dispatched = await service(session, ports).reserve_dispatch(
+                run, prepared, request_art
+            )
+    ports.corrupt_runtime_receipt_action = action
+    with pytest.raises(DBAPIError, match="invalid uncertain checker model call"):
+        async with AsyncSession(model_database.engine, expire_on_commit=False) as session:
+            async with session.begin():
+                await service(session, ports).mark_uncertain(
+                    dispatched.effect,
+                    provider_response_id=None,
+                    observation_digest=sha("authority-observation"),
+                )
 
 
 async def test_known_failed_settles_once_and_allows_authorized_child(

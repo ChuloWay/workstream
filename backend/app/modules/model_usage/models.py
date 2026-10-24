@@ -614,6 +614,7 @@ class ModelUsageEffect(Base):
     )
     request_sha256: Mapped[str] = mapped_column(String(71), nullable=False)
     state: Mapped[str] = mapped_column(String(32), nullable=False)
+    prepared_execution_facts: Mapped[dict | None] = mapped_column(JSONB)
     prepared_authorization_evidence_id: Mapped[str] = mapped_column(
         Uuid(as_uuid=False), ForeignKey("audit_events.id", ondelete="RESTRICT"), nullable=False
     )
@@ -636,6 +637,7 @@ class ModelUsageEffect(Base):
     budget_configuration_version: Mapped[int | None] = mapped_column(Integer)
     budget_configuration_digest: Mapped[str | None] = mapped_column(String(71))
     reserved_nanodollars: Mapped[int | None] = mapped_column(BigInteger)
+    dispatch_execution_facts: Mapped[dict | None] = mapped_column(JSONB)
     dispatch_authorization_evidence_id: Mapped[str | None] = mapped_column(
         Uuid(as_uuid=False), ForeignKey("audit_events.id", ondelete="RESTRICT"), unique=True
     )
