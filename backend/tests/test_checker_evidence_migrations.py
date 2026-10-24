@@ -176,6 +176,7 @@ async def _arrange_retained_lineages(
         tmp_path,
         database_url,
         admin_access=admin_access,
+        storage_settings=_settings(tmp_path, maximum_bytes=64 * 1024),
     ) as harness:
         model_stored = await harness.service.store(harness.request(b'{"result":"retained"}'))
         model_bound = await harness.bind(harness.selector, model_stored)

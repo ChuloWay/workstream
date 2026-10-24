@@ -646,11 +646,14 @@ async def output_custody_harness(
     admin_access,
     provider: str = "local",
     maximum_bytes: int = 1024,
+    storage_settings=None,
 ) -> AsyncIterator[OutputCustodyHarness]:
     """Compose real Local/MinIO storage and controlled exact output authority."""
     engine = create_async_engine(database_url)
     factory = async_sessionmaker(engine, expire_on_commit=False)
-    if provider == "minio":
+    if storage_settings is not None:
+        settings = storage_settings
+    elif provider == "minio":
         from tests.test_s3_artifact_store import minio_settings
 
         settings = minio_settings(private_prefix=f"checker-output/{new_record_id()}").model_copy(
