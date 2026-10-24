@@ -337,7 +337,7 @@ closed trial reservation/publication protocol (4 MiB frames) and model sessions
 (1 MiB frames); this host socket is never exposed inside an image.
 The verified ART request binds their configuration to the registry entry,
 checker image, material and current execution. The profile bounds offline
-builder/base/cache identities, operations and aggregate resources; the
+builder/base/cache and trusted-launcher identities, operations and aggregate resources; the
 projection selects material roles, visibility and finite ordered step templates.
 The image cannot select Docker flags, host paths, mounts, runtime,
 network, devices, credentials or another image. Workload commands remain
@@ -348,10 +348,27 @@ ART owns verified read-only inputs and canonical bounded scratch. The service
 projects only profile-authorized build/runtime roles, uses a networkless
 digest-pinned offline builder under the configured sandbox, loads exactly one
 owned candidate image, and runs fresh non-root, capability-free trials with no
-host socket or device. It applies independent CPU, memory/swap, PID, time,
-writable-byte/entry and output bounds to descendants. Missing prepared material,
-launch or cache failure, cancellation, capacity exhaustion and uncertain cleanup
-are infrastructure outcomes, never contributor findings.
+host socket or device. The digest-pinned launcher creates bounded filesystems
+inside the sandbox, then drops mount/chroot authority before running submitted
+commands. Builder code retains only its three required file capabilities;
+trial commands run as nonroot with no capabilities. Neither can reach the
+private bootstrap or host export directory. Exports belong to the nonroot
+service so it can read and remove complete and partial output.
+
+CPU, memory/swap, PID and wall-time bounds include the whole container,
+including the trusted launcher, build and export work. PID limits below two
+are refused before launch. Projected files, retained images and workspaces,
+temporary filesystems and export copies share one invocation byte/entry budget.
+Missing prepared material, launch/cache failure, platform capacity exhaustion,
+cancellation and uncertain cleanup are infrastructure outcomes. An observed
+workload limit or an unsupported generated export is instead a completed
+execution fact: receipts preserve the real child status and a separate
+`export_outcome`. Forced stops never invent an exit code or unobserved signal.
+Only successfully exported state with a profile-permitted work outcome can
+feed another step. Host storage errors remain infrastructure failures even
+when their operating-system error is disk-full. Project images interpret
+these facts against approved requirements; shared runtime code does not grade
+work or decide acceptance.
 
 Completed observations are published only after owned nested resources and
 scratch are settled. An opaque handle resolves to server-owned, request/material/
