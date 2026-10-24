@@ -92,8 +92,8 @@ async def test_runtime_transition_rejects_foreign_authority_digest(
             async with session.begin():
                 await service(session, ports).mark_uncertain(
                     dispatched.effect,
+                    sha("authority-observation"),
                     provider_response_id=None,
-                    observation_digest=sha("authority-observation"),
                 )
 
 
