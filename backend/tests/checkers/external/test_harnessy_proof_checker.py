@@ -5,7 +5,10 @@ from __future__ import annotations
 import importlib.util
 import io
 import json
+import os
 from pathlib import Path
+import subprocess
+import sys
 from uuid import uuid4
 
 import pytest
@@ -587,3 +590,54 @@ def test_published_service_paths_match_the_compose_overlay() -> None:
         ]
         mode = ":ro" if name in ("backend", "worker", "beat") else ""
         assert socket_mounts == [f"checker_socket:/run/ws-checker{mode}"], name
+
+
+def test_long_or_control_check_names_are_bounded_in_messages() -> None:
+    name = "x" * 300
+    findings = _findings(required_checks=[_check(name, conclusion="failure")])
+    assert [item["code"] for item in findings] == ["harnessy.proof.github.required_check"]
+    assert "x" * 200 + "..." in findings[0]["message"]
+    assert "x" * 201 not in findings[0]["message"]
+
+
+@pytest.mark.parametrize(
+    ("path", "protected"),
+    [
+        ("deploy/prod.tf", True),
+        ("deploy/eu/prod.tf", False),
+        ("keys/secret1.pem", True),
+        ("keys/secret12.pem", False),
+    ],
+)
+def test_configured_globs_keep_single_segment_wildcards_within_a_directory(
+    path: str, protected: bool
+) -> None:
+    configuration = {**CONFIGURATION, "protected_paths": ["deploy/*.tf", "keys/secret?.pem"]}
+    files = [{"filename": path, "previous_filename": None, "status": "modified"}]
+    expected = ["harnessy.proof.github.protected_path_changed"] if protected else []
+    assert _codes(configuration=configuration, changed_files=files) == expected
+
+
+@pytest.mark.parametrize("kind", ["directory", "fifo"])
+def test_read_proof_rejects_non_regular_files(tmp_path: Path, kind: str) -> None:
+    if kind == "directory":
+        (tmp_path / "proof.json").mkdir()
+    else:
+        os.mkfifo(tmp_path / "proof.json")
+    assert checker.read_proof(tmp_path) is None
+
+
+def test_entrypoint_fails_closed_without_proof_material() -> None:
+    """The image entrypoint runs isolated and reports the missing proof."""
+    request = {**_request(), "configuration": CONFIGURATION, "input": _input()}
+    completed = subprocess.run(
+        [sys.executable, "-I", str(CHECKER_ROOT / "checker.py")],
+        input=json.dumps(request),
+        capture_output=True,
+        text=True,
+        check=True,
+        timeout=30,
+    )
+    result = json.loads(completed.stdout)
+    assert result["verdict"] == "failed"
+    assert [item["code"] for item in result["findings"]] == ["harnessy.proof.missing"]

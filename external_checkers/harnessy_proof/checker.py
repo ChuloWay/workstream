@@ -487,9 +487,12 @@ def read_proof(input_root: Path) -> bytes | None:
         descriptor = os.open(input_root / PROOF_PATH, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
     except OSError:
         return None
+    # Check the type before wrapping: ``fdopen`` raises for a directory, and a
+    # contributor-controlled archive must yield a finding, not a crash.
+    if not stat.S_ISREG(os.fstat(descriptor).st_mode):
+        os.close(descriptor)
+        return None
     with os.fdopen(descriptor, "rb") as handle:
-        if not stat.S_ISREG(os.fstat(handle.fileno()).st_mode):
-            return None
         return handle.read(MAX_PROOF_BYTES + 1)
 
 

@@ -136,7 +136,8 @@ nothing the contributor could produce.
 
 | Claim | Command or proof | Result | Remaining uncertainty |
 |---|---|---|---|
-| Rules and result contract | `pytest tests/checkers/external/test_harnessy_proof_checker.py` | 108 passed | Facts agreement with chunk 02 was checked in a scratch run against that branch, not by a committed cross-branch test; chunk 04 should add one |
+| Rules and result contract | `pytest tests/checkers/external/test_harnessy_proof_checker.py` | 116 passed | Facts agreement with chunk 02 was checked in a scratch run against that branch, not by a committed cross-branch test; chunk 04 should add one |
+| Every fail-closed branch rejects | `coverage run` with `branch = true`, `patch = subprocess`, `include = */harnessy_proof/checker.py`, then `coverage combine` and `coverage report -m` | 100% line and branch on `checker.py` (before: 96%) | The isolated `python -I` entrypoint is measured through coverage's subprocess patch |
 | Lint | `ruff check` on the test module and `external_checkers/harnessy_proof/` | Pass | — |
 | Docs | Markdown link and stale wording checks | Pass | — |
 
@@ -144,6 +145,11 @@ The image was not rebuilt or run: Docker was out of scope for this change.
 
 ## Review findings
 
+- Coverage review found a defect: a `proof.json` directory in the submitted
+  archive made `read_proof` raise `IsADirectoryError`, crashing the checker
+  instead of reporting `harnessy.proof.missing`. `read_proof` now checks the
+  file type on the raw descriptor before wrapping it; directory and FIFO
+  regressions cover it.
 - Security review, fail-open integrity check: removed the shape-only pass and
   the facts-without-configuration path.
 - Security review, parser differential: replaced URL parsing with exact
