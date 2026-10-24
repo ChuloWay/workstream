@@ -1,6 +1,6 @@
 """A corrected unified generation replaces one policy chain without rewriting evidence."""
 
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from sqlalchemy import text
@@ -47,7 +47,7 @@ async def test_corrected_generation_replaces_policy_and_retains_original_receipt
             )
         configuration = configuration.model_copy(
             update={
-                "model_profile_id": profile["profile_id"],
+                "model_profile_id": UUID(profile["profile_id"]),
                 "model_profile_version": profile["spec"]["profile_version"],
                 "model_profile_digest": profile["profile_digest"],
             }
