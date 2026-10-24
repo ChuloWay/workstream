@@ -1,5 +1,5 @@
 {
-  "canonical_sha256": "bec932db6910a9d0c4cd5562fae96e04f53d417d279a5ed16b2e7068832bfcef",
+  "canonical_sha256": "395db628dcfcce936bb6a98af33c9930b76a197cb678f6a5c87b8a4d11fe93fd",
   "components": {
     "schemas": {
       "ApiError": {
@@ -54,6 +54,7 @@
         "type": "object"
       },
       "ContributionPolicyProjectSelection": {
+        "description": "Current exact selectors; reading them grants no mutation authority.",
         "properties": {
           "contribution_policy_id": {
             "format": "uuid",
@@ -388,6 +389,6 @@
     "method": "GET",
     "openapi_version": "3.1.0",
     "path": "/api/v1/projects/{project_id}/contribution-policies/current",
-    "repository_sha": "2e6cee003dd6bf811d20557808d77cc7061776d5"
+    "repository_sha": "59c52cc81179611ea316935552cc177f83eec687"
   }
 }

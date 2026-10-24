@@ -1,5 +1,5 @@
 {
-  "canonical_sha256": "65d4d1ef81fef4da5e43d94070d08699ee16f9a10af549ae765cc236cfdf6bbb",
+  "canonical_sha256": "0c1867cfe26d2452d35e0af123626c8cf91db24557701e5aa1e92ff9812114a2",
   "components": {
     "schemas": {
       "ApiError": {
@@ -54,6 +54,7 @@
         "type": "object"
       },
       "ContributionPolicyMutationResult": {
+        "description": "Immutable result reconstructed only from lifecycle-event truth.",
         "properties": {
           "actor_profile_id": {
             "format": "uuid",
@@ -503,6 +504,6 @@
     "method": "POST",
     "openapi_version": "3.1.0",
     "path": "/api/v1/projects/{project_id}/contribution-policies/{policy_id}/versions/{version_id}/retirement",
-    "repository_sha": "2e6cee003dd6bf811d20557808d77cc7061776d5"
+    "repository_sha": "59c52cc81179611ea316935552cc177f83eec687"
   }
 }

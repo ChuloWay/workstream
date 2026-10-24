@@ -1,5 +1,5 @@
 {
-  "canonical_sha256": "12b336b8dc63dcf2f709232e59009e5a0b279fa104268dc41a4931175e8c4d54",
+  "canonical_sha256": "a902a3d776782e49816064a52a2b77b4603915495c86cb6ba83aa45a884ecef1",
   "components": {
     "schemas": {
       "ApiError": {
@@ -296,6 +296,7 @@
             "enum": [
               "current_runner",
               "checker_implementation",
+              "model_proxy",
               "runtime_gap"
             ],
             "type": "string"
@@ -1558,7 +1559,7 @@
             "$ref": "#/components/schemas/GuideProposalReviewPackage"
           },
           "target": {
-            "$ref": "#/components/schemas/PostPolicyTarget-Output"
+            "$ref": "#/components/schemas/PostPolicyTarget"
           }
         },
         "required": [
@@ -1573,7 +1574,7 @@
         ],
         "type": "object"
       },
-      "PostPolicyTarget-Output": {
+      "PostPolicyTarget": {
         "additionalProperties": false,
         "description": "Source, upstream and sole canonical policy hash shown before a decision.",
         "properties": {
@@ -2147,6 +2148,6 @@
     "method": "GET",
     "openapi_version": "3.1.0",
     "path": "/api/v1/projects/{project_id}/guides/{guide_id}/compilations/{compilation_id}/post-submission-policies/{policy_id}",
-    "repository_sha": "2e6cee003dd6bf811d20557808d77cc7061776d5"
+    "repository_sha": "59c52cc81179611ea316935552cc177f83eec687"
   }
 }
