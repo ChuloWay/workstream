@@ -524,9 +524,18 @@ candidate layers share one remaining ledger rather than receiving fresh
 per-operation limits. The engine must fail closed before another operation when
 that ledger is exhausted, while operation receipts retain their exact local
 measurements. The runsc builder requires an actually enforced per-container
-root-overlay byte quota plus bounded observation of mutable rootfs entries;
+filesystem byte and inode quota. The pinned runtime drops `nr_inodes` from
+Docker-created tmpfs mounts; the digest-pinned trusted launcher must create
+the bounded tmpfs inside the sandbox before dropping mount/chroot privileges.
+The launcher and its build/qualification assets are part of this generic
+runtime scope, with its digest bound in the approved trial profile. It owns
+no project rules. Every writable temporary/shared-memory filesystem must be
+bounded and reserved in the same ledger;
 candidate layers must be streamed and bounded for expanded bytes and entries
-before Docker load. Forced deadline/resource termination must project a
+before Docker load, using a streaming gzip decoder and binding each layer's
+uncompressed digest to the ordered image configuration. The narrowly scoped
+`flate2` dependency and Cargo lock update implement that decoder; no layer is
+extracted on the host by this scanner. Forced deadline/resource termination must project a
 canonical cause without retaining Docker's synthetic exit 137 or inventing an
 unobserved signal, and the relay validator must accept that truthful shape.
 Focused engine, Docker-control, and relay tests must discriminate aggregate

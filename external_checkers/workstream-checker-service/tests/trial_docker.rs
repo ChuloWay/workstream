@@ -4,9 +4,9 @@ use std::fs;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::sync::Mutex;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 #[cfg(not(feature = "trial-docker-qualification"))]
@@ -84,17 +84,26 @@ impl RuntimeControl for FakeControl {
         &self,
         _owner: &RuntimeOwner,
         _name: &str,
-        _writable_roots: &[PathBuf],
+        writable_roots: &[PathBuf],
         limits: &ContainerExecutionLimits,
         _invocation_cancelled: &AtomicBool,
         _relay_cancelled: &AtomicBool,
     ) -> Result<ObservedContainerExit, RuntimeControlFailure> {
         self.limits.lock().unwrap().push(limits.clone());
-        self.observations
+        let observation = self
+            .observations
             .lock()
             .unwrap()
             .pop_front()
-            .ok_or(RuntimeControlFailure::InvalidObservation)
+            .ok_or(RuntimeControlFailure::InvalidObservation)?;
+        if observation.workspace_before_sha256.is_none() {
+            let output = writable_roots
+                .first()
+                .ok_or(RuntimeControlFailure::InvalidObservation)?;
+            fs::write(output.join("candidate.tar"), vec![0_u8; 128])
+                .map_err(|_| RuntimeControlFailure::InvalidObservation)?;
+        }
+        Ok(observation)
     }
 
     fn load_single_owned_image(
@@ -103,13 +112,19 @@ impl RuntimeControl for FakeControl {
         _archive: &Path,
         expected_tag: &str,
         _maximum_bytes: u64,
+        maximum_expanded_bytes: u64,
+        maximum_expanded_entries: u64,
         _deadline: Instant,
     ) -> Result<LoadedOwnedImage, RuntimeControlFailure> {
         assert!(expected_tag.starts_with("workstream-trial:"));
+        assert!(maximum_expanded_bytes >= 1024);
+        assert!(maximum_expanded_entries >= 2);
         Ok(LoadedOwnedImage {
             config_image_id: digest('a'),
             archive_sha256: digest('b'),
-            archive_byte_count: 4096,
+            archive_byte_count: 128,
+            expanded_byte_count: 1024,
+            expanded_entry_count: 2,
         })
     }
 
@@ -302,33 +317,26 @@ fn backend_emits_offline_bounded_builder_and_socketless_candidate_specs() {
     let creates = backend.control.creates.lock().unwrap();
     assert_eq!(creates.len(), 2);
     let builder = &creates[0].arguments;
+    assert!(builder.iter().any(|item| item == "--no-healthcheck"));
     assert!(builder.windows(2).any(|item| item == ["--network", "none"]));
-    assert!(
-        builder
-            .windows(2)
-            .any(|item| item == ["--runtime", "runsc"])
-    );
+    assert!(builder
+        .windows(2)
+        .any(|item| item == ["--runtime", "runsc"]));
     assert_eq!(
         builder.iter().filter(|item| *item == "--cap-add").count(),
         4
     );
     assert!(!builder.iter().any(|item| item == "--privileged"));
     assert!(!builder.iter().any(|item| item == "--mount"));
-    assert!(
-        builder
-            .iter()
-            .any(|item| item == "--dockerfile=/workspace/environment/Containerfile")
-    );
-    assert!(
-        builder
-            .iter()
-            .any(|item| item == "--context=dir:///workspace/environment")
-    );
-    assert!(
-        !builder.iter().any(|item| {
-            item == "--dockerfile=/workspace/environment/environment/Containerfile"
-        })
-    );
+    assert!(builder
+        .iter()
+        .any(|item| item == "--dockerfile=/workspace/environment/Containerfile"));
+    assert!(builder
+        .iter()
+        .any(|item| item == "--context=dir:///workspace/environment"));
+    assert!(!builder
+        .iter()
+        .any(|item| { item == "--dockerfile=/workspace/environment/environment/Containerfile" }));
     assert_eq!(creates[0].mounts.len(), 3);
     assert_eq!(
         creates[0].mounts[0].class,
@@ -339,12 +347,11 @@ fn backend_emits_offline_bounded_builder_and_socketless_candidate_specs() {
     assert!(creates[0].mounts[0].readonly && creates[0].mounts[1].readonly);
     assert!(!creates[0].mounts[2].readonly);
     let candidate = &creates[1].arguments;
+    assert!(candidate.iter().any(|item| item == "--no-healthcheck"));
     assert!(candidate.iter().any(|item| item == "--read-only"));
-    assert!(
-        candidate
-            .windows(2)
-            .any(|item| item == ["--user", "65532:65532"])
-    );
+    assert!(candidate
+        .windows(2)
+        .any(|item| item == ["--user", "65532:65532"]));
     assert!(!candidate.iter().any(|item| item.contains("docker.sock")));
     assert!(!candidate.iter().any(|item| item.contains("execution.sock")));
     assert!(!candidate.iter().any(|item| item.contains("model.sock")));

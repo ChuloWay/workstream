@@ -13,6 +13,7 @@ serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
 libc.workspace = true
+flate2 = { version = "1.1.10", default-features = false, features = ["rust_backend"] }
 workstream-checker-sdk = { path = "../workstream-checker-sdk" }
 workstream-checker-guest = { path = "../workstream-checker-guest" }
 

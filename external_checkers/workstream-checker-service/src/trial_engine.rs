@@ -75,6 +75,8 @@ pub(crate) struct SandboxEnforcementOverruns {
 #[derive(Clone, Debug)]
 pub(crate) struct SandboxBuildResult {
     pub(crate) observation: TrialBuildObservation,
+    pub(crate) retained_image_bytes: u64,
+    pub(crate) retained_image_entries: u64,
 }
 
 #[derive(Clone, Debug)]
@@ -267,6 +269,8 @@ impl<B: TrialSandboxBackend> GenericTrialEngine<B> {
             context.profile.maximum_entries_overrun,
             build.observation.outcome == TrialOperationOutcome::DiskExceeded,
         )?;
+        invocation_budget
+            .reserve_retained(build.retained_image_bytes, build.retained_image_entries)?;
         let mut steps = Vec::with_capacity(plan.steps.len());
         let mut workspaces: HashMap<String, PathBuf> = HashMap::new();
         let inventory_by_role: HashMap<_, _> = inventories
@@ -552,10 +556,13 @@ fn materialize_projections(
             .collect::<Vec<_>>();
         copy_tree_filtered(&source, &destination, Path::new(""), &exclusions, budget)?;
         if projected
-            .insert(projection.role.clone(), MaterializedProjection {
-                path: destination,
-                destination_relative: projection.destination_relative.clone(),
-            })
+            .insert(
+                projection.role.clone(),
+                MaterializedProjection {
+                    path: destination,
+                    destination_relative: projection.destination_relative.clone(),
+                },
+            )
             .is_some()
         {
             return Err(implementation_failure());
@@ -683,6 +690,8 @@ fn operation_outcome_name(outcome: TrialOperationOutcome) -> &'static str {
 struct ProjectionBudget {
     maximum_entries: u64,
     maximum_bytes: u64,
+    retained_entries: u64,
+    retained_bytes: u64,
     entries_left: u64,
     bytes_left: u64,
 }
@@ -692,6 +701,8 @@ impl ProjectionBudget {
         Self {
             maximum_entries: entries,
             maximum_bytes: bytes,
+            retained_entries: 0,
+            retained_bytes: 0,
             entries_left: entries,
             bytes_left: bytes,
         }
@@ -721,6 +732,26 @@ impl ProjectionBudget {
         ))
     }
 
+    fn reserve_retained(&mut self, bytes: u64, entries: u64) -> Result<(), TrialEngineFailure> {
+        self.retained_bytes = self
+            .retained_bytes
+            .checked_add(bytes)
+            .ok_or_else(capacity_failure)?;
+        self.retained_entries = self
+            .retained_entries
+            .checked_add(entries)
+            .ok_or_else(capacity_failure)?;
+        self.bytes_left = self
+            .bytes_left
+            .checked_sub(bytes)
+            .ok_or_else(capacity_failure)?;
+        self.entries_left = self
+            .entries_left
+            .checked_sub(entries)
+            .ok_or_else(capacity_failure)?;
+        Ok(())
+    }
+
     fn refresh(
         &mut self,
         root: &Path,
@@ -737,11 +768,17 @@ impl ProjectionBudget {
             .maximum_entries
             .checked_add(if exceeded { entries_overrun } else { 0 })
             .ok_or_else(capacity_failure)?;
-        if bytes > maximum_bytes || entries > maximum_entries {
+        let total_bytes = bytes
+            .checked_add(self.retained_bytes)
+            .ok_or_else(capacity_failure)?;
+        let total_entries = entries
+            .checked_add(self.retained_entries)
+            .ok_or_else(capacity_failure)?;
+        if total_bytes > maximum_bytes || total_entries > maximum_entries {
             return Err(capacity_failure());
         }
-        self.bytes_left = self.maximum_bytes.saturating_sub(bytes);
-        self.entries_left = self.maximum_entries.saturating_sub(entries);
+        self.bytes_left = self.maximum_bytes.saturating_sub(total_bytes);
+        self.entries_left = self.maximum_entries.saturating_sub(total_entries);
         Ok(())
     }
 }

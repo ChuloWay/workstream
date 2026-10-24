@@ -56,6 +56,8 @@ struct FakeBackend {
     step_requests: Mutex<Vec<SandboxStepRequest>>,
     outcomes: Mutex<VecDeque<TrialOperationOutcome>>,
     build_cpu_time_ms: AtomicU64,
+    retained_image_bytes: AtomicU64,
+    retained_image_entries: AtomicU64,
     step_cpu_time_ms: Mutex<VecDeque<u64>>,
     step_extra_files: AtomicUsize,
 }
@@ -94,7 +96,11 @@ impl TrialSandboxBackend for Arc<FakeBackend> {
         if cpu_time_ms != 0 {
             observation.cpu_time_ms = cpu_time_ms;
         }
-        Ok(SandboxBuildResult { observation })
+        Ok(SandboxBuildResult {
+            observation,
+            retained_image_bytes: self.retained_image_bytes.load(Ordering::Relaxed),
+            retained_image_entries: self.retained_image_entries.load(Ordering::Relaxed),
+        })
     }
 
     fn run_step(
@@ -109,12 +115,10 @@ impl TrialSandboxBackend for Arc<FakeBackend> {
         assert_eq!(request.visible_roles.len(), 1);
         assert_eq!(request.visible_roles[0].role, "protected");
         assert_eq!(request.visible_roles[0].destination_relative, "protected");
-        assert!(
-            request
-                .workspace_root
-                .join("workspace/initial.txt")
-                .is_file()
-        );
+        assert!(request
+            .workspace_root
+            .join("workspace/initial.txt")
+            .is_file());
         assert_eq!(request.command, ["/candidate/check", "case-a"]);
         let outcome = self
             .outcomes
@@ -394,12 +398,10 @@ fn engine_projects_only_authorized_roles_runs_exact_plan_and_cleans_owned_scratc
     assert_eq!(backend.steps.load(Ordering::Relaxed), 1);
     assert_eq!(backend.cleanups.load(Ordering::Relaxed), 1);
     assert_eq!(execution.material_inventory_digests.len(), 3);
-    assert!(
-        fs::read_dir(&context.trial_scratch_root)
-            .unwrap()
-            .next()
-            .is_none()
-    );
+    assert!(fs::read_dir(&context.trial_scratch_root)
+        .unwrap()
+        .next()
+        .is_none());
 }
 
 #[test]
@@ -529,6 +531,33 @@ fn projections_and_build_context_share_one_entry_budget() {
         .unwrap_err();
     assert_eq!(failure.code, TrialRelayFailure::CapacityExceeded);
     assert_eq!(backend.builds.load(Ordering::Relaxed), 0);
+    assert_eq!(backend.cleanups.load(Ordering::Relaxed), 1);
+}
+
+#[test]
+fn retained_image_expansion_consumes_the_shared_invocation_budget() {
+    let root = Root::new();
+    let context = context(&root);
+    let plan = plan();
+    let backend = Arc::new(FakeBackend::default());
+    // The same plan succeeds when the loaded image reports no retained
+    // expansion. Charging its measured entries must exhaust the one shared
+    // invocation ledger before any candidate step can start.
+    backend
+        .retained_image_entries
+        .store(plan.resources.maximum_entries, Ordering::Relaxed);
+    let failure = GenericTrialEngine::new(backend.clone())
+        .execute(
+            &context,
+            &plan,
+            Instant::now() + Duration::from_secs(2),
+            &AtomicBool::new(false),
+            &AtomicBool::new(false),
+        )
+        .unwrap_err();
+    assert_eq!(failure.code, TrialRelayFailure::CapacityExceeded);
+    assert_eq!(backend.builds.load(Ordering::Relaxed), 1);
+    assert_eq!(backend.steps.load(Ordering::Relaxed), 0);
     assert_eq!(backend.cleanups.load(Ordering::Relaxed), 1);
 }
 

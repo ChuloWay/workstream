@@ -1,4 +1,4 @@
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use std::fs;
 use std::io::{Read, Write};
@@ -517,12 +517,10 @@ fn assert_plan_rejected(mutator: impl FnOnce(&mut Value)) {
 #[test]
 fn completed_plan_publishes_runner_facts_only_after_confirmed_cleanup() {
     let started = start(true);
-    assert!(
-        started
-            .relay
-            .mount_spec()
-            .contains("dst=/work/execution.sock")
-    );
+    assert!(started
+        .relay
+        .mount_spec()
+        .contains("dst=/work/execution.sock"));
     assert!(started.relay.mount_spec().ends_with(",readonly"));
     let response = exchange(started.relay.socket_path(), &request(plan()));
     assert_eq!(response["outcome"], "completed");

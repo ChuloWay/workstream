@@ -9,8 +9,8 @@ use std::os::unix::ffi::OsStrExt;
 use std::os::unix::fs::{DirBuilderExt, FileTypeExt, MetadataExt, PermissionsExt};
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::{Component, Path, PathBuf};
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::Arc;
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 use workstream_checker_sdk::{canonical_hash, canonical_json};
@@ -1179,6 +1179,7 @@ fn relay_once(
             return failed_outcome(code, false, false);
         }
         Err(failure) => {
+            eprintln!("trial unavailable: stage=reserve code={:?}", failure.code);
             let _ = write_unavailable(
                 &mut stream,
                 failure.code,
@@ -1202,6 +1203,7 @@ fn relay_once(
             } else {
                 failure.code
             };
+            eprintln!("trial unavailable: stage=execute code={code:?}");
             let _ = write_unavailable(
                 &mut stream,
                 code,
@@ -1212,6 +1214,7 @@ fn relay_once(
         }
     };
     if let Err(code) = validate_execution(&execution, &request.plan, &context.profile) {
+        eprintln!("trial unavailable: stage=validate_execution code={code:?}");
         let _ = write_unavailable(
             &mut stream,
             code,
@@ -1223,6 +1226,7 @@ fn relay_once(
     let receipt = match canonical_receipt(context, request.plan, execution) {
         Ok(receipt) => receipt,
         Err(code) => {
+            eprintln!("trial unavailable: stage=receipt code={code:?}");
             let _ = write_unavailable(
                 &mut stream,
                 code,
@@ -1253,6 +1257,7 @@ fn relay_once(
             return failed_outcome(code, true, false);
         }
         Err(failure) => {
+            eprintln!("trial unavailable: stage=publish code={:?}", failure.code);
             let _ = write_unavailable(
                 &mut stream,
                 failure.code,

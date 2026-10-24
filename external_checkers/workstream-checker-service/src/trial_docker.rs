@@ -22,6 +22,9 @@ use std::thread;
 use std::time::{Duration, Instant};
 use workstream_checker_sdk::canonical_hash;
 
+#[path = "trial_docker/image_archive.rs"]
+mod image_archive;
+
 static RUNTIME_FILE_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Clone, Debug, Deserialize, Hash, PartialEq, Eq, Serialize)]
@@ -111,6 +114,8 @@ pub(crate) struct LoadedOwnedImage {
     pub(crate) config_image_id: String,
     pub(crate) archive_sha256: String,
     pub(crate) archive_byte_count: u64,
+    pub(crate) expanded_byte_count: u64,
+    pub(crate) expanded_entry_count: u64,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -167,6 +172,8 @@ pub(crate) trait RuntimeControl: Send + Sync + 'static {
         archive: &std::path::Path,
         expected_tag: &str,
         maximum_bytes: u64,
+        maximum_expanded_bytes: u64,
+        maximum_expanded_entries: u64,
         deadline: Instant,
     ) -> Result<LoadedOwnedImage, RuntimeControlFailure>;
 
@@ -232,9 +239,19 @@ impl<C: RuntimeControl> RuntimeControl for Arc<C> {
         archive: &std::path::Path,
         expected_tag: &str,
         maximum_bytes: u64,
+        maximum_expanded_bytes: u64,
+        maximum_expanded_entries: u64,
         deadline: Instant,
     ) -> Result<LoadedOwnedImage, RuntimeControlFailure> {
-        (**self).load_single_owned_image(owner, archive, expected_tag, maximum_bytes, deadline)
+        (**self).load_single_owned_image(
+            owner,
+            archive,
+            expected_tag,
+            maximum_bytes,
+            maximum_expanded_bytes,
+            maximum_expanded_entries,
+            deadline,
+        )
     }
 
     fn cleanup_owner(
@@ -842,6 +859,8 @@ impl RuntimeControl for DockerRuntimeControl {
         archive: &std::path::Path,
         expected_tag: &str,
         maximum_bytes: u64,
+        maximum_expanded_bytes: u64,
+        maximum_expanded_entries: u64,
         deadline: Instant,
     ) -> Result<LoadedOwnedImage, RuntimeControlFailure> {
         validate_owner(owner)?;
@@ -857,7 +876,14 @@ impl RuntimeControl for DockerRuntimeControl {
         {
             return Err(RuntimeControlFailure::InvalidObservation);
         }
-        validate_single_image_archive(&canonical, expected_tag, maximum_bytes)?;
+        let expanded = validate_single_image_archive(
+            &canonical,
+            expected_tag,
+            maximum_bytes,
+            maximum_expanded_bytes,
+            maximum_expanded_entries,
+            deadline,
+        )?;
         if image_exists(self, expected_tag, deadline)? {
             return Err(RuntimeControlFailure::InvalidObservation);
         }
@@ -926,6 +952,8 @@ impl RuntimeControl for DockerRuntimeControl {
             config_image_id,
             archive_sha256,
             archive_byte_count: metadata.len(),
+            expanded_byte_count: expanded.bytes,
+            expanded_entry_count: expanded.entries,
         })
     }
 
@@ -952,6 +980,7 @@ impl RuntimeControl for DockerRuntimeControl {
                         "container".into(),
                         "rm".into(),
                         "--force".into(),
+                        "--volumes".into(),
                         name.clone(),
                     ],
                     deadline,
@@ -1146,10 +1175,14 @@ pub(crate) fn persist_runtime_journal_for_test(
         attempt_id: "018f6f49-66b8-7d2a-bf4d-0e2eeaa00001".into(),
         trial_owner_id: format!("trial_{}", "a".repeat(32)),
     };
-    persist_runtime_journal(root, &owner, &OwnedRuntimeResources {
-        containers: vec!["ws-trial-live-resource".into()],
-        images: Vec::new(),
-    })?;
+    persist_runtime_journal(
+        root,
+        &owner,
+        &OwnedRuntimeResources {
+            containers: vec!["ws-trial-live-resource".into()],
+            images: Vec::new(),
+        },
+    )?;
     runtime_journal_path(root, &owner)
 }
 
@@ -1734,7 +1767,10 @@ fn validate_single_image_archive(
     archive: &std::path::Path,
     expected_tag: &str,
     maximum_bytes: u64,
-) -> Result<(), RuntimeControlFailure> {
+    maximum_expanded_bytes: u64,
+    maximum_expanded_entries: u64,
+    deadline: Instant,
+) -> Result<image_archive::ExpandedImage, RuntimeControlFailure> {
     let mut file = File::open(archive).map_err(|_| RuntimeControlFailure::InvalidObservation)?;
     let length = file
         .metadata()
@@ -1868,7 +1904,15 @@ fn validate_single_image_archive(
     if referenced.len() != entries.len() {
         return Err(RuntimeControlFailure::InvalidObservation);
     }
-    Ok(())
+    image_archive::validate_layers(
+        &mut file,
+        &entries,
+        &manifest.layers,
+        &config_bytes,
+        maximum_expanded_bytes,
+        maximum_expanded_entries,
+        deadline,
+    )
 }
 
 #[derive(Deserialize)]
@@ -2043,6 +2087,7 @@ impl<C: RuntimeControl> DockerTrialBackend<C> {
             self.config.runtime_key.clone(),
             "--network".into(),
             "none".into(),
+            "--no-healthcheck".into(),
             "--cap-drop".into(),
             "ALL".into(),
             "--security-opt".into(),
@@ -2169,7 +2214,23 @@ impl<C: RuntimeControl> TrialSandboxBackend for DockerTrialBackend<C> {
             )
             .map_err(runtime_failure)?;
         let mut observation = build_observation(observed)?;
+        let mut retained_image_bytes = 0;
+        let mut retained_image_entries = 0;
         if observation.outcome == TrialOperationOutcome::Succeeded {
+            let archive_bytes = fs::metadata(&request.output_archive)
+                .map_err(|_| runtime_failure(RuntimeControlFailure::InvalidObservation))?
+                .len();
+            if observation.written_bytes < archive_bytes || observation.written_entries == 0 {
+                return Err(runtime_failure(RuntimeControlFailure::InvalidObservation));
+            }
+            let expanded_bytes = request
+                .mutable_disk_bytes
+                .checked_sub(observation.written_bytes)
+                .ok_or_else(|| runtime_failure(RuntimeControlFailure::CapacityExceeded))?;
+            let expanded_entries = request
+                .mutable_entries
+                .checked_sub(observation.written_entries)
+                .ok_or_else(|| runtime_failure(RuntimeControlFailure::CapacityExceeded))?;
             let loaded = self
                 .control
                 .load_single_owned_image(
@@ -2177,14 +2238,22 @@ impl<C: RuntimeControl> TrialSandboxBackend for DockerTrialBackend<C> {
                     &request.output_archive,
                     &request.destination,
                     self.config.maximum_candidate_archive_bytes,
+                    expanded_bytes,
+                    expanded_entries,
                     deadline,
                 )
                 .map_err(runtime_failure)?;
             observation.candidate_image_digest = Some(loaded.config_image_id);
             observation.candidate_archive_digest = Some(loaded.archive_sha256);
             observation.written_bytes = observation.written_bytes.max(loaded.archive_byte_count);
+            retained_image_bytes = loaded.expanded_byte_count;
+            retained_image_entries = loaded.expanded_entry_count;
         }
-        Ok(SandboxBuildResult { observation })
+        Ok(SandboxBuildResult {
+            observation,
+            retained_image_bytes,
+            retained_image_entries,
+        })
     }
 
     fn run_step(
@@ -2544,6 +2613,12 @@ mod runtime_journal_tests {
         layer_type: u8,
         layer_link: &str,
     ) -> Vec<u8> {
+        let mut layer = tar_entry("work/value", b'0', "", b"value");
+        layer.extend([0_u8; 1024]);
+        let mut config: serde_json::Value = serde_json::from_slice(config_bytes).unwrap();
+        config["rootfs"] = serde_json::json!({"type": "layers", "diff_ids": [format!("sha256:{:x}", Sha256::digest(&layer))]});
+        let config_bytes = serde_json::to_vec(&config).unwrap();
+        let config_bytes = config_bytes.as_slice();
         let config_name = config_name_override
             .map(str::to_owned)
             .unwrap_or_else(|| format!("{:x}.json", Sha256::digest(config_bytes)));
@@ -2555,7 +2630,7 @@ mod runtime_journal_tests {
         let manifest = serde_json::to_vec(&vec![item; manifest_entries]).unwrap();
         let mut archive = tar_entry(manifest_path, b'0', "", &manifest);
         archive.extend(tar_entry(&config_name, b'0', "", config_bytes));
-        archive.extend(tar_entry(layer_path, layer_type, layer_link, b"layer"));
+        archive.extend(tar_entry(layer_path, layer_type, layer_link, &layer));
         archive.extend([0_u8; 1024]);
         archive
     }
@@ -2570,7 +2645,11 @@ mod runtime_journal_tests {
             &path,
             "workstream-trial:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
             1024 * 1024,
+            1024 * 1024,
+            4096,
+            Instant::now() + Duration::from_secs(10),
         )
+        .map(|_| ())
     }
 
     #[test]
@@ -2615,6 +2694,42 @@ mod runtime_journal_tests {
             validate_archive_bytes(&root, &nonzero_trailing),
             Err(RuntimeControlFailure::InvalidObservation)
         );
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn candidate_expansion_is_refused_before_any_docker_command() {
+        let root = root();
+        let binary = root.join("docker-probe");
+        fs::write(
+            &binary,
+            b"#!/bin/sh\nprintf invoked > \"$0.invoked\"\nexit 1\n",
+        )
+        .unwrap();
+        fs::set_permissions(&binary, fs::Permissions::from_mode(0o700)).unwrap();
+        let configuration = root.join("daemon.json");
+        fs::write(&configuration, b"{}").unwrap();
+        let archive = root.join("candidate.tar");
+        fs::write(
+            &archive,
+            image_archive("manifest.json", 1, b"{}", None, "layer.tar", b'0', ""),
+        )
+        .unwrap();
+        let control = DockerRuntimeControl::new(binary, root.clone(), configuration).unwrap();
+        assert_eq!(
+            control.load_single_owned_image(
+                &owner(),
+                &archive,
+                "workstream-trial:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                1024 * 1024,
+                1,
+                4096,
+                Instant::now() + Duration::from_secs(10),
+            ),
+            Err(RuntimeControlFailure::CapacityExceeded)
+        );
+        assert!(!root.join("docker-probe.invoked").exists());
+        assert!(control.owned.lock().unwrap().is_empty());
         fs::remove_dir_all(root).unwrap();
     }
 }
