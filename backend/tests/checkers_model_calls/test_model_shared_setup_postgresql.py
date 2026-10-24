@@ -4,6 +4,7 @@ from copy import deepcopy
 import json
 
 from app.modules.model_usage.models import ModelUsageEffect
+from app.modules.model_usage.profiles import ModelProfileReader
 from tests.checkers_model_calls.model_usage_pg_support import (
     DatabaseFacts,
     model_database as _model_database,
@@ -17,7 +18,6 @@ from tests.checkers_model_calls.test_model_call_transactions_postgresql import (
     ModelCallUsage,
     ModelGenerationSettings,
     ModelProfileProvisioningFacts,
-    ModelProfileReader,
     ModelCallUnavailable,
     ModelUsageBudgetAccount,
     asyncio,
