@@ -1,10 +1,10 @@
 use sha2::Digest;
 use std::collections::VecDeque;
-use std::fs;
-use std::os::unix::fs::PermissionsExt;
+use std::fs::{self, File};
+use std::os::unix::fs::{MetadataExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::sync::atomic::AtomicBool;
+use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU8};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
@@ -41,6 +41,9 @@ static TEST_ROOT_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 struct FakeControl {
     creates: Mutex<Vec<OwnedContainerCreate>>,
     limits: Mutex<Vec<ContainerExecutionLimits>>,
+    launcher_child_exit: AtomicI32,
+    builder_export_failure: AtomicU8,
+    step_export_failure: AtomicU8,
     observations: Mutex<VecDeque<ObservedContainerExit>>,
     cleaned: Mutex<Vec<RuntimeOwner>>,
 }
@@ -100,8 +103,44 @@ impl RuntimeControl for FakeControl {
             let output = writable_roots
                 .first()
                 .ok_or(RuntimeControlFailure::InvalidObservation)?;
-            fs::write(output.join("candidate.tar"), vec![0_u8; 128])
-                .map_err(|_| RuntimeControlFailure::InvalidObservation)?;
+            let child_exit = self.launcher_child_exit.load(Ordering::Relaxed);
+            let export_failure = self.builder_export_failure.load(Ordering::Relaxed);
+            if child_exit == 0 && export_failure == 0 {
+                fs::write(output.join("candidate.tar"), vec![0_u8; 128])
+                    .map_err(|_| RuntimeControlFailure::InvalidObservation)?;
+            }
+            let failure = match export_failure {
+                0 => "null",
+                1 => "\"capacity_exceeded\"",
+                2 => "\"invalid\"",
+                _ => return Err(RuntimeControlFailure::InvalidObservation),
+            };
+            fs::write(
+                output.join("status.json"),
+                format!("{{\"candidate_exported\":{},\"child\":{{\"exit_code\":{child_exit},\"signal\":null}},\"export_failure\":{failure},\"schema\":\"workstream.trial_launcher_status.v1\",\"workspace_exported\":false}}", child_exit == 0 && export_failure == 0),
+            )
+            .map_err(|_| RuntimeControlFailure::InvalidObservation)?;
+        } else {
+            let export = writable_roots
+                .first()
+                .ok_or(RuntimeControlFailure::InvalidObservation)?;
+            let export_failure = self.step_export_failure.load(Ordering::Relaxed);
+            if export_failure == 0 {
+                fs::create_dir(export.join("workspace.next"))
+                    .map_err(|_| RuntimeControlFailure::InvalidObservation)?;
+            }
+            let child_exit = self.launcher_child_exit.load(Ordering::Relaxed);
+            let failure = match export_failure {
+                0 => "null",
+                1 => "\"capacity_exceeded\"",
+                2 => "\"invalid\"",
+                _ => return Err(RuntimeControlFailure::InvalidObservation),
+            };
+            fs::write(
+                export.join("status.json"),
+                format!("{{\"candidate_exported\":false,\"child\":{{\"exit_code\":{child_exit},\"signal\":null}},\"export_failure\":{failure},\"schema\":\"workstream.trial_launcher_status.v1\",\"workspace_exported\":{}}}", export_failure == 0),
+            )
+            .map_err(|_| RuntimeControlFailure::InvalidObservation)?;
         }
         Ok(observation)
     }
@@ -151,6 +190,7 @@ fn identity() -> SandboxBackendIdentity {
         platform: "linux/amd64".into(),
         platform_identity_digest: digest('3'),
         builder_image_digest: digest('4'),
+        trusted_launcher_digest: digest('6'),
         offline_cache_digest: digest('5'),
         approved_base_digests: vec![digest('6')],
     }
@@ -227,18 +267,28 @@ impl Drop for Root {
 
 fn backend(root: &Root) -> DockerTrialBackend<FakeControl> {
     let cache = root.child("cache");
+    let launcher = root.0.join("launcher");
+    fs::write(&launcher, b"trusted launcher").unwrap();
+    fs::set_permissions(&launcher, fs::Permissions::from_mode(0o555)).unwrap();
+    let launcher_digest = format!("sha256:{:x}", sha2::Sha256::digest(b"trusted launcher"));
+    let mut identity = identity();
+    identity.trusted_launcher_digest = launcher_digest.clone();
     DockerTrialBackend::new(
         DockerTrialConfiguration {
-            identity: identity(),
+            identity,
             deployment_owner: "deployment_a".into(),
             request_digest: digest('9'),
             attempt_id: "018f6f49-66b8-7d2a-bf4d-0e2eeaa00001".into(),
             runtime_key: "runsc".into(),
             builder_image_id: digest('4'),
+            trusted_launcher_path: launcher,
+            trusted_launcher_digest: launcher_digest,
             offline_cache_root: cache,
             maximum_candidate_archive_bytes: 64 * 1024 * 1024,
             candidate_uid: 65532,
             candidate_gid: 65532,
+            export_uid: 65532,
+            export_gid: 65532,
         },
         FakeControl {
             observations: Mutex::new(VecDeque::from([observed(false), observed(true)])),
@@ -254,6 +304,7 @@ fn backend_emits_offline_bounded_builder_and_socketless_candidate_specs() {
     let context = root.child("context");
     let output = root.child("output");
     let workspace = root.child("workspace");
+    let export = root.child("export");
     let source = root.child("source");
     let backend = backend(&root);
     let deadline = Instant::now() + Duration::from_secs(2);
@@ -272,6 +323,13 @@ fn backend_emits_offline_bounded_builder_and_socketless_candidate_specs() {
                 remaining_cpu_time_ms: 2_000,
                 mutable_disk_bytes: 4096,
                 mutable_entries: 10,
+                launcher_root_bytes: 64 * 1024,
+                launcher_root_entries: 64,
+                launcher_candidate_bytes: 16 * 1024,
+                launcher_temporary_bytes: 4096,
+                launcher_temporary_entries: 2,
+                launcher_shared_memory_bytes: 4096,
+                launcher_shared_memory_entries: 2,
                 timeout_ms: 1000,
                 maximum_output_bytes: 4096,
                 enforcement_overruns: overruns(),
@@ -282,13 +340,22 @@ fn backend_emits_offline_bounded_builder_and_socketless_candidate_specs() {
         )
         .unwrap();
     assert_eq!(build.observation.candidate_image_digest, Some(digest('a')));
+    assert_eq!(
+        build.observation.export_outcome,
+        TrialExportOutcome::Exported
+    );
     backend
+        .control
+        .launcher_child_exit
+        .store(17, Ordering::Relaxed);
+    let step = backend
         .run_step(
             &SandboxStepRequest {
                 owner_id: format!("trial_{}", "a".repeat(32)),
                 slot_id: "slot_a".into(),
                 candidate_image_digest: digest('a'),
                 workspace_root: workspace,
+                export_root: export,
                 visible_roles: vec![ProjectedRoleMount {
                     role: "source".into(),
                     path: source,
@@ -304,6 +371,14 @@ fn backend_emits_offline_bounded_builder_and_socketless_candidate_specs() {
                 remaining_cpu_time_ms: 2_000,
                 mutable_disk_bytes: 4096,
                 mutable_entries: 10,
+                launcher_root_bytes: 64 * 1024,
+                launcher_root_entries: 32,
+                launcher_workspace_bytes: 4096,
+                launcher_workspace_entries: 10,
+                launcher_temporary_bytes: 4096,
+                launcher_temporary_entries: 2,
+                launcher_shared_memory_bytes: 4096,
+                launcher_shared_memory_entries: 2,
                 timeout_ms: 500,
                 maximum_output_bytes: 4096,
                 enforcement_overruns: overruns(),
@@ -314,17 +389,34 @@ fn backend_emits_offline_bounded_builder_and_socketless_candidate_specs() {
             &cancelled,
         )
         .unwrap();
+    assert_eq!(step.observation.outcome, TrialOperationOutcome::ExitNonzero);
+    assert_eq!(step.observation.exit_code, Some(17));
+    assert_eq!(
+        step.observation.export_outcome,
+        TrialExportOutcome::Exported
+    );
     let creates = backend.control.creates.lock().unwrap();
     assert_eq!(creates.len(), 2);
     let builder = &creates[0].arguments;
     assert!(builder.iter().any(|item| item == "--no-healthcheck"));
+    assert!(builder
+        .windows(2)
+        .any(|item| item == ["--entrypoint", "/workstream-bootstrap/launcher"]));
+    assert!(builder.iter().any(|item| item == "--ignore-path=/out"));
+    assert!(builder.iter().any(|item| item == "--candidate-bytes"));
+    assert!(builder
+        .windows(2)
+        .any(|item| item == ["--export-uid", "65532"]));
+    assert!(builder
+        .windows(2)
+        .any(|item| item == ["--export-gid", "65532"]));
     assert!(builder.windows(2).any(|item| item == ["--network", "none"]));
     assert!(builder
         .windows(2)
         .any(|item| item == ["--runtime", "runsc"]));
     assert_eq!(
         builder.iter().filter(|item| *item == "--cap-add").count(),
-        4
+        9
     );
     assert!(!builder.iter().any(|item| item == "--privileged"));
     assert!(!builder.iter().any(|item| item == "--mount"));
@@ -337,43 +429,259 @@ fn backend_emits_offline_bounded_builder_and_socketless_candidate_specs() {
     assert!(!builder
         .iter()
         .any(|item| { item == "--dockerfile=/workspace/environment/environment/Containerfile" }));
-    assert_eq!(creates[0].mounts.len(), 3);
-    assert_eq!(
-        creates[0].mounts[0].class,
-        OwnedMountClass::ProjectedContext
-    );
-    assert_eq!(creates[0].mounts[1].class, OwnedMountClass::OfflineCache);
-    assert_eq!(creates[0].mounts[2].class, OwnedMountClass::CandidateOutput);
-    assert!(creates[0].mounts[0].readonly && creates[0].mounts[1].readonly);
-    assert!(!creates[0].mounts[2].readonly);
+    assert_eq!(creates[0].mounts.len(), 4);
+    assert_eq!(creates[0].mounts[0].class, OwnedMountClass::TrustedLauncher);
+    assert_eq!(creates[0].mounts[1].class, OwnedMountClass::LauncherContext);
+    assert_eq!(creates[0].mounts[2].class, OwnedMountClass::LauncherCache);
+    assert_eq!(creates[0].mounts[3].class, OwnedMountClass::LauncherExport);
+    assert!(creates[0].mounts[..3].iter().all(|mount| mount.readonly));
+    assert!(!creates[0].mounts[3].readonly);
     let candidate = &creates[1].arguments;
     assert!(candidate.iter().any(|item| item == "--no-healthcheck"));
     assert!(candidate.iter().any(|item| item == "--read-only"));
+    assert!(candidate.iter().any(|item| item == "step"));
+    assert!(candidate.iter().any(|item| item == "--root-inodes"));
     assert!(candidate
         .windows(2)
-        .any(|item| item == ["--user", "65532:65532"]));
+        .any(|item| item == ["--export-uid", "65532"]));
+    assert!(candidate
+        .windows(2)
+        .any(|item| item == ["--export-gid", "65532"]));
+    assert!(candidate
+        .windows(2)
+        .any(|item| item == ["--visible", "source=source"]));
+    assert!(candidate.windows(2).any(|item| item == ["--user", "0:0"]));
     assert!(!candidate.iter().any(|item| item.contains("docker.sock")));
     assert!(!candidate.iter().any(|item| item.contains("execution.sock")));
     assert!(!candidate.iter().any(|item| item.contains("model.sock")));
-    assert!(!candidate.iter().any(|item| item == "--cap-add"));
+    assert_eq!(
+        candidate.iter().filter(|item| *item == "--cap-add").count(),
+        9
+    );
     assert!(!candidate.iter().any(|item| item == "--mount"));
-    assert_eq!(creates[1].mounts[0].class, OwnedMountClass::TrialState);
+    assert_eq!(creates[1].mounts[0].class, OwnedMountClass::TrustedLauncher);
     assert_eq!(
         creates[1].mounts[1].class,
-        OwnedMountClass::TrialStateOverlay
+        OwnedMountClass::LauncherWorkspace
     );
-    assert_eq!(creates[1].mounts[1].destination, "/work/state/source");
-    assert!(!creates[1].mounts[0].readonly);
-    assert!(creates[1].mounts[1].readonly);
+    assert_eq!(creates[1].mounts[2].class, OwnedMountClass::LauncherExport);
+    assert_eq!(creates[1].mounts[3].class, OwnedMountClass::LauncherRole);
+    assert_eq!(
+        creates[1].mounts[3].destination,
+        "/workstream-bootstrap/input/roles/source"
+    );
+    assert!(creates[1].mounts[0].readonly && creates[1].mounts[1].readonly);
+    assert!(!creates[1].mounts[2].readonly);
+    assert!(creates[1].mounts[3].readonly);
     drop(creates);
     let limits = backend.control.limits.lock().unwrap();
     assert_eq!(limits[1].wall_time_overrun_ms, 100);
     assert_eq!(limits[1].cpu_time_overrun_ms, 200);
     drop(limits);
+    let launcher = backend.control.creates.lock().unwrap()[0].mounts[0]
+        .source
+        .clone();
+    fs::set_permissions(&launcher, fs::Permissions::from_mode(0o755)).unwrap();
+    fs::write(&launcher, b"drifted launcher").unwrap();
+    fs::set_permissions(&launcher, fs::Permissions::from_mode(0o555)).unwrap();
+    let drift_output = root.child("drift-output");
+    let failure = backend
+        .build(
+            &SandboxBuildRequest {
+                owner_id: format!("trial_{}", "b".repeat(32)),
+                context_root: root.child("drift-context"),
+                context_relative: ".".into(),
+                dockerfile_relative: "Dockerfile".into(),
+                output_archive: drift_output.join("candidate.tar"),
+                destination: format!("workstream-trial:{}", "b".repeat(32)),
+                platform: "linux/amd64".into(),
+                resources: resources(),
+                remaining_cpu_time_ms: 2_000,
+                mutable_disk_bytes: 1024 * 1024,
+                mutable_entries: 100,
+                launcher_root_bytes: 512 * 1024,
+                launcher_root_entries: 64,
+                launcher_candidate_bytes: 128 * 1024,
+                launcher_temporary_bytes: 4096,
+                launcher_temporary_entries: 4,
+                launcher_shared_memory_bytes: 4096,
+                launcher_shared_memory_entries: 4,
+                timeout_ms: 1000,
+                maximum_output_bytes: 4096,
+                enforcement_overruns: overruns(),
+            },
+            deadline,
+            &cancelled,
+            &cancelled,
+        )
+        .unwrap_err();
+    assert_eq!(failure.code, TrialRelayFailure::ImplementationUnavailable);
+    assert_eq!(backend.control.creates.lock().unwrap().len(), 2);
     backend
         .cleanup(&format!("trial_{}", "a".repeat(32)), deadline)
         .unwrap();
     assert_eq!(backend.control.cleaned.lock().unwrap().len(), 1);
+}
+
+#[test]
+fn trusted_builder_status_keeps_child_125_as_a_work_outcome() {
+    let root = Root::new();
+    let context = root.child("context");
+    let output = root.child("output");
+    let backend = backend(&root);
+    backend
+        .control
+        .launcher_child_exit
+        .store(125, Ordering::Relaxed);
+    let result = backend
+        .build(
+            &SandboxBuildRequest {
+                owner_id: format!("trial_{}", "c".repeat(32)),
+                context_root: context,
+                context_relative: ".".into(),
+                dockerfile_relative: "Dockerfile".into(),
+                output_archive: output.join("candidate.tar"),
+                destination: format!("workstream-trial:{}", "c".repeat(32)),
+                platform: "linux/amd64".into(),
+                resources: resources(),
+                remaining_cpu_time_ms: 2_000,
+                mutable_disk_bytes: 1024 * 1024,
+                mutable_entries: 100,
+                launcher_root_bytes: 512 * 1024,
+                launcher_root_entries: 64,
+                launcher_candidate_bytes: 128 * 1024,
+                launcher_temporary_bytes: 4096,
+                launcher_temporary_entries: 4,
+                launcher_shared_memory_bytes: 4096,
+                launcher_shared_memory_entries: 4,
+                timeout_ms: 1000,
+                maximum_output_bytes: 4096,
+                enforcement_overruns: overruns(),
+            },
+            Instant::now() + Duration::from_secs(2),
+            &AtomicBool::new(false),
+            &AtomicBool::new(false),
+        )
+        .unwrap();
+    assert_eq!(
+        result.observation.outcome,
+        TrialOperationOutcome::ExitNonzero
+    );
+    assert_eq!(result.observation.exit_code, Some(125));
+    assert_eq!(
+        result.observation.export_outcome,
+        TrialExportOutcome::NotStarted
+    );
+    assert!(result.observation.candidate_image_digest.is_none());
+    assert!(fs::read_dir(output).unwrap().next().is_none());
+}
+
+#[test]
+fn launcher_exit_125_is_infrastructure_even_when_a_fake_status_exists() {
+    let root = Root::new();
+    let output = root.child("launcher-infrastructure-output");
+    let backend = backend(&root);
+    let mut launcher_failure = observed(false);
+    launcher_failure.exit_code = Some(125);
+    let mut observations = backend.control.observations.lock().unwrap();
+    observations.clear();
+    observations.push_back(launcher_failure);
+    drop(observations);
+    let failure = backend
+        .build(
+            &SandboxBuildRequest {
+                owner_id: format!("trial_{}", "d".repeat(32)),
+                context_root: root.child("launcher-infrastructure-context"),
+                context_relative: ".".into(),
+                dockerfile_relative: "Dockerfile".into(),
+                output_archive: output.join("candidate.tar"),
+                destination: format!("workstream-trial:{}", "d".repeat(32)),
+                platform: "linux/amd64".into(),
+                resources: resources(),
+                remaining_cpu_time_ms: 2_000,
+                mutable_disk_bytes: 1024 * 1024,
+                mutable_entries: 100,
+                launcher_root_bytes: 512 * 1024,
+                launcher_root_entries: 64,
+                launcher_candidate_bytes: 128 * 1024,
+                launcher_temporary_bytes: 4096,
+                launcher_temporary_entries: 4,
+                launcher_shared_memory_bytes: 4096,
+                launcher_shared_memory_entries: 4,
+                timeout_ms: 1000,
+                maximum_output_bytes: 4096,
+                enforcement_overruns: overruns(),
+            },
+            Instant::now() + Duration::from_secs(2),
+            &AtomicBool::new(false),
+            &AtomicBool::new(false),
+        )
+        .unwrap_err();
+    assert_eq!(failure.code, TrialRelayFailure::ImplementationUnavailable);
+}
+
+#[test]
+fn trusted_builder_export_failures_are_closed_facts_with_actual_child_status() {
+    let cancelled = AtomicBool::new(false);
+    for (index, failure, expected_outcome, expected_export) in [
+        (
+            0,
+            1,
+            TrialOperationOutcome::DiskExceeded,
+            TrialExportOutcome::CapacityExceeded,
+        ),
+        (
+            1,
+            2,
+            TrialOperationOutcome::ExportInvalid,
+            TrialExportOutcome::Invalid,
+        ),
+    ] {
+        let root = Root::new();
+        let backend = backend(&root);
+        backend
+            .control
+            .builder_export_failure
+            .store(failure, Ordering::Relaxed);
+        let output = root.child(&format!("closed-export-{index}"));
+        let result = backend
+            .build(
+                &SandboxBuildRequest {
+                    owner_id: format!("trial_{index:032x}"),
+                    context_root: root.child(&format!("closed-context-{index}")),
+                    context_relative: ".".into(),
+                    dockerfile_relative: "Dockerfile".into(),
+                    output_archive: output.join("candidate.tar"),
+                    destination: format!("workstream-trial:{index:032x}"),
+                    platform: "linux/amd64".into(),
+                    resources: resources(),
+                    remaining_cpu_time_ms: 2_000,
+                    mutable_disk_bytes: 1024 * 1024,
+                    mutable_entries: 100,
+                    launcher_root_bytes: 512 * 1024,
+                    launcher_root_entries: 64,
+                    launcher_candidate_bytes: 128 * 1024,
+                    launcher_temporary_bytes: 4096,
+                    launcher_temporary_entries: 4,
+                    launcher_shared_memory_bytes: 4096,
+                    launcher_shared_memory_entries: 4,
+                    timeout_ms: 1000,
+                    maximum_output_bytes: 4096,
+                    enforcement_overruns: overruns(),
+                },
+                Instant::now() + Duration::from_secs(2),
+                &cancelled,
+                &cancelled,
+            )
+            .unwrap();
+        assert_eq!(result.observation.outcome, expected_outcome);
+        assert_eq!(result.observation.export_outcome, expected_export);
+        assert_eq!(result.observation.exit_code, Some(0));
+        assert_eq!(result.observation.signal, None);
+        assert_eq!(result.observation.written_bytes, 128);
+        assert!(result.observation.candidate_image_digest.is_none());
+        assert!(fs::read_dir(output).unwrap().next().is_none());
+    }
 }
 
 #[test]
@@ -427,6 +735,13 @@ fn backend_projects_forced_causes_without_synthetic_exit_or_signal() {
                     remaining_cpu_time_ms: 2_000,
                     mutable_disk_bytes: 4096,
                     mutable_entries: 10,
+                    launcher_root_bytes: 64 * 1024,
+                    launcher_root_entries: 64,
+                    launcher_candidate_bytes: 16 * 1024,
+                    launcher_temporary_bytes: 4096,
+                    launcher_temporary_entries: 2,
+                    launcher_shared_memory_bytes: 4096,
+                    launcher_shared_memory_entries: 2,
                     timeout_ms: 1000,
                     maximum_output_bytes: 4096,
                     enforcement_overruns: overruns(),
@@ -439,6 +754,10 @@ fn backend_projects_forced_causes_without_synthetic_exit_or_signal() {
         assert_eq!(result.observation.outcome, expected);
         assert_eq!(result.observation.exit_code, None);
         assert_eq!(result.observation.signal, None);
+        assert_eq!(
+            result.observation.export_outcome,
+            TrialExportOutcome::Unavailable
+        );
     }
 
     let invalid = backend.build(
@@ -454,6 +773,13 @@ fn backend_projects_forced_causes_without_synthetic_exit_or_signal() {
             remaining_cpu_time_ms: 2_000,
             mutable_disk_bytes: 4096,
             mutable_entries: 10,
+            launcher_root_bytes: 64 * 1024,
+            launcher_root_entries: 64,
+            launcher_candidate_bytes: 16 * 1024,
+            launcher_temporary_bytes: 4096,
+            launcher_temporary_entries: 2,
+            launcher_shared_memory_bytes: 4096,
+            launcher_shared_memory_entries: 2,
             timeout_ms: 1000,
             maximum_output_bytes: 4096,
             enforcement_overruns: overruns(),
@@ -473,6 +799,11 @@ fn backend_rejects_runtime_profile_that_would_expose_host_uds() {
     let root = Root::new();
     let mut identity = identity();
     identity.child_host_uds = "open".into();
+    let launcher = root.0.join("launcher");
+    fs::write(&launcher, b"trusted launcher").unwrap();
+    fs::set_permissions(&launcher, fs::Permissions::from_mode(0o555)).unwrap();
+    let launcher_digest = format!("sha256:{:x}", sha2::Sha256::digest(b"trusted launcher"));
+    identity.trusted_launcher_digest = launcher_digest.clone();
     let result = DockerTrialBackend::new(
         DockerTrialConfiguration {
             identity: identity.clone(),
@@ -481,10 +812,14 @@ fn backend_rejects_runtime_profile_that_would_expose_host_uds() {
             attempt_id: "018f6f49-66b8-7d2a-bf4d-0e2eeaa00001".into(),
             runtime_key: "runsc".into(),
             builder_image_id: digest('4'),
+            trusted_launcher_path: launcher,
+            trusted_launcher_digest: launcher_digest,
             offline_cache_root: root.child("cache"),
             maximum_candidate_archive_bytes: 1024,
             candidate_uid: 65532,
             candidate_gid: 65532,
+            export_uid: 65532,
+            export_gid: 65532,
         },
         FakeControl::default(),
     );
@@ -501,6 +836,12 @@ pub fn concrete_runtime_builds_and_runs_offline_under_runsc() {
     );
     let platform_identity = std::env::var("WORKSTREAM_TRIAL_PLATFORM_IDENTITY_SHA256")
         .expect("platform identity must be explicit");
+    let trusted_launcher_path = PathBuf::from(
+        std::env::var("WORKSTREAM_TRIAL_LAUNCHER_PATH")
+            .expect("trusted launcher path must be explicit"),
+    );
+    let trusted_launcher_digest = std::env::var("WORKSTREAM_TRIAL_LAUNCHER_SHA256")
+        .expect("trusted launcher digest must be explicit");
     let run = state.join("trial-scratch/engine-qualification");
     let _ = fs::remove_dir_all(&run);
     fs::create_dir(&run).unwrap();
@@ -510,6 +851,8 @@ pub fn concrete_runtime_builds_and_runs_offline_under_runsc() {
     let output = run.join("output");
     let workspace = run.join("workspace");
     let deadline_workspace = run.join("deadline-workspace");
+    let step_export = run.join("step-export");
+    let deadline_export = run.join("deadline-export");
     let source = run.join("source");
     for path in [
         &runtime,
@@ -517,6 +860,8 @@ pub fn concrete_runtime_builds_and_runs_offline_under_runsc() {
         &output,
         &workspace,
         &deadline_workspace,
+        &step_export,
+        &deadline_export,
         &source,
     ] {
         fs::create_dir(path).unwrap();
@@ -545,6 +890,7 @@ pub fn concrete_runtime_builds_and_runs_offline_under_runsc() {
         platform_identity_digest: platform_identity,
         builder_image_digest:
             "sha256:b8c743a43e82f0cef9956ea09eae79c2d56b51d359b65a736c171624a9fc95e3".into(),
+        trusted_launcher_digest: trusted_launcher_digest.clone(),
         offline_cache_digest:
             "sha256:0d7c48edceae685051d2f60497b0df7f55a0f3f8dd6d29c5e82b9c0cd75a40e1".into(),
         approved_base_digests: vec![
@@ -566,10 +912,14 @@ pub fn concrete_runtime_builds_and_runs_offline_under_runsc() {
             runtime_key: "runsc".into(),
             builder_image_id:
                 "sha256:b8c743a43e82f0cef9956ea09eae79c2d56b51d359b65a736c171624a9fc95e3".into(),
+            trusted_launcher_path,
+            trusted_launcher_digest,
             offline_cache_root: state.join("cache/content"),
             maximum_candidate_archive_bytes: 64 * 1024 * 1024,
             candidate_uid: 65532,
             candidate_gid: 65532,
+            export_uid: 65532,
+            export_gid: 65532,
         },
         control,
     )
@@ -599,6 +949,13 @@ pub fn concrete_runtime_builds_and_runs_offline_under_runsc() {
                 remaining_cpu_time_ms: 60_000,
                 mutable_disk_bytes: 64 * 1024 * 1024,
                 mutable_entries: 10_000,
+                launcher_root_bytes: 32 * 1024 * 1024,
+                launcher_root_entries: 5000,
+                launcher_candidate_bytes: 16 * 1024 * 1024,
+                launcher_temporary_bytes: 8 * 1024 * 1024,
+                launcher_temporary_entries: 256,
+                launcher_shared_memory_bytes: 4096,
+                launcher_shared_memory_entries: 2,
                 timeout_ms: 60_000,
                 maximum_output_bytes: 1024 * 1024,
                 enforcement_overruns: SandboxEnforcementOverruns {
@@ -616,6 +973,11 @@ pub fn concrete_runtime_builds_and_runs_offline_under_runsc() {
         );
         eprintln!("qualification build result: {build:?}");
         let build = build?;
+        let candidate_metadata = fs::metadata(output.join("candidate.tar")).unwrap();
+        assert_eq!(candidate_metadata.uid(), unsafe { libc::geteuid() });
+        assert_eq!(candidate_metadata.gid(), unsafe { libc::getegid() });
+        assert!(File::open(output.join("candidate.tar")).is_ok());
+        assert!(!output.join("status.json").exists());
         let candidate = build
             .observation
             .candidate_image_digest
@@ -635,6 +997,7 @@ pub fn concrete_runtime_builds_and_runs_offline_under_runsc() {
                 slot_id: "generic_offline_probe".into(),
                 candidate_image_digest: candidate,
                 workspace_root: workspace,
+                export_root: step_export,
                 visible_roles: vec![ProjectedRoleMount {
                     role: "source".into(),
                     path: source,
@@ -647,13 +1010,21 @@ pub fn concrete_runtime_builds_and_runs_offline_under_runsc() {
                 command: vec![
                     "/bin/sh".into(),
                     "-ceu".into(),
-                    "test -e /proc/gvisor/kernel_is_gvisor; test \"$(id -u)\" = 65532; test \"$(sed -n 's/^CapEff:[[:space:]]*//p' /proc/self/status)\" = 0000000000000000; test ! -e /var/run/docker.sock; test ! -e /work/execution.sock; test ! -e /work/model.sock; test ! -e /work/input/protected; test -f /work/input/source/visible.txt; if wget -T 1 -qO- http://1.1.1.1 >/dev/null 2>&1; then exit 71; fi; sleep 1; printf 'qualification=pass\\n'".into(),
+                    "test -e /proc/gvisor/kernel_is_gvisor; test \"$(id -u)\" = 65532; test \"$(sed -n 's/^CapEff:[[:space:]]*//p' /proc/self/status)\" = 0000000000000000; test ! -e /var/run/docker.sock; test ! -e /work/execution.sock; test ! -e /work/model.sock; test ! -e /workspace/protected; test -f /workspace/source/visible.txt; if wget -T 1 -qO- http://1.1.1.1 >/dev/null 2>&1; then exit 71; fi; sleep 1; printf 'qualification=pass\\n'".into(),
                 ],
                 working_directory: ".".into(),
                 resources: trial_resources,
                 remaining_cpu_time_ms: 60_000,
                 mutable_disk_bytes: 64 * 1024 * 1024,
                 mutable_entries: 10_000,
+                launcher_root_bytes: 1024 * 1024,
+                launcher_root_entries: 512,
+                launcher_workspace_bytes: 24 * 1024 * 1024,
+                launcher_workspace_entries: 4000,
+                launcher_temporary_bytes: 8 * 1024 * 1024,
+                launcher_temporary_entries: 256,
+                launcher_shared_memory_bytes: 4096,
+                launcher_shared_memory_entries: 2,
                 timeout_ms: 10_000,
                 maximum_output_bytes: 64 * 1024,
                 enforcement_overruns: SandboxEnforcementOverruns {
@@ -672,12 +1043,17 @@ pub fn concrete_runtime_builds_and_runs_offline_under_runsc() {
         );
         eprintln!("qualification step result: {step:?}");
         let step = step?;
+        assert!(!run.join("step-export").exists());
+        let workspace_metadata = fs::metadata(run.join("workspace")).unwrap();
+        assert_eq!(workspace_metadata.uid(), unsafe { libc::geteuid() });
+        assert_eq!(workspace_metadata.gid(), unsafe { libc::getegid() });
         let deadline_step = backend.run_step(
             &SandboxStepRequest {
                 owner_id: owner_id.clone(),
                 slot_id: "generic_deadline_probe".into(),
                 candidate_image_digest: build.observation.candidate_image_digest.clone().unwrap(),
                 workspace_root: deadline_workspace,
+                export_root: deadline_export,
                 visible_roles: vec![ProjectedRoleMount {
                     role: "source".into(),
                     path: run.join("source"),
@@ -700,6 +1076,14 @@ pub fn concrete_runtime_builds_and_runs_offline_under_runsc() {
                 remaining_cpu_time_ms: 60_000,
                 mutable_disk_bytes: 64 * 1024 * 1024,
                 mutable_entries: 10_000,
+                launcher_root_bytes: 1024 * 1024,
+                launcher_root_entries: 512,
+                launcher_workspace_bytes: 24 * 1024 * 1024,
+                launcher_workspace_entries: 4000,
+                launcher_temporary_bytes: 8 * 1024 * 1024,
+                launcher_temporary_entries: 256,
+                launcher_shared_memory_bytes: 4096,
+                launcher_shared_memory_entries: 2,
                 timeout_ms: 4_000,
                 maximum_output_bytes: 64 * 1024,
                 enforcement_overruns: SandboxEnforcementOverruns {
@@ -718,6 +1102,7 @@ pub fn concrete_runtime_builds_and_runs_offline_under_runsc() {
         );
         eprintln!("qualification deadline result: {deadline_step:?}");
         let deadline_step = deadline_step?;
+        assert!(!run.join("deadline-export").exists());
         Ok::<_, SandboxFailure>((build, step, deadline_step))
     })();
     let cleanup = backend.cleanup(&owner_id, Instant::now() + Duration::from_secs(20));
@@ -756,9 +1141,9 @@ pub fn concrete_runtime_builds_and_runs_offline_under_runsc() {
                 ],
                 mounts: vec![OwnedBindMount {
                     source: run.join("context"),
-                    destination: "/workspace".into(),
+                    destination: "/workstream-bootstrap/input/context".into(),
                     readonly: true,
-                    class: OwnedMountClass::ProjectedContext,
+                    class: OwnedMountClass::LauncherContext,
                 }],
             },
             Instant::now() + Duration::from_secs(10),

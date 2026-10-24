@@ -55,6 +55,7 @@ struct FakeBackend {
     build_requests: Mutex<Vec<SandboxBuildRequest>>,
     step_requests: Mutex<Vec<SandboxStepRequest>>,
     outcomes: Mutex<VecDeque<TrialOperationOutcome>>,
+    export_outcomes: Mutex<VecDeque<TrialExportOutcome>>,
     build_cpu_time_ms: AtomicU64,
     retained_image_bytes: AtomicU64,
     retained_image_entries: AtomicU64,
@@ -73,6 +74,7 @@ impl TrialSandboxBackend for Arc<FakeBackend> {
             platform: profile.platform,
             platform_identity_digest: profile.platform_identity_digest,
             builder_image_digest: profile.builder_image_digest,
+            trusted_launcher_digest: profile.trusted_launcher_digest,
             offline_cache_digest: profile.offline_cache_digest,
             approved_base_digests: profile.approved_base_digests,
         }
@@ -119,6 +121,7 @@ impl TrialSandboxBackend for Arc<FakeBackend> {
             .workspace_root
             .join("workspace/initial.txt")
             .is_file());
+        assert!(request.export_root.is_dir());
         assert_eq!(request.command, ["/candidate/check", "case-a"]);
         let outcome = self
             .outcomes
@@ -126,6 +129,12 @@ impl TrialSandboxBackend for Arc<FakeBackend> {
             .unwrap()
             .pop_front()
             .unwrap_or(TrialOperationOutcome::Succeeded);
+        let export_outcome = self
+            .export_outcomes
+            .lock()
+            .unwrap()
+            .pop_front()
+            .unwrap_or(TrialExportOutcome::Exported);
         if outcome == TrialOperationOutcome::ExitNonzero {
             fs::write(
                 request.workspace_root.join("interrupted.state"),
@@ -150,6 +159,7 @@ impl TrialSandboxBackend for Arc<FakeBackend> {
             .pop_front()
             .unwrap_or(10);
         self.step_requests.lock().unwrap().push(request.clone());
+        fs::remove_dir(&request.export_root).unwrap();
         Ok(SandboxStepResult {
             observation: TrialStepObservation {
                 slot_id: request.slot_id.clone(),
@@ -169,6 +179,7 @@ impl TrialSandboxBackend for Arc<FakeBackend> {
                 stderr_sha256: hash(b""),
                 workspace_before_sha256: digest('1'),
                 workspace_after_sha256: digest('2'),
+                export_outcome,
                 elapsed_ms: 20,
                 cpu_time_ms,
                 peak_memory_bytes: 1024,
@@ -215,6 +226,7 @@ fn profile() -> TrialProfile {
         platform: "linux/amd64".into(),
         platform_identity_digest: digest('6'),
         builder_image_digest: digest('7'),
+        trusted_launcher_digest: digest('8'),
         offline_cache_digest: digest('8'),
         approved_base_digests: vec![digest('9')],
         source_material_roles: vec!["submission_archive".into()],
@@ -285,7 +297,7 @@ fn resources() -> TrialResources {
         cpu_time_ms: 2_000,
         memory_bytes: 32 * 1024 * 1024,
         disk_bytes: 512 * 1024,
-        maximum_entries: 50,
+        maximum_entries: 100,
         pids: 8,
     }
 }
@@ -324,6 +336,7 @@ fn build_observation() -> TrialBuildObservation {
         stderr_sha256: hash(b""),
         candidate_image_digest: Some(digest('a')),
         candidate_archive_digest: Some(digest('b')),
+        export_outcome: TrialExportOutcome::Exported,
         elapsed_ms: 100,
         cpu_time_ms: 50,
         peak_memory_bytes: 4096,
@@ -388,7 +401,7 @@ fn engine_projects_only_authorized_roles_runs_exact_plan_and_cleans_owned_scratc
         .execute(
             &context,
             &plan(),
-            Instant::now() + Duration::from_secs(2),
+            Instant::now() + Duration::from_secs(10),
             &AtomicBool::new(false),
             &AtomicBool::new(false),
         )
@@ -512,6 +525,49 @@ fn deliberate_work_failure_can_retain_state_but_resource_failure_cannot() {
 }
 
 #[test]
+fn invalid_export_never_advances_state_and_skips_its_dependent() {
+    let root = Root::new();
+    let (context, plan) = continuation_context_and_plan(&root);
+    let backend = Arc::new(FakeBackend::default());
+    backend
+        .outcomes
+        .lock()
+        .unwrap()
+        .push_back(TrialOperationOutcome::ExportInvalid);
+    backend
+        .export_outcomes
+        .lock()
+        .unwrap()
+        .push_back(TrialExportOutcome::Invalid);
+    let execution = GenericTrialEngine::new(backend.clone())
+        .execute(
+            &context,
+            &plan,
+            Instant::now() + Duration::from_secs(2),
+            &AtomicBool::new(false),
+            &AtomicBool::new(false),
+        )
+        .unwrap();
+    assert_eq!(
+        execution.steps[0].outcome,
+        TrialOperationOutcome::ExportInvalid
+    );
+    assert_eq!(
+        execution.steps[0].export_outcome,
+        TrialExportOutcome::Invalid
+    );
+    assert_eq!(
+        execution.steps[1].outcome,
+        TrialOperationOutcome::DependencySkipped
+    );
+    assert_eq!(
+        execution.steps[1].export_outcome,
+        TrialExportOutcome::NotStarted
+    );
+    assert_eq!(backend.steps.load(Ordering::Relaxed), 1);
+}
+
+#[test]
 fn projections_and_build_context_share_one_entry_budget() {
     let root = Root::new();
     let context = context(&root);
@@ -565,8 +621,9 @@ fn retained_image_expansion_consumes_the_shared_invocation_budget() {
 fn retained_workspace_copies_remain_charged_to_the_invocation() {
     let root = Root::new();
     let (context, mut plan) = continuation_context_and_plan(&root);
-    plan.resources.maximum_entries = 24;
+    plan.resources.maximum_entries = 100;
     let backend = Arc::new(FakeBackend::default());
+    backend.step_extra_files.store(10, Ordering::Relaxed);
     backend
         .outcomes
         .lock()
@@ -576,7 +633,7 @@ fn retained_workspace_copies_remain_charged_to_the_invocation() {
         .execute(
             &context,
             &plan,
-            Instant::now() + Duration::from_secs(2),
+            Instant::now() + Duration::from_secs(10),
             &AtomicBool::new(false),
             &AtomicBool::new(false),
         )
@@ -591,7 +648,7 @@ fn child_workspace_writes_cannot_exceed_the_global_remaining_budget() {
     let root = Root::new();
     let context = context(&root);
     let backend = Arc::new(FakeBackend::default());
-    backend.step_extra_files.store(64, Ordering::Relaxed);
+    backend.step_extra_files.store(128, Ordering::Relaxed);
     let failure = GenericTrialEngine::new(backend.clone())
         .execute(
             &context,

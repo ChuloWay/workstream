@@ -52,6 +52,7 @@ def profile():
         platform="linux/amd64",
         platform_identity_digest=digest("4"),
         builder_image_digest=digest("5"),
+        trusted_launcher_digest=digest("6"),
         offline_cache_digest=digest("6"),
         approved_base_digests=(digest("7"),),
         permitted_source_roles=("submission_archive",),
@@ -62,7 +63,17 @@ def profile():
             "exit_nonzero",
             "signalled",
         ),
-        builder_capabilities=("CHOWN", "DAC_OVERRIDE", "FOWNER", "SYS_CHROOT"),
+        builder_capabilities=(
+            "CHOWN",
+            "DAC_OVERRIDE",
+            "FOWNER",
+            "KILL",
+            "SETGID",
+            "SETPCAP",
+            "SETUID",
+            "SYS_ADMIN",
+            "SYS_CHROOT",
+        ),
         child_capabilities=(),
         child_network="none",
         child_runs_as_non_root=True,
@@ -174,6 +185,8 @@ def test_runtime_split_and_no_swap_are_closed_trusted_profile_rules():
         replace(selected, child_capabilities=("SYS_ADMIN",))
     with pytest.raises(TrialProfileError, match="byte ceiling"):
         replace(selected.limits, maximum_receipt_bytes=1024 * 1024 + 1)
+    with pytest.raises(TrialProfileError, match="PID ceiling"):
+        replace(selected.limits, maximum_pids=1)
 
 
 def test_locked_configuration_parses_trial_and_model_selectors_independently():

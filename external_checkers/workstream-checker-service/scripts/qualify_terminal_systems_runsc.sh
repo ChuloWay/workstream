@@ -23,6 +23,9 @@ readonly INNER_COMPOSITION_ROOT="${INNER_ROOT}/terminal-systems-runsc-compositio
 readonly ORIGINAL_CONFIG="$(mktemp /tmp/ws493-runsc-daemon.XXXXXX.json)"
 ORIGINAL_CONFIG_MODE=""
 readonly BUILD_MESSAGES="$(mktemp /tmp/ws493-runsc-build.XXXXXX.jsonl)"
+readonly LAUNCHER_MESSAGES="$(mktemp /tmp/ws493-runsc-launcher-build.XXXXXX.jsonl)"
+readonly LAUNCHER_PROGRAM_HEADERS="$(mktemp /tmp/ws493-runsc-launcher.XXXXXX.phdr)"
+readonly LAUNCHER_DYNAMIC="$(mktemp /tmp/ws493-runsc-launcher.XXXXXX.dynamic)"
 readonly METADATA="${WORKSTREAM_TS_RUNSC_METADATA:-/tmp/ws493-terminal-systems-runsc.json}"
 readonly RESULT_LOG="${WORKSTREAM_TS_RUNSC_LOG:-/tmp/ws493-terminal-systems-runsc.log}"
 readonly EXIT_SIDECAR="${WORKSTREAM_TS_RUNSC_EXIT:-/tmp/ws493-terminal-systems-runsc.exit}"
@@ -111,7 +114,8 @@ cleanup() {
   if [[ -n "${PREPARED_IMAGE:-}" ]]; then
     remove_composition_root || status=1
   fi
-  rm -f -- "${ORIGINAL_CONFIG}" "${BUILD_MESSAGES}"
+  rm -f -- "${ORIGINAL_CONFIG}" "${BUILD_MESSAGES}" "${LAUNCHER_MESSAGES}" \
+    "${LAUNCHER_PROGRAM_HEADERS}" "${LAUNCHER_DYNAMIC}"
   # This unique private root is created by this invocation and contains only
   # the trusted service/proxy sockets, never submitted material.
   rm -rf -- "${SOCKET_ROOT}" || status=1
@@ -286,7 +290,7 @@ chmod 0700 "${COMPOSITION_ROOT}" "${COMPOSITION_ROOT}/bin" "${COMPOSITION_ROOT}/
 
 (
   cd "${REPOSITORY_ROOT}/external_checkers"
-  CARGO_NET_OFFLINE=true CARGO_BUILD_JOBS=1 RUST_MIN_STACK=67108864 cargo build \
+  CARGO_NET_OFFLINE=true CARGO_INCREMENTAL=0 CARGO_BUILD_JOBS=1 RUST_MIN_STACK=67108864 cargo build \
     --locked -p workstream-checker-service --bin workstream-checker-service \
     --message-format=json-render-diagnostics >"${BUILD_MESSAGES}"
 )
@@ -310,7 +314,39 @@ print(values[0])
 PY
 )"
 [[ -x "${SERVICE_BINARY}" ]]
+(
+  cd "${REPOSITORY_ROOT}"
+  CARGO_NET_OFFLINE=true CARGO_INCREMENTAL=0 CARGO_BUILD_JOBS=1 cargo rustc \
+    --manifest-path external_checkers/workstream-checker-service/Cargo.toml \
+    --bin workstream-trial-launcher --message-format=json-render-diagnostics \
+    -- -C target-feature=+crt-static >"${LAUNCHER_MESSAGES}"
+)
+readonly LAUNCHER_BINARY="$(python3 - "${LAUNCHER_MESSAGES}" <<'PY'
+import json
+import sys
+
+values = []
+for line in open(sys.argv[1], encoding="utf-8"):
+    item = json.loads(line)
+    if (
+        item.get("reason") == "compiler-artifact"
+        and item["target"]["name"] == "workstream-trial-launcher"
+        and "bin" in item["target"]["kind"]
+        and item.get("executable")
+    ):
+        values.append(item["executable"])
+if len(values) != 1:
+    raise SystemExit("cargo did not report exactly one launcher executable")
+print(values[0])
+PY
+)"
+[[ -x "${LAUNCHER_BINARY}" ]]
+readelf -l "${LAUNCHER_BINARY}" >"${LAUNCHER_PROGRAM_HEADERS}"
+readelf -d "${LAUNCHER_BINARY}" >"${LAUNCHER_DYNAMIC}"
+! grep -q INTERP "${LAUNCHER_PROGRAM_HEADERS}"
+! grep -q NEEDED "${LAUNCHER_DYNAMIC}"
 cp -- "${SERVICE_BINARY}" "${COMPOSITION_ROOT}/bin/workstream-checker-service"
+cp -- "${LAUNCHER_BINARY}" "${COMPOSITION_ROOT}/bin/workstream-trial-launcher"
 cp -- "$(readlink -f /lib64/ld-linux-x86-64.so.2)" "${COMPOSITION_ROOT}/bin/ld-linux-x86-64.so.2"
 cp -- "$(readlink -f /lib/x86_64-linux-gnu/libgcc_s.so.1)" "${COMPOSITION_ROOT}/bin/libgcc_s.so.1"
 cp -- "$(readlink -f /lib/x86_64-linux-gnu/libm.so.6)" "${COMPOSITION_ROOT}/bin/libm.so.6"
@@ -458,6 +494,8 @@ export WORKSTREAM_TS_RUNSC_BUILDER_ID="$(python3 -c 'import json,sys; print(json
 export WORKSTREAM_TS_RUNSC_BUILDER_MANIFEST="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["builder_manifest"])' "${STATE_ROOT}/prepared-assets.json")"
 export WORKSTREAM_TS_RUNSC_CACHE_DIGEST="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["cache_manifest_sha256"])' "${STATE_ROOT}/prepared-assets.json")"
 export WORKSTREAM_TS_RUNSC_ENGINE_DIGEST="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["runsc_binary_sha256"])' "${STATE_ROOT}/prepared-assets.json")"
+export WORKSTREAM_TS_RUNSC_LAUNCHER_PATH="${INNER_COMPOSITION_ROOT}/bin/workstream-trial-launcher"
+export WORKSTREAM_TS_RUNSC_LAUNCHER_DIGEST="sha256:$(sha256sum "${COMPOSITION_ROOT}/bin/workstream-trial-launcher" | cut -d' ' -f1)"
 
 if [[ "${WORKSTREAM_TS_RUNSC_PREFLIGHT_ONLY:-0}" == 1 ]]; then
   echo "qualification stage=preflight_only_complete"

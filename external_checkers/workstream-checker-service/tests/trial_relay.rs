@@ -23,6 +23,13 @@ fn profile_rejects_receipts_larger_than_durable_custody_limit() {
     assert!(!valid_profile(&selected));
 }
 
+#[test]
+fn profile_requires_room_for_trusted_pid_one_and_one_child() {
+    let mut selected = profile();
+    selected.maximum_pids = 1;
+    assert!(!valid_profile(&selected));
+}
+
 struct TestRoot(PathBuf);
 
 impl TestRoot {
@@ -217,6 +224,7 @@ fn profile() -> TrialProfile {
         platform: "linux/amd64".into(),
         platform_identity_digest: digest('8'),
         builder_image_digest: digest('9'),
+        trusted_launcher_digest: digest('c'),
         offline_cache_digest: digest('a'),
         approved_base_digests: vec![digest('b')],
         source_material_roles: vec!["submission_archive".into()],
@@ -293,6 +301,7 @@ fn execution(cleanup_confirmed: bool) -> TrialExecution {
     TrialExecution {
         platform_identity_digest: profile.platform_identity_digest,
         builder_image_digest: profile.builder_image_digest,
+        trusted_launcher_digest: profile.trusted_launcher_digest,
         offline_cache_digest: profile.offline_cache_digest,
         base_image_digests: profile.approved_base_digests,
         material_inventory_digests: vec![
@@ -315,6 +324,7 @@ fn execution(cleanup_confirmed: bool) -> TrialExecution {
             stderr_sha256: text_digest(""),
             candidate_image_digest: Some(digest('e')),
             candidate_archive_digest: Some(digest('f')),
+            export_outcome: TrialExportOutcome::Exported,
             elapsed_ms: 100,
             cpu_time_ms: 50,
             peak_memory_bytes: 1024,
@@ -340,6 +350,7 @@ fn execution(cleanup_confirmed: bool) -> TrialExecution {
             stderr_sha256: text_digest(""),
             workspace_before_sha256: digest('1'),
             workspace_after_sha256: digest('2'),
+            export_outcome: TrialExportOutcome::Exported,
             elapsed_ms: 20,
             cpu_time_ms: 10,
             peak_memory_bytes: 512,
@@ -362,6 +373,7 @@ fn build_failure_execution() -> TrialExecution {
     value.build.stderr_sha256 = text_digest("compile error\n");
     value.build.candidate_image_digest = None;
     value.build.candidate_archive_digest = None;
+    value.build.export_outcome = TrialExportOutcome::NotStarted;
     let step = &mut value.steps[0];
     step.outcome = TrialOperationOutcome::DependencySkipped;
     step.exit_code = None;
@@ -376,6 +388,7 @@ fn build_failure_execution() -> TrialExecution {
     step.peak_pids = 0;
     step.written_bytes = 0;
     step.written_entries = 0;
+    step.export_outcome = TrialExportOutcome::NotStarted;
     value
 }
 
@@ -562,11 +575,23 @@ fn host_runtime_fields_and_profile_slot_substitution_are_rejected_before_engine(
     assert_plan_rejected(|value| value["steps"][0]["visible_roles"] = json!(["source"]));
     assert_plan_rejected(|value| value["steps"][0]["working_directory"] = json!("../host"));
     assert_plan_rejected(|value| value["resources"]["pids"] = json!(33));
+    assert_plan_rejected(|value| value["resources"]["pids"] = json!(1));
     assert_plan_rejected(|value| value["environment"]["platform"] = json!("linux/arm64"));
     assert_plan_rejected(|value| {
         let trailing = value["steps"][0].clone();
         value["steps"].as_array_mut().unwrap().push(trailing);
     });
+}
+
+#[test]
+fn two_pid_whole_container_boundary_reaches_the_engine() {
+    let started = start(true);
+    let mut bounded = plan();
+    bounded["resources"]["pids"] = json!(2);
+    let response = exchange(started.relay.socket_path(), &request(bounded));
+    assert_eq!(response["outcome"], "completed");
+    assert_eq!(started.engine.calls.load(Ordering::Relaxed), 1);
+    assert_eq!(started.relay.finish().failure, None);
 }
 
 #[test]
@@ -870,6 +895,7 @@ fn observed_cpu_and_deadline_overruns_are_preserved_within_enforcement_caps() {
     cpu.steps[0].exit_code = None;
     cpu.steps[0].signal = None;
     cpu.steps[0].cpu_time_ms = 5_001;
+    cpu.steps[0].export_outcome = TrialExportOutcome::Unavailable;
     assert_observed_limit_is_published(cpu, "cpu_exceeded");
 
     let mut deadline = execution(true);
@@ -877,5 +903,25 @@ fn observed_cpu_and_deadline_overruns_are_preserved_within_enforcement_caps() {
     deadline.steps[0].exit_code = None;
     deadline.steps[0].signal = None;
     deadline.steps[0].elapsed_ms = 850;
+    deadline.steps[0].export_outcome = TrialExportOutcome::Unavailable;
     assert_observed_limit_is_published(deadline, "deadline_exceeded");
+}
+
+#[test]
+fn closed_export_failures_preserve_child_status_without_fabricating_usage() {
+    let mut invalid = execution(true);
+    invalid.steps[0].outcome = TrialOperationOutcome::ExportInvalid;
+    invalid.steps[0].export_outcome = TrialExportOutcome::Invalid;
+    invalid.steps[0].exit_code = Some(0);
+    invalid.steps[0].signal = None;
+    assert_observed_limit_is_published(invalid, "export_invalid");
+
+    let mut capacity = execution(true);
+    capacity.steps[0].outcome = TrialOperationOutcome::DiskExceeded;
+    capacity.steps[0].export_outcome = TrialExportOutcome::CapacityExceeded;
+    capacity.steps[0].exit_code = Some(0);
+    capacity.steps[0].signal = None;
+    capacity.steps[0].written_bytes = 64;
+    capacity.steps[0].written_entries = 1;
+    assert_observed_limit_is_published(capacity, "disk_exceeded");
 }

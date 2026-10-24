@@ -225,6 +225,7 @@ def _trial_authority(env: dict[str, str], *, revision: bool = False):
         platform="linux/amd64",
         platform_identity_digest=env["WORKSTREAM_TS_RUNSC_PLATFORM_IDENTITY"],
         builder_image_digest=env["WORKSTREAM_TS_RUNSC_BUILDER_ID"],
+        trusted_launcher_digest=env["WORKSTREAM_TS_RUNSC_LAUNCHER_DIGEST"],
         offline_cache_digest=env["WORKSTREAM_TS_RUNSC_CACHE_DIGEST"],
         approved_base_digests=(ALPINE_DIGEST,),
         permitted_source_roles=("submission_archive",),
@@ -236,7 +237,17 @@ def _trial_authority(env: dict[str, str], *, revision: bool = False):
         ),
         permitted_operations=("run",),
         permitted_state_retention_outcomes=("succeeded", "exit_nonzero", "signalled"),
-        builder_capabilities=("CHOWN", "DAC_OVERRIDE", "FOWNER", "SYS_CHROOT"),
+        builder_capabilities=(
+            "CHOWN",
+            "DAC_OVERRIDE",
+            "FOWNER",
+            "KILL",
+            "SETGID",
+            "SETPCAP",
+            "SETUID",
+            "SYS_ADMIN",
+            "SYS_CHROOT",
+        ),
         child_capabilities=(),
         child_network="none",
         child_runs_as_non_root=True,
@@ -733,6 +744,8 @@ async def test_production_service_executes_project_trial_under_runsc_with_real_c
                 "deployment_owner": "terminal-systems-runsc-qualification",
                 "runtime_key": "runsc-trial",
                 "builder_image_id": env["WORKSTREAM_TS_RUNSC_BUILDER_ID"],
+                "trusted_launcher_path": env["WORKSTREAM_TS_RUNSC_LAUNCHER_PATH"],
+                "trusted_launcher_digest": env["WORKSTREAM_TS_RUNSC_LAUNCHER_DIGEST"],
                 "maximum_candidate_archive_bytes": 64 * 1024 * 1024,
                 "candidate_uid": os.geteuid(),
                 "candidate_gid": os.getegid(),
@@ -837,6 +850,10 @@ async def test_production_service_executes_project_trial_under_runsc_with_real_c
                 assert (
                     execution["builder_image_digest"]
                     == env["WORKSTREAM_TS_RUNSC_BUILDER_ID"]
+                )
+                assert (
+                    execution["trusted_launcher_digest"]
+                    == env["WORKSTREAM_TS_RUNSC_LAUNCHER_DIGEST"]
                 )
                 assert execution["offline_cache_digest"] == env["WORKSTREAM_TS_RUNSC_CACHE_DIGEST"]
                 assert execution["base_image_digests"] == [ALPINE_DIGEST]

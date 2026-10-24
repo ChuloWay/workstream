@@ -73,6 +73,7 @@ pub(crate) struct TrialProfile {
     pub(crate) platform: String,
     pub(crate) platform_identity_digest: String,
     pub(crate) builder_image_digest: String,
+    pub(crate) trusted_launcher_digest: String,
     pub(crate) offline_cache_digest: String,
     pub(crate) approved_base_digests: Vec<String>,
     pub(crate) source_material_roles: Vec<String>,
@@ -173,6 +174,7 @@ pub(crate) struct TrialStep {
 pub(crate) struct TrialExecution {
     pub(crate) platform_identity_digest: String,
     pub(crate) builder_image_digest: String,
+    pub(crate) trusted_launcher_digest: String,
     pub(crate) offline_cache_digest: String,
     pub(crate) base_image_digests: Vec<String>,
     pub(crate) material_inventory_digests: Vec<RoleInventoryDigest>,
@@ -200,6 +202,7 @@ pub(crate) struct TrialBuildObservation {
     pub(crate) stderr_sha256: String,
     pub(crate) candidate_image_digest: Option<String>,
     pub(crate) candidate_archive_digest: Option<String>,
+    pub(crate) export_outcome: TrialExportOutcome,
     pub(crate) elapsed_ms: u64,
     pub(crate) cpu_time_ms: u64,
     pub(crate) peak_memory_bytes: u64,
@@ -225,6 +228,7 @@ pub(crate) struct TrialStepObservation {
     pub(crate) stderr_sha256: String,
     pub(crate) workspace_before_sha256: String,
     pub(crate) workspace_after_sha256: String,
+    pub(crate) export_outcome: TrialExportOutcome,
     pub(crate) elapsed_ms: u64,
     pub(crate) cpu_time_ms: u64,
     pub(crate) peak_memory_bytes: u64,
@@ -246,7 +250,18 @@ pub(crate) enum TrialOperationOutcome {
     PidExceeded,
     DiskExceeded,
     OutputExceeded,
+    ExportInvalid,
     DependencySkipped,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum TrialExportOutcome {
+    Exported,
+    Invalid,
+    CapacityExceeded,
+    Unavailable,
+    NotStarted,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -768,6 +783,7 @@ pub(crate) fn valid_profile(profile: &TrialProfile) -> bool {
         && profile.child_host_uds == "none"
         && valid_sha256(&profile.platform_identity_digest)
         && valid_sha256(&profile.builder_image_digest)
+        && valid_sha256(&profile.trusted_launcher_digest)
         && valid_sha256(&profile.offline_cache_digest)
         && !profile.approved_base_digests.is_empty()
         && base_digests.len() == profile.approved_base_digests.len()
@@ -884,7 +900,9 @@ pub(crate) fn valid_profile(profile: &TrialProfile) -> bool {
         && profile.maximum_disk_overrun_bytes > 0
         && profile.maximum_entries > 0
         && profile.maximum_entries_overrun > 0
-        && profile.maximum_pids > 0
+        // Every submitted operation runs beneath the trusted PID 1 launcher,
+        // and the whole-container ceiling includes both processes.
+        && profile.maximum_pids >= 2
         && profile.maximum_pids_overrun > 0
         && !profile.platform.is_empty()
 }
@@ -992,7 +1010,7 @@ fn validate_plan(plan: &TrialPlan, profile: &TrialProfile) -> Result<(), TrialRe
         || plan.resources.disk_bytes > profile.maximum_disk_bytes
         || plan.resources.maximum_entries == 0
         || plan.resources.maximum_entries > profile.maximum_entries
-        || plan.resources.pids == 0
+        || plan.resources.pids < 2
         || plan.resources.pids > profile.maximum_pids
     {
         return Err(TrialRelayFailure::InvalidRequest);
@@ -1508,6 +1526,7 @@ fn validate_execution(
     }
     if execution.platform_identity_digest != profile.platform_identity_digest
         || execution.builder_image_digest != profile.builder_image_digest
+        || execution.trusted_launcher_digest != profile.trusted_launcher_digest
         || execution.offline_cache_digest != profile.offline_cache_digest
         || execution.base_image_digests != profile.approved_base_digests
         || execution.steps.len() != plan.steps.len()
@@ -1599,6 +1618,7 @@ fn validate_execution(
             )
             || !valid_operation_outcome(
                 observation.outcome,
+                observation.export_outcome,
                 observation.exit_code,
                 observation.signal,
                 &observation.stdout,
@@ -1619,10 +1639,11 @@ fn validate_execution(
             .checked_add(observation.cpu_time_ms)
             .ok_or(TrialRelayFailure::ImplementationUnavailable)?;
         invocation_capacity_exhausted |= observation.outcome == TrialOperationOutcome::DiskExceeded;
-        if slot_profile
-            .retain_state_after
-            .iter()
-            .any(|value| value == trial_outcome_name(observation.outcome))
+        if observation.export_outcome == TrialExportOutcome::Exported
+            && slot_profile
+                .retain_state_after
+                .iter()
+                .any(|value| value == trial_outcome_name(observation.outcome))
         {
             retained_slots.insert(observation.slot_id.as_str());
         }
@@ -1641,6 +1662,7 @@ fn trial_outcome_name(outcome: TrialOperationOutcome) -> &'static str {
         TrialOperationOutcome::PidExceeded => "pid_exceeded",
         TrialOperationOutcome::DiskExceeded => "disk_exceeded",
         TrialOperationOutcome::OutputExceeded => "output_exceeded",
+        TrialOperationOutcome::ExportInvalid => "export_invalid",
         TrialOperationOutcome::DependencySkipped => "dependency_skipped",
     }
 }
@@ -1695,27 +1717,40 @@ fn valid_build_observation(
 
 fn valid_build_outcome(observation: &TrialBuildObservation) -> bool {
     let has_candidate = observation.candidate_image_digest.is_some();
-    match observation.outcome {
-        TrialOperationOutcome::Succeeded => {
+    match (observation.outcome, observation.export_outcome) {
+        (TrialOperationOutcome::Succeeded, TrialExportOutcome::Exported) => {
             has_candidate && observation.exit_code == Some(0) && observation.signal.is_none()
         }
-        TrialOperationOutcome::ExitNonzero => {
+        (TrialOperationOutcome::ExitNonzero, TrialExportOutcome::NotStarted) => {
             !has_candidate
-                && observation.exit_code.is_some_and(|value| value != 0)
+                && observation
+                    .exit_code
+                    .is_some_and(|value| (1..=255).contains(&value))
                 && observation.signal.is_none()
         }
-        TrialOperationOutcome::Signalled => {
-            !has_candidate && observation.exit_code.is_none() && observation.signal.is_some()
+        (TrialOperationOutcome::Signalled, TrialExportOutcome::NotStarted) => {
+            !has_candidate
+                && observation.exit_code.is_none()
+                && observation
+                    .signal
+                    .is_some_and(|value| (1..=64).contains(&value))
         }
-        TrialOperationOutcome::DeadlineExceeded
-        | TrialOperationOutcome::CpuExceeded
-        | TrialOperationOutcome::MemoryExceeded
-        | TrialOperationOutcome::PidExceeded
-        | TrialOperationOutcome::DiskExceeded
-        | TrialOperationOutcome::OutputExceeded => {
-            !has_candidate && observation.exit_code.is_none() && observation.signal.is_none()
+        (
+            TrialOperationOutcome::DeadlineExceeded
+            | TrialOperationOutcome::CpuExceeded
+            | TrialOperationOutcome::MemoryExceeded
+            | TrialOperationOutcome::PidExceeded
+            | TrialOperationOutcome::DiskExceeded
+            | TrialOperationOutcome::OutputExceeded,
+            TrialExportOutcome::Unavailable,
+        ) => !has_candidate && observation.exit_code.is_none() && observation.signal.is_none(),
+        (TrialOperationOutcome::DiskExceeded, TrialExportOutcome::CapacityExceeded) => {
+            !has_candidate && valid_actual_child(observation.exit_code, observation.signal)
         }
-        TrialOperationOutcome::DependencySkipped => false,
+        (TrialOperationOutcome::ExportInvalid, TrialExportOutcome::Invalid) => {
+            !has_candidate && valid_actual_child(observation.exit_code, observation.signal)
+        }
+        _ => false,
     }
 }
 
@@ -1811,6 +1846,7 @@ fn upper_with_overrun(observed: u64, limit: u64, overrun: u64, exceeded: bool) -
 
 fn valid_operation_outcome(
     outcome: TrialOperationOutcome,
+    export_outcome: TrialExportOutcome,
     exit_code: Option<i32>,
     signal: Option<i32>,
     stdout: &str,
@@ -1819,25 +1855,44 @@ fn valid_operation_outcome(
 ) -> bool {
     if must_skip {
         return outcome == TrialOperationOutcome::DependencySkipped
+            && export_outcome == TrialExportOutcome::NotStarted
             && exit_code.is_none()
             && signal.is_none()
             && stdout.is_empty()
             && stderr.is_empty();
     }
-    match outcome {
-        TrialOperationOutcome::Succeeded => exit_code == Some(0) && signal.is_none(),
-        TrialOperationOutcome::ExitNonzero => {
-            exit_code.is_some_and(|value| value != 0) && signal.is_none()
+    match (outcome, export_outcome) {
+        (TrialOperationOutcome::Succeeded, TrialExportOutcome::Exported) => {
+            exit_code == Some(0) && signal.is_none()
         }
-        TrialOperationOutcome::Signalled => exit_code.is_none() && signal.is_some(),
-        TrialOperationOutcome::DeadlineExceeded
-        | TrialOperationOutcome::CpuExceeded
-        | TrialOperationOutcome::MemoryExceeded
-        | TrialOperationOutcome::PidExceeded
-        | TrialOperationOutcome::DiskExceeded
-        | TrialOperationOutcome::OutputExceeded => exit_code.is_none() && signal.is_none(),
-        TrialOperationOutcome::DependencySkipped => false,
+        (TrialOperationOutcome::ExitNonzero, TrialExportOutcome::Exported) => {
+            exit_code.is_some_and(|value| (1..=255).contains(&value)) && signal.is_none()
+        }
+        (TrialOperationOutcome::Signalled, TrialExportOutcome::Exported) => {
+            exit_code.is_none() && signal.is_some_and(|value| (1..=64).contains(&value))
+        }
+        (
+            TrialOperationOutcome::DeadlineExceeded
+            | TrialOperationOutcome::CpuExceeded
+            | TrialOperationOutcome::MemoryExceeded
+            | TrialOperationOutcome::PidExceeded
+            | TrialOperationOutcome::DiskExceeded
+            | TrialOperationOutcome::OutputExceeded,
+            TrialExportOutcome::Unavailable,
+        ) => exit_code.is_none() && signal.is_none(),
+        (TrialOperationOutcome::DiskExceeded, TrialExportOutcome::CapacityExceeded)
+        | (TrialOperationOutcome::ExportInvalid, TrialExportOutcome::Invalid) => {
+            valid_actual_child(exit_code, signal)
+        }
+        _ => false,
     }
+}
+
+fn valid_actual_child(exit_code: Option<i32>, signal: Option<i32>) -> bool {
+    matches!(
+        (exit_code, signal),
+        (Some(0..=255), None) | (None, Some(1..=64))
+    )
 }
 
 fn valid_role_inventory(values: &[RoleInventoryDigest], expected: &[String]) -> bool {

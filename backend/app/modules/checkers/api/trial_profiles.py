@@ -106,6 +106,8 @@ class TrialResourceCeilings:
             raise TrialProfileError("trial timeout ceiling is invalid")
         if self.maximum_memory_bytes != self.maximum_swap_bytes:
             raise TrialProfileError("trial swap must be disabled")
+        if self.maximum_pids < 2:
+            raise TrialProfileError("trial PID ceiling cannot host the trusted launcher and child")
         if (
             any(
                 value > 4 * 1024 * 1024
@@ -137,6 +139,7 @@ class TrialExecutionProfile:
     platform: str
     platform_identity_digest: Sha256
     builder_image_digest: Sha256
+    trusted_launcher_digest: Sha256
     offline_cache_digest: Sha256
     approved_base_digests: tuple[Sha256, ...]
     permitted_source_roles: tuple[Identifier, ...]
@@ -145,7 +148,20 @@ class TrialExecutionProfile:
     permitted_state_retention_outcomes: tuple[
         Literal["succeeded", "exit_nonzero", "signalled"], ...
     ]
-    builder_capabilities: tuple[Literal["CHOWN", "DAC_OVERRIDE", "FOWNER", "SYS_CHROOT"], ...]
+    builder_capabilities: tuple[
+        Literal[
+            "CHOWN",
+            "DAC_OVERRIDE",
+            "FOWNER",
+            "KILL",
+            "SETGID",
+            "SETPCAP",
+            "SETUID",
+            "SYS_ADMIN",
+            "SYS_CHROOT",
+        ],
+        ...,
+    ]
     child_capabilities: tuple[()]
     child_network: Literal["none"]
     child_runs_as_non_root: Literal[True]
@@ -162,7 +178,18 @@ class TrialExecutionProfile:
             or self.child_network != "none"
             or self.child_runs_as_non_root is not True
             or self.child_capabilities != ()
-            or self.builder_capabilities != ("CHOWN", "DAC_OVERRIDE", "FOWNER", "SYS_CHROOT")
+            or self.builder_capabilities
+            != (
+                "CHOWN",
+                "DAC_OVERRIDE",
+                "FOWNER",
+                "KILL",
+                "SETGID",
+                "SETPCAP",
+                "SETUID",
+                "SYS_ADMIN",
+                "SYS_CHROOT",
+            )
             or self.permitted_operations != ("run",)
             or not self.permitted_state_retention_outcomes
             or len(set(self.permitted_state_retention_outcomes))
@@ -178,6 +205,7 @@ class TrialExecutionProfile:
             self.engine_identity_digest,
             self.platform_identity_digest,
             self.builder_image_digest,
+            self.trusted_launcher_digest,
             self.offline_cache_digest,
             *self.approved_base_digests,
         )

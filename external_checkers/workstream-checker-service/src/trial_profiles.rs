@@ -45,6 +45,7 @@ struct RuntimeProfile {
     platform: String,
     platform_identity_digest: String,
     builder_image_digest: String,
+    trusted_launcher_digest: String,
     offline_cache_digest: String,
     approved_base_digests: Vec<String>,
     permitted_source_roles: Vec<String>,
@@ -135,7 +136,17 @@ impl TrialAuthorityEntry {
             || self.profile.child_network != "none"
             || !self.profile.child_runs_as_non_root
             || self.profile.builder_capabilities
-                != ["CHOWN", "DAC_OVERRIDE", "FOWNER", "SYS_CHROOT"]
+                != [
+                    "CHOWN",
+                    "DAC_OVERRIDE",
+                    "FOWNER",
+                    "KILL",
+                    "SETGID",
+                    "SETPCAP",
+                    "SETUID",
+                    "SYS_ADMIN",
+                    "SYS_CHROOT",
+                ]
             || !self.profile.child_capabilities.is_empty()
             || self.profile.permitted_operations != ["run"]
             || profile_digest != self.profile.selector.profile_digest
@@ -192,6 +203,7 @@ impl TrialAuthorityEntry {
             platform: self.profile.platform,
             platform_identity_digest: self.profile.platform_identity_digest,
             builder_image_digest: self.profile.builder_image_digest,
+            trusted_launcher_digest: self.profile.trusted_launcher_digest,
             offline_cache_digest: self.profile.offline_cache_digest,
             approved_base_digests: self.profile.approved_base_digests,
             source_material_roles: self.profile.permitted_source_roles,
@@ -419,6 +431,7 @@ mod tests {
             platform: "linux/amd64".into(),
             platform_identity_digest: digest('4'),
             builder_image_digest: digest('5'),
+            trusted_launcher_digest: digest('6'),
             offline_cache_digest: digest('6'),
             approved_base_digests: vec![digest('7')],
             permitted_source_roles: vec!["submission_archive".into()],
@@ -429,6 +442,11 @@ mod tests {
                 "CHOWN".into(),
                 "DAC_OVERRIDE".into(),
                 "FOWNER".into(),
+                "KILL".into(),
+                "SETGID".into(),
+                "SETPCAP".into(),
+                "SETUID".into(),
+                "SYS_ADMIN".into(),
                 "SYS_CHROOT".into(),
             ],
             child_capabilities: Vec::new(),

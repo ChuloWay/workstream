@@ -5,7 +5,8 @@ use crate::trial_engine::{
     SandboxFailure, SandboxStepRequest, SandboxStepResult, TrialSandboxBackend,
 };
 use crate::trial_relay::{
-    TrialBuildObservation, TrialOperationOutcome, TrialRelayFailure, TrialStepObservation,
+    TrialBuildObservation, TrialExportOutcome, TrialOperationOutcome, TrialRelayFailure,
+    TrialStepObservation,
 };
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -46,11 +47,12 @@ pub(crate) struct OwnedContainerCreate {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum OwnedMountClass {
-    ProjectedContext,
-    OfflineCache,
-    CandidateOutput,
-    TrialState,
-    TrialStateOverlay,
+    TrustedLauncher,
+    LauncherContext,
+    LauncherCache,
+    LauncherExport,
+    LauncherWorkspace,
+    LauncherRole,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -1445,15 +1447,26 @@ fn validate_owned_mount(mount: &OwnedBindMount) -> Result<(), RuntimeControlFail
         return Err(RuntimeControlFailure::InvalidConfiguration);
     }
     let accepted = match mount.class {
-        OwnedMountClass::ProjectedContext => mount.readonly && mount.destination == "/workspace",
-        OwnedMountClass::OfflineCache => mount.readonly && mount.destination == "/cache",
-        OwnedMountClass::CandidateOutput => !mount.readonly && mount.destination == "/out",
-        OwnedMountClass::TrialState => !mount.readonly && mount.destination == "/work/state",
-        OwnedMountClass::TrialStateOverlay => {
+        OwnedMountClass::TrustedLauncher => {
+            mount.readonly && mount.destination == "/workstream-bootstrap/launcher"
+        }
+        OwnedMountClass::LauncherContext => {
+            mount.readonly && mount.destination == "/workstream-bootstrap/input/context"
+        }
+        OwnedMountClass::LauncherCache => {
+            mount.readonly && mount.destination == "/workstream-bootstrap/input/cache"
+        }
+        OwnedMountClass::LauncherExport => {
+            !mount.readonly && mount.destination == "/workstream-bootstrap/export"
+        }
+        OwnedMountClass::LauncherWorkspace => {
+            mount.readonly && mount.destination == "/workstream-bootstrap/input/workspace"
+        }
+        OwnedMountClass::LauncherRole => {
             mount.readonly
                 && mount
                     .destination
-                    .strip_prefix("/work/state/")
+                    .strip_prefix("/workstream-bootstrap/input/roles/")
                     .is_some_and(valid_container_relative_path)
         }
     };
@@ -2004,10 +2017,14 @@ pub(crate) struct DockerTrialConfiguration {
     pub(crate) attempt_id: String,
     pub(crate) runtime_key: String,
     pub(crate) builder_image_id: String,
+    pub(crate) trusted_launcher_path: PathBuf,
+    pub(crate) trusted_launcher_digest: String,
     pub(crate) offline_cache_root: PathBuf,
     pub(crate) maximum_candidate_archive_bytes: u64,
     pub(crate) candidate_uid: u32,
     pub(crate) candidate_gid: u32,
+    pub(crate) export_uid: u32,
+    pub(crate) export_gid: u32,
 }
 
 pub(crate) struct DockerTrialBackend<C: RuntimeControl> {
@@ -2020,6 +2037,10 @@ impl<C: RuntimeControl> DockerTrialBackend<C> {
         config: DockerTrialConfiguration,
         control: C,
     ) -> Result<Self, SandboxFailure> {
+        let trusted_launcher_path = fs::canonicalize(&config.trusted_launcher_path)
+            .map_err(|_| infrastructure(TrialRelayFailure::InvalidRequest))?;
+        let launcher_metadata = fs::symlink_metadata(&trusted_launcher_path)
+            .map_err(|_| infrastructure(TrialRelayFailure::InvalidRequest))?;
         if config.identity.child_runtime != "runsc"
             || config.identity.child_host_uds != "none"
             || config.runtime_key.is_empty()
@@ -2030,10 +2051,23 @@ impl<C: RuntimeControl> DockerTrialBackend<C> {
                 .all(|item| item.is_ascii_alphanumeric() || matches!(item, b'_' | b'-' | b'.'))
             || !valid_sha256(&config.builder_image_id)
             || config.builder_image_id != config.identity.builder_image_digest
+            || config.trusted_launcher_digest != config.identity.trusted_launcher_digest
+            || !valid_sha256(&config.trusted_launcher_digest)
+            || trusted_launcher_path != config.trusted_launcher_path
+            || !launcher_metadata.file_type().is_file()
+            || launcher_metadata.file_type().is_symlink()
+            || launcher_metadata.permissions().mode() & 0o111 == 0
+            || launcher_metadata.permissions().mode() & 0o022 != 0
+            || hash_bounded_file(&trusted_launcher_path, 8 * 1024 * 1024)
+                .ok()
+                .as_deref()
+                != Some(config.trusted_launcher_digest.as_str())
             || !config.offline_cache_root.is_absolute()
             || config.maximum_candidate_archive_bytes == 0
             || config.candidate_uid == 0
             || config.candidate_gid == 0
+            || config.export_uid == 0
+            || config.export_gid == 0
         {
             return Err(infrastructure(TrialRelayFailure::InvalidRequest));
         }
@@ -2047,6 +2081,26 @@ impl<C: RuntimeControl> DockerTrialBackend<C> {
             attempt_id: self.config.attempt_id.clone(),
             trial_owner_id: trial_owner_id.to_owned(),
         }
+    }
+
+    fn require_trusted_launcher(&self) -> Result<(), SandboxFailure> {
+        let canonical = fs::canonicalize(&self.config.trusted_launcher_path)
+            .map_err(|_| infrastructure(TrialRelayFailure::ImplementationUnavailable))?;
+        let metadata = fs::symlink_metadata(&canonical)
+            .map_err(|_| infrastructure(TrialRelayFailure::ImplementationUnavailable))?;
+        if canonical != self.config.trusted_launcher_path
+            || !metadata.file_type().is_file()
+            || metadata.file_type().is_symlink()
+            || metadata.permissions().mode() & 0o111 == 0
+            || metadata.permissions().mode() & 0o022 != 0
+            || hash_bounded_file(&canonical, 8 * 1024 * 1024)
+                .ok()
+                .as_deref()
+                != Some(self.config.trusted_launcher_digest.as_str())
+        {
+            return Err(infrastructure(TrialRelayFailure::ImplementationUnavailable));
+        }
+        Ok(())
     }
 
     fn limits(
@@ -2088,10 +2142,35 @@ impl<C: RuntimeControl> DockerTrialBackend<C> {
             "--network".into(),
             "none".into(),
             "--no-healthcheck".into(),
+            "--read-only".into(),
             "--cap-drop".into(),
             "ALL".into(),
+            "--cap-add".into(),
+            "CHOWN".into(),
+            "--cap-add".into(),
+            "DAC_OVERRIDE".into(),
+            "--cap-add".into(),
+            "FOWNER".into(),
+            "--cap-add".into(),
+            "KILL".into(),
+            "--cap-add".into(),
+            "SETGID".into(),
+            "--cap-add".into(),
+            "SETPCAP".into(),
+            "--cap-add".into(),
+            "SETUID".into(),
+            "--cap-add".into(),
+            "SYS_ADMIN".into(),
+            "--cap-add".into(),
+            "SYS_CHROOT".into(),
             "--security-opt".into(),
             "no-new-privileges".into(),
+            "--user".into(),
+            "0:0".into(),
+            "--tmpfs".into(),
+            "/workstream-bootstrap:rw,nosuid,nodev,size=65536".into(),
+            "--entrypoint".into(),
+            "/workstream-bootstrap/launcher".into(),
             "--pids-limit".into(),
             resources.pids.to_string(),
             "--memory".into(),
@@ -2130,21 +2209,36 @@ impl<C: RuntimeControl> TrialSandboxBackend for DockerTrialBackend<C> {
                 &self.config.identity.offline_cache_digest,
             )
             .map_err(runtime_failure)?;
+        self.require_trusted_launcher()?;
         let owner = self.owner(&request.owner_id);
         let name = format!("ws-trial-{}-build", request.owner_id);
         let mut arguments = self.common_create_arguments(&request.resources);
         arguments.extend([
-            "--user".into(),
-            "0:0".into(),
-            "--cap-add".into(),
-            "CHOWN".into(),
-            "--cap-add".into(),
-            "DAC_OVERRIDE".into(),
-            "--cap-add".into(),
-            "FOWNER".into(),
-            "--cap-add".into(),
-            "SYS_CHROOT".into(),
             self.config.builder_image_id.clone(),
+            "builder".into(),
+            "--root-bytes".into(),
+            request.launcher_root_bytes.to_string(),
+            "--root-inodes".into(),
+            request.launcher_root_entries.to_string(),
+            "--candidate-bytes".into(),
+            request
+                .launcher_candidate_bytes
+                .min(self.config.maximum_candidate_archive_bytes)
+                .to_string(),
+            "--tmp-bytes".into(),
+            request.launcher_temporary_bytes.to_string(),
+            "--tmp-inodes".into(),
+            request.launcher_temporary_entries.to_string(),
+            "--shm-bytes".into(),
+            request.launcher_shared_memory_bytes.to_string(),
+            "--shm-inodes".into(),
+            request.launcher_shared_memory_entries.to_string(),
+            "--export-uid".into(),
+            self.config.export_uid.to_string(),
+            "--export-gid".into(),
+            self.config.export_gid.to_string(),
+            "--".into(),
+            "/kaniko/executor".into(),
             format!("--dockerfile=/workspace/{}", request.dockerfile_relative),
             format!("--context=dir:///workspace/{}", request.context_relative),
             "--cache=true".into(),
@@ -2154,6 +2248,7 @@ impl<C: RuntimeControl> TrialSandboxBackend for DockerTrialBackend<C> {
             "--no-push".into(),
             "--no-push-cache".into(),
             "--tar-path=/out/candidate.tar".into(),
+            "--ignore-path=/out".into(),
             format!("--destination={}", request.destination),
             "--force".into(),
             "--log-format=text".into(),
@@ -2166,25 +2261,31 @@ impl<C: RuntimeControl> TrialSandboxBackend for DockerTrialBackend<C> {
                     arguments,
                     mounts: vec![
                         owned_mount(
-                            &request.context_root,
-                            "/workspace",
+                            &self.config.trusted_launcher_path,
+                            "/workstream-bootstrap/launcher",
                             true,
-                            OwnedMountClass::ProjectedContext,
+                            OwnedMountClass::TrustedLauncher,
+                        )?,
+                        owned_mount(
+                            &request.context_root,
+                            "/workstream-bootstrap/input/context",
+                            true,
+                            OwnedMountClass::LauncherContext,
                         )?,
                         owned_mount(
                             &self.config.offline_cache_root,
-                            "/cache",
+                            "/workstream-bootstrap/input/cache",
                             true,
-                            OwnedMountClass::OfflineCache,
+                            OwnedMountClass::LauncherCache,
                         )?,
                         owned_mount(
                             request
                                 .output_archive
                                 .parent()
                                 .ok_or_else(|| infrastructure(TrialRelayFailure::InvalidRequest))?,
-                            "/out",
+                            "/workstream-bootstrap/export",
                             false,
-                            OwnedMountClass::CandidateOutput,
+                            OwnedMountClass::LauncherExport,
                         )?,
                     ],
                 },
@@ -2213,7 +2314,37 @@ impl<C: RuntimeControl> TrialSandboxBackend for DockerTrialBackend<C> {
                 relay_cancelled,
             )
             .map_err(runtime_failure)?;
-        let mut observation = build_observation(observed)?;
+        let mut observed = observed;
+        let (export_outcome, outcome_override) = match observed.termination {
+            RuntimeTermination::Exited if observed.exit_code == Some(0) => {
+                let admitted = admit_builder_export(request)?;
+                observed.termination = if admitted.child.exit_code.is_some() {
+                    RuntimeTermination::Exited
+                } else {
+                    RuntimeTermination::Signalled
+                };
+                observed.exit_code = admitted.child.exit_code;
+                observed.signal = admitted.child.signal;
+                let outcome_override = match admitted.export_outcome {
+                    TrialExportOutcome::CapacityExceeded => {
+                        Some(TrialOperationOutcome::DiskExceeded)
+                    }
+                    TrialExportOutcome::Invalid => Some(TrialOperationOutcome::ExportInvalid),
+                    _ => None,
+                };
+                (admitted.export_outcome, outcome_override)
+            }
+            RuntimeTermination::Exited | RuntimeTermination::Signalled => {
+                return Err(runtime_failure(RuntimeControlFailure::InvalidObservation));
+            }
+            RuntimeTermination::DeadlineExceeded
+            | RuntimeTermination::CpuExceeded
+            | RuntimeTermination::MemoryExceeded
+            | RuntimeTermination::PidExceeded
+            | RuntimeTermination::DiskExceeded
+            | RuntimeTermination::OutputExceeded => (TrialExportOutcome::Unavailable, None),
+        };
+        let mut observation = build_observation(observed, export_outcome, outcome_override)?;
         let mut retained_image_bytes = 0;
         let mut retained_image_entries = 0;
         if observation.outcome == TrialOperationOutcome::Succeeded {
@@ -2264,49 +2395,89 @@ impl<C: RuntimeControl> TrialSandboxBackend for DockerTrialBackend<C> {
         invocation_cancelled: &AtomicBool,
         relay_cancelled: &AtomicBool,
     ) -> Result<SandboxStepResult, SandboxFailure> {
+        self.require_trusted_launcher()?;
         let owner = self.owner(&request.owner_id);
         let slot_digest = Sha256::digest(request.slot_id.as_bytes());
         let slot_digest = format!("{slot_digest:x}");
         let name = format!("ws-trial-{}-{}", request.owner_id, &slot_digest[..16]);
         let mut arguments = self.common_create_arguments(&request.resources);
-        let user = format!(
-            "{}:{}",
-            self.config.candidate_uid, self.config.candidate_gid
-        );
-        let working_directory = if request.working_directory == "." {
-            "/work/state".to_owned()
-        } else {
-            format!("/work/state/{}", request.working_directory)
-        };
         arguments.extend([
-            "--read-only".into(),
-            "--user".into(),
-            user,
-            "--workdir".into(),
-            working_directory,
-            "--tmpfs".into(),
-            "/tmp:rw,noexec,nosuid,nodev,size=16777216".into(),
+            request.candidate_image_digest.clone(),
+            "step".into(),
+            "--root-bytes".into(),
+            request.launcher_root_bytes.to_string(),
+            "--root-inodes".into(),
+            request.launcher_root_entries.to_string(),
+            "--workspace-bytes".into(),
+            request.launcher_workspace_bytes.to_string(),
+            "--workspace-inodes".into(),
+            request.launcher_workspace_entries.to_string(),
+            "--tmp-bytes".into(),
+            request.launcher_temporary_bytes.to_string(),
+            "--tmp-inodes".into(),
+            request.launcher_temporary_entries.to_string(),
+            "--shm-bytes".into(),
+            request.launcher_shared_memory_bytes.to_string(),
+            "--shm-inodes".into(),
+            request.launcher_shared_memory_entries.to_string(),
+            "--working-directory".into(),
+            request.working_directory.clone(),
+            "--uid".into(),
+            self.config.candidate_uid.to_string(),
+            "--gid".into(),
+            self.config.candidate_gid.to_string(),
+            "--export-uid".into(),
+            self.config.export_uid.to_string(),
+            "--export-gid".into(),
+            self.config.export_gid.to_string(),
         ]);
-        let mut mounts = vec![owned_mount(
-            &request.workspace_root,
-            "/work/state",
-            false,
-            OwnedMountClass::TrialState,
-        )?];
+        let mut mounts = vec![
+            owned_mount(
+                &self.config.trusted_launcher_path,
+                "/workstream-bootstrap/launcher",
+                true,
+                OwnedMountClass::TrustedLauncher,
+            )?,
+            owned_mount(
+                &request.workspace_root,
+                "/workstream-bootstrap/input/workspace",
+                true,
+                OwnedMountClass::LauncherWorkspace,
+            )?,
+            owned_mount(
+                &request.export_root,
+                "/workstream-bootstrap/export",
+                false,
+                OwnedMountClass::LauncherExport,
+            )?,
+        ];
         for role in &request.visible_roles {
+            arguments.extend([
+                "--visible".into(),
+                format!("{}={}", role.role, role.destination_relative),
+            ]);
             mounts.push(owned_mount(
                 &role.path,
-                &format!("/work/state/{}", role.destination_relative),
+                &format!("/workstream-bootstrap/input/roles/{}", role.role),
                 true,
-                OwnedMountClass::TrialStateOverlay,
+                OwnedMountClass::LauncherRole,
             )?);
         }
-        arguments.extend([
-            "--entrypoint".into(),
-            request.command[0].clone(),
-            request.candidate_image_digest.clone(),
-        ]);
-        arguments.extend(request.command.iter().skip(1).cloned());
+        arguments.push("--".into());
+        arguments.extend(request.command.iter().cloned());
+        let limits = self.limits(
+            &request.resources,
+            request.remaining_cpu_time_ms,
+            request.mutable_disk_bytes,
+            request.mutable_entries,
+            request.timeout_ms,
+            request.maximum_output_bytes,
+            &request.enforcement_overruns,
+            deadline,
+        );
+        let workspace_before_sha256 =
+            combined_tree_digest(std::slice::from_ref(&request.workspace_root), &limits)
+                .map_err(runtime_failure)?;
         self.control
             .create_owned_container(
                 OwnedContainerCreate {
@@ -2325,23 +2496,58 @@ impl<C: RuntimeControl> TrialSandboxBackend for DockerTrialBackend<C> {
             .run_owned_container(
                 &owner,
                 &name,
-                std::slice::from_ref(&request.workspace_root),
-                &self.limits(
-                    &request.resources,
-                    request.remaining_cpu_time_ms,
-                    request.mutable_disk_bytes,
-                    request.mutable_entries,
-                    request.timeout_ms,
-                    request.maximum_output_bytes,
-                    &request.enforcement_overruns,
-                    deadline,
-                ),
+                std::slice::from_ref(&request.export_root),
+                &limits,
                 invocation_cancelled,
                 relay_cancelled,
             )
             .map_err(runtime_failure)?;
+        let mut observed = observed;
+        let (export_outcome, outcome_override) = match observed.termination {
+            RuntimeTermination::Exited if observed.exit_code == Some(0) => {
+                let admitted = admit_launcher_export(request)?;
+                observed.termination = if admitted.child.exit_code.is_some() {
+                    RuntimeTermination::Exited
+                } else {
+                    RuntimeTermination::Signalled
+                };
+                observed.exit_code = admitted.child.exit_code;
+                observed.signal = admitted.child.signal;
+                let outcome_override = match admitted.export_outcome {
+                    TrialExportOutcome::CapacityExceeded => {
+                        Some(TrialOperationOutcome::DiskExceeded)
+                    }
+                    TrialExportOutcome::Invalid => Some(TrialOperationOutcome::ExportInvalid),
+                    _ => None,
+                };
+                (admitted.export_outcome, outcome_override)
+            }
+            RuntimeTermination::Exited | RuntimeTermination::Signalled => {
+                return Err(runtime_failure(RuntimeControlFailure::InvalidObservation));
+            }
+            RuntimeTermination::DeadlineExceeded
+            | RuntimeTermination::CpuExceeded
+            | RuntimeTermination::MemoryExceeded
+            | RuntimeTermination::PidExceeded
+            | RuntimeTermination::DiskExceeded
+            | RuntimeTermination::OutputExceeded => {
+                remove_launcher_export(&request.export_root)?;
+                (TrialExportOutcome::Unavailable, None)
+            }
+        };
+        observed.workspace_before_sha256 = Some(workspace_before_sha256);
+        observed.workspace_after_sha256 = Some(
+            combined_tree_digest(std::slice::from_ref(&request.workspace_root), &limits)
+                .map_err(runtime_failure)?,
+        );
         Ok(SandboxStepResult {
-            observation: step_observation(request, operation_order, observed)?,
+            observation: step_observation(
+                request,
+                operation_order,
+                observed,
+                export_outcome,
+                outcome_override,
+            )?,
         })
     }
 
@@ -2354,8 +2560,10 @@ impl<C: RuntimeControl> TrialSandboxBackend for DockerTrialBackend<C> {
 
 fn build_observation(
     value: ObservedContainerExit,
+    export_outcome: TrialExportOutcome,
+    outcome_override: Option<TrialOperationOutcome>,
 ) -> Result<TrialBuildObservation, SandboxFailure> {
-    let outcome = operation_outcome(&value)?;
+    let outcome = outcome_override.unwrap_or(operation_outcome(&value)?);
     Ok(TrialBuildObservation {
         outcome,
         exit_code: value.exit_code,
@@ -2366,6 +2574,7 @@ fn build_observation(
         stderr: value.stderr,
         candidate_image_digest: None,
         candidate_archive_digest: None,
+        export_outcome,
         elapsed_ms: value.elapsed_ms,
         cpu_time_ms: value.cpu_time_ms,
         peak_memory_bytes: value.peak_memory_bytes,
@@ -2376,12 +2585,199 @@ fn build_observation(
     })
 }
 
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct LauncherStatus {
+    schema: String,
+    child: LauncherChildStatus,
+    candidate_exported: bool,
+    workspace_exported: bool,
+    export_failure: Option<LauncherExportFailure>,
+}
+
+#[derive(Clone, Copy, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+enum LauncherExportFailure {
+    CapacityExceeded,
+    Invalid,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct LauncherChildStatus {
+    exit_code: Option<i32>,
+    signal: Option<i32>,
+}
+
+struct AdmittedLauncherExport {
+    child: LauncherChildStatus,
+    export_outcome: TrialExportOutcome,
+}
+
+fn read_launcher_status(root: &std::path::Path) -> Result<LauncherStatus, SandboxFailure> {
+    let status_path = root.join("status.json");
+    let status_metadata = fs::symlink_metadata(&status_path)
+        .map_err(|_| runtime_failure(RuntimeControlFailure::InvalidObservation))?;
+    if !status_metadata.file_type().is_file()
+        || status_metadata.file_type().is_symlink()
+        || status_metadata.len() > 4096
+    {
+        return Err(runtime_failure(RuntimeControlFailure::InvalidObservation));
+    }
+    let status: LauncherStatus =
+        serde_json::from_slice(&read_bounded(&status_path, 4096).map_err(runtime_failure)?)
+            .map_err(|_| runtime_failure(RuntimeControlFailure::InvalidObservation))?;
+    let exact_outcome = match (status.child.exit_code, status.child.signal) {
+        (Some(code), None) => (0..=255).contains(&code),
+        (None, Some(signal)) => (1..=64).contains(&signal),
+        _ => false,
+    };
+    if status.schema != "workstream.trial_launcher_status.v1" || !exact_outcome {
+        return Err(runtime_failure(RuntimeControlFailure::InvalidObservation));
+    }
+    Ok(status)
+}
+
+fn admit_builder_export(
+    request: &SandboxBuildRequest,
+) -> Result<AdmittedLauncherExport, SandboxFailure> {
+    let root = request
+        .output_archive
+        .parent()
+        .ok_or_else(|| runtime_failure(RuntimeControlFailure::InvalidConfiguration))?;
+    let status = read_launcher_status(root)?;
+    let succeeded = status.child.exit_code == Some(0);
+    let export_outcome = match status.export_failure {
+        None if succeeded && status.candidate_exported => TrialExportOutcome::Exported,
+        None if !succeeded && !status.candidate_exported => TrialExportOutcome::NotStarted,
+        Some(LauncherExportFailure::CapacityExceeded)
+            if succeeded && !status.candidate_exported =>
+        {
+            TrialExportOutcome::CapacityExceeded
+        }
+        Some(LauncherExportFailure::Invalid) if succeeded && !status.candidate_exported => {
+            TrialExportOutcome::Invalid
+        }
+        _ => return Err(runtime_failure(RuntimeControlFailure::InvalidObservation)),
+    };
+    if status.workspace_exported {
+        return Err(runtime_failure(RuntimeControlFailure::InvalidObservation));
+    }
+    let mut names = fs::read_dir(root)
+        .map_err(|_| runtime_failure(RuntimeControlFailure::InvalidObservation))?
+        .map(|entry| entry.map(|value| value.file_name()))
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|_| runtime_failure(RuntimeControlFailure::InvalidObservation))?;
+    names.sort();
+    let expected = if status.candidate_exported {
+        vec![
+            std::ffi::OsString::from("candidate.tar"),
+            std::ffi::OsString::from("status.json"),
+        ]
+    } else {
+        vec![std::ffi::OsString::from("status.json")]
+    };
+    if names != expected {
+        return Err(runtime_failure(RuntimeControlFailure::InvalidObservation));
+    }
+    fs::remove_file(root.join("status.json"))
+        .map_err(|_| runtime_failure(RuntimeControlFailure::CleanupUnsettled))?;
+    Ok(AdmittedLauncherExport {
+        child: status.child,
+        export_outcome,
+    })
+}
+
+fn admit_launcher_export(
+    request: &SandboxStepRequest,
+) -> Result<AdmittedLauncherExport, SandboxFailure> {
+    let mut names = fs::read_dir(&request.export_root)
+        .map_err(|_| runtime_failure(RuntimeControlFailure::InvalidObservation))?
+        .map(|entry| entry.map(|value| value.file_name()))
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|_| runtime_failure(RuntimeControlFailure::InvalidObservation))?;
+    names.sort();
+    let status = read_launcher_status(&request.export_root)?;
+    let export_outcome = match status.export_failure {
+        None if status.workspace_exported => TrialExportOutcome::Exported,
+        Some(LauncherExportFailure::CapacityExceeded) if !status.workspace_exported => {
+            TrialExportOutcome::CapacityExceeded
+        }
+        Some(LauncherExportFailure::Invalid) if !status.workspace_exported => {
+            TrialExportOutcome::Invalid
+        }
+        _ => return Err(runtime_failure(RuntimeControlFailure::InvalidObservation)),
+    };
+    let expected = if status.workspace_exported {
+        vec![
+            std::ffi::OsString::from("status.json"),
+            std::ffi::OsString::from("workspace.next"),
+        ]
+    } else {
+        vec![std::ffi::OsString::from("status.json")]
+    };
+    if names != expected || status.candidate_exported {
+        return Err(runtime_failure(RuntimeControlFailure::InvalidObservation));
+    }
+    if export_outcome != TrialExportOutcome::Exported {
+        fs::remove_file(request.export_root.join("status.json"))
+            .map_err(|_| runtime_failure(RuntimeControlFailure::CleanupUnsettled))?;
+        fs::remove_dir(&request.export_root)
+            .map_err(|_| runtime_failure(RuntimeControlFailure::CleanupUnsettled))?;
+        return Ok(AdmittedLauncherExport {
+            child: status.child,
+            export_outcome,
+        });
+    }
+    let next = request.export_root.join("workspace.next");
+    let (bytes, entries) =
+        combined_tree_usage(std::slice::from_ref(&next)).map_err(runtime_failure)?;
+    if bytes > request.launcher_workspace_bytes || entries > request.launcher_workspace_entries {
+        return Err(runtime_failure(RuntimeControlFailure::CapacityExceeded));
+    }
+    let parent = request
+        .workspace_root
+        .parent()
+        .ok_or_else(|| runtime_failure(RuntimeControlFailure::InvalidConfiguration))?;
+    let backup = parent.join(format!(".{}.previous", request.slot_id));
+    if backup.exists() {
+        return Err(runtime_failure(RuntimeControlFailure::CleanupUnsettled));
+    }
+    fs::rename(&request.workspace_root, &backup)
+        .map_err(|_| runtime_failure(RuntimeControlFailure::CleanupUnsettled))?;
+    if fs::rename(&next, &request.workspace_root).is_err() {
+        let _ = fs::rename(&backup, &request.workspace_root);
+        return Err(runtime_failure(RuntimeControlFailure::CleanupUnsettled));
+    }
+    fs::remove_dir_all(&backup)
+        .map_err(|_| runtime_failure(RuntimeControlFailure::CleanupUnsettled))?;
+    fs::remove_file(request.export_root.join("status.json"))
+        .map_err(|_| runtime_failure(RuntimeControlFailure::CleanupUnsettled))?;
+    fs::remove_dir(&request.export_root)
+        .map_err(|_| runtime_failure(RuntimeControlFailure::CleanupUnsettled))?;
+    Ok(AdmittedLauncherExport {
+        child: status.child,
+        export_outcome,
+    })
+}
+
+fn remove_launcher_export(root: &std::path::Path) -> Result<(), SandboxFailure> {
+    let metadata = fs::symlink_metadata(root)
+        .map_err(|_| runtime_failure(RuntimeControlFailure::CleanupUnsettled))?;
+    if !metadata.file_type().is_dir() || metadata.file_type().is_symlink() {
+        return Err(runtime_failure(RuntimeControlFailure::CleanupUnsettled));
+    }
+    fs::remove_dir_all(root).map_err(|_| runtime_failure(RuntimeControlFailure::CleanupUnsettled))
+}
+
 fn step_observation(
     request: &SandboxStepRequest,
     order: u32,
     value: ObservedContainerExit,
+    export_outcome: TrialExportOutcome,
+    outcome_override: Option<TrialOperationOutcome>,
 ) -> Result<TrialStepObservation, SandboxFailure> {
-    let outcome = operation_outcome(&value)?;
+    let outcome = outcome_override.unwrap_or(operation_outcome(&value)?);
     Ok(TrialStepObservation {
         slot_id: request.slot_id.clone(),
         operation_order: order,
@@ -2400,6 +2796,7 @@ fn step_observation(
         workspace_after_sha256: value
             .workspace_after_sha256
             .ok_or_else(|| infrastructure(TrialRelayFailure::ImplementationUnavailable))?,
+        export_outcome,
         elapsed_ms: value.elapsed_ms,
         cpu_time_ms: value.cpu_time_ms,
         peak_memory_bytes: value.peak_memory_bytes,
@@ -2472,8 +2869,7 @@ fn owned_mount(
 }
 
 fn runtime_failure(value: RuntimeControlFailure) -> SandboxFailure {
-    #[cfg(test)]
-    eprintln!("trial runtime control failure: {value:?}");
+    eprintln!("trial runtime stage=control failure={value:?}");
     match value {
         RuntimeControlFailure::DeadlineExceeded => {
             infrastructure(TrialRelayFailure::DeadlineExceeded)

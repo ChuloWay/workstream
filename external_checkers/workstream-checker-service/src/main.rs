@@ -103,6 +103,8 @@ struct TrialRuntimeConfiguration {
     deployment_owner: String,
     runtime_key: String,
     builder_image_id: String,
+    trusted_launcher_path: PathBuf,
+    trusted_launcher_digest: String,
     maximum_candidate_archive_bytes: u64,
     candidate_uid: u32,
     candidate_gid: u32,
@@ -526,6 +528,8 @@ fn load_trial_runtime(config: &mut ServiceConfig) -> Result<(), String> {
                 || runtime.candidate_gid == 0
                 || runtime.maximum_candidate_archive_bytes == 0
                 || !valid_digest(&runtime.outer_runtime_config_digest)
+                || !valid_digest(&runtime.trusted_launcher_digest)
+                || !runtime.trusted_launcher_path.is_absolute()
                 || config.runtime != "runsc"
                 || config.isolation_mode != "gvisor"
                 || config.model_proxy_socket.is_none()
@@ -553,6 +557,9 @@ fn trial_engine(
     request: &ValidatedRequest,
     profile: &TrialProfile,
 ) -> Result<Arc<dyn TrialEngine>, String> {
+    // SAFETY: effective process IDs are read-only process attributes and name
+    // the service account that owns all engine-created export directories.
+    let (export_uid, export_gid) = unsafe { (libc::geteuid(), libc::getegid()) };
     let runtime = config
         .trial_runtime
         .as_ref()
@@ -584,6 +591,7 @@ fn trial_engine(
                 platform: profile.platform.clone(),
                 platform_identity_digest: profile.platform_identity_digest.clone(),
                 builder_image_digest: profile.builder_image_digest.clone(),
+                trusted_launcher_digest: profile.trusted_launcher_digest.clone(),
                 offline_cache_digest: profile.offline_cache_digest.clone(),
                 approved_base_digests: profile.approved_base_digests.clone(),
             },
@@ -592,10 +600,14 @@ fn trial_engine(
             attempt_id: attempt_id.to_owned(),
             runtime_key: runtime.runtime_key.clone(),
             builder_image_id: runtime.builder_image_id.clone(),
+            trusted_launcher_path: runtime.trusted_launcher_path.clone(),
+            trusted_launcher_digest: runtime.trusted_launcher_digest.clone(),
             offline_cache_root: runtime.offline_cache_root.clone(),
             maximum_candidate_archive_bytes: runtime.maximum_candidate_archive_bytes,
             candidate_uid: runtime.candidate_uid,
             candidate_gid: runtime.candidate_gid,
+            export_uid,
+            export_gid,
         },
         control,
     )
@@ -3356,6 +3368,8 @@ mod tests {
             deployment_owner: "deployment_a".into(),
             runtime_key: "runsc-trial".into(),
             builder_image_id: format!("sha256:{}", "2".repeat(64)),
+            trusted_launcher_path: config.docker_binary.clone(),
+            trusted_launcher_digest: format!("sha256:{}", "3".repeat(64)),
             maximum_candidate_archive_bytes: 1024,
             candidate_uid: config.sandbox_uid,
             candidate_gid: config.sandbox_gid,

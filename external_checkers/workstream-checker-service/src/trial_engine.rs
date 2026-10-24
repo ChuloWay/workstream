@@ -2,8 +2,8 @@
 
 use crate::trial_relay::{
     RoleInventoryDigest, TrialBuildObservation, TrialEngine, TrialEngineContext,
-    TrialEngineFailure, TrialExecution, TrialOperationOutcome, TrialPlan, TrialRelayFailure,
-    TrialResources, TrialStepObservation,
+    TrialEngineFailure, TrialExecution, TrialExportOutcome, TrialOperationOutcome, TrialPlan,
+    TrialRelayFailure, TrialResources, TrialStepObservation,
 };
 use serde_json::json;
 use sha2::{Digest, Sha256};
@@ -31,6 +31,13 @@ pub(crate) struct SandboxBuildRequest {
     pub(crate) remaining_cpu_time_ms: u64,
     pub(crate) mutable_disk_bytes: u64,
     pub(crate) mutable_entries: u64,
+    pub(crate) launcher_root_bytes: u64,
+    pub(crate) launcher_root_entries: u64,
+    pub(crate) launcher_candidate_bytes: u64,
+    pub(crate) launcher_temporary_bytes: u64,
+    pub(crate) launcher_temporary_entries: u64,
+    pub(crate) launcher_shared_memory_bytes: u64,
+    pub(crate) launcher_shared_memory_entries: u64,
     pub(crate) timeout_ms: u64,
     pub(crate) maximum_output_bytes: usize,
     pub(crate) enforcement_overruns: SandboxEnforcementOverruns,
@@ -42,6 +49,7 @@ pub(crate) struct SandboxStepRequest {
     pub(crate) slot_id: String,
     pub(crate) candidate_image_digest: String,
     pub(crate) workspace_root: PathBuf,
+    pub(crate) export_root: PathBuf,
     pub(crate) visible_roles: Vec<ProjectedRoleMount>,
     pub(crate) visible_role_inventory_digests: Vec<RoleInventoryDigest>,
     pub(crate) command: Vec<String>,
@@ -50,6 +58,14 @@ pub(crate) struct SandboxStepRequest {
     pub(crate) remaining_cpu_time_ms: u64,
     pub(crate) mutable_disk_bytes: u64,
     pub(crate) mutable_entries: u64,
+    pub(crate) launcher_root_bytes: u64,
+    pub(crate) launcher_root_entries: u64,
+    pub(crate) launcher_workspace_bytes: u64,
+    pub(crate) launcher_workspace_entries: u64,
+    pub(crate) launcher_temporary_bytes: u64,
+    pub(crate) launcher_temporary_entries: u64,
+    pub(crate) launcher_shared_memory_bytes: u64,
+    pub(crate) launcher_shared_memory_entries: u64,
     pub(crate) timeout_ms: u64,
     pub(crate) maximum_output_bytes: usize,
     pub(crate) enforcement_overruns: SandboxEnforcementOverruns,
@@ -99,6 +115,7 @@ pub(crate) struct SandboxBackendIdentity {
     pub(crate) platform: String,
     pub(crate) platform_identity_digest: String,
     pub(crate) builder_image_digest: String,
+    pub(crate) trusted_launcher_digest: String,
     pub(crate) offline_cache_digest: String,
     pub(crate) approved_base_digests: Vec<String>,
 }
@@ -195,6 +212,7 @@ impl<B: TrialSandboxBackend> GenericTrialEngine<B> {
             || backend.platform != context.profile.platform
             || backend.platform_identity_digest != context.profile.platform_identity_digest
             || backend.builder_image_digest != context.profile.builder_image_digest
+            || backend.trusted_launcher_digest != context.profile.trusted_launcher_digest
             || backend.offline_cache_digest != context.profile.offline_cache_digest
             || backend.approved_base_digests != context.profile.approved_base_digests
         {
@@ -228,9 +246,11 @@ impl<B: TrialSandboxBackend> GenericTrialEngine<B> {
         let output = owned.root.join("output");
         create_accounted_directory(&output, &mut invocation_budget)?;
         create_accounted_directory(&owned.root.join("workspaces"), &mut invocation_budget)?;
+        create_accounted_directory(&owned.root.join("exports"), &mut invocation_budget)?;
         let archive = output.join("candidate.tar");
         let destination = format!("workstream-trial:{}", &owned.owner_id[6..]);
         let (build_disk_bytes, build_entries) = invocation_budget.mutable_allowance(&output)?;
+        let build_allowances = invocation_budget.build_allowances()?;
         let mut cpu_time_used = 0_u64;
         let build = self
             .backend
@@ -247,6 +267,13 @@ impl<B: TrialSandboxBackend> GenericTrialEngine<B> {
                     remaining_cpu_time_ms: plan.resources.cpu_time_ms,
                     mutable_disk_bytes: build_disk_bytes,
                     mutable_entries: build_entries,
+                    launcher_root_bytes: build_allowances.root_bytes,
+                    launcher_root_entries: build_allowances.root_entries,
+                    launcher_candidate_bytes: build_allowances.candidate_bytes,
+                    launcher_temporary_bytes: build_allowances.temporary_bytes,
+                    launcher_temporary_entries: build_allowances.temporary_entries,
+                    launcher_shared_memory_bytes: build_allowances.shared_memory_bytes,
+                    launcher_shared_memory_entries: build_allowances.shared_memory_entries,
                     timeout_ms: plan.build_timeout_ms,
                     maximum_output_bytes: context.profile.maximum_step_output_bytes,
                     enforcement_overruns: overruns(context),
@@ -255,7 +282,7 @@ impl<B: TrialSandboxBackend> GenericTrialEngine<B> {
                 invocation_cancelled,
                 relay_cancelled,
             )
-            .map_err(sandbox_failure)?;
+            .map_err(|value| sandbox_failure("build", value))?;
         cpu_time_used = charge_cpu_time(
             cpu_time_used,
             build.observation.cpu_time_ms,
@@ -305,6 +332,7 @@ impl<B: TrialSandboxBackend> GenericTrialEngine<B> {
                     continue;
                 }
                 let workspace = owned.root.join("workspaces").join(&step.slot_id);
+                let export_root = owned.root.join("exports").join(&step.slot_id);
                 if step.state_source == "fresh" {
                     create_accounted_directory(&workspace, &mut invocation_budget)?;
                     for role in &slot_profile.seed_roles {
@@ -324,6 +352,9 @@ impl<B: TrialSandboxBackend> GenericTrialEngine<B> {
                 }
                 let (mutable_disk_bytes, mutable_entries) =
                     invocation_budget.mutable_allowance(&workspace)?;
+                create_accounted_directory(&export_root, &mut invocation_budget)?;
+                let step_allowances = invocation_budget
+                    .step_allowances(&workspace, step.visible_roles.len() as u64)?;
                 let visible_roles = step
                     .visible_roles
                     .iter()
@@ -358,6 +389,7 @@ impl<B: TrialSandboxBackend> GenericTrialEngine<B> {
                             slot_id: step.slot_id.clone(),
                             candidate_image_digest: candidate.clone(),
                             workspace_root: workspace.clone(),
+                            export_root,
                             visible_roles,
                             visible_role_inventory_digests,
                             command: step.command.clone(),
@@ -370,6 +402,14 @@ impl<B: TrialSandboxBackend> GenericTrialEngine<B> {
                                 .ok_or_else(capacity_failure)?,
                             mutable_disk_bytes,
                             mutable_entries,
+                            launcher_root_bytes: step_allowances.root_bytes,
+                            launcher_root_entries: step_allowances.root_entries,
+                            launcher_workspace_bytes: step_allowances.workspace_bytes,
+                            launcher_workspace_entries: step_allowances.workspace_entries,
+                            launcher_temporary_bytes: step_allowances.temporary_bytes,
+                            launcher_temporary_entries: step_allowances.temporary_entries,
+                            launcher_shared_memory_bytes: step_allowances.shared_memory_bytes,
+                            launcher_shared_memory_entries: step_allowances.shared_memory_entries,
                             timeout_ms: step.timeout_ms,
                             maximum_output_bytes: context.profile.maximum_step_output_bytes,
                             enforcement_overruns: overruns(context),
@@ -379,7 +419,7 @@ impl<B: TrialSandboxBackend> GenericTrialEngine<B> {
                         invocation_cancelled,
                         relay_cancelled,
                     )
-                    .map_err(sandbox_failure)?;
+                    .map_err(|value| sandbox_failure("step", value))?;
                 let outcome = result.observation.outcome;
                 invocation_capacity_exhausted = outcome == TrialOperationOutcome::DiskExceeded;
                 cpu_time_used = charge_cpu_time(
@@ -395,11 +435,13 @@ impl<B: TrialSandboxBackend> GenericTrialEngine<B> {
                     context.profile.maximum_entries_overrun,
                     outcome == TrialOperationOutcome::DiskExceeded,
                 )?;
+                let export_outcome = result.observation.export_outcome;
                 steps.push(result.observation);
-                let retain = slot_profile
-                    .retain_state_after
-                    .iter()
-                    .any(|allowed| allowed == operation_outcome_name(outcome));
+                let retain = export_outcome == TrialExportOutcome::Exported
+                    && slot_profile
+                        .retain_state_after
+                        .iter()
+                        .any(|allowed| allowed == operation_outcome_name(outcome));
                 if retain {
                     workspaces.insert(step.slot_id.clone(), workspace);
                 } else {
@@ -414,6 +456,7 @@ impl<B: TrialSandboxBackend> GenericTrialEngine<B> {
         Ok(TrialExecution {
             platform_identity_digest: context.profile.platform_identity_digest.clone(),
             builder_image_digest: context.profile.builder_image_digest.clone(),
+            trusted_launcher_digest: context.profile.trusted_launcher_digest.clone(),
             offline_cache_digest: context.profile.offline_cache_digest.clone(),
             base_image_digests: context.profile.approved_base_digests.clone(),
             material_inventory_digests: inventories,
@@ -468,6 +511,7 @@ fn skipped_observation(
         stderr_sha256: empty,
         workspace_before_sha256: sha256_bytes(b"dependency-skipped"),
         workspace_after_sha256: sha256_bytes(b"dependency-skipped"),
+        export_outcome: TrialExportOutcome::NotStarted,
         elapsed_ms: 0,
         cpu_time_ms: 0,
         peak_memory_bytes: 0,
@@ -682,6 +726,7 @@ fn operation_outcome_name(outcome: TrialOperationOutcome) -> &'static str {
         TrialOperationOutcome::PidExceeded => "pid_exceeded",
         TrialOperationOutcome::DiskExceeded => "disk_exceeded",
         TrialOperationOutcome::OutputExceeded => "output_exceeded",
+        TrialOperationOutcome::ExportInvalid => "export_invalid",
         TrialOperationOutcome::DependencySkipped => "dependency_skipped",
     }
 }
@@ -694,6 +739,33 @@ struct ProjectionBudget {
     retained_bytes: u64,
     entries_left: u64,
     bytes_left: u64,
+}
+
+const LAUNCHER_BOOTSTRAP_BYTES: u64 = 64 * 1024;
+// The trusted bootstrap has a fixed mount skeleton; submitted code never sees
+// it. Charge every launcher-created top-level entry conservatively.
+const LAUNCHER_BOOTSTRAP_ENTRIES: u64 = 8;
+const MINIMUM_TMPFS_BYTES: u64 = 4096;
+
+struct BuildAllowances {
+    root_bytes: u64,
+    root_entries: u64,
+    candidate_bytes: u64,
+    temporary_bytes: u64,
+    temporary_entries: u64,
+    shared_memory_bytes: u64,
+    shared_memory_entries: u64,
+}
+
+struct StepAllowances {
+    root_bytes: u64,
+    root_entries: u64,
+    workspace_bytes: u64,
+    workspace_entries: u64,
+    temporary_bytes: u64,
+    temporary_entries: u64,
+    shared_memory_bytes: u64,
+    shared_memory_entries: u64,
 }
 
 impl ProjectionBudget {
@@ -730,6 +802,114 @@ impl ProjectionBudget {
                 .checked_add(self.entries_left)
                 .ok_or_else(capacity_failure)?,
         ))
+    }
+
+    fn build_allowances(&self) -> Result<BuildAllowances, TrialEngineFailure> {
+        let remaining_bytes = self
+            .bytes_left
+            .checked_sub(LAUNCHER_BOOTSTRAP_BYTES + MINIMUM_TMPFS_BYTES)
+            .and_then(|value| value.checked_sub(MINIMUM_TMPFS_BYTES))
+            .ok_or_else(capacity_failure)?;
+        let temporary_bytes = (remaining_bytes / 8).clamp(MINIMUM_TMPFS_BYTES, 16 * 1024 * 1024);
+        let shared_memory_bytes = (remaining_bytes / 16).clamp(MINIMUM_TMPFS_BYTES, 1024 * 1024);
+        let root_and_candidate = self
+            .bytes_left
+            .checked_sub(LAUNCHER_BOOTSTRAP_BYTES)
+            .and_then(|value| value.checked_sub(temporary_bytes))
+            .and_then(|value| value.checked_sub(shared_memory_bytes))
+            .ok_or_else(capacity_failure)?;
+        let candidate_bytes = root_and_candidate / 3;
+        let root_bytes = root_and_candidate
+            .checked_sub(candidate_bytes)
+            .ok_or_else(capacity_failure)?;
+        if candidate_bytes == 0 || root_bytes < candidate_bytes {
+            return Err(capacity_failure());
+        }
+
+        let entries_after_bootstrap = self
+            .entries_left
+            .checked_sub(LAUNCHER_BOOTSTRAP_ENTRIES)
+            .and_then(|value| value.checked_sub(1))
+            .ok_or_else(capacity_failure)?;
+        let temporary_entries = (entries_after_bootstrap / 8).clamp(4, 256);
+        let shared_memory_entries = (entries_after_bootstrap / 16).clamp(4, 64);
+        let root_entries = entries_after_bootstrap
+            .checked_sub(temporary_entries)
+            .and_then(|value| value.checked_sub(shared_memory_entries))
+            .ok_or_else(capacity_failure)?;
+        if root_entries < 32 {
+            return Err(capacity_failure());
+        }
+        Ok(BuildAllowances {
+            root_bytes,
+            root_entries,
+            candidate_bytes,
+            temporary_bytes,
+            temporary_entries,
+            shared_memory_bytes,
+            shared_memory_entries,
+        })
+    }
+
+    fn step_allowances(
+        &self,
+        workspace: &Path,
+        visible_role_count: u64,
+    ) -> Result<StepAllowances, TrialEngineFailure> {
+        let bootstrap_entries = LAUNCHER_BOOTSTRAP_ENTRIES
+            .checked_add(visible_role_count)
+            .ok_or_else(capacity_failure)?;
+        let root_entries = self
+            .retained_entries
+            .checked_add(16)
+            .map(|value| value.max(32))
+            .ok_or_else(capacity_failure)?;
+        let root_bytes = root_entries
+            .checked_mul(4096)
+            .map(|value| value.max(64 * 1024))
+            .ok_or_else(capacity_failure)?;
+        let bytes_after_fixed = self
+            .bytes_left
+            .checked_sub(LAUNCHER_BOOTSTRAP_BYTES)
+            .and_then(|value| value.checked_sub(root_bytes))
+            .ok_or_else(capacity_failure)?;
+        let temporary_bytes = (bytes_after_fixed / 8).clamp(MINIMUM_TMPFS_BYTES, 16 * 1024 * 1024);
+        let shared_memory_bytes = (bytes_after_fixed / 16).clamp(MINIMUM_TMPFS_BYTES, 1024 * 1024);
+        let workspace_bytes = self
+            .bytes_left
+            .checked_sub(LAUNCHER_BOOTSTRAP_BYTES)
+            .and_then(|value| value.checked_sub(root_bytes))
+            .and_then(|value| value.checked_sub(temporary_bytes))
+            .and_then(|value| value.checked_sub(shared_memory_bytes))
+            .ok_or_else(capacity_failure)?
+            / 2;
+
+        let entries_after_fixed = self
+            .entries_left
+            .checked_sub(bootstrap_entries)
+            .and_then(|value| value.checked_sub(root_entries))
+            .ok_or_else(capacity_failure)?;
+        let temporary_entries = (entries_after_fixed / 8).clamp(4, 256);
+        let shared_memory_entries = (entries_after_fixed / 16).clamp(4, 64);
+        let workspace_entries = entries_after_fixed
+            .checked_sub(temporary_entries)
+            .and_then(|value| value.checked_sub(shared_memory_entries))
+            .ok_or_else(capacity_failure)?
+            / 2;
+        let (existing_bytes, existing_entries) = owned_tree_usage(workspace)?;
+        if workspace_bytes < existing_bytes || workspace_entries < existing_entries {
+            return Err(capacity_failure());
+        }
+        Ok(StepAllowances {
+            root_bytes,
+            root_entries,
+            workspace_bytes,
+            workspace_entries,
+            temporary_bytes,
+            temporary_entries,
+            shared_memory_bytes,
+            shared_memory_entries,
+        })
     }
 
     fn reserve_retained(&mut self, bytes: u64, entries: u64) -> Result<(), TrialEngineFailure> {
@@ -1037,7 +1217,8 @@ fn require_available(
     }
 }
 
-fn sandbox_failure(value: SandboxFailure) -> TrialEngineFailure {
+fn sandbox_failure(stage: &str, value: SandboxFailure) -> TrialEngineFailure {
+    eprintln!("trial engine stage={stage} failure={:?}", value.code);
     TrialEngineFailure {
         code: value.code,
         cleanup_unsettled: value.cleanup_unsettled,
