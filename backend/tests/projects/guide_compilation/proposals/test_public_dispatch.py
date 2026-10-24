@@ -37,11 +37,8 @@ async def assert_other_actors_cannot_recover(factory, creator, latest_path, endp
             assert rejected.status_code == 404, rejected.text
 
 
-@pytest.mark.parametrize("broker_failure", [False, True])
-@pytest.mark.parametrize("manager_handoff", [False, True])
-async def test_manual_dispatch_retains_one_human_request_and_one_execution(
-    isolated_database_env, monkeypatch, tmp_path, broker_failure, manager_handoff,
-):
+def configure_manual_dispatch(monkeypatch, tmp_path, broker_failure):
+    """Wire the scripted worker and a broker with observable delivery attempts."""
     from app.core.config import get_settings
     from app.core import project_agents
     from app.modules.projects import setup_queue
@@ -66,6 +63,19 @@ async def test_manual_dispatch_retains_one_human_request_and_one_execution(
             raise setup_queue.ProjectSetupQueueError("broker unavailable")
         return values["task_id"]
     monkeypatch.setattr(setup_queue, "enqueue_project_guide_compilation", enqueue)
+    return worker, runtime, published
+
+
+@pytest.mark.parametrize("broker_failure", [False, True])
+@pytest.mark.parametrize("manager_handoff", [False, True])
+async def test_manual_dispatch_retains_one_human_request_and_one_execution(
+    isolated_database_env, monkeypatch, tmp_path, broker_failure, manager_handoff,
+):
+    from app.core.config import get_settings
+
+    worker, runtime, published = configure_manual_dispatch(
+        monkeypatch, tmp_path, broker_failure
+    )
     async with proposal_case(isolated_database_env) as (_, factory, command, actor, grant):
         from tests.project_create_fixtures import grant_fixture_admin_role
 
