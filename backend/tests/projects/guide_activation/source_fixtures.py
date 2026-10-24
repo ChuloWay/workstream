@@ -155,7 +155,7 @@ def _external_compilation_outcome(
                     }
                 ),
                 parameters=post_submit_parameters,
-            )
+            ),
         )
         for case in cases:
             requirements.append(
