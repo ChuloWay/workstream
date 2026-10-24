@@ -1,28 +1,23 @@
-"""Networkless Harnessy work-proof checker for the local agent loop.
+"""Networkless Harnessy work-proof checker for post-submission evaluation.
 
 The checker reads one ``external_checker_request.v1`` envelope on stdin and the
-verified, read-only Submission material under ``/work/input``. It validates the
-claims in ``proof.json`` and writes one ``external_checker_result.v1`` envelope.
+verified, read-only Submission material under ``/work/input``. It compares the
+claims in ``proof.json`` with ``workstream.github_facts.v1`` facts that
+WorkStream read from GitHub and placed in the request input under
+``github_facts``, and writes one ``external_checker_result.v1`` envelope.
 
-Shape mode (empty binding configuration, no facts in the request input): the
-checker validates only the shape and values that ``proof.json`` claims. It does
-not confirm that the pull request, commit or CI run exist on GitHub. A passing
-verdict means "well-formed proof claims", not "independently verified work".
+There is one mode and it fails closed (owner decision 20): the binding
+configuration must name ``github_repository`` and ``base_branch``, and the facts
+must be present and well formed. Otherwise the verdict is ``failed``. A proof is
+never passed on its own claims. The checker itself never uses the network or a
+credential, and it derives nothing from URLs beyond exact equality with the
+canonical URLs built from the facts.
 
-GitHub comparison mode: the binding configuration names
-``{"github_repository": "owner/name", "base_branch": "main"}``, and WorkStream
-places ``workstream.github_facts.v1`` facts it read from GitHub in the request
-input under ``github_facts``. The checker compares every claim with those facts
-and reports one error finding per mismatch. Missing or malformed facts when the
-configuration requires them are an error finding, never a pass. Facts present
-without configuration are still compared, except the configured repository and
-base branch. The checker itself never uses the network or a credential.
-
-Integrity rules (owner decision 20) apply whenever facts are compared and fail
-closed: every required check must be bound to an App; a change to CI or
-repository configuration paths needs explicit human acceptance; the head commit
-needs an independent approval (latest decisive review, not the author, not a
-bot); and approval only by configured operators adds a non-blocking
+Integrity rules: every required check must be bound to an App; a change to CI
+or repository configuration paths needs explicit human acceptance; the head
+commit needs an independent approval (latest decisive review, not the author,
+not a bot); every fact entry that names a commit must name the head commit; and
+approval only by configured operators adds a non-blocking
 ``harnessy.operator_approved`` warning.
 """
 
@@ -35,7 +30,6 @@ from pathlib import Path
 import re
 import stat
 import sys
-from urllib.parse import urlsplit
 
 PROOF_PATH = "proof.json"
 PROOF_SCHEMA = "harnessy.work.proof.v1"
@@ -43,78 +37,13 @@ MAX_PROOF_BYTES = 65_536
 CHECK_ID = "harnessy.proof"
 GITHUB_FACTS_INPUT_KEY = "github_facts"
 GITHUB_FACTS_SCHEMA = "workstream.github_facts.v1"
-_COMMIT_SHA = re.compile(r"[0-9a-fA-F]{40}")
-_LOWER_SHA = re.compile(r"[0-9a-f]{40}")
-_PULL_PATH = re.compile(
-    r"/([A-Za-z0-9][A-Za-z0-9-]{0,38})/([A-Za-z0-9._-]{1,100})/pull/([1-9][0-9]{0,9})"
-)
-_MAX_CHECK_NAME_CHARACTERS = 200
-
-
-def _finding(code: str, message: str, *, level: str = "error") -> dict[str, object]:
-    return {
-        "check_id": CHECK_ID,
-        "code": f"{CHECK_ID}.{code}",
-        "level": level,
-        "message": message,
-        "path": PROOF_PATH,
-        "line": None,
-    }
-
-
-def _github_https_url(value: object) -> bool:
-    """Accept only an https://github.com/... URL without credentials or port."""
-    if not isinstance(value, str):
-        return False
-    try:
-        parts = urlsplit(value)
-    except ValueError:
-        return False
-    return parts.scheme == "https" and parts.netloc == "github.com" and parts.path not in ("", "/")
-
-
-def evaluate_proof(
-    raw: bytes | None,
-    *,
-    configuration: object = None,
-    input_value: object = None,
-) -> list[dict[str, object]]:
-    """Return error findings for one proof document; an empty list passes.
-
-    ``configuration`` is the locked binding configuration and ``input_value`` the
-    request input. Together they select shape mode or GitHub comparison mode.
-    """
-    if raw is None:
-        return [_finding("missing", "The submission must contain proof.json at its root.")]
-    if len(raw) > MAX_PROOF_BYTES:
-        return [_finding("too_large", "proof.json must be at most 64 KiB.")]
-    try:
-        proof = json.loads(raw.decode("utf-8"))
-    except (UnicodeDecodeError, ValueError):
-        return [_finding("invalid_json", "proof.json must be valid UTF-8 JSON.")]
-    if not isinstance(proof, dict):
-        return [_finding("invalid_json", "proof.json must contain a JSON object.")]
-    findings = []
-    if proof.get("schema") != PROOF_SCHEMA:
-        findings.append(_finding("schema", f"schema must be {PROOF_SCHEMA!r}."))
-    commit_sha = proof.get("commit_sha")
-    if not isinstance(commit_sha, str) or _COMMIT_SHA.fullmatch(commit_sha) is None:
-        findings.append(_finding("commit_sha", "commit_sha must be 40 hexadecimal characters."))
-    for field in ("pr_url", "ci_run_url"):
-        if not _github_https_url(proof.get(field)):
-            findings.append(_finding(field, f"{field} must be an https://github.com/ URL."))
-    if proof.get("ci_conclusion") != "success":
-        findings.append(_finding("ci_conclusion", "ci_conclusion must be 'success'."))
-    if proof.get("merged") is not True:
-        findings.append(_finding("merged", "merged must be the JSON value true."))
-    findings.extend(compare_github_facts(proof, configuration, input_value))
-    return findings
-
-
 DEFAULT_PROTECTED_PATHS = (".github/**", "**/CODEOWNERS", ".gitlab-ci.yml", ".circleci/**")
 DEFAULT_REQUIRED_INDEPENDENT_APPROVALS = 1
 OPERATOR_APPROVED_CODE = "harnessy.operator_approved"
+_COMMIT_SHA = re.compile(r"[0-9a-fA-F]{40}")
+_LOWER_SHA = re.compile(r"[0-9a-f]{40}")
 _APPROVAL_STATES = frozenset({"APPROVED", "CHANGES_REQUESTED", "DISMISSED"})
+_MAX_CHECK_NAME_CHARACTERS = 200
 _MAX_LISTED_PATHS = 5
 _CONFIGURATION_KEYS = frozenset(
     {
@@ -128,18 +57,64 @@ _CONFIGURATION_KEYS = frozenset(
 )
 
 
+def _finding(code: str, message: str, *, level: str = "error") -> dict[str, object]:
+    return {
+        "check_id": CHECK_ID,
+        "code": f"{CHECK_ID}.{code}",
+        "level": level,
+        "message": message,
+        "path": PROOF_PATH,
+        "line": None,
+    }
+
+
+def evaluate_proof(
+    raw: bytes | None,
+    *,
+    configuration: object,
+    input_value: object,
+) -> list[dict[str, object]]:
+    """Return findings for one proof; it passes only when it matches GitHub facts."""
+    if raw is None:
+        return [_finding("missing", "The submission must contain proof.json at its root.")]
+    if len(raw) > MAX_PROOF_BYTES:
+        return [_finding("too_large", "proof.json must be at most 64 KiB.")]
+    try:
+        proof = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, ValueError):
+        return [_finding("invalid_json", "proof.json must be valid UTF-8 JSON.")]
+    if not isinstance(proof, dict):
+        return [_finding("invalid_json", "proof.json must contain a JSON object.")]
+    return claim_findings(proof) + compare_github_facts(proof, configuration, input_value)
+
+
+def claim_findings(proof: dict) -> list[dict[str, object]]:
+    """Check the claims that need no facts; URLs are checked against the facts."""
+    findings = []
+    if proof.get("schema") != PROOF_SCHEMA:
+        findings.append(_finding("schema", f"schema must be {PROOF_SCHEMA!r}."))
+    commit_sha = proof.get("commit_sha")
+    if not isinstance(commit_sha, str) or _COMMIT_SHA.fullmatch(commit_sha) is None:
+        findings.append(_finding("commit_sha", "commit_sha must be 40 hexadecimal characters."))
+    if proof.get("ci_conclusion") != "success":
+        findings.append(_finding("ci_conclusion", "ci_conclusion must be 'success'."))
+    if proof.get("merged") is not True:
+        findings.append(_finding("merged", "merged must be the JSON value true."))
+    return findings
+
+
 def _strings(value: object) -> bool:
     """Return whether a value is a list of non-empty strings."""
     return isinstance(value, list) and all(isinstance(item, str) and item for item in value)
 
 
-def _github_configuration(configuration: object) -> dict | None | bool:
-    """Return the normalized GitHub configuration, None for shape mode, or False.
+def github_configuration(configuration: object) -> dict | None:
+    """Return the normalized configuration, or None when it is absent or invalid.
 
     Integrity options take safe defaults: unbound required checks are errors,
     the default protected paths apply, and one independent approval is needed.
     """
-    if not isinstance(configuration, dict) or not configuration:
+    if not isinstance(configuration, dict):
         return None
     repository = configuration.get("github_repository")
     base_branch = configuration.get("base_branch")
@@ -161,7 +136,7 @@ def _github_configuration(configuration: object) -> dict | None | bool:
         or approvals < 1
         or not _strings(operators)
     ):
-        return False
+        return None
     return {
         "repository": repository,
         "base_branch": base_branch,
@@ -182,22 +157,46 @@ def _actor(value: object) -> bool:
     )
 
 
-def _valid_facts(facts: object) -> bool:
+def _optional(value: object, kind: type) -> bool:
+    """Return whether a value is null or a non-boolean instance of ``kind``."""
+    return value is None or (isinstance(value, kind) and type(value) is not bool)
+
+
+def _sha_or_none(value: object) -> bool:
+    """Return whether a value is null or a lowercase 40-character commit SHA."""
+    return value is None or (isinstance(value, str) and _LOWER_SHA.fullmatch(value) is not None)
+
+
+_CHECK_KEYS = frozenset(
+    {
+        "name",
+        "app_id",
+        "app_bound",
+        "conclusion",
+        "check_run_app_id",
+        "check_run_head_sha",
+        "check_run_html_url",
+        "check_run_details_url",
+        "workflow_run_id",
+        "commit_status_judged",
+        "commit_status_sha",
+    }
+)
+
+
+def valid_facts(facts: object) -> bool:
     """Accept only the exact ``workstream.github_facts.v1`` field shape."""
     if not isinstance(facts, dict) or facts.get("schema_version") != GITHUB_FACTS_SCHEMA:
         return False
     checks = facts.get("required_checks")
-    merge_sha = facts.get("merge_commit_sha")
     reviews = facts.get("reviews")
     files = facts.get("changed_files")
     return (
         isinstance(facts.get("repository"), str)
         and type(facts.get("pull_request_number")) is int
+        and isinstance(facts.get("html_url"), str)
         and isinstance(facts.get("merged"), bool)
-        and (
-            merge_sha is None
-            or (isinstance(merge_sha, str) and _LOWER_SHA.fullmatch(merge_sha) is not None)
-        )
+        and _sha_or_none(facts.get("merge_commit_sha"))
         and isinstance(facts.get("base_ref"), str)
         and isinstance(facts.get("head_sha"), str)
         and _LOWER_SHA.fullmatch(facts["head_sha"]) is not None
@@ -208,7 +207,7 @@ def _valid_facts(facts: object) -> bool:
             and type(review.get("id")) is int
             and (review.get("reviewer") is None or _actor(review.get("reviewer")))
             and isinstance(review.get("state"), str)
-            and (review.get("commit_id") is None or isinstance(review.get("commit_id"), str))
+            and _sha_or_none(review.get("commit_id"))
             for review in reviews
         )
         and isinstance(files, list)
@@ -217,19 +216,21 @@ def _valid_facts(facts: object) -> bool:
         and all(
             isinstance(item, dict)
             and isinstance(item.get("filename"), str)
-            and (
-                item.get("previous_filename") is None
-                or isinstance(item.get("previous_filename"), str)
-            )
+            and _optional(item.get("previous_filename"), str)
             for item in files
         )
         and isinstance(checks, list)
         and len(checks) > 0
         and all(
             isinstance(check, dict)
-            and isinstance(check.get("name"), str)
-            and isinstance(check.get("conclusion"), str)
-            and isinstance(check.get("app_bound"), bool)
+            and set(check) == _CHECK_KEYS
+            and isinstance(check["name"], str)
+            and isinstance(check["conclusion"], str)
+            and isinstance(check["app_bound"], bool)
+            and isinstance(check["commit_status_judged"], bool)
+            and _sha_or_none(check["check_run_head_sha"])
+            and _sha_or_none(check["commit_status_sha"])
+            and _optional(check["workflow_run_id"], int)
             for check in checks
         )
     )
@@ -310,14 +311,57 @@ def qualifying_approvals(facts: dict) -> list[str]:
     return sorted(logins)
 
 
-def _integrity_findings(facts: dict, configured: dict | None) -> list[dict[str, object]]:
-    """Integrity rules that apply whenever GitHub facts are compared."""
-    settings = configured or {
-        "allow_unbound": False,
-        "protected_paths": DEFAULT_PROTECTED_PATHS,
-        "required_approvals": DEFAULT_REQUIRED_INDEPENDENT_APPROVALS,
-        "operators": frozenset(),
+def _binding_findings(facts: dict) -> list[dict[str, object]]:
+    """Every check entry that names a commit must name the head commit."""
+    head = facts["head_sha"]
+    for check in facts["required_checks"]:
+        for sha in (check["check_run_head_sha"], check["commit_status_sha"]):
+            if sha is not None and sha != head:
+                return [
+                    _finding(
+                        "github.facts_binding",
+                        "The GitHub facts mix results from different commits.",
+                    )
+                ]
+    return []
+
+
+def _url_findings(proof: dict, facts: dict) -> list[dict[str, object]]:
+    """Require the claimed URLs to equal the canonical URLs built from the facts.
+
+    ``pr_url`` must equal ``https://github.com/{repository}/pull/{number}`` and
+    GitHub's own ``html_url``. ``ci_run_url`` must equal
+    ``https://github.com/{repository}/actions/runs/{id}`` for the workflow run of
+    at least one judged required check. Nothing else is derived from either URL.
+    """
+    findings = []
+    repository = facts["repository"]
+    canonical_pull = f"https://github.com/{repository}/pull/{facts['pull_request_number']}"
+    if proof.get("pr_url") != canonical_pull or facts["html_url"] != canonical_pull:
+        findings.append(
+            _finding(
+                "github.pr_url",
+                f"pr_url must be exactly {canonical_pull}, the pull request GitHub reports.",
+            )
+        )
+    run_urls = {
+        f"https://github.com/{repository}/actions/runs/{check['workflow_run_id']}"
+        for check in facts["required_checks"]
+        if check["workflow_run_id"] is not None
     }
+    if proof.get("ci_run_url") not in run_urls:
+        findings.append(
+            _finding(
+                "github.ci_run",
+                "ci_run_url must be https://github.com/<repository>/actions/runs/<id> for a "
+                "workflow run that produced a required check on the head commit.",
+            )
+        )
+    return findings
+
+
+def _integrity_findings(facts: dict, settings: dict) -> list[dict[str, object]]:
+    """Integrity rules of owner decision 20."""
     findings = []
     if not settings["allow_unbound"]:
         for check in facts["required_checks"]:
@@ -370,8 +414,8 @@ def compare_github_facts(
     proof: dict, configuration: object, input_value: object
 ) -> list[dict[str, object]]:
     """Compare proof claims with WorkStream-read GitHub facts; one finding per mismatch."""
-    configured = _github_configuration(configuration)
-    if configured is False:
+    settings = github_configuration(configuration)
+    if settings is None:
         return [
             _finding(
                 "github.configuration",
@@ -381,63 +425,36 @@ def compare_github_facts(
         ]
     facts = input_value.get(GITHUB_FACTS_INPUT_KEY) if isinstance(input_value, dict) else None
     if facts is None:
-        if configured is None:
-            return []
         return [
             _finding(
                 "github.facts_missing",
                 "GitHub facts are required for this check but were not provided.",
             )
         ]
-    if not _valid_facts(facts):
+    if not valid_facts(facts):
         return [_finding("github.facts_invalid", "The provided GitHub facts are malformed.")]
+    binding = _binding_findings(facts)
+    if binding:
+        return binding
     findings = []
     repository = facts["repository"]
-    if configured is not None:
-        if repository.casefold() != configured["repository"].casefold():
-            findings.append(
-                _finding(
-                    "github.repository",
-                    f"The pull request belongs to {_display(repository)}, "
-                    f"not {_display(configured['repository'])}.",
-                )
-            )
-        if facts["base_ref"] != configured["base_branch"]:
-            findings.append(
-                _finding(
-                    "github.base_branch",
-                    f"The pull request targets {_display(facts['base_ref'])}, "
-                    f"not {_display(configured['base_branch'])}.",
-                )
-            )
-    pr_url = proof.get("pr_url")
-    match = (
-        _PULL_PATH.fullmatch(urlsplit(pr_url).path.rstrip("/"))
-        if _github_https_url(pr_url)
-        else None
-    )
-    if match is None:
+    if repository.casefold() != settings["repository"].casefold():
         findings.append(
             _finding(
-                "github.pr_url",
-                "pr_url must be https://github.com/<owner>/<repository>/pull/<number>.",
+                "github.repository",
+                f"The pull request belongs to {_display(repository)}, "
+                f"not {_display(settings['repository'])}.",
             )
         )
-    else:
-        if f"{match.group(1)}/{match.group(2)}".casefold() != repository.casefold():
-            findings.append(
-                _finding(
-                    "github.pr_repository",
-                    "pr_url names a different repository than the GitHub facts.",
-                )
+    if facts["base_ref"] != settings["base_branch"]:
+        findings.append(
+            _finding(
+                "github.base_branch",
+                f"The pull request targets {_display(facts['base_ref'])}, "
+                f"not {_display(settings['base_branch'])}.",
             )
-        if int(match.group(3)) != facts["pull_request_number"]:
-            findings.append(
-                _finding(
-                    "github.pull_request_number",
-                    "pr_url names a different pull request than the GitHub facts.",
-                )
-            )
+        )
+    findings.extend(_url_findings(proof, facts))
     if facts["merged"] is not True:
         findings.append(
             _finding("github.merged", "GitHub reports that the pull request is not merged.")
@@ -460,9 +477,8 @@ def compare_github_facts(
                     "for the pull request head commit.",
                 )
             )
-    findings.extend(_integrity_findings(facts, configured))
+    findings.extend(_integrity_findings(facts, settings))
     return findings
-
 
 
 def read_proof(input_root: Path) -> bytes | None:
