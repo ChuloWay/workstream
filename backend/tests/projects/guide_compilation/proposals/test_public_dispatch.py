@@ -38,15 +38,20 @@ async def assert_other_actors_cannot_recover(factory, creator, latest_path, endp
             assert rejected.status_code == 404, rejected.text
 
 
+async def retained_runtime_configuration(factory, setup_id):
+    """Read the exact immutable runtime selected by this correction attempt."""
+    async with factory() as session:
+        return await session.scalar(text(
+            "SELECT runtime_configuration FROM project_guide_compilation_attempts "
+            "WHERE setup_run_id=:id"
+        ), {"id": setup_id})
+
+
 async def assert_dispatch_keeps_selected_profile(
     factory, actor, project_id, setup_id, configuration, profile,
 ):
     """A later Operator profile cannot rewrite the committed correction attempt."""
-    async with factory() as session:
-        saved = await session.scalar(text(
-            "SELECT runtime_configuration FROM project_guide_compilation_attempts "
-            "WHERE setup_run_id=:id"
-        ), {"id": setup_id})
+    saved = await retained_runtime_configuration(factory, setup_id)
     assert saved["model_profile_id"] == profile["profile_id"]
     assert saved["model_profile_version"] == profile["spec"]["profile_version"]
     assert saved["model_profile_digest"] == profile["profile_digest"]
@@ -200,9 +205,5 @@ async def test_manual_dispatch_retains_one_human_request_and_one_execution(
             assert completed.json()["correction_operation_id"] == operation
             assert completed.json()["predecessor_compilation_id"] == predecessor
             assert await predecessor_record() == original_finalization
-            async with factory() as session:
-                retained_profile = await session.scalar(text(
-                    "SELECT runtime_configuration->>'model_profile_id' "
-                    "FROM project_guide_compilation_attempts WHERE setup_run_id=:id"
-                ), {"id": pending["id"]})
-            assert retained_profile == profile["profile_id"]
+            saved = await retained_runtime_configuration(factory, pending["id"])
+            assert saved["model_profile_id"] == profile["profile_id"]
