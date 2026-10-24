@@ -580,6 +580,7 @@ expected = {
 
 
 AUDIT_ALLOWED_ACTION_VALUES = {
+    "project.catalogue.list",
     "checker.model_call.prepare",
     "checker.model_call.dispatch",
     "checker.model_call.recover",

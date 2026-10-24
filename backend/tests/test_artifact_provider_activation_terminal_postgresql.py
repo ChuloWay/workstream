@@ -493,7 +493,8 @@ async def test_checker_output_put_observation_terminal_outcomes(
                     assert receipt.observed_sha256 is None
                     assert receipt.observed_byte_count is None
                 assert receipt.execution_generation == attempt.execution_generation
-                assert checker_run_id == attempt.checker_run_id
+                assert attempt.checker_run_id is None
+                assert attempt.model_call_attempt_id is not None
                 assert orchestrator._require_terminal_activation.await_count >= 2
                 assert all(
                     call.args == (activation_id,)

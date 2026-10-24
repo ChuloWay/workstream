@@ -44,8 +44,10 @@ async def test_lost_post_policy_correction_discovered_and_dispatched_by_new_mana
     isolated_database_env, monkeypatch, post_policy_worker,
 ):
     from app.core import project_agents
+    from app.core.config import get_settings
     from app.modules.projects import setup_queue
     from tests.projects.guide_compilation.runtime_fixtures import (
+        publish_scripted_model_profile,
         scripted_runtime_configuration,
     )
 
@@ -58,6 +60,16 @@ async def test_lost_post_policy_correction_discovered_and_dispatched_by_new_mana
     async with public_approved_case(isolated_database_env, monkeypatch) as (
         factory, command, creator, grant, approval_id, _,
     ):
+        configuration = scripted_runtime_configuration(
+            get_settings(), adapter_profile_builder=lambda value: value
+        )
+        operator, _ = await seed_review_actor(
+            factory, None, role="operator", scope="system"
+        )
+        async with proposal_client(factory, operator) as operator_client:
+            await publish_scripted_model_profile(
+                operator_client, command.project_id, configuration
+            )
         assert deliver(post_policy_worker, approval_id)["status"] == "policy_draft_ready"
         path = proposal_path(command)
         async with proposal_client(factory, creator) as client:
