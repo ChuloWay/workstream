@@ -198,6 +198,10 @@
     },
     {
       "group": "lifecycle",
+      "target": "backend/app/api/deps/project_catalogue.py"
+    },
+    {
+      "group": "lifecycle",
       "target": "backend/app/api/deps/project_guide_reads.py"
     },
     {
@@ -267,6 +271,10 @@
     {
       "group": "shared",
       "target": "backend/app/api/routes/post_policy.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/api/routes/project_catalogue.py"
     },
     {
       "group": "lifecycle",
@@ -686,6 +694,10 @@
     },
     {
       "group": "auth",
+      "target": "backend/app/modules/authorization/api/project_catalogue.py"
+    },
+    {
+      "group": "auth",
       "target": "backend/app/modules/authorization/api/project_guide_compilation.py"
     },
     {
@@ -874,6 +886,10 @@
     },
     {
       "group": "auth",
+      "target": "backend/app/modules/authorization/domain/project_catalogue.py"
+    },
+    {
+      "group": "auth",
       "target": "backend/app/modules/authorization/domain/project_create.py"
     },
     {
@@ -1035,6 +1051,10 @@
     {
       "group": "auth",
       "target": "backend/app/modules/authorization/prepared_submission_replay.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/project_catalogue.py"
     },
     {
       "group": "auth",
@@ -2349,7 +2369,7 @@
       "target": "backend/scripts/validate_test_lane_evidence.py"
     }
   ],
-  "authority_digest": "bcb6024819d3bbda45e7f8fbfd0dba07ea4a26981348253daca0c5d9d9ec90db",
+  "authority_digest": "38802d2eaf89cd8ce3ec68743f7c8a4868771d69fb99544400dd16559a269098",
   "protected_base_commit": "7676ce4347db0c9694962a9b587a20765e16eac6",
   "schema": "workstream.behavior-ownership-partition.v1"
 }
