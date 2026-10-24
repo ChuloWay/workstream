@@ -13,19 +13,21 @@
 - Project shells: [Project creation and authority-selected reads](WS-MCP-002-06.md), merged in PR #627.
 - Project participation: [Project-role grants](WS-MCP-002-07.md), merged in PR #644.
 - Guide declarations: [Guide declarations and draft metadata](WS-MCP-002-08.md), merged in PR #655.
-- Current change: [Contributor workspace and contribution policies](WS-MCP-002-10.md).
-- Next usable boundary: WS-MCP-002-11 complete guide lifecycle bindings.
+- Contributor workspace and policies: [Workspace and contribution-policy tools](WS-MCP-002-10.md), merged in PR #669.
+- Current change: [Guide, checker and artifact operations](WS-MCP-002-11.md).
+- Next usable boundary: WS-MCP-002-12 task execution and submissions.
 
 ## Current implementation
 
 [`mcp_server/`](../../../mcp_server/README.md) is an independently packaged
-Streamable HTTP adapter with forty-seven tools: three self-service tools for profile read,
+Streamable HTTP adapter with ninety tools: three self-service tools for profile read,
 profile update and exact-project authorization context, plus six administrative
 reads for permission/role definitions, grants and actor/identity projections, two
 administrative grant mutations, five actor/identity lifecycle mutations, two
 project-shell tools, five project-participation tools, two guide-metadata tools
 and two draft-policy tools, plus twenty contributor workspace, contribution
-evidence and contribution-policy tools. It includes a container,
+evidence and contribution-policy tools, twenty-four complete guide-lifecycle
+tools, ten checker/delivery/registry tools and nine operator-artifact tools. It includes a container,
 selected response-schema validation and additive CI. Its integration tests
 exercise the installed adapter against the real Workstream API. Workstream
 still owns token verification and authorization. This is delivered packaging,
@@ -421,7 +423,7 @@ live environment; do not reopen credential architecture.
 
 The original fixed 27-tool proposal was completed through row 09. The
 maintainer later requested broad public-API coverage in parallel, domain-based
-batches. Rows 10 through 14 record that superseding implementation sequence;
+batches. Rows 10 through 13 record that superseding implementation sequence;
 assembled release proof follows those bindings rather than occupying row 10.
 
 | Change ID and outcome | Depends on | Owned modules and exact new tools | PR acceptance evidence and next usable boundary |
@@ -436,10 +438,9 @@ assembled release proof follows those bindings rather than occupying row 10.
 | WS-MCP-002-08: declare guide documents and edit draft metadata | 06; agreement on upload exclusion | `tools/guides.py`; `guides_create`, `guides_update` | Current examples/documents schema, waiting-setup response, summary-only PATCH, immutable-field rejection, UTF-8/aggregate limits and replay. Leaves document declarations; actual uploads/setup completion stay outside MCP. |
 | WS-MCP-002-09: configure draft review and revision policies | 08; agreement on selector recovery limitation | `tools/policies.py`; `review_policy_put`, `revision_policy_put` | Correct initial/current `If-Match`, omission versus defaults, human-review mode, stale/malformed selectors, lineage, exact-project denial and replay. Leaves draft policy configuration without approval/activation tools. |
 | WS-MCP-002-10: contributor workspace and contribution policies | 09; current public contracts | `tools/workspace_reads.py`, `tools/contribution_policies.py`; 20 tools | Caller/project workspace, JSON contribution evidence and exact policy lifecycle; catalogue reaches 47. |
-| WS-MCP-002-11: complete guide lifecycle | Current guide contracts | Guide reads, documents, setup/sufficiency/artifact policies, proposals, corrections and activation; 24 tools | Complete public guide lifecycle without local inference or policy authority. |
-| WS-MCP-002-12: checker and artifact operations | Current checker/ART contracts | Ten checker and nine operator-artifact tools | Operator recovery and exact contributor/manager checker projections; catalogue reaches 90. |
-| WS-MCP-002-13: task execution and submissions | Current task/submission contracts | Eighteen contributor and manager execution/submission tools | Preparation, claim/start, context and submission workflows; catalogue reaches 108. |
-| WS-MCP-002-14: task operations and imports | Current task/import/AUTH contracts | Nineteen management, audit, import and service-actor tools | Public product catalogue reaches 127; `/api/v1/health` remains operational liveness, not a user tool. |
+| WS-MCP-002-11: guide, checker and artifact operations | Current guide/checker/ART contracts | `tools/guide_lifecycle.py`, `tools/checker_artifacts.py`; 43 tools | Complete public guide setup/activation, checker recovery and operator artifact inspection/recovery; catalogue reaches 90. |
+| WS-MCP-002-12: task execution and submissions | Current task/submission contracts | Eighteen contributor and manager execution/submission tools | Preparation, claim/start, context and submission workflows; catalogue reaches 108. |
+| WS-MCP-002-13: task operations and imports | Current project/task/import/AUTH contracts | Twenty project-list, management, audit, import and service-actor tools | Public product catalogue reaches 128; both health routes remain operational liveness, not user tools. |
 
 The dependency column describes technical prerequisites, not permission to start another chunk automatically. Default delivery follows row order. Independent branches may be proposed only after checking shared registry/schema ownership. One chunk finishes with its checks, focused review and human review/merge direction before beginning the next. If a chunk grows beyond its coherent behavior, revise its contract/map before adding unrelated implementation; do not silently combine rows into one PR.
 
@@ -447,9 +448,12 @@ Every binding chunk includes its route/body/query/header/status tests, public AP
 
 ### Binding-specific implementation prerequisites
 
-- **Catalogue and schemas:** for each chunk, capture only its selected operations and transitive schemas from `/openapi.json` of the pinned backend, with source SHA and explicit differences from the historical mapping. Review those differences in that implementation PR. The full product catalogue is assembled after row 14 and then receives release proof.
+- **Catalogue and schemas:** for each chunk, capture only its selected operations and transitive schemas from `/openapi.json` of the pinned backend, with source SHA and explicit differences from the historical mapping. Review those differences in that implementation PR. The full product catalogue is assembled after row 13 and then receives release proof.
 - **Credential contract (settled):** use section 5 unchanged caller-token forwarding. No further resource registration, token exchange or owner credential decision is required for this design.
-- **Workflow limits:** agree that document upload/setup completion and recovery of lost/stale policy selectors remain outside this catalogue. No automatic extra endpoint, hidden route or write-as-read workaround.
+- **Workflow limits:** guide document upload uses only the declared fixed public
+  route; setup completion remains backend-owned. Recovery of lost/stale policy
+  selectors remains outside this catalogue. No automatic extra endpoint, hidden
+  route or write-as-read workaround.
 
 The first record includes the earlier experiment and the delivered independent
 foundation. Before each later chunk starts, create its own combined record from
@@ -480,11 +484,12 @@ independently deployed custom bearer-header adapter, not a public deployment.
 
 The maintainer subsequently requested broader MCP coverage against the public
 API and explicitly allowed multiple larger PRs to proceed concurrently. Rows
-10 through 14 divide the 100 remaining product operations into five coherent
-batches. `/api/v1/health` is excluded because it is operational liveness, not a
+10 through 13 divide the 101 remaining product operations into four coherent
+batches; row 11 combines the adjacent guide/checker/artifact work after the
+maintainer requested larger parallel PRs. `/api/v1/health` is excluded because it is operational liveness, not a
 user capability. Every batch preserves fixed routes, caller-token forwarding,
 selected OpenAPI contracts, no private imports and Workstream-owned authority.
-Release proof follows the assembled 127-tool product catalogue.
+Release proof follows the assembled 128-tool product catalogue.
 
 ## References
 

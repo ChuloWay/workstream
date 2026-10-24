@@ -55,8 +55,16 @@ def adapter(
 
     def handler(request: httpx.Request) -> httpx.Response:
         received.append(request)
+        response_body = (
+            {"content": upstream["content"]}
+            if "content" in upstream
+            else {"json": upstream["json"]}
+        )
         return httpx.Response(
-            upstream["status"], json=upstream["json"], headers=upstream["headers"], request=request
+            upstream["status"],
+            headers=upstream["headers"],
+            request=request,
+            **response_body,
         )
 
     def fake_client(_: Settings) -> httpx.AsyncClient:

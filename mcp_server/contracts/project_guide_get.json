@@ -1,0 +1,830 @@
+{
+  "canonical_sha256": "4e90e68027da8ed73e8684b0a7743656b13ded224597bafafa1c494174f050a8",
+  "components": {
+    "schemas": {
+      "ApiError": {
+        "additionalProperties": false,
+        "description": "Canonical machine-readable API error.",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "correlation_id": {
+            "type": "string"
+          },
+          "details": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "message": {
+            "type": "string"
+          },
+          "retryable": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "code",
+          "message",
+          "details",
+          "correlation_id",
+          "retryable"
+        ],
+        "type": "object"
+      },
+      "ApiErrorResponse": {
+        "additionalProperties": false,
+        "description": "Canonical error plus additive legacy compatibility fields.",
+        "properties": {
+          "detail": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "$ref": "#/components/schemas/ApiError"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "type": "object"
+      },
+      "GuideReviewPolicyValues": {
+        "additionalProperties": false,
+        "description": "The review policy version a guide selects.",
+        "properties": {
+          "allowed_decisions": {
+            "items": {
+              "enum": [
+                "accept",
+                "needs_revision",
+                "reject"
+              ],
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "created_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "finding_evidence_requirement": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "generation": {
+            "exclusiveMinimum": 0.0,
+            "type": "integer"
+          },
+          "human_review_required": {
+            "type": "boolean"
+          },
+          "max_active_review_leases_per_reviewer": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "minimum_finding_fields": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "policy_hash": {
+            "pattern": "^sha256:[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "policy_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "reject_policy": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "review_lease_duration_seconds": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "review_preference_window_seconds": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "self_review_allowed": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "semantics_format": {
+            "enum": [
+              "v1",
+              "v2"
+            ],
+            "type": "string"
+          },
+          "semantics_status": {
+            "enum": [
+              "complete",
+              "legacy_incomplete"
+            ],
+            "type": "string"
+          },
+          "supersedes_policy_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "policy_id",
+          "generation",
+          "policy_hash",
+          "human_review_required",
+          "semantics_format",
+          "semantics_status",
+          "supersedes_policy_id",
+          "review_preference_window_seconds",
+          "review_lease_duration_seconds",
+          "max_active_review_leases_per_reviewer",
+          "self_review_allowed",
+          "reject_policy",
+          "finding_evidence_requirement",
+          "allowed_decisions",
+          "minimum_finding_fields",
+          "created_at"
+        ],
+        "type": "object"
+      },
+      "GuideRevisionPolicyValues": {
+        "additionalProperties": false,
+        "description": "The revision policy version a guide selects.",
+        "properties": {
+          "allowed_resubmission_states": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "created_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "generation": {
+            "exclusiveMinimum": 0.0,
+            "type": "integer"
+          },
+          "max_revision_rounds": {
+            "minimum": 0.0,
+            "type": "integer"
+          },
+          "policy_hash": {
+            "pattern": "^sha256:[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "policy_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "reviewer_reassignment_rule": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "revision_deadline_hours": {
+            "minimum": 1.0,
+            "type": "integer"
+          },
+          "semantics_status": {
+            "enum": [
+              "complete",
+              "legacy_incomplete"
+            ],
+            "type": "string"
+          },
+          "supersedes_policy_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "policy_id",
+          "generation",
+          "policy_hash",
+          "semantics_status",
+          "supersedes_policy_id",
+          "max_revision_rounds",
+          "revision_deadline_hours",
+          "allowed_resubmission_states",
+          "reviewer_reassignment_rule",
+          "created_at"
+        ],
+        "type": "object"
+      },
+      "ProjectGuideDeclaredDocument": {
+        "additionalProperties": false,
+        "description": "A document declared at guide creation and whether its original has been uploaded.",
+        "properties": {
+          "byte_count": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "document_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "ingest_state": {
+            "enum": [
+              "awaiting_upload",
+              "uploaded"
+            ],
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "media_type": {
+            "enum": [
+              "application/pdf",
+              "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+              "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+              "text/markdown"
+            ],
+            "type": "string"
+          },
+          "order": {
+            "minimum": 0.0,
+            "type": "integer"
+          },
+          "sha256": {
+            "anyOf": [
+              {
+                "pattern": "^sha256:[0-9a-f]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "document_id",
+          "label",
+          "media_type",
+          "order",
+          "ingest_state",
+          "sha256",
+          "byte_count"
+        ],
+        "type": "object"
+      },
+      "ProjectGuideDetail": {
+        "additionalProperties": false,
+        "description": "One guide with its declared documents, selected policies and latest setup lineage.\n\n``review_policy`` and ``revision_policy`` are the versions the guide\nselects; a draft that has not selected them has none.\n``latest_compilation_id`` is the current tip of the guide's compilation\nlineage.",
+        "properties": {
+          "documents": {
+            "items": {
+              "$ref": "#/components/schemas/ProjectGuideDeclaredDocument"
+            },
+            "maxItems": 100,
+            "type": "array"
+          },
+          "guide": {
+            "$ref": "#/components/schemas/ProjectGuideRecord"
+          },
+          "latest_compilation_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "latest_setup_run_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "review_policy": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GuideReviewPolicyValues"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "revision_policy": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GuideRevisionPolicyValues"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "guide",
+          "documents",
+          "review_policy",
+          "revision_policy",
+          "latest_setup_run_id",
+          "latest_compilation_id"
+        ],
+        "type": "object"
+      },
+      "ProjectGuideRecord": {
+        "additionalProperties": false,
+        "description": "The stored guide record; task example content is not included, only its commitment.",
+        "properties": {
+          "activation_operation_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "approved_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "change_summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "contribution_policy_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "contribution_policy_version_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "created_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "created_by": {
+            "type": "string"
+          },
+          "effective_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "guide_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "project_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "draft",
+              "active",
+              "superseded"
+            ],
+            "type": "string"
+          },
+          "superseded_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "task_examples_hash": {
+            "anyOf": [
+              {
+                "pattern": "^sha256:[0-9a-f]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "updated_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "guide_id",
+          "project_id",
+          "version",
+          "status",
+          "change_summary",
+          "task_examples_hash",
+          "contribution_policy_id",
+          "contribution_policy_version_id",
+          "activation_operation_id",
+          "approved_by",
+          "created_by",
+          "created_at",
+          "updated_at",
+          "effective_at",
+          "superseded_at"
+        ],
+        "type": "object"
+      }
+    }
+  },
+  "operation": {
+    "description": "One guide with its declared documents, selected policies and latest setup run and compilation.",
+    "operationId": "read_project_guide_api_v1_projects__project_id__guides__guide_id__get",
+    "parameters": [
+      {
+        "in": "path",
+        "name": "project_id",
+        "required": true,
+        "schema": {
+          "format": "uuid",
+          "type": "string"
+        }
+      },
+      {
+        "in": "path",
+        "name": "guide_id",
+        "required": true,
+        "schema": {
+          "format": "uuid",
+          "type": "string"
+        }
+      },
+      {
+        "in": "header",
+        "name": "X-Request-ID",
+        "required": false,
+        "schema": {
+          "format": "uuid",
+          "maxLength": 36,
+          "minLength": 36,
+          "type": "string"
+        }
+      },
+      {
+        "in": "header",
+        "name": "X-Correlation-ID",
+        "required": false,
+        "schema": {
+          "format": "uuid",
+          "maxLength": 36,
+          "minLength": 36,
+          "type": "string"
+        }
+      }
+    ],
+    "responses": {
+      "200": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ProjectGuideDetail"
+            }
+          }
+        },
+        "description": "Successful Response",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "400": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Invalid request.",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "401": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Authentication failed.",
+        "headers": {
+          "WWW-Authenticate": {
+            "schema": {
+              "type": "string"
+            }
+          },
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "403": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Permission denied.",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "404": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Not Found",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "422": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Unprocessable Entity",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "500": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Internal server error.",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "503": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Service Unavailable",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "security": [
+      {
+        "HTTPBearer": []
+      }
+    ],
+    "summary": "Read Project Guide",
+    "tags": [
+      "projects"
+    ],
+    "x-workstream-action-id": "project.guide.read"
+  },
+  "source": {
+    "method": "GET",
+    "openapi_version": "3.1.0",
+    "path": "/api/v1/projects/{project_id}/guides/{guide_id}",
+    "repository_sha": "733c752f7c1ecbb74615d42b747dfbda8ff72df5"
+  }
+}

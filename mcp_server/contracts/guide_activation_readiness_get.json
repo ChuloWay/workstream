@@ -1,0 +1,448 @@
+{
+  "canonical_sha256": "9bccecc83b5d9e459332bdd77d5c7e845c895cf01544440eaca2b0ebfc9d22b7",
+  "components": {
+    "schemas": {
+      "ApiError": {
+        "additionalProperties": false,
+        "description": "Canonical machine-readable API error.",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "correlation_id": {
+            "type": "string"
+          },
+          "details": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "message": {
+            "type": "string"
+          },
+          "retryable": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "code",
+          "message",
+          "details",
+          "correlation_id",
+          "retryable"
+        ],
+        "type": "object"
+      },
+      "ApiErrorResponse": {
+        "additionalProperties": false,
+        "description": "Canonical error plus additive legacy compatibility fields.",
+        "properties": {
+          "detail": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "$ref": "#/components/schemas/ApiError"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "type": "object"
+      },
+      "GuideActivationCondition": {
+        "additionalProperties": false,
+        "description": "One unmet precondition with the refusal code activation would raise for it.",
+        "properties": {
+          "code": {
+            "enum": [
+              "proposal_unavailable",
+              "proposal_stale",
+              "approval_blocked"
+            ],
+            "type": "string"
+          },
+          "message": {
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string"
+          },
+          "missing_capabilities": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/MissingCheckerCapability"
+            },
+            "maxItems": 200,
+            "type": "array"
+          },
+          "reason": {
+            "enum": [
+              "project_not_activatable",
+              "post_policy_unavailable",
+              "upstream_approval_not_current",
+              "post_policy_not_approved",
+              "guide_not_draft",
+              "review_policy_unselected",
+              "revision_policy_unselected",
+              "source_snapshot_invalid",
+              "checker_policy_unsupported",
+              "checker_policy_mismatch",
+              "checker_registry_changed",
+              "checker_capability_missing",
+              "human_review_required_by_guide",
+              "activation_requirements_unmet",
+              "contribution_policy_unpublished",
+              "contribution_policy_invalid",
+              "activation_integrity_failed"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "reason",
+          "message"
+        ],
+        "type": "object"
+      },
+      "GuideActivationReadiness": {
+        "additionalProperties": false,
+        "description": "Dry-run result over the current selections; not a promise that activation will succeed later.\n\n``unmet`` is in activation's check order, so its first entry carries the\nrefusal code activation would raise now. A check whose inputs are missing\nis not evaluated.",
+        "properties": {
+          "guide_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "project_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "ready": {
+            "type": "boolean"
+          },
+          "unmet": {
+            "items": {
+              "$ref": "#/components/schemas/GuideActivationCondition"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "project_id",
+          "guide_id",
+          "ready",
+          "unmet"
+        ],
+        "type": "object"
+      },
+      "MissingCheckerCapability": {
+        "additionalProperties": false,
+        "description": "Bounded manager feedback from the approved compilation's missing checks.",
+        "properties": {
+          "requirement_id": {
+            "pattern": "^[a-z][a-z0-9_.-]{0,99}$",
+            "type": "string"
+          },
+          "stage": {
+            "enum": [
+              "pre_submit",
+              "post_submit"
+            ],
+            "type": "string"
+          },
+          "title": {
+            "maxLength": 1000,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "requirement_id",
+          "stage",
+          "title"
+        ],
+        "type": "object"
+      }
+    }
+  },
+  "operation": {
+    "description": "Dry-run activation over the current selections: ready, or the unmet conditions it evaluates, with refusal codes.\n\nA check whose inputs are missing is not evaluated.",
+    "operationId": "read_guide_activation_readiness_api_v1_projects__project_id__guides__guide_id__activation_readiness_get",
+    "parameters": [
+      {
+        "in": "path",
+        "name": "project_id",
+        "required": true,
+        "schema": {
+          "format": "uuid",
+          "type": "string"
+        }
+      },
+      {
+        "in": "path",
+        "name": "guide_id",
+        "required": true,
+        "schema": {
+          "format": "uuid",
+          "type": "string"
+        }
+      },
+      {
+        "in": "header",
+        "name": "X-Request-ID",
+        "required": false,
+        "schema": {
+          "format": "uuid",
+          "maxLength": 36,
+          "minLength": 36,
+          "type": "string"
+        }
+      },
+      {
+        "in": "header",
+        "name": "X-Correlation-ID",
+        "required": false,
+        "schema": {
+          "format": "uuid",
+          "maxLength": 36,
+          "minLength": 36,
+          "type": "string"
+        }
+      }
+    ],
+    "responses": {
+      "200": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/GuideActivationReadiness"
+            }
+          }
+        },
+        "description": "Successful Response",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "400": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Invalid request.",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "401": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Authentication failed.",
+        "headers": {
+          "WWW-Authenticate": {
+            "schema": {
+              "type": "string"
+            }
+          },
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "403": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Permission denied.",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "404": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Not Found",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "422": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Unprocessable Entity",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "500": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Internal server error.",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "503": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Service Unavailable",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "security": [
+      {
+        "HTTPBearer": []
+      }
+    ],
+    "summary": "Read Guide Activation Readiness",
+    "tags": [
+      "projects"
+    ],
+    "x-workstream-action-id": "project.guide.activation_readiness.read"
+  },
+  "source": {
+    "method": "GET",
+    "openapi_version": "3.1.0",
+    "path": "/api/v1/projects/{project_id}/guides/{guide_id}/activation-readiness",
+    "repository_sha": "2e6cee003dd6bf811d20557808d77cc7061776d5"
+  }
+}

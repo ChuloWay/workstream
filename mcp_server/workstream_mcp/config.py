@@ -5,6 +5,8 @@ import os
 from dataclasses import dataclass
 from urllib.parse import urlsplit
 
+from workstream_mcp.limits import GUIDE_DOCUMENT_MAX_BYTES, MCP_MAX_REQUEST_BYTES
+
 
 class ConfigurationError(ValueError):
     """Raised when deployment configuration is unsafe or inconsistent."""
@@ -63,8 +65,9 @@ class Settings:
     host: str = "127.0.0.1"
     port: int = 8080
     allowed_hosts: tuple[str, ...] = ("127.0.0.1:*", "localhost:*")
-    max_request_bytes: int = 65_536
+    max_request_bytes: int = MCP_MAX_REQUEST_BYTES
     max_response_bytes: int = 65_536
+    max_document_bytes: int = GUIDE_DOCUMENT_MAX_BYTES
     max_header_bytes: int = 16_384
     max_request_frames: int = 128
     max_in_flight: int = 8
@@ -72,14 +75,26 @@ class Settings:
     connect_timeout_seconds: float = 3.0
     read_timeout_seconds: float = 10.0
     total_timeout_seconds: float = 12.0
+    document_timeout_seconds: float = 120.0
     keep_alive_seconds: int = 5
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "api_url", _api_url(self.api_url))
         bounds: tuple[tuple[str, int, int, int], ...] = (
             ("port", self.port, 1, 65_535),
-            ("max_request_bytes", self.max_request_bytes, 1_024, 1_048_576),
-            ("max_response_bytes", self.max_response_bytes, 1_024, 1_048_576),
+            ("max_request_bytes", self.max_request_bytes, 1_024, MCP_MAX_REQUEST_BYTES),
+            (
+                "max_response_bytes",
+                self.max_response_bytes,
+                1_024,
+                1_048_576,
+            ),
+            (
+                "max_document_bytes",
+                self.max_document_bytes,
+                1_024,
+                GUIDE_DOCUMENT_MAX_BYTES,
+            ),
             ("max_header_bytes", self.max_header_bytes, 1_024, 65_536),
             ("max_request_frames", self.max_request_frames, 1, 4_096),
             ("max_in_flight", self.max_in_flight, 1, 256),
@@ -92,6 +107,7 @@ class Settings:
             ("connect_timeout_seconds", self.connect_timeout_seconds, 0.1, 60),
             ("read_timeout_seconds", self.read_timeout_seconds, 0.1, 120),
             ("total_timeout_seconds", self.total_timeout_seconds, 0.1, 180),
+            ("document_timeout_seconds", self.document_timeout_seconds, 1, 600),
             ("ingress_timeout_seconds", self.ingress_timeout_seconds, 0.1, 180),
         )
         for timeout_name, timeout_value, timeout_minimum, timeout_maximum in timeout_bounds:
@@ -106,6 +122,8 @@ class Settings:
             self.connect_timeout_seconds, self.read_timeout_seconds
         ):
             raise ConfigurationError("total timeout cannot be shorter than operation timeouts")
+        if self.document_timeout_seconds < self.connect_timeout_seconds:
+            raise ConfigurationError("document timeout cannot be shorter than connect timeout")
         if not self.allowed_hosts or any(not item.strip() for item in self.allowed_hosts):
             raise ConfigurationError("at least one non-empty allowed host is required")
         for allowed_host in self.allowed_hosts:
@@ -140,10 +158,22 @@ class Settings:
             port=_integer("WORKSTREAM_MCP_PORT", 8080, minimum=1, maximum=65_535),
             allowed_hosts=allowed_hosts,
             max_request_bytes=_integer(
-                "WORKSTREAM_MCP_MAX_REQUEST_BYTES", 65_536, minimum=1_024, maximum=1_048_576
+                "WORKSTREAM_MCP_MAX_REQUEST_BYTES",
+                MCP_MAX_REQUEST_BYTES,
+                minimum=1_024,
+                maximum=MCP_MAX_REQUEST_BYTES,
             ),
             max_response_bytes=_integer(
-                "WORKSTREAM_MCP_MAX_RESPONSE_BYTES", 65_536, minimum=1_024, maximum=1_048_576
+                "WORKSTREAM_MCP_MAX_RESPONSE_BYTES",
+                65_536,
+                minimum=1_024,
+                maximum=1_048_576,
+            ),
+            max_document_bytes=_integer(
+                "WORKSTREAM_MCP_MAX_DOCUMENT_BYTES",
+                GUIDE_DOCUMENT_MAX_BYTES,
+                minimum=1_024,
+                maximum=GUIDE_DOCUMENT_MAX_BYTES,
             ),
             max_header_bytes=_integer(
                 "WORKSTREAM_MCP_MAX_HEADER_BYTES", 16_384, minimum=1_024, maximum=65_536
@@ -163,6 +193,9 @@ class Settings:
             ),
             total_timeout_seconds=_seconds(
                 "WORKSTREAM_MCP_TOTAL_TIMEOUT_SECONDS", 12, minimum=0.1, maximum=180
+            ),
+            document_timeout_seconds=_seconds(
+                "WORKSTREAM_MCP_DOCUMENT_TIMEOUT_SECONDS", 120, minimum=1, maximum=600
             ),
             keep_alive_seconds=_integer(
                 "WORKSTREAM_MCP_KEEP_ALIVE_SECONDS", 5, minimum=1, maximum=30

@@ -1,5 +1,5 @@
 {
-  "canonical_sha256": "24b32c1c0c65a53528eec4d2ac246b2b745e14e14a052be3125e3113efaa26cf",
+  "canonical_sha256": "197e25588fb793229371144d2a13d03c2ba0f018ea32750d06bb6ee3e8305b3a",
   "components": {
     "schemas": {
       "ApiError": {
@@ -7,24 +7,19 @@
         "description": "Canonical machine-readable API error.",
         "properties": {
           "code": {
-            "title": "Code",
             "type": "string"
           },
           "correlation_id": {
-            "title": "Correlation Id",
             "type": "string"
           },
           "details": {
             "additionalProperties": true,
-            "title": "Details",
             "type": "object"
           },
           "message": {
-            "title": "Message",
             "type": "string"
           },
           "retryable": {
-            "title": "Retryable",
             "type": "boolean"
           }
         },
@@ -35,7 +30,6 @@
           "correlation_id",
           "retryable"
         ],
-        "title": "ApiError",
         "type": "object"
       },
       "ApiErrorResponse": {
@@ -48,8 +42,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Detail"
+            ]
           },
           "error": {
             "$ref": "#/components/schemas/ApiError"
@@ -58,30 +51,24 @@
         "required": [
           "error"
         ],
-        "title": "ApiErrorResponse",
         "type": "object"
       },
       "ContributionPolicyMutationResult": {
-        "description": "Immutable result reconstructed only from lifecycle-event truth.",
         "properties": {
           "actor_profile_id": {
             "format": "uuid",
-            "title": "Actor Profile Id",
             "type": "string"
           },
           "contribution_policy_id": {
             "format": "uuid",
-            "title": "Contribution Policy Id",
             "type": "string"
           },
           "contribution_policy_version_id": {
             "format": "uuid",
-            "title": "Contribution Policy Version Id",
             "type": "string"
           },
           "event_id": {
             "format": "uuid",
-            "title": "Event Id",
             "type": "string"
           },
           "event_type": {
@@ -91,7 +78,6 @@
               "published",
               "retired"
             ],
-            "title": "Event Type",
             "type": "string"
           },
           "from_policy_status": {
@@ -102,8 +88,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "From Policy Status"
+            ]
           },
           "from_version_status": {
             "anyOf": [
@@ -113,17 +98,14 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "From Version Status"
+            ]
           },
           "occurred_at": {
             "format": "date-time",
-            "title": "Occurred At",
             "type": "string"
           },
           "operation_id": {
             "format": "uuid",
-            "title": "Operation Id",
             "type": "string"
           },
           "prior_current_version_id": {
@@ -135,8 +117,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Prior Current Version Id"
+            ]
           },
           "prior_current_version_number": {
             "anyOf": [
@@ -146,28 +127,22 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Prior Current Version Number"
+            ]
           },
           "project_id": {
             "format": "uuid",
-            "title": "Project Id",
             "type": "string"
           },
           "request_digest": {
-            "title": "Request Digest",
             "type": "string"
           },
           "to_policy_status": {
-            "title": "To Policy Status",
             "type": "string"
           },
           "to_version_status": {
-            "title": "To Version Status",
             "type": "string"
           },
           "version_number": {
-            "title": "Version Number",
             "type": "integer"
           }
         },
@@ -189,7 +164,6 @@
           "to_version_status",
           "occurred_at"
         ],
-        "title": "ContributionPolicyMutationResult",
         "type": "object"
       },
       "PolicyCreateInput": {
@@ -199,14 +173,12 @@
           "name": {
             "maxLength": 200,
             "minLength": 1,
-            "title": "Name",
             "type": "string"
           }
         },
         "required": [
           "name"
         ],
-        "title": "PolicyCreateInput",
         "type": "object"
       }
     }
@@ -221,7 +193,6 @@
         "required": true,
         "schema": {
           "format": "uuid",
-          "title": "Project Id",
           "type": "string"
         }
       },
@@ -523,6 +494,6 @@
     "method": "POST",
     "openapi_version": "3.1.0",
     "path": "/api/v1/projects/{project_id}/contribution-policies/drafts",
-    "repository_sha": "bb39ac10aed24e3484f3155706f7a8902ef97694"
+    "repository_sha": "2e6cee003dd6bf811d20557808d77cc7061776d5"
   }
 }
