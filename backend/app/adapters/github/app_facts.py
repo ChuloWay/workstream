@@ -35,9 +35,14 @@ from app.interfaces.github_facts import (
     GitHubFactsAccessDeniedError,
     GitHubFactsProtocolError,
     GitHubFactsUnavailableError,
+    GITHUB_MAXIMUM_LISTED_FILES,
+    GitHubActorFact,
+    GitHubChangedFileFact,
+    GitHubFactsIncompleteError,
     GitHubPullRequestFacts,
     GitHubPullRequestNotFoundError,
     GitHubRequiredCheckFact,
+    GitHubReviewFact,
     GitHubRequiredChecksNotConfiguredError,
     GitHubResponseDigest,
     is_github_repository,
@@ -218,6 +223,22 @@ class GitHubAppFactsAdapter:
                 )
             )
             head_sha = pull_facts["head_sha"]
+            changed_files_count = pull_facts["changed_files_count"]
+            if changed_files_count > GITHUB_MAXIMUM_LISTED_FILES:
+                raise GitHubFactsIncompleteError(_IDENTITY)
+            reviews = await session.read_pages(
+                "reviews",
+                f"/repos/{repository}/pulls/{pull_request_number}/reviews",
+                item_key=None,
+            )
+            files = await session.read_pages(
+                "files",
+                f"/repos/{repository}/pulls/{pull_request_number}/files",
+                item_key=None,
+                maximum_pages=GITHUB_MAXIMUM_LISTED_FILES // PAGE_SIZE,
+            )
+            if len(files) != changed_files_count:
+                raise GitHubFactsIncompleteError(_IDENTITY)
             check_runs = await session.read_pages(
                 "check_runs",
                 f"/repos/{repository}/commits/{head_sha}/check-runs",
@@ -237,12 +258,19 @@ class GitHubAppFactsAdapter:
                 merge_commit_sha=pull_facts["merge_commit_sha"],
                 base_ref=pull_facts["base_ref"],
                 head_sha=head_sha,
-                required_checks=tuple(
-                    GitHubRequiredCheckFact(
-                        name=name,
-                        app_id=app_id,
-                        conclusion=_conclusion(name, app_id, check_runs, statuses),
+                author=_actor(pull_facts["author"]),
+                reviews=tuple(_review(item) for item in reviews),
+                changed_files_count=changed_files_count,
+                changed_files=tuple(
+                    GitHubChangedFileFact(
+                        filename=item["filename"],
+                        previous_filename=item.get("previous_filename"),
+                        status=item["status"],
                     )
+                    for item in files
+                ),
+                required_checks=tuple(
+                    _required_check_fact(name, app_id, check_runs, statuses)
                     for name, app_id in required
                 ),
                 fetched_at=datetime.fromtimestamp(self._wall_clock(), UTC),
@@ -376,15 +404,29 @@ class _FactsSession:
         self._record(label, response)
         return _json(response)
 
-    async def read_pages(self, label: str, path: str, *, item_key: str) -> list[dict]:
-        """Follow same-origin ``next`` links for a bounded number of pages."""
+    async def read_pages(
+        self,
+        label: str,
+        path: str,
+        *,
+        item_key: str | None,
+        maximum_pages: int = MAXIMUM_PAGES,
+    ) -> list[dict]:
+        """Follow same-origin ``next`` links for a bounded number of pages.
+
+        ``item_key`` names the list inside an object body; None means the body
+        itself is the list. More pages than ``maximum_pages`` fail closed.
+        """
         url = self._url(path) + f"?per_page={PAGE_SIZE}"
         items: list[dict] = []
-        for page in range(1, MAXIMUM_PAGES + 1):
+        for page in range(1, maximum_pages + 1):
             response = await self._installation_get(url, not_found=GitHubFactsProtocolError)
             self._record(f"{label}.page.{page}", response)
             body = _json(response)
-            page_items = body.get(item_key) if isinstance(body, dict) else None
+            if item_key is None:
+                page_items = body
+            else:
+                page_items = body.get(item_key) if isinstance(body, dict) else None
             if not isinstance(page_items, list) or not all(
                 isinstance(item, dict) for item in page_items
             ):
@@ -537,6 +579,8 @@ def _pull_request_facts(body: object, repository: str, number: int) -> dict[str,
             "merge_commit_sha": body["merge_commit_sha"] if merged is True else None,
             "base_ref": base["ref"],
             "head_sha": head["sha"],
+            "author": body["user"],
+            "changed_files_count": body["changed_files"],
         }
         valid = (
             body["number"] == number
@@ -544,6 +588,8 @@ def _pull_request_facts(body: object, repository: str, number: int) -> dict[str,
             and full_name.casefold() == repository.casefold()
             and isinstance(values["base_ref"], str)
             and isinstance(values["head_sha"], str)
+            and type(values["changed_files_count"]) is int
+            and values["changed_files_count"] >= 0
         )
     except (KeyError, TypeError):
         valid = False
@@ -590,16 +636,36 @@ def _latest(items: list[dict]) -> dict | None:
     return max(items, key=lambda item: item["id"], default=None)
 
 
-def _conclusion(
+def _actor(body: object) -> GitHubActorFact:
+    """Translate one GitHub user object."""
+    if not isinstance(body, dict):
+        raise GitHubFactsProtocolError(_IDENTITY)
+    return GitHubActorFact(login=body["login"], id=body["id"], type=body["type"])
+
+
+def _review(body: dict) -> GitHubReviewFact:
+    """Translate one review; GitHub reports a deleted reviewer as null."""
+    user = body.get("user")
+    return GitHubReviewFact(
+        id=body["id"],
+        reviewer=None if user is None else _actor(user),
+        state=body["state"],
+        commit_id=body.get("commit_id"),
+        submitted_at=body.get("submitted_at"),
+    )
+
+
+def _required_check_fact(
     name: str,
     app_id: int | None,
     check_runs: list[dict],
     statuses: list[dict],
-) -> str:
+) -> GitHubRequiredCheckFact:
     """Judge only the latest check run and latest status for one required check.
 
     A re-run supersedes an earlier attempt with the same name. When both a check
     run and a commit status exist for the name, both latest results must succeed.
+    The fact records which App produced the judged run.
     """
     observed: list[str] = []
     runs = []
@@ -609,7 +675,12 @@ def _conclusion(
         if run.get("name") == name and (app_id is None or run_app_id == app_id):
             runs.append(run)
     run = _latest(runs)
+    check_run_app_id = None
     if run is not None:
+        app = run.get("app")
+        check_run_app_id = app.get("id") if isinstance(app, dict) else None
+        if check_run_app_id is not None and type(check_run_app_id) is not int:
+            raise GitHubFactsProtocolError(_IDENTITY)
         if run.get("status") != "completed":
             observed.append("pending")
         else:
@@ -617,6 +688,7 @@ def _conclusion(
             if conclusion not in _CHECK_RUN_CONCLUSIONS:
                 raise GitHubFactsProtocolError(_IDENTITY)
             observed.append(conclusion)
+    status_judged = False
     if app_id is None:
         # Commit statuses carry no App identity, so they satisfy only
         # requirements that accept any source.
@@ -626,6 +698,17 @@ def _conclusion(
             if state not in _STATUS_STATES:
                 raise GitHubFactsProtocolError(_IDENTITY)
             observed.append(state)
-    if not observed:
-        return "missing"
-    return next((value for value in observed if value != "success"), "success")
+            status_judged = True
+    conclusion = (
+        "missing"
+        if not observed
+        else next((value for value in observed if value != "success"), "success")
+    )
+    return GitHubRequiredCheckFact(
+        name=name,
+        app_id=app_id,
+        app_bound=app_id is not None,
+        conclusion=conclusion,
+        check_run_app_id=check_run_app_id,
+        commit_status_judged=status_judged,
+    )

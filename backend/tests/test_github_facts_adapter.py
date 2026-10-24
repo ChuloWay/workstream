@@ -26,6 +26,7 @@ from app.interfaces.external_services import (
 )
 from app.interfaces.github_facts import (
     GitHubFactsAccessDeniedError,
+    GitHubFactsIncompleteError,
     GitHubFactsProtocolError,
     GitHubFactsUnavailableError,
     GitHubPullRequestFacts,
@@ -60,9 +61,33 @@ def _pull(**changes: object) -> dict:
         "merge_commit_sha": MERGE_SHA,
         "base": {"ref": "main", "repo": {"full_name": REPOSITORY}},
         "head": {"sha": HEAD_SHA},
+        "user": {"login": "agent-bot", "id": 501, "type": "Bot"},
+        "changed_files": 2,
     }
     body.update(changes)
     return body
+
+
+REVIEWS = [
+    {
+        "id": 61,
+        "user": {"login": "reviewer", "id": 7, "type": "User"},
+        "state": "APPROVED",
+        "commit_id": HEAD_SHA,
+        "submitted_at": "2027-01-15T07:00:00Z",
+    },
+    {
+        "id": 62,
+        "user": None,
+        "state": "COMMENTED",
+        "commit_id": MERGE_SHA,
+        "submitted_at": "2027-01-15T07:30:00Z",
+    },
+]
+FILES = [
+    {"filename": "src/app.py", "status": "modified"},
+    {"filename": ".github/workflows/ci.yml", "previous_filename": "ci.yml", "status": "renamed"},
+]
 
 
 class FakeGitHub:
@@ -76,6 +101,8 @@ class FakeGitHub:
         self.route("GET", f"/repos/{REPOSITORY}/installation", {"id": 77})
         self.route("POST", "/app/installations/77/access_tokens", self._token)
         self.route("GET", f"/repos/{REPOSITORY}/pulls/12", _pull())
+        self.route("GET", f"/repos/{REPOSITORY}/pulls/12/reviews", REVIEWS)
+        self.route("GET", f"/repos/{REPOSITORY}/pulls/12/files", FILES)
         self.route(
             "GET",
             f"/repos/{REPOSITORY}/branches/main/protection/required_status_checks",
@@ -207,9 +234,49 @@ async def test_happy_path_returns_facts_with_response_digests() -> None:
         "merge_commit_sha": MERGE_SHA,
         "base_ref": "main",
         "head_sha": HEAD_SHA,
+        "author": {"login": "agent-bot", "id": 501, "type": "Bot"},
+        "reviews": [
+            {
+                "id": 61,
+                "reviewer": {"login": "reviewer", "id": 7, "type": "User"},
+                "state": "APPROVED",
+                "commit_id": HEAD_SHA,
+                "submitted_at": "2027-01-15T07:00:00Z",
+            },
+            {
+                "id": 62,
+                "reviewer": None,
+                "state": "COMMENTED",
+                "commit_id": MERGE_SHA,
+                "submitted_at": "2027-01-15T07:30:00Z",
+            },
+        ],
+        "changed_files_count": 2,
+        "changed_files": [
+            {"filename": "src/app.py", "previous_filename": None, "status": "modified"},
+            {
+                "filename": ".github/workflows/ci.yml",
+                "previous_filename": "ci.yml",
+                "status": "renamed",
+            },
+        ],
         "required_checks": [
-            {"name": "backend", "app_id": 15368, "conclusion": "success"},
-            {"name": "lint", "app_id": None, "conclusion": "success"},
+            {
+                "name": "backend",
+                "app_id": 15368,
+                "app_bound": True,
+                "conclusion": "success",
+                "check_run_app_id": 15368,
+                "commit_status_judged": False,
+            },
+            {
+                "name": "lint",
+                "app_id": None,
+                "app_bound": False,
+                "conclusion": "success",
+                "check_run_app_id": None,
+                "commit_status_judged": True,
+            },
         ],
         "fetched_at": "2027-01-15T08:00:00Z",
         "responses": [
@@ -224,6 +291,18 @@ async def test_happy_path_returns_facts_with_response_digests() -> None:
                         f"{API}/repos/{REPOSITORY}/branches/main/protection/"
                         "required_status_checks"
                     ]
+                ),
+            },
+            {
+                "request": "reviews.page.1",
+                "sha256": _sha(
+                    fake.bodies[f"{API}/repos/{REPOSITORY}/pulls/12/reviews?per_page=100"]
+                ),
+            },
+            {
+                "request": "files.page.1",
+                "sha256": _sha(
+                    fake.bodies[f"{API}/repos/{REPOSITORY}/pulls/12/files?per_page=100"]
                 ),
             },
             {
@@ -299,7 +378,7 @@ async def test_pagination_follows_same_origin_next_links() -> None:
     facts = await _fetch(_adapter(fake))
 
     assert facts.required_checks[0].conclusion == "failure"
-    assert [item.request for item in facts.responses][2:4] == [
+    assert [item.request for item in facts.responses][4:6] == [
         "check_runs.page.1",
         "check_runs.page.2",
     ]
@@ -734,3 +813,90 @@ def test_settings_reject_incomplete_or_unsafe_configuration(values: dict) -> Non
 def test_settings_accept_loopback_http_only_for_local_and_test() -> None:
     settings = _settings(github_api_base_url="http://127.0.0.1:8080")
     assert settings.github_api_base_url == "http://127.0.0.1:8080"
+
+
+async def test_reviews_and_files_paginate_and_reviews_are_returned_unfiltered() -> None:
+    fake = FakeGitHub()
+    reviews_path = f"/repos/{REPOSITORY}/pulls/12/reviews"
+    files_path = f"/repos/{REPOSITORY}/pulls/12/files"
+    fake.route(
+        "GET",
+        reviews_path,
+        httpx.Response(
+            200,
+            json=[REVIEWS[0]],
+            headers={"link": f'<{API}{reviews_path}?per_page=100&page=2>; rel="next"'},
+        ),
+        [{**REVIEWS[0], "id": 63, "state": "CHANGES_REQUESTED"}],
+    )
+    page_one = [{"filename": f"f{index}.py", "status": "added"} for index in range(100)]
+    fake.route("GET", f"/repos/{REPOSITORY}/pulls/12", _pull(changed_files=101))
+    fake.route(
+        "GET",
+        files_path,
+        httpx.Response(
+            200,
+            json=page_one,
+            headers={"link": f'<{API}{files_path}?per_page=100&page=2>; rel="next"'},
+        ),
+        [{"filename": "last.py", "status": "added"}],
+    )
+    facts = await _fetch(_adapter(fake))
+    assert [(item.id, item.state) for item in facts.reviews] == [
+        (61, "APPROVED"),
+        (63, "CHANGES_REQUESTED"),
+    ]
+    assert len(facts.changed_files) == facts.changed_files_count == 101
+    assert [item.request for item in facts.responses][2:6] == [
+        "reviews.page.1",
+        "reviews.page.2",
+        "files.page.1",
+        "files.page.2",
+    ]
+
+
+async def test_more_changed_files_than_github_can_list_fails_closed() -> None:
+    fake = FakeGitHub()
+    fake.route("GET", f"/repos/{REPOSITORY}/pulls/12", _pull(changed_files=3001))
+    with pytest.raises(GitHubFactsIncompleteError):
+        await _fetch(_adapter(fake))
+    assert not any(request.url.path.endswith("/files") for request in fake.requests)
+
+
+async def test_changed_file_listing_shorter_than_reported_fails_closed() -> None:
+    fake = FakeGitHub()
+    fake.route("GET", f"/repos/{REPOSITORY}/pulls/12", _pull(changed_files=3))
+    with pytest.raises(GitHubFactsIncompleteError):
+        await _fetch(_adapter(fake))
+
+
+async def test_check_run_app_and_status_source_are_recorded() -> None:
+    fake = FakeGitHub()
+    fake.route(
+        "GET",
+        f"/repos/{REPOSITORY}/branches/main/protection/required_status_checks",
+        {"contexts": ["lint"], "checks": []},
+    )
+    fake.route(
+        "GET",
+        f"/repos/{REPOSITORY}/commits/{HEAD_SHA}/check-runs",
+        {
+            "check_runs": [
+                {
+                    "id": 5,
+                    "name": "lint",
+                    "status": "completed",
+                    "conclusion": "success",
+                    "app": {"id": 777},
+                }
+            ]
+        },
+    )
+    fake.route("GET", f"/repos/{REPOSITORY}/commits/{HEAD_SHA}/status", {"statuses": []})
+    facts = await _fetch(_adapter(fake))
+    check = facts.required_checks[0]
+    assert (check.app_bound, check.check_run_app_id, check.commit_status_judged) == (
+        False,
+        777,
+        False,
+    )

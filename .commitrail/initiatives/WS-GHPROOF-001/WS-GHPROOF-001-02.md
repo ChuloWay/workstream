@@ -2,7 +2,7 @@
 
 - Initiative: WS-GHPROOF-001
 - Durable disposition: Complete
-- Intended merge outcome: WorkStream has a typed, secret-safe GitHub facts capability that reads one pull request's merge state and base-branch required-check results as a read-only GitHub App, registered per ADR 0014 and not yet called by a production path.
+- Intended merge outcome: WorkStream has a typed, secret-safe GitHub facts capability that reads one pull request's merge state, author, reviews, changed files and base-branch required-check results as a read-only GitHub App, registered per ADR 0014 and not yet called by a production path.
 
 ## Intent
 
@@ -103,6 +103,23 @@ chunk adds no transport, credential or retry logic of its own.
   adapter error is raised `from None` and carries only its code. Retry logs
   carry only status and attempt. Token-exchange bodies are never hashed or
   returned; facts hold only GitHub data and response digests.
+- **Integrity facts (owner decision 20, 2026-10-24).** The reader stays
+  factual and makes no policy decision. It adds the pull request author
+  (`login`, numeric `id`, `type` such as `User` or `Bot`); every submitted review
+  from `GET /pulls/{n}/reviews` (review `id`, reviewer or null for a deleted
+  account, `state`, `commit_id`, `submitted_at`), unfiltered, because choosing
+  each reviewer's latest review is the checker's rule; and every changed file
+  from `GET /pulls/{n}/files` (`filename`, `previous_filename` for renames,
+  `status`). Both lists paginate with `per_page=100`; each page body is hashed.
+- **Incomplete file lists fail closed.** GitHub lists at most 3,000 changed
+  files. If the pull request's `changed_files` exceeds 3,000, or the listing
+  length differs from it, the read raises `GitHubFactsIncompleteError` (a
+  protocol error), so a protected-path rule can never miss a file.
+- **Check provenance.** Each required check also records `app_bound` (the
+  requirement names an App), `check_run_app_id` (the App that produced the
+  judged latest run, or null) and `commit_status_judged` (a commit status, which
+  has no App identity, was judged). The schema id stays
+  `workstream.github_facts.v1` because the shape is unreleased.
 - **Facts.** `merge_commit_sha` is null unless merged, because GitHub reports a
   test-merge commit for open pull requests. `responses` lists the SHA-256 of
   each raw facts response body in request order.
@@ -114,6 +131,11 @@ chunk adds no transport, credential or retry logic of its own.
 
 - [x] Only the latest re-run per required check counts, in both directions,
   and the required set is the union of `checks` and `contexts`.
+- [x] Author, all reviews (paginated, unfiltered) and all changed files
+  (paginated) are returned and hashed; more files than GitHub can list, or a
+  short listing, fails as incomplete.
+- [x] Each required check records its App binding and the producing App or
+  status source of the judged result.
 - [x] Happy path returns the exact facts, response digests, a verifiable JWT
   and a repository-scoped token request.
 - [x] Pagination is followed within the origin; a foreign link fails.
@@ -141,7 +163,7 @@ chunk adds no transport, credential or retry logic of its own.
 
 | Claim | Command or proof | Result | Remaining uncertainty |
 |---|---|---|---|
-| Adapter behavior and secret custody | `pytest tests/test_github_facts_adapter.py` | 44 passed | Uses `httpx.MockTransport`; the re-run rule comes from a separate live read, not from this suite |
+| Adapter behavior and secret custody | `pytest tests/test_github_facts_adapter.py` | 48 passed | Uses `httpx.MockTransport`; the re-run rule comes from a separate live read, not from this suite |
 | Re-run test detects order-based selection | Temporarily selecting the last listed run made both re-run cases fail | Detected | Manual negative control |
 | Secret tests detect leaks | Temporarily unredacting the token repr, and logging the Authorization value, each made one test fail | Detected | Manual negative control |
 | Lane catalogue, boundaries, ownership | `tests/test_ci_lane_catalogue.py`, `tests/architecture/test_module_boundaries.py`, `tests/test_behavior_ownership.py`, `scripts.behavior_ownership validate`, `module_boundaries`, `authorization_boundary`, `test_structure_boundary` | Pass | None |

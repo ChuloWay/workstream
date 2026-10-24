@@ -79,12 +79,55 @@ class _FactsValue(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, revalidate_instances="always")
 
 
+# GitHub changed-file listings return at most this many files per pull request.
+GITHUB_MAXIMUM_LISTED_FILES = 3000
+
+
+class GitHubActorFact(_FactsValue):
+    """One GitHub account as GitHub reports it (``type`` is e.g. User or Bot)."""
+
+    login: Annotated[StrictStr, Field(min_length=1, max_length=100)]
+    id: Annotated[StrictInt, Field(ge=1)]
+    type: Annotated[StrictStr, Field(min_length=1, max_length=50)]
+
+
+class GitHubReviewFact(_FactsValue):
+    """One submitted pull-request review, unfiltered.
+
+    ``reviewer`` is null when GitHub no longer has the account. Policy, such as
+    taking each reviewer's latest review, belongs to the consumer.
+    """
+
+    id: Annotated[StrictInt, Field(ge=1)]
+    reviewer: GitHubActorFact | None
+    state: Annotated[StrictStr, Field(min_length=1, max_length=50)]
+    commit_id: GitSha | None
+    submitted_at: datetime | None
+
+
+class GitHubChangedFileFact(_FactsValue):
+    """One changed file; ``previous_filename`` is set for renames."""
+
+    filename: Annotated[StrictStr, Field(min_length=1, max_length=4096)]
+    previous_filename: Annotated[StrictStr, Field(min_length=1, max_length=4096)] | None
+    status: Annotated[StrictStr, Field(min_length=1, max_length=50)]
+
+
 class GitHubRequiredCheckFact(_FactsValue):
-    """One check required by base-branch protection and its head-SHA result."""
+    """One check required by base-branch protection and its head-SHA result.
+
+    ``app_id`` is the requirement's App restriction and ``app_bound`` says
+    whether one exists. ``check_run_app_id`` is the App that produced the judged
+    latest check run (null when no run was judged). ``commit_status_judged`` is
+    true when a commit status, which carries no App identity, was judged.
+    """
 
     name: Annotated[StrictStr, Field(min_length=1, max_length=255)]
     app_id: StrictInt | None
+    app_bound: StrictBool
     conclusion: GitHubCheckConclusion
+    check_run_app_id: StrictInt | None
+    commit_status_judged: StrictBool
 
 
 class GitHubResponseDigest(_FactsValue):
@@ -110,6 +153,10 @@ class GitHubPullRequestFacts(_FactsValue):
     merge_commit_sha: GitSha | None
     base_ref: Annotated[StrictStr, Field(min_length=1, max_length=255)]
     head_sha: GitSha
+    author: GitHubActorFact
+    reviews: tuple[GitHubReviewFact, ...]
+    changed_files_count: Annotated[StrictInt, Field(ge=0, le=GITHUB_MAXIMUM_LISTED_FILES)]
+    changed_files: tuple[GitHubChangedFileFact, ...]
     required_checks: tuple[GitHubRequiredCheckFact, ...] = Field(min_length=1)
     fetched_at: datetime
     responses: tuple[GitHubResponseDigest, ...] = Field(min_length=1)
@@ -147,6 +194,12 @@ class GitHubFactsProtocolError(ExternalServiceProtocolError):
     """GitHub returned a response outside the supported facts protocol."""
 
     code = "github_facts_protocol_invalid"
+
+
+class GitHubFactsIncompleteError(GitHubFactsProtocolError):
+    """GitHub cannot list every changed file, so the facts would be partial."""
+
+    code = "github_facts_incomplete"
 
 
 class GitHubFactsAdapter(ExternalServiceAdapter, Protocol):
