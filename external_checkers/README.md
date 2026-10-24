@@ -89,6 +89,19 @@ trial filesystem's quota. These are runtime capability limits, not additional
 project requirements. Project checks must report unavailable execution distinctly
 from a verified work failure.
 
+Every completed build or step records `export_outcome` separately from the
+child's exit code or signal. `exported` means the bounded candidate or workspace
+was retained; `capacity_exceeded` means its logical bytes or entries exceed the
+allowance; `invalid` means it cannot be represented by the supported export
+format. The latter two produce `disk_exceeded` or `export_invalid` observations
+while preserving the actual child status. A forced runtime stop records
+`unavailable` and does not invent an exit code or signal. `not_started` covers
+dependency-skipped steps and failed builds that never request candidate export.
+Only an exported workspace whose work outcome the profile permits may feed a
+later step. Host storage or export I/O failures remain infrastructure failures;
+they are not evidence that submitted work exceeded its allowance. Project
+images interpret these execution facts against their own approved requirements.
+
 ## Optional model socket
 
 An entitled post-submit invocation may receive one invocation-local Unix socket

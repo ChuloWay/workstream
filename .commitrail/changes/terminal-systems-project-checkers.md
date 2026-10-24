@@ -542,3 +542,13 @@ Focused engine, Docker-control, and relay tests must discriminate aggregate
 copies, retained state, child writes, combined CPU, rootfs writes, expanded
 layers, OOM, deadline and resource termination. No global daemon change,
 provider call, or relaxation of the invocation ceiling is authorized.
+
+The launcher exports private candidate, status and workspace files to the
+explicit nonroot service UID/GID, including partial paths so cleanup can run
+after failure. Build and step observations share a closed `export_outcome`
+field. Unsupported generated state and explicit logical export-cap refusal
+retain the real child status; host copy/fsync failures remain infrastructure
+failures. Dependent steps cannot use unexported state. The project client must
+accept truthful forced-stop observations with an unknown signal and must reject
+synthetic exit codes, absent export facts and contradictory outcomes. These
+facts do not add project grading or lifecycle decisions to the shared runtime.
