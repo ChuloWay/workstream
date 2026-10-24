@@ -446,7 +446,7 @@ fn run_step(arguments: StepArguments) -> Result<()> {
     create_clean_directory(Path::new(ROOT), 0o700)?;
     mount_tmpfs(Path::new(ROOT), &arguments.root, 0o755, false)?;
     prepare_candidate_skeleton(Path::new(ROOT))?;
-    prepare_step_workspace(&arguments)?;
+    let visible_role_placeholders = prepare_step_workspace(&arguments)?;
     let export = open_export_directory()?;
     enter_root(Path::new(ROOT))?;
     make_parent_process()?;
@@ -464,7 +464,9 @@ fn run_step(arguments: StepArguments) -> Result<()> {
     let outcome = wait_for_child(child.pid)?;
     drain_descendants()?;
     require_no_child_setup_error(child.error)?;
+    env::set_current_dir("/")?;
     unmount_visible_roles(&arguments.visible_roles)?;
+    remove_visible_role_placeholders(&visible_role_placeholders)?;
     let mut export_failure = inspect_workspace(
         Path::new("/workspace"),
         arguments.workspace.bytes,
@@ -499,7 +501,7 @@ fn run_step(arguments: StepArguments) -> Result<()> {
     Ok(())
 }
 
-fn prepare_step_workspace(arguments: &StepArguments) -> Result<()> {
+fn prepare_step_workspace(arguments: &StepArguments) -> Result<Vec<PathBuf>> {
     let root = Path::new(ROOT);
     mount_tmpfs(&root.join("workspace"), &arguments.workspace, 0o700, false)?;
     change_owner(&root.join("workspace"), arguments.uid, arguments.gid)?;
@@ -510,11 +512,70 @@ fn prepare_step_workspace(arguments: &StepArguments) -> Result<()> {
     )?;
     mount_tmpfs(&root.join("tmp"), &arguments.temporary, 0o1777, true)?;
     mount_process_filesystems(root, &arguments.shared_memory)?;
+    let mut placeholders = Vec::new();
     for role in &arguments.visible_roles {
         let source = Path::new(INPUT_ROLES).join(&role.role);
         let destination = root.join("workspace").join(&role.destination);
-        require_safe_directory_beneath(&root.join("workspace"), &role.destination)?;
+        placeholders.extend(
+            prepare_visible_role_destination(
+                &root.join("workspace"),
+                &role.destination,
+                ExportOwner {
+                    uid: arguments.uid,
+                    gid: arguments.gid,
+                },
+            )?
+            .into_iter()
+            .map(|relative| Path::new("/workspace").join(relative)),
+        );
         bind_readonly(&source, &destination, true)?;
+    }
+    Ok(placeholders)
+}
+
+fn prepare_visible_role_destination(
+    workspace: &Path,
+    relative: &Path,
+    owner: ExportOwner,
+) -> Result<Vec<PathBuf>> {
+    require_directory_without_symlink(workspace)?;
+    let mut current = workspace.to_path_buf();
+    let mut current_relative = PathBuf::new();
+    let mut created = Vec::new();
+    let components = relative.components().collect::<Vec<_>>();
+    for (index, component) in components.iter().enumerate() {
+        let Component::Normal(name) = component else {
+            return Err(failure("unsafe visible role destination"));
+        };
+        current.push(name);
+        current_relative.push(name);
+        let final_component = index + 1 == components.len();
+        match fs::symlink_metadata(&current) {
+            Ok(metadata)
+                if !final_component
+                    && metadata.file_type().is_dir()
+                    && !metadata.file_type().is_symlink() => {}
+            Ok(_) if final_component => {
+                return Err(failure("visible role destination collides with workspace"));
+            }
+            Ok(_) => {
+                return Err(failure(
+                    "visible role destination is not an ordinary directory",
+                ))
+            }
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {
+                create_owned_directory(&current, 0o700, owner)?;
+                created.push(current_relative.clone());
+            }
+            Err(error) => return Err(error.into()),
+        }
+    }
+    Ok(created)
+}
+
+fn remove_visible_role_placeholders(placeholders: &[PathBuf]) -> Result<()> {
+    for placeholder in placeholders.iter().rev() {
+        fs::remove_dir(placeholder)?;
     }
     Ok(())
 }
@@ -2025,6 +2086,64 @@ mod tests {
             inspect_workspace(&root, 1024, 8).unwrap(),
             Some(ExportFailure::CapacityExceeded)
         );
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn visible_role_mountpoint_is_created_and_removed_beneath_workspace() {
+        let root = env::temp_dir().join(format!("workstream-launcher-role-{}", process::id()));
+        let _ = fs::remove_dir_all(&root);
+        let workspace = root.join("workspace");
+        fs::create_dir_all(workspace.join("existing")).unwrap();
+        let created = prepare_visible_role_destination(
+            &workspace,
+            Path::new("existing/roles/source"),
+            ExportOwner {
+                // SAFETY: effective IDs are read-only process attributes.
+                uid: unsafe { libc::geteuid() },
+                // SAFETY: effective IDs are read-only process attributes.
+                gid: unsafe { libc::getegid() },
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            created,
+            vec![
+                PathBuf::from("existing/roles"),
+                PathBuf::from("existing/roles/source")
+            ]
+        );
+        let created = created
+            .into_iter()
+            .map(|relative| workspace.join(relative))
+            .collect::<Vec<_>>();
+        remove_visible_role_placeholders(&created).unwrap();
+        assert!(workspace.join("existing").is_dir());
+        assert!(!workspace.join("existing/roles").exists());
+        fs::create_dir(workspace.join("collision")).unwrap();
+        assert!(prepare_visible_role_destination(
+            &workspace,
+            Path::new("collision"),
+            ExportOwner {
+                // SAFETY: effective IDs are read-only process attributes.
+                uid: unsafe { libc::geteuid() },
+                // SAFETY: effective IDs are read-only process attributes.
+                gid: unsafe { libc::getegid() },
+            },
+        )
+        .is_err());
+        symlink("/tmp", workspace.join("redirect")).unwrap();
+        assert!(prepare_visible_role_destination(
+            &workspace,
+            Path::new("redirect/source"),
+            ExportOwner {
+                // SAFETY: effective IDs are read-only process attributes.
+                uid: unsafe { libc::geteuid() },
+                // SAFETY: effective IDs are read-only process attributes.
+                gid: unsafe { libc::getegid() },
+            },
+        )
+        .is_err());
         fs::remove_dir_all(root).unwrap();
     }
 
