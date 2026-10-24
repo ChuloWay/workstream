@@ -36,6 +36,17 @@ def main():
         return int(subprocess.check_output(['systemctl', 'show', '--property=MainPID',
                                            '--value', args.unit], text=True))
 
+    def ready():
+        try:
+            response = exchange(config['socket_path'], {
+                'protocol_version': 'trusted_submission_intake.v1',
+                'operation': 'health', 'lease': None, 'payload': {},
+            })
+            return response['status'] == 'ok'
+        except (OSError, EOFError):
+            return False
+
+    wait_until(ready, 'intake node did not become ready')
     controller = pid()
     if controller <= 0:
         raise RuntimeError('controller is not active')
