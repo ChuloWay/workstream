@@ -4,9 +4,9 @@ use std::fs;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::Mutex;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 #[cfg(not(feature = "trial-docker-qualification"))]
@@ -303,24 +303,32 @@ fn backend_emits_offline_bounded_builder_and_socketless_candidate_specs() {
     assert_eq!(creates.len(), 2);
     let builder = &creates[0].arguments;
     assert!(builder.windows(2).any(|item| item == ["--network", "none"]));
-    assert!(builder
-        .windows(2)
-        .any(|item| item == ["--runtime", "runsc"]));
+    assert!(
+        builder
+            .windows(2)
+            .any(|item| item == ["--runtime", "runsc"])
+    );
     assert_eq!(
         builder.iter().filter(|item| *item == "--cap-add").count(),
         4
     );
     assert!(!builder.iter().any(|item| item == "--privileged"));
     assert!(!builder.iter().any(|item| item == "--mount"));
-    assert!(builder
-        .iter()
-        .any(|item| item == "--dockerfile=/workspace/environment/Containerfile"));
-    assert!(builder
-        .iter()
-        .any(|item| item == "--context=dir:///workspace/environment"));
-    assert!(!builder
-        .iter()
-        .any(|item| { item == "--dockerfile=/workspace/environment/environment/Containerfile" }));
+    assert!(
+        builder
+            .iter()
+            .any(|item| item == "--dockerfile=/workspace/environment/Containerfile")
+    );
+    assert!(
+        builder
+            .iter()
+            .any(|item| item == "--context=dir:///workspace/environment")
+    );
+    assert!(
+        !builder.iter().any(|item| {
+            item == "--dockerfile=/workspace/environment/environment/Containerfile"
+        })
+    );
     assert_eq!(creates[0].mounts.len(), 3);
     assert_eq!(
         creates[0].mounts[0].class,
@@ -332,9 +340,11 @@ fn backend_emits_offline_bounded_builder_and_socketless_candidate_specs() {
     assert!(!creates[0].mounts[2].readonly);
     let candidate = &creates[1].arguments;
     assert!(candidate.iter().any(|item| item == "--read-only"));
-    assert!(candidate
-        .windows(2)
-        .any(|item| item == ["--user", "65532:65532"]));
+    assert!(
+        candidate
+            .windows(2)
+            .any(|item| item == ["--user", "65532:65532"])
+    );
     assert!(!candidate.iter().any(|item| item.contains("docker.sock")));
     assert!(!candidate.iter().any(|item| item.contains("execution.sock")));
     assert!(!candidate.iter().any(|item| item.contains("model.sock")));
@@ -357,6 +367,98 @@ fn backend_emits_offline_bounded_builder_and_socketless_candidate_specs() {
         .cleanup(&format!("trial_{}", "a".repeat(32)), deadline)
         .unwrap();
     assert_eq!(backend.control.cleaned.lock().unwrap().len(), 1);
+}
+
+#[test]
+fn backend_projects_forced_causes_without_synthetic_exit_or_signal() {
+    let root = Root::new();
+    let context = root.child("context-forced");
+    let output = root.child("output-forced");
+    let backend = backend(&root);
+    let mut observations = backend.control.observations.lock().unwrap();
+    observations.clear();
+    for termination in [
+        RuntimeTermination::DeadlineExceeded,
+        RuntimeTermination::CpuExceeded,
+        RuntimeTermination::MemoryExceeded,
+        RuntimeTermination::DiskExceeded,
+    ] {
+        let mut value = observed(false);
+        value.termination = termination;
+        value.exit_code = None;
+        value.signal = None;
+        observations.push_back(value);
+    }
+    let mut invalid = observed(false);
+    invalid.termination = RuntimeTermination::DeadlineExceeded;
+    invalid.exit_code = Some(137);
+    observations.push_back(invalid);
+    drop(observations);
+
+    let deadline = Instant::now() + Duration::from_secs(2);
+    let cancelled = AtomicBool::new(false);
+    for (index, expected) in [
+        TrialOperationOutcome::DeadlineExceeded,
+        TrialOperationOutcome::CpuExceeded,
+        TrialOperationOutcome::MemoryExceeded,
+        TrialOperationOutcome::DiskExceeded,
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let result = backend
+            .build(
+                &SandboxBuildRequest {
+                    owner_id: format!("trial_{index:032x}"),
+                    context_root: context.clone(),
+                    context_relative: ".".into(),
+                    dockerfile_relative: "Dockerfile".into(),
+                    output_archive: output.join(format!("candidate-{index}.tar")),
+                    destination: format!("workstream-trial:{index:032x}"),
+                    platform: "linux/amd64".into(),
+                    resources: resources(),
+                    remaining_cpu_time_ms: 2_000,
+                    mutable_disk_bytes: 4096,
+                    mutable_entries: 10,
+                    timeout_ms: 1000,
+                    maximum_output_bytes: 4096,
+                    enforcement_overruns: overruns(),
+                },
+                deadline,
+                &cancelled,
+                &cancelled,
+            )
+            .unwrap();
+        assert_eq!(result.observation.outcome, expected);
+        assert_eq!(result.observation.exit_code, None);
+        assert_eq!(result.observation.signal, None);
+    }
+
+    let invalid = backend.build(
+        &SandboxBuildRequest {
+            owner_id: format!("trial_{}", "f".repeat(32)),
+            context_root: context,
+            context_relative: ".".into(),
+            dockerfile_relative: "Dockerfile".into(),
+            output_archive: output.join("invalid.tar"),
+            destination: format!("workstream-trial:{}", "f".repeat(32)),
+            platform: "linux/amd64".into(),
+            resources: resources(),
+            remaining_cpu_time_ms: 2_000,
+            mutable_disk_bytes: 4096,
+            mutable_entries: 10,
+            timeout_ms: 1000,
+            maximum_output_bytes: 4096,
+            enforcement_overruns: overruns(),
+        },
+        deadline,
+        &cancelled,
+        &cancelled,
+    );
+    assert_eq!(
+        invalid.unwrap_err().code,
+        TrialRelayFailure::ImplementationUnavailable
+    );
 }
 
 #[test]

@@ -1,4 +1,4 @@
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use std::fs;
 use std::io::{Read, Write};
@@ -517,10 +517,12 @@ fn assert_plan_rejected(mutator: impl FnOnce(&mut Value)) {
 #[test]
 fn completed_plan_publishes_runner_facts_only_after_confirmed_cleanup() {
     let started = start(true);
-    assert!(started
-        .relay
-        .mount_spec()
-        .contains("dst=/work/execution.sock"));
+    assert!(
+        started
+            .relay
+            .mount_spec()
+            .contains("dst=/work/execution.sock")
+    );
     assert!(started.relay.mount_spec().ends_with(",readonly"));
     let response = exchange(started.relay.socket_path(), &request(plan()));
     assert_eq!(response["outcome"], "completed");
@@ -868,14 +870,14 @@ fn observed_cpu_and_deadline_overruns_are_preserved_within_enforcement_caps() {
     let mut cpu = execution(true);
     cpu.steps[0].outcome = TrialOperationOutcome::CpuExceeded;
     cpu.steps[0].exit_code = None;
-    cpu.steps[0].signal = Some(9);
+    cpu.steps[0].signal = None;
     cpu.steps[0].cpu_time_ms = 5_001;
     assert_observed_limit_is_published(cpu, "cpu_exceeded");
 
     let mut deadline = execution(true);
     deadline.steps[0].outcome = TrialOperationOutcome::DeadlineExceeded;
     deadline.steps[0].exit_code = None;
-    deadline.steps[0].signal = Some(9);
+    deadline.steps[0].signal = None;
     deadline.steps[0].elapsed_ms = 850;
     assert_observed_limit_is_published(deadline, "deadline_exceeded");
 }

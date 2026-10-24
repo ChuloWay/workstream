@@ -552,13 +552,10 @@ fn materialize_projections(
             .collect::<Vec<_>>();
         copy_tree_filtered(&source, &destination, Path::new(""), &exclusions, budget)?;
         if projected
-            .insert(
-                projection.role.clone(),
-                MaterializedProjection {
-                    path: destination,
-                    destination_relative: projection.destination_relative.clone(),
-                },
-            )
+            .insert(projection.role.clone(), MaterializedProjection {
+                path: destination,
+                destination_relative: projection.destination_relative.clone(),
+            })
             .is_some()
         {
             return Err(implementation_failure());

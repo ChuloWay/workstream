@@ -3,7 +3,7 @@ use std::collections::VecDeque;
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -55,6 +55,9 @@ struct FakeBackend {
     build_requests: Mutex<Vec<SandboxBuildRequest>>,
     step_requests: Mutex<Vec<SandboxStepRequest>>,
     outcomes: Mutex<VecDeque<TrialOperationOutcome>>,
+    build_cpu_time_ms: AtomicU64,
+    step_cpu_time_ms: Mutex<VecDeque<u64>>,
+    step_extra_files: AtomicUsize,
 }
 
 impl TrialSandboxBackend for Arc<FakeBackend> {
@@ -86,9 +89,12 @@ impl TrialSandboxBackend for Arc<FakeBackend> {
         assert_eq!(request.context_relative, ".");
         assert_eq!(request.dockerfile_relative, "source/Containerfile");
         self.build_requests.lock().unwrap().push(request.clone());
-        Ok(SandboxBuildResult {
-            observation: build_observation(),
-        })
+        let mut observation = build_observation();
+        let cpu_time_ms = self.build_cpu_time_ms.load(Ordering::Relaxed);
+        if cpu_time_ms != 0 {
+            observation.cpu_time_ms = cpu_time_ms;
+        }
+        Ok(SandboxBuildResult { observation })
     }
 
     fn run_step(
@@ -103,10 +109,12 @@ impl TrialSandboxBackend for Arc<FakeBackend> {
         assert_eq!(request.visible_roles.len(), 1);
         assert_eq!(request.visible_roles[0].role, "protected");
         assert_eq!(request.visible_roles[0].destination_relative, "protected");
-        assert!(request
-            .workspace_root
-            .join("workspace/initial.txt")
-            .is_file());
+        assert!(
+            request
+                .workspace_root
+                .join("workspace/initial.txt")
+                .is_file()
+        );
         assert_eq!(request.command, ["/candidate/check", "case-a"]);
         let outcome = self
             .outcomes
@@ -124,6 +132,19 @@ impl TrialSandboxBackend for Arc<FakeBackend> {
         if request.slot_id == "slot_b" {
             assert!(request.workspace_root.join("interrupted.state").is_file());
         }
+        for index in 0..self.step_extra_files.load(Ordering::Relaxed) {
+            fs::write(
+                request.workspace_root.join(format!("child-write-{index}")),
+                b"x",
+            )
+            .unwrap();
+        }
+        let cpu_time_ms = self
+            .step_cpu_time_ms
+            .lock()
+            .unwrap()
+            .pop_front()
+            .unwrap_or(10);
         self.step_requests.lock().unwrap().push(request.clone());
         Ok(SandboxStepResult {
             observation: TrialStepObservation {
@@ -145,7 +166,7 @@ impl TrialSandboxBackend for Arc<FakeBackend> {
                 workspace_before_sha256: digest('1'),
                 workspace_after_sha256: digest('2'),
                 elapsed_ms: 20,
-                cpu_time_ms: 10,
+                cpu_time_ms,
                 peak_memory_bytes: 1024,
                 peak_pids: 1,
                 written_bytes: 10,
@@ -373,10 +394,12 @@ fn engine_projects_only_authorized_roles_runs_exact_plan_and_cleans_owned_scratc
     assert_eq!(backend.steps.load(Ordering::Relaxed), 1);
     assert_eq!(backend.cleanups.load(Ordering::Relaxed), 1);
     assert_eq!(execution.material_inventory_digests.len(), 3);
-    assert!(fs::read_dir(&context.trial_scratch_root)
-        .unwrap()
-        .next()
-        .is_none());
+    assert!(
+        fs::read_dir(&context.trial_scratch_root)
+            .unwrap()
+            .next()
+            .is_none()
+    );
 }
 
 #[test]
@@ -484,4 +507,117 @@ fn deliberate_work_failure_can_retain_state_but_resource_failure_cannot() {
         TrialOperationOutcome::DependencySkipped
     );
     assert_eq!(backend.steps.load(Ordering::Relaxed), 1);
+}
+
+#[test]
+fn projections_and_build_context_share_one_entry_budget() {
+    let root = Root::new();
+    let context = context(&root);
+    let mut plan = plan();
+    // Each former phase-local copy fits within ten entries, but their retained
+    // aggregate does not. The backend must never receive a build request.
+    plan.resources.maximum_entries = 10;
+    let backend = Arc::new(FakeBackend::default());
+    let failure = GenericTrialEngine::new(backend.clone())
+        .execute(
+            &context,
+            &plan,
+            Instant::now() + Duration::from_secs(2),
+            &AtomicBool::new(false),
+            &AtomicBool::new(false),
+        )
+        .unwrap_err();
+    assert_eq!(failure.code, TrialRelayFailure::CapacityExceeded);
+    assert_eq!(backend.builds.load(Ordering::Relaxed), 0);
+    assert_eq!(backend.cleanups.load(Ordering::Relaxed), 1);
+}
+
+#[test]
+fn retained_workspace_copies_remain_charged_to_the_invocation() {
+    let root = Root::new();
+    let (context, mut plan) = continuation_context_and_plan(&root);
+    plan.resources.maximum_entries = 24;
+    let backend = Arc::new(FakeBackend::default());
+    backend
+        .outcomes
+        .lock()
+        .unwrap()
+        .push_back(TrialOperationOutcome::ExitNonzero);
+    let failure = GenericTrialEngine::new(backend.clone())
+        .execute(
+            &context,
+            &plan,
+            Instant::now() + Duration::from_secs(2),
+            &AtomicBool::new(false),
+            &AtomicBool::new(false),
+        )
+        .unwrap_err();
+    assert_eq!(failure.code, TrialRelayFailure::CapacityExceeded);
+    assert_eq!(backend.steps.load(Ordering::Relaxed), 1);
+    assert_eq!(backend.cleanups.load(Ordering::Relaxed), 1);
+}
+
+#[test]
+fn child_workspace_writes_cannot_exceed_the_global_remaining_budget() {
+    let root = Root::new();
+    let context = context(&root);
+    let backend = Arc::new(FakeBackend::default());
+    backend.step_extra_files.store(64, Ordering::Relaxed);
+    let failure = GenericTrialEngine::new(backend.clone())
+        .execute(
+            &context,
+            &plan(),
+            Instant::now() + Duration::from_secs(2),
+            &AtomicBool::new(false),
+            &AtomicBool::new(false),
+        )
+        .unwrap_err();
+    assert_eq!(failure.code, TrialRelayFailure::CapacityExceeded);
+    assert_eq!(backend.steps.load(Ordering::Relaxed), 1);
+    assert_eq!(backend.cleanups.load(Ordering::Relaxed), 1);
+}
+
+#[test]
+fn sequential_operations_receive_only_the_remaining_cpu_time() {
+    let root = Root::new();
+    let (mut context, mut plan) = continuation_context_and_plan(&root);
+    context.profile.maximum_steps = 3;
+    context.profile.slot_templates[0].maximum_occurrences = 3;
+    plan.steps.push(TrialStep {
+        slot_id: "slot_c".into(),
+        slot_kind: "generic_run".into(),
+        operation: "run".into(),
+        state_source: "fresh".into(),
+        visible_roles: vec!["protected".into()],
+        command: vec!["/candidate/check".into(), "case-a".into()],
+        working_directory: ".".into(),
+        timeout_ms: 500,
+    });
+    let backend = Arc::new(FakeBackend::default());
+    backend.step_cpu_time_ms.lock().unwrap().extend([1000, 951]);
+    backend.outcomes.lock().unwrap().extend([
+        TrialOperationOutcome::ExitNonzero,
+        TrialOperationOutcome::CpuExceeded,
+    ]);
+    let execution = GenericTrialEngine::new(backend.clone())
+        .execute(
+            &context,
+            &plan,
+            Instant::now() + Duration::from_secs(2),
+            &AtomicBool::new(false),
+            &AtomicBool::new(false),
+        )
+        .unwrap();
+    let requests = backend.step_requests.lock().unwrap();
+    assert_eq!(requests.len(), 2);
+    assert_eq!(requests[0].remaining_cpu_time_ms, 1950);
+    assert_eq!(requests[1].remaining_cpu_time_ms, 950);
+    assert_eq!(
+        execution.steps[1].outcome,
+        TrialOperationOutcome::CpuExceeded
+    );
+    assert_eq!(
+        execution.steps[2].outcome,
+        TrialOperationOutcome::DependencySkipped
+    );
 }
