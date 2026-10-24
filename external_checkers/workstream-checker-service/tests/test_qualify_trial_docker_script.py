@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -74,6 +75,62 @@ def _prepare_state(state: Path) -> None:
         "base_manifest": declared["BASE_PLATFORM_IMAGE"],
     }
     (state / "prepared-assets.json").write_text(json.dumps(value), encoding="utf-8")
+
+
+def _install_success_fakes(root: Path) -> Path:
+    fake_bin = root / "bin"
+    fake_bin.mkdir()
+    qualifier = root / "qualify-trial-docker"
+    launcher = root / "workstream-trial-launcher"
+    _write_executable(qualifier, "#!/bin/sh\nexit 0\n")
+    _write_executable(launcher, "#!/bin/sh\nexit 0\n")
+    _write_executable(
+        fake_bin / "cargo",
+        f"""#!/bin/sh
+case "$*" in
+  *"--bin qualify-trial-docker"*) executable={qualifier} ;;
+  *"--bin workstream-trial-launcher"*) executable={launcher} ;;
+  *) exit 91 ;;
+esac
+printf '{{"reason":"compiler-artifact","target":{{"name":"%s","kind":["bin"]}},"executable":"%s"}}\n' "$(basename "$executable")" "$executable"
+""",
+    )
+    _write_executable(fake_bin / "readelf", "#!/bin/sh\nexit 0\n")
+    _write_executable(
+        fake_bin / "docker",
+        """#!/bin/sh
+if [ "$1" = inspect ]; then
+  printf '[{"Config":{"Labels":{"org.workstream.pilot00.run":"qualification-test"}},"State":{"Running":true},"Mounts":[{"Destination":"/workstream-state","Source":"%s"}]}]\n' "$WORKSTREAM_TRIAL_QUALIFICATION_STATE_ROOT"
+  exit 0
+fi
+case "$*" in
+  *"qualification-bin/qualify-trial-docker"*)
+    mkdir -p "$WORKSTREAM_TRIAL_QUALIFICATION_STATE_ROOT/results"
+    printf '{"schema_version":"workstream.trial_docker_qualification.v1"}\n' > "$WORKSTREAM_TRIAL_QUALIFICATION_STATE_ROOT/results/trial-docker-qualification.json"
+    ;;
+  *"rm -f -- /workstream-state/results/trial-docker-qualification.json"*)
+    rm -f "$WORKSTREAM_TRIAL_QUALIFICATION_STATE_ROOT/results/trial-docker-qualification.json"
+    ;;
+esac
+exit 0
+""",
+    )
+    return fake_bin
+
+
+def _install_python_failure_injector(fake_bin: Path) -> None:
+    _write_executable(
+        fake_bin / "python3",
+        """#!/bin/sh
+program="$(mktemp)"
+trap 'rm -f "$program"' EXIT
+cat > "$program"
+if [ "$1" = - ] && [ "${2:-}" = "${FAIL_AFTER_LINK_RESULT:-}" ]; then
+  printf '\nraise SystemExit("injected-post-link-failure")\n' >> "$program"
+fi
+"$REAL_PYTHON" "$@" < "$program"
+""",
+    )
 
 
 class TrialQualifierWrapperTest(unittest.TestCase):
@@ -173,6 +230,72 @@ exit 0
             self.assertEqual(result.returncode, 23, result.stdout + result.stderr)
             self.assertIn("simulated-cargo-failure", prefix.with_suffix(".log").read_text())
             self.assertEqual(prefix.with_suffix(".exit").read_text(), "23\n")
+            self.assertFalse(prefix.with_suffix(".json").exists())
+            self.assertFalse((state / "results/trial-docker-qualification.json").exists())
+
+    def test_success_publishes_exact_bound_summary_after_cleanup(self) -> None:
+        head, tree = _source_identity()
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            state = root / "state"
+            prefix = root / "success"
+            _prepare_state(state)
+            fake_bin = _install_success_fakes(root)
+            result = subprocess.run(
+                [SCRIPT],
+                env=_environment(
+                    state=state,
+                    prefix=prefix,
+                    head=head,
+                    tree=tree,
+                    path=f"{fake_bin}:{os.environ['PATH']}",
+                ),
+                cwd=ROOT,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertEqual(prefix.with_suffix(".exit").read_text(), "0\n")
+            summary = json.loads(prefix.with_suffix(".json").read_text())
+            self.assertEqual(summary["source"], {"head": head, "tree": tree})
+            self.assertEqual(summary["invocation_nonce"], "wrapper-test")
+            self.assertTrue(summary["cleanup_confirmed"])
+            self.assertEqual(
+                summary["qualification"]["schema_version"],
+                "workstream.trial_docker_qualification.v1",
+            )
+            self.assertFalse((state / "results/trial-docker-qualification.json").exists())
+
+    def test_failure_after_atomic_link_retracts_success_json(self) -> None:
+        head, tree = _source_identity()
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            state = root / "state"
+            prefix = root / "post-link-failure"
+            _prepare_state(state)
+            fake_bin = _install_success_fakes(root)
+            _install_python_failure_injector(fake_bin)
+            environment = _environment(
+                state=state,
+                prefix=prefix,
+                head=head,
+                tree=tree,
+                path=f"{fake_bin}:{os.environ['PATH']}",
+            )
+            environment["REAL_PYTHON"] = sys.executable
+            environment["FAIL_AFTER_LINK_RESULT"] = str(prefix.with_suffix(".json"))
+            result = subprocess.run(
+                [SCRIPT],
+                env=environment,
+                cwd=ROOT,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("injected-post-link-failure", prefix.with_suffix(".log").read_text())
+            self.assertNotEqual(prefix.with_suffix(".exit").read_text().strip(), "0")
             self.assertFalse(prefix.with_suffix(".json").exists())
             self.assertFalse((state / "results/trial-docker-qualification.json").exists())
 

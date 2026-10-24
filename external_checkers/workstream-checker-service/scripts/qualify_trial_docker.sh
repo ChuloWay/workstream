@@ -25,7 +25,7 @@ LAUNCHER_PROGRAM_HEADERS=""
 LAUNCHER_DYNAMIC=""
 INNER_READY=0
 CLEANUP_COMPLETE=0
-SUMMARY_PUBLISHED=0
+SUMMARY_PUBLICATION_STARTED=0
 
 source_identity_matches() {
   local actual_head actual_tree worktree_status
@@ -115,7 +115,7 @@ PY
     echo "qualification could not write its exit sidecar" >&2
     status=1
   fi
-  if [[ "${SUMMARY_PUBLISHED}" == 1 && "${status}" != 0 ]]; then
+  if [[ "${SUMMARY_PUBLICATION_STARTED}" == 1 && "${status}" != 0 ]]; then
     if ! python3 - "${RESULT_JSON}" <<'PY'
 import os
 import sys
@@ -162,6 +162,9 @@ if len(parents) != 1:
 parent = parents.pop()
 if parent.resolve(strict=True) != parent:
     raise SystemExit("qualification evidence directory must be canonical")
+parent_stat = parent.stat()
+if parent_stat.st_uid != os.geteuid() or parent_stat.st_mode & 0o077:
+    raise SystemExit("qualification evidence directory must be private and caller-owned")
 if any(os.path.lexists(path) for path in (log_path, exit_path, result_path)):
     raise SystemExit("qualification evidence prefix already exists")
 flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
@@ -367,6 +370,7 @@ cleanup_owned_resources
 CLEANUP_COMPLETE=1
 source_identity_matches
 
+SUMMARY_PUBLICATION_STARTED=1
 python3 - \
   "${RESULT_JSON}" \
   "${INVOCATION_NONCE}" \
@@ -447,4 +451,3 @@ try:
 finally:
     os.close(directory)
 PY
-SUMMARY_PUBLISHED=1
