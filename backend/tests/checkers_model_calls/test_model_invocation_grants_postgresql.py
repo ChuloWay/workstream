@@ -119,7 +119,7 @@ class GrantBoundaries:
                 "action_id,permission_id,project_id,resource_type,resource_id,"
                 "denial_code,after_facts) values "
                 "(:id,'authority','SensitiveAuthorizationAllowed','actor_profile',:actor,"
-                ":action,'checker.model_call.grant',:project,null,null,"
+                ":action,'checker.model_call.grant',null,null,null,"
                 "null,cast(:after as jsonb)) "
                 "on conflict(id) do nothing"
             ),
@@ -127,7 +127,6 @@ class GrantBoundaries:
                 "id": evidence.evidence_id,
                 "actor": str(actor_id),
                 "action": self._action,
-                "project": str(resource.scope_project_id),
                 "after": json.dumps(
                     {
                         "allowed": True,

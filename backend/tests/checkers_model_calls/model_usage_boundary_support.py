@@ -240,7 +240,7 @@ class DatabaseBoundaryPorts:
         resource_type = None
         resource_id = None
         if resource is not None:
-            project_id = getattr(resource, "scope_project_id", None) or getattr(
+            resource_project_id = getattr(resource, "scope_project_id", None) or getattr(
                 resource, "project_id", None
             )
             if resource_digest is None:
@@ -248,7 +248,11 @@ class DatabaseBoundaryPorts:
             target = project_authority_audit_target(
                 resource,
                 resource.action_id,
-                matched_scope_project_id=project_id,
+                matched_scope_project_id=(
+                    resource_project_id
+                    if resource.resource_type == "project_model_administration"
+                    else None
+                ),
             )
             if target is not None:
                 project_id, resource_type, resource_id, _, _ = target
