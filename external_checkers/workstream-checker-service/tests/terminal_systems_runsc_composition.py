@@ -47,6 +47,12 @@ from app.interfaces.checker_model_provider import (
 from app.interfaces.project_agents import CapabilityParameter, CheckSpecification
 from app.modules.actors.api import ServiceIdentity
 from app.modules.artifacts.preparation import HARD_MAXIMUM_ARTIFACT_BYTES
+from app.modules.artifacts.models import (
+    ArtifactBinding,
+    ArtifactContent,
+    ArtifactPutAttempt,
+    ArtifactVerificationReceipt,
+)
 from app.modules.checkers.api.external import (
     ExternalCheckerSchema,
     external_checker_json_hash,
@@ -74,7 +80,9 @@ from tests.checkers.execution.support import (
 )
 from tests.checkers.external.support import post_registry_spec
 from tests.checkers.external.test_trial_evidence import _owner
-from tests.checkers.external.test_revision_materialization import DiagnosticMaterialization
+from tests.checkers.external.test_revision_materialization import (
+    DiagnosticMaterialization,
+)
 from tests.checkers.external.test_trial_policy import trial_specification
 from tests.checkers_model_calls.test_composed_execution import (
     model_review_specification,
@@ -91,7 +99,8 @@ from tests.test_checker_materialization import _limits
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 PROJECT_MODEL = REPOSITORY_ROOT / "pilots/terminal_systems/checkers/post/model"
 PACKAGE_ROOT = (
-    REPOSITORY_ROOT / "pilots/terminal_systems/checkers/post/qualification/runtime_package"
+    REPOSITORY_ROOT
+    / "pilots/terminal_systems/checkers/post/qualification/runtime_package"
 )
 sys.path.insert(0, str(PROJECT_MODEL))
 from trial_plan import (  # noqa: E402
@@ -128,13 +137,20 @@ class DiagnosticTrialProxy(CheckerTrialProxy):
         except Exception as error:
             print("trial callback error:", type(error).__name__, str(error)[:1_000])
             raise
-        print("trial callback outcome:", operation, reply.get("outcome"), reply.get("failure_code"))
+        print(
+            "trial callback outcome:",
+            operation,
+            reply.get("outcome"),
+            reply.get("failure_code"),
+        )
         return reply
 
 
 REQUIREMENT = "runtime_environment_and_verification_trials"
 PROFILE_ID = UUID("018f6f49-66b8-7d2a-bf4d-0e2eeaa00493")
-ALPINE_DIGEST = "sha256:c64c687cbea9300178b30c95835354e34c4e4febc4badfe27102879de0483b5e"
+ALPINE_DIGEST = (
+    "sha256:c64c687cbea9300178b30c95835354e34c4e4febc4badfe27102879de0483b5e"
+)
 
 
 def _required_environment() -> dict[str, str]:
@@ -153,10 +169,96 @@ def _required_environment() -> dict[str, str]:
         "WORKSTREAM_TS_RUNSC_BUILDER_MANIFEST",
         "WORKSTREAM_TS_RUNSC_CACHE_DIGEST",
         "WORKSTREAM_TS_RUNSC_ENGINE_DIGEST",
+        "WORKSTREAM_TS_RUNSC_LAUNCHER_PATH",
+        "WORKSTREAM_TS_RUNSC_LAUNCHER_DIGEST",
+        "WORKSTREAM_TS_RUNSC_SUMMARY_PATH",
     )
     values = {name: os.environ.get(name, "") for name in names}
     assert all(values.values()), f"qualification environment incomplete: {values}"
     return values
+
+
+async def _retained_trial_summary(session, retained, receipts):
+    """Retain exact verified content/binding identities without provider coordinates."""
+    rows = tuple(
+        await session.execute(
+            select(
+                ArtifactBinding,
+                ArtifactContent,
+                ArtifactPutAttempt,
+                ArtifactVerificationReceipt,
+            )
+            .join(ArtifactContent, ArtifactContent.id == ArtifactBinding.content_id)
+            .join(
+                ArtifactPutAttempt,
+                ArtifactPutAttempt.id == ArtifactBinding.put_attempt_id,
+            )
+            .join(
+                ArtifactVerificationReceipt,
+                ArtifactVerificationReceipt.id
+                == ArtifactBinding.verification_receipt_id,
+            )
+            .where(
+                ArtifactBinding.resource_type == "checker_trial_evidence",
+                ArtifactBinding.resource_id.in_([item.id for item in retained]),
+                ArtifactBinding.logical_role == "trial_receipt",
+            )
+        )
+    )
+    assert len(rows) == len(retained) == len(receipts) == 2
+    bindings = {
+        binding.resource_id: (binding, content, attempt, verification)
+        for binding, content, attempt, verification in rows
+    }
+    assert len(bindings) == 2
+    by_digest = {external_checker_json_hash(receipt): receipt for receipt in receipts}
+    result = []
+    for item in sorted(retained, key=lambda item: item.id):
+        binding, content, attempt, verification = bindings[item.id]
+        assert binding.project_id == item.project_id
+        assert binding.scope_version == 1 and binding.supersedes_binding_id is None
+        assert binding.put_attempt_id and binding.verification_receipt_id
+        assert attempt.checker_trial_evidence_id == item.id
+        assert (
+            attempt.status == "object_confirmed"
+            and attempt.checker_output_custody_sealed
+        )
+        assert verification.outcome == "verified"
+        assert (
+            content.sha256
+            == item.content_sha256
+            == attempt.sha256
+            == verification.observed_sha256
+        )
+        assert (
+            content.byte_count == attempt.byte_count == verification.observed_byte_count
+        )
+        assert content.media_type == attempt.media_type == "application/json"
+        receipt = by_digest[item.content_sha256]
+        result.append(
+            {
+                "trial_evidence_id": str(item.id),
+                "address_digest": item.address_digest,
+                "requirement_id": receipt["originating_identity"]["requirement_id"],
+                "receipt_digest": item.content_sha256,
+                "artifact_binding_id": str(binding.id),
+                "artifact_content_id": str(content.id),
+                "artifact_byte_count": content.byte_count,
+                "put_attempt_id": str(binding.put_attempt_id),
+                "verification_receipt_id": str(binding.verification_receipt_id),
+                "candidate_image_digest": receipt["execution"]["build"][
+                    "candidate_image_digest"
+                ],
+                "candidate_archive_digest": receipt["execution"]["build"][
+                    "candidate_archive_digest"
+                ],
+                "step_outcomes": {
+                    step["slot_id"]: step["outcome"]
+                    for step in receipt["execution"]["steps"]
+                },
+            }
+        )
+    return result
 
 
 def _qualification_archive(evidence_path: str, _project_id) -> bytes:
@@ -483,7 +585,9 @@ def _provider_output(prompt: str, index: int, observations: list[dict]) -> str:
     )
 
 
-def _wait_for_socket(path: Path, process: subprocess.Popen, timeout: float = 30.0) -> None:
+def _wait_for_socket(
+    path: Path, process: subprocess.Popen, timeout: float = 30.0
+) -> None:
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         if process.poll() is not None:
@@ -525,7 +629,9 @@ async def test_production_service_executes_project_trial_under_runsc_with_real_c
     ).strip()
     assert builder_image_id == env["WORKSTREAM_TS_RUNSC_BUILDER_ID"]
     monkeypatch.setattr(material_helpers, "archive_with_modes", _qualification_archive)
-    await admin_access.signed.grant(admin_access.admin, admin_access.target, role="operator")
+    await admin_access.signed.grant(
+        admin_access.admin, admin_access.target, role="operator"
+    )
     profile, projection = _trial_authority(env)
     _trial_authority(env, revision=True)
     registry_spec, trial_values = _registry_spec(
@@ -599,8 +705,14 @@ async def test_production_service_executes_project_trial_under_runsc_with_real_c
                 ),
             )
             for requirement_id, statement in (
-                (AUTHOR_REQUIREMENT, "Compare author claims with authenticated trial evidence."),
-                (REQUIREMENT, "Evaluate runtime and verification behavior in isolated trials."),
+                (
+                    AUTHOR_REQUIREMENT,
+                    "Compare author claims with authenticated trial evidence.",
+                ),
+                (
+                    REQUIREMENT,
+                    "Evaluate runtime and verification behavior in isolated trials.",
+                ),
             )
         )
 
@@ -631,22 +743,29 @@ async def test_production_service_executes_project_trial_under_runsc_with_real_c
         ),
     ) as h:
         h.service = DiagnosticMaterialization(h.service)
-        await provision_post_submit_service(h.factory, ServiceIdentity.ARTIFACT_CHECKER_OUTPUT)
+        await provision_post_submit_service(
+            h.factory, ServiceIdentity.ARTIFACT_CHECKER_OUTPUT
+        )
         assert len(h.request.policy.entries) == 2
         assert {
             entry.requirement_id: entry.configuration["check"]
             for entry in h.request.policy.entries
         } == {AUTHOR_REQUIREMENT: AUTHOR_REQUIREMENT, REQUIREMENT: REQUIREMENT}
-        assert len(
-            {
-                (
-                    entry.configuration["trial_profile_digest"],
-                    entry.configuration["trial_projection_digest"],
-                )
-                for entry in h.request.policy.entries
-            }
-        ) == 1
-        assert len({entry.configuration_sha256 for entry in h.request.policy.entries}) == 2
+        assert (
+            len(
+                {
+                    (
+                        entry.configuration["trial_profile_digest"],
+                        entry.configuration["trial_projection_digest"],
+                    )
+                    for entry in h.request.policy.entries
+                }
+            )
+            == 1
+        )
+        assert (
+            len({entry.configuration_sha256 for entry in h.request.policy.entries}) == 2
+        )
         manifest = _manifest(h.request.policy.entries, profile, projection)
         manifest_bytes = json.dumps(
             manifest, sort_keys=True, separators=(",", ":"), ensure_ascii=False
@@ -679,7 +798,9 @@ async def test_production_service_executes_project_trial_under_runsc_with_real_c
                 )
 
             async def recover(self, _reference):
-                raise AssertionError("completed controlled calls must use retained responses")
+                raise AssertionError(
+                    "completed controlled calls must use retained responses"
+                )
 
         @asynccontextmanager
         async def provider(_profile):
@@ -776,7 +897,9 @@ async def test_production_service_executes_project_trial_under_runsc_with_real_c
             "cache": [
                 {
                     "repository": env["WORKSTREAM_TS_RUNSC_CHECKER_REPOSITORY"],
-                    "platform_manifest_digest": env["WORKSTREAM_TS_RUNSC_CHECKER_DIGEST"],
+                    "platform_manifest_digest": env[
+                        "WORKSTREAM_TS_RUNSC_CHECKER_DIGEST"
+                    ],
                     "platform_manifest_media_type": "application/vnd.docker.distribution.manifest.v2+json",
                     "platform_manifest_byte_count": 1,
                     "operating_system": "linux",
@@ -835,7 +958,11 @@ async def test_production_service_executes_project_trial_under_runsc_with_real_c
                     ),
                 )
                 result = await executor.evaluate_post_submission(h.request)
-            assert result.outcome == "completed", (result, len(creates), len(observations))
+            assert result.outcome == "completed", (
+                result,
+                len(creates),
+                len(observations),
+            )
             assert len(result.execution.external_members) == 2
             assert {
                 member.requirement_id: (member.result.outcome, member.result.verdict)
@@ -848,7 +975,8 @@ async def test_production_service_executes_project_trial_under_runsc_with_real_c
             receipts = [item["receipt"] for item in observations if "receipt" in item]
             assert len(receipts) == 2
             assert {
-                receipt["originating_identity"]["requirement_id"] for receipt in receipts
+                receipt["originating_identity"]["requirement_id"]
+                for receipt in receipts
             } == {AUTHOR_REQUIREMENT, REQUIREMENT}
             for receipt in receipts:
                 assert receipt["plan_completed"] is True
@@ -870,11 +998,18 @@ async def test_production_service_executes_project_trial_under_runsc_with_real_c
                     execution["trusted_launcher_digest"]
                     == env["WORKSTREAM_TS_RUNSC_LAUNCHER_DIGEST"]
                 )
-                assert execution["offline_cache_digest"] == env["WORKSTREAM_TS_RUNSC_CACHE_DIGEST"]
+                assert (
+                    execution["offline_cache_digest"]
+                    == env["WORKSTREAM_TS_RUNSC_CACHE_DIGEST"]
+                )
                 assert execution["base_image_digests"] == [ALPINE_DIGEST]
                 assert execution["build"]["outcome"] == "succeeded"
-                assert execution["build"]["candidate_image_digest"].startswith("sha256:")
-                outcomes = {item["slot_id"]: item["outcome"] for item in execution["steps"]}
+                assert execution["build"]["candidate_image_digest"].startswith(
+                    "sha256:"
+                )
+                outcomes = {
+                    item["slot_id"]: item["outcome"] for item in execution["steps"]
+                }
                 assert len(outcomes) == 17
                 assert outcomes["starter_verification"] == "exit_nonzero"
                 assert outcomes["reference_verify_1"] == "succeeded"
@@ -891,13 +1026,29 @@ async def test_production_service_executes_project_trial_under_runsc_with_real_c
                 effects = tuple(await session.scalars(select(ModelUsageEffect)))
                 assert len(effects) == 4
                 assert all(item.state == "completed" for item in effects)
-                assert all(UUID(item.request_binding_id).version == 7 for item in effects)
-                assert all(UUID(item.response_binding_id).version == 7 for item in effects)
+                assert all(
+                    UUID(item.request_binding_id).version == 7 for item in effects
+                )
+                assert all(
+                    UUID(item.response_binding_id).version == 7 for item in effects
+                )
                 retained = tuple(await session.scalars(select(CheckerTrialEvidence)))
                 assert len(retained) == 2
                 assert {item.content_sha256 for item in retained} == {
                     external_checker_json_hash(receipt) for receipt in receipts
                 }
+                trial_summary = await _retained_trial_summary(
+                    session, retained, receipts
+                )
+                model_summary = [
+                    {
+                        "effect_id": str(item.id),
+                        "request_binding_id": str(item.request_binding_id),
+                        "response_binding_id": str(item.response_binding_id),
+                        "settled_nanodollars": item.settled_nanodollars,
+                    }
+                    for item in sorted(effects, key=lambda item: item.id)
+                ]
             for directory in ("trial-relay", "trial-scratch", "trial-runtime"):
                 assert list((root / directory).iterdir()) == []
             checkers = subprocess.check_output(
@@ -957,4 +1108,53 @@ async def test_production_service_executes_project_trial_under_runsc_with_real_c
             if diagnostic:
                 print("Rust service diagnostic:", diagnostic[-16_384:])
             if service is not None and service.returncode not in {0, -15, 143}:
-                raise AssertionError((root / "service.stderr").read_text(encoding="utf-8"))
+                raise AssertionError(
+                    (root / "service.stderr").read_text(encoding="utf-8")
+                )
+    summary = {
+        "schema_version": "workstream.terminal_systems_composition_evidence.v1",
+        "provider_mode": "controlled",
+        "guide_to_contribution_proven": False,
+        "image": {
+            "digest": env["WORKSTREAM_TS_RUNSC_CHECKER_DIGEST"],
+            "id": env["WORKSTREAM_TS_RUNSC_CHECKER_ID"],
+        },
+        "profile": {
+            "id": str(profile.selector.profile_id),
+            "version": profile.selector.profile_version,
+            "digest": profile.selector.profile_digest,
+        },
+        "projection": {
+            "id": str(projection.selector.projection_id),
+            "version": projection.selector.projection_version,
+            "digest": projection.selector.projection_digest,
+        },
+        "authority_manifest_digest": manifest_digest,
+        "runtime": {
+            "platform": profile.platform,
+            "platform_identity_digest": env["WORKSTREAM_TS_RUNSC_PLATFORM_IDENTITY"],
+            "outer_configuration_digest": env["WORKSTREAM_TS_RUNSC_DAEMON_DIGEST"],
+            "child_configuration_digest": profile.child_runtime_config_digest,
+            "engine_digest": env["WORKSTREAM_TS_RUNSC_ENGINE_DIGEST"],
+            "launcher_digest": env["WORKSTREAM_TS_RUNSC_LAUNCHER_DIGEST"],
+            "builder_image_id": env["WORKSTREAM_TS_RUNSC_BUILDER_ID"],
+            "builder_manifest": env["WORKSTREAM_TS_RUNSC_BUILDER_MANIFEST"],
+            "offline_cache_digest": env["WORKSTREAM_TS_RUNSC_CACHE_DIGEST"],
+            "base_image_digests": list(profile.approved_base_digests),
+        },
+        "model_effects": model_summary,
+        "trials": trial_summary,
+        "replay_additional_provider_calls": len(creates) - 4,
+        "owned_runtime_resources_removed": True,
+    }
+    encoded = json.dumps(
+        summary, sort_keys=True, separators=(",", ":"), allow_nan=False
+    ).encode()
+    assert len(encoded) <= 64 * 1024
+    summary_path = Path(env["WORKSTREAM_TS_RUNSC_SUMMARY_PATH"])
+    assert summary_path.is_absolute() and root not in summary_path.parents
+    descriptor = os.open(summary_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(descriptor, "wb") as output:
+        output.write(encoded)
+        output.flush()
+        os.fsync(output.fileno())
