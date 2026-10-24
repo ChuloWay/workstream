@@ -259,6 +259,140 @@ async def test_installed_mcp_preserves_policy_lineage_authority_and_replay() -> 
                     status=403,
                     code="permission_not_granted",
                 )
+
+                await _mcp(
+                    mcp_url,
+                    tokens["admin"],
+                    "workstream_admin_grants_issue",
+                    {
+                        "body": {
+                            "target_actor_profile_id": profiles["manager"]["actor_profile_id"],
+                            "role": "finance_authority",
+                            "scope_type": "project",
+                            "scope_project_id": project["id"],
+                            "reason": "Authorize contribution policy MCP proof",
+                        },
+                        "idempotency_key": str(uuid4()),
+                    },
+                )
+                contribution_create = {
+                    "project_id": project["id"],
+                    "body": {"name": "Installed MCP contribution policy"},
+                    "idempotency_key": str(uuid4()),
+                }
+                contribution_policy = await _mcp(
+                    mcp_url,
+                    tokens["manager"],
+                    "workstream_contribution_policy_create",
+                    contribution_create,
+                )
+                policy_id = contribution_policy["contribution_policy_id"]
+                version_id = contribution_policy["contribution_policy_version_id"]
+                assert await _mcp(
+                    mcp_url,
+                    tokens["manager"],
+                    "workstream_contribution_policy_current_get",
+                    {"project_id": project["id"]},
+                ) == {
+                    "project_id": project["id"],
+                    "contribution_policy_id": policy_id,
+                    "current_published_version_id": None,
+                    "open_draft_version_id": version_id,
+                }
+                listed = await _mcp(
+                    mcp_url,
+                    tokens["manager"],
+                    "workstream_contribution_policies_list",
+                    {"project_id": project["id"], "limit": 10},
+                )
+                assert [item["contribution_policy_version_id"] for item in listed["items"]] == [
+                    version_id
+                ]
+                rules = {
+                    "rules": [
+                        {
+                            "contribution_type": contribution_type,
+                            "compensation_mode": "unpaid",
+                            "definitions": [],
+                        }
+                        for contribution_type in (
+                            "accepted_submission",
+                            "completed_review",
+                        )
+                    ]
+                }
+                base = {
+                    "project_id": project["id"],
+                    "policy_id": policy_id,
+                    "version_id": version_id,
+                }
+                await _mcp(
+                    mcp_url,
+                    tokens["manager"],
+                    "workstream_contribution_policy_update",
+                    {**base, "body": rules, "idempotency_key": str(uuid4())},
+                )
+                published = await _mcp(
+                    mcp_url,
+                    tokens["manager"],
+                    "workstream_contribution_policy_publish",
+                    {**base, "body": {}, "idempotency_key": str(uuid4())},
+                )
+                assert published["to_version_status"] == "published"
+                exact = await _mcp(
+                    mcp_url,
+                    tokens["manager"],
+                    "workstream_contribution_policy_get",
+                    {**base},
+                )
+                assert exact["contribution_policy_version_id"] == version_id
+                retired = await _mcp(
+                    mcp_url,
+                    tokens["manager"],
+                    "workstream_contribution_policy_retire",
+                    {**base, "body": {}, "idempotency_key": str(uuid4())},
+                )
+                assert retired["to_version_status"] == "retired"
+
+                actor_projects = await _mcp(
+                    mcp_url,
+                    tokens["manager"],
+                    "workstream_actor_projects_list",
+                    {"limit": 100},
+                )
+                assert project["id"] in {item["project_id"] for item in actor_projects["items"]}
+                assert (
+                    await _mcp(
+                        mcp_url,
+                        tokens["manager"],
+                        "workstream_actor_submissions_list",
+                        {},
+                    )
+                )["items"] == []
+                await _mcp(
+                    mcp_url,
+                    tokens["manager"],
+                    "workstream_actor_submissions_list",
+                    {"project_id": project["id"]},
+                    status=404,
+                    code="project_authorization_resource_not_found",
+                )
+                assert (
+                    await _mcp(
+                        mcp_url,
+                        tokens["manager"],
+                        "workstream_project_submissions_list",
+                        {"project_id": project["id"]},
+                    )
+                )["items"] == []
+                assert (
+                    await _mcp(
+                        mcp_url,
+                        tokens["manager"],
+                        "workstream_contributions_list",
+                        {"project_id": project["id"]},
+                    )
+                )["items"] == []
         finally:
             _stop(mcp)
             _stop(api)

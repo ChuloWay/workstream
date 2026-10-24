@@ -1,6 +1,4 @@
 {
-  "schema": "workstream.behavior-ownership-partition.v1",
-  "protected_base_commit": "7676ce4347db0c9694962a9b587a20765e16eac6",
   "assignments": [
     {
       "group": "artifacts",
@@ -204,6 +202,10 @@
     },
     {
       "group": "lifecycle",
+      "target": "backend/app/api/deps/project_catalogue.py"
+    },
+    {
+      "group": "lifecycle",
       "target": "backend/app/api/deps/project_guide_reads.py"
     },
     {
@@ -273,6 +275,10 @@
     {
       "group": "shared",
       "target": "backend/app/api/routes/post_policy.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/api/routes/project_catalogue.py"
     },
     {
       "group": "lifecycle",
@@ -704,6 +710,10 @@
     },
     {
       "group": "auth",
+      "target": "backend/app/modules/authorization/api/project_catalogue.py"
+    },
+    {
+      "group": "auth",
       "target": "backend/app/modules/authorization/api/project_guide_compilation.py"
     },
     {
@@ -892,6 +902,10 @@
     },
     {
       "group": "auth",
+      "target": "backend/app/modules/authorization/domain/project_catalogue.py"
+    },
+    {
+      "group": "auth",
       "target": "backend/app/modules/authorization/domain/project_create.py"
     },
     {
@@ -1053,6 +1067,10 @@
     {
       "group": "auth",
       "target": "backend/app/modules/authorization/prepared_submission_replay.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/project_catalogue.py"
     },
     {
       "group": "auth",
@@ -2375,5 +2393,7 @@
       "target": "backend/scripts/validate_test_lane_evidence.py"
     }
   ],
-  "authority_digest": "8673604becb49ee6bed81935a3419f7aed696580c7dab2c8d739aedb71c49990"
+  "authority_digest": "baf2d4f184415c4e789a37c40541aa1879347a9c71f24f2afe58ffbd8888958e",
+  "protected_base_commit": "7676ce4347db0c9694962a9b587a20765e16eac6",
+  "schema": "workstream.behavior-ownership-partition.v1"
 }

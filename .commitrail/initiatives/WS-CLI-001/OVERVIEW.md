@@ -45,6 +45,8 @@
   and eligible warning acknowledgement through existing public POSTs;
   [WS-CLI-001-41](WS-CLI-001-41.md), explicit manual artifact-policy draft
   creation and exact-predecessor hash-guarded successor through public writes;
+  [WS-CLI-001-46](WS-CLI-001-46.md), a separate minimal system project-reader
+  catalogue and `project list` command, without widening contributor membership;
   [PILOT-13](../../changes/pilot13-assigned-task-guide-documents.md), assigned-task locked-guide listing/download;
   [PILOT-02](../../changes/pilot02-bulk-transitions-cli.md), explicit CSV conversion,
   source custody, atomic import, batch status and whole-batch screen/release.
@@ -67,6 +69,12 @@ editing/configuring a guide does not approve or activate it. Other public API
 client gaps and the optional TUI remain separate work. Binary distribution's
 workflow is prepared by -44; a protected release run and public-asset audit
 remain operational work.
+
+[WS-CLI-001-46](WS-CLI-001-46.md) adds `GET /api/v1/projects` and
+`workstream project list`: current system Project Manager, Operator, Finance
+and Audit project-reader grants can discover bounded ID/name/status pages.
+`me projects` remains exact-grant membership; catalogue reads neither confer
+guide/management access nor implement the optional TUI.
 
 The Operator commands `operations task list`, `operations task locked-context`
 and `operations task start` use three existing public routes. Their restricted
@@ -330,7 +338,8 @@ CLIs. Keep the package independent of backend and MCP runtime dependencies.
    identity, authority or backend policy.
 3. **WS-CLI-001-03:** Inspect a known project alongside its current authority,
    through the public project read. Preserve administrative/contributor response
-   boundaries; do not invent a public project-list contract.
+   boundaries. The separate system-reader catalogue arrives in WS-CLI-001-46;
+   contributor membership stays exact-grant scoped.
 4. **WS-CLI-001-04:** Browse a manager task page and open its exact project/task
    detail, passing opaque continuation unchanged without automatic pagination.
 5. **WS-CLI-001-05:** Discover one ready-task page and inspect contributor
