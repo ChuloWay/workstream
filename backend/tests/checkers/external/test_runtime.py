@@ -28,6 +28,7 @@ from app.core.hashing import canonical_json_hash
 from app.interfaces.external_checker_execution import (
     ExternalCheckerIsolationReceipt,
     ExternalCheckerMaterialGrant,
+    ExternalCheckerServiceHealth,
 )
 from app.interfaces.external_services import (
     ExternalServiceUnavailableError,
@@ -197,8 +198,33 @@ def test_service_runtime_files_stay_outside_art_scratch_custody(tmp_path: Path):
         ArtifactScratchManager(root=scratch, limits=limits)
 
 
+@pytest.mark.parametrize(
+    "runtime,isolation_mode",
+    [("runc", "gvisor"), ("smolvm", "docker-dev"), ("runsc", "smol-microvm")],
+)
+def test_receipts_cannot_misrepresent_an_engine_as_another_isolation(runtime, isolation_mode):
+    shared = dict(
+        operating_system="linux", architecture="amd64", runtime=runtime,
+        isolation_mode=isolation_mode, sandbox_uid=1000, sandbox_gid=1000,
+    )
+    with pytest.raises(ValueError):
+        ExternalCheckerServiceHealth(cached_platform_manifests=1, **shared)
+    with pytest.raises(ValueError):
+        ExternalCheckerIsolationReceipt(
+            repository="registry.example/checker", platform_manifest_digest=SHA,
+            platform_manifest_media_type="application/vnd.oci.image.manifest.v1+json",
+            platform_manifest_byte_count=128, config_image_id=SHA, **shared,
+        )
+
+
+@pytest.mark.parametrize(
+    "runtime,isolation_mode",
+    [("runsc", "gvisor"), ("runc", "docker-dev"), ("smolvm", "smol-microvm")],
+)
 @pytest.mark.asyncio
-async def test_unix_adapter_revalidates_exact_result_and_factory_is_closed(tmp_path: Path):
+async def test_unix_adapter_revalidates_exact_result_and_factory_is_closed(
+    tmp_path: Path, runtime: str, isolation_mode: str,
+):
     request = _request()
     result = make_external_checker_execution_result(
         request_digest=request.request_digest,
@@ -223,8 +249,8 @@ async def test_unix_adapter_revalidates_exact_result_and_factory_is_closed(tmp_p
                     "status": "ready",
                     "operating_system": "linux",
                     "architecture": "amd64",
-                    "runtime": "runsc",
-                    "isolation_mode": "gvisor",
+                    "runtime": runtime,
+                    "isolation_mode": isolation_mode,
                     "cached_platform_manifests": 1,
                     "sandbox_uid": 65532,
                     "sandbox_gid": 65532,
@@ -249,8 +275,8 @@ async def test_unix_adapter_revalidates_exact_result_and_factory_is_closed(tmp_p
                     "operating_system": "linux",
                     "architecture": "amd64",
                     "config_image_id": "sha256:" + "b" * 64,
-                    "runtime": "runsc",
-                    "isolation_mode": "gvisor",
+                    "runtime": runtime,
+                    "isolation_mode": isolation_mode,
                     "sandbox_uid": 65532,
                     "sandbox_gid": 65532,
                 },
@@ -266,7 +292,8 @@ async def test_unix_adapter_revalidates_exact_result_and_factory_is_closed(tmp_p
         factory = external_checker_execution_factory(socket_path=socket, timeout_seconds=90.0)
         adapter = factory.create("unix_socket")
         health = await adapter.health()
-        assert health.runtime == "runsc"
+        assert health.runtime == runtime
+        assert health.isolation_mode == isolation_mode
         assert health.cached_platform_manifests == 1
         response = await adapter.execute(
             request,
@@ -277,6 +304,8 @@ async def test_unix_adapter_revalidates_exact_result_and_factory_is_closed(tmp_p
         )
         assert response.result == result
         assert response.isolation is not None
+        assert response.isolation.runtime == runtime
+        assert response.isolation.isolation_mode == isolation_mode
         with pytest.raises(UnknownExternalServiceProviderError):
             factory.create("docker")
         short = external_checker_execution_factory(socket_path=socket, timeout_seconds=2.0).create(

@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import os
 from pathlib import Path
@@ -22,6 +21,7 @@ from pydantic import ValidationError
 
 from app.modules.checkers.api.external import ExternalCheckerExecutionResult
 from scripts.checker_image_process import ExecutionBudget, ImageError, run
+from scripts.checker_image_manifest import DIGEST, MANIFEST_TYPES, verify_platform_manifest
 from scripts.checker_image_samples import (
     Descriptor,
     load_descriptor,
@@ -30,11 +30,6 @@ from scripts.checker_image_samples import (
     snapshot_sample,
 )
 
-MANIFEST_TYPES = (
-    "application/vnd.oci.image.manifest.v1+json",
-    "application/vnd.docker.distribution.manifest.v2+json",
-)
-DIGEST = re.compile(r"sha256:[0-9a-f]{64}")
 
 
 def decode(raw: bytes):
@@ -268,19 +263,10 @@ def verify_manifest(response: dict, digest: str, image_id: str) -> tuple[str, in
     ):
         raise ImageError("ECR returned conflicting identities for the published digest")
     raw = item["imageManifest"].encode("utf-8")
-    manifest = decode(raw)
+    manifest = verify_platform_manifest(raw, digest)
     media = item.get("imageManifestMediaType")
-    if (
-        media not in MANIFEST_TYPES
-        or manifest.get("mediaType") != media
-        or manifest.get("schemaVersion") != 2
-        or not isinstance(manifest.get("layers"), list)
-        or "manifests" in manifest
-        or len(raw) > 10 * 1024 * 1024
-        or item["imageId"]["imageDigest"] != digest
-        or "sha256:" + hashlib.sha256(raw).hexdigest() != digest
-        or manifest.get("config", {}).get("digest") != image_id
-    ):
+    if (manifest["mediaType"] != media or item["imageId"]["imageDigest"] != digest
+            or manifest["config"]["digest"] != image_id):
         raise ImageError("published manifest does not match the tested image")
     return media, len(raw)
 

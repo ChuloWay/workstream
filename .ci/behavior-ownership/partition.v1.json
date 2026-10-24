@@ -2398,11 +2398,19 @@
     },
     {
       "group": "artifacts",
+      "target": "backend/scripts/checker_image_manifest.py"
+    },
+    {
+      "group": "artifacts",
       "target": "backend/scripts/checker_image_process.py"
     },
     {
       "group": "artifacts",
       "target": "backend/scripts/checker_image_samples.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/scripts/checker_smol_cache.py"
     },
     {
       "group": "shared",
@@ -2501,7 +2509,7 @@
       "target": "backend/scripts/validate_test_lane_evidence.py"
     }
   ],
-  "authority_digest": "288da9c4d97023564a79b926223d9bfcb7d1b038dcb03d39b17e27154f4ff695",
+  "authority_digest": "cbc1693904d86116e7bc0038d353d79e933be2778aa44d9e4cf3dbef06d6867c",
   "protected_base_commit": "7676ce4347db0c9694962a9b587a20765e16eac6",
   "schema": "workstream.behavior-ownership-partition.v1"
 }

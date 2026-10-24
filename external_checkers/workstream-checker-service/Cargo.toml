@@ -11,3 +11,4 @@ serde_json.workspace = true
 sha2.workspace = true
 libc.workspace = true
 workstream-checker-sdk = { path = "../workstream-checker-sdk" }
+workstream-checker-guest = { path = "../workstream-checker-guest" }

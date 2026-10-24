@@ -2,6 +2,7 @@
 
 mod model_relay;
 mod proxy_transport;
+mod smol;
 
 use model_relay::{
     deserialize_required_model_grant, valid_model_grant, validate_proxy_socket,
@@ -16,6 +17,7 @@ use std::os::fd::AsRawFd;
 use std::os::unix::fs::FileTypeExt;
 use std::os::unix::fs::{MetadataExt, OpenOptionsExt, PermissionsExt};
 use std::os::unix::net::{UnixListener, UnixStream};
+use std::os::unix::process::CommandExt;
 use std::path::{Component, Path, PathBuf};
 use std::process::{Child, Command, ExitStatus, Stdio};
 use std::thread;
@@ -37,16 +39,21 @@ const RUNTIME_FILE_PREFIX: &str = ".workstream-checker-runtime-";
 const CONTAINER_OWNER_FILE: &str = ".workstream-checker-owner";
 const UNSETTLED_RESOURCE_ERROR: &str = "owned runtime resource cleanup unsettled";
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct ServiceConfig {
     #[serde(skip)]
     container_owner: Option<String>,
+    #[serde(skip)]
+    smol_admission: Option<std::sync::Arc<smol::Admission>>,
     socket_path: PathBuf,
     model_proxy_socket: Option<PathBuf>,
     model_relay_root: Option<PathBuf>,
     material_root: PathBuf,
+    #[serde(default)]
     docker_binary: PathBuf,
+    #[serde(default)]
+    smol: Option<smol::SmolConfig>,
     runtime: String,
     isolation_mode: String,
     operating_system: String,
@@ -66,6 +73,8 @@ struct CacheEntry {
     operating_system: String,
     architecture: String,
     config_image_id: String,
+    #[serde(default)]
+    smol: Option<smol::SmolImage>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -426,6 +435,9 @@ fn main() {
 }
 
 fn run() -> Result<(), String> {
+    if std::env::args().nth(1).as_deref() == Some("--smol-guardian") {
+        return smol::guardian();
+    }
     let path = std::env::args_os()
         .nth(1)
         .ok_or("configuration path missing")?;
@@ -433,7 +445,11 @@ fn run() -> Result<(), String> {
     let mut config: ServiceConfig =
         serde_json::from_slice(&bytes).map_err(|_| "configuration invalid")?;
     let listener = prepare_listener(&mut config)?;
-    serve_connections(&config, listener.incoming(), SOCKET_IO_TIMEOUT)
+    if config.runtime == "smolvm" {
+        smol::serve(&config, listener.incoming())
+    } else {
+        serve_connections(&config, listener.incoming(), SOCKET_IO_TIMEOUT)
+    }
 }
 
 fn serve_connections<I>(
@@ -461,7 +477,11 @@ fn prepare_listener(config: &mut ServiceConfig) -> Result<OwnedSocketListener, S
     config.container_owner = Some(load_container_owner(&listener.parent)?);
     validate_config(config)?;
     cleanup_stale_runtime_files(config)?;
-    cleanup_stale_checker_containers(config)?;
+    if config.runtime == "smolvm" {
+        smol::recover(config)?;
+    } else {
+        cleanup_stale_checker_containers(config)?;
+    }
     Ok(listener)
 }
 
@@ -544,6 +564,9 @@ fn serve_connection(
     }
     let response = read_frame_until(&mut stream, MAX_ENVELOPE_BYTES, Instant::now() + timeout)
         .and_then(|bytes| handle_frame(config, &stream, &bytes));
+    if let Err(error) = &response {
+        eprintln!("checker request rejected: {error}");
+    }
     if let Some(bytes) = connection_response(response)? {
         let _ = write_frame_until(&mut stream, &bytes, Instant::now() + timeout);
     }
@@ -561,10 +584,10 @@ fn connection_response(response: Result<Vec<u8>, String>) -> Result<Option<Vec<u
 fn validate_config(config: &ServiceConfig) -> Result<(), String> {
     if !config.socket_path.is_absolute()
         || !config.material_root.is_absolute()
-        || !config.docker_binary.is_absolute()
-        || !matches!(config.isolation_mode.as_str(), "gvisor" | "docker-dev")
-        || !matches!(config.runtime.as_str(), "runsc" | "runc")
-        || (config.isolation_mode == "gvisor") != (config.runtime == "runsc")
+        || !matches!(
+            (config.runtime.as_str(), config.isolation_mode.as_str()),
+            ("runsc", "gvisor") | ("runc", "docker-dev") | ("smolvm", "smol-microvm")
+        )
         || config.operating_system.is_empty()
         || config.architecture.is_empty()
         || config.sandbox_uid == 0
@@ -600,7 +623,7 @@ fn validate_config(config: &ServiceConfig) -> Result<(), String> {
         return Err("socket parent is not private".into());
     }
     match (&config.model_proxy_socket, &config.model_relay_root) {
-        (Some(model_proxy_socket), Some(model_relay_root)) => {
+        (Some(model_proxy_socket), Some(model_relay_root)) if config.runtime != "smolvm" => {
             validate_proxy_socket(model_proxy_socket)?;
             validate_relay_root(model_relay_root)?;
             if (config.sandbox_uid, config.sandbox_gid) != (effective_uid, effective_gid) {
@@ -610,15 +633,25 @@ fn validate_config(config: &ServiceConfig) -> Result<(), String> {
         (None, None) => {}
         _ => return Err("model relay configuration incomplete".into()),
     }
-    let docker =
-        fs::symlink_metadata(&config.docker_binary).map_err(|_| "docker binary missing")?;
-    if !docker.file_type().is_file()
-        || docker.file_type().is_symlink()
-        || docker.mode() & 0o111 == 0
-        || fs::canonicalize(&config.docker_binary).map_err(|_| "docker binary invalid")?
-            != config.docker_binary
-    {
-        return Err("docker binary invalid".into());
+    if config.runtime == "smolvm" {
+        if !config.docker_binary.as_os_str().is_empty() {
+            return Err("unused Docker configuration".into());
+        }
+        smol::validate(config)?;
+    } else {
+        if config.smol.is_some() || !config.docker_binary.is_absolute() {
+            return Err("engine configuration invalid".into());
+        }
+        let docker =
+            fs::symlink_metadata(&config.docker_binary).map_err(|_| "docker binary missing")?;
+        if !docker.file_type().is_file()
+            || docker.file_type().is_symlink()
+            || docker.mode() & 0o111 == 0
+            || fs::canonicalize(&config.docker_binary).map_err(|_| "docker binary invalid")?
+                != config.docker_binary
+        {
+            return Err("docker binary invalid".into());
+        }
     }
     let mut identities = std::collections::BTreeSet::new();
     let mut manifests = std::collections::BTreeSet::new();
@@ -688,13 +721,34 @@ fn handle_frame(
     let request_bytes = serde_json::to_vec(&envelope.request).map_err(|_| "request invalid")?;
     let request = parse_request(&request_bytes).map_err(|_| "request contract invalid")?;
     if let Some(model_grant) = envelope.model_grant.0.as_ref() {
-        if config.model_proxy_socket.is_none()
-            || config.model_relay_root.is_none()
-            || !valid_model_grant(model_grant, &request.request_digest, &request.phase)
-        {
+        if !valid_model_grant(model_grant, &request.request_digest, &request.phase) {
+            return Err("model grant invalid".into());
+        }
+        if config.runtime == "smolvm" {
+            return encode_response(
+                infrastructure_result(&request, "implementation_unavailable")
+                    .map_err(|_| "result construction failed")?,
+                None,
+            );
+        }
+        if config.model_proxy_socket.is_none() || config.model_relay_root.is_none() {
             return Err("model grant invalid".into());
         }
     }
+    let _reservation = if config.runtime == "smolvm" {
+        match smol::reserve(config, &request) {
+            Ok(reservation) => Some(reservation),
+            Err(_) => {
+                return encode_response(
+                    infrastructure_result(&request, "implementation_unavailable")
+                        .map_err(|_| "result construction failed")?,
+                    None,
+                )
+            }
+        }
+    } else {
+        None
+    };
     let Some(cache) = config
         .cache
         .iter()
@@ -766,6 +820,9 @@ fn handle_frame(
 }
 
 fn runtime_ready(config: &ServiceConfig) -> Result<(), String> {
+    if config.runtime == "smolvm" {
+        return smol::ready(config);
+    }
     let status = run_bounded_command(
         &config.docker_binary,
         &["info", "--format", "{{json .Runtimes}}"],
@@ -871,58 +928,80 @@ fn run_bounded_command_inner(
     deadline: Instant,
     maximum_output: usize,
     client: Option<&UnixStream>,
-    mut cleanup: Option<&mut EmergencyCleanupBudget>,
+    cleanup: Option<&mut EmergencyCleanupBudget>,
 ) -> Result<BoundedCommandOutput, String> {
     if Instant::now() >= deadline {
         return Err("process deadline exceeded".into());
     }
-    let mut child = Command::new(binary)
+    let child = Command::new(binary)
         .args(arguments)
+        .process_group(0)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
         .map_err(|_| "process launch failed")?;
+    collect_bounded_command(child, deadline, maximum_output, client, cleanup)
+}
+
+fn stop_command_group(child: &mut Child, deadline: Instant) -> Result<ExitStatus, String> {
+    // Every control command has its own fresh process group; never kill by name.
+    unsafe {
+        libc::kill(-(child.id() as i32), libc::SIGKILL);
+    }
+    stop_child(child, deadline)
+}
+
+fn collect_bounded_command(
+    mut child: Child,
+    deadline: Instant,
+    maximum_output: usize,
+    client: Option<&UnixStream>,
+    mut cleanup: Option<&mut EmergencyCleanupBudget>,
+) -> Result<BoundedCommandOutput, String> {
     let mut stdout = match child.stdout.take() {
         Some(stdout) => stdout,
         None => {
-            let _ = stop_child(&mut child, command_cleanup_deadline(&mut cleanup));
+            let _ = stop_command_group(&mut child, command_cleanup_deadline(&mut cleanup));
             return Err("process stdout unavailable".into());
         }
     };
     let mut stderr = match child.stderr.take() {
         Some(stderr) => stderr,
         None => {
-            let _ = stop_child(&mut child, command_cleanup_deadline(&mut cleanup));
+            let _ = stop_command_group(&mut child, command_cleanup_deadline(&mut cleanup));
             return Err("process stderr unavailable".into());
         }
     };
     if set_nonblocking(&stdout).is_err() || set_nonblocking(&stderr).is_err() {
-        let _ = stop_child(&mut child, command_cleanup_deadline(&mut cleanup));
+        let _ = stop_command_group(&mut child, command_cleanup_deadline(&mut cleanup));
         return Err("process descriptor unavailable".into());
     }
     let mut stdout_bytes = Vec::new();
     let mut stderr_bytes = Vec::new();
     loop {
         if client.is_some_and(|stream| !client_is_connected(stream)) {
-            let _ = stop_child(&mut child, command_cleanup_deadline(&mut cleanup));
+            let _ = stop_command_group(&mut child, command_cleanup_deadline(&mut cleanup));
             return Err("client disconnected".into());
         }
-        if read_available(&mut stdout, &mut stdout_bytes, maximum_output).is_err()
-            || read_available(&mut stderr, &mut stderr_bytes, maximum_output).is_err()
+        let stdout_read = read_available(&mut stdout, &mut stdout_bytes, maximum_output);
+        let stderr_read = read_available(&mut stderr, &mut stderr_bytes, maximum_output);
+        if stdout_read.is_err()
+            || stderr_read.is_err()
             || stdout_bytes.len().saturating_add(stderr_bytes.len()) > maximum_output
         {
-            let _ = stop_child(&mut child, command_cleanup_deadline(&mut cleanup));
+            let _ = stop_command_group(&mut child, command_cleanup_deadline(&mut cleanup));
             return Err("process output unbounded".into());
         }
         let status = match child.try_wait() {
             Ok(status) => status,
             Err(_) => {
-                let _ = stop_child(&mut child, command_cleanup_deadline(&mut cleanup));
+                let _ = stop_command_group(&mut child, command_cleanup_deadline(&mut cleanup));
                 return Err("process wait failed".into());
             }
         };
-        if let Some(status) = status {
+        if let Some(status) = status.filter(|_| stdout_read == Ok(true) && stderr_read == Ok(true))
+        {
             read_available(&mut stdout, &mut stdout_bytes, maximum_output)?;
             read_available(&mut stderr, &mut stderr_bytes, maximum_output)?;
             if stdout_bytes.len().saturating_add(stderr_bytes.len()) > maximum_output {
@@ -935,7 +1014,7 @@ fn run_bounded_command_inner(
             });
         }
         if Instant::now() >= deadline {
-            stop_child(&mut child, command_cleanup_deadline(&mut cleanup))?;
+            stop_command_group(&mut child, command_cleanup_deadline(&mut cleanup))?;
             return Err("process deadline exceeded".into());
         }
         thread::sleep(Duration::from_millis(5));
@@ -1322,6 +1401,9 @@ fn inspect_image(
     client: &UnixStream,
     budget: &mut RequestExecutionBudget,
 ) -> Result<(), String> {
+    if config.runtime == "smolvm" {
+        return smol::inspect_image(cache);
+    }
     let reference = format!("{}@{}", cache.repository, cache.platform_manifest_digest);
     let output = run_bounded_command_cancellable(
         &config.docker_binary,
@@ -1447,6 +1529,9 @@ fn execute_container_inner(
     client: &UnixStream,
     budget: &mut RequestExecutionBudget,
 ) -> Result<ExecutedChecker, ExecutionFailure> {
+    if config.runtime == "smolvm" {
+        return smol::execute(config, cache, request, workspace, client, budget);
+    }
     let owner = container_owner(config)
         .map_err(|_| ExecutionFailure::ordinary("implementation_unavailable", false))?;
     // Revalidate immediately before handing the path to Docker.
@@ -2258,7 +2343,7 @@ mod tests {
     use std::os::unix::net::UnixStream;
     use std::time::Instant;
 
-    fn test_config() -> (PathBuf, ServiceConfig) {
+    pub(super) fn test_config() -> (PathBuf, ServiceConfig) {
         let root = std::env::temp_dir().join(format!(
             "ws-pilot04-service-{}",
             SystemTime::now()
@@ -2283,6 +2368,8 @@ mod tests {
         let sandbox_uid = owner.uid();
         let sandbox_gid = owner.gid();
         let config = ServiceConfig {
+            smol: None,
+            smol_admission: None,
             container_owner: Some(
                 load_container_owner(&File::open(&socket_root).unwrap()).unwrap(),
             ),
@@ -2298,6 +2385,7 @@ mod tests {
             sandbox_uid,
             sandbox_gid,
             cache: vec![CacheEntry {
+                smol: None,
                 repository: "registry.example/workstream/checker".into(),
                 platform_manifest_digest: format!("sha256:{}", "1".repeat(64)),
                 platform_manifest_media_type: "application/vnd.oci.image.manifest.v1+json".into(),
@@ -2876,6 +2964,22 @@ exit 2
         assert!(serde_json::from_value::<ServiceConfig>(configuration.clone()).is_ok());
         configuration["terminal_benchmark"] = Value::Null;
         assert!(serde_json::from_value::<ServiceConfig>(configuration).is_err());
+    }
+
+    #[test]
+    fn smol_configuration_rejects_the_unprojected_host_model_relay() {
+        let (root, mut config) = test_config();
+        config.runtime = "smolvm".into();
+        config.isolation_mode = "smol-microvm".into();
+        config.docker_binary = PathBuf::new();
+        config.model_proxy_socket = Some(root.join("private/model-proxy.sock"));
+        config.model_relay_root = Some(root.join("private/model-relays"));
+
+        assert_eq!(
+            validate_config(&config),
+            Err("model relay configuration incomplete".into())
+        );
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[test]
