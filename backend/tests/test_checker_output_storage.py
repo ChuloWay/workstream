@@ -1033,6 +1033,12 @@ async def _arrange_historical_checker_run_output(connection, case) -> None:
     await connection.execute(
         text("alter table artifact_put_attempts enable trigger checker_output_put_attempt_custody")
     )
+    # Only this historical fixture may replace current producer coordinates.
+    # Restore the immutable guard before the upgrade/preservation assertions.
+    await connection.execute(text(
+        "alter table artifact_operation_receipts disable trigger "
+        "trg_artifact_operation_receipts_immutable"
+    ))
     await connection.execute(
         text(
             "update artifact_operation_receipts set checker_run_id=:run, "
@@ -1040,6 +1046,10 @@ async def _arrange_historical_checker_run_output(connection, case) -> None:
         ),
         {"run": case.checker_run_id, "attempt": case.put_attempt_id},
     )
+    await connection.execute(text(
+        "alter table artifact_operation_receipts enable trigger "
+        "trg_artifact_operation_receipts_immutable"
+    ))
 
 
 def _run_0007_upgrade(connection) -> None:
