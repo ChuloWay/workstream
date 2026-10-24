@@ -2068,6 +2068,8 @@ impl<C: RuntimeControl> DockerTrialBackend<C> {
             || config.candidate_gid == 0
             || config.export_uid == 0
             || config.export_gid == 0
+            || config.candidate_uid != config.export_uid
+            || config.candidate_gid != config.export_gid
         {
             return Err(infrastructure(TrialRelayFailure::InvalidRequest));
         }

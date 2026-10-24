@@ -237,7 +237,7 @@ def _trial_authority(env: dict[str, str], *, revision: bool = False):
         ),
         permitted_operations=("run",),
         permitted_state_retention_outcomes=("succeeded", "exit_nonzero", "signalled"),
-        builder_capabilities=(
+        trusted_launcher_capabilities=(
             "CHOWN",
             "DAC_OVERRIDE",
             "FOWNER",
@@ -248,6 +248,7 @@ def _trial_authority(env: dict[str, str], *, revision: bool = False):
             "SYS_ADMIN",
             "SYS_CHROOT",
         ),
+        builder_capabilities=("CHOWN", "DAC_OVERRIDE", "FOWNER"),
         child_capabilities=(),
         child_network="none",
         child_runs_as_non_root=True,
@@ -507,6 +508,22 @@ async def test_production_service_executes_project_trial_under_runsc_with_real_c
     root = Path(env["WORKSTREAM_TS_RUNSC_COMPOSITION_ROOT"]).resolve(strict=True)
     inner = env["WORKSTREAM_TS_RUNSC_INNER_COMPOSITION_ROOT"]
     assert root.name == "terminal-systems-runsc-composition"
+    builder_image_id = subprocess.check_output(
+        [
+            "docker",
+            "exec",
+            env["WORKSTREAM_TS_RUNSC_CONTAINER"],
+            "docker",
+            "image",
+            "inspect",
+            "--format",
+            "{{.Id}}",
+            env["WORKSTREAM_TS_RUNSC_BUILDER_ID"],
+        ],
+        text=True,
+        timeout=15,
+    ).strip()
+    assert builder_image_id == env["WORKSTREAM_TS_RUNSC_BUILDER_ID"]
     monkeypatch.setattr(material_helpers, "archive_with_modes", _qualification_archive)
     await admin_access.signed.grant(admin_access.admin, admin_access.target, role="operator")
     profile, projection = _trial_authority(env)
@@ -747,8 +764,6 @@ async def test_production_service_executes_project_trial_under_runsc_with_real_c
                 "trusted_launcher_path": env["WORKSTREAM_TS_RUNSC_LAUNCHER_PATH"],
                 "trusted_launcher_digest": env["WORKSTREAM_TS_RUNSC_LAUNCHER_DIGEST"],
                 "maximum_candidate_archive_bytes": 64 * 1024 * 1024,
-                "candidate_uid": os.geteuid(),
-                "candidate_gid": os.getegid(),
             },
             "material_root": f"{inner}/post-scratch",
             "docker_binary": "/usr/local/bin/docker",

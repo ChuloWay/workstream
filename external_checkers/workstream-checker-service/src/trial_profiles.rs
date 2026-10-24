@@ -52,6 +52,7 @@ struct RuntimeProfile {
     permitted_material_roles: Vec<String>,
     permitted_operations: Vec<String>,
     permitted_state_retention_outcomes: Vec<String>,
+    trusted_launcher_capabilities: Vec<String>,
     builder_capabilities: Vec<String>,
     child_capabilities: Vec<String>,
     child_network: String,
@@ -135,7 +136,7 @@ impl TrialAuthorityEntry {
             || self.profile.child_host_uds != "none"
             || self.profile.child_network != "none"
             || !self.profile.child_runs_as_non_root
-            || self.profile.builder_capabilities
+            || self.profile.trusted_launcher_capabilities
                 != [
                     "CHOWN",
                     "DAC_OVERRIDE",
@@ -147,6 +148,7 @@ impl TrialAuthorityEntry {
                     "SYS_ADMIN",
                     "SYS_CHROOT",
                 ]
+            || self.profile.builder_capabilities != ["CHOWN", "DAC_OVERRIDE", "FOWNER"]
             || !self.profile.child_capabilities.is_empty()
             || self.profile.permitted_operations != ["run"]
             || profile_digest != self.profile.selector.profile_digest
@@ -438,7 +440,7 @@ mod tests {
             permitted_material_roles: vec!["candidate_source".into()],
             permitted_operations: vec!["run".into()],
             permitted_state_retention_outcomes: vec!["succeeded".into()],
-            builder_capabilities: vec![
+            trusted_launcher_capabilities: vec![
                 "CHOWN".into(),
                 "DAC_OVERRIDE".into(),
                 "FOWNER".into(),
@@ -449,6 +451,7 @@ mod tests {
                 "SYS_ADMIN".into(),
                 "SYS_CHROOT".into(),
             ],
+            builder_capabilities: vec!["CHOWN".into(), "DAC_OVERRIDE".into(), "FOWNER".into()],
             child_capabilities: Vec::new(),
             child_network: "none".into(),
             child_runs_as_non_root: true,
@@ -623,6 +626,58 @@ mod tests {
         assert_eq!(
             selector_from_configuration(value.as_object().unwrap()),
             Err("trial selectors invalid")
+        );
+    }
+
+    #[test]
+    fn launcher_and_builder_capability_sets_are_distinct_exact_authority() {
+        let mut broad_builder = authority_entry(&digest('c'));
+        broad_builder.profile.builder_capabilities =
+            broad_builder.profile.trusted_launcher_capabilities.clone();
+        broad_builder.profile.selector.profile_digest =
+            payload_digest(&broad_builder.profile, "profile_digest").unwrap();
+        assert_eq!(
+            catalog(vec![broad_builder]).err(),
+            Some("trial authority manifest entry invalid")
+        );
+
+        let mut narrow_launcher = authority_entry(&digest('c'));
+        narrow_launcher.profile.trusted_launcher_capabilities =
+            narrow_launcher.profile.builder_capabilities.clone();
+        narrow_launcher.profile.selector.profile_digest =
+            payload_digest(&narrow_launcher.profile, "profile_digest").unwrap();
+        assert_eq!(
+            catalog(vec![narrow_launcher]).err(),
+            Some("trial authority manifest entry invalid")
+        );
+    }
+
+    #[test]
+    fn state_overlay_destination_rejects_nested_workspace_paths() {
+        let mut nested = authority_entry(&digest('c'));
+        nested
+            .projection
+            .material_projections
+            .push(TrialMaterialProjectionProfile {
+                role: "verification".into(),
+                source_role: "submission_archive".into(),
+                projection_kind: "state_overlay".into(),
+                source_relative: "tests".into(),
+                destination_relative: "nested/tests".into(),
+                exclusions: Vec::new(),
+            });
+        nested
+            .projection
+            .allowed_material_roles
+            .push("verification".into());
+        nested.projection.slot_templates[0]
+            .visible_roles
+            .push("verification".into());
+        nested.projection.selector.projection_digest =
+            payload_digest(&nested.projection, "projection_digest").unwrap();
+        assert_eq!(
+            catalog(vec![nested]).err(),
+            Some("trial authority manifest entry invalid")
         );
     }
 }

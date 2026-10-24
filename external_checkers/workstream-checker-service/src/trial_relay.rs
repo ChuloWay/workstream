@@ -482,6 +482,7 @@ struct TrialObservationProjection {
 struct TrialBuildProjection {
     terminal_state: &'static str,
     outcome: TrialOperationOutcome,
+    export_outcome: TrialExportOutcome,
     exit_code: Option<i32>,
     signal: Option<i32>,
     stdout_sha256: String,
@@ -506,6 +507,7 @@ struct TrialStepProjection {
     slot_id: String,
     operation_order: u32,
     outcome: TrialOperationOutcome,
+    export_outcome: TrialExportOutcome,
     exit_code: Option<i32>,
     signal: Option<i32>,
     stdout_sha256: String,
@@ -920,7 +922,8 @@ fn valid_material_projection(
         && safe_relative_path(&projection.source_relative, true)
         && safe_relative_path(&projection.destination_relative, true)
         && !(projection.projection_kind == "state_overlay"
-            && projection.destination_relative == ".")
+            && (projection.destination_relative == "."
+                || projection.destination_relative.contains('/')))
         && projection
             .exclusions
             .iter()
@@ -1329,6 +1332,7 @@ fn observation_projection(receipt: &TrialReceiptPublication) -> TrialObservation
         build: TrialBuildProjection {
             terminal_state: "completed_work",
             outcome: build.outcome,
+            export_outcome: build.export_outcome,
             exit_code: build.exit_code,
             signal: build.signal,
             stdout_sha256: build.stdout_sha256.clone(),
@@ -1355,6 +1359,7 @@ fn observation_projection(receipt: &TrialReceiptPublication) -> TrialObservation
                 slot_id: step.slot_id.clone(),
                 operation_order: step.operation_order,
                 outcome: step.outcome,
+                export_outcome: step.export_outcome,
                 exit_code: step.exit_code,
                 signal: step.signal,
                 stdout_sha256: step.stdout_sha256.clone(),

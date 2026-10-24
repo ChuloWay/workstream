@@ -543,8 +543,16 @@ fn completed_plan_publishes_runner_facts_only_after_confirmed_cleanup() {
         "workstream.checker_trial_observations.v1"
     );
     assert_eq!(response["observations"]["terminal_state"], "completed_work");
+    assert_eq!(
+        response["observations"]["build"]["export_outcome"],
+        "exported"
+    );
     assert_eq!(response["observations"]["steps"][0]["slot_id"], "slot_a");
     assert_eq!(response["observations"]["steps"][0]["outcome"], "succeeded");
+    assert_eq!(
+        response["observations"]["steps"][0]["export_outcome"],
+        "exported"
+    );
     assert_eq!(response["observations"]["steps"][0]["stdout_byte_count"], 3);
     assert_eq!(
         response["observations"]["steps"][0]["stdout_sha256"],

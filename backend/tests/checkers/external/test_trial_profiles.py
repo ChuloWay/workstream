@@ -63,7 +63,7 @@ def profile():
             "exit_nonzero",
             "signalled",
         ),
-        builder_capabilities=(
+        trusted_launcher_capabilities=(
             "CHOWN",
             "DAC_OVERRIDE",
             "FOWNER",
@@ -74,6 +74,7 @@ def profile():
             "SYS_ADMIN",
             "SYS_CHROOT",
         ),
+        builder_capabilities=("CHOWN", "DAC_OVERRIDE", "FOWNER"),
         child_capabilities=(),
         child_network="none",
         child_runs_as_non_root=True,
@@ -183,10 +184,26 @@ def test_runtime_split_and_no_swap_are_closed_trusted_profile_rules():
         )
     with pytest.raises(TrialProfileError, match="invalid"):
         replace(selected, child_capabilities=("SYS_ADMIN",))
+    with pytest.raises(TrialProfileError, match="invalid"):
+        replace(selected, builder_capabilities=selected.trusted_launcher_capabilities)
+    with pytest.raises(TrialProfileError, match="invalid"):
+        replace(selected, trusted_launcher_capabilities=selected.builder_capabilities)
     with pytest.raises(TrialProfileError, match="byte ceiling"):
         replace(selected.limits, maximum_receipt_bytes=1024 * 1024 + 1)
     with pytest.raises(TrialProfileError, match="PID ceiling"):
         replace(selected.limits, maximum_pids=1)
+
+
+def test_state_overlay_destination_is_exactly_one_workspace_component():
+    with pytest.raises(TrialProfileError, match="material projection"):
+        TrialMaterialProjection(
+            "verification",
+            "submission_archive",
+            "state_overlay",
+            "tests",
+            "nested/tests",
+            (),
+        )
 
 
 def test_locked_configuration_parses_trial_and_model_selectors_independently():

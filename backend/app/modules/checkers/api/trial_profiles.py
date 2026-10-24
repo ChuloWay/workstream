@@ -148,7 +148,7 @@ class TrialExecutionProfile:
     permitted_state_retention_outcomes: tuple[
         Literal["succeeded", "exit_nonzero", "signalled"], ...
     ]
-    builder_capabilities: tuple[
+    trusted_launcher_capabilities: tuple[
         Literal[
             "CHOWN",
             "DAC_OVERRIDE",
@@ -162,6 +162,7 @@ class TrialExecutionProfile:
         ],
         ...,
     ]
+    builder_capabilities: tuple[Literal["CHOWN", "DAC_OVERRIDE", "FOWNER"], ...]
     child_capabilities: tuple[()]
     child_network: Literal["none"]
     child_runs_as_non_root: Literal[True]
@@ -178,7 +179,7 @@ class TrialExecutionProfile:
             or self.child_network != "none"
             or self.child_runs_as_non_root is not True
             or self.child_capabilities != ()
-            or self.builder_capabilities
+            or self.trusted_launcher_capabilities
             != (
                 "CHOWN",
                 "DAC_OVERRIDE",
@@ -190,6 +191,7 @@ class TrialExecutionProfile:
                 "SYS_ADMIN",
                 "SYS_CHROOT",
             )
+            or self.builder_capabilities != ("CHOWN", "DAC_OVERRIDE", "FOWNER")
             or self.permitted_operations != ("run",)
             or not self.permitted_state_retention_outcomes
             or len(set(self.permitted_state_retention_outcomes))
@@ -283,7 +285,7 @@ class TrialMaterialProjection:
             or not _safe_relative(self.source_relative, allow_dot=True)
             or not _safe_relative(self.destination_relative, allow_dot=True)
             or self.projection_kind == "state_overlay"
-            and self.destination_relative == "."
+            and (self.destination_relative == "." or "/" in self.destination_relative)
             or tuple(sorted(set(self.exclusions))) != self.exclusions
             or any(not _safe_relative(value, allow_dot=False) for value in self.exclusions)
             or _paths_overlap(self.exclusions)
@@ -809,6 +811,7 @@ def _parse_profile(value: object) -> TrialExecutionProfile:
         "permitted_material_roles",
         "permitted_operations",
         "permitted_state_retention_outcomes",
+        "trusted_launcher_capabilities",
         "builder_capabilities",
         "child_capabilities",
     ):

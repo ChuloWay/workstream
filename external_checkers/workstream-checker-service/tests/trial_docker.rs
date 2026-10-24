@@ -797,16 +797,16 @@ fn backend_projects_forced_causes_without_synthetic_exit_or_signal() {
 #[test]
 fn backend_rejects_runtime_profile_that_would_expose_host_uds() {
     let root = Root::new();
-    let mut identity = identity();
-    identity.child_host_uds = "open".into();
+    let mut host_uds_identity = identity();
+    host_uds_identity.child_host_uds = "open".into();
     let launcher = root.0.join("launcher");
     fs::write(&launcher, b"trusted launcher").unwrap();
     fs::set_permissions(&launcher, fs::Permissions::from_mode(0o555)).unwrap();
     let launcher_digest = format!("sha256:{:x}", sha2::Sha256::digest(b"trusted launcher"));
-    identity.trusted_launcher_digest = launcher_digest.clone();
+    host_uds_identity.trusted_launcher_digest = launcher_digest.clone();
     let result = DockerTrialBackend::new(
         DockerTrialConfiguration {
-            identity: identity.clone(),
+            identity: host_uds_identity,
             deployment_owner: "deployment_a".into(),
             request_digest: digest('9'),
             attempt_id: "018f6f49-66b8-7d2a-bf4d-0e2eeaa00001".into(),
@@ -827,6 +827,42 @@ fn backend_rejects_runtime_profile_that_would_expose_host_uds() {
         result.err().unwrap().code,
         TrialRelayFailure::InvalidRequest
     );
+
+    for (name, candidate_uid, candidate_gid) in [("uid", 65531, 65532), ("gid", 65532, 65531)] {
+        let launcher = root.0.join(format!("launcher-identity-{name}"));
+        let launcher_bytes = format!("trusted launcher identity {name}");
+        fs::write(&launcher, launcher_bytes.as_bytes()).unwrap();
+        fs::set_permissions(&launcher, fs::Permissions::from_mode(0o555)).unwrap();
+        let launcher_digest = format!(
+            "sha256:{:x}",
+            sha2::Sha256::digest(launcher_bytes.as_bytes())
+        );
+        let mut identity = identity();
+        identity.trusted_launcher_digest = launcher_digest.clone();
+        let mismatch = DockerTrialBackend::new(
+            DockerTrialConfiguration {
+                identity,
+                deployment_owner: "deployment_a".into(),
+                request_digest: digest('9'),
+                attempt_id: "018f6f49-66b8-7d2a-bf4d-0e2eeaa00001".into(),
+                runtime_key: "runsc".into(),
+                builder_image_id: digest('4'),
+                trusted_launcher_path: launcher,
+                trusted_launcher_digest: launcher_digest,
+                offline_cache_root: root.child(&format!("cache-identity-{name}")),
+                maximum_candidate_archive_bytes: 1024,
+                candidate_uid,
+                candidate_gid,
+                export_uid: 65532,
+                export_gid: 65532,
+            },
+            FakeControl::default(),
+        );
+        assert_eq!(
+            mismatch.err().unwrap().code,
+            TrialRelayFailure::InvalidRequest
+        );
+    }
 }
 
 pub fn concrete_runtime_builds_and_runs_offline_under_runsc() {
@@ -869,7 +905,7 @@ pub fn concrete_runtime_builds_and_runs_offline_under_runsc() {
     }
     fs::write(
         context.join("Dockerfile"),
-        b"FROM alpine@sha256:c64c687cbea9300178b30c95835354e34c4e4febc4badfe27102879de0483b5e\nCOPY payload.txt /opt/qualification/payload.txt\nUSER 65532:65532\nENTRYPOINT [\"/bin/sh\"]\n",
+        b"FROM alpine@sha256:c64c687cbea9300178b30c95835354e34c4e4febc4badfe27102879de0483b5e\nCOPY payload.txt /opt/qualification/payload.txt\nRUN test \"$(sed -n 's/^CapEff:[[:space:]]*//p' /proc/self/status)\" = 000000000000000b && test \"$(sed -n 's/^CapBnd:[[:space:]]*//p' /proc/self/status)\" = 000000000000000b && printf 'builder-capabilities=000000000000000b\\n' > /opt/qualification/builder-capabilities.txt\nUSER 65532:65532\nENTRYPOINT [\"/bin/sh\"]\n",
     )
     .unwrap();
     fs::write(
@@ -1010,7 +1046,7 @@ pub fn concrete_runtime_builds_and_runs_offline_under_runsc() {
                 command: vec![
                     "/bin/sh".into(),
                     "-ceu".into(),
-                    "test -e /proc/gvisor/kernel_is_gvisor; test \"$(id -u)\" = 65532; test \"$(sed -n 's/^CapEff:[[:space:]]*//p' /proc/self/status)\" = 0000000000000000; test ! -e /var/run/docker.sock; test ! -e /work/execution.sock; test ! -e /work/model.sock; test ! -e /workspace/protected; test -f /workspace/source/visible.txt; if wget -T 1 -qO- http://1.1.1.1 >/dev/null 2>&1; then exit 71; fi; sleep 1; printf 'qualification=pass\\n'".into(),
+                    "test -e /proc/gvisor/kernel_is_gvisor; test \"$(id -u)\" = 65532; test \"$(sed -n 's/^CapEff:[[:space:]]*//p' /proc/self/status)\" = 0000000000000000; test \"$(cat /opt/qualification/builder-capabilities.txt)\" = builder-capabilities=000000000000000b; test ! -e /var/run/docker.sock; test ! -e /work/execution.sock; test ! -e /work/model.sock; test ! -e /workspace/protected; test -f /workspace/source/visible.txt; if touch /workspace/source/sibling 2>/dev/null; then exit 72; fi; if mv /workspace/source /workspace/renamed 2>/dev/null; then exit 73; fi; if wget -T 1 -qO- http://1.1.1.1 >/dev/null 2>&1; then exit 71; fi; sleep 1; printf 'qualification=pass\\n'".into(),
                 ],
                 working_directory: ".".into(),
                 resources: trial_resources,
@@ -1047,6 +1083,7 @@ pub fn concrete_runtime_builds_and_runs_offline_under_runsc() {
         let workspace_metadata = fs::metadata(run.join("workspace")).unwrap();
         assert_eq!(workspace_metadata.uid(), unsafe { libc::geteuid() });
         assert_eq!(workspace_metadata.gid(), unsafe { libc::getegid() });
+        assert!(!run.join("workspace/source").exists());
         let deadline_step = backend.run_step(
             &SandboxStepRequest {
                 owner_id: owner_id.clone(),

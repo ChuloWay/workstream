@@ -106,8 +106,6 @@ struct TrialRuntimeConfiguration {
     trusted_launcher_path: PathBuf,
     trusted_launcher_digest: String,
     maximum_candidate_archive_bytes: u64,
-    candidate_uid: u32,
-    candidate_gid: u32,
 }
 
 impl InvocationReceiptRegistrar for InvocationReceiptRegistry {
@@ -524,9 +522,7 @@ fn load_trial_runtime(config: &mut ServiceConfig) -> Result<(), String> {
     match (&config.trial_profiles, &config.trial_runtime) {
         (None, None) => Ok(()),
         (Some(_), Some(runtime)) => {
-            if runtime.candidate_uid == 0
-                || runtime.candidate_gid == 0
-                || runtime.maximum_candidate_archive_bytes == 0
+            if runtime.maximum_candidate_archive_bytes == 0
                 || !valid_digest(&runtime.outer_runtime_config_digest)
                 || !valid_digest(&runtime.trusted_launcher_digest)
                 || !runtime.trusted_launcher_path.is_absolute()
@@ -604,8 +600,8 @@ fn trial_engine(
             trusted_launcher_digest: runtime.trusted_launcher_digest.clone(),
             offline_cache_root: runtime.offline_cache_root.clone(),
             maximum_candidate_archive_bytes: runtime.maximum_candidate_archive_bytes,
-            candidate_uid: runtime.candidate_uid,
-            candidate_gid: runtime.candidate_gid,
+            candidate_uid: config.sandbox_uid,
+            candidate_gid: config.sandbox_gid,
             export_uid,
             export_gid,
         },
@@ -3371,8 +3367,6 @@ mod tests {
             trusted_launcher_path: config.docker_binary.clone(),
             trusted_launcher_digest: format!("sha256:{}", "3".repeat(64)),
             maximum_candidate_archive_bytes: 1024,
-            candidate_uid: config.sandbox_uid,
-            candidate_gid: config.sandbox_gid,
         });
 
         let first = prepare_listener(&mut config).unwrap();
