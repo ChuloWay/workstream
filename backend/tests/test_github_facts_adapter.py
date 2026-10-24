@@ -33,6 +33,7 @@ from app.interfaces.github_facts import (
     GitHubPullRequestFacts,
     GitHubPullRequestNotFoundError,
     GitHubRequiredChecksNotConfiguredError,
+    parse_pull_request_url,
 )
 
 API = "https://api.github.test"
@@ -62,6 +63,7 @@ def _pull(**changes: object) -> dict:
         "merge_commit_sha": MERGE_SHA,
         "base": {"ref": "main", "repo": {"full_name": REPOSITORY}},
         "head": {"sha": HEAD_SHA},
+        "html_url": f"https://github.com/{REPOSITORY}/pull/12",
         "user": {"login": "agent-bot", "id": 501, "type": "Bot"},
         "changed_files": 2,
     }
@@ -69,6 +71,7 @@ def _pull(**changes: object) -> dict:
     return body
 
 
+RUN_DETAILS_URL = f"https://github.com/{REPOSITORY}/actions/runs/345/job/678"
 REVIEWS = [
     {
         "id": 61,
@@ -124,6 +127,8 @@ class FakeGitHub:
                 "check_runs": [
                     {
                         "id": 10,
+                        "html_url": f"https://github.com/{REPOSITORY}/runs/10",
+                        "details_url": RUN_DETAILS_URL,
                         "name": "backend",
                         "head_sha": HEAD_SHA, "status": "completed",
                         "conclusion": "success",
@@ -230,6 +235,7 @@ async def test_happy_path_returns_facts_with_response_digests() -> None:
         "schema_version": "workstream.github_facts.v1",
         "repository": REPOSITORY,
         "pull_request_number": 12,
+        "html_url": f"https://github.com/{REPOSITORY}/pull/12",
         "state": "closed",
         "merged": True,
         "merge_commit_sha": MERGE_SHA,
@@ -269,6 +275,9 @@ async def test_happy_path_returns_facts_with_response_digests() -> None:
                 "conclusion": "success",
                 "check_run_app_id": 15368,
                 "check_run_head_sha": HEAD_SHA,
+                "check_run_html_url": f"https://github.com/{REPOSITORY}/runs/10",
+                "check_run_details_url": RUN_DETAILS_URL,
+                "workflow_run_id": 345,
                 "commit_status_judged": False,
                 "commit_status_sha": None,
             },
@@ -279,6 +288,9 @@ async def test_happy_path_returns_facts_with_response_digests() -> None:
                 "conclusion": "success",
                 "check_run_app_id": None,
                 "check_run_head_sha": None,
+                "check_run_html_url": None,
+                "check_run_details_url": None,
+                "workflow_run_id": None,
                 "commit_status_judged": True,
                 "commit_status_sha": HEAD_SHA,
             },
@@ -975,3 +987,65 @@ async def test_combined_status_for_another_commit_is_a_protocol_error() -> None:
     )
     with pytest.raises(GitHubFactsProtocolError):
         await _fetch(_adapter(fake))
+
+
+@pytest.mark.parametrize(
+    ("app_id", "details_url", "expected"),
+    [
+        (15368, RUN_DETAILS_URL, 345),
+        (15368, f"https://github.com/{REPOSITORY}/actions/runs/345", 345),
+        (999, RUN_DETAILS_URL, None),
+        (15368, "https://github.com/acme/other/actions/runs/345/job/1", None),
+        (15368, f"https://example.test/{REPOSITORY}/actions/runs/345", None),
+        (15368, None, None),
+    ],
+    ids=("actions-job", "actions-run", "other-app", "other-repo", "other-host", "none"),
+)
+async def test_workflow_run_id_comes_only_from_actions_runs_of_this_repository(
+    app_id: int, details_url: str | None, expected: int | None
+) -> None:
+    fake = FakeGitHub()
+    fake.route(
+        "GET",
+        f"/repos/{REPOSITORY}/branches/main/protection/required_status_checks",
+        {"contexts": [], "checks": [{"context": "backend", "app_id": app_id}]},
+    )
+    fake.route(
+        "GET",
+        f"/repos/{REPOSITORY}/commits/{HEAD_SHA}/check-runs",
+        {"check_runs": [{"id": 9, "name": "backend", "head_sha": HEAD_SHA,
+                         "status": "completed", "conclusion": "success",
+                         "details_url": details_url, "app": {"id": app_id}}]},
+    )
+    facts = await _fetch(_adapter(fake))
+    assert facts.required_checks[0].workflow_run_id == expected
+    assert facts.required_checks[0].check_run_details_url == details_url
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://github.com/acme/widgets/pull/12/",
+        "https://github.com/acme/widgets/pull/12?x=1",
+        "https://github.com/acme/widgets/pull/12#top",
+        "https://github.com:443/acme/widgets/pull/12",
+        "https://user@github.com/acme/widgets/pull/12",
+        "https://github.com/acme/widgets/pull/%31%32",
+        "https://github.com/acme\\widgets/pull/12",
+        "https://github.com/acme/widgets/pull/012",
+        "https://github.com/acme/widgéts/pull/12",
+        "http://github.com/acme/widgets/pull/12",
+        "https://github.com/acme/widgets/pulls/12",
+        "https://github.com/acme/../pull/12",
+        12,
+    ],
+)
+def test_pull_request_url_parser_rejects_noncanonical_forms(url: object) -> None:
+    assert parse_pull_request_url(url) is None
+
+
+def test_pull_request_url_parser_returns_repository_and_number() -> None:
+    assert parse_pull_request_url("https://github.com/Acme/widgets.v2/pull/12") == (
+        "Acme/widgets.v2",
+        12,
+    )

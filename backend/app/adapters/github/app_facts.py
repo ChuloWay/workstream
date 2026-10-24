@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 import hashlib
 import logging
+import re
 import time
 from typing import Any
 from urllib.parse import quote, urlsplit
@@ -61,6 +62,11 @@ JWT_LIFETIME_SECONDS = 540
 # Refresh an installation token this long before GitHub's stated expiry.
 TOKEN_REFRESH_MARGIN_SECONDS = 300
 INITIAL_BACKOFF_SECONDS = 0.5
+GITHUB_ACTIONS_APP_ID = 15368
+_ACTIONS_DETAILS_URL = re.compile(
+    r"https://github\.com/([A-Za-z0-9][A-Za-z0-9-]{0,38}/[A-Za-z0-9._-]{1,100})"
+    r"/actions/runs/([1-9][0-9]{0,18})(?:/job/[1-9][0-9]{0,18})?"
+)
 # Whole facts reads attempted when the pull request moves during a read.
 FACTS_CONSISTENCY_ATTEMPTS = 3
 _BOUND_PULL_FIELDS = (
@@ -298,6 +304,7 @@ class GitHubAppFactsAdapter:
             return GitHubPullRequestFacts(
                 repository=pull_facts["repository"],
                 pull_request_number=pull_request_number,
+                html_url=pull_facts["html_url"],
                 state=pull_facts["state"],
                 merged=pull_facts["merged"],
                 merge_commit_sha=pull_facts["merge_commit_sha"],
@@ -315,7 +322,9 @@ class GitHubAppFactsAdapter:
                     for item in files
                 ),
                 required_checks=tuple(
-                    _required_check_fact(name, app_id, check_runs, statuses, head_sha)
+                    _required_check_fact(
+                        name, app_id, check_runs, statuses, head_sha, pull_facts["repository"]
+                    )
                     for name, app_id in required
                 ),
                 fetched_at=datetime.fromtimestamp(self._wall_clock(), UTC),
@@ -630,6 +639,7 @@ def _pull_request_facts(body: object, repository: str, number: int) -> dict[str,
             "merge_commit_sha": body["merge_commit_sha"] if merged is True else None,
             "base_ref": base["ref"],
             "head_sha": head["sha"],
+            "html_url": body["html_url"],
             "author": body["user"],
             "changed_files_count": body["changed_files"],
         }
@@ -687,6 +697,25 @@ def _latest(items: list[dict]) -> dict | None:
     return max(items, key=lambda item: item["id"], default=None)
 
 
+def _workflow_run_id(run: dict, repository: str) -> int | None:
+    """Return the Actions workflow run id from a GitHub Actions run's details URL.
+
+    The App lacks Actions read permission, so the run id comes from GitHub's own
+    ``details_url`` (``https://github.com/{repo}/actions/runs/{id}/job/{job}``),
+    and only for the GitHub Actions App and this repository.
+    """
+    app = run.get("app")
+    details_url = run.get("details_url")
+    if not isinstance(app, dict) or app.get("id") != GITHUB_ACTIONS_APP_ID:
+        return None
+    if not isinstance(details_url, str):
+        return None
+    match = _ACTIONS_DETAILS_URL.fullmatch(details_url)
+    if match is None or match.group(1).casefold() != repository.casefold():
+        return None
+    return int(match.group(2))
+
+
 def _actor(body: object) -> GitHubActorFact:
     """Translate one GitHub user object."""
     if not isinstance(body, dict):
@@ -712,6 +741,7 @@ def _required_check_fact(
     check_runs: list[dict],
     statuses: list[dict],
     head_sha: str,
+    repository: str,
 ) -> GitHubRequiredCheckFact:
     """Judge only the latest check run and latest status for one required check.
 
@@ -729,8 +759,12 @@ def _required_check_fact(
     run = _latest(runs)
     check_run_app_id = None
     check_run_head_sha = None
+    html_url = details_url = workflow_run_id = None
     if run is not None:
         check_run_head_sha = run.get("head_sha")
+        html_url = run.get("html_url")
+        details_url = run.get("details_url")
+        workflow_run_id = _workflow_run_id(run, repository)
         app = run.get("app")
         check_run_app_id = app.get("id") if isinstance(app, dict) else None
         if check_run_app_id is not None and type(check_run_app_id) is not int:
@@ -765,6 +799,9 @@ def _required_check_fact(
         conclusion=conclusion,
         check_run_app_id=check_run_app_id,
         check_run_head_sha=check_run_head_sha,
+        check_run_html_url=html_url,
+        check_run_details_url=details_url,
+        workflow_run_id=workflow_run_id,
         commit_status_judged=status_judged,
         commit_status_sha=head_sha if status_judged else None,
     )

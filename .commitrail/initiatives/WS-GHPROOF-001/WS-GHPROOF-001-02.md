@@ -132,6 +132,17 @@ chunk adds no transport, credential or retry logic of its own.
   required check records `check_run_head_sha` and `commit_status_sha` so the
   checker can verify the binding. Reviews keep their own `commit_id`; the
   checker counts only reviews of the head SHA.
+- **One canonical pull-request identity (security review, parser
+  differential).** The facts carry GitHub's own pull-request `html_url`. For the
+  judged check run they carry `check_run_html_url`, `check_run_details_url` and
+  `workflow_run_id`. The App has no Actions read permission, so the workflow run
+  id is taken only from a GitHub Actions App (id 15368) `details_url` of the
+  form `https://github.com/{repository}/actions/runs/{id}[/job/{job}]` for this
+  repository; other producers give null. `parse_pull_request_url` in the port
+  module is the single parser for a claimed pull-request URL: it accepts only
+  ASCII `https://github.com/{owner}/{name}/pull/{number}`. Chunk 04 must take
+  the pull-request number from this function, and the checker re-asserts exact
+  equality of the claim with the facts, so fetcher and checker cannot disagree.
 - **Check provenance.** Each required check also records `app_bound` (the
   requirement names an App), `check_run_app_id` (the App that produced the
   judged latest run, or null) and `commit_status_judged` (a commit status, which
@@ -154,6 +165,8 @@ chunk adds no transport, credential or retry logic of its own.
 - [x] A pull request that moves during a read is re-read and bound to one
   state; one that keeps moving, or whose merged flag flips, fails as
   inconsistent; check runs or statuses for another commit fail.
+- [x] Facts carry the pull-request `html_url` and each judged run's URLs and
+  workflow run id; the canonical URL parser rejects every non-canonical form.
 - [x] Each required check records its App binding and the producing App or
   status source of the judged result.
 - [x] Happy path returns the exact facts, response digests, a verifiable JWT
@@ -183,7 +196,7 @@ chunk adds no transport, credential or retry logic of its own.
 
 | Claim | Command or proof | Result | Remaining uncertainty |
 |---|---|---|---|
-| Adapter behavior and secret custody | `pytest tests/test_github_facts_adapter.py` | 53 passed | Uses `httpx.MockTransport`; the re-run rule comes from a separate live read, not from this suite |
+| Adapter behavior and secret custody | `pytest tests/test_github_facts_adapter.py` | 73 passed | Uses `httpx.MockTransport`; the re-run rule comes from a separate live read, not from this suite |
 | Re-run test detects order-based selection | Temporarily selecting the last listed run made both re-run cases fail | Detected | Manual negative control |
 | Secret tests detect leaks | Temporarily unredacting the token repr, and logging the Authorization value, each made one test fail | Detected | Manual negative control |
 | Lane catalogue, boundaries, ownership | `tests/test_ci_lane_catalogue.py`, `tests/architecture/test_module_boundaries.py`, `tests/test_behavior_ownership.py`, `scripts.behavior_ownership validate`, `module_boundaries`, `authorization_boundary`, `test_structure_boundary` | Pass | None |

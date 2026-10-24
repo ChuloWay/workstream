@@ -63,6 +63,29 @@ def is_github_repository(value: object) -> bool:
     return isinstance(value, str) and _GITHUB_REPOSITORY.fullmatch(value) is not None
 
 
+_CANONICAL_PULL_REQUEST_URL = re.compile(
+    r"https://github\.com/([A-Za-z0-9][A-Za-z0-9-]{0,38}/[A-Za-z0-9._-]{1,100})"
+    r"/pull/([1-9][0-9]{0,9})"
+)
+
+
+def parse_pull_request_url(value: object) -> tuple[str, int] | None:
+    """Return (repository, number) from one canonical pull-request URL, or None.
+
+    This is the single parser for a claimed pull-request URL. Only
+    ``https://github.com/{owner}/{name}/pull/{number}`` in ASCII is accepted:
+    no port, user information, query, fragment, trailing slash, percent
+    encoding or backslash. The checker re-asserts exact equality of the claim
+    with the facts, so the reader and the checker cannot disagree.
+    """
+    if not isinstance(value, str) or not value.isascii():
+        return None
+    match = _CANONICAL_PULL_REQUEST_URL.fullmatch(value)
+    if match is None or not is_github_repository(match.group(1)):
+        return None
+    return match.group(1), int(match.group(2))
+
+
 def _github_repository(value: str) -> str:
     """Validate one canonical repository name."""
     if not is_github_repository(value):
@@ -122,6 +145,10 @@ class GitHubRequiredCheckFact(_FactsValue):
     commit GitHub reports for that run. ``commit_status_judged`` is true when a
     commit status, which carries no App identity, was judged;
     ``commit_status_sha`` is the commit of that combined status.
+    ``check_run_html_url`` and ``check_run_details_url`` are GitHub's URLs for the
+    judged run, and ``workflow_run_id`` is the GitHub Actions workflow run that
+    produced it, taken from a GitHub Actions ``details_url`` of this repository
+    (null for other producers).
     """
 
     name: Annotated[StrictStr, Field(min_length=1, max_length=255)]
@@ -130,6 +157,9 @@ class GitHubRequiredCheckFact(_FactsValue):
     conclusion: GitHubCheckConclusion
     check_run_app_id: StrictInt | None
     check_run_head_sha: GitSha | None
+    check_run_html_url: Annotated[StrictStr, Field(max_length=2048)] | None
+    check_run_details_url: Annotated[StrictStr, Field(max_length=2048)] | None
+    workflow_run_id: Annotated[StrictInt, Field(ge=1)] | None
     commit_status_judged: StrictBool
     commit_status_sha: GitSha | None
 
@@ -155,6 +185,7 @@ class GitHubPullRequestFacts(_FactsValue):
     schema_version: Literal["workstream.github_facts.v1"] = GITHUB_FACTS_SCHEMA_VERSION
     repository: GitHubRepository
     pull_request_number: Annotated[StrictInt, Field(ge=1)]
+    html_url: Annotated[StrictStr, Field(min_length=1, max_length=2048)]
     state: Literal["open", "closed"]
     merged: StrictBool
     merge_commit_sha: GitSha | None
