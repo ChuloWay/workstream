@@ -124,6 +124,9 @@ CREATE INDEX ix_checker_model_invocation_grants_run
 CREATE FUNCTION public.guard_checker_model_invocation_grant() RETURNS trigger
 LANGUAGE plpgsql SET search_path=pg_catalog,public,pg_temp AS $$
 DECLARE authority public.audit_events%ROWTYPE;
+DECLARE authority_actor public.actor_profiles%ROWTYPE;
+DECLARE authority_facts jsonb;
+DECLARE authority_resource_digest varchar;
 DECLARE task_project uuid;
 DECLARE assignment_task uuid;
 DECLARE assignment_project uuid;
@@ -192,18 +195,37 @@ BEGIN
 
  SELECT * INTO authority FROM public.audit_events
   WHERE id=NEW.authorization_evidence_id FOR SHARE;
+ authority_facts:=pg_catalog.jsonb_build_object(
+  'execution',NEW.execution_facts,'slot',NEW.paid_slot,
+  'external_request_digest',NEW.external_request_digest,
+  'token_hash',NEW.token_hash);
+ authority_resource_digest:=public.model_usage_json_digest(
+  pg_catalog.jsonb_build_object('resource_context',pg_catalog.jsonb_build_object(
+   'resource_type','checker_model_call',
+   'resource_id',(NEW.execution_facts->>'evaluation_request_id')::uuid,
+   'scope_project_id',NEW.project_id,
+   'action_id','checker.model_call.grant','facts',authority_facts,
+   'facts_digest',public.model_usage_json_digest(pg_catalog.jsonb_build_object(
+    'action','checker.model_call.grant','facts',authority_facts)))));
+ SELECT * INTO authority_actor FROM public.actor_profiles
+  WHERE id=authority.actor_id::uuid FOR SHARE;
  IF authority.id IS NULL OR
+    authority_actor.id IS NULL OR
     authority.event_domain IS DISTINCT FROM 'authority' OR
     authority.event_type IS DISTINCT FROM 'SensitiveAuthorizationAllowed' OR
     authority.actor_ref_kind IS DISTINCT FROM 'actor_profile' OR
     authority.action_id IS DISTINCT FROM 'checker.model_call.grant' OR
     authority.permission_id IS DISTINCT FROM 'checker.model_call.grant' OR
+    authority.project_id IS DISTINCT FROM NEW.project_id OR
+    authority.resource_type IS DISTINCT FROM 'checker_model_call' OR
+    authority.resource_id IS DISTINCT FROM
+     NEW.execution_facts->>'evaluation_request_id' OR
     authority.denial_code IS NOT NULL OR
-    authority.after_facts::jsonb IS DISTINCT FROM jsonb_build_object(
-     'allowed',true,
-     'resource_context_digest',authority.after_facts->>'resource_context_digest') OR
-    coalesce(authority.after_facts->>'resource_context_digest','')
-     !~ '^sha256:[0-9a-f]{64}$' THEN
+    authority.after_facts::jsonb IS DISTINCT FROM pg_catalog.jsonb_build_object(
+     'allowed',true,'resource_context_digest',authority_resource_digest) OR
+    authority_actor.actor_kind IS DISTINCT FROM 'service' OR
+    authority_actor.status IS DISTINCT FROM 'active' OR
+    authority_actor.service_identity IS DISTINCT FROM 'workstream.checker.post_submit' THEN
   RAISE EXCEPTION 'checker model invocation grant authority is invalid'
    USING ERRCODE='23514';
  END IF;
@@ -1965,6 +1987,14 @@ DECLARE terminal_digest varchar;
 DECLARE terminal_facts jsonb;
 DECLARE terminal_resource_facts jsonb;
 DECLARE terminal_resource_digest varchar;
+DECLARE phase_actor public.actor_profiles%ROWTYPE;
+DECLARE phase_execution jsonb;
+DECLARE phase_facts jsonb;
+DECLARE phase_resource jsonb;
+DECLARE phase_resource_digest varchar;
+DECLARE phase_request_evidence jsonb;
+DECLARE phase_attempt jsonb;
+DECLARE retry_terminal_digest varchar;
 BEGIN
  IF TG_OP='DELETE' THEN
   RAISE EXCEPTION 'checker model call attempts cannot be deleted' USING ERRCODE='55000';
@@ -1985,6 +2015,20 @@ BEGIN
   END IF;
   SELECT * INTO checker_envelope FROM public.checker_model_usage_envelopes
    WHERE id=slot.envelope_id FOR UPDATE;
+  terminal_service:='workstream.checker.post_submit';
+  terminal_resource_type:='checker_model_call';
+  terminal_slot:=pg_catalog.jsonb_build_object(
+   'project_id',slot.project_id,'assignment_id',slot.assignment_id,
+   'submission_id',slot.submission_id,'submission_version',slot.submission_version,
+   'requirement_id',slot.requirement_id,
+   'registry_entry_digest',slot.registry_entry_digest,
+   'configuration_sha256',slot.configuration_sha256,
+   'profile_id',slot.profile_id,'profile_version',slot.profile_version,
+   'profile_digest',slot.profile_digest,'slot_index',slot.slot_index);
+  terminal_effect:=pg_catalog.jsonb_build_object(
+   'project_id',slot.project_id,'task_id',slot.task_id,'slot_id',slot.id,
+   'slot_key',terminal_slot,'attempt_id',NEW.id,
+   'internal_call_request_id',NEW.internal_call_request_id);
  ELSE
   prepare_action:='project.guide_compilation.model.prepare';
   dispatch_action:='project.guide_compilation.model.dispatch';
@@ -2000,21 +2044,123 @@ BEGIN
   END IF;
   SELECT * INTO setup_envelope FROM public.setup_model_usage_envelopes
    WHERE id=setup_slot.envelope_id FOR UPDATE;
+  terminal_service:='workstream.project.setup';
+  terminal_resource_type:='setup_model_usage';
+  terminal_slot:=pg_catalog.jsonb_build_object(
+   'compilation_attempt_id',setup_slot.compilation_attempt_id,
+   'project_id',setup_slot.project_id,'guide_id',setup_slot.guide_id,
+   'source_snapshot_id',setup_slot.source_snapshot_id,
+   'setup_run_id',setup_slot.setup_run_id,
+   'setup_generation',setup_slot.setup_generation,
+   'runtime_configuration_hash',setup_slot.runtime_configuration_hash,
+   'profile_id',setup_slot.profile_id,'profile_version',setup_slot.profile_version,
+   'profile_digest',setup_slot.profile_digest,'phase',setup_slot.phase,
+   'call_index',setup_slot.call_index);
+  terminal_effect:=pg_catalog.jsonb_build_object(
+   'project_id',setup_slot.project_id,'slot_id',setup_slot.id,
+   'slot_key',terminal_slot,'effect_id',NEW.id,
+   'internal_call_request_id',NEW.internal_call_request_id);
  END IF;
  IF profile.id IS NULL THEN
   RAISE EXCEPTION 'invalid checker model call attempt ownership' USING ERRCODE='23514';
  END IF;
  SELECT * INTO prepare_authority FROM public.audit_events
   WHERE id=NEW.prepared_authorization_evidence_id FOR SHARE;
+ SELECT * INTO phase_actor FROM public.actor_profiles
+  WHERE id=prepare_authority.actor_id::uuid FOR SHARE;
+ IF NEW.checker_slot_id IS NULL THEN
+  phase_facts:=pg_catalog.jsonb_build_object(
+   'slot',terminal_slot,'request_sha256',NEW.request_sha256);
+  phase_resource:=pg_catalog.jsonb_build_object(
+   'resource_type','setup_model_usage',
+   'resource_id',setup_slot.compilation_attempt_id,
+   'scope_project_id',setup_slot.project_id,
+   'action_id',prepare_action,'facts',phase_facts,
+   'facts_digest',public.model_usage_json_digest(pg_catalog.jsonb_build_object(
+    'action',prepare_action,'facts',phase_facts)));
+ ELSIF NEW.attempt_number=1 THEN
+  SELECT grant_row.execution_facts INTO phase_execution
+   FROM public.checker_model_invocation_grants grant_row
+   WHERE grant_row.project_id=slot.project_id AND
+    grant_row.paid_slot=terminal_slot AND
+    grant_row.execution_facts->>'evaluation_request_id'=prepare_authority.resource_id
+   ORDER BY grant_row.issued_at DESC,grant_row.id DESC LIMIT 1;
+  phase_facts:=pg_catalog.jsonb_build_object(
+   'execution',phase_execution,'slot',terminal_slot,
+   'request_sha256',NEW.request_sha256);
+  phase_resource:=pg_catalog.jsonb_build_object(
+   'resource_type','checker_model_call',
+   'resource_id',(phase_execution->>'evaluation_request_id')::uuid,
+   'scope_project_id',slot.project_id,
+   'action_id',prepare_action,'facts',phase_facts,
+   'facts_digest',public.model_usage_json_digest(pg_catalog.jsonb_build_object(
+    'action',prepare_action,'facts',phase_facts)));
+ ELSE
+  SELECT * INTO parent FROM public.model_usage_effects
+   WHERE id=NEW.parent_attempt_id FOR SHARE;
+  retry_terminal_digest:=CASE parent.state
+   WHEN 'known_no_effect' THEN public.model_usage_json_digest(
+    pg_catalog.jsonb_build_object(
+     'state','known_no_effect','proof_id',parent.no_effect_proof_id,
+     'proof_digest',parent.no_effect_proof_digest,
+     'observed_at',
+      to_char(parent.no_effect_observed_at AT TIME ZONE 'UTC',
+       'YYYY-MM-DD"T"HH24:MI:SS') ||
+      CASE WHEN rtrim(to_char(parent.no_effect_observed_at AT TIME ZONE 'UTC','US'),'0')=''
+       THEN '' ELSE '.' ||
+        rtrim(to_char(parent.no_effect_observed_at AT TIME ZONE 'UTC','US'),'0') END ||
+      '+00:00'))
+   WHEN 'known_failed' THEN public.model_usage_json_digest(
+    pg_catalog.jsonb_build_object(
+     'state','known_failed','provider_response_id',parent.provider_response_id,
+     'response_content_sha256',parent.response_content_sha256,
+     'usage',pg_catalog.jsonb_build_object(
+      'input_tokens',parent.input_tokens,
+      'cached_input_tokens',parent.cached_input_tokens,
+      'output_tokens',parent.output_tokens,
+      'reasoning_tokens',parent.reasoning_tokens),
+     'settled_nanodollars',parent.settled_nanodollars))
+   ELSE NULL END;
+  phase_facts:=pg_catalog.jsonb_build_object(
+   'project_id',slot.project_id,'parent_attempt_id',parent.id,
+   'terminal_digest',retry_terminal_digest);
+  phase_resource:=pg_catalog.jsonb_build_object(
+   'resource_type','project_model_administration',
+   'resource_id',parent.id,'project_id',slot.project_id,
+   'actor_profile_id',prepare_authority.actor_id::uuid,
+   'action_id',prepare_action,'facts',phase_facts,
+   'facts_digest',public.model_usage_json_digest(pg_catalog.jsonb_build_object(
+    'action',prepare_action,'facts',phase_facts)));
+ END IF;
+ phase_resource_digest:=public.model_usage_json_digest(
+  pg_catalog.jsonb_build_object('resource_context',phase_resource));
  IF prepare_authority.id IS NULL OR
+    phase_actor.id IS NULL OR phase_facts IS NULL OR
+    (NEW.checker_slot_id IS NOT NULL AND NEW.attempt_number=1 AND
+     phase_execution IS NULL) OR
+    (NEW.checker_slot_id IS NOT NULL AND NEW.attempt_number>1 AND
+     (parent.id IS NULL OR retry_terminal_digest IS NULL)) OR
     prepare_authority.event_domain IS DISTINCT FROM 'authority' OR
     prepare_authority.event_type IS DISTINCT FROM 'SensitiveAuthorizationAllowed' OR
     prepare_authority.actor_ref_kind IS DISTINCT FROM 'actor_profile' OR
     prepare_authority.action_id IS DISTINCT FROM prepare_action OR
     prepare_authority.permission_id IS DISTINCT FROM prepare_action OR
+    prepare_authority.project_id IS DISTINCT FROM
+     coalesce(slot.project_id,setup_slot.project_id) OR
+    prepare_authority.resource_type IS DISTINCT FROM phase_resource->>'resource_type' OR
+    prepare_authority.resource_id IS DISTINCT FROM phase_resource->>'resource_id' OR
     prepare_authority.denial_code IS NOT NULL OR
-    coalesce(prepare_authority.after_facts->>'resource_context_digest','')
-     !~ '^sha256:[0-9a-f]{64}$' THEN
+    prepare_authority.after_facts::jsonb IS DISTINCT FROM
+     pg_catalog.jsonb_build_object(
+      'allowed',true,'resource_context_digest',phase_resource_digest) OR
+    (TG_OP='INSERT' AND NEW.attempt_number=1 AND
+     (phase_actor.actor_kind IS DISTINCT FROM 'service' OR
+      phase_actor.status IS DISTINCT FROM 'active' OR
+      phase_actor.service_identity IS DISTINCT FROM terminal_service)) OR
+    (TG_OP='INSERT' AND NEW.attempt_number>1 AND
+     (phase_actor.actor_kind IS DISTINCT FROM 'human' OR
+      phase_actor.status IS DISTINCT FROM 'active' OR
+      prepare_authority.matched_grant_id IS NULL)) THEN
   RAISE EXCEPTION 'model usage prepare authority is invalid' USING ERRCODE='23514';
  END IF;
  maximum_dispatch_reservation := profile.maximum_input_tokens::numeric *
@@ -2057,20 +2203,6 @@ BEGIN
     'output_tokens',NEW.output_tokens,'reasoning_tokens',NEW.reasoning_tokens)
    ELSE NULL END;
   IF NEW.checker_slot_id IS NOT NULL THEN
-   terminal_service:='workstream.checker.post_submit';
-   terminal_resource_type:='checker_model_call';
-   terminal_slot:=pg_catalog.jsonb_build_object(
-    'project_id',slot.project_id,'assignment_id',slot.assignment_id,
-    'submission_id',slot.submission_id,'submission_version',slot.submission_version,
-    'requirement_id',slot.requirement_id,
-    'registry_entry_digest',slot.registry_entry_digest,
-    'configuration_sha256',slot.configuration_sha256,
-    'profile_id',slot.profile_id,'profile_version',slot.profile_version,
-    'profile_digest',slot.profile_digest,'slot_index',slot.slot_index);
-   terminal_effect:=pg_catalog.jsonb_build_object(
-    'project_id',slot.project_id,'task_id',slot.task_id,'slot_id',slot.id,
-    'slot_key',terminal_slot,'attempt_id',NEW.id,
-    'internal_call_request_id',NEW.internal_call_request_id);
    IF NEW.state IN ('completed','known_failed') THEN
     terminal_digest:=public.model_usage_json_digest(pg_catalog.jsonb_build_object(
      'status',NEW.state,'provider_response_id',NEW.provider_response_id,
@@ -2078,22 +2210,6 @@ BEGIN
      'response_evidence',terminal_evidence,'usage',terminal_usage));
    END IF;
   ELSE
-   terminal_service:='workstream.project.setup';
-   terminal_resource_type:='setup_model_usage';
-   terminal_slot:=pg_catalog.jsonb_build_object(
-    'compilation_attempt_id',setup_slot.compilation_attempt_id,
-    'project_id',setup_slot.project_id,'guide_id',setup_slot.guide_id,
-    'source_snapshot_id',setup_slot.source_snapshot_id,
-    'setup_run_id',setup_slot.setup_run_id,
-    'setup_generation',setup_slot.setup_generation,
-    'runtime_configuration_hash',setup_slot.runtime_configuration_hash,
-    'profile_id',setup_slot.profile_id,'profile_version',setup_slot.profile_version,
-    'profile_digest',setup_slot.profile_digest,'phase',setup_slot.phase,
-    'call_index',setup_slot.call_index);
-   terminal_effect:=pg_catalog.jsonb_build_object(
-    'project_id',setup_slot.project_id,'slot_id',setup_slot.id,
-    'slot_key',terminal_slot,'effect_id',NEW.id,
-    'internal_call_request_id',NEW.internal_call_request_id);
    IF NEW.state IN ('completed','known_failed') THEN
     terminal_digest:=public.model_usage_json_digest(pg_catalog.jsonb_build_object(
      'status','completed','provider_response_id',NEW.provider_response_id,
@@ -2209,15 +2325,69 @@ BEGIN
    configuration_digest=NEW.budget_configuration_digest FOR SHARE;
   SELECT * INTO account FROM public.model_usage_budget_accounts
    WHERE project_id=coalesce(slot.project_id,setup_slot.project_id) FOR SHARE;
+  SELECT * INTO phase_actor FROM public.actor_profiles
+   WHERE id=dispatch_authority.actor_id::uuid FOR SHARE;
+  phase_request_evidence:=pg_catalog.jsonb_build_object(
+   'binding_id',NEW.request_binding_id,'content_id',NEW.request_content_id,
+   'put_attempt_id',NEW.request_put_attempt_id,
+   'verification_receipt_id',NEW.request_verification_receipt_id,
+   'content_sha256',NEW.request_content_sha256,
+   'byte_count',NEW.request_byte_count,'media_type','application/json');
+  IF NEW.checker_slot_id IS NOT NULL THEN
+   phase_attempt:=pg_catalog.jsonb_build_object(
+    'slot_id',slot.id,'slot_key',terminal_slot,'attempt_id',NEW.id,
+    'attempt_number',NEW.attempt_number,
+    'internal_call_request_id',NEW.internal_call_request_id,
+    'request_sha256',NEW.request_sha256,'state','prepared','replayed',false);
+   SELECT grant_row.execution_facts INTO phase_execution
+    FROM public.checker_model_invocation_grant_calls grant_call
+    JOIN public.checker_model_invocation_grants grant_row
+     ON grant_row.id=grant_call.grant_id
+    WHERE grant_call.attempt_id=NEW.id AND
+     grant_call.request_sha256=NEW.request_sha256 AND
+     grant_row.issued_at<=dispatch_authority.occurred_at
+    ORDER BY grant_row.issued_at DESC,grant_row.id DESC LIMIT 1;
+   phase_facts:=pg_catalog.jsonb_build_object(
+    'execution',phase_execution,'attempt',phase_attempt,
+    'request_evidence',phase_request_evidence);
+  ELSE
+   phase_attempt:=pg_catalog.jsonb_build_object(
+    'envelope_id',setup_envelope.id,'slot_id',setup_slot.id,
+    'slot_key',terminal_slot,'effect_id',NEW.id,
+    'attempt_number',NEW.attempt_number,
+    'internal_call_request_id',NEW.internal_call_request_id,
+    'request_sha256',NEW.request_sha256,'state','prepared','replayed',false);
+   phase_facts:=pg_catalog.jsonb_build_object(
+    'prepared',phase_attempt,'request_evidence',phase_request_evidence);
+  END IF;
+  phase_resource:=pg_catalog.jsonb_build_object(
+   'resource_type',terminal_resource_type,'resource_id',NEW.id,
+   'scope_project_id',coalesce(slot.project_id,setup_slot.project_id),
+   'action_id',dispatch_action,'facts',phase_facts,
+   'facts_digest',public.model_usage_json_digest(pg_catalog.jsonb_build_object(
+    'action',dispatch_action,'facts',phase_facts)));
+  phase_resource_digest:=public.model_usage_json_digest(
+   pg_catalog.jsonb_build_object('resource_context',phase_resource));
   IF dispatch_authority.id IS NULL OR
+     phase_actor.id IS NULL OR phase_facts IS NULL OR
+     (NEW.checker_slot_id IS NOT NULL AND phase_execution IS NULL) OR
      dispatch_authority.event_domain IS DISTINCT FROM 'authority' OR
      dispatch_authority.event_type IS DISTINCT FROM 'SensitiveAuthorizationAllowed' OR
      dispatch_authority.actor_ref_kind IS DISTINCT FROM 'actor_profile' OR
      dispatch_authority.action_id IS DISTINCT FROM dispatch_action OR
      dispatch_authority.permission_id IS DISTINCT FROM dispatch_action OR
+     dispatch_authority.project_id IS DISTINCT FROM
+      coalesce(slot.project_id,setup_slot.project_id) OR
+     dispatch_authority.resource_type IS DISTINCT FROM terminal_resource_type OR
+     dispatch_authority.resource_id IS DISTINCT FROM NEW.id::text OR
      dispatch_authority.denial_code IS NOT NULL OR
-     coalesce(dispatch_authority.after_facts->>'resource_context_digest','')
-      !~ '^sha256:[0-9a-f]{64}$' OR
+     dispatch_authority.after_facts::jsonb IS DISTINCT FROM
+      pg_catalog.jsonb_build_object(
+       'allowed',true,'resource_context_digest',phase_resource_digest) OR
+     (TG_OP='UPDATE' AND OLD.state='prepared' AND
+      (phase_actor.actor_kind IS DISTINCT FROM 'service' OR
+       phase_actor.status IS DISTINCT FROM 'active' OR
+       phase_actor.service_identity IS DISTINCT FROM terminal_service)) OR
      NOT request_complete OR budget.id IS NULL OR
      budget.project_id<>coalesce(slot.project_id,setup_slot.project_id) OR
      (TG_OP='UPDATE' AND OLD.state='prepared' AND
@@ -2290,15 +2460,39 @@ BEGIN
  ELSIF NEW.state='uncertain' THEN
   SELECT * INTO observation_authority FROM public.audit_events
    WHERE id=NEW.observation_authorization_evidence_id FOR SHARE;
+  SELECT * INTO phase_actor FROM public.actor_profiles
+   WHERE id=observation_authority.actor_id::uuid FOR SHARE;
+  phase_facts:=pg_catalog.jsonb_build_object(
+   'effect',terminal_effect,'provider_response_id',NEW.provider_response_id,
+   'observation_digest',NEW.uncertainty_digest);
+  phase_resource:=pg_catalog.jsonb_build_object(
+   'resource_type',terminal_resource_type,'resource_id',NEW.id,
+   'scope_project_id',coalesce(slot.project_id,setup_slot.project_id),
+   'action_id',observation_action,
+   'facts',pg_catalog.jsonb_strip_nulls(phase_facts),
+   'facts_digest',public.model_usage_json_digest(pg_catalog.jsonb_build_object(
+    'action',observation_action,'facts',phase_facts)));
+  phase_resource_digest:=public.model_usage_json_digest(
+   pg_catalog.jsonb_build_object('resource_context',phase_resource));
   IF observation_authority.id IS NULL OR
+     phase_actor.id IS NULL OR
      observation_authority.event_domain IS DISTINCT FROM 'authority' OR
      observation_authority.event_type IS DISTINCT FROM 'SensitiveAuthorizationAllowed' OR
      observation_authority.actor_ref_kind IS DISTINCT FROM 'actor_profile' OR
      observation_authority.action_id IS DISTINCT FROM observation_action OR
      observation_authority.permission_id IS DISTINCT FROM observation_action OR
+     observation_authority.project_id IS DISTINCT FROM
+      coalesce(slot.project_id,setup_slot.project_id) OR
+     observation_authority.resource_type IS DISTINCT FROM terminal_resource_type OR
+     observation_authority.resource_id IS DISTINCT FROM NEW.id::text OR
      observation_authority.denial_code IS NOT NULL OR
-     coalesce(observation_authority.after_facts->>'resource_context_digest','')
-      !~ '^sha256:[0-9a-f]{64}$' OR
+     observation_authority.after_facts::jsonb IS DISTINCT FROM
+      pg_catalog.jsonb_build_object(
+       'allowed',true,'resource_context_digest',phase_resource_digest) OR
+     (TG_OP='UPDATE' AND OLD.state='dispatching' AND
+      (phase_actor.actor_kind IS DISTINCT FROM 'service' OR
+       phase_actor.status IS DISTINCT FROM 'active' OR
+       phase_actor.service_identity IS DISTINCT FROM terminal_service)) OR
      NEW.uncertainty_digest !~ '^sha256:[0-9a-f]{64}$' OR
      NEW.observation_authorization_evidence_id IS NULL OR
 	    NEW.response_binding_id IS NOT NULL OR NEW.response_content_id IS NOT NULL OR
@@ -2325,6 +2519,10 @@ BEGIN
      terminal_authority.actor_ref_kind IS DISTINCT FROM 'actor_profile' OR
      terminal_authority.action_id IS DISTINCT FROM terminal_action OR
      terminal_authority.permission_id IS DISTINCT FROM terminal_action OR
+     terminal_authority.project_id IS DISTINCT FROM
+      coalesce(slot.project_id,setup_slot.project_id) OR
+     terminal_authority.resource_type IS DISTINCT FROM terminal_resource_type OR
+     terminal_authority.resource_id IS DISTINCT FROM NEW.id::text OR
      terminal_authority.denial_code IS NOT NULL OR
      terminal_authority.after_facts::jsonb IS DISTINCT FROM
       pg_catalog.jsonb_build_object(
@@ -2351,6 +2549,10 @@ BEGIN
      terminal_authority.actor_ref_kind IS DISTINCT FROM 'actor_profile' OR
      terminal_authority.action_id IS DISTINCT FROM terminal_action OR
      terminal_authority.permission_id IS DISTINCT FROM terminal_action OR
+     terminal_authority.project_id IS DISTINCT FROM
+      coalesce(slot.project_id,setup_slot.project_id) OR
+     terminal_authority.resource_type IS DISTINCT FROM terminal_resource_type OR
+     terminal_authority.resource_id IS DISTINCT FROM NEW.id::text OR
      terminal_authority.denial_code IS NOT NULL OR
      terminal_authority.after_facts::jsonb IS DISTINCT FROM
       pg_catalog.jsonb_build_object(
@@ -2378,6 +2580,10 @@ BEGIN
      terminal_authority.actor_ref_kind IS DISTINCT FROM 'actor_profile' OR
      terminal_authority.action_id IS DISTINCT FROM terminal_action OR
      terminal_authority.permission_id IS DISTINCT FROM terminal_action OR
+     terminal_authority.project_id IS DISTINCT FROM
+      coalesce(slot.project_id,setup_slot.project_id) OR
+     terminal_authority.resource_type IS DISTINCT FROM terminal_resource_type OR
+     terminal_authority.resource_id IS DISTINCT FROM NEW.id::text OR
      terminal_authority.denial_code IS NOT NULL OR
      terminal_authority.after_facts::jsonb IS DISTINCT FROM
       pg_catalog.jsonb_build_object(

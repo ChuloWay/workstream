@@ -12,9 +12,11 @@ from tests.checkers_model_calls.model_usage_pg_support import (
     DatabaseFacts,
     model_database as _model_database,
 )
-from tests.checkers_model_calls.test_model_call_transactions_postgresql import (
+from tests.checkers_model_calls.model_usage_boundary_support import (
     BoundaryPorts,
     DatabaseBoundaryPorts,
+)
+from tests.checkers_model_calls.test_model_call_transactions_postgresql import (
     evidence,
     prepare_and_reserve,
     provision,
