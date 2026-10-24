@@ -28,7 +28,8 @@ chunk adds no transport, credential or retry logic of its own.
   `GitHubFactsAdapter` port.
 - `backend/app/adapters/github/__init__.py` (composition root) and
   `backend/app/adapters/github/app_facts.py` (GitHub App provider).
-- `backend/app/core/config.py` GitHub App settings and their validator;
+- `backend/app/core/config.py` GitHub App settings, the private-key secret
+  custody and their validators;
   commented examples in `backend/.env.example`.
 - `backend/tests/test_github_facts_adapter.py`, its lane-catalogue entry and
   shared-family fingerprint, and the behavior-ownership partition additions.
@@ -40,6 +41,11 @@ chunk adds no transport, credential or retry logic of its own.
 
 ## Design and decisions
 
+- **GitHub App.** The intended App is `flow-workstream-proof-reader` (App id
+  5454828), installed on the Flow-Research repositories with read access to
+  administration, checks, metadata, pull requests and statuses. Its private key
+  stays in the operator's secret store; no key is committed, and tests generate
+  a throwaway RSA key.
 - **Authentication.** An RS256 App JWT (PyJWT, 60 s backdated, 9 min lifetime)
   is used only to look up the repository installation (unless
   `WORKSTREAM_GITHUB_APP_INSTALLATION_ID` is set) and to exchange an installation
@@ -52,12 +58,19 @@ chunk adds no transport, credential or retry logic of its own.
   `status` for the head SHA, with `per_page=100` and `Link: rel="next"`
   pagination up to 10 pages. A next link to another origin is a protocol error,
   so a response cannot redirect the credential. Redirects are not followed.
-- **Required checks.** Protection `checks` (context plus optional App id) are
-  used when present, otherwise `contexts`. A check restricted to an App matches
-  only that App's check runs; an unrestricted check matches check runs and
-  commit statuses by name. Every matching result must be `success`; otherwise
-  the first non-success value is reported. No match is `missing`; an incomplete
-  run is `pending`. `neutral` and `skipped` are not `success`.
+- **Required checks.** The required set is the union of protection
+  `checks[].context` (with its optional App id; `-1` or null means any source)
+  and `contexts` (any source). A check restricted to an App matches only that
+  App's check runs; an unrestricted check matches check runs and commit
+  statuses by name.
+- **Re-runs.** A head commit can carry several check runs with one name. A live
+  read of Flow-Research/harnessy-v2 PR #169 found 47 runs for 24 names, where a
+  failed first attempt was re-run successfully; judging any run per name gave a
+  false failure. For each required check only the most recent check run
+  (highest GitHub id) and the most recent commit status (highest id) count.
+  When both exist, both must be `success`; otherwise the first non-success value
+  is reported. No match is `missing`; an incomplete run is `pending`. `neutral`
+  and `skipped` are not `success`.
 - **Missing protection fails closed.** A 404 from the protection endpoint, or an
   empty required-check list, raises `GitHubRequiredChecksNotConfiguredError`
   (a non-retryable configuration error). Without required checks "CI passed"
@@ -76,8 +89,14 @@ chunk adds no transport, credential or retry logic of its own.
   about 3% of the 3,520 s handler timeout at the maximum. Chunk 04 must place
   this budget inside the handler prelude or reserve it from the execution
   budget; the 60 s prelude margin alone is already partly used.
-- **Credential custody.** The key is read once from an absolute file path
-  (bounded to 16 KiB) and held only as a parsed `RSAPrivateKey`. Tokens live
+- **Credential custody.** The PEM key is the secret setting
+  `WORKSTREAM_GITHUB_APP_PRIVATE_KEY`. Settings remove it from structured input
+  before validation and hold it only as a private redacted `SecretStr`,
+  following the `pagination_cursor_hmac_secret` custody path (direct, JSON,
+  string and dotenv inputs; cleared on failure). It must be configured together
+  with the App id. Single-line values with literal `\n` separators are
+  accepted. The adapter parses it once (bounded to 16 KiB) and holds only an
+  `RSAPrivateKey`. Tokens live
   only in `_InstallationToken`, whose representation is redacted. Every
   adapter error is raised `from None` and carries only its code. Retry logs
   carry only status and attempt. Token-exchange bodies are never hashed or
@@ -91,6 +110,8 @@ chunk adds no transport, credential or retry logic of its own.
 
 ## Acceptance criteria
 
+- [x] Only the latest re-run per required check counts, in both directions,
+  and the required set is the union of `checks` and `contexts`.
 - [x] Happy path returns the exact facts, response digests, a verifiable JWT
   and a repository-scoped token request.
 - [x] Pagination is followed within the origin; a foreign link fails.
@@ -106,6 +127,8 @@ chunk adds no transport, credential or retry logic of its own.
 ## Risk and review routing
 
 - Risk class: L1, new external credential custody without a production caller.
+  The App's administration read permission is needed for classic branch
+  protection reads.
 - Required reviewers: security, senior engineering, QA.
 - Human review focus: the GitHub App permission set (classic branch protection
   reads need repository administration read), fail-closed missing protection,
@@ -116,7 +139,8 @@ chunk adds no transport, credential or retry logic of its own.
 
 | Claim | Command or proof | Result | Remaining uncertainty |
 |---|---|---|---|
-| Adapter behavior and secret custody | `pytest tests/test_github_facts_adapter.py` | 39 passed | Uses `httpx.MockTransport`, not live GitHub |
+| Adapter behavior and secret custody | `pytest tests/test_github_facts_adapter.py` | 44 passed | Uses `httpx.MockTransport`; the re-run rule comes from a separate live read, not from this suite |
+| Re-run test detects order-based selection | Temporarily selecting the last listed run made both re-run cases fail | Detected | Manual negative control |
 | Secret tests detect leaks | Temporarily unredacting the token repr, and logging the Authorization value, each made one test fail | Detected | Manual negative control |
 | Lane catalogue, boundaries, ownership | `tests/test_ci_lane_catalogue.py`, `tests/architecture/test_module_boundaries.py`, `tests/test_behavior_ownership.py`, `scripts.behavior_ownership validate`, `module_boundaries`, `authorization_boundary`, `test_structure_boundary` | Pass | None |
 | Settings | `tests/test_config.py` plus the new settings cases | Pass | None |

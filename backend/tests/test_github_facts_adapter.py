@@ -5,7 +5,6 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
-from pathlib import Path
 import traceback
 
 import httpx
@@ -50,6 +49,7 @@ PRIVATE_PEM = PRIVATE_KEY.private_bytes(
     serialization.NoEncryption(),
 ).decode()
 PEM_BODY_LINE = PRIVATE_PEM.splitlines()[1]
+# Throwaway key generated per test run; no real key exists in the repository.
 
 
 def _pull(**changes: object) -> dict:
@@ -95,6 +95,7 @@ class FakeGitHub:
                 "total_count": 1,
                 "check_runs": [
                     {
+                        "id": 10,
                         "name": "backend",
                         "status": "completed",
                         "conclusion": "success",
@@ -106,7 +107,7 @@ class FakeGitHub:
         self.route(
             "GET",
             f"/repos/{REPOSITORY}/commits/{HEAD_SHA}/status",
-            {"state": "success", "statuses": [{"context": "lint", "state": "success"}]},
+            {"state": "success", "statuses": [{"id": 21, "context": "lint", "state": "success"}]},
         )
 
     def route(self, method: str, path: str, *responses: object) -> None:
@@ -278,7 +279,7 @@ async def test_pagination_follows_same_origin_next_links() -> None:
             200,
             json={
                 "check_runs": [
-                    {"name": "other", "status": "completed", "conclusion": "failure"}
+                    {"id": 4, "name": "other", "status": "completed", "conclusion": "failure"}
                 ]
             },
             headers={"link": f'<{page_two}>; rel="next"'},
@@ -286,6 +287,7 @@ async def test_pagination_follows_same_origin_next_links() -> None:
         {
             "check_runs": [
                 {
+                    "id": 11,
                     "name": "backend",
                     "status": "completed",
                     "conclusion": "failure",
@@ -331,9 +333,9 @@ async def test_required_check_conclusions_fail_closed() -> None:
         f"/repos/{REPOSITORY}/commits/{HEAD_SHA}/check-runs",
         {
             "check_runs": [
-                {"name": "backend", "status": "completed", "conclusion": "success"},
-                {"name": "e2e", "status": "in_progress", "conclusion": None},
-                {"name": "wrong-app", "status": "completed", "conclusion": "skipped"},
+                {"id": 1, "name": "backend", "status": "completed", "conclusion": "success"},
+                {"id": 2, "name": "e2e", "status": "in_progress", "conclusion": None},
+                {"id": 3, "name": "wrong-app", "status": "completed", "conclusion": "skipped"},
             ]
         },
     )
@@ -342,8 +344,8 @@ async def test_required_check_conclusions_fail_closed() -> None:
         f"/repos/{REPOSITORY}/commits/{HEAD_SHA}/status",
         {
             "statuses": [
-                {"context": "backend", "state": "failure"},
-                {"context": "lint", "state": "error"},
+                {"id": 23, "context": "backend", "state": "failure"},
+                {"id": 24, "context": "lint", "state": "error"},
             ]
         },
     )
@@ -358,6 +360,64 @@ async def test_required_check_conclusions_fail_closed() -> None:
     }
 
 
+@pytest.mark.parametrize(
+    ("older", "newer", "expected"),
+    [("failure", "success", "success"), ("success", "failure", "failure")],
+    ids=("rerun-passed", "rerun-failed"),
+)
+async def test_only_the_latest_rerun_of_a_required_check_counts(
+    older: str, newer: str, expected: str
+) -> None:
+    fake = FakeGitHub()
+    runs_path = f"/repos/{REPOSITORY}/commits/{HEAD_SHA}/check-runs"
+    run = {"name": "backend", "status": "completed", "app": {"id": 15368}}
+    # The newer run is on the first page and the older on the second, so
+    # response order cannot decide the result.
+    fake.route(
+        "GET",
+        runs_path,
+        httpx.Response(
+            200,
+            json={"check_runs": [{**run, "id": 900, "conclusion": newer}]},
+            headers={"link": f'<{API}{runs_path}?per_page=100&page=2>; rel="next"'},
+        ),
+        {"check_runs": [{**run, "id": 899, "conclusion": older}]},
+    )
+    fake.route(
+        "GET",
+        f"/repos/{REPOSITORY}/commits/{HEAD_SHA}/status",
+        {
+            "statuses": [
+                {"id": 31, "context": "lint", "state": "failure"},
+                {"id": 32, "context": "lint", "state": "success"},
+            ]
+        },
+    )
+    facts = await _fetch(_adapter(fake))
+    assert {item.name: item.conclusion for item in facts.required_checks} == {
+        "backend": expected,
+        "lint": "success",
+    }
+
+
+async def test_required_checks_are_the_union_of_checks_and_contexts() -> None:
+    fake = FakeGitHub()
+    fake.route(
+        "GET",
+        f"/repos/{REPOSITORY}/branches/main/protection/required_status_checks",
+        {
+            "contexts": ["backend", "docs"],
+            "checks": [{"context": "backend", "app_id": 15368}, {"context": "lint", "app_id": -1}],
+        },
+    )
+    facts = await _fetch(_adapter(fake))
+    assert [(item.name, item.app_id, item.conclusion) for item in facts.required_checks] == [
+        ("backend", 15368, "success"),
+        ("docs", None, "missing"),
+        ("lint", None, "success"),
+    ]
+
+
 async def test_app_restricted_check_ignores_other_apps_and_statuses() -> None:
     fake = FakeGitHub()
     fake.route(
@@ -366,6 +426,7 @@ async def test_app_restricted_check_ignores_other_apps_and_statuses() -> None:
         {
             "check_runs": [
                 {
+                    "id": 12,
                     "name": "backend",
                     "status": "completed",
                     "conclusion": "success",
@@ -377,7 +438,7 @@ async def test_app_restricted_check_ignores_other_apps_and_statuses() -> None:
     fake.route(
         "GET",
         f"/repos/{REPOSITORY}/commits/{HEAD_SHA}/status",
-        {"statuses": [{"context": "backend", "state": "success"}, {"context": "lint", "state": "success"}]},
+        {"statuses": [{"id": 22, "context": "backend", "state": "success"}, {"id": 21, "context": "lint", "state": "success"}]},
     )
     facts = await _fetch(_adapter(fake))
     assert facts.required_checks[0].conclusion == "missing"
@@ -593,23 +654,21 @@ async def test_successful_facts_and_token_holder_are_secret_free(
         _assert_secret_free(text, secrets)
 
 
-def _settings(tmp_path: Path, **values: object) -> Settings:
-    key_file = tmp_path / "github-app.pem"
-    key_file.write_text(PRIVATE_PEM, encoding="utf-8")
+def _settings(**values: object) -> Settings:
     configured: dict[str, object] = {
         "environment": "test",
         "github_app_id": APP_ID,
-        "github_app_private_key_file": key_file,
+        "github_app_private_key": PRIVATE_PEM,
         "github_api_base_url": API,
     }
     configured.update(values)
     return Settings(_env_file=None, **configured)
 
 
-async def test_factory_registers_the_github_app_provider(tmp_path: Path) -> None:
+async def test_factory_registers_the_github_app_provider() -> None:
     fake = FakeGitHub()
     factory = github_facts_adapter_factory(
-        _settings(tmp_path, github_app_installation_id=77),
+        _settings(github_app_installation_id=77),
         transport=httpx.MockTransport(fake.handler),
     )
     adapter = factory.create("github_app")
@@ -621,23 +680,44 @@ async def test_factory_registers_the_github_app_provider(tmp_path: Path) -> None
     assert facts.repository == REPOSITORY
 
 
-def test_factory_refuses_missing_or_unusable_credentials(tmp_path: Path) -> None:
+def test_factory_refuses_missing_or_unusable_credentials() -> None:
     unconfigured = Settings(_env_file=None, environment="test")
     with pytest.raises(ExternalServiceConfigurationError):
         github_facts_adapter_factory(unconfigured).create("github_app")
-    settings = _settings(tmp_path)
-    assert settings.github_app_private_key_file is not None
-    settings.github_app_private_key_file.write_text("not a key", encoding="utf-8")
+    unusable = "-----BEGIN PRIVATE KEY-----\nnot-a-key\n-----END PRIVATE KEY-----\n"
     with pytest.raises(ExternalServiceConfigurationError) as caught:
-        github_facts_adapter_factory(settings).create("github_app")
+        github_facts_adapter_factory(_settings(github_app_private_key=unusable)).create(
+            "github_app"
+        )
     assert caught.value.__cause__ is None
+
+
+def test_private_key_setting_is_redacted_and_accepts_escaped_newlines(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings = _settings()
+    assert settings.github_app_private_key is not None
+    assert settings.github_app_private_key.get_secret_value() == PRIVATE_PEM
+    for text in (repr(settings), str(settings.model_dump()), settings.model_dump_json()):
+        assert PEM_BODY_LINE not in text
+    monkeypatch.setenv("WORKSTREAM_GITHUB_APP_PRIVATE_KEY", PRIVATE_PEM.replace("\n", "\\n"))
+    from_environment = Settings(_env_file=None, environment="test", github_app_id=APP_ID)
+    assert from_environment.github_app_private_key is not None
+    assert from_environment.github_app_private_key.get_secret_value() == PRIVATE_PEM
+
+
+def test_invalid_private_key_setting_error_omits_the_value() -> None:
+    bogus = "not-a-pem-secret-value-0123456789"
+    with pytest.raises(ValueError) as caught:
+        _settings(github_app_private_key=bogus)
+    assert bogus not in "".join(traceback.format_exception(caught.value))
 
 
 @pytest.mark.parametrize(
     "values",
     [
-        {"github_app_private_key_file": None},
-        {"github_app_private_key_file": Path("relative.pem")},
+        {"github_app_private_key": None},
+        {"github_app_id": None},
         {"github_api_base_url": "http://api.github.example"},
         {"github_api_base_url": "https://user:pass@api.github.com"},
         {"github_api_base_url": "https://api.github.com/"},
@@ -646,13 +726,11 @@ def test_factory_refuses_missing_or_unusable_credentials(tmp_path: Path) -> None
         {"github_facts_total_deadline_seconds": 121.0},
     ],
 )
-def test_settings_reject_incomplete_or_unsafe_configuration(
-    tmp_path: Path, values: dict
-) -> None:
+def test_settings_reject_incomplete_or_unsafe_configuration(values: dict) -> None:
     with pytest.raises(ValueError):
-        _settings(tmp_path, **values)
+        _settings(**values)
 
 
-def test_settings_accept_loopback_http_only_for_local_and_test(tmp_path: Path) -> None:
-    settings = _settings(tmp_path, github_api_base_url="http://127.0.0.1:8080")
+def test_settings_accept_loopback_http_only_for_local_and_test() -> None:
+    settings = _settings(github_api_base_url="http://127.0.0.1:8080")
     assert settings.github_api_base_url == "http://127.0.0.1:8080"

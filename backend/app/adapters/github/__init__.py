@@ -31,8 +31,8 @@ def _github_app_adapter(
 ) -> GitHubAppFactsAdapter:
     """Construct the provider from complete settings or fail as configuration."""
     app_id = settings.github_app_id
-    key_file = settings.github_app_private_key_file
-    if app_id is None or key_file is None:
+    private_key = settings.github_app_private_key
+    if app_id is None or private_key is None:
         raise ExternalServiceConfigurationError(
             ExternalServiceAdapterIdentity(GITHUB_FACTS_CAPABILITY_KEY, GITHUB_APP_PROVIDER_KEY)
         )
@@ -45,7 +45,7 @@ def _github_app_adapter(
             total_deadline_seconds=settings.github_facts_total_deadline_seconds,
             maximum_attempts=settings.github_facts_maximum_attempts,
         ),
-        load_github_app_private_key(key_file),
+        load_github_app_private_key(private_key),
         transport=transport,
     )
 

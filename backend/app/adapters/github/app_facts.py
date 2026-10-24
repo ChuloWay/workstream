@@ -15,7 +15,6 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 import hashlib
 import logging
-from pathlib import Path
 import time
 from typing import Any
 from urllib.parse import quote, urlsplit
@@ -24,7 +23,7 @@ import httpx
 import jwt
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
 from cryptography.hazmat.primitives.serialization import load_pem_private_key
-from pydantic import ValidationError
+from pydantic import SecretStr, ValidationError
 
 from app.interfaces.external_services import (
     ExternalServiceAdapterIdentity,
@@ -102,16 +101,16 @@ class GitHubAppFactsConfiguration:
     maximum_attempts: int
 
 
-def load_github_app_private_key(path: Path) -> RSAPrivateKey:
-    """Read and parse one bounded PEM RSA key without exposing its bytes."""
+def load_github_app_private_key(secret: SecretStr) -> RSAPrivateKey:
+    """Parse one bounded PEM RSA key without exposing its bytes."""
     key: object = None
     try:
-        with path.open("rb") as handle:
-            data = handle.read(MAXIMUM_PRIVATE_KEY_BYTES + 1)
+        data = secret.get_secret_value().encode("ascii")
         if len(data) <= MAXIMUM_PRIVATE_KEY_BYTES:
             key = load_pem_private_key(data, password=None)
-    except (OSError, ValueError, TypeError):
+    except (UnicodeEncodeError, ValueError, TypeError):
         key = None
+    data = b""
     if not isinstance(key, RSAPrivateKey):
         raise ExternalServiceConfigurationError(_IDENTITY) from None
     return key
@@ -554,32 +553,41 @@ def _pull_request_facts(body: object, repository: str, number: int) -> dict[str,
 
 
 def _required_checks(body: object) -> tuple[tuple[str, int | None], ...]:
-    """Return required (context, app id) pairs; none configured fails closed."""
+    """Return required (context, app id) pairs from ``checks`` and ``contexts``.
+
+    ``checks`` entries carry an optional App restriction; a name only in
+    ``contexts`` accepts any source. No required check fails closed.
+    """
     if not isinstance(body, dict):
         raise GitHubFactsProtocolError(_IDENTITY)
-    checks = body.get("checks")
-    required: dict[tuple[str, int | None], None] = {}
-    if isinstance(checks, list) and checks:
-        for item in checks:
-            context = item.get("context") if isinstance(item, dict) else None
-            app_id = item.get("app_id") if isinstance(item, dict) else None
-            if not isinstance(context, str) or not context:
-                raise GitHubFactsProtocolError(_IDENTITY)
-            if app_id is not None and (type(app_id) is not int or app_id < 1):
-                # GitHub reports -1 or null for "any source".
-                app_id = None
-            required[(context, app_id)] = None
-    else:
-        contexts = body.get("contexts")
-        if not isinstance(contexts, list):
+    checks = body.get("checks", [])
+    contexts = body.get("contexts", [])
+    if not isinstance(checks, list) or not isinstance(contexts, list):
+        raise GitHubFactsProtocolError(_IDENTITY)
+    required: dict[str, int | None] = {}
+    for item in checks:
+        context = item.get("context") if isinstance(item, dict) else None
+        app_id = item.get("app_id") if isinstance(item, dict) else None
+        if not isinstance(context, str) or not context:
             raise GitHubFactsProtocolError(_IDENTITY)
-        for context in contexts:
-            if not isinstance(context, str) or not context:
-                raise GitHubFactsProtocolError(_IDENTITY)
-            required[(context, None)] = None
+        if app_id is not None and (type(app_id) is not int or app_id < 1):
+            # GitHub reports -1 or null for "any source".
+            app_id = None
+        required[context] = app_id
+    for context in contexts:
+        if not isinstance(context, str) or not context:
+            raise GitHubFactsProtocolError(_IDENTITY)
+        required.setdefault(context, None)
     if not required:
         raise GitHubRequiredChecksNotConfiguredError(_IDENTITY)
-    return tuple(sorted(required, key=lambda item: (item[0], item[1] or 0)))
+    return tuple(sorted(required.items()))
+
+
+def _latest(items: list[dict]) -> dict | None:
+    """Return the most recent item by GitHub id; re-runs get higher ids."""
+    if any(type(item.get("id")) is not int for item in items):
+        raise GitHubFactsProtocolError(_IDENTITY)
+    return max(items, key=lambda item: item["id"], default=None)
 
 
 def _conclusion(
@@ -588,26 +596,32 @@ def _conclusion(
     check_runs: list[dict],
     statuses: list[dict],
 ) -> str:
-    """Combine every matching check run and commit status; all must succeed."""
+    """Judge only the latest check run and latest status for one required check.
+
+    A re-run supersedes an earlier attempt with the same name. When both a check
+    run and a commit status exist for the name, both latest results must succeed.
+    """
     observed: list[str] = []
+    runs = []
     for run in check_runs:
         app = run.get("app")
         run_app_id = app.get("id") if isinstance(app, dict) else None
-        if run.get("name") != name or (app_id is not None and run_app_id != app_id):
-            continue
+        if run.get("name") == name and (app_id is None or run_app_id == app_id):
+            runs.append(run)
+    run = _latest(runs)
+    if run is not None:
         if run.get("status") != "completed":
             observed.append("pending")
-            continue
-        conclusion = run.get("conclusion")
-        if conclusion not in _CHECK_RUN_CONCLUSIONS:
-            raise GitHubFactsProtocolError(_IDENTITY)
-        observed.append(conclusion)
+        else:
+            conclusion = run.get("conclusion")
+            if conclusion not in _CHECK_RUN_CONCLUSIONS:
+                raise GitHubFactsProtocolError(_IDENTITY)
+            observed.append(conclusion)
     if app_id is None:
         # Commit statuses carry no App identity, so they satisfy only
         # requirements that accept any source.
-        for status in statuses:
-            if status.get("context") != name:
-                continue
+        status = _latest([item for item in statuses if item.get("context") == name])
+        if status is not None:
             state = status.get("state")
             if state not in _STATUS_STATES:
                 raise GitHubFactsProtocolError(_IDENTITY)

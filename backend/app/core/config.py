@@ -287,10 +287,10 @@ class Settings(BaseSettings):
         gt=0.0,
         le=3700.0,
     )
-    # Read-only GitHub App used to read pull-request proof facts. The private
-    # key stays in a file; settings hold only its absolute path.
+    # Read-only GitHub App used to read pull-request proof facts. Its PEM
+    # private key is the secret WORKSTREAM_GITHUB_APP_PRIVATE_KEY, held only as
+    # a private redacted attribute (see github_app_private_key).
     github_app_id: int | None = Field(default=None, ge=1)
-    github_app_private_key_file: Path | None = None
     github_app_installation_id: int | None = Field(default=None, ge=1)
     github_api_base_url: str = "https://api.github.com"
     github_api_request_timeout_seconds: float = Field(default=10.0, gt=0.0, le=30.0)
@@ -316,6 +316,7 @@ class Settings(BaseSettings):
 
     _api_rate_limit_key_secret: SecretStr | None = PrivateAttr(default=None)
     _pagination_cursor_hmac_secret: SecretStr | None = PrivateAttr(default=None)
+    _github_app_private_key: SecretStr | None = PrivateAttr(default=None)
     _artifact_s3_access_key_id: SecretStr | None = PrivateAttr(default=None)
     _artifact_s3_secret_access_key: SecretStr | None = PrivateAttr(default=None)
     _artifact_s3_session_token: SecretStr | None = PrivateAttr(default=None)
@@ -336,24 +337,29 @@ class Settings(BaseSettings):
         secret: SecretStr | None = None
         cursor_secret: SecretStr | None = None
         s3_secrets = _EMPTY_ARTIFACT_S3_SECRETS
+        github_key: SecretStr | None = None
         try:
             _normalize_observability_endpoint_input(values)
             _normalize_artifact_s3_endpoint_input(values)
             secret = _extract_api_rate_limit_key_secret(values)
             cursor_secret = _extract_pagination_cursor_hmac_secret(values)
             s3_secrets = _extract_artifact_s3_static_secrets(values)
+            github_key = _extract_github_app_private_key(values)
             super().__init__(**values)
             self._validate_observability_endpoint_security()
             self._api_rate_limit_key_secret = secret
             self._pagination_cursor_hmac_secret = cursor_secret
             self._set_artifact_s3_static_secrets(s3_secrets)
+            self._github_app_private_key = github_key
             if not _ALTERNATE_VALIDATION_RESTORES_SECRETS.get():
                 self._validate_artifact_s3_secret_contract()
+                self._validate_github_app_secret_contract()
         except Exception:
             _clear_settings_private_secrets(self)
             values.clear()
             secret = None
             cursor_secret = None
+            github_key = None
             s3_secrets = _EMPTY_ARTIFACT_S3_SECRETS
             raise
 
@@ -372,6 +378,7 @@ class Settings(BaseSettings):
         if isinstance(obj, Mapping) and (
             "api_rate_limit_key_secret" in obj
             or "pagination_cursor_hmac_secret" in obj
+            or _GITHUB_APP_PRIVATE_KEY_FIELD in obj
             or _ARTIFACT_S3_SENSITIVE_INPUT_FIELDS.intersection(obj)
             or _OBSERVABILITY_SENSITIVE_INPUT_FIELDS.intersection(obj)
         ):
@@ -407,6 +414,7 @@ class Settings(BaseSettings):
         if isinstance(parsed, Mapping) and (
             "api_rate_limit_key_secret" in parsed
             or "pagination_cursor_hmac_secret" in parsed
+            or _GITHUB_APP_PRIVATE_KEY_FIELD in parsed
             or _ARTIFACT_S3_SENSITIVE_INPUT_FIELDS.intersection(parsed)
             or _OBSERVABILITY_SENSITIVE_INPUT_FIELDS.intersection(parsed)
         ):
@@ -429,6 +437,7 @@ class Settings(BaseSettings):
         if isinstance(obj, Mapping) and (
             "api_rate_limit_key_secret" in obj
             or "pagination_cursor_hmac_secret" in obj
+            or _GITHUB_APP_PRIVATE_KEY_FIELD in obj
             or _ARTIFACT_S3_SENSITIVE_INPUT_FIELDS.intersection(obj)
             or _OBSERVABILITY_SENSITIVE_INPUT_FIELDS.intersection(obj)
         ):
@@ -453,6 +462,7 @@ class Settings(BaseSettings):
         secret: SecretStr | None = None
         cursor_secret: SecretStr | None = None
         s3_secrets = _EMPTY_ARTIFACT_S3_SECRETS
+        github_key: SecretStr | None = None
         settings: Settings | None = None
         try:
             _normalize_observability_endpoint_input(sanitized)
@@ -468,6 +478,11 @@ class Settings(BaseSettings):
                 else None
             )
             s3_secrets = _extract_artifact_s3_static_secrets(sanitized)
+            github_key = (
+                _extract_github_app_private_key(sanitized)
+                if _GITHUB_APP_PRIVATE_KEY_FIELD in sanitized
+                else None
+            )
             if secret is not None:
                 sanitized["api_rate_limit_key_secret"] = None
             if cursor_secret is not None:
@@ -485,6 +500,9 @@ class Settings(BaseSettings):
                 settings._pagination_cursor_hmac_secret = cursor_secret
             settings._set_artifact_s3_static_secrets(s3_secrets)
             settings._validate_artifact_s3_secret_contract()
+            if github_key is not None:
+                settings._github_app_private_key = github_key
+            settings._validate_github_app_secret_contract()
             return settings
         except Exception:
             if settings is not None:
@@ -493,6 +511,7 @@ class Settings(BaseSettings):
             secret = None
             cursor_secret = None
             s3_secrets = _EMPTY_ARTIFACT_S3_SECRETS
+            github_key = None
             settings = None
             raise
 
@@ -509,6 +528,7 @@ class Settings(BaseSettings):
         if isinstance(dotenv_settings, DotEnvSettingsSource):
             dotenv_settings.env_vars.pop("workstream_api_rate_limit_key_secret", None)
             dotenv_settings.env_vars.pop("workstream_pagination_cursor_hmac_secret", None)
+            dotenv_settings.env_vars.pop(f"workstream_{_GITHUB_APP_PRIVATE_KEY_FIELD}", None)
             for field_name in _ARTIFACT_S3_SECRET_FIELDS:
                 dotenv_settings.env_vars.pop(f"workstream_{field_name}", None)
         return init_settings, env_settings, dotenv_settings, file_secret_settings
@@ -522,6 +542,16 @@ class Settings(BaseSettings):
     def pagination_cursor_hmac_secret(self) -> SecretStr | None:
         """Return the validated, redacted pagination-cursor key setting."""
         return self._pagination_cursor_hmac_secret
+
+    @property
+    def github_app_private_key(self) -> SecretStr | None:
+        """Return the redacted GitHub App PEM private key."""
+        return self._github_app_private_key
+
+    def _validate_github_app_secret_contract(self) -> None:
+        """Require the GitHub App id and private key together."""
+        if (self.github_app_id is None) != (self._github_app_private_key is None):
+            raise ValueError("GitHub App id and private key must be configured together")
 
     @property
     def artifact_s3_access_key_id(self) -> SecretStr | None:
@@ -575,13 +605,8 @@ class Settings(BaseSettings):
     @model_validator(mode="after")
     def validate_github_app(self) -> Settings:
         """Require a complete GitHub App identity and a credential-safe API origin."""
-        if (self.github_app_id is None) != (self.github_app_private_key_file is None):
-            raise ValueError("GitHub App id and private key file must be configured together")
         if self.github_app_installation_id is not None and self.github_app_id is None:
             raise ValueError("GitHub App installation id requires a GitHub App id")
-        key_file = self.github_app_private_key_file
-        if key_file is not None and not key_file.is_absolute():
-            raise ValueError("GitHub App private key file must be an absolute path")
         parsed = urlsplit(self.github_api_base_url)
         loopback_http = (
             parsed.scheme == "http"
@@ -931,6 +956,7 @@ def _clear_settings_private_secrets(settings: object) -> None:
         return
     private_values["_api_rate_limit_key_secret"] = None
     private_values["_pagination_cursor_hmac_secret"] = None
+    private_values["_github_app_private_key"] = None
     private_values["_artifact_s3_access_key_id"] = None
     private_values["_artifact_s3_secret_access_key"] = None
     private_values["_artifact_s3_session_token"] = None
@@ -1112,6 +1138,43 @@ def _extract_pagination_cursor_hmac_secret(
         del raw_value, secret
         raise
     return secret
+
+
+_GITHUB_APP_PRIVATE_KEY_FIELD = "github_app_private_key"
+MAXIMUM_GITHUB_APP_PRIVATE_KEY_CHARACTERS = 16_384
+
+
+def _extract_github_app_private_key(values: dict[str, object]) -> SecretStr | None:
+    """Remove the GitHub App PEM key from structured input; the adapter parses it.
+
+    A single-line value with literal ``\\n`` separators, as some secret stores
+    emit, is converted to a multi-line PEM document.
+    """
+    raw_value = _pop_optional_secret_source(
+        values,
+        field_name=_GITHUB_APP_PRIVATE_KEY_FIELD,
+        environment_name="WORKSTREAM_GITHUB_APP_PRIVATE_KEY",
+    )
+    if raw_value is _MISSING_SECRET or raw_value is None or raw_value == "":
+        return None
+    if isinstance(raw_value, SecretStr):
+        text = raw_value.get_secret_value()
+    elif isinstance(raw_value, str):
+        text = raw_value
+    else:
+        del raw_value
+        raise ValueError("invalid GitHub App private key")
+    del raw_value
+    if "\n" not in text and "\\n" in text:
+        text = text.replace("\\n", "\n")
+    if (
+        len(text) > MAXIMUM_GITHUB_APP_PRIVATE_KEY_CHARACTERS
+        or "-----BEGIN" not in text
+        or "PRIVATE KEY-----" not in text
+    ):
+        del text
+        raise ValueError("invalid GitHub App private key")
+    return SecretStr(text)
 
 
 def _extract_artifact_s3_static_secrets(
