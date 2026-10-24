@@ -1750,22 +1750,28 @@ request, run, lease, result, material and original execution receipt. Unprovable
 retained receipts cause an atomic upgrade refusal; queued work is preserved.
 Production uses real action-specific AUTH/PREP with fresh live identity checks.
 
-## Checker model calls
+## Shared model calls
 
-Model-enabled external POST images select one immutable profile through the
-locked policy configuration. These records track paid provider effects separately
-from `CheckerRun`: losing a execution lease or retrying a checker does not create
+Setup agents and model-enabled external POST images share immutable project
+profiles and one lifetime budget account. Setup snapshots its selected profile
+into the compilation attempt; POST selects it through the locked policy
+configuration. Paid effects retain distinct setup or checker ancestry. Setup
+restart, loss of an execution lease, or checker retry does not itself authorize
 another paid effect.
 
 | Table | Custody |
 |---|---|
-| `model_usage_profiles` | Immutable project/image/provider/model/bounds/pricing specification and Operator authorization receipt |
+| `model_usage_profiles` | Immutable project/provider/model/bounds/pricing specification and Operator authorization receipt; image/configuration binding remains with approved POST policy |
 | `model_usage_budget_configurations` | Immutable versions of the finite project lifetime ceiling |
 | `model_usage_budget_accounts` | Current configuration and serialized lifetime reserved/settled integer USD nanodollars; configuration changes never reset spend |
+| `checker_model_usage_envelopes` | Finite aggregate call/token/byte/tool bounds for the locked POST workload and profile |
+| `setup_model_usage_envelopes` | Finite aggregate bounds across draft/review/correction for one compilation attempt, setup generation, runtime configuration and profile |
+| `setup_model_usage_slots` | Stable setup envelope, phase and call index with the immutable first request hash |
 | `checker_model_usage_slots` | Stable project, assignment, Submission/version, requirement, registry digest, configuration hash, exact profile and call-slot identity; excludes retry generation and execution lease |
-| `model_usage_effects` | Immutable first request hash, dispatch intent, reservation, provider identity, private ART request/response references, usage and once-only terminal settlement |
+| `model_usage_effects` | Exactly one strong setup-slot or checker-slot owner; immutable first request hash, dispatch intent, reservation, provider identity, private ART request/response references, usage and once-only terminal settlement |
 | `checker_model_usage_recoveries` | Fresh current-run attachment with canonical execution/effect facts; SQL verifies the exact paid slot, running successor lease, fixed-service recovery receipt and resource digest, and the row cannot authorize a new provider create |
-| `checker_model_invocation_grants` | Hashed short-lived capability, exact execution and binding, PostgreSQL expiry and one consumption into the selected attempt/request |
+| `checker_model_invocation_grant_calls` | Each invocation call index binds the exact request hash and durable paid effect; a successor invocation may reuse that same effect without a new paid create |
+| `checker_model_invocation_grants` | Hashed short-lived capability, exact execution and binding, PostgreSQL expiry and bounded indexed call attachments |
 
 An attempt progresses from `prepared` to `dispatching`, with uncertain delivery
 retaining its full reservation. Authenticated output and complete usage settle
@@ -1780,8 +1786,11 @@ Migration `0061_model_usage` extends existing ART put/receipt custody
 with `model_call_attempt_id` and exact private request/response slots. Transcript
 bytes stay in ART, never these ledger rows or outbox payloads. Existing historical
 run-bound ART rows remain retained; new model evidence uses the paid attempt.
-The call ledger's private evidence is separate from normalized public checker
-findings. See [model runtime operations](operations_checker_models.md).
+Setup and POST request/response bindings use `setup_model_call` and
+`checker_model_call`, respectively. Their private evidence stays separate from
+normalized public checker findings. Setup uses provider storage disabled: an
+observed provider ID alone cannot recover lost response bytes; unresolved effects
+retain their reservation until authenticated evidence resolves them. See [model runtime operations](operations_checker_models.md).
 
 ## CheckerResult
 

@@ -102,16 +102,50 @@ def scripted_document_access_runtime(
     return document_access(attempt_id, manifest, configuration)
 
 
+def scripted_model_profile_spec(project_id, configuration) -> ProjectModelProfileSpec:
+    """Build the bounded profile required by the setup runtime's fixed tools."""
+    source = profile_spec().model_dump(mode="python")
+    source.update(
+        project_id=project_id,
+        profile_version=1,
+        provider=configuration.model_provider,
+        api=configuration.model_api,
+        model_snapshot=configuration.model,
+        allowed_tools=("read_document", "search_document"),
+        maximum_tool_calls=configuration.maximum_tool_calls,
+        maximum_tool_output_bytes=configuration.maximum_tool_output_characters * 4,
+    )
+    return ProjectModelProfileSpec.model_validate(source)
+
+
+async def publish_scripted_model_profile(client, project_id, configuration):
+    """Publish one exact scripted-runtime profile through the Operator API."""
+    spec = scripted_model_profile_spec(project_id, configuration)
+    published = await client.post(
+        f"/api/v1/operations/projects/{project_id}/model-profiles",
+        headers=auth_headers(),
+        json=spec.model_dump(mode="json"),
+    )
+    assert published.status_code == 201, published.text
+
+
+def configure_scripted_model_transport(monkeypatch, socket_path: Path) -> None:
+    """Enable the typed setup-model session without providing a live transport."""
+    assert socket_path.is_absolute() and not socket_path.exists()
+    monkeypatch.setenv("WORKSTREAM_CHECKER_MODEL_PROXY_SOCKET", str(socket_path))
+    get_settings.cache_clear()
+
+
 @pytest.fixture
-async def scripted_model_profile(automatic_source, project_client, monkeypatch):
+async def scripted_model_profile(automatic_source, project_client, monkeypatch, tmp_path):
     """Publish the exact inference profile selected by live coordinator tests."""
+    configure_scripted_model_transport(monkeypatch, tmp_path / "unused-model-proxy.sock")
     factory, _actor, setup_id, _snapshot = automatic_source
     async with factory() as session:
         project_id = await session.scalar(
             select(ProjectSetupRun.project_id).where(ProjectSetupRun.id == str(setup_id))
         )
         assert project_id is not None
-
     set_dev_actor(
         monkeypatch,
         roles="viewer",
@@ -151,21 +185,7 @@ async def scripted_model_profile(automatic_source, project_client, monkeypatch):
     configuration = scripted_runtime_configuration(
         get_settings(), adapter_profile_builder=lambda value: value
     )
-    source = profile_spec().model_dump(mode="python")
-    source.update(
-        project_id=project_id,
-        profile_version=1,
-        provider=configuration.model_provider,
-        api=configuration.model_api,
-        model_snapshot=configuration.model,
-    )
-    spec = ProjectModelProfileSpec.model_validate(source)
-    published = await project_client.post(
-        f"/api/v1/operations/projects/{project_id}/model-profiles",
-        headers=auth_headers(),
-        json=spec.model_dump(mode="json"),
-    )
-    assert published.status_code == 201, published.text
+    await publish_scripted_model_profile(project_client, project_id, configuration)
     set_dev_actor(
         monkeypatch,
         roles="project_manager",
@@ -209,8 +229,10 @@ async def record_attempt_document_access(sessions, attempt_id, context):
 
 class ScriptedGuideRuntime:
     outcome = generated_result()
-    identity = runtime_configuration().adapter_identity
-    calls = 0
+
+    def __init__(self, configuration=None):
+        self.identity = (configuration or runtime_configuration()).adapter_identity
+        self.calls = 0
 
     def admit_execution(self):
         pass

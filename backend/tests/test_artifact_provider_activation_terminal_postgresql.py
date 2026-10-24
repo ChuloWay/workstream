@@ -316,7 +316,8 @@ async def test_checker_output_shared_put_and_verification_lifecycle(
         async with factory() as session:
             relationships = await seed_checker_output_relationships(session, namespace, policy_bundle=policy_bundle)
             async with minted_source(
-                tmp_path / f"checker-{expected_outcome}", b"checker lifecycle"
+                tmp_path / f"checker-{expected_outcome}", b'{"output":"checker lifecycle"}',
+                media_type="application/json",
             ) as source:
                 project_id, task_id, checker_run_id, admission = await _admit_checker_output(
                     session, settings, namespace, source, relationships=relationships)
@@ -409,7 +410,8 @@ async def test_checker_output_put_observation_terminal_outcomes(
         async with factory() as session:
             relationships = await seed_checker_output_relationships(session, namespace, policy_bundle=policy_bundle)
             async with minted_source(
-                tmp_path / f"checker-observation-{expected_outcome}", b"checker observation"
+                tmp_path / f"checker-observation-{expected_outcome}", b'{"output":"checker observation"}',
+                media_type="application/json",
             ) as source:
                 _project_id, _task_id, checker_run_id, admission = await _admit_checker_output(
                     session, settings, namespace, source, relationships=relationships)
@@ -526,7 +528,8 @@ async def test_expired_activation_rolls_back_provider_verification_facts(
             )
             async with minted_source(
                 tmp_path / f"expired-{provider_outcome}",
-                b"provider terminal evidence",
+                b'{"output":"provider terminal evidence"}',
+                media_type="application/json",
             ) as source:
                 _project_id, _task_id, _checker_run_id, admission = await _admit_checker_output(
                     session,
@@ -748,7 +751,9 @@ async def test_verification_unavailable_retries_then_exhausts(
     try:
         async with factory() as session:
             relationships = await seed_checker_output_relationships(session, namespace, policy_bundle=policy_bundle)
-            async with minted_source(tmp_path / "unavailable", b"retry") as source:
+            async with minted_source(
+                tmp_path / "unavailable", b'{"output":"retry"}', media_type="application/json"
+            ) as source:
                 _, _, _, admission = await _admit_checker_output(
                     session, settings, namespace, source, relationships=relationships)
                 orchestrator = ArtifactStorageOrchestrator(

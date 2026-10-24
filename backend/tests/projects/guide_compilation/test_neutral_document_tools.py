@@ -287,12 +287,14 @@ async def test_grant_or_custody_failure_returns_no_successful_receipt():
     assert corrupt_custody.receipts == []
 
 
-def test_runtime_capability_exposes_only_tools():
+def test_runtime_capability_exposes_only_bounded_tools_and_model_ports():
     tools, _handle, _document, _custody = _tools()
     capabilities = GuideRuntimeCapabilities(tools=tools)
-    assert tuple(capabilities.__dataclass_fields__) == ("tools",)
+    assert tuple(capabilities.__dataclass_fields__) == ("tools", "model")
+    assert capabilities.model is None
     assert not hasattr(capabilities, "documents")
     assert not hasattr(capabilities, "resources")
+    assert not hasattr(capabilities, "credentials")
 
 
 def test_parser_source_limit_rejects_manifest_before_any_tool_or_inference_call():

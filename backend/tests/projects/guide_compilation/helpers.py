@@ -7,7 +7,7 @@ import hashlib
 import json
 from uuid import UUID, uuid4
 
-from sqlalchemy import text
+from sqlalchemy import insert, text, update
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -459,84 +459,89 @@ async def _seed_artifact_custody(
 ) -> None:
     from datetime import datetime, timezone
 
-    namespace_row = ArtifactStorageNamespace(
-        id="primary",
-        backend=namespace.backend if namespace else "local",
-        adapter=namespace.adapter if namespace else "local",
-        provider_profile=namespace.provider_profile if namespace else "test",
-        namespace_descriptor=namespace.namespace_descriptor
+    namespace_values = {
+        "id": "primary",
+        "backend": namespace.backend if namespace else "local",
+        "adapter": namespace.adapter if namespace else "local",
+        "provider_profile": namespace.provider_profile if namespace else "test",
+        "namespace_descriptor": namespace.namespace_descriptor
         if namespace
         else {"root": "guide-compilation-fixture"},
-        namespace_fingerprint=namespace.namespace_fingerprint if namespace else SOURCE_SHA256,
+        "namespace_fingerprint": namespace.namespace_fingerprint
+        if namespace
+        else SOURCE_SHA256,
+    }
+    provider_ref = provider_object_ref or f"fixtures/{CONTENT_ID}"
+    # Explicit Core statements let historical-migration tests arrange the ART
+    # columns that existed at that revision without making current ORM metadata
+    # project newer nullable columns into the older schema.
+    await session.execute(insert(ArtifactStorageNamespace).values(**namespace_values))
+    await session.execute(
+        insert(ArtifactContent).values(
+            id=str(CONTENT_ID),
+            sha256=SOURCE_SHA256,
+            byte_count=len(SOURCE_BYTES),
+            media_type="application/pdf",
+            normalized_display_name="guide.pdf",
+        )
     )
-    session.add_all(
-        [
-            namespace_row,
-            ArtifactContent(
-                id=str(CONTENT_ID),
-                sha256=SOURCE_SHA256,
-                byte_count=len(SOURCE_BYTES),
-                media_type="application/pdf",
-                normalized_display_name="guide.pdf",
-            ),
-            GuideSourceArtifactIngest(
-                id=str(DOCUMENT_VERSION_ID),
-                source_item_id=str(SOURCE_ITEM_ID),
-                actor_profile_id=str(values["actor"]),
-                sha256=SOURCE_SHA256,
-                byte_count=len(SOURCE_BYTES),
-                media_type="application/pdf",
-            ),
-        ]
+    await session.execute(
+        insert(GuideSourceArtifactIngest).values(
+            id=str(DOCUMENT_VERSION_ID),
+            source_item_id=str(SOURCE_ITEM_ID),
+            actor_profile_id=str(values["actor"]),
+            sha256=SOURCE_SHA256,
+            byte_count=len(SOURCE_BYTES),
+            media_type="application/pdf",
+        )
     )
-    await session.flush()
-    replica = ArtifactReplica(
-        id=str(REPLICA_ID),
-        content_id=str(CONTENT_ID),
-        storage_namespace_id="primary",
-        namespace_fingerprint=namespace_row.namespace_fingerprint,
-        adapter=namespace_row.adapter,
-        provider_profile=namespace_row.provider_profile,
-        provider_object_ref=provider_object_ref or f"fixtures/{CONTENT_ID}",
-        verification_state="pending",
-        availability_state="unknown",
-        integrity_state="unknown",
+    await session.execute(
+        insert(ArtifactReplica).values(
+            id=str(REPLICA_ID),
+            content_id=str(CONTENT_ID),
+            storage_namespace_id="primary",
+            namespace_fingerprint=namespace_values["namespace_fingerprint"],
+            adapter=namespace_values["adapter"],
+            provider_profile=namespace_values["provider_profile"],
+            provider_object_ref=provider_ref,
+            verification_state="pending",
+            availability_state="unknown",
+            integrity_state="unknown",
+        )
     )
-    session.add(replica)
-    await session.flush()
-    put = ArtifactPutAttempt(
-        id=str(PUT_ATTEMPT_ID),
-        producer_request_type="guide",
-        producer_type="actor_profile",
-        producer_ref=str(values["actor"]),
-        project_id=str(values["project"]),
-        guide_source_item_id=str(SOURCE_ITEM_ID),
-        sha256=SOURCE_SHA256,
-        byte_count=len(SOURCE_BYTES),
-        media_type="application/pdf",
-        storage_namespace_id="primary",
-        namespace_fingerprint=namespace_row.namespace_fingerprint,
-        canonical_target=f"sha256/{SOURCE_SHA256[7:9]}/{SOURCE_SHA256[9:]}",
-        operation_identity=SOURCE_SHA256,
-        request_digest=SOURCE_SHA256,
-        status="object_confirmed",
-        terminal_result_code="document_stored",
-        replica_id=str(REPLICA_ID),
-        terminal_at=datetime.now(timezone.utc),
+    await session.execute(
+        insert(ArtifactPutAttempt).values(
+            id=str(PUT_ATTEMPT_ID),
+            producer_request_type="guide",
+            producer_type="actor_profile",
+            producer_ref=str(values["actor"]),
+            project_id=str(values["project"]),
+            guide_source_item_id=str(SOURCE_ITEM_ID),
+            sha256=SOURCE_SHA256,
+            byte_count=len(SOURCE_BYTES),
+            media_type="application/pdf",
+            storage_namespace_id="primary",
+            namespace_fingerprint=namespace_values["namespace_fingerprint"],
+            canonical_target=f"sha256/{SOURCE_SHA256[7:9]}/{SOURCE_SHA256[9:]}",
+            operation_identity=SOURCE_SHA256,
+            request_digest=SOURCE_SHA256,
+            status="object_confirmed",
+            terminal_result_code="document_stored",
+            replica_id=str(REPLICA_ID),
+            terminal_at=datetime.now(timezone.utc),
+        )
     )
-    session.add(put)
-    await session.flush()
-    session.add(
-        ArtifactOperationReceipt(
+    await session.execute(
+        insert(ArtifactOperationReceipt).values(
             id=str(RECEIPT_ID),
             contract_version=2,
-            put_attempt_id=put.id,
+            put_attempt_id=str(PUT_ATTEMPT_ID),
             guide_source_item_id=str(SOURCE_ITEM_ID),
-            replica_id=replica.id,
+            replica_id=str(REPLICA_ID),
             operation="put",
-            idempotency_key=put.operation_identity,
-            request_digest=put.request_digest,
-            provider_object_ref=replica.provider_object_ref,
+            idempotency_key=SOURCE_SHA256,
+            request_digest=SOURCE_SHA256,
+            provider_object_ref=provider_ref,
             replayed=False,
             outcome="document_stored",
             attempt_number=1,
@@ -544,8 +549,11 @@ async def _seed_artifact_custody(
             details=[],
         )
     )
-    await session.flush()
-    put.receipt_id = str(RECEIPT_ID)
+    await session.execute(
+        update(ArtifactPutAttempt)
+        .where(ArtifactPutAttempt.id == str(PUT_ATTEMPT_ID))
+        .values(receipt_id=str(RECEIPT_ID))
+    )
 
 
 async def seed_database(

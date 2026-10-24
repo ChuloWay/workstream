@@ -255,7 +255,7 @@ async def request_corrected_attempt(factory, actor, correction, *, capabilities=
     from tests.checkers.external.support import capability_projection
     from app.modules.projects.guide_compilation.request_inputs import CompilationRequestInputs
     from app.modules.projects.guide_compilation.service import GuideCompilationService
-    from tests.projects.guide_compilation.helpers import runtime_configuration
+    from tests.projects.guide_compilation.helpers import manager_runtime_configuration
 
     ctx = HumanAuthorizationContext(
         actor_profile_id=actor.actor_profile_id,
@@ -276,7 +276,7 @@ async def request_corrected_attempt(factory, actor, correction, *, capabilities=
             request_inputs=CompilationRequestInputs(
                 guide_document_manifest_port(session),
                 capabilities or capability_projection(),
-                runtime_configuration(),
+                manager_runtime_configuration(),
             ),
         )
         return await service.request_correction(
@@ -310,7 +310,8 @@ async def finalize_corrected_attempt(factory, values, actor, correction, *, outc
     await request_corrected_attempt(factory, actor, correction, capabilities=capabilities)
     async with factory() as session:
         setup = await session.get(ProjectSetupRun, str(correction.successor_setup_run_id))
-    runtime = ScriptedGuideRuntime()
+    configuration = manager_runtime_configuration()
+    runtime = ScriptedGuideRuntime(configuration)
     if outcome is not None:
         runtime.outcome = outcome
 
@@ -326,7 +327,7 @@ async def finalize_corrected_attempt(factory, values, actor, correction, *, outc
         checker_capabilities=capabilities,
         request_authority=guide_compilation_request_authority,
         execution_authority=guide_compilation_execution_authority,
-        configuration_factory=manager_runtime_configuration,
+        configuration_factory=lambda: configuration,
         model_profiles=lambda _session: None,
         runtime_factory=lambda configuration: runtime,
         sufficiency_authorization_factory=guide_sufficiency_projection_authorization,

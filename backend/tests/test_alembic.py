@@ -114,8 +114,7 @@ async def _seed_retained_guide_runtime_rows(
         _historical_configuration,
     )
 
-    async with _historical_artifact_model_usage_projection(database_url):
-        values = await seed_database(database_url)
+    values = await seed_database(database_url)
     compilation = context(values)
     attempt_identity = identity(compilation)
     document = compilation.material.documents[0]
