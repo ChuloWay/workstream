@@ -15,7 +15,7 @@ proposal remain the sources to reconcile. This is a real guide-driven project,
 not a fixed task-name fixture. Shared model access now covers both POST agents
 and setup under #492's one project account; this change consumes that contract
 without owning its shared ledger or provider credentials. CHECKERS input/trial
-custody adds linear migrations 0062 and 0063 after that dependency.
+custody adds linear migrations 0063 and 0064 after that dependency.
 
 ## Bounded change
 
@@ -67,7 +67,7 @@ Generic isolated build/trial support owns the new
 `external_checkers/workstream-checker-service/src/trial_relay.rs` module after
 coordination with the model-runtime owner. Shared model transport remains in
 `model_relay.rs`; this change owns coordinated `main.rs` assembly of the independent trial capability. Model ledger/profile
-changes remain in 0061; this change owns only 0062/0063.
+changes remain in 0062; this change owns only 0063/0064.
 `external_checkers/workstream-checker-service/tests/trial_relay.rs` compiles
 that otherwise unconnected module and exercises its fake-engine protocol,
 identity, bounds, cancellation and cleanup contracts before shared composition.
@@ -126,7 +126,7 @@ only. The reviewable outcome requires the actual generic trial tool plus compose
 resource, cancellation, cleanup and replay/substitution controls. Controlled
 provider qualification follows the approved shared runtime; live spend and the
 project activation/contribution journey remain separately authorized phases.
-Real PostgreSQL revision-material qualification also found that migration 0062's
+Real PostgreSQL revision-material qualification also found that migration 0063's
 deferred predicate omitted the canonical feedback `schema_version`; a tagged
 predicate diagnostic isolated that exact source mismatch. The migration repair
 uses the closed `post_submit_current_result_reference` discriminator, after
@@ -142,9 +142,9 @@ registry and audit snapshot is unchanged, so this ordering change does not
 weaken immutability.
 
 `backend/tests/test_checker_evidence_migrations.py` qualifies retained checker,
-checker-model and setup-model ART rows across 0061 to the current head. Current
+checker-model and setup-model ART rows across 0062 to the current head. Current
 ORM fixtures may use only nullable projection columns during arrangement; those
-columns must remain null and be removed before the exact canonical 0061 schema
+columns must remain null and be removed before the exact canonical 0062 schema
 is checked and upgraded. Historical checker-run rows are arranged explicitly by
 the isolated fixture; this does not restore a production writer for that retired
 subject. Its temporarily suspended arrangement guard must be restored before the
@@ -358,12 +358,12 @@ different preparation, assignment, predecessor or feedback source.
 
 This extension owns `backend/app/modules/checkers/models.py`,
 `backend/app/modules/checkers/api/execution.py`,
-`backend/alembic/versions/0062_checker_revision_input.py`,
+`backend/alembic/versions/0063_checker_revision_input.py`,
 `backend/alembic/env.py`, `backend/tests/test_alembic.py`,
 `backend/scripts/schema_baseline_manifest.py`,
 `backend/tests/conftest.py` (expected public-schema fingerprint only),
 `backend/tests/checkers/external/test_revision_materialization.py` and affected
-schema fingerprints. Migration 0062 follows PILOT-05's shared model owner 0061;
+schema fingerprints. Migration 0063 follows PILOT-05's shared model owner 0062;
 integrate the committed dependency before migration qualification. No competing
 head or rewritten retained data is allowed. Prove exact SQL/Python digest
 agreement, current-only retained data, selected initial/revised inputs,
@@ -400,8 +400,8 @@ Exact owner scope: `backend/app/modules/checkers/api/trial_evidence.py`,
 `backend/app/modules/checkers/trial_evidence.py`,
 `backend/app/modules/checkers/models.py`, and
 `backend/tests/checkers/external/test_trial_evidence.py`. The shared ART and AUTH
-trial branches belong to this change; additive owner migration 0063 follows
-0062. Verify current TASK-before-CHECKERS custody, distinct
+trial branches belong to this change; additive owner migration 0064 follows
+0063. Verify current TASK-before-CHECKERS custody, distinct
 contributor isolation, concurrent reservation/first-content pinning, mutation
 denial, rollback and loss/recovery of the publication response on PostgreSQL
 and MinIO. No trial handle may authorize model spend without verified bytes.
@@ -420,14 +420,14 @@ composition is coordinated with PILOT-05. No provider call or network access is
 introduced by the trial protocol itself.
 
 Trial owner persistence owns additive
-`backend/alembic/versions/0063_checker_trial_evidence.py`, existing migration
+`backend/alembic/versions/0064_checker_trial_evidence.py`, existing migration
 preflight/graph tests, and `backend/tests/conftest.py` (head fingerprint and
 exact new table reset/deletion inventories). The same migration adds only the
 shared ART trial-subject foreign keys agreed with PILOT-05. Retain one linear
-chain after 0062, preserve historical model-output rows, and verify supported
+chain after 0063, preserve historical model-output rows, and verify supported
 intermediate upgrades and immutable terminal evidence without baseline edits.
 
-The trial-specific ART extension belongs to this change after migration 0063,
+The trial-specific ART extension belongs to this change after migration 0064,
 so the prerequisite model-runtime PR remains independently deployable. Extend
 the existing pipeline through explicit checker-model, setup-model and trial subject cases in:
 `backend/app/modules/checkers/api/output_custody.py`,

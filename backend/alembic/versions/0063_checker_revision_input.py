@@ -4,8 +4,8 @@ from alembic import op
 import sqlalchemy as sa
 
 
-revision = "0062_checker_revision_input"
-down_revision = "0061_model_usage"
+revision = "0063_checker_revision_input"
+down_revision = "0062_model_usage"
 branch_labels = None
 depends_on = None
 

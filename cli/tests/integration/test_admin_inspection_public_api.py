@@ -141,6 +141,36 @@ async def test_admin_inspection_follows_real_authority_and_scope(
                 system_grant = await issue("auditor", "audit_authority")
                 project = str(await create_project("CLI inspection scope"))
                 foreign = str(await create_project("CLI inspection foreign"))
+                catalogue = cli(
+                    origin,
+                    tokens["auditor"],
+                    "project",
+                    "list",
+                    "--limit",
+                    "1",
+                    "-o",
+                    "json",
+                )
+                assert catalogue.returncode == 0 and catalogue.stderr == "", (
+                    catalogue.stderr
+                )
+                catalogue_page = json.loads(catalogue.stdout)
+                direct_catalogue = await direct.get(
+                    "/api/v1/projects",
+                    headers=headers("auditor"),
+                    params={"limit": 1},
+                )
+                assert direct_catalogue.status_code == 200, direct_catalogue.text
+                assert catalogue_page == direct_catalogue.json()
+                assert len(catalogue_page["items"]) == 1
+                assert catalogue_page["items"][0] == {
+                    "project_id": min(project, foreign),
+                    "name": "CLI inspection scope"
+                    if project < foreign
+                    else "CLI inspection foreign",
+                    "status": "draft",
+                }
+                assert catalogue_page["next_cursor"]
                 scoped_grant = await issue("scoped", "audit_authority", project)
                 target_grant = await issue("target", "project_manager", project)
                 target = profiles["target"]

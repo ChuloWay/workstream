@@ -1,5 +1,5 @@
 {
-  "canonical_sha256": "0135c6dbb2ade3d6417ad0e32b8e33f9f7202cbe3ff2746ddf07efc6ee6c06f0",
+  "canonical_sha256": "60e4a118da27aff0fb92147162e5c5588e8e924673841e2a03893d29f68460e3",
   "components": {
     "schemas": {
       "ActionId": {
@@ -81,6 +81,7 @@
           "project_role_grant.issue",
           "project_role_grant.revoke",
           "project.read",
+          "project.catalogue.list",
           "actor.authorization_context.read",
           "project.setup_run.read",
           "project.guide_sufficiency_report.list",
@@ -582,7 +583,7 @@
   "schema_version": 1,
   "source": {
     "action_id": "actor.authorization_context.read",
-    "backend_git_sha": "3a1d2b53062c534d199f7d7087832b66d2c0b72a",
+    "backend_git_sha": "6208a1f8152df8de299fa6dd1a6802d9454c9d44",
     "method": "GET",
     "openapi_version": "3.1.0",
     "path": "/api/v1/actors/me/authorization-context"

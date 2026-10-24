@@ -23,9 +23,9 @@ evidence to both setup inference and approved POST images. Setup retains its
 native OpenAI Agents SDK and OmniCoreAgent loops through the trusted proxy; POST
 retains project-owned rubrics and invocation-local transport. Strong typed setup
 and checker subjects share the meter without fabricating a CheckerRun for setup.
-The linear `0061_model_usage` migration follows main's
-`0060_audit_restore_path`; intermediate upgrades retain main data and leave one
-head.
+The linear `0062_model_usage` migration follows main's
+`0061_project_catalogue_read` (which follows `0060_audit_restore_path`);
+intermediate upgrades retain main data and leave one head.
 
 ## Bounded change
 
@@ -230,7 +230,8 @@ slot and the need to preserve image ownership. No live provider spend or project
 completion is established. The candidate has focused controlled-provider,
 proxy crash/replay, private Unix transport, setup/checker shared-account and
 hosted Compose contract proof. The retained-data upgrade through
-`0060_audit_restore_path` to `0061_model_usage`, PostgreSQL ledger, public
+`0060_audit_restore_path` through `0061_project_catalogue_read` to
+`0062_model_usage`, PostgreSQL ledger, public
 provisioning and actual authorization catalogue adapter require final exact-head
 evidence before readiness.
 All six composed public profile-to-checker cases pass with real PostgreSQL,
@@ -291,7 +292,7 @@ The current security repair makes setup `known_failed` completion record the
 required settlement authority and timestamp before the terminal transition. A
 real PostgreSQL regression proves one provider dispatch, exact settled cost,
 zero remaining reservation and immutable restart replay. Checker recovery rows
-now retain canonical execution/effect facts, and the `0061_model_usage` guard
+now retain canonical execution/effect facts, and the `0062_model_usage` guard
 independently verifies exact project, Task, assignment, Submission, registry,
 run, lease, generation, effect, service actor, action and resource digest. The
 valid fresh retry successor and independent substitutions of every one of those
@@ -302,11 +303,12 @@ grant-call bindings are explicitly classified natural/composite identities,
 all MODEL foreign keys use the referenced native UUID representation, and the
 ORM declares the budget configuration uniqueness required by the account's
 composite foreign key. Native UUID metadata tests pass `5/5`; the complete
-static identifier inventory passes `24/24`. The first combined canonical 0061
-run installed every migration through `0061_model_usage` and emitted six passing
+static identifier inventory passes `24/24`. The first combined canonical model
+usage run installed every migration through `0062_model_usage` and emitted six passing
 tests, but its final ART case exceeded the deliberately bounded 240-second child
 limit. Cleanup completed and no full-run pass is claimed from that attempt;
-split exact-head PostgreSQL replay and retained-data upgrade remain pending.
+that historical pre-rechain result does not qualify `0062_model_usage`; split
+exact-head PostgreSQL replay and retained-data upgrade remain pending.
 
 Hosted configuration proof at `9a57c8831` passes 31 focused tests. An actual
 parent Rust relay image built from `04bbac112` passed a controlled smoke with no
@@ -337,7 +339,7 @@ must still be supplied before final guide activation.
 The setup ART continuation is limited to public setup selector/reservation
 types and a MODEL-USAGE-owned resolver, the existing ART generated-output
 admission/storage/verification/binding path, its prepared AUTH resource, the
-`0061_model_usage` ART constraints/guards, adapter composition, and focused
+`0062_model_usage` ART constraints/guards, adapter composition, and focused
 AUTH/PostgreSQL/MinIO regressions. Its owned paths are
 `backend/app/modules/model_usage/api.py`, a new cohesive resolver under
 `backend/app/modules/model_usage/`,
@@ -348,7 +350,7 @@ schema, model and adapter-composition files,
 `backend/app/modules/authorization/checker_output_authorization.py`,
 `backend/app/modules/authorization/domain/checker_outputs.py`,
 `backend/app/modules/authorization/domain/audit.py`,
-`backend/alembic/versions/0061_model_usage.py`, and only their focused tests and
+`backend/alembic/versions/0062_model_usage.py`, and only their focused tests and
 schema inventory/fingerprint updates. This continuation does not edit
 `backend/app/modules/model_usage/setup.py`, SDK/transport/provider dispatch,
 PROJECTS owners, or CHECKERS ORM. It adds only the closed setup-model-output
@@ -365,7 +367,7 @@ concealed. The response contains only the typed stable setup/checker owner,
 profile selector, state, reservations/settlement, usage and ART evidence
 identities; it never returns provider response coordinates, request/response
 bytes, credentials, list access or mutation authority. The action/permission
-pair is added to the same linear `0061_model_usage` audit allowlist and the MCP
+pair is added to the same linear `0062_model_usage` audit allowlist and the MCP
 authorization-context snapshot.
 
 ## Historical checker-only review

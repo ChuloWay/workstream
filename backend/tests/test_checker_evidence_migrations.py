@@ -1,4 +1,4 @@
-"""Retain real checker and model ART lineages across the 0061-to-head upgrade."""
+"""Retain real checker and model ART lineages across the 0062-to-head upgrade."""
 
 from __future__ import annotations
 
@@ -39,7 +39,7 @@ from tests.test_checker_output_storage import (
 
 pytestmark = pytest.mark.postgres_schema_contract
 
-_SCHEMA_0061_SHA256 = "482698a75dd54023f02dd1a6c86c14e39af34a8513adeb3d227501d9a4c14e13"
+_SCHEMA_0062_SHA256 = "482698a75dd54023f02dd1a6c86c14e39af34a8513adeb3d227501d9a4c14e13"
 _PROJECTION_SHIMS = (
     "alter table checker_runs add column input_context_custody jsonb",
     "alter table artifact_put_attempts add column checker_trial_evidence_id uuid",
@@ -76,7 +76,7 @@ async def _execute(database_url: str, *statements: str) -> None:
         await connection.close()
 
 
-async def _assert_exact_0061_schema(database_url: str, monkeypatch) -> None:
+async def _assert_exact_0062_schema(database_url: str, monkeypatch) -> None:
     tables = tuple(
         table
         for table in suite_fixtures.RESETTABLE_TEST_TABLES
@@ -87,13 +87,13 @@ async def _assert_exact_0061_schema(database_url: str, monkeypatch) -> None:
         patch.setattr(
             suite_fixtures,
             "EXPECTED_PUBLIC_SCHEMA_SHA256",
-            _SCHEMA_0061_SHA256,
+            _SCHEMA_0062_SHA256,
         )
         connection = await asyncpg.connect(database_url.replace("+asyncpg", ""))
         try:
             await suite_fixtures._assert_canonical_test_schema(connection)
             assert await connection.fetchval("select version_num from alembic_version") == (
-                "0061_model_usage"
+                "0062_model_usage"
             )
         finally:
             await connection.close()
@@ -260,7 +260,7 @@ async def _assert_head_lineage_projection(
 
 
 @pytest.mark.asyncio
-async def test_real_checker_and_model_lineages_survive_0061_to_head(
+async def test_real_checker_and_model_lineages_survive_0062_to_head(
     tmp_path,
     isolated_database_env,
     signed_access,
@@ -274,7 +274,7 @@ async def test_real_checker_and_model_lineages_survive_0061_to_head(
             "drop schema public cascade",
             "create schema public",
         )
-        await asyncio.to_thread(command.upgrade, _alembic_config(), "0061_model_usage")
+        await asyncio.to_thread(command.upgrade, _alembic_config(), "0062_model_usage")
         await _execute(isolated_database_env, *_PROJECTION_SHIMS)
         await db_session.dispose_engine()
         admin_access = await _fresh_admin_access(signed_access)
@@ -286,7 +286,7 @@ async def test_real_checker_and_model_lineages_survive_0061_to_head(
         await db_session.dispose_engine()
         await _assert_projection_shims_null(isolated_database_env)
         await _execute(isolated_database_env, *_DROP_PROJECTION_SHIMS)
-        await _assert_exact_0061_schema(isolated_database_env, monkeypatch)
+        await _assert_exact_0062_schema(isolated_database_env, monkeypatch)
         before = await _retained_rows(isolated_database_env)
 
         await asyncio.to_thread(command.upgrade, _alembic_config(), HEAD_REVISION)

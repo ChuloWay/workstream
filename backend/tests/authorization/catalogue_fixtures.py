@@ -295,6 +295,7 @@ new_permissions = frozenset(
 
 expected = {
     "actor.project.list": ("actor.profile.read_self", "PILOT-READ-2"),
+    "project.catalogue.list": ("project.read", "WS-CLI-001-46"),
     **dict.fromkeys(
         (
             "actor.assignment.list",

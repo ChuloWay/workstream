@@ -196,6 +196,7 @@ async def test_public_profile_to_private_model_call_and_completed_checker(
         await provision_post_submit_service(h.factory, ServiceIdentity.ARTIFACT_CHECKER_OUTPUT)
         creates = []
         lost_replies = []
+        provider_accepted = asyncio.Event()
 
         class Provider:
             async def create(self, request):
@@ -207,6 +208,7 @@ async def test_public_profile_to_private_model_call_and_completed_checker(
                     )
                 failed = terminal_mode == "failed" and len(creates) == 1
                 reference = CheckerModelResponseReference(f"resp_composed_{len(creates)}")
+                provider_accepted.set()
                 return CheckerModelCreateResult(
                     CheckerModelCreateOutcome.ACCEPTED,
                     known_response=reference,
@@ -277,12 +279,24 @@ async def test_public_profile_to_private_model_call_and_completed_checker(
                     prompt="Evaluate the verified work",
                 )
                 if concurrent_callback:
-                    replies = await asyncio.gather(proxy.handle(callback), proxy.handle(callback))
-                    assert sorted(reply.outcome for reply in replies) == [
-                        "completed",
-                        "unavailable",
-                    ]
-                    reply = next(reply for reply in replies if reply.outcome == "completed")
+                    first = asyncio.create_task(proxy.handle(callback))
+                    await asyncio.wait_for(provider_accepted.wait(), timeout=5)
+                    for _ in range(500):
+                        async with h.factory() as session:
+                            known = await session.scalar(
+                                select(ModelUsageEffect.id).where(
+                                    ModelUsageEffect.provider_response_id.is_not(None)
+                                )
+                            )
+                        if known is not None:
+                            break
+                        await asyncio.sleep(0.01)
+                    assert known is not None
+                    second = asyncio.create_task(proxy.handle(callback))
+                    replies = await asyncio.gather(first, second)
+                    assert [reply.outcome for reply in replies] == ["completed", "completed"]
+                    assert replies[0].receipt_digest == replies[1].receipt_digest
+                    reply = replies[0]
                 else:
                     reply = await proxy.handle(callback)
                 if terminal_mode is not None and self.invocations == 1:

@@ -127,7 +127,7 @@ async def grant_database(ledger_database_fixture: DatabaseFacts) -> GrantDatabas
     async with ledger_database.engine.connect() as connection:
         schema = str(await connection.scalar(text("select current_schema()")))
     migration = runpy.run_path(
-        str(Path(__file__).resolve().parents[2] / "alembic/versions/0061_model_usage.py")
+        str(Path(__file__).resolve().parents[2] / "alembic/versions/0062_model_usage.py")
     )
     capture = _CaptureOperations()
     migration["_upgrade_invocation_grants"].__globals__["op"] = capture
