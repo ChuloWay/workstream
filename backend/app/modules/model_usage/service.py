@@ -56,9 +56,9 @@ from app.modules.model_usage.repository import (
 from app.modules.model_usage.profiles import stored_model_profile
 
 
-def _uuid(value: str) -> UUID:
+def _uuid(value: object) -> UUID:
     """Decode a persisted UUID string at the typed service boundary."""
-    return UUID(value)
+    return UUID(str(value))
 
 
 def _same_uuid(value: str, expected: UUID) -> bool:
