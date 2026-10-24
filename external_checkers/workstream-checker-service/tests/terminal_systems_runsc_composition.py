@@ -81,6 +81,8 @@ from tests.checkers_model_calls.test_composed_execution import (
 from tests.checkers_model_calls.test_public_api import profile_spec
 import tests.post_submit_materialization_helpers as material_helpers
 from tests.post_submit_materialization_helpers import material_fixture
+from tests.artifact_store_helpers import artifact_admission_limit_settings
+from tests.test_s3_artifact_store import minio_settings
 from tests.projects.guide_activation.source_fixtures import PostSubmitBindingCase
 from tests.test_checker_materialization import _limits
 
@@ -551,6 +553,15 @@ async def test_production_service_executes_project_trial_under_runsc_with_real_c
         tmp_path,
         isolated_database_env,
         provider="minio",
+        storage_settings=minio_settings(private_prefix=f"runsc/{uuid4()}").model_copy(
+            update={
+                **artifact_admission_limit_settings(1024 * 1024),
+                "artifact_scratch_root": tmp_path / "intake-scratch",
+                "artifact_scratch_minimum_free_bytes": 0,
+                # Exercise the deployed buffer, not the two-byte boundary-test fixture.
+                "artifact_stream_buffer_bytes": 1024 * 1024,
+            }
+        ),
         post_submit_registry_spec=registry_spec,
         post_submit_bindings_setup=binding_cases,
         post_scratch_root=post_scratch,
