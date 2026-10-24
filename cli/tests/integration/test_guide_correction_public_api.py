@@ -38,7 +38,10 @@ from tests.projects.guide_compilation.runtime_fixtures import (
 
 @pytest.mark.asyncio
 async def test_guide_correction_public_save_dispatch_replay_and_authority(
-    clean_postgres_database, tmp_path, cli, monkeypatch,  # noqa: F811
+    clean_postgres_database,
+    tmp_path,
+    cli,
+    monkeypatch,  # noqa: F811
 ):
     env = api_environment()
     env["WORKSTREAM_E2E_FLOW_ISSUER"] = "https://identity.flowresearch.tech"
@@ -253,9 +256,7 @@ async def test_guide_correction_public_save_dispatch_replay_and_authority(
                         )
                     finally:
                         get_settings.cache_clear()
-                profile = scripted_model_profile_spec(
-                    command.project_id, configuration
-                )
+                profile = scripted_model_profile_spec(command.project_id, configuration)
                 published = await direct.post(
                     f"/api/v1/operations/projects/{command.project_id}/model-profiles",
                     headers={
