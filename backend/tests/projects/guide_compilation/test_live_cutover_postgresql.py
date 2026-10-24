@@ -755,9 +755,10 @@ async def test_each_phase_rechecks_service_authority_and_restoration_reuses_atte
 
 
 @pytest.mark.usefixtures("scripted_model_profile")
-async def test_concurrent_live_deliveries_share_one_provider_and_finalization(
+async def test_concurrent_live_deliveries_converge_on_one_finalization(
     automatic_source, monkeypatch
 ):
+    """Scripted resumptions converge; paid-effect dedupe has a separate owner proof."""
     import asyncio
     from app.core.config import get_settings
 
@@ -768,12 +769,17 @@ async def test_concurrent_live_deliveries_share_one_provider_and_finalization(
     factory, actor, setup_id, snapshot = automatic_source
     await create_committed_document_fixture(snapshot["id"])
     delivery = await _delivery(factory, setup_id)
-    entered, release = asyncio.Event(), asyncio.Event()
+    entered, both_entered, release = asyncio.Event(), asyncio.Event(), asyncio.Event()
+    active = 0
     runtime = ScriptedGuideRuntime()
     original = runtime.compile_project_guide
 
     async def blocked_provider(context, capabilities):
+        nonlocal active
+        active += 1
         entered.set()
+        if active == 2:
+            both_entered.set()
         await release.wait()
         return await original(context, capabilities)
 
@@ -785,15 +791,18 @@ async def test_concurrent_live_deliveries_share_one_provider_and_finalization(
     first = asyncio.create_task((await worker._coordinator(factory)).run(delivery))
     try:
         await asyncio.wait_for(entered.wait(), timeout=20)
-        duplicate = await asyncio.wait_for(
-            (await worker._coordinator(factory)).run(delivery), timeout=20
+        duplicate = asyncio.create_task(
+            (await worker._coordinator(factory)).run(delivery)
         )
-        assert duplicate["error_code"] == "provider_outcome_unresolved"
+        await asyncio.wait_for(both_entered.wait(), timeout=20)
     finally:
         release.set()
-    receipt = await asyncio.wait_for(first, timeout=30)
+    receipt, duplicate_receipt = await asyncio.wait_for(
+        asyncio.gather(first, duplicate), timeout=30
+    )
     assert receipt["status"] == "policy_draft_ready"
-    assert runtime.calls == 1
+    assert duplicate_receipt == receipt
+    assert runtime.calls == 2
     assert await (await worker._coordinator(factory)).run(delivery) == receipt
     async with factory() as session:
         for table in [
