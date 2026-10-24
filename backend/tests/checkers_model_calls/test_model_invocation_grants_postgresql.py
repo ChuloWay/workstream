@@ -365,6 +365,127 @@ async def test_grant_round_trip_binds_exact_calls_and_becomes_immutable(
                     await session.execute(text(mutation))
 
 
+async def _consume_grant(owner, grant, database: GrantDatabase) -> None:
+    facts = await owner.resolve(grant.grant_id, grant.binding_digest)
+    await owner.consume_prepared(
+        facts,
+        call_index=0,
+        request_sha256=database.prepared_request_sha256,
+        prepared_attempt_id=database.prepared_attempt_id,
+    )
+
+
+async def _attached_grants(session: AsyncSession, database: GrantDatabase) -> int:
+    count = await session.scalar(
+        text(
+            "select count(*) from checker_model_invocation_grant_calls "
+            "where attempt_id=:attempt"
+        ),
+        {"attempt": database.prepared_attempt_id},
+    )
+    assert count is not None
+    return count
+
+
+async def _renew_and_consume(session, owner, boundaries, database: GrantDatabase):
+    renewed = database.execution.model_copy(
+        update={
+            "worker_lease_id": new_record_id(),
+            "worker_lease_generation": database.execution.worker_lease_generation + 1,
+            "worker_lease_expires_at": datetime.now(UTC) + timedelta(minutes=10),
+        }
+    )
+    await session.execute(
+        text(
+            "update checker_runs set worker_lease_id=:lease,"
+            "worker_lease_generation=:generation,worker_lease_expires_at=:expires "
+            "where id=:run"
+        ),
+        {
+            "lease": renewed.worker_lease_id,
+            "generation": renewed.worker_lease_generation,
+            "expires": renewed.worker_lease_expires_at,
+            "run": renewed.checker_run_id,
+        },
+    )
+    renewed_database = GrantDatabase(
+        database.facts,
+        renewed,
+        database.slot,
+        database.prepared,
+        database.prepared_attempt_id,
+        database.prepared_request_sha256,
+    )
+    grant = await _issue(renewed_database, boundaries=boundaries, session=session)
+    await _consume_grant(owner, grant, database)
+    return renewed
+
+
+async def _settle_renewed_effect(session, database: GrantDatabase, renewed) -> None:
+    dispatched = await service(session, BoundaryPorts()).reserve_dispatch(
+        renewed,
+        database.prepared,
+        evidence("renewed-dispatch-request", database.prepared_request_sha256),
+    )
+    completed = await service(session, BoundaryPorts()).complete_known_failure(
+        dispatched.effect,
+        provider_response_id="resp_renewed_dispatch",
+        provider_model_snapshot="gpt-example-2026-10-01",
+        response_evidence=evidence(
+            "renewed-dispatch-response", sha("renewed-dispatch-response")
+        ),
+        usage=ModelCallUsage(
+            input_tokens=22,
+            cached_input_tokens=2,
+            output_tokens=3,
+            reasoning_tokens=1,
+        ),
+    )
+    effect = await session.get(ModelUsageEffect, str(completed.effect.attempt_id))
+    account = await session.get(ModelUsageBudgetAccount, str(database.facts.project_id))
+    assert effect.prepared_execution_facts == database.execution.model_dump(mode="json")
+    assert effect.dispatch_execution_facts == renewed.model_dump(mode="json")
+    assert account.lifetime_reserved_nanodollars == 0
+    assert account.lifetime_settled_nanodollars == completed.settled_nanodollars
+
+
+async def _attach_successor(session, owner, boundaries, database, renewed) -> None:
+    successor = renewed.model_copy(
+        update={
+            "checker_run_id": new_record_id(),
+            "evaluation_request_id": new_record_id(),
+            "evaluation_generation": renewed.evaluation_generation + 1,
+            "worker_lease_id": new_record_id(),
+        }
+    )
+    await session.execute(
+        text(
+            "insert into checker_runs select :run,task_id,submission_id,submission_version,"
+            "project_id,:request,phase,:generation,request_json,:lease,"
+            "worker_lease_generation,worker_lease_expires_at,status,"
+            "selected_post_submit_policy_sha256,selected_post_submit_policy_body,"
+            "locked_post_submit_checker_policy_hash from checker_runs where id=:source"
+        ),
+        {
+            "run": successor.checker_run_id,
+            "request": successor.evaluation_request_id,
+            "generation": successor.evaluation_generation,
+            "lease": successor.worker_lease_id,
+            "source": database.execution.checker_run_id,
+        },
+    )
+    successor_database = GrantDatabase(
+        database.facts,
+        successor,
+        database.slot,
+        database.prepared,
+        database.prepared_attempt_id,
+        database.prepared_request_sha256,
+    )
+    grant = await _issue(successor_database, boundaries=boundaries, session=session)
+    await _consume_grant(owner, grant, database)
+
+
 async def test_renewed_and_successor_grants_reattach_the_same_paid_effect(
     grant_database: GrantDatabase,
 ) -> None:
@@ -372,155 +493,14 @@ async def test_renewed_and_successor_grants_reattach_the_same_paid_effect(
     async with AsyncSession(grant_database.facts.engine, expire_on_commit=False) as session:
         async with session.begin():
             boundaries = GrantBoundaries(session)
-            first = await _issue(grant_database, boundaries=boundaries, session=session)
             owner = ModelInvocationGrants(session, authority=boundaries, current=boundaries)
-            first_facts = await owner.resolve(first.grant_id, first.binding_digest)
-            await owner.consume_prepared(
-                first_facts,
-                call_index=0,
-                request_sha256=grant_database.prepared_request_sha256,
-                prepared_attempt_id=grant_database.prepared_attempt_id,
-            )
-            renewed_execution = grant_database.execution.model_copy(
-                update={
-                    "worker_lease_id": new_record_id(),
-                    "worker_lease_generation": (
-                        grant_database.execution.worker_lease_generation + 1
-                    ),
-                    "worker_lease_expires_at": datetime.now(UTC) + timedelta(minutes=10),
-                }
-            )
-            await session.execute(
-                text(
-                    "update checker_runs set worker_lease_id=:lease,"
-                    "worker_lease_generation=:generation,worker_lease_expires_at=:expires "
-                    "where id=:run"
-                ),
-                {
-                    "lease": renewed_execution.worker_lease_id,
-                    "generation": renewed_execution.worker_lease_generation,
-                    "expires": renewed_execution.worker_lease_expires_at,
-                    "run": renewed_execution.checker_run_id,
-                },
-            )
-            renewed_database = GrantDatabase(
-                grant_database.facts,
-                renewed_execution,
-                grant_database.slot,
-                grant_database.prepared,
-                grant_database.prepared_attempt_id,
-                grant_database.prepared_request_sha256,
-            )
-            renewed = await _issue(renewed_database, boundaries=boundaries, session=session)
-            renewed_facts = await owner.resolve(renewed.grant_id, renewed.binding_digest)
-            await owner.consume_prepared(
-                renewed_facts,
-                call_index=0,
-                request_sha256=grant_database.prepared_request_sha256,
-                prepared_attempt_id=grant_database.prepared_attempt_id,
-            )
-            assert (
-                await session.scalar(
-                    text(
-                        "select count(*) from checker_model_invocation_grant_calls "
-                        "where attempt_id=:attempt"
-                    ),
-                    {"attempt": grant_database.prepared_attempt_id},
-                )
-                == 2
-            )
-
-            request_art = evidence(
-                "renewed-dispatch-request", grant_database.prepared_request_sha256
-            )
-            dispatched = await service(session, BoundaryPorts()).reserve_dispatch(
-                renewed_execution,
-                grant_database.prepared,
-                request_art,
-            )
-            completed = await service(session, BoundaryPorts()).complete_known_failure(
-                dispatched.effect,
-                provider_response_id="resp_renewed_dispatch",
-                provider_model_snapshot="gpt-example-2026-10-01",
-                response_evidence=evidence(
-                    "renewed-dispatch-response", sha("renewed-dispatch-response")
-                ),
-                usage=ModelCallUsage(
-                    input_tokens=22,
-                    cached_input_tokens=2,
-                    output_tokens=3,
-                    reasoning_tokens=1,
-                ),
-            )
-            effect = await session.get(ModelUsageEffect, str(completed.effect.attempt_id))
-            account = await session.get(
-                ModelUsageBudgetAccount, str(grant_database.facts.project_id)
-            )
-            assert effect.prepared_execution_facts == grant_database.execution.model_dump(
-                mode="json"
-            )
-            assert effect.dispatch_execution_facts == renewed_execution.model_dump(mode="json")
-            assert account.lifetime_reserved_nanodollars == 0
-            assert account.lifetime_settled_nanodollars == completed.settled_nanodollars
-
-            successor = renewed_execution.model_copy(
-                update={
-                    "checker_run_id": new_record_id(),
-                    "evaluation_request_id": new_record_id(),
-                    "evaluation_generation": grant_database.execution.evaluation_generation + 1,
-                    "worker_lease_id": new_record_id(),
-                }
-            )
-            await session.execute(
-                text(
-                    "insert into checker_runs select :run,task_id,submission_id,"
-                    "submission_version,project_id,:request,phase,:generation,"
-                    "request_json,:lease,worker_lease_generation,worker_lease_expires_at,"
-                    "status,selected_post_submit_policy_sha256,"
-                    "selected_post_submit_policy_body,locked_post_submit_checker_policy_hash "
-                    "from checker_runs where id=:source"
-                ),
-                {
-                    "run": successor.checker_run_id,
-                    "request": successor.evaluation_request_id,
-                    "generation": successor.evaluation_generation,
-                    "lease": successor.worker_lease_id,
-                    "source": grant_database.execution.checker_run_id,
-                },
-            )
-            successor_database = GrantDatabase(
-                grant_database.facts,
-                successor,
-                grant_database.slot,
-                grant_database.prepared,
-                grant_database.prepared_attempt_id,
-                grant_database.prepared_request_sha256,
-            )
-            successor_grant = await _issue(
-                successor_database,
-                boundaries=boundaries,
-                session=session,
-            )
-            successor_facts = await owner.resolve(
-                successor_grant.grant_id,
-                successor_grant.binding_digest,
-            )
-            await owner.consume_prepared(
-                successor_facts,
-                call_index=0,
-                request_sha256=grant_database.prepared_request_sha256,
-                prepared_attempt_id=grant_database.prepared_attempt_id,
-            )
-            assert (
-                await session.scalar(
-                    text(
-                        "select count(*) from checker_model_invocation_grant_calls "
-                        "where attempt_id=:attempt"
-                    ),
-                    {"attempt": grant_database.prepared_attempt_id},
-                )
-                == 3
-            )
+            first = await _issue(grant_database, boundaries=boundaries, session=session)
+            await _consume_grant(owner, first, grant_database)
+            renewed = await _renew_and_consume(session, owner, boundaries, grant_database)
+            assert await _attached_grants(session, grant_database) == 2
+            await _settle_renewed_effect(session, grant_database, renewed)
+            await _attach_successor(session, owner, boundaries, grant_database, renewed)
+            assert await _attached_grants(session, grant_database) == 3
 
 
 async def test_grant_rejects_reused_or_wrong_authority_and_stale_db_clock(
@@ -572,6 +552,63 @@ async def test_grant_rejects_reused_or_wrong_authority_and_stale_db_clock(
                     sha("expired request"),
                     registry_entry_id=grant_database.facts.registry_entry_id,
                 )
+
+
+async def _reject_grant_scope_substitutions(database: GrantDatabase) -> None:
+    foreign_registry = new_record_id()
+    async with database.facts.engine.begin() as connection:
+        await connection.execute(
+            text(
+                "insert into external_checker_registry_entries(id,entry_digest,phase) "
+                "values (:id,:digest,'post_submit')"
+            ),
+            {"id": foreign_registry, "digest": database.slot.registry_entry_digest},
+        )
+    async with AsyncSession(database.facts.engine) as session:
+        with pytest.raises(DBAPIError):
+            async with session.begin():
+                boundaries = GrantBoundaries(session)
+                await ModelInvocationGrants(
+                    session, authority=boundaries, current=boundaries
+                ).issue(
+                    database.execution,
+                    database.slot,
+                    sha("foreign registry request"),
+                    registry_entry_id=foreign_registry,
+                )
+
+    foreign_project = new_record_id()
+    async with database.facts.engine.begin() as connection:
+        await connection.execute(
+            text("insert into projects(id) values (:id)"), {"id": foreign_project}
+        )
+    async with AsyncSession(database.facts.engine) as session:
+        with pytest.raises(DBAPIError):
+            async with session.begin():
+                boundaries = GrantBoundaries(session)
+                await ModelInvocationGrants(
+                    session, authority=boundaries, current=boundaries
+                ).issue(
+                    database.execution.model_copy(update={"project_id": foreign_project}),
+                    database.slot.model_copy(update={"project_id": foreign_project}),
+                    sha("foreign project request"),
+                    registry_entry_id=database.facts.registry_entry_id,
+                )
+
+    async with database.facts.engine.begin() as connection:
+        await connection.execute(
+            text(
+                "update checker_runs set selected_post_submit_policy_body="
+                "jsonb_set(selected_post_submit_policy_body,"
+                "'{entries,0,configuration_sha256}',to_jsonb(cast(:digest as text)))"
+            ),
+            {"digest": sha("substituted configuration")},
+        )
+    async with AsyncSession(database.facts.engine) as session:
+        with pytest.raises(DBAPIError):
+            async with session.begin():
+                boundaries = GrantBoundaries(session)
+                await _issue(database, boundaries=boundaries, session=session)
 
 
 async def test_grant_rejects_locked_binding_and_call_substitution_or_gaps(
@@ -660,66 +697,7 @@ async def test_grant_rejects_locked_binding_and_call_substitution_or_gaps(
                     },
                 )
 
-    foreign_registry = new_record_id()
-    async with grant_database.facts.engine.begin() as connection:
-        await connection.execute(
-            text(
-                "insert into external_checker_registry_entries(id,entry_digest,phase) "
-                "values (:id,:digest,'post_submit')"
-            ),
-            {"id": foreign_registry, "digest": grant_database.slot.registry_entry_digest},
-        )
-    async with AsyncSession(grant_database.facts.engine) as session:
-        with pytest.raises(DBAPIError):
-            async with session.begin():
-                boundaries = GrantBoundaries(session)
-                await ModelInvocationGrants(
-                    session,
-                    authority=boundaries,
-                    current=boundaries,
-                ).issue(
-                    grant_database.execution,
-                    grant_database.slot,
-                    sha("foreign registry request"),
-                    registry_entry_id=foreign_registry,
-                )
-
-    foreign_project = new_record_id()
-    async with grant_database.facts.engine.begin() as connection:
-        await connection.execute(
-            text("insert into projects(id) values (:id)"),
-            {"id": foreign_project},
-        )
-    async with AsyncSession(grant_database.facts.engine) as session:
-        with pytest.raises(DBAPIError):
-            async with session.begin():
-                boundaries = GrantBoundaries(session)
-                await ModelInvocationGrants(
-                    session,
-                    authority=boundaries,
-                    current=boundaries,
-                ).issue(
-                    grant_database.execution.model_copy(update={"project_id": foreign_project}),
-                    grant_database.slot.model_copy(update={"project_id": foreign_project}),
-                    sha("foreign project request"),
-                    registry_entry_id=grant_database.facts.registry_entry_id,
-                )
-
-    async with grant_database.facts.engine.begin() as connection:
-        await connection.execute(
-            text(
-                "update checker_runs set selected_post_submit_policy_body="
-                "jsonb_set(selected_post_submit_policy_body,"
-                "'{entries,0,configuration_sha256}',to_jsonb(cast(:digest as text)))"
-            ),
-            {"digest": sha("substituted configuration")},
-        )
-    async with AsyncSession(grant_database.facts.engine) as session:
-        with pytest.raises(DBAPIError):
-            async with session.begin():
-                boundaries = GrantBoundaries(session)
-                await _issue(grant_database, boundaries=boundaries, session=session)
-
+    await _reject_grant_scope_substitutions(grant_database)
     assert facts.slot == grant_database.slot
 
 
