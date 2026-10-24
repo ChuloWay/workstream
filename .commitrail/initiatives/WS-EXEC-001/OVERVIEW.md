@@ -1,6 +1,6 @@
 # WS-EXEC-001 — Managed lifecycle for self-hosted checker microVMs
 
-- Disposition: Planned
+- Disposition: Complete
 - Intent: finish the real upload -> isolated intake -> pre-check -> immutable Submission -> durable post-check -> governed outcome path through Workstream's typed adapters. Preparation begins after authorization while the same request uploads its ZIP. Success, rejection, disconnect, deadline, runtime failure and controller restart must release exactly owned resources. User explicitly authorized continuing through all implementation boundaries and live EC2 proof; the standalone qualification is not completion.
 
 ## Observed owners and concrete gaps
@@ -13,8 +13,9 @@ closes intake before ordered project PRE execution. POST uses the same intake
 under its durable execution/lease/outbox custody. `ExternalCheckerExecutionAdapter`
 and its explicit factory compose the Rust node's project execution capability.
 The node supports bounded Smol execution, exact-owner cleanup and independent
-guardians. Both capabilities now have owner/adapter proof; the remaining gap is
-deployment composition and their combined public API/durable-worker journey.
+guardians. Both capabilities have owner/adapter proof and a combined public API/Celery
+journey on an isolated one-slot Smol node. Hosted composition requires pinned
+intake configuration; the intended production Flow/AWS deployment remains separate.
 
 The Smol 1.31.4 qualification (PR #672) proves fresh VM overlap, real Python checker
 execution, cancellation/deadlines and request-process recovery, but not production
@@ -96,6 +97,12 @@ results and governed outcome. Test CPU/memory/PID/output enforcement rather than
 inferring limits from vCPU count. Resource exhaustion, cancellation and unknown
 execution outcomes must not become failed-work verdicts or unsafe execution retries.
 
-Next usable boundary: WS-EXEC-001-03, deployment composition and public durable-worker proof.
-Boundaries 1 and 2 supply node lifecycle and upload-overlapped ART intake. Their
-separate real-node and transaction proofs do not complete the public Smol journey.
+All three implementation boundaries are complete for the self-hosted lifecycle.
+The public drill proves cancellation, ordered PRE, bounded launch retries,
+controller recovery, durable POST recovery through the public Operator route,
+true-policy review routing and false-policy acceptance with exact contribution
+and conditional award facts. It uses a local Flow verifier fixture, recorded guide
+inference and MinIO; it does not certify production Flow, native AWS S3, live model
+invocation or the intended hosted deployment. Next usable boundary: provision the
+pinned intake and approved checker images in that deployment and repeat its
+provider/identity-specific proof. This does not authorize merge or a new initiative.
