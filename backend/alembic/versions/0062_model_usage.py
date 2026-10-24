@@ -217,9 +217,8 @@ BEGIN
     authority.action_id IS DISTINCT FROM 'checker.model_call.grant' OR
     authority.permission_id IS DISTINCT FROM 'checker.model_call.grant' OR
     authority.project_id IS DISTINCT FROM NEW.project_id OR
-    authority.resource_type IS DISTINCT FROM 'checker_model_call' OR
-    authority.resource_id IS DISTINCT FROM
-     NEW.execution_facts->>'evaluation_request_id' OR
+    authority.resource_type IS NOT NULL OR
+    authority.resource_id IS NOT NULL OR
     authority.denial_code IS NOT NULL OR
     authority.after_facts::jsonb IS DISTINCT FROM pg_catalog.jsonb_build_object(
      'allowed',true,'resource_context_digest',authority_resource_digest) OR
@@ -1405,6 +1404,7 @@ CREATE TABLE public.model_usage_effects (
  parent_attempt_id uuid,
  request_sha256 varchar(71) NOT NULL,
  state varchar(32) NOT NULL,
+ prepared_execution_facts jsonb,
  prepared_authorization_evidence_id uuid NOT NULL,
  request_binding_id uuid,
  request_content_id uuid,
@@ -1416,6 +1416,7 @@ CREATE TABLE public.model_usage_effects (
  budget_configuration_version integer,
  budget_configuration_digest varchar(71),
  reserved_nanodollars bigint,
+ dispatch_execution_facts jsonb,
  dispatch_authorization_evidence_id uuid,
  provider_response_id varchar(256),
  response_binding_id uuid,
@@ -1697,6 +1698,46 @@ BEGIN
  END IF;
  RETURN NEW;
 END $$
+""",
+    r"""
+CREATE FUNCTION public.model_usage_checker_execution_matches(
+ facts jsonb, expected_project_id uuid, expected_task_id uuid,
+ expected_assignment_id uuid, expected_submission_id uuid,
+ expected_submission_version integer
+) RETURNS boolean
+LANGUAGE sql IMMUTABLE STRICT SET search_path=pg_catalog,public,pg_temp AS $$
+ SELECT jsonb_typeof(facts)='object' AND
+  (SELECT count(*) FROM jsonb_object_keys(facts))=11 AND
+  facts ?& ARRAY[
+   'project_id','task_id','assignment_id','submission_id','submission_version',
+   'evaluation_request_id','evaluation_generation','checker_run_id',
+   'worker_lease_id','worker_lease_generation','worker_lease_expires_at'] AND
+  jsonb_typeof(facts->'submission_version')='number' AND
+  jsonb_typeof(facts->'evaluation_generation')='number' AND
+  jsonb_typeof(facts->'worker_lease_generation')='number' AND
+  facts->'submission_version'=to_jsonb((facts->>'submission_version')::integer) AND
+  facts->'evaluation_generation'=to_jsonb((facts->>'evaluation_generation')::integer) AND
+  facts->'worker_lease_generation'=
+   to_jsonb((facts->>'worker_lease_generation')::integer) AND
+  (facts->>'submission_version')::integer>0 AND
+  (facts->>'evaluation_generation')::integer>0 AND
+  (facts->>'worker_lease_generation')::integer>0 AND
+  (facts->>'project_id')::uuid::text=facts->>'project_id' AND
+  (facts->>'task_id')::uuid::text=facts->>'task_id' AND
+  (facts->>'assignment_id')::uuid::text=facts->>'assignment_id' AND
+  (facts->>'submission_id')::uuid::text=facts->>'submission_id' AND
+  (facts->>'evaluation_request_id')::uuid::text=facts->>'evaluation_request_id' AND
+  (facts->>'checker_run_id')::uuid::text=facts->>'checker_run_id' AND
+  (facts->>'worker_lease_id')::uuid::text=facts->>'worker_lease_id' AND
+  jsonb_typeof(facts->'worker_lease_expires_at')='string' AND
+  facts->>'worker_lease_expires_at' ~ '(Z|[+-][0-9]{2}:[0-9]{2})$' AND
+  isfinite((facts->>'worker_lease_expires_at')::timestamptz) AND
+  (facts->>'project_id')::uuid=expected_project_id AND
+  (facts->>'task_id')::uuid=expected_task_id AND
+  (facts->>'assignment_id')::uuid=expected_assignment_id AND
+  (facts->>'submission_id')::uuid=expected_submission_id AND
+  (facts->>'submission_version')::integer=expected_submission_version
+$$
 """,
     r"""
 CREATE FUNCTION public.guard_model_usage_budget_configuration() RETURNS trigger
@@ -2079,12 +2120,7 @@ BEGIN
    'facts_digest',public.model_usage_json_digest(pg_catalog.jsonb_build_object(
     'action',prepare_action,'facts',phase_facts)));
  ELSIF NEW.attempt_number=1 THEN
-  SELECT grant_row.execution_facts INTO phase_execution
-   FROM public.checker_model_invocation_grants grant_row
-   WHERE grant_row.project_id=slot.project_id AND
-    grant_row.paid_slot=terminal_slot AND
-    grant_row.execution_facts->>'evaluation_request_id'=prepare_authority.resource_id
-   ORDER BY grant_row.issued_at DESC,grant_row.id DESC LIMIT 1;
+  phase_execution:=NEW.prepared_execution_facts;
   phase_facts:=pg_catalog.jsonb_build_object(
    'execution',phase_execution,'slot',terminal_slot,
    'request_sha256',NEW.request_sha256);
@@ -2138,6 +2174,10 @@ BEGIN
     phase_actor.id IS NULL OR phase_facts IS NULL OR
     (NEW.checker_slot_id IS NOT NULL AND NEW.attempt_number=1 AND
      phase_execution IS NULL) OR
+    (NEW.checker_slot_id IS NOT NULL AND NEW.attempt_number=1 AND
+     public.model_usage_checker_execution_matches(
+      phase_execution,slot.project_id,slot.task_id,slot.assignment_id,
+      slot.submission_id,slot.submission_version) IS NOT TRUE) OR
     (NEW.checker_slot_id IS NOT NULL AND NEW.attempt_number>1 AND
      (parent.id IS NULL OR retry_terminal_digest IS NULL)) OR
     prepare_authority.event_domain IS DISTINCT FROM 'authority' OR
@@ -2147,8 +2187,10 @@ BEGIN
     prepare_authority.permission_id IS DISTINCT FROM prepare_action OR
     prepare_authority.project_id IS DISTINCT FROM
      coalesce(slot.project_id,setup_slot.project_id) OR
-    prepare_authority.resource_type IS DISTINCT FROM phase_resource->>'resource_type' OR
-    prepare_authority.resource_id IS DISTINCT FROM phase_resource->>'resource_id' OR
+    prepare_authority.resource_type IS DISTINCT FROM
+     CASE WHEN NEW.attempt_number>1 THEN 'project' ELSE NULL END OR
+    prepare_authority.resource_id IS DISTINCT FROM
+     CASE WHEN NEW.attempt_number>1 THEN slot.project_id::text ELSE NULL END OR
     prepare_authority.denial_code IS NOT NULL OR
     prepare_authority.after_facts::jsonb IS DISTINCT FROM
      pg_catalog.jsonb_build_object(
@@ -2243,7 +2285,9 @@ BEGIN
  END IF;
  IF TG_OP='INSERT' THEN
   IF NEW.attempt_number=1 THEN
-   IF NEW.parent_attempt_id IS NOT NULL THEN
+   IF NEW.parent_attempt_id IS NOT NULL OR
+      (NEW.checker_slot_id IS NOT NULL AND NEW.prepared_execution_facts IS NULL) OR
+      (NEW.setup_slot_id IS NOT NULL AND NEW.prepared_execution_facts IS NOT NULL) THEN
     RAISE EXCEPTION 'initial checker model attempt cannot have a parent' USING ERRCODE='23514';
    END IF;
   ELSE
@@ -2257,6 +2301,7 @@ BEGIN
        FROM public.model_usage_effects WHERE
         checker_slot_id IS NOT DISTINCT FROM NEW.checker_slot_id AND
         setup_slot_id IS NOT DISTINCT FROM NEW.setup_slot_id) OR
+      NEW.prepared_execution_facts IS NOT NULL OR
       NOT (parent.state='known_no_effect' OR
        (parent.state='known_failed' AND parent.settled_nanodollars IS NOT NULL AND
         parent.settlement_authorization_evidence_id IS NOT NULL)) THEN
@@ -2266,11 +2311,13 @@ BEGIN
  ELSIF ROW(NEW.checker_slot_id,NEW.setup_slot_id,NEW.attempt_number,
              NEW.internal_call_request_id,
              NEW.parent_attempt_id,NEW.request_sha256,
+             NEW.prepared_execution_facts,
              NEW.prepared_authorization_evidence_id,NEW.prepared_at)
        IS DISTINCT FROM
        ROW(OLD.checker_slot_id,OLD.setup_slot_id,OLD.attempt_number,
              OLD.internal_call_request_id,
              OLD.parent_attempt_id,OLD.request_sha256,
+             OLD.prepared_execution_facts,
              OLD.prepared_authorization_evidence_id,OLD.prepared_at) THEN
   RAISE EXCEPTION 'checker model call attempt identity is immutable' USING ERRCODE='55000';
  END IF;
@@ -2279,14 +2326,16 @@ BEGIN
         NEW.request_verification_receipt_id,NEW.request_content_sha256,
         NEW.request_byte_count,NEW.budget_configuration_id,
         NEW.budget_configuration_version,NEW.budget_configuration_digest,
-        NEW.reserved_nanodollars,NEW.dispatch_authorization_evidence_id,
+        NEW.reserved_nanodollars,NEW.dispatch_execution_facts,
+        NEW.dispatch_authorization_evidence_id,
         NEW.dispatched_at)
     IS DISTINCT FROM
     ROW(OLD.request_binding_id,OLD.request_content_id,OLD.request_put_attempt_id,
         OLD.request_verification_receipt_id,OLD.request_content_sha256,
         OLD.request_byte_count,OLD.budget_configuration_id,
         OLD.budget_configuration_version,OLD.budget_configuration_digest,
-        OLD.reserved_nanodollars,OLD.dispatch_authorization_evidence_id,
+        OLD.reserved_nanodollars,OLD.dispatch_execution_facts,
+        OLD.dispatch_authorization_evidence_id,
         OLD.dispatched_at) THEN
   RAISE EXCEPTION 'checker model dispatch facts are immutable' USING ERRCODE='55000';
  END IF;
@@ -2299,6 +2348,7 @@ BEGIN
      NEW.budget_configuration_version IS NOT NULL OR
      NEW.budget_configuration_digest IS NOT NULL OR
      NEW.reserved_nanodollars IS NOT NULL OR
+     NEW.dispatch_execution_facts IS NOT NULL OR
      NEW.dispatch_authorization_evidence_id IS NOT NULL OR
 	    NEW.dispatched_at IS NOT NULL OR NEW.provider_response_id IS NOT NULL OR
 	    NEW.response_binding_id IS NOT NULL OR NEW.response_content_id IS NOT NULL OR
@@ -2339,14 +2389,7 @@ BEGIN
     'attempt_number',NEW.attempt_number,
     'internal_call_request_id',NEW.internal_call_request_id,
     'request_sha256',NEW.request_sha256,'state','prepared','replayed',false);
-   SELECT grant_row.execution_facts INTO phase_execution
-    FROM public.checker_model_invocation_grant_calls grant_call
-    JOIN public.checker_model_invocation_grants grant_row
-     ON grant_row.id=grant_call.grant_id
-    WHERE grant_call.attempt_id=NEW.id AND
-     grant_call.request_sha256=NEW.request_sha256 AND
-     grant_row.issued_at<=dispatch_authority.occurred_at
-    ORDER BY grant_row.issued_at DESC,grant_row.id DESC LIMIT 1;
+   phase_execution:=NEW.dispatch_execution_facts;
    phase_facts:=pg_catalog.jsonb_build_object(
     'execution',phase_execution,'attempt',phase_attempt,
     'request_evidence',phase_request_evidence);
@@ -2371,6 +2414,11 @@ BEGIN
   IF dispatch_authority.id IS NULL OR
      phase_actor.id IS NULL OR phase_facts IS NULL OR
      (NEW.checker_slot_id IS NOT NULL AND phase_execution IS NULL) OR
+     (NEW.checker_slot_id IS NOT NULL AND
+      public.model_usage_checker_execution_matches(
+       phase_execution,slot.project_id,slot.task_id,slot.assignment_id,
+       slot.submission_id,slot.submission_version) IS NOT TRUE) OR
+     (NEW.setup_slot_id IS NOT NULL AND NEW.dispatch_execution_facts IS NOT NULL) OR
      dispatch_authority.event_domain IS DISTINCT FROM 'authority' OR
      dispatch_authority.event_type IS DISTINCT FROM 'SensitiveAuthorizationAllowed' OR
      dispatch_authority.actor_ref_kind IS DISTINCT FROM 'actor_profile' OR
@@ -2378,8 +2426,8 @@ BEGIN
      dispatch_authority.permission_id IS DISTINCT FROM dispatch_action OR
      dispatch_authority.project_id IS DISTINCT FROM
       coalesce(slot.project_id,setup_slot.project_id) OR
-     dispatch_authority.resource_type IS DISTINCT FROM terminal_resource_type OR
-     dispatch_authority.resource_id IS DISTINCT FROM NEW.id::text OR
+     dispatch_authority.resource_type IS NOT NULL OR
+     dispatch_authority.resource_id IS NOT NULL OR
      dispatch_authority.denial_code IS NOT NULL OR
      dispatch_authority.after_facts::jsonb IS DISTINCT FROM
       pg_catalog.jsonb_build_object(
@@ -2483,8 +2531,8 @@ BEGIN
      observation_authority.permission_id IS DISTINCT FROM observation_action OR
      observation_authority.project_id IS DISTINCT FROM
       coalesce(slot.project_id,setup_slot.project_id) OR
-     observation_authority.resource_type IS DISTINCT FROM terminal_resource_type OR
-     observation_authority.resource_id IS DISTINCT FROM NEW.id::text OR
+     observation_authority.resource_type IS NOT NULL OR
+     observation_authority.resource_id IS NOT NULL OR
      observation_authority.denial_code IS NOT NULL OR
      observation_authority.after_facts::jsonb IS DISTINCT FROM
       pg_catalog.jsonb_build_object(
@@ -2521,8 +2569,8 @@ BEGIN
      terminal_authority.permission_id IS DISTINCT FROM terminal_action OR
      terminal_authority.project_id IS DISTINCT FROM
       coalesce(slot.project_id,setup_slot.project_id) OR
-     terminal_authority.resource_type IS DISTINCT FROM terminal_resource_type OR
-     terminal_authority.resource_id IS DISTINCT FROM NEW.id::text OR
+     terminal_authority.resource_type IS NOT NULL OR
+     terminal_authority.resource_id IS NOT NULL OR
      terminal_authority.denial_code IS NOT NULL OR
      terminal_authority.after_facts::jsonb IS DISTINCT FROM
       pg_catalog.jsonb_build_object(
@@ -2551,8 +2599,8 @@ BEGIN
      terminal_authority.permission_id IS DISTINCT FROM terminal_action OR
      terminal_authority.project_id IS DISTINCT FROM
       coalesce(slot.project_id,setup_slot.project_id) OR
-     terminal_authority.resource_type IS DISTINCT FROM terminal_resource_type OR
-     terminal_authority.resource_id IS DISTINCT FROM NEW.id::text OR
+     terminal_authority.resource_type IS NOT NULL OR
+     terminal_authority.resource_id IS NOT NULL OR
      terminal_authority.denial_code IS NOT NULL OR
      terminal_authority.after_facts::jsonb IS DISTINCT FROM
       pg_catalog.jsonb_build_object(
@@ -2582,8 +2630,8 @@ BEGIN
      terminal_authority.permission_id IS DISTINCT FROM terminal_action OR
      terminal_authority.project_id IS DISTINCT FROM
       coalesce(slot.project_id,setup_slot.project_id) OR
-     terminal_authority.resource_type IS DISTINCT FROM terminal_resource_type OR
-     terminal_authority.resource_id IS DISTINCT FROM NEW.id::text OR
+     terminal_authority.resource_type IS NOT NULL OR
+     terminal_authority.resource_id IS NOT NULL OR
      terminal_authority.denial_code IS NOT NULL OR
      terminal_authority.after_facts::jsonb IS DISTINCT FROM
       pg_catalog.jsonb_build_object(
@@ -2746,6 +2794,8 @@ BEGIN
     authority.actor_ref_kind IS DISTINCT FROM 'actor_profile' OR
     authority.action_id IS DISTINCT FROM 'checker.model_call.recover' OR
     authority.permission_id IS DISTINCT FROM 'checker.model_call.recover' OR
+    authority.project_id IS DISTINCT FROM slot.project_id OR
+    authority.resource_type IS NOT NULL OR authority.resource_id IS NOT NULL OR
     authority.denial_code IS NOT NULL OR
     authority.after_facts::jsonb IS DISTINCT FROM jsonb_build_object(
      'allowed',true,'resource_context_digest',expected_digest) OR

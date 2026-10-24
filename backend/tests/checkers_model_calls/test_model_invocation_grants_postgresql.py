@@ -72,10 +72,12 @@ class GrantBoundaries:
         *,
         evidence_id: UUID | None = None,
         action: str = "checker.model_call.grant",
+        corrupt_digest: bool = False,
     ) -> None:
         self._session = session
         self._evidence_id = evidence_id
         self._action = action
+        self._corrupt_digest = corrupt_digest
 
     async def authorize_grant(
         self,
@@ -117,7 +119,7 @@ class GrantBoundaries:
                 "action_id,permission_id,project_id,resource_type,resource_id,"
                 "denial_code,after_facts) values "
                 "(:id,'authority','SensitiveAuthorizationAllowed','actor_profile',:actor,"
-                ":action,'checker.model_call.grant',:project,:resource_type,:resource_id,"
+                ":action,'checker.model_call.grant',:project,null,null,"
                 "null,cast(:after as jsonb)) "
                 "on conflict(id) do nothing"
             ),
@@ -126,12 +128,14 @@ class GrantBoundaries:
                 "actor": str(actor_id),
                 "action": self._action,
                 "project": str(resource.scope_project_id),
-                "resource_type": resource.resource_type,
-                "resource_id": str(resource.resource_id),
                 "after": json.dumps(
                     {
                         "allowed": True,
-                        "resource_context_digest": authorization_resource_digest(resource),
+                        "resource_context_digest": (
+                            sha("foreign grant authority")
+                            if self._corrupt_digest
+                            else authorization_resource_digest(resource)
+                        ),
                     }
                 ),
             },
@@ -469,6 +473,12 @@ async def test_grant_rejects_reused_or_wrong_authority_and_stale_db_clock(
         with pytest.raises(DBAPIError):
             async with session.begin():
                 boundaries = GrantBoundaries(session, action="checker.model_call.dispatch")
+                await _issue(grant_database, boundaries=boundaries, session=session)
+
+    async with AsyncSession(grant_database.facts.engine) as session:
+        with pytest.raises(DBAPIError):
+            async with session.begin():
+                boundaries = GrantBoundaries(session, corrupt_digest=True)
                 await _issue(grant_database, boundaries=boundaries, session=session)
 
     expired = grant_database.execution.model_copy(

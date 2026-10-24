@@ -561,6 +561,7 @@ class ModelCallService:
             internal_call_request_id=str(new_record_id()),
             request_sha256=request_sha256,
             state="prepared",
+            prepared_execution_facts=execution.model_dump(mode="json"),
             prepared_authorization_evidence_id=str(authority.evidence_id),
         )
         await self._repo.add(attempt)
@@ -740,6 +741,7 @@ class ModelCallService:
         row.budget_configuration_version = budget.configuration_version
         row.budget_configuration_digest = budget.configuration_digest
         row.reserved_nanodollars = reservation
+        row.dispatch_execution_facts = execution.model_dump(mode="json")
         row.dispatch_authorization_evidence_id = str(authority.evidence_id)
         row.dispatched_at = await self._repo.now()
         row.state = "dispatching"
