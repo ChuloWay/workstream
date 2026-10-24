@@ -117,6 +117,21 @@ class DiagnosticModelProxy(CheckerModelProxy):
         return reply
 
 
+class DiagnosticTrialProxy(CheckerTrialProxy):
+    """Retain bounded callback stages without logging material or receipt bodies."""
+
+    async def handle(self, payload):
+        operation = payload.get("operation")
+        print("trial callback entered:", operation)
+        try:
+            reply = await super().handle(payload)
+        except Exception as error:
+            print("trial callback error:", type(error).__name__, str(error)[:1_000])
+            raise
+        print("trial callback outcome:", operation, reply.get("outcome"), reply.get("failure_code"))
+        return reply
+
+
 REQUIREMENT = "runtime_environment_and_verification_trials"
 PROFILE_ID = UUID("018f6f49-66b8-7d2a-bf4d-0e2eeaa00493")
 ALPINE_DIGEST = "sha256:c64c687cbea9300178b30c95835354e34c4e4febc4badfe27102879de0483b5e"
@@ -668,7 +683,7 @@ async def test_production_service_executes_project_trial_under_runsc_with_real_c
         def trial_reservations(session, external):
             return _owner(session, external, catalog)
 
-        trial_proxy = CheckerTrialProxy(
+        trial_proxy = DiagnosticTrialProxy(
             sessions=h.factory,
             reservations=trial_reservations,
             profiles=catalog,
