@@ -71,6 +71,25 @@ if totals != {"tests": 1, "failures": 0, "errors": 0, "skipped": 0} or cases != 
 PY
 }
 
+write_exit_sidecar() {
+  python3 - "${EXIT_SIDECAR}" "$1" <<'PY'
+import os
+import stat
+import sys
+
+descriptor = os.open(
+    sys.argv[1], os.O_WRONLY | os.O_TRUNC | getattr(os, "O_NOFOLLOW", 0)
+)
+try:
+    if not stat.S_ISREG(os.fstat(descriptor).st_mode):
+        raise SystemExit("qualification exit sidecar is not regular")
+    os.write(descriptor, (sys.argv[2] + "\n").encode())
+    os.fsync(descriptor)
+finally:
+    os.close(descriptor)
+PY
+}
+
 cleanup_docker() {
   timeout --kill-after=5s 30s docker "$@"
 }
@@ -244,9 +263,7 @@ for trial in trials:
         raise SystemExit("qualification summary step outcomes differ")
 PY
   fi
-  local exit_temporary="${EXIT_SIDECAR}.tmp.$$"
-  printf '%s\n' "${status}" >"${exit_temporary}" || status=1
-  mv -- "${exit_temporary}" "${EXIT_SIDECAR}" || status=1
+  write_exit_sidecar "${status}" || status=1
   if [[ "${status}" == 0 ]]; then
     python3 - \
       "${RESULT_SUMMARY}.tmp.$$" "${RESULT_SUMMARY}" "${INVOCATION_ID}" \
@@ -314,8 +331,7 @@ PY
   if [[ "${status}" != 0 ]]; then
     rm -f -- "${RESULT_SUMMARY}" "${RESULT_SUMMARY_SHA256}" \
       "${RESULT_SUMMARY}.tmp.$$" "${RESULT_SUMMARY_SHA256}.tmp.$$"
-    printf '%s\n' "${status}" >"${EXIT_SIDECAR}.tmp.$$"
-    mv -- "${EXIT_SIDECAR}.tmp.$$" "${EXIT_SIDECAR}"
+    write_exit_sidecar "${status}"
   fi
   cat -- "${RESULT_LOG}" >&3
   exit "${status}"
@@ -335,14 +351,39 @@ on_signal() {
 [[ -z "${WORKSTREAM_TS_RUNSC_METADATA:-}" ]]
 [[ -z "${WORKSTREAM_TS_RUNSC_LOG:-}" ]]
 [[ -z "${WORKSTREAM_TS_RUNSC_EXIT:-}" ]]
-for evidence_path in \
-  "${METADATA}" "${RESULT_LOG}" "${EXIT_SIDECAR}" "${JUNIT_XML}" \
-  "${FIXTURE_SUMMARY}" "${RESULT_SUMMARY}" "${RESULT_SUMMARY_SHA256}"; do
-  [[ ! -e "${evidence_path}" && ! -L "${evidence_path}" ]]
-done
+python3 - \
+  "${RESULT_LOG}" "${EXIT_SIDECAR}" "${METADATA}" "${JUNIT_XML}" \
+  "${FIXTURE_SUMMARY}" "${RESULT_SUMMARY}" "${RESULT_SUMMARY_SHA256}" <<'PY'
+import os
+from pathlib import Path
+import sys
+
+paths = tuple(Path(value) for value in sys.argv[1:])
+parents = {path.parent for path in paths}
+if len(parents) != 1:
+    raise SystemExit("qualification evidence files must share one directory")
+parent = parents.pop()
+if parent.resolve(strict=True) != parent:
+    raise SystemExit("qualification evidence directory must be canonical")
+parent_stat = parent.stat()
+if parent_stat.st_uid != os.geteuid() or parent_stat.st_mode & 0o077:
+    raise SystemExit("qualification evidence directory must be private and caller-owned")
+if any(os.path.lexists(path) for path in paths):
+    raise SystemExit("qualification evidence prefix already exists")
+flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
+created = []
+try:
+    for path in paths[:2]:
+        descriptor = os.open(path, flags, 0o600)
+        os.close(descriptor)
+        created.append(path)
+except BaseException:
+    for path in created:
+        path.unlink(missing_ok=True)
+    raise
+PY
 exec 3>&1 4>&2
-: >"${RESULT_LOG}"
-exec >"${RESULT_LOG}" 2>&1
+exec >>"${RESULT_LOG}" 2>&1
 trap cleanup EXIT
 trap on_signal INT TERM
 source_guard
