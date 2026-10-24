@@ -42,10 +42,17 @@ enter a container that runs submitted material.
    statuses both count.
 4. The facts reach the checker in the request `input` (stdin), so the request
    digest binds them. They are not a second ART mount.
-5. In comparison mode, `harnessy.work_proof` reports one error finding for each
-   mismatch: repository, pull request number, merged flag, merge commit SHA,
-   base branch, and each required check that is missing or not `success`.
-   Missing facts when the configuration requires them is an error finding.
+5. `harnessy.work_proof` has one fail-closed mode. Its configuration must name
+   the repository and base branch, and facts must be present; otherwise it
+   fails. It reports one error finding for each mismatch: repository, base
+   branch, merged flag, merge commit SHA, each required check that is missing or
+   not `success`, and the integrity rules below. It parses no URL: `pr_url` and
+   `ci_run_url` must equal canonical URLs built from the facts.
+6. One canonical pull-request identity: chunk 04 takes the pull-request number
+   from the single shared parser `parse_pull_request_url` (chunk 02), and the
+   checker re-asserts exact equality of the claimed URL with the facts, so the
+   fetcher and the checker cannot disagree. Every fact is bound to one
+   pull-request state (`head_sha`, `merge_commit_sha`).
 
 ## Chunk map
 
@@ -54,7 +61,7 @@ enter a container that runs submitted material.
 | 01 | This initiative record | None |
 | 02 | GitHub facts port and GitHub App adapter (integrity layer 1 facts: pull request, author, reviews, changed files, required checks with their producing App), registered per ADR 0014 and not yet called by a production path | 01 |
 | 03 | `harnessy.work_proof` comparison mode and integrity layers 2 to 5, configuration schema and checker version | 01 |
-| 04 | Selected POST wiring: fetch facts inside the existing outbox evaluation handler for bindings whose locked configuration selects GitHub facts; map facts-unavailable to an infrastructure failure; route protected-path changes to human acceptance; integrity layers 6 and 7 | 02, 03, PR #677 |
+| 04 | Selected POST wiring: fetch facts inside the existing outbox evaluation handler for bindings whose locked configuration selects GitHub facts, taking the pull-request number only from `parse_pull_request_url`; map facts-unavailable to an infrastructure failure; route protected-path changes to human acceptance; integrity layers 6 and 7 | 02, 03, PR #677 |
 | 05 | Durable ART custody of the facts as a `service_identity` checker-run binding; integrity layer 8 | 04, PRs #676 and #677 |
 | 06 | Hosted secret configuration and an end-to-end drill against a fake GitHub, covering every integrity layer | 04, 05 |
 
