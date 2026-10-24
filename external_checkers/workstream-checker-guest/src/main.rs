@@ -75,11 +75,22 @@ fn material_path_is_relative(value: &str) -> bool {
             .all(|part| matches!(part, Component::Normal(_)))
 }
 
+fn mount_directory(path: &Path) -> Result<()> {
+    // No image code or other threads run before confinement. Refuse image-owned
+    // symlinks (including dangling ones) instead of mounting through them.
+    match fs::symlink_metadata(path) {
+        Ok(metadata) if metadata.is_dir() => Ok(()),
+        Ok(_) => Err("mount target is not a directory".into()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(fs::create_dir(path)?),
+        Err(error) => Err(error.into()),
+    }
+}
+
 fn stage(job: &GuestJob, input: &mut impl Read) -> Result<File> {
     // Mask any image-owned /work before handling untrusted paths. Only this
     // trusted process runs in the image until staging and confinement complete.
-    fs::create_dir_all("/work")?;
-    fs::create_dir_all("/tmp")?;
+    mount_directory(Path::new("/work"))?;
+    mount_directory(Path::new("/tmp"))?;
     // Stage on the VM's bounded ephemeral disk, so immutable input pages can
     // be reclaimed independently of the checker heap. Never put the submitted
     // tree in tmpfs or silently add its expanded size to the workload limit.
@@ -353,6 +364,24 @@ fn supervised_exit(status: i32, oom_kills: u64) -> i32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn mount_targets_reject_image_symlinks_and_non_directories() {
+        let root = std::env::temp_dir().join(format!("ws-guest-mounts-{}", std::process::id()));
+        fs::create_dir(&root).unwrap();
+        let target = root.join("directory");
+        mount_directory(&target).unwrap();
+        mount_directory(&target).unwrap();
+        let link = root.join("link");
+        std::os::unix::fs::symlink(&target, &link).unwrap();
+        assert!(mount_directory(&link).is_err());
+        fs::remove_dir(&target).unwrap();
+        assert!(mount_directory(&link).is_err());
+        fs::write(&target, b"image file").unwrap();
+        assert!(mount_directory(&target).is_err());
+        assert_eq!(fs::read(&target).unwrap(), b"image file");
+        fs::remove_dir_all(root).unwrap();
+    }
+
     #[test]
     fn material_containment_does_not_apply_finding_presentation_limits() {
         assert!(material_path_is_relative(&format!(

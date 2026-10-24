@@ -443,51 +443,65 @@ impl Machine {
         config: &ServiceConfig,
         request: &ValidatedRequest,
         deadline: Instant,
-    ) -> Result<Self, String> {
-        let s = settings(config)?.clone();
+    ) -> Result<Self, ExecutionFailure> {
+        let s = settings(config)
+            .map_err(|_| ExecutionFailure::ordinary("implementation_unavailable", false))?
+            .clone();
         let root = config
             .socket_path
             .parent()
-            .ok_or("socket parent missing")?
+            .ok_or("socket parent missing")
+            .map_err(|_| ExecutionFailure::ordinary("implementation_unavailable", false))?
             .join("smol-leases");
         let mut random = [0u8; 16];
         File::open("/dev/urandom")
             .and_then(|mut f| f.read_exact(&mut random))
-            .map_err(|_| "randomness unavailable")?;
+            .map_err(|_| ExecutionFailure::ordinary("implementation_unavailable", false))?;
         let nonce: String = random.iter().map(|b| format!("{b:02x}")).collect();
-        let owner = container_owner(config)?.to_owned();
+        let owner = container_owner(config)
+            .map_err(|_| ExecutionFailure::ordinary("implementation_unavailable", false))?
+            .to_owned();
         let lease = Lease {
             name: format!("ws-{nonce}"),
             owner,
             epoch: std::process::id(),
-            expires_ms: now_ms()?.saturating_add(
-                deadline
-                    .saturating_duration_since(Instant::now())
-                    .as_millis() as u64,
-            ),
+            expires_ms: now_ms()
+                .map_err(|_| ExecutionFailure::ordinary("implementation_unavailable", false))?
+                .saturating_add(
+                    deadline
+                        .saturating_duration_since(Instant::now())
+                        .as_millis() as u64,
+                ),
             lifetime_ms: deadline
                 .saturating_duration_since(Instant::now())
                 .as_millis() as u64,
             root,
             runtime: s,
         };
-        let bytes = serde_json::to_vec(&lease).map_err(|_| "lease encoding failed")?;
+        let bytes = serde_json::to_vec(&lease)
+            .map_err(|_| ExecutionFailure::ordinary("implementation_unavailable", false))?;
         let mut file = OpenOptions::new()
             .create_new(true)
             .write(true)
             .mode(0o600)
             .open(lease.path())
-            .map_err(|_| "lease create failed")?;
+            .map_err(|error| {
+                if error.kind() == std::io::ErrorKind::AlreadyExists {
+                    ExecutionFailure::unsettled(false)
+                } else {
+                    ExecutionFailure::ordinary("implementation_unavailable", false)
+                }
+            })?;
         file.write_all(&bytes)
             .and_then(|_| file.sync_all())
-            .map_err(|_| "lease persistence failed")?;
+            .map_err(|_| ExecutionFailure::unsettled(false))?;
         File::open(&lease.root)
             .and_then(|f| f.sync_all())
-            .map_err(|_| "lease persistence failed")?;
+            .map_err(|_| ExecutionFailure::unsettled(false))?;
         // Persist ownership before any runtime resource is created. The guardian
         // is a distinct exec with its own lifetime and only this lease's custody.
         let mut guardian =
-            Command::new(std::env::current_exe().map_err(|_| "service executable unavailable")?)
+            Command::new(std::env::current_exe().map_err(|_| ExecutionFailure::unsettled(false))?)
                 .arg("--smol-guardian")
                 .arg(lease.path())
                 .env_clear()
@@ -495,23 +509,24 @@ impl Machine {
                 .stdout(Stdio::piped())
                 .stderr(Stdio::null())
                 .spawn()
-                .map_err(|_| "guardian unavailable")?;
+                .map_err(|_| ExecutionFailure::unsettled(false))?;
         let keeper = guardian.stdin.take();
         let mut handshake = guardian
             .stdout
             .take()
-            .ok_or("guardian handshake unavailable")?;
-        set_nonblocking(&handshake)?;
+            .ok_or_else(|| ExecutionFailure::unsettled(false))?;
+        set_nonblocking(&handshake).map_err(|_| ExecutionFailure::unsettled(false))?;
         let mut bytes = Vec::new();
         let handshake_deadline = deadline.min(Instant::now() + SOCKET_IO_TIMEOUT);
         loop {
-            read_available(&mut handshake, &mut bytes, 1)?;
+            read_available(&mut handshake, &mut bytes, 1)
+                .map_err(|_| ExecutionFailure::unsettled(false))?;
             if bytes == [1] {
                 break;
             }
             if Instant::now() >= handshake_deadline {
                 drop(keeper);
-                return Err("guardian handshake timed out".into());
+                return Err(ExecutionFailure::unsettled(false));
             }
             thread::sleep(Duration::from_millis(5));
         }
@@ -522,8 +537,11 @@ impl Machine {
             consumed: false,
         };
         if machine.configure_cgroup(request).is_err() {
-            let _ = machine.close();
-            return Err("cgroup reservation unavailable".into());
+            return Err(if machine.close().is_ok() {
+                ExecutionFailure::ordinary("implementation_unavailable", false)
+            } else {
+                ExecutionFailure::unsettled(false)
+            });
         }
         Ok(machine)
     }
@@ -744,8 +762,7 @@ pub(super) fn execute(
     budget: &mut RequestExecutionBudget,
 ) -> Result<ExecutedChecker, ExecutionFailure> {
     for attempt in 0..3 {
-        let mut machine = Machine::create(config, request, budget.deadline)
-            .map_err(|_| ExecutionFailure::unsettled(false))?;
+        let mut machine = Machine::create(config, request, budget.deadline)?;
         let prepared = machine.prepare(cache, request, client, budget.deadline);
         let launched = prepared.is_ok();
         let result = prepared
@@ -916,6 +933,43 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn missing_lease_directory_does_not_poison_node_admission() {
+        let (root, mut config) = super::super::tests::test_config();
+        config.smol = Some(SmolConfig {
+            binary: root.join("unused-runtime"),
+            binary_sha256: format!("sha256:{}", "a".repeat(64)),
+            home: root.join("home"),
+            guest_binary: root.join("guest"),
+            guest_sha256: format!("sha256:{}", "b".repeat(64)),
+            cgroup_root: root.join("groups"),
+            maximum_parallel: 2,
+        });
+        let request = parse_request(include_bytes!("../../fixtures/request.json")).unwrap();
+        let (client, _peer) = UnixStream::pair().unwrap();
+        let mut budget =
+            RequestExecutionBudget::new(Instant::now() + Duration::from_secs(1), 32768);
+        let result = execute(
+            &config,
+            &config.cache[0],
+            &request,
+            &root,
+            &client,
+            &mut budget,
+        );
+        assert_eq!(
+            result.unwrap_err(),
+            ExecutionFailure::ordinary("implementation_unavailable", false)
+        );
+        assert!(!config
+            .socket_path
+            .parent()
+            .unwrap()
+            .join("smol-leases")
+            .exists());
+        fs::remove_dir_all(root).unwrap();
+    }
 
     #[test]
     fn concurrent_capacity_is_reserved_until_its_owner_releases_it() {
