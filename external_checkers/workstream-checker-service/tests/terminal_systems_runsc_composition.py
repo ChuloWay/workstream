@@ -104,6 +104,19 @@ from trial_plan import (  # noqa: E402
 from author_checker import AUTHOR_REQUIREMENT  # noqa: E402
 
 
+class DiagnosticModelProxy(CheckerModelProxy):
+    """Keep controlled-provider failure causes in the qualification log."""
+
+    async def _handle(self, request):
+        try:
+            reply = await super()._handle(request)
+        except Exception as error:
+            print("model callback error:", type(error).__name__, str(error)[:1_000])
+            raise
+        print("model callback outcome:", reply.outcome, reply.failure_code)
+        return reply
+
+
 REQUIREMENT = "runtime_environment_and_verification_trials"
 PROFILE_ID = UUID("018f6f49-66b8-7d2a-bf4d-0e2eeaa00493")
 ALPINE_DIGEST = "sha256:c64c687cbea9300178b30c95835354e34c4e4febc4badfe27102879de0483b5e"
@@ -637,7 +650,7 @@ async def test_production_service_executes_project_trial_under_runsc_with_real_c
             preparation=h.preparation,
             settings=h.settings,
         )
-        model_proxy = CheckerModelProxy(
+        model_proxy = DiagnosticModelProxy(
             sessions=h.factory,
             authorization=checker_model_service_authorization,
             grants=model_invocation_grants,
@@ -779,7 +792,7 @@ async def test_production_service_executes_project_trial_under_runsc_with_real_c
                     ),
                 )
                 result = await executor.evaluate_post_submission(h.request)
-            assert result.outcome == "completed", result
+            assert result.outcome == "completed", (result, len(creates), len(observations))
             assert len(result.execution.external_members) == 2
             assert {
                 member.requirement_id: (member.result.outcome, member.result.verdict)
