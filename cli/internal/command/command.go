@@ -110,6 +110,7 @@ func Run(args []string, stdout, stderr io.Writer, getenv environment, version st
 	addAdminInspection(root, client, &output, stdout)
 
 	project := &cobra.Command{Use: "project", Short: "Public project operations"}
+	addProjectCatalogue(project, client, &output, stdout)
 	addTaskReads(project, client, &output, stdout)
 	addTaskBatch(project, client, &output, stdout)
 	addProjectCreate(project, client, &output, stdout)

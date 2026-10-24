@@ -333,6 +333,7 @@ def authorization_http_error(exc: AuthorizationDenied) -> StructuredHTTPExceptio
         ActionId.PROJECT_ROLE_GRANT_LIST,
         ActionId.PROJECT_ROLE_GRANT_READ,
         ActionId.PROJECT_READ,
+        ActionId.PROJECT_CATALOGUE_LIST,
         ActionId.ACTOR_AUTHORIZATION_CONTEXT_READ,
         ActionId.PROJECT_SETUP_RUN_READ,
         ActionId.PROJECT_GUIDE_SUFFICIENCY_REPORT_LIST,

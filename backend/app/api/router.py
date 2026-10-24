@@ -11,6 +11,7 @@ from app.api.routes.contributor_reads import router as contributor_reads_router
 from app.api.routes.project_guide_reads import router as project_guide_reads_router
 from app.api.routes.project_preparation_reads import router as project_preparation_reads_router
 from app.api.routes.project_work_reads import router as project_work_reads_router
+from app.api.routes.project_catalogue import router as project_catalogue_router
 
 from fastapi import APIRouter
 
@@ -32,6 +33,7 @@ api_router.include_router(health_router)
 api_router.include_router(health_router, prefix="/api/v1")
 api_router.include_router(actors_router, prefix="/api/v1")
 api_router.include_router(contributor_reads_router, prefix="/api/v1")
+api_router.include_router(project_catalogue_router, prefix="/api/v1")
 api_router.include_router(authorization_router, prefix="/api/v1")
 api_router.include_router(project_create_router, prefix="/api/v1")
 api_router.include_router(guide_mutation_router, prefix="/api/v1")
