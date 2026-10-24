@@ -441,7 +441,7 @@ async def _settle_renewed_effect(session, database: GrantDatabase, renewed) -> N
             reasoning_tokens=1,
         ),
     )
-    effect = await session.get(ModelUsageEffect, str(completed.effect.attempt_id))
+    effect = await session.get(ModelUsageEffect, str(completed.attempt_id))
     account = await session.get(ModelUsageBudgetAccount, str(database.facts.project_id))
     assert effect.prepared_execution_facts == database.execution.model_dump(mode="json")
     assert effect.dispatch_execution_facts == renewed.model_dump(mode="json")
