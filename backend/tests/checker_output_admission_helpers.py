@@ -145,7 +145,16 @@ async def make_checker_output_reservation(
     )
     profile_id = new_record_id()
     actor_id = await session.scalar(select(ActorProfile.id).order_by(ActorProfile.id).limit(1))
-    audit_event_id = await session.scalar(select(AuditEvent.id).order_by(AuditEvent.id).limit(1))
+    audit_event_id = await session.scalar(
+        select(AuditEvent.id)
+        .where(
+            ~select(ModelUsageProfile.id)
+            .where(ModelUsageProfile.authorization_evidence_id == AuditEvent.id)
+            .exists()
+        )
+        .order_by(AuditEvent.id)
+        .limit(1)
+    )
     assert actor_id is not None and audit_event_id is not None
     per_call_bytes = max(maximum_bytes, 1024)
     profile_digest = canonical_json_hash(

@@ -63,7 +63,7 @@ async def model_database(postgres_database_url: str):
             "create table task_assignments(id uuid primary key, task_id uuid not null, project_id uuid not null)",
             "create table submissions(id uuid primary key, task_id uuid not null, version integer not null, unique(id,task_id,version))",
             "create table external_checker_registry_entries(id uuid primary key,entry_digest text not null,phase text not null)",
-            "create table checker_runs(id uuid primary key,task_id uuid,submission_id uuid,submission_version integer,project_id uuid,evaluation_request_id uuid,phase text,evaluation_generation integer,request_json text,worker_lease_id uuid,worker_lease_generation integer,worker_lease_expires_at timestamptz,status text)",
+            "create table checker_runs(id uuid primary key,task_id uuid,submission_id uuid,submission_version integer,project_id uuid,evaluation_request_id uuid,phase text,evaluation_generation integer,request_json text,worker_lease_id uuid,worker_lease_generation integer,worker_lease_expires_at timestamptz,status text,selected_post_submit_policy_sha256 text,selected_post_submit_policy_body jsonb,locked_post_submit_checker_policy_hash text)",
             "create table actor_profiles(id uuid primary key,actor_kind text default 'human',status text default 'active',service_identity text)",
             "create table audit_events(id uuid primary key, event_domain text, event_type text, actor_ref_kind text, actor_id text, action_id text, permission_id text, denial_code text, after_facts json)",
             "create table artifact_bindings(id uuid primary key)",

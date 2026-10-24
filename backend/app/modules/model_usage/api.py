@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterable
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Annotated, Literal, Protocol, Self
 from uuid import RFC_4122, UUID
 
@@ -977,6 +977,15 @@ class ModelUsageEffectInspection(ModelCallValue):
         return self
 
 
+def model_usage_instant(value: datetime) -> str:
+    """Match PostgreSQL's canonical UTC timestamptz JSON spelling exactly."""
+    utc = value.astimezone(UTC)
+    rendered = utc.strftime("%Y-%m-%dT%H:%M:%S")
+    if utc.microsecond:
+        rendered += "." + f"{utc.microsecond:06d}".rstrip("0")
+    return rendered + "+00:00"
+
+
 def model_retry_terminal_digest(
     terminal: KnownFailedModelCall | KnownNoEffectProof,
 ) -> str:
@@ -986,7 +995,7 @@ def model_retry_terminal_digest(
             "state": "known_no_effect",
             "proof_id": str(terminal.proof_id),
             "proof_digest": terminal.proof_digest,
-            "observed_at": terminal.observed_at.isoformat(),
+            "observed_at": model_usage_instant(terminal.observed_at),
         }
     else:
         facts = {
@@ -1275,5 +1284,6 @@ __all__ = (
     "SetupModelUsageSlotKey",
     "model_action_digest",
     "model_retry_terminal_digest",
+    "model_usage_instant",
     "model_usage_cost",
 )

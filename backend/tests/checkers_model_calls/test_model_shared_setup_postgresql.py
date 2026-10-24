@@ -18,6 +18,7 @@ from tests.checkers_model_calls.test_model_call_transactions_postgresql import (
     ModelGenerationSettings,
     ModelProfileProvisioningFacts,
     ModelProfileReader,
+    ModelCallUnavailable,
     ModelUsageBudgetAccount,
     asyncio,
     canonical_json_hash,
@@ -37,6 +38,32 @@ from tests.checkers_model_calls.test_model_call_transactions_postgresql import (
 )
 
 model_database = _model_database
+
+
+async def test_profile_reader_requires_exact_project_and_selector(
+    model_database: DatabaseFacts,
+) -> None:
+    ports = BoundaryPorts()
+    profile = await provision(model_database, ports, limit=10_000)
+    async with AsyncSession(model_database.engine) as session:
+        async with session.begin():
+            reader = ModelProfileReader(session)
+            assert (
+                await reader.read_exact(
+                    profile.selector,
+                    project_id=model_database.project_id,
+                )
+                == profile
+            )
+            with pytest.raises(ModelCallUnavailable, match="model_profile_unavailable"):
+                await reader.read_exact(profile.selector, project_id=new_record_id())
+            with pytest.raises(ModelCallUnavailable, match="model_profile_unavailable"):
+                await reader.read_exact(
+                    profile.selector.model_copy(
+                        update={"profile_digest": sha("substituted-profile")}
+                    ),
+                    project_id=model_database.project_id,
+                )
 
 
 async def test_provisioning_replay_retains_original_receipts_with_fresh_authority(

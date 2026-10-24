@@ -778,7 +778,6 @@ class CheckerModelInvocationGrantCall(Base):
             name="facts",
         ),
         UniqueConstraint("grant_id", "call_index", name="uq_checker_model_grant_call_index"),
-        UniqueConstraint("attempt_id", name="uq_checker_model_grant_call_attempt"),
     )
     grant_id: Mapped[str] = mapped_column(
         Uuid(as_uuid=False),

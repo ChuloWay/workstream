@@ -133,19 +133,6 @@ async def grant_database(ledger_database_fixture: DatabaseFacts) -> GrantDatabas
     migration["_upgrade_invocation_grants"].__globals__["op"] = capture
     migration["_upgrade_invocation_grants"]()
     async with ledger_database.engine.begin() as connection:
-        await connection.execute(
-            text(
-                "alter table checker_runs add column project_id uuid, add column task_id uuid,"
-                "add column submission_id uuid, add column submission_version integer,"
-                "add column evaluation_request_id uuid, add column evaluation_generation integer,"
-                "add column request_json text, add column worker_lease_id uuid,"
-                "add column worker_lease_generation integer,"
-                "add column worker_lease_expires_at timestamptz, add column status text,"
-                "add column phase text, add column selected_post_submit_policy_sha256 text,"
-                "add column selected_post_submit_policy_body jsonb,"
-                "add column locked_post_submit_checker_policy_hash text"
-            )
-        )
         for statement in capture.statements:
             await connection.execute(text(_isolated(statement, schema)))
 
@@ -336,6 +323,100 @@ async def test_grant_round_trip_binds_exact_calls_and_becomes_immutable(
             with pytest.raises(DBAPIError):
                 async with session.begin():
                     await session.execute(text(mutation))
+
+
+async def test_renewed_and_successor_grants_reattach_the_same_paid_effect(
+    grant_database: GrantDatabase,
+) -> None:
+    """Lease renewal and an authorized retry run reuse one stable paid effect."""
+    async with AsyncSession(grant_database.facts.engine, expire_on_commit=False) as session:
+        async with session.begin():
+            boundaries = GrantBoundaries(session)
+            first = await _issue(grant_database, boundaries=boundaries, session=session)
+            owner = ModelInvocationGrants(session, authority=boundaries, current=boundaries)
+            first_facts = await owner.resolve(first.grant_id, first.binding_digest)
+            await owner.consume_prepared(
+                first_facts,
+                call_index=0,
+                request_sha256=grant_database.prepared_request_sha256,
+                prepared_attempt_id=grant_database.prepared_attempt_id,
+            )
+            renewed = await _issue(grant_database, boundaries=boundaries, session=session)
+            renewed_facts = await owner.resolve(renewed.grant_id, renewed.binding_digest)
+            await owner.consume_prepared(
+                renewed_facts,
+                call_index=0,
+                request_sha256=grant_database.prepared_request_sha256,
+                prepared_attempt_id=grant_database.prepared_attempt_id,
+            )
+            assert (
+                await session.scalar(
+                    text(
+                        "select count(*) from checker_model_invocation_grant_calls "
+                        "where attempt_id=:attempt"
+                    ),
+                    {"attempt": grant_database.prepared_attempt_id},
+                )
+                == 2
+            )
+
+            successor = grant_database.execution.model_copy(
+                update={
+                    "checker_run_id": new_record_id(),
+                    "evaluation_request_id": new_record_id(),
+                    "evaluation_generation": grant_database.execution.evaluation_generation + 1,
+                    "worker_lease_id": new_record_id(),
+                }
+            )
+            await session.execute(
+                text(
+                    "insert into checker_runs select :run,task_id,submission_id,"
+                    "submission_version,project_id,:request,phase,:generation,"
+                    "request_json,:lease,worker_lease_generation,worker_lease_expires_at,"
+                    "status,selected_post_submit_policy_sha256,"
+                    "selected_post_submit_policy_body,locked_post_submit_checker_policy_hash "
+                    "from checker_runs where id=:source"
+                ),
+                {
+                    "run": successor.checker_run_id,
+                    "request": successor.evaluation_request_id,
+                    "generation": successor.evaluation_generation,
+                    "lease": successor.worker_lease_id,
+                    "source": grant_database.execution.checker_run_id,
+                },
+            )
+            successor_database = GrantDatabase(
+                grant_database.facts,
+                successor,
+                grant_database.slot,
+                grant_database.prepared_attempt_id,
+                grant_database.prepared_request_sha256,
+            )
+            successor_grant = await _issue(
+                successor_database,
+                boundaries=boundaries,
+                session=session,
+            )
+            successor_facts = await owner.resolve(
+                successor_grant.grant_id,
+                successor_grant.binding_digest,
+            )
+            await owner.consume_prepared(
+                successor_facts,
+                call_index=0,
+                request_sha256=grant_database.prepared_request_sha256,
+                prepared_attempt_id=grant_database.prepared_attempt_id,
+            )
+            assert (
+                await session.scalar(
+                    text(
+                        "select count(*) from checker_model_invocation_grant_calls "
+                        "where attempt_id=:attempt"
+                    ),
+                    {"attempt": grant_database.prepared_attempt_id},
+                )
+                == 3
+            )
 
 
 async def test_grant_rejects_reused_or_wrong_authority_and_stale_db_clock(

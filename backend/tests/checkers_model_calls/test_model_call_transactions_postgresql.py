@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, timedelta, timezone
 import asyncio
 import json
 from uuid import UUID, uuid4
@@ -15,11 +15,16 @@ from app.core.hashing import canonical_json_hash
 from app.core.identifiers import new_record_id
 from app.modules.authorization.domain.model_usage import (
     BUDGET_CONFIGURE,
+    COMPLETE,
     PROFILE_PROVISION,
     RECOVER,
+    SETUP_COMPLETE,
+    ModelCallCompleteAuthorityFacts,
     ModelCallRecoverAuthorityFacts,
+    SetupModelCompleteAuthorityFacts,
     checker_model_call_resource,
     project_model_admin_resource,
+    setup_model_usage_resource,
 )
 from app.modules.authorization.domain.resource_digest import authorization_resource_digest
 from app.modules.model_usage.api import (
@@ -43,9 +48,9 @@ from app.modules.model_usage.api import (
     SetupModelOwnerProfile,
     model_action_digest,
     model_retry_terminal_digest,
+    model_usage_instant,
 )
 from app.modules.model_usage.models import ModelUsageBudgetAccount
-from app.modules.model_usage.profiles import ModelProfileReader
 from app.modules.model_usage.service import ModelCallService
 from app.modules.model_usage.setup import SetupModelUsageService
 from tests.checkers_model_calls.model_usage_pg_support import (
@@ -69,6 +74,7 @@ class BoundaryPorts:
     current_checks: int = 0
     events: list[str] = field(default_factory=list)
     corrupt_admin_receipt: bool = False
+    terminal_receipt_change: str | None = None
 
     def _decision(self, action: str, facts: object) -> ModelActionEvidence:
         self.events.append(action)
@@ -329,10 +335,51 @@ class DatabaseBoundaryPorts:
 
     async def authorize_complete(self, effect, response_evidence, terminal_digest):
         evidence = await self._ports.authorize_complete(effect, response_evidence, terminal_digest)
+        actor_id = new_record_id()
+        service_identity = (
+            "workstream.project.setup"
+            if self._ports.terminal_receipt_change == "actor"
+            else "workstream.checker.post_submit"
+        )
+        await self._session.execute(
+            text(
+                "insert into actor_profiles(id,actor_kind,status,service_identity) "
+                "values (:id,'service','active',:identity)"
+            ),
+            {"id": actor_id, "identity": service_identity},
+        )
+        authority_effect = effect
+        if self._ports.terminal_receipt_change == "effect":
+            authority_effect = effect.model_copy(update={"attempt_id": new_record_id()})
+        elif self._ports.terminal_receipt_change == "project":
+            foreign_project = new_record_id()
+            authority_effect = effect.model_copy(
+                update={
+                    "project_id": foreign_project,
+                    "slot_key": effect.slot_key.model_copy(update={"project_id": foreign_project}),
+                }
+            )
+        facts = ModelCallCompleteAuthorityFacts(
+            effect=authority_effect,
+            response_evidence=response_evidence,
+            terminal_digest=terminal_digest,
+        )
+        action = (
+            "checker.model_call.observe"
+            if self._ports.terminal_receipt_change == "action"
+            else "checker.model_call.complete"
+        )
+        resource_digest = authorization_resource_digest(
+            checker_model_call_resource(COMPLETE, facts)
+        )
+        if self._ports.terminal_receipt_change == "digest":
+            resource_digest = sha("foreign terminal resource")
         return await self._authority(
             evidence,
-            action="checker.model_call.complete",
-            permission="checker.model_call.complete",
+            action=action,
+            permission=action,
+            actor_id=actor_id,
+            resource_digest=resource_digest,
         )
 
     async def authorize_setup_prepare(self, slot, request_sha256):
@@ -365,10 +412,51 @@ class DatabaseBoundaryPorts:
         evidence = await self._ports.authorize_setup_complete(
             effect, response_evidence, terminal_digest
         )
+        actor_id = new_record_id()
+        service_identity = (
+            "workstream.checker.post_submit"
+            if self._ports.terminal_receipt_change == "actor"
+            else "workstream.project.setup"
+        )
+        await self._session.execute(
+            text(
+                "insert into actor_profiles(id,actor_kind,status,service_identity) "
+                "values (:id,'service','active',:identity)"
+            ),
+            {"id": actor_id, "identity": service_identity},
+        )
+        authority_effect = effect
+        if self._ports.terminal_receipt_change == "effect":
+            authority_effect = effect.model_copy(update={"effect_id": new_record_id()})
+        elif self._ports.terminal_receipt_change == "project":
+            foreign_project = new_record_id()
+            authority_effect = effect.model_copy(
+                update={
+                    "project_id": foreign_project,
+                    "slot_key": effect.slot_key.model_copy(update={"project_id": foreign_project}),
+                }
+            )
+        facts = SetupModelCompleteAuthorityFacts(
+            effect=authority_effect,
+            response_evidence=response_evidence,
+            terminal_digest=terminal_digest,
+        )
+        action = (
+            "project.guide_compilation.model.observe"
+            if self._ports.terminal_receipt_change == "action"
+            else "project.guide_compilation.model.complete"
+        )
+        resource_digest = authorization_resource_digest(
+            setup_model_usage_resource(SETUP_COMPLETE, facts)
+        )
+        if self._ports.terminal_receipt_change == "digest":
+            resource_digest = sha("foreign setup terminal resource")
         return await self._authority(
             evidence,
-            action="project.guide_compilation.model.complete",
-            permission="project.guide_compilation.model.complete",
+            action=action,
+            permission=action,
+            actor_id=actor_id,
+            resource_digest=resource_digest,
         )
 
     async def require_setup_request(self, prepared, evidence):
@@ -882,8 +970,18 @@ async def test_uncertain_holds_budget_and_only_proven_no_effect_allows_child(
     proof = KnownNoEffectProof(
         proof_id=new_record_id(),
         proof_digest=sha("provider-no-effect"),
-        observed_at=datetime.now(UTC),
+        observed_at=datetime(
+            2026,
+            10,
+            24,
+            5,
+            30,
+            0,
+            123_000,
+            tzinfo=timezone(timedelta(hours=5, minutes=30)),
+        ),
     )
+    assert model_usage_instant(proof.observed_at) == "2026-10-24T00:00:00.123+00:00"
     async with AsyncSession(model_database.engine, expire_on_commit=False) as session:
         async with session.begin():
             owner = service(session, ports)
@@ -1027,53 +1125,6 @@ async def test_budget_adjustment_preserves_reserved_and_settles_old_snapshot(
                     await service(session, ports).provision_budget(shrinking_facts)
 
 
-async def test_known_failed_settles_once_and_allows_authorized_child(
-    model_database: DatabaseFacts,
-) -> None:
-    ports = BoundaryPorts()
-    reservation = 100 * 11 + 50 * 29
-    profile = await provision(model_database, ports, limit=reservation * 2)
-    run, paid_slot, prepared, dispatched, _ = await prepare_and_reserve(
-        model_database, ports, profile, "model_known_failure"
-    )
-    usage = ModelCallUsage(
-        input_tokens=22,
-        cached_input_tokens=2,
-        output_tokens=3,
-        reasoning_tokens=1,
-    )
-    response_art = evidence("failed-response", sha("failed-response"))
-    async with AsyncSession(model_database.engine, expire_on_commit=False) as session:
-        async with session.begin():
-            owner = service(session, ports)
-            failed = await owner.complete_known_failure(
-                dispatched.effect,
-                provider_response_id="resp_terminal_failure",
-                provider_model_snapshot=profile.spec.model_snapshot,
-                response_evidence=response_art,
-                usage=usage,
-            )
-            replay = await owner.complete_known_failure(
-                dispatched.effect,
-                provider_response_id="resp_terminal_failure",
-                provider_model_snapshot=profile.spec.model_snapshot,
-                response_evidence=response_art,
-                usage=usage,
-            )
-            assert replay.replayed
-            child = await owner.prepare_recovery_child(
-                paid_slot,
-                registry_entry_id=model_database.registry_entry_id,
-                parent_attempt_id=prepared.attempt_id,
-                terminal_digest=model_retry_terminal_digest(failed),
-                request_sha256=prepared.request_sha256,
-            )
-            assert child.attempt_number == 2
-            account = await session.get(ModelUsageBudgetAccount, str(model_database.project_id))
-            assert account.lifetime_reserved_nanodollars == 0
-            assert account.lifetime_settled_nanodollars == failed.settled_nanodollars
-
-
 async def test_database_guards_reject_ledger_mutation_and_counter_substitution(
     model_database: DatabaseFacts,
 ) -> None:
@@ -1133,29 +1184,3 @@ async def test_database_ancestry_prevents_receipt_and_artifact_deletion(
             with pytest.raises(DBAPIError):
                 async with session.begin():
                     await session.execute(text(statement), {"id": identifier})
-
-
-async def test_profile_reader_requires_exact_project_and_selector(
-    model_database: DatabaseFacts,
-) -> None:
-    ports = BoundaryPorts()
-    profile = await provision(model_database, ports, limit=10_000)
-    async with AsyncSession(model_database.engine) as session:
-        async with session.begin():
-            reader = ModelProfileReader(session)
-            assert (
-                await reader.read_exact(
-                    profile.selector,
-                    project_id=model_database.project_id,
-                )
-                == profile
-            )
-            with pytest.raises(ModelCallUnavailable, match="model_profile_unavailable"):
-                await reader.read_exact(profile.selector, project_id=new_record_id())
-            with pytest.raises(ModelCallUnavailable, match="model_profile_unavailable"):
-                await reader.read_exact(
-                    profile.selector.model_copy(
-                        update={"profile_digest": sha("substituted-profile")}
-                    ),
-                    project_id=model_database.project_id,
-                )

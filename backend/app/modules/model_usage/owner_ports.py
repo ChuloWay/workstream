@@ -96,6 +96,11 @@ class ModelRecoverySources:
                 CheckerModelInvocationGrantCall.grant_id == CheckerModelInvocationGrant.id,
             )
             .where(CheckerModelInvocationGrantCall.attempt_id == str(parent_attempt_id))
+            .order_by(
+                CheckerModelInvocationGrant.issued_at.desc(),
+                CheckerModelInvocationGrant.id,
+            )
+            .limit(1)
         )
         if (
             slot_row is None
@@ -103,7 +108,7 @@ class ModelRecoverySources:
             or parent.checker_slot_id != slot_row.id
             or grant is None
             or grant.project_id != str(slot.project_id)
-            or ModelPaidSlotKey.model_validate(grant.paid_slot).envelope_digest
+            or ModelPaidSlotKey.model_validate_json(json.dumps(grant.paid_slot)).envelope_digest
             != slot.envelope_digest
         ):
             raise ModelCallUnavailable("model_recovery_source_unavailable")
@@ -135,6 +140,7 @@ class ModelRecoverySources:
                     CheckerModelUsageSlot,
                     CheckerModelInvocationGrant.registry_entry_id,
                 )
+                .select_from(CheckerModelInvocationGrant)
                 .join(
                     CheckerModelInvocationGrantCall,
                     CheckerModelInvocationGrantCall.grant_id == CheckerModelInvocationGrant.id,
