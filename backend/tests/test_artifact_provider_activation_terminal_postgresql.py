@@ -345,11 +345,12 @@ async def test_checker_output_shared_put_and_verification_lifecycle(
                 assert attempt is not None and receipt is not None and job is not None
                 job_id = UUID(job.id)
                 assert attempt.producer_request_type == "checker_output"
-                assert (attempt.project_id, attempt.task_id, attempt.checker_run_id) == (
+                assert (attempt.project_id, attempt.task_id) == (
                     project_id,
                     task_id,
-                    checker_run_id,
                 )
+                assert attempt.checker_run_id is None
+                assert attempt.model_call_attempt_id is not None
                 assert receipt.checker_run_id == checker_run_id
                 with pytest.raises(DBAPIError):
                     await session.execute(

@@ -238,7 +238,9 @@ async def read_package(factory, command, actor, grant_id):
         raise exc from exc.__context__
 
 
-async def request_corrected_attempt(factory, actor, correction, *, capabilities=None):
+async def request_corrected_attempt(
+    factory, actor, correction, *, capabilities=None, configuration=None
+):
     """Enter the existing production human request port; no provider is invoked."""
     from app.adapters.artifacts import guide_document_manifest_port
     from app.modules.authorization.guide_compilation import (
@@ -276,7 +278,7 @@ async def request_corrected_attempt(factory, actor, correction, *, capabilities=
             request_inputs=CompilationRequestInputs(
                 guide_document_manifest_port(session),
                 capabilities or capability_projection(),
-                manager_runtime_configuration(),
+                configuration or manager_runtime_configuration(),
             ),
         )
         return await service.request_correction(
@@ -284,7 +286,9 @@ async def request_corrected_attempt(factory, actor, correction, *, capabilities=
         )
 
 
-async def finalize_corrected_attempt(factory, values, actor, correction, *, outcome=None):
+async def finalize_corrected_attempt(
+    factory, values, actor, correction, *, outcome=None, configuration=None
+):
     """Run a scripted result through actual execution, projections and finalization."""
     from app.adapters.artifacts import guide_document_manifest_port
     from app.adapters.auth import (
@@ -307,10 +311,16 @@ async def finalize_corrected_attempt(factory, values, actor, correction, *, outc
 
     async with factory() as session, session.begin():
         capabilities = await external_checker_capability_projection(session)
-    await request_corrected_attempt(factory, actor, correction, capabilities=capabilities)
+    configuration = configuration or manager_runtime_configuration()
+    await request_corrected_attempt(
+        factory,
+        actor,
+        correction,
+        capabilities=capabilities,
+        configuration=configuration,
+    )
     async with factory() as session:
         setup = await session.get(ProjectSetupRun, str(correction.successor_setup_run_id))
-    configuration = manager_runtime_configuration()
     runtime = ScriptedGuideRuntime(configuration)
     if outcome is not None:
         runtime.outcome = outcome
