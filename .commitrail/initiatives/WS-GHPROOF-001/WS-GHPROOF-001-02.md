@@ -196,7 +196,8 @@ chunk adds no transport, credential or retry logic of its own.
 
 | Claim | Command or proof | Result | Remaining uncertainty |
 |---|---|---|---|
-| Adapter behavior and secret custody | `pytest tests/test_github_facts_adapter.py` | 73 passed | Uses `httpx.MockTransport`; the re-run rule comes from a separate live read, not from this suite |
+| Adapter behavior and secret custody | `pytest tests/test_github_facts_adapter.py` | 122 passed | Uses `httpx.MockTransport`; the re-run rule comes from a separate live read, not from this suite |
+| Every fail-closed branch rejects | `coverage run --branch --include='app/adapters/github/*,app/interfaces/github_facts.py' -m pytest tests/test_github_facts_adapter.py`; `coverage report -m` | 100% line and branch on `app_facts.py`, `github/__init__.py` and `github_facts.py` (before: 90% and 98%) | Coverage shows execution; each added test asserts the typed error or outcome |
 | Re-run test detects order-based selection | Temporarily selecting the last listed run made both re-run cases fail | Detected | Manual negative control |
 | Secret tests detect leaks | Temporarily unredacting the token repr, and logging the Authorization value, each made one test fail | Detected | Manual negative control |
 | Lane catalogue, boundaries, ownership | `tests/test_ci_lane_catalogue.py`, `tests/architecture/test_module_boundaries.py`, `tests/test_behavior_ownership.py`, `scripts.behavior_ownership validate`, `module_boundaries`, `authorization_boundary`, `test_structure_boundary` | Pass | None |
@@ -208,7 +209,11 @@ because `uv.lock` supports Linux only. Hosted Backend CI owns the locked run.
 
 ## Review findings
 
-None recorded.
+- Coverage review: three unreachable branches were removed rather than kept as
+  dead code: a deadline check between consistency attempts (the next request
+  already fails with `GitHubFactsUnavailableError` once the deadline is spent),
+  a full-URL branch in the API-path helper (only paths reach it), and the
+  natural exit of the retry `for` loop (every exit is an explicit break).
 
 ## Reconciliation
 

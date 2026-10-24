@@ -11,12 +11,14 @@ import httpx
 import jwt
 import pytest
 from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.hazmat.primitives.asymmetric import ec, rsa
+from pydantic import SecretStr, ValidationError
 
 from app.adapters.github import github_facts_adapter_factory
 from app.adapters.github.app_facts import (
     GitHubAppFactsAdapter,
     GitHubAppFactsConfiguration,
+    load_github_app_private_key,
     _InstallationToken,
 )
 from app.core.config import Settings
@@ -1049,3 +1051,305 @@ def test_pull_request_url_parser_returns_repository_and_number() -> None:
         "Acme/widgets.v2",
         12,
     )
+
+
+
+# Fail-closed branches: each malformed or hostile response is rejected ---------
+
+PROTECTION = f"/repos/{REPOSITORY}/branches/main/protection/required_status_checks"
+RUNS = f"/repos/{REPOSITORY}/commits/{HEAD_SHA}/check-runs"
+STATUS = f"/repos/{REPOSITORY}/commits/{HEAD_SHA}/status"
+EC_KEY = ec.generate_private_key(ec.SECP256R1())
+
+
+def test_private_key_loader_rejects_oversized_and_non_rsa_keys() -> None:
+    oversized = PRIVATE_PEM + "\n" + "A" * 20_000
+    ec_pem = EC_KEY.private_bytes(
+        serialization.Encoding.PEM,
+        serialization.PrivateFormat.PKCS8,
+        serialization.NoEncryption(),
+    ).decode()
+    for value in (oversized, ec_pem, "é" * 10):
+        with pytest.raises(ExternalServiceConfigurationError) as caught:
+            load_github_app_private_key(SecretStr(value))
+        assert caught.value.__cause__ is None
+    with pytest.raises(ExternalServiceConfigurationError):
+        GitHubAppFactsAdapter(
+            GitHubAppFactsConfiguration(
+                app_id=APP_ID,
+                installation_id=None,
+                api_base_url=API,
+                request_timeout_seconds=10.0,
+                total_deadline_seconds=45.0,
+                maximum_attempts=3,
+            ),
+            EC_KEY,  # type: ignore[arg-type]
+        )
+
+
+@pytest.mark.parametrize(
+    "lookup",
+    [{}, {"id": "77"}, {"id": 0}, []],
+    ids=("no-id", "string-id", "zero-id", "not-object"),
+)
+async def test_unusable_installation_lookup_is_a_protocol_error(lookup: object) -> None:
+    fake = FakeGitHub()
+    fake.route("GET", f"/repos/{REPOSITORY}/installation", lookup)
+    with pytest.raises(GitHubFactsProtocolError):
+        await _fetch(_adapter(fake))
+
+
+@pytest.mark.parametrize(
+    "token_body",
+    [
+        {"token": TOKEN, "expires_at": "later"},
+        {"token": TOKEN, "expires_at": "2027-01-15T09:00:00"},
+        {"token": TOKEN},
+        {"token": "", "expires_at": "2027-01-15T09:00:00Z"},
+        {"token": "ghs_bad token", "expires_at": "2027-01-15T09:00:00Z"},
+        {"token": 5, "expires_at": "2027-01-15T09:00:00Z"},
+        [],
+    ],
+    ids=("bad-expiry", "naive-expiry", "no-expiry", "empty", "whitespace", "non-string", "list"),
+)
+async def test_unusable_token_exchange_is_a_protocol_error(token_body: object) -> None:
+    fake = FakeGitHub()
+    fake.route(
+        "POST",
+        "/app/installations/77/access_tokens",
+        httpx.Response(201, json=token_body),
+    )
+    with pytest.raises(GitHubFactsProtocolError):
+        await _fetch(_adapter(fake))
+    assert not any(r.url.path.endswith("/pulls/12") for r in fake.requests)
+
+
+async def test_app_jwt_rejected_is_access_denied() -> None:
+    fake = FakeGitHub()
+    fake.route("GET", f"/repos/{REPOSITORY}/installation", httpx.Response(401))
+    with pytest.raises(GitHubFactsAccessDeniedError):
+        await _fetch(_adapter(fake))
+
+
+async def test_unexpected_client_error_is_a_protocol_error_without_retry() -> None:
+    fake = FakeGitHub()
+    clock = Clock()
+    fake.route("GET", f"/repos/{REPOSITORY}/pulls/12", httpx.Response(422))
+    with pytest.raises(GitHubFactsProtocolError):
+        await _fetch(_adapter(fake, clock))
+    assert clock.sleeps == []
+
+
+@pytest.mark.parametrize(
+    "headers",
+    [
+        {"retry-after": "soon"},
+        {"x-ratelimit-remaining": "0"},
+        {"x-ratelimit-remaining": "0", "x-ratelimit-reset": "tomorrow"},
+    ],
+    ids=("bad-retry-after", "no-reset", "bad-reset"),
+)
+async def test_forbidden_with_unusable_rate_limit_headers_is_access_denied(
+    headers: dict,
+) -> None:
+    fake = FakeGitHub()
+    clock = Clock()
+    fake.route("GET", f"/repos/{REPOSITORY}/pulls/12", httpx.Response(403, headers=headers))
+    with pytest.raises(GitHubFactsAccessDeniedError):
+        await _fetch(_adapter(fake, clock))
+    assert clock.sleeps == []
+
+
+async def test_deadline_spent_by_one_slow_response_stops_further_requests() -> None:
+    fake = FakeGitHub()
+    clock = Clock()
+
+    def slow_pull(_request: httpx.Request) -> httpx.Response:
+        clock.now += 60.0
+        return httpx.Response(200, json=_pull())
+
+    fake.route("GET", f"/repos/{REPOSITORY}/pulls/12", slow_pull)
+    with pytest.raises(GitHubFactsUnavailableError):
+        await _fetch(_adapter(fake, clock, deadline=45.0))
+    assert not any(r.url.path == PROTECTION for r in fake.requests)
+
+
+@pytest.mark.parametrize(
+    "pull",
+    [
+        [],
+        {k: v for k, v in _pull().items() if k != "base"},
+        _pull(head={"sha": None}),
+        _pull(changed_files="2"),
+        _pull(changed_files=-1),
+        _pull(number=13),
+        _pull(user=None),
+        _pull(user={"login": "agent-bot", "id": 501}),
+        _pull(merged=True, merge_commit_sha="not-a-sha"),
+        _pull(state="draft"),
+    ],
+    ids=(
+        "not-object",
+        "no-base",
+        "null-head",
+        "string-file-count",
+        "negative-file-count",
+        "other-number",
+        "null-author",
+        "author-without-type",
+        "bad-merge-sha",
+        "unknown-state",
+    ),
+)
+async def test_malformed_pull_request_is_a_protocol_error(pull: object) -> None:
+    fake = FakeGitHub()
+    fake.route("GET", f"/repos/{REPOSITORY}/pulls/12", pull)
+    with pytest.raises(GitHubFactsProtocolError):
+        await _fetch(_adapter(fake))
+
+
+@pytest.mark.parametrize(
+    "protection",
+    [
+        [],
+        {"checks": "backend", "contexts": []},
+        {"checks": [], "contexts": "backend"},
+        {"checks": [{"app_id": 1}], "contexts": []},
+        {"checks": [{"context": "", "app_id": 1}], "contexts": []},
+        {"checks": ["backend"], "contexts": []},
+        {"checks": [], "contexts": [7]},
+    ],
+    ids=(
+        "not-object",
+        "checks-not-list",
+        "contexts-not-list",
+        "check-without-context",
+        "empty-context",
+        "check-not-object",
+        "context-not-string",
+    ),
+)
+async def test_malformed_branch_protection_is_a_protocol_error(protection: object) -> None:
+    fake = FakeGitHub()
+    fake.route("GET", PROTECTION, protection)
+    with pytest.raises(GitHubFactsProtocolError):
+        await _fetch(_adapter(fake))
+
+
+@pytest.mark.parametrize(
+    ("path", "body"),
+    [
+        (RUNS, {"check_runs": "backend"}),
+        (RUNS, {"check_runs": ["backend"]}),
+        (RUNS, []),
+        (f"/repos/{REPOSITORY}/pulls/12/reviews", {"reviews": []}),
+        (STATUS, {"sha": HEAD_SHA, "statuses": None}),
+    ],
+    ids=("runs-not-list", "run-not-object", "runs-body-list", "reviews-object", "statuses-null"),
+)
+async def test_malformed_listing_page_is_a_protocol_error(path: str, body: object) -> None:
+    fake = FakeGitHub()
+    fake.route("GET", path, body)
+    with pytest.raises(GitHubFactsProtocolError):
+        await _fetch(_adapter(fake))
+
+
+async def test_listing_longer_than_the_page_bound_fails_closed() -> None:
+    fake = FakeGitHub()
+    reviews = f"/repos/{REPOSITORY}/pulls/12/reviews"
+    fake.route(
+        "GET",
+        reviews,
+        httpx.Response(
+            200,
+            json=[REVIEWS[0]],
+            headers={"link": f'<{API}{reviews}?per_page=100&page=99>; rel="next"'},
+        ),
+    )
+    with pytest.raises(GitHubFactsProtocolError):
+        await _fetch(_adapter(fake))
+    assert sum(r.url.path == reviews for r in fake.requests) == 10
+
+
+@pytest.mark.parametrize(
+    ("runs", "statuses"),
+    [
+        ([{"name": "lint", "head_sha": HEAD_SHA, "status": "completed",
+           "conclusion": "success"}], []),
+        ([{"id": "5", "name": "lint", "head_sha": HEAD_SHA, "status": "completed",
+           "conclusion": "success"}], []),
+        ([{"id": 5, "name": "lint", "head_sha": HEAD_SHA, "status": "completed",
+           "conclusion": "success", "app": {"id": "15368"}}], []),
+        ([{"id": 5, "name": "lint", "head_sha": HEAD_SHA, "status": "completed",
+           "conclusion": "exploded"}], []),
+        ([], [{"id": 1, "context": "lint", "state": "green"}]),
+        ([], [{"context": "lint", "state": "success"}]),
+    ],
+    ids=(
+        "run-without-id",
+        "run-string-id",
+        "run-string-app-id",
+        "unknown-conclusion",
+        "unknown-status-state",
+        "status-without-id",
+    ),
+)
+async def test_malformed_check_result_is_a_protocol_error(runs: list, statuses: list) -> None:
+    fake = FakeGitHub()
+    fake.route("GET", PROTECTION, {"contexts": ["lint"], "checks": []})
+    fake.route("GET", RUNS, {"check_runs": runs})
+    fake.route("GET", STATUS, {"sha": HEAD_SHA, "statuses": statuses})
+    with pytest.raises(GitHubFactsProtocolError):
+        await _fetch(_adapter(fake))
+
+
+async def test_malformed_review_is_a_protocol_error() -> None:
+    fake = FakeGitHub()
+    fake.route(
+        "GET",
+        f"/repos/{REPOSITORY}/pulls/12/reviews",
+        [{**REVIEWS[0], "commit_id": "not-a-sha"}],
+    )
+    with pytest.raises(GitHubFactsProtocolError):
+        await _fetch(_adapter(fake))
+
+
+def test_facts_model_rejects_a_noncanonical_repository() -> None:
+    facts = GitHubPullRequestFacts.model_validate(
+        {
+            "repository": REPOSITORY,
+            "pull_request_number": 12,
+            "html_url": f"https://github.com/{REPOSITORY}/pull/12",
+            "state": "closed",
+            "merged": True,
+            "merge_commit_sha": MERGE_SHA,
+            "base_ref": "main",
+            "head_sha": HEAD_SHA,
+            "author": {"login": "a", "id": 1, "type": "User"},
+            "reviews": [],
+            "changed_files_count": 0,
+            "changed_files": [],
+            "required_checks": [
+                {
+                    "name": "backend",
+                    "app_id": 1,
+                    "app_bound": True,
+                    "conclusion": "success",
+                    "check_run_app_id": 1,
+                    "check_run_head_sha": HEAD_SHA,
+                    "check_run_html_url": None,
+                    "check_run_details_url": None,
+                    "workflow_run_id": None,
+                    "commit_status_judged": False,
+                    "commit_status_sha": None,
+                }
+            ],
+            "fetched_at": "2027-01-15T08:00:00Z",
+            "responses": [{"request": "pull_request", "sha256": "sha256:" + "0" * 64}],
+        }
+    )
+    for repository in ("acme", "acme/..", "-acme/widgets"):
+        with pytest.raises(ValidationError):
+            GitHubPullRequestFacts.model_validate(
+                {**facts.model_dump(), "repository": repository}
+            )

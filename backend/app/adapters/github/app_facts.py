@@ -230,8 +230,8 @@ class GitHubAppFactsAdapter:
                 )
                 if facts is not None:
                     return facts
-                if deadline.remaining() <= 0:
-                    break
+        # An exhausted deadline already raised GitHubFactsUnavailableError from
+        # the next request, so reaching here means the state kept moving.
         raise GitHubFactsInconsistentError(_IDENTITY)
 
     async def _read_consistent_facts(
@@ -421,11 +421,9 @@ class _FactsSession:
         self._deadline = deadline
         self._digests = digests
 
-    def _url(self, path_or_url: str) -> str:
+    def _url(self, path: str) -> str:
         """Resolve an API path against the configured origin."""
-        if path_or_url.startswith("/"):
-            return self._adapter._configuration.api_base_url + path_or_url
-        return path_or_url
+        return self._adapter._configuration.api_base_url + path
 
     async def app_json(
         self,
@@ -548,7 +546,9 @@ class _FactsSession:
     ) -> httpx.Response:
         """Send with bounded retries for transport errors, 5xx and rate limits."""
         configuration = self._adapter._configuration
-        for attempt in range(1, configuration.maximum_attempts + 1):
+        attempt = 0
+        while True:
+            attempt += 1
             remaining = self._deadline.remaining()
             if remaining <= 0:
                 break
@@ -587,9 +587,10 @@ class _FactsSession:
                 None if response is None else response.status_code,
                 attempt,
             )
-            if attempt == configuration.maximum_attempts:
-                break
-            if delay >= self._deadline.remaining():
+            if (
+                attempt >= configuration.maximum_attempts
+                or delay >= self._deadline.remaining()
+            ):
                 break
             await self._adapter._sleep(delay)
         raise GitHubFactsUnavailableError(_IDENTITY) from None
