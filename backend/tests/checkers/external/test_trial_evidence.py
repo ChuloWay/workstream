@@ -28,6 +28,7 @@ from tests.checkers.external.test_trial_profiles import configuration, digest, p
 from tests.checkers.external.test_trial_policy import trial_specification
 from tests.checkers.external.test_revision_materialization import DiagnosticMaterialization
 from tests.post_submit_materialization_helpers import material_fixture
+from tests.test_checker_materialization import _limits
 
 
 def _subject(request, projected):
@@ -209,6 +210,9 @@ async def test_trial_reservation_is_current_exact_immutable_and_replayed(
         post_submit_registry_spec=spec,
         post_submit_binding_setup=parameters,
         post_submit_specification=trial_specification(),
+        # The consumer executes multiple real transactions and contention probes
+        # while material remains open; it is not the ten-second parser unit case.
+        scratch_limits=_limits(total_deadline_seconds=120.0, reservation_ttl_seconds=150.0),
     ) as h:
         catalog = catalog_for(h.request)
         await reserve(h)
@@ -294,6 +298,9 @@ async def test_concurrent_trial_reservation_waits_then_recovers_complete_rollbac
         post_submit_registry_spec=spec,
         post_submit_binding_setup=parameters,
         post_submit_specification=trial_specification(),
+        # The consumer executes multiple real transactions and contention probes
+        # while material remains open; it is not the ten-second parser unit case.
+        scratch_limits=_limits(total_deadline_seconds=120.0, reservation_ttl_seconds=150.0),
     ) as h:
         catalog = catalog_for(h.request)
         await reserve(h)
