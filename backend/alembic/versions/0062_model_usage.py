@@ -216,7 +216,7 @@ BEGIN
     authority.actor_ref_kind IS DISTINCT FROM 'actor_profile' OR
     authority.action_id IS DISTINCT FROM 'checker.model_call.grant' OR
     authority.permission_id IS DISTINCT FROM 'checker.model_call.grant' OR
-    authority.project_id IS DISTINCT FROM NEW.project_id OR
+    authority.project_id IS NOT NULL OR
     authority.resource_type IS NOT NULL OR
     authority.resource_id IS NOT NULL OR
     authority.denial_code IS NOT NULL OR
@@ -2186,7 +2186,7 @@ BEGIN
     prepare_authority.action_id IS DISTINCT FROM prepare_action OR
     prepare_authority.permission_id IS DISTINCT FROM prepare_action OR
     prepare_authority.project_id IS DISTINCT FROM
-     coalesce(slot.project_id,setup_slot.project_id) OR
+     CASE WHEN NEW.attempt_number>1 THEN slot.project_id ELSE NULL END OR
     prepare_authority.resource_type IS DISTINCT FROM
      CASE WHEN NEW.attempt_number>1 THEN 'project' ELSE NULL END OR
     prepare_authority.resource_id IS DISTINCT FROM
@@ -2424,8 +2424,7 @@ BEGIN
      dispatch_authority.actor_ref_kind IS DISTINCT FROM 'actor_profile' OR
      dispatch_authority.action_id IS DISTINCT FROM dispatch_action OR
      dispatch_authority.permission_id IS DISTINCT FROM dispatch_action OR
-     dispatch_authority.project_id IS DISTINCT FROM
-      coalesce(slot.project_id,setup_slot.project_id) OR
+     dispatch_authority.project_id IS NOT NULL OR
      dispatch_authority.resource_type IS NOT NULL OR
      dispatch_authority.resource_id IS NOT NULL OR
      dispatch_authority.denial_code IS NOT NULL OR
@@ -2529,8 +2528,7 @@ BEGIN
      observation_authority.actor_ref_kind IS DISTINCT FROM 'actor_profile' OR
      observation_authority.action_id IS DISTINCT FROM observation_action OR
      observation_authority.permission_id IS DISTINCT FROM observation_action OR
-     observation_authority.project_id IS DISTINCT FROM
-      coalesce(slot.project_id,setup_slot.project_id) OR
+     observation_authority.project_id IS NOT NULL OR
      observation_authority.resource_type IS NOT NULL OR
      observation_authority.resource_id IS NOT NULL OR
      observation_authority.denial_code IS NOT NULL OR
@@ -2567,8 +2565,7 @@ BEGIN
      terminal_authority.actor_ref_kind IS DISTINCT FROM 'actor_profile' OR
      terminal_authority.action_id IS DISTINCT FROM terminal_action OR
      terminal_authority.permission_id IS DISTINCT FROM terminal_action OR
-     terminal_authority.project_id IS DISTINCT FROM
-      coalesce(slot.project_id,setup_slot.project_id) OR
+     terminal_authority.project_id IS NOT NULL OR
      terminal_authority.resource_type IS NOT NULL OR
      terminal_authority.resource_id IS NOT NULL OR
      terminal_authority.denial_code IS NOT NULL OR
@@ -2597,8 +2594,7 @@ BEGIN
      terminal_authority.actor_ref_kind IS DISTINCT FROM 'actor_profile' OR
      terminal_authority.action_id IS DISTINCT FROM terminal_action OR
      terminal_authority.permission_id IS DISTINCT FROM terminal_action OR
-     terminal_authority.project_id IS DISTINCT FROM
-      coalesce(slot.project_id,setup_slot.project_id) OR
+     terminal_authority.project_id IS NOT NULL OR
      terminal_authority.resource_type IS NOT NULL OR
      terminal_authority.resource_id IS NOT NULL OR
      terminal_authority.denial_code IS NOT NULL OR
@@ -2628,8 +2624,7 @@ BEGIN
      terminal_authority.actor_ref_kind IS DISTINCT FROM 'actor_profile' OR
      terminal_authority.action_id IS DISTINCT FROM terminal_action OR
      terminal_authority.permission_id IS DISTINCT FROM terminal_action OR
-     terminal_authority.project_id IS DISTINCT FROM
-      coalesce(slot.project_id,setup_slot.project_id) OR
+     terminal_authority.project_id IS NOT NULL OR
      terminal_authority.resource_type IS NOT NULL OR
      terminal_authority.resource_id IS NOT NULL OR
      terminal_authority.denial_code IS NOT NULL OR
@@ -2794,7 +2789,7 @@ BEGIN
     authority.actor_ref_kind IS DISTINCT FROM 'actor_profile' OR
     authority.action_id IS DISTINCT FROM 'checker.model_call.recover' OR
     authority.permission_id IS DISTINCT FROM 'checker.model_call.recover' OR
-    authority.project_id IS DISTINCT FROM slot.project_id OR
+    authority.project_id IS NOT NULL OR
     authority.resource_type IS NOT NULL OR authority.resource_id IS NOT NULL OR
     authority.denial_code IS NOT NULL OR
     authority.after_facts::jsonb IS DISTINCT FROM jsonb_build_object(
