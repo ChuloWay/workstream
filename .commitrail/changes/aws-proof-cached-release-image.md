@@ -4,11 +4,11 @@
 - Durable disposition: Complete
 - Intended merge outcome: Recurring hosted AWS proof jobs run the selected digest-pinned release image without depending on registry login freshness.
 
-## Intent and observed defect
+## Intent
 
 The deployed pilot's scheduled verification stopped after its ECR authorization expired. The application containers remained healthy, but the required AWS activation evidence became stale. `deploy/hosted/compose.yml` gives backend services `pull_policy: always`; `run_proof_group` in `deploy/hosted/preflight.py` inherits that policy for each short-lived proof container. Thus even a locally cached exact release image causes registry authentication before verification starts.
 
-## Bounded change and design
+## Bounded change
 
 Allowed files: this record, `deploy/hosted/compose.yml`, `deploy/hosted/preflight.py`, `scripts/test_hosted_release_config.py`, and `deploy/hosted/README.md`.
 
@@ -16,7 +16,7 @@ Set `pull_policy: never` on the shared proof-job definition and require that pol
 
 Prohibited: changes to AWS role separation, proof freshness/activation criteria, image digest validation, credentials, timers, timeout/cleanup bounds, application behavior, CI selection/workflows, or other agents' POST/model-runtime work. No tags, alternate image, implicit pull or credential fallback when the selected image is absent.
 
-## Plan and acceptance
+## Acceptance criteria
 
 1. Review the bounded proof-service policy change against image identity and proof custody.
 2. Set the proof-only no-pull policy; preserve identity order, exact-container cleanup and failure propagation.
