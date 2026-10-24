@@ -2185,12 +2185,14 @@ BEGIN
     prepare_authority.actor_ref_kind IS DISTINCT FROM 'actor_profile' OR
     prepare_authority.action_id IS DISTINCT FROM prepare_action OR
     prepare_authority.permission_id IS DISTINCT FROM prepare_action OR
-    prepare_authority.project_id IS DISTINCT FROM
-     CASE WHEN NEW.attempt_number>1 THEN slot.project_id ELSE NULL END OR
-    prepare_authority.resource_type IS DISTINCT FROM
-     CASE WHEN NEW.attempt_number>1 THEN 'project' ELSE NULL END OR
-    prepare_authority.resource_id IS DISTINCT FROM
-     CASE WHEN NEW.attempt_number>1 THEN slot.project_id::text ELSE NULL END OR
+    (NEW.attempt_number=1 AND
+     (prepare_authority.project_id IS NOT NULL OR
+      prepare_authority.resource_type IS NOT NULL OR
+      prepare_authority.resource_id IS NOT NULL)) OR
+    (NEW.attempt_number>1 AND
+     (prepare_authority.project_id IS DISTINCT FROM slot.project_id OR
+      prepare_authority.resource_type IS DISTINCT FROM 'project' OR
+      prepare_authority.resource_id IS DISTINCT FROM slot.project_id::text)) OR
     prepare_authority.denial_code IS NOT NULL OR
     prepare_authority.after_facts::jsonb IS DISTINCT FROM
      pg_catalog.jsonb_build_object(
