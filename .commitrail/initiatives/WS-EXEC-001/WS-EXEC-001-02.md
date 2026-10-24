@@ -222,3 +222,10 @@ test module repair those defects without loosening the structural guard or test
 selection. Exact architecture and CI inventories retain all prior assignments.
 Required full hosted-suite evidence and reviewer receipts belong to the PR's
 current candidate; no deployment or complete user-journey claim is made here.
+
+## Creation-failure classification
+
+The trusted-intake caller preserves the runtime's typed cleanup classification.
+A failure before lease creation or after confirmed cleanup returns the existing
+recoverable `runtime_unavailable` response and releases admission. Uncertain
+lease/guardian custody still retains admission until controller reconciliation.

@@ -142,11 +142,15 @@ not an image-integrity check.
 The node reserves aggregate memory and concurrent slots before launch. A guest
 supervisor applies the exact requested CPU and memory controls, a bounded PID
 limit, non-root IDs, no capabilities, read-only root/material, a 16 MiB `/tmp`,
-and denied management syscalls and network access. Submitted material is staged
+and denied management syscalls and network access. Image-owned `/work` and `/tmp`
+links or non-directory mount roots are rejected before the image command runs.
+Submitted material is staged
 on bounded VM disk, separate from checker heap. The host bounds VMM resources
 and charges virtualization overhead separately. Results are returned only after
 VM and cgroup removal is confirmed. Unknown cleanup closes admission and requires
-startup reconciliation. Independent lease guardians survive controller death;
+startup reconciliation. Failures before lease creation or after confirmed cleanup
+return recoverable infrastructure failure without stopping other checks.
+Independent lease guardians survive controller death;
 `KillMode=process` preserves that cleanup lifetime. Preserve the private owner
 file and lease directory across restarts. Never clone them between running nodes.
 
@@ -156,7 +160,17 @@ covers the node contract; it is not public upload, admission, durable POST or
 FinalAcceptance evidence. The [recovery proof](workstream-checker-service/tests/smol_recovery.py)
 requires an isolated test unit: it kills the controller and injects a deletion
 failure while checking foreign VM/cgroup survival, bounded cleanup and closed
-readiness. Never run it against a shared production node.
+readiness. The [creation proof](workstream-checker-service/tests/smol_creation.py)
+checks that denied lease or cgroup creation preserves an already running check
+and keeps the controller available after confirmed cleanup. Never run either
+proof against a shared production node.
+The [guest mount proof](workstream-checker-service/tests/smol_guest_mounts.py)
+uses a clean image and two variants built from the
+[test Dockerfile](workstream-checker-service/tests/fixtures/mount-targets/Dockerfile)
+with `MOUNT_ROOT=work` and `MOUNT_ROOT=tmp`. It checks a command marker and the
+bootstrap rejection reason, so an error after image code ran cannot pass. Run
+it only with an isolated runtime home; exact test machines and disks are removed.
+
 ## Trusted submission intake
 
 ART uses the separate typed `trusted_submission_intake/unix_socket` capability.

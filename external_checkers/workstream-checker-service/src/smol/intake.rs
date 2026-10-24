@@ -205,6 +205,18 @@ pub(crate) fn serve(
     for attempt in 0..3 {
         let mut candidate = match Machine::create(config, RESOURCES, deadline) {
             Ok(value) => value,
+            Err(error) if !error.cleanup_unsettled => {
+                return send(
+                    &mut client,
+                    &encoded(
+                        "prepare",
+                        None,
+                        "error",
+                        json!({"code":"runtime_unavailable"}),
+                    )?,
+                    deadline,
+                );
+            }
             Err(_) => {
                 // Creation may already have persisted a guardian lease. Keep
                 // admission occupied until process exit/restart reconciliation.
