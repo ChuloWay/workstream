@@ -15,6 +15,7 @@ from check_cli_release_controls import (
 REPOSITORY = "Flow-Research/workstream"
 ENVIRONMENT = {
     "name": "cli-release",
+    "can_admins_bypass": False,
     "deployment_branch_policy": {"custom_branch_policies": True},
     "protection_rules": [
         {
@@ -43,6 +44,22 @@ class ReleaseControlsTest(unittest.TestCase):
     def test_exact_controls_pass(self) -> None:
         validate_environment(ENVIRONMENT, BRANCHES)
         validate_ruleset(SUMMARY, RULESET, REPOSITORY)
+
+    def test_environment_administrator_bypass_must_be_explicitly_disabled(self) -> None:
+        for value in (True, None, "false", "true", 0):
+            with (
+                self.subTest(value=value),
+                self.assertRaisesRegex(ValueError, "administrator bypass"),
+            ):
+                validate_environment(
+                    {**ENVIRONMENT, "can_admins_bypass": value}, BRANCHES
+                )
+
+    def test_environment_missing_administrator_bypass_fails(self) -> None:
+        environment = deepcopy(ENVIRONMENT)
+        del environment["can_admins_bypass"]
+        with self.assertRaisesRegex(ValueError, "administrator bypass"):
+            validate_environment(environment, BRANCHES)
 
     def test_hidden_bypass_field_is_not_treated_as_empty_proof(self) -> None:
         ruleset = deepcopy(RULESET)
