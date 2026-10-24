@@ -31,14 +31,15 @@ from tests.test_artifact_admission import _namespace, _settings
 from tests.test_alembic import HEAD_REVISION, _alembic_config
 from tests.test_checker_output_storage import (
     _INSERT_BINDING,
-    _binding_values,
+    _arrange_historical_checker_run_output,
+    _historical_checker_run_binding_values,
     _store_verified_output,
 )
 
 
 pytestmark = pytest.mark.postgres_schema_contract
 
-_SCHEMA_0061_SHA256 = "20996fd2588683c112ca450338c6e6c128b934c6997acf42660788b8152f3af7"
+_SCHEMA_0061_SHA256 = "482698a75dd54023f02dd1a6c86c14e39af34a8513adeb3d227501d9a4c14e13"
 _PROJECTION_SHIMS = (
     "alter table checker_runs add column input_context_custody jsonb",
     "alter table artifact_put_attempts add column checker_trial_evidence_id uuid",
@@ -181,10 +182,13 @@ async def _arrange_retained_lineages(
             store=harness.store,
             policy_bundle=harness.policy_bundle,
             source_path=tmp_path / "legacy-checker-output",
-            payload=b"retained legacy checker output",
+            payload=b'{"result":"retained historical checker output"}',
         )
-        legacy_values = _binding_values(legacy)
+        legacy_values = _historical_checker_run_binding_values(legacy)
         async with harness.factory() as session, session.begin():
+            # Arrange the historical row shape explicitly; this is retained-data
+            # proof, not a second production writer for pre-model evidence.
+            await _arrange_historical_checker_run_output(session, legacy)
             await session.execute(_INSERT_BINDING, legacy_values)
 
         storage = _StorageCase(

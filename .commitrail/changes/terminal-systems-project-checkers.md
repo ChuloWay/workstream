@@ -145,9 +145,12 @@ weaken immutability.
 checker-model and setup-model ART rows across 0061 to the current head. Current
 ORM fixtures may use only nullable projection columns during arrangement; those
 columns must remain null and be removed before the exact canonical 0061 schema
-is checked and upgraded. Existing constraints stay active. Compare all retained
-fields after upgrade and the new null projections. This is database preservation
-proof; public recovery and byte reads remain separate integration checks.
+is checked and upgraded. Historical checker-run rows are arranged explicitly by
+the isolated fixture; this does not restore a production writer for that retired
+subject. Its temporarily suspended arrangement guard must be restored before the
+canonical schema assertion and upgrade. Compare all retained fields after
+upgrade and the new null projections. This is database preservation proof;
+public recovery and byte reads remain separate integration checks.
 
 This shared-boundary change also owns `external_checkers/README.md`,
 `docs/architecture_checker_framework.md`, `docs/architecture_lockdown.md` and
@@ -508,5 +511,7 @@ offline build/run engine and an offline controlled provider. It stages only the
 qualification-only package, never a real Terminal Systems task. The wrapper
 must restore the owned harness configuration, stop a previously stopped
 harness, and remove only its exact inner registry/checker resources on success
-or failure. This is no live provider call, deployment, publication, activation,
+or failure. Docker cleanup commands have finite timeouts, and a conflicting
+cleanup container label or image identity must stop cleanup before deletion.
+This is no live provider call, deployment, publication, activation,
 or contribution rehearsal.
