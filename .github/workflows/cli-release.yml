@@ -144,6 +144,43 @@ jobs:
           go vet ./...
           go test ./...
           python ../scripts/test_cli_release_smoke.py
+      - name: Isolate hash-verified native terminal dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m venv "$RUNNER_TEMP/tui-proof-venv"
+          proof_python="$RUNNER_TEMP/tui-proof-venv/bin/python"
+          if [ "$RUNNER_OS" = Windows ]; then
+            proof_python="$RUNNER_TEMP/tui-proof-venv/Scripts/python.exe"
+          fi
+          "$proof_python" -m pip --isolated install --require-hashes --only-binary=:all: --no-cache-dir -r cli/tests/integration/requirements-native.txt
+          printf 'TUI_PROOF_PYTHON=%s\n' "$proof_python" >> "$GITHUB_ENV"
+      - name: Reconcile exact native terminal execution
+        shell: bash
+        env:
+          COMMIT: ${{ needs.prepare.outputs.commit }}
+          PLATFORM: ${{ matrix.platform }}
+          PYTEST_DISABLE_PLUGIN_AUTOLOAD: '1'
+          PYTEST_ADDOPTS: ''
+          PYTEST_PLUGINS: ''
+        run: |
+          set -euo pipefail
+          null_config="$("$TUI_PROOF_PYTHON" -c 'import os; print(os.devnull)')"
+          "$TUI_PROOF_PYTHON" -m pytest -c "$null_config" -p no:cacheprovider -o addopts= -q cli/tests/integration/test_tui_native_proof.py
+          export WORKSTREAM_CLI_EXECUTABLE="$RUNNER_TEMP/workstream-tui-proof"
+          if [ "$RUNNER_OS" = Windows ]; then
+            export WORKSTREAM_CLI_EXECUTABLE="$WORKSTREAM_CLI_EXECUTABLE.exe"
+          fi
+          (cd cli && go build -trimpath -o "$WORKSTREAM_CLI_EXECUTABLE" ./cmd/workstream)
+          "$TUI_PROOF_PYTHON" cli/tests/integration/tui_native_proof.py run --output "$RUNNER_TEMP/tui-native-evidence" --source "$COMMIT" --platform "$PLATFORM" --run-id "$GITHUB_RUN_ID" --run-attempt "$GITHUB_RUN_ATTEMPT"
+          "$TUI_PROOF_PYTHON" cli/tests/integration/tui_native_proof.py verify --output "$RUNNER_TEMP/tui-native-evidence" --source "$COMMIT" --platform "$PLATFORM" --run-id "$GITHUB_RUN_ID" --run-attempt "$GITHUB_RUN_ATTEMPT"
+      - name: Upload separate native terminal test evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: cli-tui-evidence-${{ needs.prepare.outputs.commit }}-${{ matrix.platform }}-run-${{ github.run_id }}-attempt-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/tui-native-evidence/
+          if-no-files-found: error
+          retention-days: 7
       - name: Build deterministic archive twice and smoke native installation
         shell: bash
         env:
@@ -176,6 +213,7 @@ jobs:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
           ref: ${{ github.sha }}
+          fetch-depth: 0
           persist-credentials: false
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
@@ -193,6 +231,22 @@ jobs:
         with:
           name: cli-native-windows-amd64-attempt-${{ github.run_attempt }}
           path: native/windows-amd64
+      - name: Download separate native terminal evidence
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          pattern: cli-tui-evidence-${{ needs.prepare.outputs.commit }}-*-run-${{ github.run_id }}-attempt-${{ github.run_attempt }}
+          path: native-tui-evidence
+      - name: Revalidate all four native terminal completion receipts
+        shell: bash
+        env:
+          COMMIT: ${{ needs.prepare.outputs.commit }}
+        run: |
+          set -euo pipefail
+          git show "$COMMIT:cli/tests/integration/tui_native_proof.py" > "$RUNNER_TEMP/tui_native_proof.py"
+          for platform in linux-amd64 darwin-amd64 darwin-arm64 windows-amd64; do
+            evidence="native-tui-evidence/cli-tui-evidence-$COMMIT-$platform-run-$GITHUB_RUN_ID-attempt-$GITHUB_RUN_ATTEMPT"
+            python "$RUNNER_TEMP/tui_native_proof.py" verify --output "$evidence" --source "$COMMIT" --platform "$platform" --run-id "$GITHUB_RUN_ID" --run-attempt "$GITHUB_RUN_ATTEMPT"
+          done
       - name: Bind source and assemble exact allowlist
         shell: bash
         env:
