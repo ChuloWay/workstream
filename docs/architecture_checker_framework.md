@@ -355,6 +355,14 @@ trial commands run as nonroot with no capabilities. Neither can reach the
 private bootstrap or host export directory. Exports belong to the nonroot
 service so it can read and remove complete and partial output.
 
+Each visible `state_overlay` uses one normal, top-level workspace name chosen
+by its approved projection. Nested overlay destinations and collisions with
+existing workspace entries are refused. The launcher creates that mountpoint,
+mounts the protected role read-only, and removes the empty mountpoint after
+stopping descendants and unmounting the role. No protected content or mount
+placeholder enters retained state. Build-context and state-seed projections
+still support safe nested relative paths.
+
 CPU, memory/swap, PID and wall-time bounds include the whole container,
 including the trusted launcher, build and export work. PID limits below two
 are refused before launch. Projected files, retained images and workspaces,

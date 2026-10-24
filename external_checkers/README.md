@@ -69,6 +69,11 @@ credentials or resource enlargements. Opaque profile material roles control
 build and runtime visibility. Shared Rust contains no project filenames, task
 allowlists, rubrics or command allowlists.
 
+A visible read-only role occupies one profile-selected top-level workspace
+name. Nested overlay destinations and existing-entry collisions are refused;
+the launcher removes its temporary mountpoint before retaining workspace
+state. Build-context and state-seed selectors may still use safe nested paths.
+
 The service keeps Docker/runsc authority, approved offline material, protected
 role projection, aggregate limits, observation and cleanup custody. Workload
 argv is passed only after the candidate image in the nested sandbox command; it
