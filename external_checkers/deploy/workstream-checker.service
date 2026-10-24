@@ -1,0 +1,30 @@
+[Unit]
+Description=Workstream private checker node
+After=local-fs.target
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+[Service]
+Type=simple
+# Use the same Unix identity as the ART scratch/grant issuer.
+User=workstream
+Group=workstream
+SupplementaryGroups=kvm
+StateDirectory=workstream-checker
+StateDirectoryMode=0700
+UMask=0077
+ExecStart=/opt/workstream/bin/workstream-checker-service /var/lib/workstream-checker/service.json
+Delegate=cpu memory pids
+DelegateSubgroup=controller
+MemoryMax=4G
+MemorySwapMax=0
+CPUQuota=200%
+TasksMax=2048
+# Guardians must survive controller death and finish exact-lease cleanup.
+# Each guardian has its own absolute expiry and bounded cleanup budget.
+KillMode=process
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

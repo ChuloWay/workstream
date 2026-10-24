@@ -79,7 +79,8 @@ class FakeDocker:
             {
                 "schemaVersion": 2,
                 "mediaType": cli.MANIFEST_TYPES[0],
-                "config": {"digest": IMAGE},
+                "config": {"digest": IMAGE, "size": 1,
+                           "mediaType": "application/vnd.oci.image.config.v1+json"},
                 "layers": [],
             }
         )

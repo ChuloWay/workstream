@@ -69,8 +69,9 @@ class ExternalCheckerIsolationReceipt:
             or re.fullmatch(r"sha256:[0-9a-f]{64}", self.config_image_id) is None
             or re.fullmatch(r"[a-z0-9][a-z0-9_.-]{0,31}", self.operating_system) is None
             or re.fullmatch(r"[a-z0-9][a-z0-9_.-]{0,31}", self.architecture) is None
-            or self.runtime not in {"runsc", "runc"}
-            or self.isolation_mode not in {"gvisor", "docker-dev"}
+            or (self.runtime, self.isolation_mode) not in {
+                ("runsc", "gvisor"), ("runc", "docker-dev"), ("smolvm", "smol-microvm")
+            }
             or type(self.sandbox_uid) is not int
             or type(self.sandbox_gid) is not int
             or self.sandbox_uid <= 0
@@ -104,9 +105,9 @@ class ExternalCheckerServiceHealth:
         if (
             re.fullmatch(r"[a-z0-9][a-z0-9_.-]{0,31}", self.operating_system) is None
             or re.fullmatch(r"[a-z0-9][a-z0-9_.-]{0,31}", self.architecture) is None
-            or self.runtime not in {"runsc", "runc"}
-            or self.isolation_mode not in {"gvisor", "docker-dev"}
-            or (self.isolation_mode == "gvisor") != (self.runtime == "runsc")
+            or (self.runtime, self.isolation_mode) not in {
+                ("runsc", "gvisor"), ("runc", "docker-dev"), ("smolvm", "smol-microvm")
+            }
             or type(self.cached_platform_manifests) is not int
             or self.cached_platform_manifests <= 0
             or type(self.sandbox_uid) is not int
