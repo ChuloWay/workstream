@@ -142,13 +142,17 @@ PILOT-00 DIND harness plus isolated-test PostgreSQL and MinIO endpoints:
 
 ```bash
 WORKSTREAM_TS_RUNSC_STATE_ROOT=/tmp/ws-pilot00-tsengine26 \
-WORKSTREAM_TS_RUNSC_CONTAINER=ws-pilot00-tsengine26-dind \
+WORKSTREAM_TS_RUNSC_SHARED_ROOT="$PWD/external_checkers/target/ws493-tsengine26" \
+WORKSTREAM_TS_RUNSC_CONTAINER=ws-pilot00-tsengine26-qualification-dind \
+WORKSTREAM_TS_RUNSC_PREPARED_CONTAINER=ws-pilot00-tsengine26-dind \
 WORKSTREAM_TS_RUNSC_RUN_ID=tsengine26 \
 WORKSTREAM_TEST_ADMIN_DATABASE_URL='<isolated-test-admin-url>' \
 WORKSTREAM_TEST_MINIO_ENDPOINT='<isolated-test-minio-endpoint>' \
   external_checkers/workstream-checker-service/scripts/qualify_terminal_systems_runsc.sh
 ```
 
+Run from the repository root after preparing the owned PILOT-00 harness. The
+qualification container must be distinct from the stopped preparation container.
 The wrapper fails rather than skipping when an exact prerequisite is absent. It
 temporarily gives only the outer checker runtime `host-uds=open`, keeps the
 separate submitted-code runtime at `host-uds=none`, binds both identities into
