@@ -260,6 +260,12 @@ returning; no source reads continue after timeout cleanup.
 
 The current hosted configuration passes 38/38 focused tests after reconciling
 main's cached proof-image policy with the private model-proxy image identity.
+Current main's Smol microVM engine was also reconciled without claiming a socket
+capability it does not provide: its configuration rejects the host model relay,
+and a model-entitled request on a Smol-only node closes as infrastructure
+unavailable before VM admission. The combined checker-service unit selection
+passes 44/44; model-enabled POST remains bound to the intended `runsc`/`gvisor`
+deployment path, which still requires deployed qualification.
 An actual parent Rust relay image previously passed a controlled Docker smoke
 with no network, read-only input/root filesystem, only the invocation socket
 exposed, the global grant concealed, and owned image/container cleanup
