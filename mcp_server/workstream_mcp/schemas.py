@@ -567,6 +567,255 @@ POLICY_INPUT_SCHEMAS: dict[str, dict[str, Any]] = {
     },
 }
 
+_PAGE_PROPERTIES = {
+    "limit": {"type": "integer", "minimum": 1, "maximum": 100},
+    "cursor": {"type": "string", "minLength": 1, "maxLength": 512},
+}
+_CONTRIBUTION_FILTERS = {
+    "contribution_type": {
+        "type": "string",
+        "enum": ["accepted_submission", "completed_review"],
+    },
+    "recorded_from": {"type": "string", "format": "date-time"},
+    "recorded_before": {"type": "string", "format": "date-time"},
+    "limit": {"type": "integer", "minimum": 1, "maximum": 1000},
+    "cursor": {"type": "string", "minLength": 1, "maxLength": 512},
+}
+WORKSPACE_READ_INPUT_SCHEMAS: dict[str, dict[str, Any]] = {
+    "actor_projects_list": {
+        "type": "object",
+        "properties": _PAGE_PROPERTIES,
+        "additionalProperties": False,
+    },
+    "actor_assignments_list": {
+        "type": "object",
+        "properties": {
+            "project_id": _UUID_INPUT,
+            "state": {"type": "string", "enum": ["active", "closed"]},
+            "updated_since": {"type": "string", "format": "date-time"},
+            **_PAGE_PROPERTIES,
+        },
+        "additionalProperties": False,
+    },
+    "actor_submissions_list": {
+        "type": "object",
+        "properties": {
+            "project_id": _UUID_INPUT,
+            "task_id": _UUID_INPUT,
+            "status": {
+                "type": "string",
+                "enum": [
+                    "evaluation_pending",
+                    "review_pending",
+                    "accepted",
+                    "needs_revision",
+                    "rejected",
+                ],
+            },
+            "updated_since": {"type": "string", "format": "date-time"},
+            **_PAGE_PROPERTIES,
+        },
+        "additionalProperties": False,
+    },
+    "actor_summary_get": {
+        "type": "object",
+        "properties": {"project_id": _UUID_INPUT},
+        "additionalProperties": False,
+    },
+    "contributions_list": {
+        "type": "object",
+        "properties": {"project_id": _UUID_INPUT, **_CONTRIBUTION_FILTERS},
+        "additionalProperties": False,
+    },
+    "project_contributions_export": {
+        "type": "object",
+        "properties": {"project_id": _UUID_INPUT, **_CONTRIBUTION_FILTERS},
+        "required": ["project_id"],
+        "additionalProperties": False,
+    },
+    "project_submissions_list": {
+        "type": "object",
+        "properties": {
+            "project_id": _UUID_INPUT,
+            "status": {
+                "type": "string",
+                "enum": [
+                    "evaluation_pending",
+                    "review_pending",
+                    "accepted",
+                    "needs_revision",
+                    "rejected",
+                ],
+            },
+            "task_id": _UUID_INPUT,
+            "submitter_actor_id": _UUID_INPUT,
+            "updated_since": {"type": "string", "format": "date-time"},
+            **_PAGE_PROPERTIES,
+        },
+        "required": ["project_id"],
+        "additionalProperties": False,
+    },
+    "project_assignments_list": {
+        "type": "object",
+        "properties": {
+            "project_id": _UUID_INPUT,
+            "state": {"type": "string", "enum": ["active", "closed"]},
+            **_PAGE_PROPERTIES,
+        },
+        "required": ["project_id"],
+        "additionalProperties": False,
+    },
+    "project_summary_get": {
+        "type": "object",
+        "properties": {"project_id": _UUID_INPUT},
+        "required": ["project_id"],
+        "additionalProperties": False,
+    },
+    "project_task_import_batches_list": {
+        "type": "object",
+        "properties": {"project_id": _UUID_INPUT, **_PAGE_PROPERTIES},
+        "required": ["project_id"],
+        "additionalProperties": False,
+    },
+    "project_preparations_list": {
+        "type": "object",
+        "properties": {
+            "project_id": _UUID_INPUT,
+            "outcome": {
+                "type": "string",
+                "enum": ["pending", "passed", "failed", "infrastructure_failed"],
+            },
+            **_PAGE_PROPERTIES,
+        },
+        "required": ["project_id"],
+        "additionalProperties": False,
+    },
+    "active_guide_get": {
+        "type": "object",
+        "properties": {"project_id": _UUID_INPUT},
+        "required": ["project_id"],
+        "additionalProperties": False,
+    },
+    "ready_tasks_list": {
+        "type": "object",
+        "properties": {"project_id": _UUID_INPUT, **_PAGE_PROPERTIES},
+        "required": ["project_id"],
+        "additionalProperties": False,
+    },
+}
+
+_POLICY_DEFINITION_INPUT = {
+    "type": "object",
+    "properties": {
+        "instrument_type": {"type": "string", "enum": ["money", "project_points"]},
+        "unit_code": {"type": "string"},
+        "quantity": {"type": "string"},
+        "adapter_binding_id": _UUID_INPUT,
+    },
+    "required": ["instrument_type", "unit_code", "quantity", "adapter_binding_id"],
+    "additionalProperties": False,
+}
+_POLICY_RULE_INPUT = {
+    "type": "object",
+    "properties": {
+        "contribution_type": {
+            "type": "string",
+            "enum": ["accepted_submission", "completed_review"],
+        },
+        "compensation_mode": {"type": "string", "enum": ["unpaid", "compensated"]},
+        "definitions": {"type": "array", "items": _POLICY_DEFINITION_INPUT},
+    },
+    "required": ["contribution_type", "compensation_mode"],
+    "additionalProperties": False,
+}
+CONTRIBUTION_POLICY_INPUT_SCHEMAS: dict[str, dict[str, Any]] = {
+    "contribution_policies_list": {
+        "type": "object",
+        "properties": {"project_id": _UUID_INPUT, **_PAGE_PROPERTIES},
+        "required": ["project_id"],
+        "additionalProperties": False,
+    },
+    "contribution_policy_current_get": {
+        "type": "object",
+        "properties": {"project_id": _UUID_INPUT},
+        "required": ["project_id"],
+        "additionalProperties": False,
+    },
+    "contribution_policy_get": {
+        "type": "object",
+        "properties": {
+            "project_id": _UUID_INPUT,
+            "policy_id": _UUID_INPUT,
+            "version_id": _UUID_INPUT,
+        },
+        "required": ["project_id", "policy_id"],
+        "additionalProperties": False,
+    },
+    "contribution_policy_create": {
+        "type": "object",
+        "properties": {
+            "project_id": _UUID_INPUT,
+            "body": {
+                "type": "object",
+                "properties": {"name": {"type": "string", "minLength": 1, "maxLength": 200}},
+                "required": ["name"],
+                "additionalProperties": False,
+            },
+            "idempotency_key": _IDEMPOTENCY_KEY_INPUT,
+        },
+        "required": ["project_id", "body", "idempotency_key"],
+        "additionalProperties": False,
+    },
+    "contribution_policy_update": {
+        "type": "object",
+        "properties": {
+            "project_id": _UUID_INPUT,
+            "policy_id": _UUID_INPUT,
+            "version_id": _UUID_INPUT,
+            "body": {
+                "type": "object",
+                "properties": {
+                    "rules": {
+                        "type": "array",
+                        "items": _POLICY_RULE_INPUT,
+                        "minItems": 2,
+                        "maxItems": 2,
+                    }
+                },
+                "required": ["rules"],
+                "additionalProperties": False,
+            },
+            "idempotency_key": _IDEMPOTENCY_KEY_INPUT,
+        },
+        "required": ["project_id", "policy_id", "version_id", "body", "idempotency_key"],
+        "additionalProperties": False,
+    },
+    "contribution_policy_publish": {
+        "type": "object",
+        "properties": {
+            "project_id": _UUID_INPUT,
+            "policy_id": _UUID_INPUT,
+            "version_id": _UUID_INPUT,
+            "body": EMPTY_INPUT_SCHEMA,
+            "idempotency_key": _IDEMPOTENCY_KEY_INPUT,
+        },
+        "required": ["project_id", "policy_id", "version_id", "body", "idempotency_key"],
+        "additionalProperties": False,
+    },
+    "contribution_policy_retire": {
+        "type": "object",
+        "properties": {
+            "project_id": _UUID_INPUT,
+            "policy_id": _UUID_INPUT,
+            "version_id": _UUID_INPUT,
+            "body": EMPTY_INPUT_SCHEMA,
+            "idempotency_key": _IDEMPOTENCY_KEY_INPUT,
+        },
+        "required": ["project_id", "policy_id", "version_id", "body", "idempotency_key"],
+        "additionalProperties": False,
+    },
+}
+
 
 class ContractError(RuntimeError):
     """The reviewed packaged contract is absent or invalid."""
@@ -612,7 +861,7 @@ def _selected_schema(document: dict[str, Any]) -> dict[str, Any]:
     raise ContractError("contract does not contain an output schema")
 
 
-@lru_cache(maxsize=32)
+@lru_cache(maxsize=128)
 def _contract_output_schema(name: str) -> dict[str, Any]:
     filename = f"{name}.json"
     resource = files("workstream_mcp").joinpath(f"contracts/{filename}")
@@ -648,7 +897,7 @@ def authorization_context_output_schema() -> dict[str, Any]:
     return _contract_output_schema("authorization_context_get")
 
 
-@lru_cache(maxsize=32)
+@lru_cache(maxsize=128)
 def _contract_output_validator(name: str) -> Draft202012Validator:
     return Draft202012Validator(
         _contract_output_schema(name),
@@ -759,4 +1008,26 @@ def policy_output_schema(name: str) -> dict[str, Any]:
 
 def policy_output_validator(name: str) -> Draft202012Validator:
     """Validate one draft-policy mutation response projection."""
+    return _contract_output_validator(name)
+
+
+def workspace_read_output_schema(name: str) -> dict[str, Any]:
+    if name not in WORKSPACE_READ_INPUT_SCHEMAS:
+        raise ContractError("unknown workspace read contract")
+    return _contract_output_schema(name)
+
+
+def workspace_read_output_validator(name: str) -> Draft202012Validator:
+    workspace_read_output_schema(name)
+    return _contract_output_validator(name)
+
+
+def contribution_policy_output_schema(name: str) -> dict[str, Any]:
+    if name not in CONTRIBUTION_POLICY_INPUT_SCHEMAS:
+        raise ContractError("unknown contribution policy contract")
+    return _contract_output_schema(name)
+
+
+def contribution_policy_output_validator(name: str) -> Draft202012Validator:
+    contribution_policy_output_schema(name)
     return _contract_output_validator(name)

@@ -29,6 +29,7 @@ from app.modules.authorization.domain import (
     checker_registry, checker_retry, checker_retry_reads, contribution_reads,
     contributor_reads, management_reads, submission_history, task_authority, task_queues,
     post_submit_deliveries,
+    project_catalogue,
 )
 from app.modules.authorization.domain.guide_mutations import (
     ProjectGuideMutationResourceContext, ProjectGuideMutationPrepareDenialResourceContext,
@@ -1063,6 +1064,7 @@ class PreSubmitCheckerInputResourceContext(PreSubmitCheckerInputPreparationConte
 AuthorizationResourceContext = (
     ReviewLifecycleActivationContract | contribution_reads.ContributionSelfReadResourceContext | contribution_reads.ContributionProjectReadResourceContext
     | contributor_reads.ActorProjectListResourceContext | contributor_reads.ContributorWorkReadResourceContext
+    | project_catalogue.ProjectCatalogueResourceContext
     | management_reads.ProjectManagementReadResourceContext |
     submission_history.HistoryReadResourceContext | task_queues.QueueReadResourceContext
     | checker_retry_reads.CheckerRetrySourceReadResourceContext

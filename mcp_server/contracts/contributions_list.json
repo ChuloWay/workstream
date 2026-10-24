@@ -1,0 +1,797 @@
+{
+  "canonical_sha256": "598f36beccac91828f28f2edab6b5115d065d4d17e823f1137eb4058a064b991",
+  "components": {
+    "schemas": {
+      "ApiError": {
+        "additionalProperties": false,
+        "description": "Canonical machine-readable API error.",
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "correlation_id": {
+            "title": "Correlation Id",
+            "type": "string"
+          },
+          "details": {
+            "additionalProperties": true,
+            "title": "Details",
+            "type": "object"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "retryable": {
+            "title": "Retryable",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "code",
+          "message",
+          "details",
+          "correlation_id",
+          "retryable"
+        ],
+        "title": "ApiError",
+        "type": "object"
+      },
+      "ApiErrorResponse": {
+        "additionalProperties": false,
+        "description": "Canonical error plus additive legacy compatibility fields.",
+        "properties": {
+          "detail": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          },
+          "error": {
+            "$ref": "#/components/schemas/ApiError"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "title": "ApiErrorResponse",
+        "type": "object"
+      },
+      "ContributionAwardView": {
+        "additionalProperties": false,
+        "description": "Earned immutable terms, without any fulfillment or payment assertion.",
+        "properties": {
+          "award_definition_id": {
+            "format": "uuid",
+            "title": "Award Definition Id",
+            "type": "string"
+          },
+          "award_id": {
+            "format": "uuid",
+            "title": "Award Id",
+            "type": "string"
+          },
+          "instrument": {
+            "enum": [
+              "money",
+              "project_points"
+            ],
+            "title": "Instrument",
+            "type": "string"
+          },
+          "quantity": {
+            "maxLength": 40,
+            "pattern": "^[0-9]+(?:\\.[0-9]+)?$",
+            "title": "Quantity",
+            "type": "string"
+          },
+          "unit": {
+            "title": "Unit",
+            "type": "string"
+          }
+        },
+        "required": [
+          "award_id",
+          "award_definition_id",
+          "instrument",
+          "unit",
+          "quantity"
+        ],
+        "title": "ContributionAwardView",
+        "type": "object"
+      },
+      "ContributionExportResponse": {
+        "additionalProperties": false,
+        "description": "One complete bounded page from an authorized contribution selection.",
+        "properties": {
+          "exported_at": {
+            "format": "date-time",
+            "title": "Exported At",
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ContributionRecordView"
+            },
+            "maxItems": 1000,
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "exported_at",
+          "items"
+        ],
+        "title": "ContributionExportResponse",
+        "type": "object"
+      },
+      "ContributionRecordView": {
+        "additionalProperties": false,
+        "description": "One recognized record with every applicable award and honest source times.",
+        "properties": {
+          "acceptance_review_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Acceptance Review Id"
+          },
+          "acceptance_routing_manifest_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Acceptance Routing Manifest Id"
+          },
+          "acceptance_source": {
+            "anyOf": [
+              {
+                "enum": [
+                  "human_review",
+                  "task_post_submit_route"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Acceptance Source"
+          },
+          "accepted_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accepted At"
+          },
+          "artifact_hash": {
+            "pattern": "^sha256:[0-9a-f]{64}$",
+            "title": "Artifact Hash",
+            "type": "string"
+          },
+          "awards": {
+            "items": {
+              "$ref": "#/components/schemas/ContributionAwardView"
+            },
+            "maxItems": 2,
+            "title": "Awards",
+            "type": "array"
+          },
+          "contribution_id": {
+            "format": "uuid",
+            "title": "Contribution Id",
+            "type": "string"
+          },
+          "contribution_policy_version_id": {
+            "format": "uuid",
+            "title": "Contribution Policy Version Id",
+            "type": "string"
+          },
+          "contribution_type": {
+            "enum": [
+              "accepted_submission",
+              "completed_review"
+            ],
+            "title": "Contribution Type",
+            "type": "string"
+          },
+          "contributor_display_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contributor Display Name"
+          },
+          "contributor_id": {
+            "format": "uuid",
+            "title": "Contributor Id",
+            "type": "string"
+          },
+          "external_task_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "External Task Id"
+          },
+          "policy_version_number": {
+            "exclusiveMinimum": 0.0,
+            "title": "Policy Version Number",
+            "type": "integer"
+          },
+          "project_id": {
+            "format": "uuid",
+            "title": "Project Id",
+            "type": "string"
+          },
+          "recorded_at": {
+            "format": "date-time",
+            "title": "Recorded At",
+            "type": "string"
+          },
+          "source_final_acceptance_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Final Acceptance Id"
+          },
+          "source_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Ref"
+          },
+          "source_review_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Review Id"
+          },
+          "source_review_lease_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Review Lease Id"
+          },
+          "source_task_assignment_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Task Assignment Id"
+          },
+          "source_type": {
+            "title": "Source Type",
+            "type": "string"
+          },
+          "submission_id": {
+            "format": "uuid",
+            "title": "Submission Id",
+            "type": "string"
+          },
+          "task_id": {
+            "format": "uuid",
+            "title": "Task Id",
+            "type": "string"
+          },
+          "task_title": {
+            "title": "Task Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "contribution_id",
+          "project_id",
+          "task_id",
+          "submission_id",
+          "contributor_id",
+          "contributor_display_name",
+          "contribution_type",
+          "source_review_id",
+          "source_review_lease_id",
+          "source_final_acceptance_id",
+          "source_task_assignment_id",
+          "artifact_hash",
+          "contribution_policy_version_id",
+          "policy_version_number",
+          "recorded_at",
+          "accepted_at",
+          "acceptance_source",
+          "acceptance_review_id",
+          "acceptance_routing_manifest_id",
+          "task_title",
+          "source_type",
+          "source_ref",
+          "external_task_id",
+          "awards"
+        ],
+        "title": "ContributionRecordView",
+        "type": "object"
+      }
+    }
+  },
+  "operation": {
+    "description": "Return one freshly authorized fixed-membership page of own records.",
+    "operationId": "read_own_contributions_api_v1_actors_me_contributions_get",
+    "parameters": [
+      {
+        "in": "query",
+        "name": "project_id",
+        "required": false,
+        "schema": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Project Id"
+        }
+      },
+      {
+        "in": "query",
+        "name": "format",
+        "required": false,
+        "schema": {
+          "default": "json",
+          "enum": [
+            "json",
+            "csv"
+          ],
+          "title": "Format",
+          "type": "string"
+        }
+      },
+      {
+        "in": "query",
+        "name": "contribution_type",
+        "required": false,
+        "schema": {
+          "anyOf": [
+            {
+              "enum": [
+                "accepted_submission",
+                "completed_review"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Contribution Type"
+        }
+      },
+      {
+        "in": "query",
+        "name": "recorded_from",
+        "required": false,
+        "schema": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Recorded From"
+        }
+      },
+      {
+        "in": "query",
+        "name": "recorded_before",
+        "required": false,
+        "schema": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Recorded Before"
+        }
+      },
+      {
+        "in": "query",
+        "name": "limit",
+        "required": false,
+        "schema": {
+          "default": 1000,
+          "maximum": 1000,
+          "minimum": 1,
+          "title": "Limit",
+          "type": "integer"
+        }
+      },
+      {
+        "in": "query",
+        "name": "cursor",
+        "required": false,
+        "schema": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Cursor"
+        }
+      },
+      {
+        "in": "header",
+        "name": "X-Request-ID",
+        "required": false,
+        "schema": {
+          "format": "uuid",
+          "maxLength": 36,
+          "minLength": 36,
+          "type": "string"
+        }
+      },
+      {
+        "in": "header",
+        "name": "X-Correlation-ID",
+        "required": false,
+        "schema": {
+          "format": "uuid",
+          "maxLength": 36,
+          "minLength": 36,
+          "type": "string"
+        }
+      }
+    ],
+    "responses": {
+      "200": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ContributionExportResponse"
+            }
+          },
+          "text/csv": {
+            "schema": {
+              "type": "string"
+            }
+          }
+        },
+        "description": "Successful Response",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Workstream-Next-Cursor": {
+            "description": "Opaque fixed-membership continuation when another CSV page exists.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "400": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Invalid request.",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "401": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Authentication failed.",
+        "headers": {
+          "WWW-Authenticate": {
+            "schema": {
+              "type": "string"
+            }
+          },
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "403": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Permission denied.",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "404": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Not Found",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "422": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Unprocessable Entity",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "429": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Too Many Requests",
+        "headers": {
+          "Retry-After": {
+            "description": "Seconds before retrying a rate- or snapshot-capacity-limited request.",
+            "schema": {
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "500": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Internal server error.",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "503": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Service Unavailable",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "security": [
+      {
+        "HTTPBearer": []
+      }
+    ],
+    "summary": "Read Own Contributions",
+    "tags": [
+      "contributions"
+    ],
+    "x-workstream-action-id": "contribution.read_self"
+  },
+  "source": {
+    "method": "GET",
+    "openapi_version": "3.1.0",
+    "path": "/api/v1/actors/me/contributions",
+    "repository_sha": "bb39ac10aed24e3484f3155706f7a8902ef97694"
+  }
+}

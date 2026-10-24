@@ -58,6 +58,37 @@ class _CursorEnvelope(BaseModel):
         return value
 
 
+class _IdCursorPayload(BaseModel):
+    """A signed position containing only the already-disclosed record ID."""
+
+    model_config = _STRICT
+
+    v: Literal[1]
+    q: str
+    id: str
+
+    @field_validator("q")
+    @classmethod
+    def validate_digest(cls, value: str) -> str:
+        if re.fullmatch(r"sha256:[0-9a-f]{64}", value) is None:
+            raise ValueError("invalid cursor")
+        return value
+
+
+class _IdCursorEnvelope(BaseModel):
+    model_config = _STRICT
+
+    p: _IdCursorPayload
+    s: str
+
+    @field_validator("s")
+    @classmethod
+    def validate_signature(cls, value: str) -> str:
+        if len(value) != 43 or _BASE64URL.fullmatch(value) is None:
+            raise ValueError("invalid cursor")
+        return value
+
+
 def authorization_read_query_digest(
     *,
     action_id: ActionId,
@@ -122,6 +153,52 @@ class AuthorizationReadCursorCodec:
             if str(resource_id) != envelope.p.id:
                 raise InvalidPaginationCursor("invalid cursor")
             return timestamp, resource_id
+        except InvalidPaginationCursor:
+            raise
+        except (ValueError, TypeError, UnicodeDecodeError, json.JSONDecodeError, binascii.Error):
+            raise InvalidPaginationCursor("invalid cursor") from None
+
+
+class AuthorizationIdCursorCodec:
+    """HMAC-bound ID keyset for a read whose ID is already public."""
+
+    def __init__(self, secret: bytes) -> None:
+        if len(secret) != 32:
+            raise ValueError("invalid pagination cursor HMAC secret")
+        self._secret = bytes(secret)
+
+    def encode(self, *, query_digest: str, resource_id: UUID) -> str:
+        payload = _IdCursorPayload(v=1, q=query_digest, id=str(resource_id))
+        payload_bytes = _canonical_json(payload.model_dump(mode="json"))
+        signature = hmac.new(self._secret, payload_bytes, hashlib.sha256).digest()
+        return _encode_base64url(
+            _canonical_json(
+                {
+                    "p": payload.model_dump(mode="json"),
+                    "s": _encode_base64url(signature),
+                }
+            )
+        )
+
+    def decode(self, value: str, *, query_digest: str) -> UUID:
+        try:
+            decoded = _decode_base64url(value)
+            if len(decoded) > _MAX_DECODED_BYTES:
+                raise InvalidPaginationCursor("invalid cursor")
+            envelope = _IdCursorEnvelope.model_validate(
+                json.loads(decoded, object_pairs_hook=_reject_duplicate_keys),
+            )
+            payload_bytes = _canonical_json(envelope.p.model_dump(mode="json"))
+            signature = _decode_base64url(envelope.s)
+            expected = hmac.new(self._secret, payload_bytes, hashlib.sha256).digest()
+            if not hmac.compare_digest(expected, signature):
+                raise InvalidPaginationCursor("invalid cursor")
+            if not hmac.compare_digest(envelope.p.q, query_digest):
+                raise InvalidPaginationCursor("invalid cursor")
+            resource_id = UUID(envelope.p.id)
+            if str(resource_id) != envelope.p.id:
+                raise InvalidPaginationCursor("invalid cursor")
+            return resource_id
         except InvalidPaginationCursor:
             raise
         except (ValueError, TypeError, UnicodeDecodeError, json.JSONDecodeError, binascii.Error):

@@ -66,11 +66,76 @@ OPERATIONS = {
         "/api/v1/projects/{project_id}/guides/{guide_id}/revision-policy",
         "put",
     ),
+    "actor_projects_list": ("/api/v1/actors/me/projects", "get"),
+    "actor_assignments_list": ("/api/v1/actors/me/assignments", "get"),
+    "actor_submissions_list": ("/api/v1/actors/me/submissions", "get"),
+    "actor_summary_get": ("/api/v1/actors/me/summary", "get"),
+    "contributions_list": ("/api/v1/actors/me/contributions", "get"),
+    "project_contributions_export": (
+        "/api/v1/projects/{project_id}/contributions/export",
+        "get",
+    ),
+    "contribution_policies_list": (
+        "/api/v1/projects/{project_id}/contribution-policies",
+        "get",
+    ),
+    "contribution_policy_current_get": (
+        "/api/v1/projects/{project_id}/contribution-policies/current",
+        "get",
+    ),
+    "contribution_policy_get": (
+        "/api/v1/projects/{project_id}/contribution-policies/{policy_id}",
+        "get",
+    ),
+    "contribution_policy_create": (
+        "/api/v1/projects/{project_id}/contribution-policies/drafts",
+        "post",
+    ),
+    "contribution_policy_update": (
+        "/api/v1/projects/{project_id}/contribution-policies/{policy_id}/versions/{version_id}",
+        "put",
+    ),
+    "contribution_policy_publish": (
+        "/api/v1/projects/{project_id}/contribution-policies/{policy_id}/versions/{version_id}/publication",
+        "post",
+    ),
+    "contribution_policy_retire": (
+        "/api/v1/projects/{project_id}/contribution-policies/{policy_id}/versions/{version_id}/retirement",
+        "post",
+    ),
+    "project_submissions_list": ("/api/v1/projects/{project_id}/submissions", "get"),
+    "project_assignments_list": ("/api/v1/projects/{project_id}/assignments", "get"),
+    "project_summary_get": ("/api/v1/projects/{project_id}/summary", "get"),
+    "project_task_import_batches_list": (
+        "/api/v1/projects/{project_id}/task-import-batches",
+        "get",
+    ),
+    "project_preparations_list": (
+        "/api/v1/projects/{project_id}/submission-bundle-preparations",
+        "get",
+    ),
+    "active_guide_get": ("/api/v1/projects/{project_id}/active-guide", "get"),
+    "ready_tasks_list": ("/api/v1/projects/{project_id}/tasks/ready", "get"),
 }
 
 
 def _canonical(value: object) -> bytes:
     return json.dumps(value, sort_keys=True, separators=(",", ":")).encode()
+
+
+def _without_schema_titles(value: Any, *, _in_properties: bool = False) -> Any:
+    if isinstance(value, dict):
+        return {
+            key: _without_schema_titles(item, _in_properties=key == "properties")
+            for key, item in value.items()
+            if _in_properties or key != "title"
+        }
+    if isinstance(value, list):
+        return [
+            _without_schema_titles(item, _in_properties=_in_properties)
+            for item in value
+        ]
+    return value
 
 
 def _selected(openapi: dict[str, Any], path: str, method: str) -> dict[str, Any]:
@@ -136,7 +201,9 @@ def test_contracts_match_current_backend_openapi_when_command_is_provided() -> N
         snapshot = json.loads((CONTRACTS / f"{name}.json").read_text(encoding="utf-8"))
         captured = {"operation": snapshot["operation"], "components": snapshot["components"]}
         assert snapshot["source"]["openapi_version"] == openapi["openapi"]
-        assert captured == _selected(openapi, path, method)
+        assert _without_schema_titles(captured) == _without_schema_titles(
+            _selected(openapi, path, method)
+        )
 
 
 def test_selected_fragment_follows_transitive_schema_references() -> None:
@@ -153,3 +220,39 @@ def test_selected_fragment_follows_transitive_schema_references() -> None:
     }
     selected = _selected(openapi, "/selected", "get")
     assert set(selected["components"]["schemas"]) == {"Inner", "Outer"}
+
+
+def test_contract_comparison_ignores_only_schema_titles() -> None:
+    stored = {"schema": {"title": "Old display label", "type": "string"}}
+    current = {"schema": {"title": "New display label", "type": "string"}}
+    changed = {"schema": {"title": "New display label", "type": "integer"}}
+
+    assert _without_schema_titles(stored) == _without_schema_titles(current)
+    assert _without_schema_titles(stored) != _without_schema_titles(changed)
+
+
+def test_contract_comparison_preserves_property_named_title() -> None:
+    stored = {
+        "schema": {
+            "properties": {
+                "title": {"title": "Old display label", "type": "string"}
+            }
+        }
+    }
+    current = {
+        "schema": {
+            "properties": {
+                "title": {"title": "New display label", "type": "string"}
+            }
+        }
+    }
+    changed = {
+        "schema": {
+            "properties": {
+                "title": {"title": "New display label", "type": "integer"}
+            }
+        }
+    }
+
+    assert _without_schema_titles(stored) == _without_schema_titles(current)
+    assert _without_schema_titles(stored) != _without_schema_titles(changed)

@@ -1,0 +1,626 @@
+{
+  "canonical_sha256": "e3914c070cd9b5e8ec7f87abe7e7dc747ef7624e89c3cecaa4131eeb24167654",
+  "components": {
+    "schemas": {
+      "ApiError": {
+        "additionalProperties": false,
+        "description": "Canonical machine-readable API error.",
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "correlation_id": {
+            "title": "Correlation Id",
+            "type": "string"
+          },
+          "details": {
+            "additionalProperties": true,
+            "title": "Details",
+            "type": "object"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "retryable": {
+            "title": "Retryable",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "code",
+          "message",
+          "details",
+          "correlation_id",
+          "retryable"
+        ],
+        "title": "ApiError",
+        "type": "object"
+      },
+      "ApiErrorResponse": {
+        "additionalProperties": false,
+        "description": "Canonical error plus additive legacy compatibility fields.",
+        "properties": {
+          "detail": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          },
+          "error": {
+            "$ref": "#/components/schemas/ApiError"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "title": "ApiErrorResponse",
+        "type": "object"
+      },
+      "CompensationInstrumentType": {
+        "description": "Closed compensation instrument families.",
+        "enum": [
+          "money",
+          "project_points"
+        ],
+        "title": "CompensationInstrumentType",
+        "type": "string"
+      },
+      "ContributionPolicyMutationResult": {
+        "description": "Immutable result reconstructed only from lifecycle-event truth.",
+        "properties": {
+          "actor_profile_id": {
+            "format": "uuid",
+            "title": "Actor Profile Id",
+            "type": "string"
+          },
+          "contribution_policy_id": {
+            "format": "uuid",
+            "title": "Contribution Policy Id",
+            "type": "string"
+          },
+          "contribution_policy_version_id": {
+            "format": "uuid",
+            "title": "Contribution Policy Version Id",
+            "type": "string"
+          },
+          "event_id": {
+            "format": "uuid",
+            "title": "Event Id",
+            "type": "string"
+          },
+          "event_type": {
+            "enum": [
+              "draft_created",
+              "draft_updated",
+              "published",
+              "retired"
+            ],
+            "title": "Event Type",
+            "type": "string"
+          },
+          "from_policy_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "From Policy Status"
+          },
+          "from_version_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "From Version Status"
+          },
+          "occurred_at": {
+            "format": "date-time",
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "operation_id": {
+            "format": "uuid",
+            "title": "Operation Id",
+            "type": "string"
+          },
+          "prior_current_version_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prior Current Version Id"
+          },
+          "prior_current_version_number": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prior Current Version Number"
+          },
+          "project_id": {
+            "format": "uuid",
+            "title": "Project Id",
+            "type": "string"
+          },
+          "request_digest": {
+            "title": "Request Digest",
+            "type": "string"
+          },
+          "to_policy_status": {
+            "title": "To Policy Status",
+            "type": "string"
+          },
+          "to_version_status": {
+            "title": "To Version Status",
+            "type": "string"
+          },
+          "version_number": {
+            "title": "Version Number",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "event_id",
+          "operation_id",
+          "request_digest",
+          "event_type",
+          "actor_profile_id",
+          "project_id",
+          "contribution_policy_id",
+          "contribution_policy_version_id",
+          "version_number",
+          "prior_current_version_id",
+          "prior_current_version_number",
+          "from_policy_status",
+          "to_policy_status",
+          "from_version_status",
+          "to_version_status",
+          "occurred_at"
+        ],
+        "title": "ContributionPolicyMutationResult",
+        "type": "object"
+      },
+      "PolicyDefinitionInput": {
+        "additionalProperties": false,
+        "description": "One requested immutable compensation definition.",
+        "properties": {
+          "adapter_binding_id": {
+            "format": "uuid",
+            "title": "Adapter Binding Id",
+            "type": "string"
+          },
+          "instrument_type": {
+            "$ref": "#/components/schemas/CompensationInstrumentType"
+          },
+          "quantity": {
+            "title": "Quantity",
+            "type": "string"
+          },
+          "unit_code": {
+            "title": "Unit Code",
+            "type": "string"
+          }
+        },
+        "required": [
+          "instrument_type",
+          "unit_code",
+          "quantity",
+          "adapter_binding_id"
+        ],
+        "title": "PolicyDefinitionInput",
+        "type": "object"
+      },
+      "PolicyRuleInput": {
+        "additionalProperties": false,
+        "description": "One complete contribution rule replacement.",
+        "properties": {
+          "compensation_mode": {
+            "enum": [
+              "unpaid",
+              "compensated"
+            ],
+            "title": "Compensation Mode",
+            "type": "string"
+          },
+          "contribution_type": {
+            "enum": [
+              "accepted_submission",
+              "completed_review"
+            ],
+            "title": "Contribution Type",
+            "type": "string"
+          },
+          "definitions": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/PolicyDefinitionInput"
+            },
+            "title": "Definitions",
+            "type": "array"
+          }
+        },
+        "required": [
+          "contribution_type",
+          "compensation_mode"
+        ],
+        "title": "PolicyRuleInput",
+        "type": "object"
+      },
+      "PolicyUpdateInput": {
+        "additionalProperties": false,
+        "description": "Replace the complete graph without client-generated row identifiers.",
+        "properties": {
+          "rules": {
+            "items": {
+              "$ref": "#/components/schemas/PolicyRuleInput"
+            },
+            "maxItems": 2,
+            "minItems": 2,
+            "title": "Rules",
+            "type": "array"
+          }
+        },
+        "required": [
+          "rules"
+        ],
+        "title": "PolicyUpdateInput",
+        "type": "object"
+      }
+    }
+  },
+  "operation": {
+    "description": "Replace the selected draft graph through the existing unit/binding validation.",
+    "operationId": "update_draft_api_v1_projects__project_id__contribution_policies__policy_id__versions__version_id__put",
+    "parameters": [
+      {
+        "in": "path",
+        "name": "project_id",
+        "required": true,
+        "schema": {
+          "format": "uuid",
+          "title": "Project Id",
+          "type": "string"
+        }
+      },
+      {
+        "in": "path",
+        "name": "policy_id",
+        "required": true,
+        "schema": {
+          "format": "uuid",
+          "title": "Policy Id",
+          "type": "string"
+        }
+      },
+      {
+        "in": "path",
+        "name": "version_id",
+        "required": true,
+        "schema": {
+          "format": "uuid",
+          "title": "Version Id",
+          "type": "string"
+        }
+      },
+      {
+        "in": "header",
+        "name": "Idempotency-Key",
+        "required": true,
+        "schema": {
+          "format": "uuid",
+          "type": "string"
+        }
+      },
+      {
+        "in": "header",
+        "name": "X-Request-ID",
+        "required": false,
+        "schema": {
+          "format": "uuid",
+          "maxLength": 36,
+          "minLength": 36,
+          "type": "string"
+        }
+      },
+      {
+        "in": "header",
+        "name": "X-Correlation-ID",
+        "required": false,
+        "schema": {
+          "format": "uuid",
+          "maxLength": 36,
+          "minLength": 36,
+          "type": "string"
+        }
+      }
+    ],
+    "requestBody": {
+      "content": {
+        "application/json": {
+          "schema": {
+            "$ref": "#/components/schemas/PolicyUpdateInput"
+          }
+        }
+      },
+      "required": true
+    },
+    "responses": {
+      "200": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ContributionPolicyMutationResult"
+            }
+          }
+        },
+        "description": "Successful Response",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "400": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Invalid request.",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "401": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Authentication failed.",
+        "headers": {
+          "WWW-Authenticate": {
+            "schema": {
+              "type": "string"
+            }
+          },
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "403": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Permission denied.",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "404": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Not Found",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "409": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Conflict",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "422": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Unprocessable Entity",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "500": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Internal server error.",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "503": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Service Unavailable",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "security": [
+      {
+        "HTTPBearer": []
+      }
+    ],
+    "summary": "Update Draft",
+    "tags": [
+      "contribution-policies"
+    ],
+    "x-workstream-action-id": "contribution.policy.update_draft"
+  },
+  "source": {
+    "method": "PUT",
+    "openapi_version": "3.1.0",
+    "path": "/api/v1/projects/{project_id}/contribution-policies/{policy_id}/versions/{version_id}",
+    "repository_sha": "bb39ac10aed24e3484f3155706f7a8902ef97694"
+  }
+}

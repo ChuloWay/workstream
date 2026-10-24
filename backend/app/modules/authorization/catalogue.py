@@ -272,6 +272,7 @@ class ActionId(StrEnum):
     CONTRIBUTION_READ_SELF = "contribution.read_self"
     CONTRIBUTION_READ_PROJECT = "contribution.read_project"
     ACTOR_PROJECT_LIST = "actor.project.list"
+    PROJECT_CATALOGUE_LIST = "project.catalogue.list"
     ACTOR_ASSIGNMENT_LIST = "actor.assignment.list"
     ACTOR_SUBMISSION_LIST = "actor.submission.list"
     ACTOR_WORK_SUMMARY_READ = "actor.work_summary.read"
@@ -343,6 +344,7 @@ class ActionOwner(StrEnum):
     PILOT_10 = "PILOT-10"
     PILOT_READ_2 = "PILOT-READ-2"
     PILOT_READ_3 = "PILOT-READ-3"
+    CLI_46 = "WS-CLI-001-46"
 
     AUTH_07B = "WS-AUTH-001-07B"
     AUTH_08 = "WS-AUTH-001-08"
@@ -445,6 +447,7 @@ _CONTRIBUTION_POLICY_ACTION_IDS = (
 
 ACTION_DEFINITIONS = (
     _active(ActionId.ACTOR_PROJECT_LIST, PermissionId.ACTOR_PROFILE_READ_SELF, ActionOwner.PILOT_READ_2),
+    _active(ActionId.PROJECT_CATALOGUE_LIST, PermissionId.PROJECT_READ, ActionOwner.CLI_46),
     *(
         _active(action, PermissionId.SUBMISSION_READ_OWN, ActionOwner.PILOT_READ_2)
         for action in sorted(CONTRIBUTOR_WORK_READ_ACTIONS)
@@ -818,7 +821,7 @@ HISTORICAL_PERMISSION_IDS = PERMISSION_IDS - NEW_PERMISSION_IDS
 
 def _require_catalogue_counts() -> None:
     """Keep the closed action inventory and permission boundary exact."""
-    if len(PERMISSION_IDS) != 82 or len(ACTION_IDS) != 177:
+    if len(PERMISSION_IDS) != 82 or len(ACTION_IDS) != 178:
         raise RuntimeError("authorization catalogue count mismatch")
     if len(HISTORICAL_PERMISSION_IDS) != 49 or len(NEW_PERMISSION_IDS) != 33:
         raise RuntimeError("authorization permission boundary mismatch")
@@ -919,6 +922,7 @@ _ACTIVE_ACTION_BOUNDARY = frozenset({
     ActionId.PROJECT_SUBMISSION_ARTIFACT_POLICY_DERIVE,
     ActionId.PROJECT_SUBMISSION_ARTIFACT_POLICY_UPDATE,
     ActionId.PROJECT_READ,
+    ActionId.PROJECT_CATALOGUE_LIST,
     ActionId.ACTOR_AUTHORIZATION_CONTEXT_READ,
     ActionId.PROJECT_SETUP_RUN_READ,
     ActionId.PROJECT_GUIDE_SUFFICIENCY_REPORT_LIST,
