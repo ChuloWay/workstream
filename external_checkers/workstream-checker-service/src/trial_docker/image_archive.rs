@@ -40,7 +40,10 @@ pub(super) fn validate_layers(
     let mut expanded = ExpandedImage::default();
     for (layer, expected_digest) in layers.iter().zip(diff_ids) {
         let (offset, size) = *entries.get(layer).ok_or_else(invalid)?;
-        if size < 2 || Instant::now() >= deadline {
+        if Instant::now() >= deadline {
+            return Err(RuntimeControlFailure::DeadlineExceeded);
+        }
+        if size < 2 {
             return Err(invalid());
         }
         file.seek(SeekFrom::Start(offset)).map_err(|_| invalid())?;
