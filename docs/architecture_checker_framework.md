@@ -354,6 +354,9 @@ commands. Builder code retains only its three required file capabilities;
 trial commands run as nonroot with no capabilities. Neither can reach the
 private bootstrap or host export directory. Exports belong to the nonroot
 service so it can read and remove complete and partial output.
+The candidate's numeric UID/GID must match that service identity so private
+read-only role projections remain readable; mismatched configurations are
+refused before launch. Each workload still runs in its own sandbox.
 
 Each visible `state_overlay` uses one normal, top-level workspace name chosen
 by its approved projection. Nested overlay destinations and collisions with
