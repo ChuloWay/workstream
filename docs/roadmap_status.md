@@ -266,9 +266,10 @@ Selected production request/completion composition and
 supported false-guide activation are implemented. A known pre-effect non-live REV refusal returns bounded OUTBOX retry after rollback; exhaustion dead-letters without automatic reopen. A setup-fault hold is future safety work because no current selected production result emits `task_setup_blocked`. Human review/revision, conditional fulfillment, operations and
 release proof remain later v0.1 work.
 
-The [independent MCP package](../mcp_server/README.md) implements twenty-seven
+The [independent MCP package](../mcp_server/README.md) implements forty-seven
 self-service, administrative access, actor/identity-lifecycle, project-shell,
-project-participation, guide-metadata and draft-policy tools through WS-MCP-002-09. The
+project-participation, guide-metadata, draft-policy, contributor-workspace,
+contribution-evidence and contribution-policy tools through WS-MCP-002-10. The
 [Go CLI](../cli/README.md) provides caller-profile and exact-project authorization
 reads plus human self-profile editing, exact-project inspection and manager
 task queue/detail reads, contributor ready-work/instruction reads and public
@@ -649,8 +650,9 @@ cannot be reused as post-submission review-gate evidence. See the
   adds project creation and authority-selected project reads; WS-MCP-002-07 adds
   candidate discovery and project-role grant issue/list/read/revoke; WS-MCP-002-08
   adds guide declaration and summary-only draft editing; WS-MCP-002-09 adds
-  review and revision policy selection and completes the proposed 27-tool catalogue.
-  WS-MCP-002-10 assembled release proof remains. This is still a custom
+  review and revision policy selection and completes the original 27-tool catalogue;
+  WS-MCP-002-10 adds 20 workspace/evidence/policy bindings. Four public-domain
+  batches and assembled release proof remain. This is still a custom
   authentication adapter, not a public deployment or a certified release.
   The [CLI foundation](../.commitrail/initiatives/WS-CLI-001/WS-CLI-001-01.md)
   provides `whoami` and `project access PROJECT_ID` through those public REST
