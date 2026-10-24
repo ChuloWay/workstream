@@ -33,6 +33,8 @@ chunk adds no transport, credential or retry logic of its own.
   commented examples in `backend/.env.example`.
 - `backend/tests/test_github_facts_adapter.py`, its lane-catalogue entry and
   shared-family fingerprint, and the behavior-ownership partition additions.
+- `backend/tests/test_artifact_architecture.py`: the GitHub adapter package
+  is registered as one more approved external-service composition root.
 
 ### Not allowed
 
