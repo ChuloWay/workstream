@@ -100,12 +100,7 @@ async def test_manual_dispatch_retains_one_human_request_and_one_execution(
         monkeypatch, tmp_path, broker_failure
     )
     async with proposal_case(project_database_env) as (_, factory, command, actor, grant):
-        from tests.project_create_fixtures import grant_fixture_admin_role
-
-        async with factory() as session, session.begin():
-            await grant_fixture_admin_role(
-                session, actor.actor_profile_id, role="operator", scope="system"
-            )
+        operator, _ = await seed_review_actor(factory, None, role="operator", scope="system")
         path = proposal_path(command)
         latest_path = f"/api/v1/projects/{command.project_id}/guides/{command.guide_id}/setup-runs/latest"
         async def predecessor_record():
@@ -114,13 +109,14 @@ async def test_manual_dispatch_retains_one_human_request_and_one_execution(
                     "SELECT row_to_json(f) FROM project_guide_setup_finalizations f WHERE compilation_id=:id"
                 ), {"id": command.compilation_id})
         original_finalization = await predecessor_record()
-        async with proposal_client(factory, actor) as client:
-            configuration = scripted_runtime_configuration(
-                get_settings(), adapter_profile_builder=lambda value: value
-            )
+        configuration = scripted_runtime_configuration(
+            get_settings(), adapter_profile_builder=lambda value: value
+        )
+        async with proposal_client(factory, operator) as operator_client:
             profile = await publish_scripted_model_profile(
-                client, command.project_id, configuration
+                operator_client, command.project_id, configuration
             )
+        async with proposal_client(factory, actor) as client:
             package = await client.get(path+"/proposal")
             assert package.status_code == 200, package.text
             correction = await client.post(path+"/corrections", headers={"Idempotency-Key":str(uuid4())}, json={
@@ -157,7 +153,7 @@ async def test_manual_dispatch_retains_one_human_request_and_one_execution(
             assert "provider_idempotency_key" not in response.text
             assert len(published) == 1 and runtime.calls == 0
             await assert_dispatch_keeps_selected_profile(
-                factory, actor, command.project_id, pending["id"], configuration, profile,
+                factory, operator, command.project_id, pending["id"], configuration, profile,
             )
             if broker_failure:
                 replay = await client.post(endpoint)
