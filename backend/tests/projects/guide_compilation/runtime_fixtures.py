@@ -133,7 +133,18 @@ async def publish_scripted_model_profile(client, project_id, configuration):
 def configure_scripted_model_transport(monkeypatch, socket_path: Path) -> None:
     """Enable the typed setup-model session without providing a live transport."""
     assert socket_path.is_absolute() and not socket_path.exists()
-    monkeypatch.setenv("WORKSTREAM_CHECKER_MODEL_PROXY_SOCKET", str(socket_path))
+    fixture_root = socket_path.parent
+    values = {
+        "ENVIRONMENT": "test",
+        "ARTIFACT_STORE_BACKEND": "local",
+        "ARTIFACT_LOCAL_ROOT": str(fixture_root / "durable-artifacts"),
+        "ARTIFACT_SCRATCH_ROOT": str(fixture_root / "artifact-scratch"),
+        "CHECKER_MODEL_PROXY_SOCKET": str(socket_path),
+    }
+    for scope in ("TASK", "PRODUCER", "PROJECT", "DEPLOYMENT"):
+        values[f"ARTIFACT_ADMISSION_{scope}_MAXIMUM_BYTES"] = str(1024 * 1024)
+    for name, value in values.items():
+        monkeypatch.setenv("WORKSTREAM_" + name, value)
     get_settings.cache_clear()
 
 
