@@ -823,9 +823,7 @@ def validate_compose(rendered: dict[str, Any], values: dict[str, str]) -> None:
             raise PreflightError(f"release service allows new privileges: {name}")
         if name != "guide-document-parser":
             if service.get("cap_add"):
-                raise PreflightError(
-                    f"release service adds Linux capabilities: {name}"
-                )
+                raise PreflightError(f"release service adds Linux capabilities: {name}")
             user = service.get("user")
             if not isinstance(user, str) or not re.fullmatch(
                 r"[1-9][0-9]*:[1-9][0-9]*", user
@@ -854,6 +852,10 @@ def validate_compose(rendered: dict[str, Any], values: dict[str, str]) -> None:
         )
     if any(services[name]["image"] != backend_image for name in PROOF_SERVICES):
         raise PreflightError("AWS proof jobs must use the exact backend image")
+    if any(services[name].get("pull_policy") != "never" for name in PROOF_SERVICES):
+        raise PreflightError(
+            "AWS proof jobs must use the cached release image without pulling"
+        )
     for name in (
         "api",
         "worker",

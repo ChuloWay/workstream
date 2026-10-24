@@ -88,6 +88,7 @@ x-proof-environment: &proof-environment
 
 x-proof-job: &proof-job
   <<: *backend-runtime
+  pull_policy: never
   profiles: [aws-proof]
   environment: *proof-environment
   secrets:

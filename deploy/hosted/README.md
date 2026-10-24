@@ -203,6 +203,17 @@ executes runtime immutability, readiness, negative access and then the
 credential-free coordinator. Arbitrary Compose `run` commands remain outside
 the wrapper. A locally rendered job is still not live AWS evidence.
 
+Recurring proof jobs use the exact digest-pinned backend image already cached
+on the release host (`pull_policy: never`). They do not refresh registry login
+or contact the registry to start a proof. Acquire the reviewed images through
+the authenticated release `pull` operation before starting verification. If the
+selected image is absent, verification fails and later proof identities do not
+run; restore that exact image through the release process. There is no alternate
+image or implicit download. Deployment services retain their normal pull policy.
+An image-cache failure does not extend AWS evidence freshness: activation becomes
+unavailable when its existing proof window expires, even if process health
+checks remain green.
+
 The example S3 and completion timeouts are unmeasured starting values supplied
 by the current #582 contract:
 

@@ -1,7 +1,7 @@
 # Run recurring AWS verification from the cached immutable release image
 
 - Initiative: None
-- Durable disposition: Planned
+- Durable disposition: Complete
 - Intended merge outcome: Recurring hosted AWS proof jobs run the selected digest-pinned release image without depending on registry login freshness.
 
 ## Intent and observed defect
@@ -36,7 +36,7 @@ The roadmap already retains live AWS activation and the connected hosted journey
 
 ## Evidence
 
-Execution and review results belong in the PR trust summary. The complete hosted ZIP-to-contribution journey and other agents' POST implementations are outside this correction.
+Focused configuration and real Docker policy probes preserve exact-image failure and role boundaries. Exact execution and review results belong in the PR trust summary. The complete hosted ZIP-to-contribution journey and other agents' POST implementations are outside this correction.
 
 ## Plan review correction
 
