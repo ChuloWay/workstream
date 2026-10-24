@@ -351,7 +351,8 @@ async def test_checker_output_shared_put_and_verification_lifecycle(
                 )
                 assert attempt.checker_run_id is None
                 assert attempt.model_call_attempt_id is not None
-                assert receipt.checker_run_id == checker_run_id
+                assert receipt.checker_run_id is None
+                assert receipt.model_call_attempt_id == attempt.model_call_attempt_id
                 with pytest.raises(DBAPIError):
                     await session.execute(
                         text(
