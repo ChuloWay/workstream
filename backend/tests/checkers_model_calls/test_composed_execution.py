@@ -194,7 +194,9 @@ async def test_public_profile_to_private_model_call_and_completed_checker(
         await provision_post_submit_service(h.factory, ServiceIdentity.ARTIFACT_CHECKER_OUTPUT)
         creates = []
         lost_replies = []
-        provider_accepted = asyncio.Event()
+        recovered_references = []
+        first_response_waiting = asyncio.Event()
+        release_first_response = asyncio.Event()
 
         class Provider:
             async def create(self, request):
@@ -206,7 +208,6 @@ async def test_public_profile_to_private_model_call_and_completed_checker(
                     )
                 failed = terminal_mode == "failed" and len(creates) == 1
                 reference = CheckerModelResponseReference(f"resp_composed_{len(creates)}")
-                provider_accepted.set()
                 return CheckerModelCreateResult(
                     CheckerModelCreateOutcome.ACCEPTED,
                     known_response=reference,
@@ -226,6 +227,10 @@ async def test_public_profile_to_private_model_call_and_completed_checker(
                 # persisted its provider identity but before response ART is
                 # terminal. It may retrieve that exact effect, never create it
                 # again; completed replays still read retained ART directly.
+                recovered_references.append(reference.provider_response_id)
+                if concurrent_callback:
+                    assert first_response_waiting.is_set()
+                    assert not release_first_response.is_set()
                 return CheckerModelRecoveryResult(
                     CheckerModelRecoveryOutcome.OBSERVED,
                     reference,
@@ -242,19 +247,33 @@ async def test_public_profile_to_private_model_call_and_completed_checker(
         async def provider(_):
             yield Provider()
 
+        outputs = checker_output_storage(
+            sessions=h.factory,
+            store=h.store.wrapped,
+            namespace=h.namespace,
+            preparation=h.preparation,
+            settings=h.settings,
+        )
+        original_store = outputs.store
+
+        async def hold_first_response(request):
+            if (
+                concurrent_callback
+                and request.selector.slot_key == "model_response"
+                and not first_response_waiting.is_set()
+            ):
+                first_response_waiting.set()
+                await asyncio.wait_for(release_first_response.wait(), timeout=30)
+            return await original_store(request)
+
+        monkeypatch.setattr(outputs, "store", hold_first_response)
         proxy = CheckerModelProxy(
             sessions=h.factory,
             authorization=checker_model_service_authorization,
             grants=model_invocation_grants,
             calls=model_call_service,
             profiles=model_profile_reader,
-            outputs=checker_output_storage(
-                sessions=h.factory,
-                store=h.store.wrapped,
-                namespace=h.namespace,
-                preparation=h.preparation,
-                settings=h.settings,
-            ),
+            outputs=outputs,
             bindings=lambda session: checker_output_binding(session, namespace=h.namespace),
             provider=provider,
         )
@@ -277,20 +296,21 @@ async def test_public_profile_to_private_model_call_and_completed_checker(
                 )
                 if concurrent_callback:
                     first = asyncio.create_task(proxy.handle(callback))
-                    await asyncio.wait_for(provider_accepted.wait(), timeout=5)
-                    for _ in range(500):
+                    try:
+                        await asyncio.wait_for(first_response_waiting.wait(), timeout=30)
                         async with h.factory() as session:
-                            known = await session.scalar(
-                                select(ModelUsageEffect.id).where(
-                                    ModelUsageEffect.provider_response_id.is_not(None)
-                                )
-                            )
-                        if known is not None:
-                            break
-                        await asyncio.sleep(0.01)
-                    assert known is not None
-                    second = asyncio.create_task(proxy.handle(callback))
-                    replies = await asyncio.gather(first, second)
+                            pending = await session.scalar(select(ModelUsageEffect))
+                            assert pending.provider_response_id == "resp_composed_1"
+                            assert pending.state == "uncertain"
+                            assert pending.response_binding_id is None
+                        # The first callback cannot settle while the second retrieves
+                        # the known response. A cached terminal replay cannot pass.
+                        second_reply = await proxy.handle(callback)
+                        assert recovered_references == ["resp_composed_1"]
+                    finally:
+                        release_first_response.set()
+                        first_reply = await first
+                    replies = [first_reply, second_reply]
                     assert [reply.outcome for reply in replies] == ["completed", "completed"]
                     assert replies[0].receipt_digest == replies[1].receipt_digest
                     reply = replies[0]
