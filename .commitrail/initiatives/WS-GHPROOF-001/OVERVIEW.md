@@ -7,6 +7,8 @@
   networkless `harnessy.work_proof` checker compares the proof with those facts.
 - Current change: [WS-GHPROOF-001-01](WS-GHPROOF-001-01.md) records the plan.
 - Product behavior changed: No
+- Integrity: see [Integrity requirements](#integrity-requirements); every layer
+  fails closed.
 
 ## Problem
 
@@ -50,14 +52,39 @@ enter a container that runs submitted material.
 | Chunk | Outcome | Depends on |
 |---|---|---|
 | 01 | This initiative record | None |
-| 02 | GitHub facts port and GitHub App adapter, registered per ADR 0014 and not yet called by a production path | 01 |
-| 03 | `harnessy.work_proof` comparison mode, configuration schema and checker version | 01 |
-| 04 | Selected POST wiring: fetch facts inside the existing outbox evaluation handler for bindings whose locked configuration selects GitHub facts; map facts-unavailable to an infrastructure failure | 02, 03, PR #677 |
-| 05 | Durable ART custody of the facts as a `service_identity` checker-run binding | 04, PRs #676 and #677 |
-| 06 | Hosted secret configuration and an end-to-end drill against a fake GitHub | 04, 05 |
+| 02 | GitHub facts port and GitHub App adapter (integrity layer 1 facts: pull request, author, reviews, changed files, required checks with their producing App), registered per ADR 0014 and not yet called by a production path | 01 |
+| 03 | `harnessy.work_proof` comparison mode and integrity layers 2 to 5, configuration schema and checker version | 01 |
+| 04 | Selected POST wiring: fetch facts inside the existing outbox evaluation handler for bindings whose locked configuration selects GitHub facts; map facts-unavailable to an infrastructure failure; route protected-path changes to human acceptance; integrity layers 6 and 7 | 02, 03, PR #677 |
+| 05 | Durable ART custody of the facts as a `service_identity` checker-run binding; integrity layer 8 | 04, PRs #676 and #677 |
+| 06 | Hosted secret configuration and an end-to-end drill against a fake GitHub, covering every integrity layer | 04, 05 |
 
 Chunks 02 and 03 are independent of each other. Each chunk is one pull request
 with one change record.
+
+## Integrity requirements
+
+Owner decision of 24 October 2026 (tracker decision 20): verification integrity
+is non-negotiable and is Flow's key selling point. Every layer fails closed and
+trusts nothing the contributor could produce. Missing facts never pass.
+
+| Layer | Requirement | Chunk |
+|---|---|---|
+| 1 | Facts come only from GitHub through WorkStream's read-only App, never from the submission. The reader stays factual: it reports the pull request, its author, all reviews, all changed files, and each required check with the App that produced the judged result. It makes no policy decision. If GitHub reports more changed files than it can list, the read fails as incomplete. | 02 |
+| 2 | Every required check must be bound to a producing App. A requirement that accepts any source (including commit statuses, which carry no App identity) is an error unless the locked configuration explicitly allows it. | 03 |
+| 3 | A change to CI or repository configuration (`.github/**`, `**/CODEOWNERS`, `.gitlab-ci.yml`, `.circleci/**`, plus configured paths; renames count on both names) cannot be auto-accepted and requires explicit human acceptance. | 03, routing in 04 |
+| 4 | At least one independent approval on the final head commit: an `APPROVED` latest review by a reviewer who is neither the author nor a Bot. A later `CHANGES_REQUESTED` or `DISMISSED` review by the same reviewer cancels the approval; an approval of an earlier commit does not count. | 03 |
+| 5 | Approval only by configured operator logins is reported as a non-blocking finding: the work may earn points but may not be paid in money until an independent reviewer confirms it. | 03 |
+| 6 | A claim that contradicts GitHub is "suspected misreporting", distinct from a failed check. After one flag (configurable) the contributor account is paused from claiming, and administrators are alerted. | 04 and lifecycle work |
+| 7 | A failed check gives a clear reason and may be resubmitted without penalty. An administrator override is recorded as a human override, never as a pass. | 04 and lifecycle work |
+| 8 | Certificates and contribution evidence carry the SHA-256 of the facts they relied on. | 05 and contribution evidence work |
+
+Deferred GitHub-side hardening (Julian, 24 October 2026): code-owner review for
+`.github/`, dismissing stale approvals on new pushes, and requiring approval of
+the last push are not yet enabled on the Flow repositories. Layers 3 and 4
+compensate for them in WorkStream. Today all 22 required checks of
+`Flow-Research/harnessy-v2` branch `dev` are bound to the GitHub Actions App
+(id 15368), and the agents' App lacks the `workflows` permission, so agents
+cannot edit workflow files directly.
 
 ## Owner decisions (2026-10-24)
 
