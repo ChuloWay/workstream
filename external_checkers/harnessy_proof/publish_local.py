@@ -44,13 +44,50 @@ def material_root(compose_project: str) -> str:
 
 
 def _hash(value: object) -> str:
-    """Canonical JSON digest for the string-only schema documents used here."""
+    """Canonical JSON digest for the string/integer/object schema documents used here."""
     encoded = json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     return "sha256:" + hashlib.sha256(encoded.encode("utf-8")).hexdigest()
 
 
-def _schema(schema_id: str) -> dict[str, object]:
-    document = {"type": "object"}
+# PRE has no GitHub facts, so only shape mode is valid there. POST accepts shape
+# mode ({}) or GitHub comparison mode naming both repository and base branch.
+CONFIGURATION_SCHEMAS: dict[str, dict[str, object]] = {
+    "pre_submit": {"type": "object", "additionalProperties": False, "maxProperties": 0},
+    "post_submit": {
+        "type": "object",
+        "additionalProperties": False,
+        "properties": {
+            "github_repository": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9-]{0,38}/[A-Za-z0-9._-]{1,100}$",
+            },
+            "base_branch": {"type": "string", "minLength": 1, "maxLength": 255},
+        },
+        "dependentRequired": {
+            "github_repository": ["base_branch"],
+            "base_branch": ["github_repository"],
+        },
+    },
+}
+# WorkStream adds GitHub facts to the normalized POST input only for bindings in
+# GitHub comparison mode. The checker validates the full facts shape itself.
+INPUT_SCHEMAS: dict[str, dict[str, object]] = {
+    "pre_submit": {"type": "object"},
+    "post_submit": {
+        "type": "object",
+        "properties": {
+            "github_facts": {
+                "type": "object",
+                "required": ["schema_version"],
+                "properties": {"schema_version": {"const": "workstream.github_facts.v1"}},
+            }
+        },
+    },
+}
+
+
+def _schema(schema_id: str, document: dict[str, object] | None = None) -> dict[str, object]:
+    document = {"type": "object"} if document is None else document
     return {
         "schema_id": schema_id,
         "schema_version": "v1",
@@ -66,8 +103,10 @@ def registry_spec(phase: str, image_digest: str, capability_version: str) -> dic
         "capability_version": capability_version,
         "phase": phase,
         "image_digest": image_digest,
-        "configuration_schema": _schema("harnessy.work_proof.configuration"),
-        "input_schema": _schema(INPUT_SCHEMA_IDS[phase]),
+        "configuration_schema": _schema(
+            "harnessy.work_proof.configuration", CONFIGURATION_SCHEMAS[phase]
+        ),
+        "input_schema": _schema(INPUT_SCHEMA_IDS[phase], INPUT_SCHEMAS[phase]),
         "output_schema": _schema("external_checker_result"),
         "resources": {
             "cpu_millis": 500,
@@ -147,8 +186,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--sandbox-gid", type=int, required=True)
     parser.add_argument("--out-dir", type=Path, required=True)
     # The registry holds one immutable entry per phase, capability and version,
-    # so a rebuilt image (new digest) needs a new version.
-    parser.add_argument("--capability-version", default="v1")
+    # so a rebuilt image (new digest) needs a new version. v2 adds GitHub
+    # comparison mode and real configuration/input schemas.
+    parser.add_argument("--capability-version", default="v2")
     args = parser.parse_args(argv)
     image = publish(args.registry, args.repository)
     args.out_dir.mkdir(parents=True, exist_ok=True)

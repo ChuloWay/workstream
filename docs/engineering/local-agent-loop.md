@@ -120,7 +120,7 @@ with an empty client configuration, for example
 
 Rebuilding the proof checker changes its digest. The registry holds one
 immutable entry per phase, capability and version, so rerun `publish_local.py`
-with a new `--capability-version` (for example `v2`), recreate the checker with
+with a new `--capability-version` (the default is `v2`; use, for example, `v3`), recreate the checker with
 `docker compose up --wait --force-recreate checker`, and register the two new
 bodies. Registering a new digest under an existing version returns
 `external_checker_registry_conflict`.
@@ -231,14 +231,72 @@ error finding exists:
 | `ci_conclusion` | equals `success` |
 | `merged` | the JSON value `true` |
 
-**Trust caveat.** The checker has no network access. It checks only what
-`proof.json` claims. It does not confirm that the pull request, commit or CI
-run exist, that the CI run belongs to the commit, or that the pull request was
-merged. A passing verdict means well-formed claims, not independently verified
-work. With `human_review_required:false`, a well-formed but false proof
-would reach automatic FinalAcceptance. Do not use this checker alone to gate
-acceptance that leads to compensation; pair it with human review, or with a
-checker that has trusted access to the evidence, when the claim must be true.
+**Trust caveat.** The checker has no network access. With an empty binding
+configuration (`{}`, shape mode) it checks only what `proof.json` claims. It
+does not confirm that the pull request, commit or CI run exist, that the CI run
+belongs to the commit, or that the pull request was merged. A passing verdict
+means well-formed claims, not independently verified work. With
+`human_review_required:false`, a well-formed but false proof would reach
+automatic FinalAcceptance. Do not use shape mode alone to gate acceptance that
+leads to compensation; pair it with human review, or use GitHub comparison
+mode once WorkStream supplies GitHub facts, when the claim must be true.
+
+### GitHub comparison mode
+
+Capability version `v2` adds a comparison mode
+([WS-GHPROOF-001](../../.commitrail/initiatives/WS-GHPROOF-001/OVERVIEW.md)).
+The POST binding configuration names the repository and base branch:
+
+```json
+{"github_repository": "Flow-Research/harnessy-v2", "base_branch": "main"}
+```
+
+The registry `configuration_schema` requires both keys together; the PRE
+schema accepts only `{}`. WorkStream, not the checker, reads the facts from
+GitHub and places them in the request `input` under `github_facts`, so the
+request digest binds them:
+
+```json
+{
+  "github_facts": {
+    "schema_version": "workstream.github_facts.v1",
+    "repository": "Flow-Research/harnessy-v2",
+    "pull_request_number": 12,
+    "state": "closed",
+    "merged": true,
+    "merge_commit_sha": "<40 lowercase hex, or null unless merged>",
+    "base_ref": "main",
+    "head_sha": "<40 lowercase hex>",
+    "required_checks": [{"name": "backend", "app_id": 15368, "conclusion": "success"}],
+    "fetched_at": "2026-10-24T12:00:00Z",
+    "responses": [{"request": "pull_request", "sha256": "sha256:<64 hex>"}]
+  }
+}
+```
+
+`required_checks` lists every check required by the base branch's protection,
+with its result for the head commit (`missing` and `pending` included). In
+this mode the shape rules above still apply, and each mismatch adds one `error`
+finding:
+
+| Code (`harnessy.proof.github.*`) | Fails when |
+|---|---|
+| `repository` | the facts' repository is not `github_repository` |
+| `base_branch` | the pull request's base branch is not `base_branch` |
+| `pr_url` | `pr_url` is not `https://github.com/<owner>/<repository>/pull/<number>` |
+| `pr_repository` | `pr_url` names another repository than the facts |
+| `pull_request_number` | `pr_url` names another pull request than the facts |
+| `merged` | GitHub reports the pull request as not merged |
+| `merge_commit_sha` | `commit_sha` is not the merge commit (case-insensitive) |
+| `required_check` | one finding per required check whose result is not `success` |
+| `facts_missing` | the configuration requires facts and the input has none |
+| `facts_invalid` | the facts do not have the `workstream.github_facts.v1` shape |
+| `configuration` | the configuration is neither `{}` nor both keys |
+
+Facts present without configuration are still compared, except repository and
+base branch. Until WorkStream's POST evaluation supplies facts (initiative
+chunk 04), configuring comparison mode makes every POST check fail with
+`facts_missing`; this stack therefore keeps shape mode.
 
 ## Create the manager project and the agent submitter
 

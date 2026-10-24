@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import io
 import json
 from pathlib import Path
 from uuid import uuid4
@@ -11,6 +12,7 @@ import pytest
 import yaml
 
 from app.modules.checkers.api.external import (
+    ExternalCheckerContractError,
     ExternalCheckerExecutionResult,
     ExternalCheckerRegistrySpec,
 )
@@ -179,3 +181,213 @@ def test_published_service_paths_match_the_compose_overlay() -> None:
         ]
         mode = ":ro" if name in ("backend", "worker", "beat") else ""
         assert socket_mounts == [f"checker_socket:/run/ws-checker{mode}"], name
+
+
+# GitHub comparison mode -------------------------------------------------------
+
+CONFIGURATION = {"github_repository": "acme/widgets", "base_branch": "main"}
+FACTS = {
+    "schema_version": "workstream.github_facts.v1",
+    "repository": "acme/widgets",
+    "pull_request_number": 12,
+    "state": "closed",
+    "merged": True,
+    "merge_commit_sha": VALID_PROOF["commit_sha"],
+    "base_ref": "main",
+    "head_sha": "e" * 40,
+    "required_checks": [
+        {"name": "backend", "app_id": 15368, "conclusion": "success"},
+        {"name": "lint", "app_id": None, "conclusion": "success"},
+    ],
+    "fetched_at": "2026-10-24T12:00:00Z",
+    "responses": [{"request": "pull_request", "sha256": "sha256:" + "f" * 64}],
+}
+
+
+def _input(**changes: object) -> dict:
+    facts = {**FACTS, **changes}
+    return {
+        "schema_version": "workstream.external_checker_post_submit_input.v1",
+        "github_facts": {key: value for key, value in facts.items() if value is not ...},
+    }
+
+
+def _compare(
+    proof: bytes | None = None,
+    *,
+    configuration: object = CONFIGURATION,
+    input_value: object = None,
+) -> list[str]:
+    findings = checker.evaluate_proof(
+        _encoded() if proof is None else proof,
+        configuration=configuration,
+        input_value=_input() if input_value is None else input_value,
+    )
+    return [item["code"] for item in findings]
+
+
+def test_proof_matching_github_facts_passes() -> None:
+    assert _compare() == []
+    upper = VALID_PROOF["commit_sha"].upper()
+    pr_url = "https://github.com/Acme/Widgets/pull/12/"
+    assert _compare(_encoded(commit_sha=upper, pr_url=pr_url)) == []
+
+
+@pytest.mark.parametrize(
+    ("proof_changes", "fact_changes", "code"),
+    [
+        (
+            {"pr_url": "https://github.com/acme/other/pull/12"},
+            {"repository": "acme/other"},
+            "github.repository",
+        ),
+        ({"pr_url": "https://github.com/acme/other/pull/12"}, {}, "github.pr_repository"),
+        (
+            {"pr_url": "https://github.com/acme/widgets/pull/13"},
+            {},
+            "github.pull_request_number",
+        ),
+        ({"pr_url": "https://github.com/acme/widgets/issues/12"}, {}, "github.pr_url"),
+        ({}, {"merged": False, "state": "open"}, "github.merged"),
+        ({"commit_sha": "1" * 40}, {}, "github.merge_commit_sha"),
+        ({}, {"base_ref": "release"}, "github.base_branch"),
+    ],
+)
+def test_each_github_mismatch_reports_exactly_its_finding(
+    proof_changes: dict, fact_changes: dict, code: str
+) -> None:
+    assert _compare(_encoded(**proof_changes), input_value=_input(**fact_changes)) == [
+        f"harnessy.proof.{code}"
+    ]
+
+
+def test_unmerged_facts_also_fail_the_merge_commit_comparison() -> None:
+    codes = _compare(input_value=_input(merged=False, merge_commit_sha=None))
+    assert codes == ["harnessy.proof.github.merged", "harnessy.proof.github.merge_commit_sha"]
+
+
+def test_each_unsuccessful_required_check_reports_its_own_finding() -> None:
+    checks = [
+        {"name": "backend", "app_id": 15368, "conclusion": "failure"},
+        {"name": "lint", "app_id": None, "conclusion": "success"},
+        {"name": "docs", "app_id": None, "conclusion": "missing"},
+        {"name": "e2e\nspoof", "app_id": None, "conclusion": "pending"},
+    ]
+    findings = checker.evaluate_proof(
+        _encoded(), configuration=CONFIGURATION, input_value=_input(required_checks=checks)
+    )
+    assert [item["code"] for item in findings] == ["harnessy.proof.github.required_check"] * 3
+    messages = [item["message"] for item in findings]
+    assert "backend is failure" in messages[0]
+    assert "docs is missing" in messages[1]
+    assert "e2e?spoof is pending" in messages[2]
+
+
+@pytest.mark.parametrize(
+    "input_value",
+    [{}, {"schema_version": "workstream.external_checker_post_submit_input.v1"}, None],
+)
+def test_required_facts_missing_is_an_error_never_a_pass(input_value: object) -> None:
+    findings = checker.evaluate_proof(
+        _encoded(), configuration=CONFIGURATION, input_value=input_value
+    )
+    assert [item["code"] for item in findings] == ["harnessy.proof.github.facts_missing"]
+
+
+@pytest.mark.parametrize(
+    "facts_changes",
+    [
+        {"schema_version": "workstream.github_facts.v2"},
+        {"merged": "true"},
+        {"pull_request_number": "12"},
+        {"required_checks": []},
+        {"required_checks": [{"name": "backend"}]},
+        {"merge_commit_sha": "ABC"},
+        {"head_sha": ...},
+    ],
+)
+def test_malformed_facts_are_an_error(facts_changes: dict) -> None:
+    assert _compare(input_value=_input(**facts_changes)) == [
+        "harnessy.proof.github.facts_invalid"
+    ]
+
+
+@pytest.mark.parametrize(
+    "configuration",
+    [
+        {"github_repository": "acme/widgets"},
+        {"base_branch": "main"},
+        {**CONFIGURATION, "extra": True},
+        {"github_repository": "", "base_branch": "main"},
+    ],
+)
+def test_incomplete_configuration_is_an_error(configuration: dict) -> None:
+    assert _compare(configuration=configuration) == ["harnessy.proof.github.configuration"]
+
+
+def test_shape_mode_is_unchanged_without_configuration_or_facts() -> None:
+    assert checker.evaluate_proof(_encoded(), configuration={}, input_value={}) == []
+    assert checker.evaluate_proof(_encoded(merged=False)) == [
+        checker._finding("merged", "merged must be the JSON value true.")
+    ]
+
+
+def test_unconfigured_facts_are_still_compared() -> None:
+    codes = _compare(configuration={}, input_value=_input(base_ref="other", merged=False))
+    assert codes == ["harnessy.proof.github.merged"]
+
+
+def test_shape_errors_and_github_mismatches_are_both_reported() -> None:
+    codes = _compare(_encoded(ci_conclusion="failure"), input_value=_input(merged=False))
+    assert codes == ["harnessy.proof.ci_conclusion", "harnessy.proof.github.merged"]
+
+
+def test_comparison_failure_produces_a_backend_valid_failed_result() -> None:
+    findings = checker.evaluate_proof(
+        _encoded(), configuration=CONFIGURATION, input_value=_input(base_ref="dev")
+    )
+    parsed = ExternalCheckerExecutionResult.model_validate_json(
+        json.dumps(checker.build_result(_request(), findings))
+    )
+    assert parsed.verdict == "failed"
+    assert [item.code for item in parsed.findings] == ["harnessy.proof.github.base_branch"]
+
+
+def test_main_passes_request_configuration_and_input(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    request = {**_request(), "configuration": CONFIGURATION, "input": _input(merged=False)}
+    monkeypatch.setattr(checker, "read_proof", lambda _root: _encoded())
+    monkeypatch.setattr(checker.sys, "stdin", io.StringIO(json.dumps(request)))
+    assert checker.main() == 0
+    result = json.loads(capsys.readouterr().out)
+    assert result["verdict"] == "failed"
+    assert [item["code"] for item in result["findings"]] == ["harnessy.proof.github.merged"]
+
+
+def test_registry_schemas_accept_only_supported_configuration_and_facts_input() -> None:
+    digest = "sha256:" + "d" * 64
+    post = ExternalCheckerRegistrySpec.model_validate(
+        publish_local.registry_spec("post_submit", digest, "v2")
+    )
+    pre = ExternalCheckerRegistrySpec.model_validate(
+        publish_local.registry_spec("pre_submit", digest, "v2")
+    )
+    post.configuration_schema.validate_instance({})
+    post.configuration_schema.validate_instance(CONFIGURATION)
+    post.input_schema.validate_instance(_input())
+    post.input_schema.validate_instance(
+        {"schema_version": "workstream.external_checker_post_submit_input.v1"}
+    )
+    pre.configuration_schema.validate_instance({})
+    rejected = [
+        (post.configuration_schema, {"github_repository": "acme/widgets"}),
+        (post.configuration_schema, {"base_branch": "main"}),
+        (post.configuration_schema, {**CONFIGURATION, "github_repository": "acme"}),
+        (post.configuration_schema, {**CONFIGURATION, "extra": 1}),
+        (pre.configuration_schema, CONFIGURATION),
+        (post.input_schema, _input(schema_version="workstream.github_facts.v2")),
+    ]
+    for schema, value in rejected:
+        with pytest.raises(ExternalCheckerContractError):
+            schema.validate_instance(value)
