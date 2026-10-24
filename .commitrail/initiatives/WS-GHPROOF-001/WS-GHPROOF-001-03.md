@@ -41,8 +41,10 @@ networkless and credential-free.
   digest binds them. The object is exactly chunk 02's
   `GitHubPullRequestFacts.model_dump(mode="json")`: `schema_version`,
   `repository`, `pull_request_number`, `state`, `merged`, `merge_commit_sha`
-  (null unless merged), `base_ref`, `head_sha`, `required_checks`
-  (`name`, `app_id`, `conclusion`), `fetched_at` and `responses`.
+  (null unless merged), `base_ref`, `head_sha`, `author`, `reviews`,
+  `changed_files_count`, `changed_files`, `required_checks` (`name`, `app_id`,
+  `app_bound`, `conclusion`, `check_run_app_id`, `commit_status_judged`),
+  `fetched_at` and `responses`.
 - **Mode selection.** Configuration `{}` with no facts is shape mode, unchanged.
   Configuration `{"github_repository": "owner/name", "base_branch": "<branch>"}`
   requires facts. Facts without configuration are compared except the
@@ -54,6 +56,23 @@ networkless and credential-free.
   `configuration`. Repository comparisons are case-insensitive, as GitHub
   names are; the commit SHA is compared in lower case. GitHub-provided check
   names in messages are bounded to 200 printable characters.
+- **Integrity rules (owner decision 20, 2026-10-24).** They apply whenever
+  facts are compared, with safe defaults, each with its own finding:
+  `unbound_required_check` (a requirement accepting any source; config
+  `allow_unbound_required_checks`, default false);
+  `protected_path_changed` (one finding listing up to five paths that match
+  `.github/**`, `**/CODEOWNERS`, `.gitlab-ci.yml`, `.circleci/**` or configured
+  `protected_paths`, checking both names of a rename; it states that the work
+  requires explicit human acceptance and cannot be auto-accepted);
+  `independent_approval_missing` (fewer than `required_independent_approvals`,
+  default 1, reviewers whose latest `APPROVED`/`CHANGES_REQUESTED`/`DISMISSED`
+  review by id approves the head SHA, excluding the author by id or login and
+  every non-`User` account; comments do not cancel an approval). When all
+  qualifying approvals come from `operator_logins`, the checker adds code
+  `harnessy.operator_approved` at level `warning`, which does not fail the
+  verdict. `warning` rather than `info` is used because contributor and
+  history reads count only blocking, warning and coverage findings, so an
+  `info` finding would be invisible.
 - **Fail closed.** Required but missing or malformed facts produce an error
   finding and a `failed` verdict, never a pass. Chunk 04 maps a facts-fetch
   failure to an infrastructure failure before the checker runs, so a GitHub
@@ -76,6 +95,10 @@ networkless and credential-free.
 - [x] Each failed, missing or pending required check reports its own finding.
 - [x] Required facts that are missing or malformed fail; incomplete
   configuration fails.
+- [x] Each integrity rule has its own finding and edge-case tests: stale
+  approval on an old commit, approval then changes requested or dismissed, bot
+  approval, author self-approval, rename into or out of `.github`, unbound
+  check, operator-only approval, and missing integrity facts.
 - [x] Shape mode is unchanged; `main()` passes configuration and input through.
 - [x] Published v2 registry bodies validate through
   `ExternalCheckerRegistrySpec` and accept or reject configuration and input as
@@ -93,7 +116,7 @@ networkless and credential-free.
 
 | Claim | Command or proof | Result | Remaining uncertainty |
 |---|---|---|---|
-| Comparison rules and result contract | `pytest tests/checkers/external/test_harnessy_proof_checker.py` | 56 passed | Facts shape agreement with chunk 02 is documented, not cross-tested; chunk 04 should add that test |
+| Comparison rules and result contract | `pytest tests/checkers/external/test_harnessy_proof_checker.py` | 91 passed | Facts shape agreement with chunk 02 is documented, not cross-tested; chunk 04 should add that test |
 | Lint | `ruff check` on the test module and `external_checkers/harnessy_proof/` | Pass | — |
 | Docs | Markdown link and stale wording checks | Pass | — |
 

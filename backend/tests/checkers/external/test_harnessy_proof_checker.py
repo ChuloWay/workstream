@@ -186,6 +186,7 @@ def test_published_service_paths_match_the_compose_overlay() -> None:
 # GitHub comparison mode -------------------------------------------------------
 
 CONFIGURATION = {"github_repository": "acme/widgets", "base_branch": "main"}
+HEAD = "e" * 40
 FACTS = {
     "schema_version": "workstream.github_facts.v1",
     "repository": "acme/widgets",
@@ -194,10 +195,36 @@ FACTS = {
     "merged": True,
     "merge_commit_sha": VALID_PROOF["commit_sha"],
     "base_ref": "main",
-    "head_sha": "e" * 40,
+    "head_sha": HEAD,
+    "author": {"login": "agent-bot", "id": 501, "type": "Bot"},
+    "reviews": [
+        {
+            "id": 61,
+            "reviewer": {"login": "reviewer", "id": 7, "type": "User"},
+            "state": "APPROVED",
+            "commit_id": HEAD,
+            "submitted_at": "2026-10-24T11:00:00Z",
+        }
+    ],
+    "changed_files_count": 1,
+    "changed_files": [{"filename": "src/app.py", "previous_filename": None, "status": "modified"}],
     "required_checks": [
-        {"name": "backend", "app_id": 15368, "conclusion": "success"},
-        {"name": "lint", "app_id": None, "conclusion": "success"},
+        {
+            "name": "backend",
+            "app_id": 15368,
+            "app_bound": True,
+            "conclusion": "success",
+            "check_run_app_id": 15368,
+            "commit_status_judged": False,
+        },
+        {
+            "name": "lint",
+            "app_id": 15368,
+            "app_bound": True,
+            "conclusion": "success",
+            "check_run_app_id": 15368,
+            "commit_status_judged": False,
+        },
     ],
     "fetched_at": "2026-10-24T12:00:00Z",
     "responses": [{"request": "pull_request", "sha256": "sha256:" + "f" * 64}],
@@ -267,11 +294,12 @@ def test_unmerged_facts_also_fail_the_merge_commit_comparison() -> None:
 
 
 def test_each_unsuccessful_required_check_reports_its_own_finding() -> None:
+    bound = {"app_id": 1, "app_bound": True, "check_run_app_id": 1, "commit_status_judged": False}
     checks = [
-        {"name": "backend", "app_id": 15368, "conclusion": "failure"},
-        {"name": "lint", "app_id": None, "conclusion": "success"},
-        {"name": "docs", "app_id": None, "conclusion": "missing"},
-        {"name": "e2e\nspoof", "app_id": None, "conclusion": "pending"},
+        {**bound, "name": "backend", "conclusion": "failure"},
+        {**bound, "name": "lint", "conclusion": "success"},
+        {**bound, "name": "docs", "conclusion": "missing"},
+        {**bound, "name": "e2e\nspoof", "conclusion": "pending"},
     ]
     findings = checker.evaluate_proof(
         _encoded(), configuration=CONFIGURATION, input_value=_input(required_checks=checks)
@@ -391,3 +419,218 @@ def test_registry_schemas_accept_only_supported_configuration_and_facts_input() 
     for schema, value in rejected:
         with pytest.raises(ExternalCheckerContractError):
             schema.validate_instance(value)
+
+
+
+# Integrity rules (owner decision 20) -------------------------------------------
+
+
+def _review(review_id: int, state: str, *, commit: str = HEAD, **reviewer: object) -> dict:
+    person = {"login": "reviewer", "id": 7, "type": "User", **reviewer}
+    return {
+        "id": review_id,
+        "reviewer": person,
+        "state": state,
+        "commit_id": commit,
+        "submitted_at": "2026-10-24T11:00:00Z",
+    }
+
+
+def _integrity(configuration: object = CONFIGURATION, **fact_changes: object) -> list[dict]:
+    return [
+        item
+        for item in checker.evaluate_proof(
+            _encoded(), configuration=configuration, input_value=_input(**fact_changes)
+        )
+    ]
+
+
+def _integrity_codes(configuration: object = CONFIGURATION, **fact_changes: object) -> list[str]:
+    return [item["code"] for item in _integrity(configuration, **fact_changes)]
+
+
+def _check(name: str, *, bound: bool) -> dict:
+    return {
+        "name": name,
+        "app_id": 15368 if bound else None,
+        "app_bound": bound,
+        "conclusion": "success",
+        "check_run_app_id": 15368 if bound else None,
+        "commit_status_judged": not bound,
+    }
+
+
+def test_unbound_required_check_is_an_error_unless_explicitly_allowed() -> None:
+    checks = [_check("backend", bound=True), _check("lint", bound=False)]
+    findings = _integrity(required_checks=checks)
+    assert [item["code"] for item in findings] == [
+        "harnessy.proof.github.unbound_required_check"
+    ]
+    assert "lint" in findings[0]["message"]
+    allowed = {**CONFIGURATION, "allow_unbound_required_checks": True}
+    assert _integrity_codes(allowed, required_checks=checks) == []
+
+
+@pytest.mark.parametrize(
+    "changed",
+    [
+        {"filename": ".github/workflows/ci.yml", "previous_filename": None, "status": "modified"},
+        {"filename": "docs/CODEOWNERS", "previous_filename": None, "status": "added"},
+        {"filename": "CODEOWNERS", "previous_filename": None, "status": "modified"},
+        {"filename": ".gitlab-ci.yml", "previous_filename": None, "status": "added"},
+        {"filename": ".circleci/config.yml", "previous_filename": None, "status": "removed"},
+        {"filename": ".github/workflows/x.yml", "previous_filename": "x.yml", "status": "renamed"},
+        {"filename": "moved.yml", "previous_filename": ".github/workflows/x.yml", "status": "renamed"},
+    ],
+    ids=("workflow", "nested-codeowners", "root-codeowners", "gitlab", "circleci",
+         "rename-into-github", "rename-out-of-github"),
+)
+def test_protected_path_change_requires_human_acceptance(changed: dict) -> None:
+    files = [FACTS["changed_files"][0], changed]
+    findings = _integrity(changed_files=files, changed_files_count=2)
+    assert [item["code"] for item in findings] == [
+        "harnessy.proof.github.protected_path_changed"
+    ]
+    assert "cannot be auto-accepted" in findings[0]["message"]
+
+
+def test_configured_protected_paths_extend_the_defaults() -> None:
+    files = [{"filename": "deploy/prod.tf", "previous_filename": None, "status": "modified"}]
+    assert _integrity_codes(changed_files=files) == []
+    extended = {**CONFIGURATION, "protected_paths": ["deploy/**"]}
+    assert _integrity_codes(extended, changed_files=files) == [
+        "harnessy.proof.github.protected_path_changed"
+    ]
+    nested = [{"filename": "src/.github/x", "previous_filename": None, "status": "added"}]
+    assert _integrity_codes(changed_files=nested) == []
+
+
+def test_protected_path_finding_lists_a_bounded_number_of_paths() -> None:
+    files = [
+        {"filename": f".github/workflows/w{index}.yml", "previous_filename": None, "status": "added"}
+        for index in range(20)
+    ]
+    findings = _integrity(changed_files=files, changed_files_count=20)
+    assert len(findings) == 1
+    assert "and 15 more" in findings[0]["message"]
+
+
+@pytest.mark.parametrize(
+    "reviews",
+    [
+        [],
+        [_review(61, "APPROVED", commit="1" * 40)],
+        [_review(61, "APPROVED"), _review(62, "CHANGES_REQUESTED")],
+        [_review(61, "APPROVED"), _review(62, "DISMISSED")],
+        [_review(61, "APPROVED", type="Bot", login="ci-bot[bot]")],
+        [_review(61, "APPROVED", login="agent-bot", id=501)],
+        [_review(61, "APPROVED", login="Agent-Bot", id=999)],
+        [_review(61, "COMMENTED")],
+        [{**_review(61, "APPROVED"), "reviewer": None}],
+    ],
+    ids=(
+        "no-review",
+        "stale-approval-on-old-commit",
+        "approval-then-changes-requested",
+        "approval-then-dismissed",
+        "bot-approval",
+        "author-self-approval",
+        "author-login-different-case",
+        "comment-only",
+        "deleted-reviewer",
+    ),
+)
+def test_missing_independent_approval_on_head_commit_is_an_error(reviews: list) -> None:
+    assert _integrity_codes(reviews=reviews) == [
+        "harnessy.proof.github.independent_approval_missing"
+    ]
+
+
+def test_latest_decisive_review_wins_and_comments_do_not_cancel() -> None:
+    reviews = [
+        _review(61, "CHANGES_REQUESTED"),
+        _review(62, "APPROVED"),
+        _review(63, "COMMENTED"),
+    ]
+    assert _integrity_codes(reviews=reviews) == []
+    out_of_order = [_review(70, "APPROVED"), _review(65, "CHANGES_REQUESTED")]
+    assert _integrity_codes(reviews=out_of_order) == []
+
+
+def test_required_independent_approvals_is_configurable() -> None:
+    two = {**CONFIGURATION, "required_independent_approvals": 2}
+    assert _integrity_codes(two) == ["harnessy.proof.github.independent_approval_missing"]
+    reviews = [_review(61, "APPROVED"), _review(62, "APPROVED", login="second", id=8)]
+    assert _integrity_codes(two, reviews=reviews) == []
+
+
+def test_operator_only_approval_is_a_non_blocking_warning() -> None:
+    operators = {**CONFIGURATION, "operator_logins": ["Reviewer"]}
+    findings = _integrity(operators)
+    assert [(item["code"], item["level"]) for item in findings] == [
+        ("harnessy.operator_approved", "warning")
+    ]
+    result = ExternalCheckerExecutionResult.model_validate_json(
+        json.dumps(checker.build_result(_request(), findings))
+    )
+    assert result.verdict == "passed"
+    reviews = [_review(61, "APPROVED"), _review(62, "APPROVED", login="independent", id=8)]
+    assert _integrity_codes(operators, reviews=reviews) == []
+
+
+@pytest.mark.parametrize(
+    "missing",
+    ["author", "reviews", "changed_files", "changed_files_count"],
+)
+def test_integrity_rules_fail_closed_without_their_facts(missing: str) -> None:
+    assert _integrity_codes(**{missing: ...}) == ["harnessy.proof.github.facts_invalid"]
+
+
+def test_file_count_mismatch_and_unlabelled_check_binding_fail_closed() -> None:
+    assert _integrity_codes(changed_files_count=2) == ["harnessy.proof.github.facts_invalid"]
+    check = {key: value for key, value in FACTS["required_checks"][0].items() if key != "app_bound"}
+    assert _integrity_codes(required_checks=[check]) == ["harnessy.proof.github.facts_invalid"]
+
+
+def test_unconfigured_facts_still_apply_default_integrity_rules() -> None:
+    files = [{"filename": ".github/ci.yml", "previous_filename": None, "status": "added"}]
+    assert _integrity_codes({}, changed_files=files, reviews=[]) == [
+        "harnessy.proof.github.protected_path_changed",
+        "harnessy.proof.github.independent_approval_missing",
+    ]
+
+
+@pytest.mark.parametrize(
+    "configuration",
+    [
+        {**CONFIGURATION, "allow_unbound_required_checks": "yes"},
+        {**CONFIGURATION, "protected_paths": ".github/**"},
+        {**CONFIGURATION, "protected_paths": [""]},
+        {**CONFIGURATION, "required_independent_approvals": 0},
+        {**CONFIGURATION, "required_independent_approvals": True},
+        {**CONFIGURATION, "operator_logins": [1]},
+    ],
+)
+def test_invalid_integrity_options_are_a_configuration_error(configuration: dict) -> None:
+    assert _compare(configuration=configuration) == ["harnessy.proof.github.configuration"]
+
+
+def test_registry_schema_accepts_integrity_options_only_in_comparison_mode() -> None:
+    post = ExternalCheckerRegistrySpec.model_validate(
+        publish_local.registry_spec("post_submit", "sha256:" + "d" * 64, "v2")
+    )
+    full = {
+        **CONFIGURATION,
+        "allow_unbound_required_checks": False,
+        "protected_paths": ["deploy/**"],
+        "required_independent_approvals": 2,
+        "operator_logins": ["julian"],
+    }
+    post.configuration_schema.validate_instance(full)
+    for value in (
+        {"operator_logins": ["julian"]},
+        {**CONFIGURATION, "required_independent_approvals": 0},
+        {**CONFIGURATION, "protected_paths": "deploy/**"},
+    ):
+        with pytest.raises(ExternalCheckerContractError):
+            post.configuration_schema.validate_instance(value)

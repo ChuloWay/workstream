@@ -50,7 +50,8 @@ def _hash(value: object) -> str:
 
 
 # PRE has no GitHub facts, so only shape mode is valid there. POST accepts shape
-# mode ({}) or GitHub comparison mode naming both repository and base branch.
+# mode ({}) or GitHub comparison mode naming both repository and base branch,
+# optionally with integrity options whose defaults are the safe ones.
 CONFIGURATION_SCHEMAS: dict[str, dict[str, object]] = {
     "pre_submit": {"type": "object", "additionalProperties": False, "maxProperties": 0},
     "post_submit": {
@@ -62,10 +63,31 @@ CONFIGURATION_SCHEMAS: dict[str, dict[str, object]] = {
                 "pattern": "^[A-Za-z0-9][A-Za-z0-9-]{0,38}/[A-Za-z0-9._-]{1,100}$",
             },
             "base_branch": {"type": "string", "minLength": 1, "maxLength": 255},
+            "allow_unbound_required_checks": {"type": "boolean"},
+            "protected_paths": {
+                "type": "array",
+                "maxItems": 100,
+                "items": {"type": "string", "minLength": 1, "maxLength": 1000},
+            },
+            "required_independent_approvals": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 10,
+            },
+            "operator_logins": {
+                "type": "array",
+                "maxItems": 100,
+                "items": {"type": "string", "minLength": 1, "maxLength": 100},
+            },
         },
+        # Every integrity option belongs to GitHub comparison mode.
         "dependentRequired": {
             "github_repository": ["base_branch"],
             "base_branch": ["github_repository"],
+            "allow_unbound_required_checks": ["github_repository"],
+            "protected_paths": ["github_repository"],
+            "required_independent_approvals": ["github_repository"],
+            "operator_logins": ["github_repository"],
         },
     },
 }

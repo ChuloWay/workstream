@@ -252,7 +252,15 @@ The POST binding configuration names the repository and base branch:
 ```
 
 The registry `configuration_schema` requires both keys together; the PRE
-schema accepts only `{}`. WorkStream, not the checker, reads the facts from
+schema accepts only `{}`. Comparison mode also accepts integrity options whose
+defaults are the safe ones:
+
+| Option | Default | Effect |
+|---|---|---|
+| `allow_unbound_required_checks` | `false` | When false, a required check that accepts any source is an error |
+| `protected_paths` | `[]` | Globs added to `.github/**`, `**/CODEOWNERS`, `.gitlab-ci.yml`, `.circleci/**` |
+| `required_independent_approvals` | `1` | Independent approvals needed on the head commit (1 to 10) |
+| `operator_logins` | `[]` | Logins whose approval alone adds the `harnessy.operator_approved` warning | WorkStream, not the checker, reads the facts from
 GitHub and places them in the request `input` under `github_facts`, so the
 request digest binds them:
 
@@ -267,7 +275,14 @@ request digest binds them:
     "merge_commit_sha": "<40 lowercase hex, or null unless merged>",
     "base_ref": "main",
     "head_sha": "<40 lowercase hex>",
-    "required_checks": [{"name": "backend", "app_id": 15368, "conclusion": "success"}],
+    "author": {"login": "agent-bot", "id": 501, "type": "Bot"},
+    "reviews": [{"id": 61, "reviewer": {"login": "reviewer", "id": 7, "type": "User"},
+                 "state": "APPROVED", "commit_id": "<head sha>", "submitted_at": "..."}],
+    "changed_files_count": 1,
+    "changed_files": [{"filename": "src/app.py", "previous_filename": null, "status": "modified"}],
+    "required_checks": [{"name": "backend", "app_id": 15368, "app_bound": true,
+                         "conclusion": "success", "check_run_app_id": 15368,
+                         "commit_status_judged": false}],
     "fetched_at": "2026-10-24T12:00:00Z",
     "responses": [{"request": "pull_request", "sha256": "sha256:<64 hex>"}]
   }
@@ -291,7 +306,16 @@ finding:
 | `required_check` | one finding per required check whose result is not `success` |
 | `facts_missing` | the configuration requires facts and the input has none |
 | `facts_invalid` | the facts do not have the `workstream.github_facts.v1` shape |
-| `configuration` | the configuration is neither `{}` nor both keys |
+| `configuration` | the configuration is neither `{}` nor both keys with valid options |
+| `unbound_required_check` | a required check accepts any source and `allow_unbound_required_checks` is false |
+| `protected_path_changed` | a changed file, or a rename's previous name, matches a protected glob; the work needs explicit human acceptance and cannot be auto-accepted |
+| `independent_approval_missing` | fewer than `required_independent_approvals` reviewers approve the head commit, counting each reviewer's latest approve, request-changes or dismissed review, and excluding the author and non-`User` accounts |
+
+When every qualifying approval comes from `operator_logins`, the checker adds a
+non-blocking `warning` finding with code `harnessy.operator_approved`: the
+work may earn points but may not be paid in money until an independent reviewer
+confirms it. The verdict does not change. These integrity rules also apply when
+facts arrive without configuration, using the defaults.
 
 Facts present without configuration are still compared, except repository and
 base branch. Until WorkStream's POST evaluation supplies facts (initiative

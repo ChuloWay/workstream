@@ -17,6 +17,13 @@ and reports one error finding per mismatch. Missing or malformed facts when the
 configuration requires them are an error finding, never a pass. Facts present
 without configuration are still compared, except the configured repository and
 base branch. The checker itself never uses the network or a credential.
+
+Integrity rules (owner decision 20) apply whenever facts are compared and fail
+closed: every required check must be bound to an App; a change to CI or
+repository configuration paths needs explicit human acceptance; the head commit
+needs an independent approval (latest decisive review, not the author, not a
+bot); and approval only by configured operators adds a non-blocking
+``harnessy.operator_approved`` warning.
 """
 
 from __future__ import annotations
@@ -104,21 +111,75 @@ def evaluate_proof(
     return findings
 
 
-def _github_configuration(configuration: object) -> tuple[str, str] | None | bool:
-    """Return (repository, base branch), None for shape mode, or False if invalid."""
+DEFAULT_PROTECTED_PATHS = (".github/**", "**/CODEOWNERS", ".gitlab-ci.yml", ".circleci/**")
+DEFAULT_REQUIRED_INDEPENDENT_APPROVALS = 1
+OPERATOR_APPROVED_CODE = "harnessy.operator_approved"
+_APPROVAL_STATES = frozenset({"APPROVED", "CHANGES_REQUESTED", "DISMISSED"})
+_MAX_LISTED_PATHS = 5
+_CONFIGURATION_KEYS = frozenset(
+    {
+        "github_repository",
+        "base_branch",
+        "allow_unbound_required_checks",
+        "protected_paths",
+        "required_independent_approvals",
+        "operator_logins",
+    }
+)
+
+
+def _strings(value: object) -> bool:
+    """Return whether a value is a list of non-empty strings."""
+    return isinstance(value, list) and all(isinstance(item, str) and item for item in value)
+
+
+def _github_configuration(configuration: object) -> dict | None | bool:
+    """Return the normalized GitHub configuration, None for shape mode, or False.
+
+    Integrity options take safe defaults: unbound required checks are errors,
+    the default protected paths apply, and one independent approval is needed.
+    """
     if not isinstance(configuration, dict) or not configuration:
         return None
     repository = configuration.get("github_repository")
     base_branch = configuration.get("base_branch")
+    allow_unbound = configuration.get("allow_unbound_required_checks", False)
+    protected = configuration.get("protected_paths", [])
+    approvals = configuration.get(
+        "required_independent_approvals", DEFAULT_REQUIRED_INDEPENDENT_APPROVALS
+    )
+    operators = configuration.get("operator_logins", [])
     if (
-        set(configuration) != {"github_repository", "base_branch"}
+        not set(configuration) <= _CONFIGURATION_KEYS
         or not isinstance(repository, str)
         or not isinstance(base_branch, str)
         or not repository
         or not base_branch
+        or not isinstance(allow_unbound, bool)
+        or not _strings(protected)
+        or type(approvals) is not int
+        or approvals < 1
+        or not _strings(operators)
     ):
         return False
-    return repository, base_branch
+    return {
+        "repository": repository,
+        "base_branch": base_branch,
+        "allow_unbound": allow_unbound,
+        "protected_paths": (*DEFAULT_PROTECTED_PATHS, *protected),
+        "required_approvals": approvals,
+        "operators": frozenset(login.casefold() for login in operators),
+    }
+
+
+def _actor(value: object) -> bool:
+    """Return whether a value has the GitHub actor fact shape."""
+    return (
+        isinstance(value, dict)
+        and isinstance(value.get("login"), str)
+        and type(value.get("id")) is int
+        and isinstance(value.get("type"), str)
+    )
 
 
 def _valid_facts(facts: object) -> bool:
@@ -127,6 +188,8 @@ def _valid_facts(facts: object) -> bool:
         return False
     checks = facts.get("required_checks")
     merge_sha = facts.get("merge_commit_sha")
+    reviews = facts.get("reviews")
+    files = facts.get("changed_files")
     return (
         isinstance(facts.get("repository"), str)
         and type(facts.get("pull_request_number")) is int
@@ -138,12 +201,35 @@ def _valid_facts(facts: object) -> bool:
         and isinstance(facts.get("base_ref"), str)
         and isinstance(facts.get("head_sha"), str)
         and _LOWER_SHA.fullmatch(facts["head_sha"]) is not None
+        and _actor(facts.get("author"))
+        and isinstance(reviews, list)
+        and all(
+            isinstance(review, dict)
+            and type(review.get("id")) is int
+            and (review.get("reviewer") is None or _actor(review.get("reviewer")))
+            and isinstance(review.get("state"), str)
+            and (review.get("commit_id") is None or isinstance(review.get("commit_id"), str))
+            for review in reviews
+        )
+        and isinstance(files, list)
+        and type(facts.get("changed_files_count")) is int
+        and facts["changed_files_count"] == len(files)
+        and all(
+            isinstance(item, dict)
+            and isinstance(item.get("filename"), str)
+            and (
+                item.get("previous_filename") is None
+                or isinstance(item.get("previous_filename"), str)
+            )
+            for item in files
+        )
         and isinstance(checks, list)
         and len(checks) > 0
         and all(
             isinstance(check, dict)
             and isinstance(check.get("name"), str)
             and isinstance(check.get("conclusion"), str)
+            and isinstance(check.get("app_bound"), bool)
             for check in checks
         )
     )
@@ -157,6 +243,129 @@ def _display(value: str) -> str:
     return printable
 
 
+def _glob_regex(pattern: str) -> re.Pattern[str]:
+    """Translate a path glob: ``**`` spans directories, ``*`` and ``?`` do not.
+
+    A leading ``**/`` also matches at the repository root.
+    """
+    parts = []
+    index = 0
+    while index < len(pattern):
+        if pattern.startswith("**/", index):
+            parts.append("(?:.*/)?")
+            index += 3
+        elif pattern.startswith("**", index):
+            parts.append(".*")
+            index += 2
+        elif pattern[index] == "*":
+            parts.append("[^/]*")
+            index += 1
+        elif pattern[index] == "?":
+            parts.append("[^/]")
+            index += 1
+        else:
+            parts.append(re.escape(pattern[index]))
+            index += 1
+    return re.compile("".join(parts))
+
+
+def protected_changes(files: list[dict], patterns: tuple[str, ...]) -> list[str]:
+    """Return changed paths, including rename sources, that match a protected glob."""
+    compiled = [_glob_regex(pattern) for pattern in patterns]
+    matched = []
+    for item in files:
+        for path in (item.get("previous_filename"), item["filename"]):
+            if path and any(regex.fullmatch(path) for regex in compiled):
+                matched.append(path)
+    return sorted(set(matched))
+
+
+def qualifying_approvals(facts: dict) -> list[str]:
+    """Return logins whose latest decisive review approves the head commit.
+
+    Each reviewer's latest ``APPROVED``, ``CHANGES_REQUESTED`` or ``DISMISSED``
+    review (by review id) decides; comments do not. The approval must name the
+    head SHA and come from a ``User`` who is not the pull request author.
+    """
+    author = facts["author"]
+    latest: dict[int, dict] = {}
+    for review in facts["reviews"]:
+        reviewer = review["reviewer"]
+        if reviewer is None or review["state"] not in _APPROVAL_STATES:
+            continue
+        current = latest.get(reviewer["id"])
+        if current is None or review["id"] > current["id"]:
+            latest[reviewer["id"]] = review
+    logins = []
+    for review in latest.values():
+        reviewer = review["reviewer"]
+        if (
+            review["state"] == "APPROVED"
+            and review["commit_id"] == facts["head_sha"]
+            and reviewer["type"] == "User"
+            and reviewer["id"] != author["id"]
+            and reviewer["login"].casefold() != author["login"].casefold()
+        ):
+            logins.append(reviewer["login"])
+    return sorted(logins)
+
+
+def _integrity_findings(facts: dict, configured: dict | None) -> list[dict[str, object]]:
+    """Integrity rules that apply whenever GitHub facts are compared."""
+    settings = configured or {
+        "allow_unbound": False,
+        "protected_paths": DEFAULT_PROTECTED_PATHS,
+        "required_approvals": DEFAULT_REQUIRED_INDEPENDENT_APPROVALS,
+        "operators": frozenset(),
+    }
+    findings = []
+    if not settings["allow_unbound"]:
+        for check in facts["required_checks"]:
+            if not check["app_bound"]:
+                findings.append(
+                    _finding(
+                        "github.unbound_required_check",
+                        f"Required check {_display(check['name'])} accepts a result from "
+                        "any source; it must be bound to the App that produces it.",
+                    )
+                )
+    protected = protected_changes(facts["changed_files"], settings["protected_paths"])
+    if protected:
+        listed = ", ".join(_display(path) for path in protected[:_MAX_LISTED_PATHS])
+        more = len(protected) - _MAX_LISTED_PATHS
+        suffix = f" and {more} more" if more > 0 else ""
+        findings.append(
+            _finding(
+                "github.protected_path_changed",
+                f"The pull request changes CI or repository configuration ({listed}{suffix}); "
+                "it requires explicit human acceptance and cannot be auto-accepted.",
+            )
+        )
+    approvals = qualifying_approvals(facts)
+    if len(approvals) < settings["required_approvals"]:
+        findings.append(
+            _finding(
+                "github.independent_approval_missing",
+                f"The head commit needs {settings['required_approvals']} approval(s) from "
+                "reviewers who are neither the author nor a bot; "
+                f"GitHub shows {len(approvals)}.",
+            )
+        )
+    if approvals and all(login.casefold() in settings["operators"] for login in approvals):
+        findings.append(
+            {
+                **_finding(
+                    "operator_approved",
+                    "Only operator accounts approved this work. It may earn points but may "
+                    "not be paid in money until an independent reviewer confirms it.",
+                    level="warning",
+                ),
+                "code": OPERATOR_APPROVED_CODE,
+            }
+        )
+    return findings
+
+
 def compare_github_facts(
     proof: dict, configuration: object, input_value: object
 ) -> list[dict[str, object]]:
@@ -166,7 +375,8 @@ def compare_github_facts(
         return [
             _finding(
                 "github.configuration",
-                "The checker configuration must name github_repository and base_branch.",
+                "The checker configuration must name github_repository and base_branch, "
+                "with only supported integrity options.",
             )
         ]
     facts = input_value.get(GITHUB_FACTS_INPUT_KEY) if isinstance(input_value, dict) else None
@@ -184,21 +394,20 @@ def compare_github_facts(
     findings = []
     repository = facts["repository"]
     if configured is not None:
-        expected_repository, expected_base = configured
-        if repository.casefold() != expected_repository.casefold():
+        if repository.casefold() != configured["repository"].casefold():
             findings.append(
                 _finding(
                     "github.repository",
                     f"The pull request belongs to {_display(repository)}, "
-                    f"not {_display(expected_repository)}.",
+                    f"not {_display(configured['repository'])}.",
                 )
             )
-        if facts["base_ref"] != expected_base:
+        if facts["base_ref"] != configured["base_branch"]:
             findings.append(
                 _finding(
                     "github.base_branch",
                     f"The pull request targets {_display(facts['base_ref'])}, "
-                    f"not {_display(expected_base)}.",
+                    f"not {_display(configured['base_branch'])}.",
                 )
             )
     pr_url = proof.get("pr_url")
@@ -251,7 +460,9 @@ def compare_github_facts(
                     "for the pull request head commit.",
                 )
             )
+    findings.extend(_integrity_findings(facts, configured))
     return findings
+
 
 
 def read_proof(input_root: Path) -> bytes | None:
