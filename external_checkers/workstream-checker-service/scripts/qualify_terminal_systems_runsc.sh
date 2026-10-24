@@ -18,17 +18,16 @@ readonly EVIDENCE_PREFIX="${WORKSTREAM_TS_RUNSC_EVIDENCE_PREFIX:?set a fresh abs
 readonly CHECKER_IMAGE="${WORKSTREAM_TS_RUNSC_CHECKER_IMAGE:-ws-terminal-systems-post:qualification}"
 readonly REGISTRY_IMAGE="${WORKSTREAM_TS_RUNSC_REGISTRY_IMAGE:-registry:2}"
 readonly INNER_ROOT="/workstream-state"
-# Host AF_UNIX paths must stay below 108 bytes even in a deep checkout.
-readonly SOCKET_ROOT="$(mktemp -d /tmp/ws493-sockets.XXXXXX)"
 readonly INNER_SOCKET_ROOT="/workstream-sockets"
 readonly COMPOSITION_ROOT="${SHARED_ROOT}/terminal-systems-runsc-composition"
 readonly INNER_COMPOSITION_ROOT="${INNER_ROOT}/terminal-systems-runsc-composition"
-readonly ORIGINAL_CONFIG="$(mktemp /tmp/ws493-runsc-daemon.XXXXXX.json)"
+SOCKET_ROOT=""
+ORIGINAL_CONFIG=""
 ORIGINAL_CONFIG_MODE=""
-readonly BUILD_MESSAGES="$(mktemp /tmp/ws493-runsc-build.XXXXXX.jsonl)"
-readonly LAUNCHER_MESSAGES="$(mktemp /tmp/ws493-runsc-launcher-build.XXXXXX.jsonl)"
-readonly LAUNCHER_PROGRAM_HEADERS="$(mktemp /tmp/ws493-runsc-launcher.XXXXXX.phdr)"
-readonly LAUNCHER_DYNAMIC="$(mktemp /tmp/ws493-runsc-launcher.XXXXXX.dynamic)"
+BUILD_MESSAGES=""
+LAUNCHER_MESSAGES=""
+LAUNCHER_PROGRAM_HEADERS=""
+LAUNCHER_DYNAMIC=""
 readonly METADATA="${EVIDENCE_PREFIX}.metadata.json"
 readonly RESULT_LOG="${EVIDENCE_PREFIX}.log"
 readonly EXIT_SIDECAR="${EVIDENCE_PREFIX}.exit"
@@ -166,11 +165,18 @@ cleanup() {
   if [[ -n "${PREPARED_IMAGE:-}" ]]; then
     remove_composition_root || status=1
   fi
-  rm -f -- "${ORIGINAL_CONFIG}" "${BUILD_MESSAGES}" "${LAUNCHER_MESSAGES}" \
-    "${LAUNCHER_PROGRAM_HEADERS}" "${LAUNCHER_DYNAMIC}"
+  for temporary in \
+    "${ORIGINAL_CONFIG}" "${BUILD_MESSAGES}" "${LAUNCHER_MESSAGES}" \
+    "${LAUNCHER_PROGRAM_HEADERS}" "${LAUNCHER_DYNAMIC}"; do
+    if [[ -n "${temporary}" ]]; then
+      rm -f -- "${temporary}"
+    fi
+  done
   # This unique private root is created by this invocation and contains only
   # the trusted service/proxy sockets, never submitted material.
-  rm -rf -- "${SOCKET_ROOT}" || status=1
+  if [[ -n "${SOCKET_ROOT}" ]]; then
+    rm -rf -- "${SOCKET_ROOT}" || status=1
+  fi
   source_guard || status=1
   if [[ "${status}" == 0 ]]; then
     validate_junit || status=1
@@ -386,6 +392,16 @@ exec 3>&1 4>&2
 exec >>"${RESULT_LOG}" 2>&1
 trap cleanup EXIT
 trap on_signal INT TERM
+# Host AF_UNIX paths must stay below 108 bytes even in a deep checkout. These
+# owned temporaries are allocated only after cleanup custody is installed.
+SOCKET_ROOT="$(mktemp -d /tmp/ws493-sockets.XXXXXX)"
+ORIGINAL_CONFIG="$(mktemp /tmp/ws493-runsc-daemon.XXXXXX.json)"
+BUILD_MESSAGES="$(mktemp /tmp/ws493-runsc-build.XXXXXX.jsonl)"
+LAUNCHER_MESSAGES="$(mktemp /tmp/ws493-runsc-launcher-build.XXXXXX.jsonl)"
+LAUNCHER_PROGRAM_HEADERS="$(mktemp /tmp/ws493-runsc-launcher.XXXXXX.phdr)"
+LAUNCHER_DYNAMIC="$(mktemp /tmp/ws493-runsc-launcher.XXXXXX.dynamic)"
+readonly SOCKET_ROOT ORIGINAL_CONFIG BUILD_MESSAGES LAUNCHER_MESSAGES
+readonly LAUNCHER_PROGRAM_HEADERS LAUNCHER_DYNAMIC
 source_guard
 
 [[ "${STATE_ROOT}" == /* ]]
