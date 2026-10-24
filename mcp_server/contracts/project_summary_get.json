@@ -1,0 +1,551 @@
+{
+  "canonical_sha256": "6618d63d6c584f699a3c0d1fad57a46007d8f511cee16a6f82f4cc03588f2377",
+  "components": {
+    "schemas": {
+      "ApiError": {
+        "additionalProperties": false,
+        "description": "Canonical machine-readable API error.",
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "correlation_id": {
+            "title": "Correlation Id",
+            "type": "string"
+          },
+          "details": {
+            "additionalProperties": true,
+            "title": "Details",
+            "type": "object"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "retryable": {
+            "title": "Retryable",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "code",
+          "message",
+          "details",
+          "correlation_id",
+          "retryable"
+        ],
+        "title": "ApiError",
+        "type": "object"
+      },
+      "ApiErrorResponse": {
+        "additionalProperties": false,
+        "description": "Canonical error plus additive legacy compatibility fields.",
+        "properties": {
+          "detail": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          },
+          "error": {
+            "$ref": "#/components/schemas/ApiError"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "title": "ApiErrorResponse",
+        "type": "object"
+      },
+      "AwardTotal": {
+        "additionalProperties": false,
+        "description": "The exact sum of the caller's immutable awards; not a payment or fulfillment claim.",
+        "properties": {
+          "instrument": {
+            "enum": [
+              "money",
+              "project_points"
+            ],
+            "title": "Instrument",
+            "type": "string"
+          },
+          "quantity": {
+            "pattern": "^[0-9]+(?:\\.[0-9]+)?$",
+            "title": "Quantity",
+            "type": "string"
+          },
+          "unit": {
+            "title": "Unit",
+            "type": "string"
+          }
+        },
+        "required": [
+          "instrument",
+          "unit",
+          "quantity"
+        ],
+        "title": "AwardTotal",
+        "type": "object"
+      },
+      "ContributorAssignmentCounts": {
+        "additionalProperties": false,
+        "properties": {
+          "active": {
+            "minimum": 0.0,
+            "title": "Active",
+            "type": "integer"
+          },
+          "closed": {
+            "minimum": 0.0,
+            "title": "Closed",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "active",
+          "closed"
+        ],
+        "title": "ContributorAssignmentCounts",
+        "type": "object"
+      },
+      "ContributorSubmissionCounts": {
+        "additionalProperties": false,
+        "properties": {
+          "accepted": {
+            "minimum": 0.0,
+            "title": "Accepted",
+            "type": "integer"
+          },
+          "evaluation_pending": {
+            "minimum": 0.0,
+            "title": "Evaluation Pending",
+            "type": "integer"
+          },
+          "needs_revision": {
+            "minimum": 0.0,
+            "title": "Needs Revision",
+            "type": "integer"
+          },
+          "rejected": {
+            "minimum": 0.0,
+            "title": "Rejected",
+            "type": "integer"
+          },
+          "review_pending": {
+            "minimum": 0.0,
+            "title": "Review Pending",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "evaluation_pending",
+          "review_pending",
+          "accepted",
+          "needs_revision",
+          "rejected"
+        ],
+        "title": "ContributorSubmissionCounts",
+        "type": "object"
+      },
+      "ProjectWorkSummary": {
+        "additionalProperties": false,
+        "description": "One project's work counts, acceptance rate, checker infrastructure failures and award totals.\n\n``acceptance_rate`` is accepted over decided attempts (accepted,\nneeds_revision, rejected) and null before any attempt is decided.\n``award_totals`` lists every instrument and unit total of the project's\nimmutable awards, empty when no award exists; it is not a payment claim.",
+        "properties": {
+          "acceptance_rate": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Acceptance Rate"
+          },
+          "assignments": {
+            "$ref": "#/components/schemas/ContributorAssignmentCounts"
+          },
+          "award_totals": {
+            "items": {
+              "$ref": "#/components/schemas/AwardTotal"
+            },
+            "title": "Award Totals",
+            "type": "array"
+          },
+          "checker_infrastructure_failures": {
+            "minimum": 0.0,
+            "title": "Checker Infrastructure Failures",
+            "type": "integer"
+          },
+          "project_id": {
+            "format": "uuid",
+            "title": "Project Id",
+            "type": "string"
+          },
+          "submissions": {
+            "$ref": "#/components/schemas/ContributorSubmissionCounts"
+          },
+          "tasks": {
+            "$ref": "#/components/schemas/TaskStatusCounts"
+          }
+        },
+        "required": [
+          "project_id",
+          "tasks",
+          "assignments",
+          "submissions",
+          "acceptance_rate",
+          "checker_infrastructure_failures",
+          "award_totals"
+        ],
+        "title": "ProjectWorkSummary",
+        "type": "object"
+      },
+      "TaskStatusCounts": {
+        "additionalProperties": false,
+        "description": "Tasks per stored lifecycle status; every status is present.",
+        "properties": {
+          "accepted": {
+            "minimum": 0.0,
+            "title": "Accepted",
+            "type": "integer"
+          },
+          "claimed": {
+            "minimum": 0.0,
+            "title": "Claimed",
+            "type": "integer"
+          },
+          "draft": {
+            "minimum": 0.0,
+            "title": "Draft",
+            "type": "integer"
+          },
+          "evaluation_pending": {
+            "minimum": 0.0,
+            "title": "Evaluation Pending",
+            "type": "integer"
+          },
+          "in_progress": {
+            "minimum": 0.0,
+            "title": "In Progress",
+            "type": "integer"
+          },
+          "needs_revision": {
+            "minimum": 0.0,
+            "title": "Needs Revision",
+            "type": "integer"
+          },
+          "ready": {
+            "minimum": 0.0,
+            "title": "Ready",
+            "type": "integer"
+          },
+          "review_pending": {
+            "minimum": 0.0,
+            "title": "Review Pending",
+            "type": "integer"
+          },
+          "screening": {
+            "minimum": 0.0,
+            "title": "Screening",
+            "type": "integer"
+          },
+          "submitted": {
+            "minimum": 0.0,
+            "title": "Submitted",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "draft",
+          "screening",
+          "ready",
+          "claimed",
+          "in_progress",
+          "submitted",
+          "evaluation_pending",
+          "review_pending",
+          "needs_revision",
+          "accepted"
+        ],
+        "title": "TaskStatusCounts",
+        "type": "object"
+      }
+    }
+  },
+  "operation": {
+    "description": "Task, claim and attempt counts, acceptance rate, checker infrastructure failures and award totals.\n\nAward totals list the project's earned awards per instrument and unit, empty when none exist.",
+    "operationId": "read_project_summary_api_v1_projects__project_id__summary_get",
+    "parameters": [
+      {
+        "in": "path",
+        "name": "project_id",
+        "required": true,
+        "schema": {
+          "format": "uuid",
+          "title": "Project Id",
+          "type": "string"
+        }
+      },
+      {
+        "in": "header",
+        "name": "X-Request-ID",
+        "required": false,
+        "schema": {
+          "format": "uuid",
+          "maxLength": 36,
+          "minLength": 36,
+          "type": "string"
+        }
+      },
+      {
+        "in": "header",
+        "name": "X-Correlation-ID",
+        "required": false,
+        "schema": {
+          "format": "uuid",
+          "maxLength": 36,
+          "minLength": 36,
+          "type": "string"
+        }
+      }
+    ],
+    "responses": {
+      "200": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ProjectWorkSummary"
+            }
+          }
+        },
+        "description": "Successful Response",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "400": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Invalid request.",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "401": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Authentication failed.",
+        "headers": {
+          "WWW-Authenticate": {
+            "schema": {
+              "type": "string"
+            }
+          },
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "403": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Permission denied.",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "404": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Not Found",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "422": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Unprocessable Entity",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "500": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Internal server error.",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      },
+      "503": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiErrorResponse"
+            }
+          }
+        },
+        "description": "Service Unavailable",
+        "headers": {
+          "X-Correlation-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "X-Request-ID": {
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "security": [
+      {
+        "HTTPBearer": []
+      }
+    ],
+    "summary": "Read Project Summary",
+    "tags": [
+      "projects"
+    ],
+    "x-workstream-action-id": "project.summary.read"
+  },
+  "source": {
+    "method": "GET",
+    "openapi_version": "3.1.0",
+    "path": "/api/v1/projects/{project_id}/summary",
+    "repository_sha": "bb39ac10aed24e3484f3155706f7a8902ef97694"
+  }
+}

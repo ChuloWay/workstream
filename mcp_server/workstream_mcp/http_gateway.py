@@ -18,12 +18,14 @@ from workstream_mcp.schemas import (
     actor_lifecycle_output_validator,
     admin_grant_output_validator,
     authorization_context_output_validator,
+    contribution_policy_output_validator,
     guide_output_validator,
     policy_output_validator,
     profile_output_validator,
     profile_update_output_validator,
     project_grant_output_validator,
     project_output_validator,
+    workspace_read_output_validator,
 )
 
 _SAFE_VALUE = re.compile(
@@ -62,6 +64,10 @@ _PUBLIC_ERROR_CODES = frozenset(
         "policy_precondition_failed",
         "policy_precondition_invalid",
         "authorization_handle_invalid",
+        "contribution_export_invalid",
+        "contribution_policy_conflict",
+        "contribution_policy_not_found",
+        "contribution_policy_storage_unavailable",
         "resource_guard_denied",
         "resource_not_found",
         "rate_limit_exceeded",
@@ -110,6 +116,21 @@ ACTOR_LIFECYCLE_MUTATIONS = {
         "identity_link_id",
         "actor_identity_link",
     ),
+}
+WORKSPACE_READ_PATHS = {
+    "actor_projects_list": "/api/v1/actors/me/projects",
+    "actor_assignments_list": "/api/v1/actors/me/assignments",
+    "actor_submissions_list": "/api/v1/actors/me/submissions",
+    "actor_summary_get": "/api/v1/actors/me/summary",
+    "contributions_list": "/api/v1/actors/me/contributions",
+    "project_contributions_export": "/api/v1/projects/{project_id}/contributions/export",
+    "project_submissions_list": "/api/v1/projects/{project_id}/submissions",
+    "project_assignments_list": "/api/v1/projects/{project_id}/assignments",
+    "project_summary_get": "/api/v1/projects/{project_id}/summary",
+    "project_task_import_batches_list": "/api/v1/projects/{project_id}/task-import-batches",
+    "project_preparations_list": "/api/v1/projects/{project_id}/submission-bundle-preparations",
+    "active_guide_get": "/api/v1/projects/{project_id}/active-guide",
+    "ready_tasks_list": "/api/v1/projects/{project_id}/tasks/ready",
 }
 
 
@@ -537,6 +558,256 @@ class WorkstreamGateway:
                 )
             )
         return outcome
+
+    async def workspace_read(
+        self,
+        name: str,
+        bearer: str,
+        arguments: dict[str, Any],
+        correlation_id: str | None = None,
+    ) -> GatewayResult:
+        """Dispatch one fixed contributor/project read with JSON-only exports."""
+        path = WORKSPACE_READ_PATHS[name]
+        project_id_value = arguments.get("project_id")
+        project_id = project_id_value if isinstance(project_id_value, str) else None
+        if "{project_id}" in path:
+            if project_id is None:  # guarded by the tool schema
+                return self._invalid_read_response(correlation_id)
+            path = path.format(project_id=quote(project_id, safe=""))
+        params = {
+            key: str(value)
+            for key, value in arguments.items()
+            if key != "project_id"
+        }
+        if name in {"contributions_list", "project_contributions_export"}:
+            params["format"] = "json"
+            if name == "contributions_list" and project_id is not None:
+                params["project_id"] = project_id
+        elif name.startswith("actor_") and project_id is not None:
+            params["project_id"] = project_id
+        outcome = await self._request(
+            "GET",
+            path,
+            bearer,
+            workspace_read_output_validator(name),
+            correlation_id,
+            params=params or None,
+        )
+        if outcome.failure is not None or project_id is None:
+            return outcome
+        data = outcome.data or {}
+        if not self._workspace_project_matches(name, data, project_id):
+            return self._invalid_read_response(correlation_id)
+        return outcome
+
+    @classmethod
+    def _workspace_project_matches(
+        cls, name: str, data: dict[str, Any], project_id: str
+    ) -> bool:
+        candidates: list[dict[str, Any]] = [data]
+        items = data.get("items")
+        if isinstance(items, list):
+            candidates.extend(item for item in items if isinstance(item, dict))
+        if name == "active_guide_get":
+            candidates.extend(item for item in data.values() if isinstance(item, dict))
+        return all(
+            "project_id" not in item
+            or cls._same_uuid(item["project_id"], project_id)
+            for item in candidates
+        )
+
+    async def contribution_policy_read(
+        self,
+        name: str,
+        bearer: str,
+        arguments: dict[str, Any],
+        correlation_id: str | None = None,
+    ) -> GatewayResult:
+        """Read one fixed contribution-policy projection and bind selectors."""
+        project_id = arguments["project_id"]
+        base = f"/api/v1/projects/{quote(project_id, safe='')}/contribution-policies"
+        if name == "contribution_policies_list":
+            path = base
+        elif name == "contribution_policy_current_get":
+            path = f"{base}/current"
+        else:
+            path = f"{base}/{quote(arguments['policy_id'], safe='')}"
+        params = {
+            key: str(value)
+            for key, value in arguments.items()
+            if key not in {"project_id", "policy_id"}
+        }
+        outcome = await self._request(
+            "GET",
+            path,
+            bearer,
+            contribution_policy_output_validator(name),
+            correlation_id,
+            params=params or None,
+        )
+        if outcome.failure is not None:
+            return outcome
+        data = outcome.data or {}
+        items = data.get("items") if name == "contribution_policies_list" else [data]
+        if not isinstance(items, list) or any(
+            not isinstance(item, dict)
+            or not self._same_uuid(item.get("project_id"), project_id)
+            or (
+                "policy_id" in arguments
+                and not self._same_uuid(
+                    item.get("contribution_policy_id"), arguments["policy_id"]
+                )
+            )
+            or (
+                "version_id" in arguments
+                and not self._same_uuid(
+                    item.get("contribution_policy_version_id"), arguments["version_id"]
+                )
+            )
+            for item in items
+        ):
+            return self._invalid_read_response(correlation_id)
+        if name == "contribution_policies_list" and not self._unique_uuid_field(
+            items, "contribution_policy_version_id"
+        ):
+            return self._invalid_read_response(correlation_id)
+        if name == "contribution_policy_current_get":
+            published = data.get("current_published_version_id")
+            draft = data.get("open_draft_version_id")
+            if (published is None and draft is None) or (
+                published is not None
+                and draft is not None
+                and self._same_uuid(published, str(draft))
+            ):
+                return self._invalid_read_response(correlation_id)
+        return outcome
+
+    async def contribution_policy_mutation(
+        self,
+        name: str,
+        bearer: str,
+        arguments: dict[str, Any],
+        correlation_id: str | None = None,
+    ) -> GatewayResult:
+        """Mutate one contribution policy and bind its immutable receipt."""
+        project_id = arguments["project_id"]
+        base = f"/api/v1/projects/{quote(project_id, safe='')}/contribution-policies"
+        if name == "contribution_policy_create":
+            method, path, expected_status = "POST", f"{base}/drafts", 201
+        else:
+            policy_id = arguments["policy_id"]
+            version_id = arguments["version_id"]
+            path = (
+                f"{base}/{quote(policy_id, safe='')}/versions/"
+                f"{quote(version_id, safe='')}"
+            )
+            method, expected_status = "PUT", 200
+            if name == "contribution_policy_publish":
+                method, path = "POST", f"{path}/publication"
+            elif name == "contribution_policy_retire":
+                method, path = "POST", f"{path}/retirement"
+        outcome = await self._request(
+            method,
+            path,
+            bearer,
+            contribution_policy_output_validator(name),
+            correlation_id,
+            json_body=arguments["body"],
+            idempotency_key=arguments["idempotency_key"],
+            expected_status=expected_status,
+            mutation=True,
+        )
+        if outcome.failure is not None:
+            return outcome
+        data = outcome.data or {}
+        matches = (
+            self._same_uuid(data.get("operation_id"), arguments["idempotency_key"])
+            and self._same_uuid(data.get("project_id"), project_id)
+        )
+        if name != "contribution_policy_create":
+            matches = (
+                matches
+                and self._same_uuid(data.get("contribution_policy_id"), arguments["policy_id"])
+                and self._same_uuid(
+                    data.get("contribution_policy_version_id"), arguments["version_id"]
+                )
+            )
+        matches = matches and self._contribution_policy_transition_matches(name, data)
+        if not matches:
+            return GatewayResult(
+                failure=SafeFailure(
+                    "workstream_execution_uncertain",
+                    status=502,
+                    correlation_id=correlation_id,
+                )
+            )
+        return outcome
+
+    @classmethod
+    def _contribution_policy_transition_matches(
+        cls, name: str, data: dict[str, Any]
+    ) -> bool:
+        version_number = data.get("version_number")
+        digest = data.get("request_digest")
+        prior_id = data.get("prior_current_version_id")
+        prior_number = data.get("prior_current_version_number")
+        if (
+            not isinstance(version_number, int)
+            or isinstance(version_number, bool)
+            or version_number < 1
+            or not isinstance(digest, str)
+            or re.fullmatch(r"sha256:[0-9a-f]{64}", digest) is None
+            or (prior_id is None) != (prior_number is None)
+            or (
+                prior_id is not None
+                and (
+                    not cls._same_uuid(prior_id, str(prior_id))
+                    or not isinstance(prior_number, int)
+                    or isinstance(prior_number, bool)
+                    or prior_number < 1
+                )
+            )
+        ):
+            return False
+        from_policy = data.get("from_policy_status")
+        from_version = data.get("from_version_status")
+        to_policy = data.get("to_policy_status")
+        to_version = data.get("to_version_status")
+        event = data.get("event_type")
+        if name == "contribution_policy_create":
+            return event == "draft_created" and from_version is None and to_version == "draft" and (
+                (from_policy is None and to_policy == "draft" and prior_id is None)
+                or (from_policy == "active" and to_policy == "active" and prior_id is not None)
+            )
+        consistent_prior = (from_policy == "draft" and prior_id is None) or (
+            from_policy == "active" and prior_id is not None
+        )
+        if name == "contribution_policy_update":
+            return (
+                event == "draft_updated"
+                and consistent_prior
+                and from_version == "draft"
+                and to_version == "draft"
+                and to_policy == from_policy
+            )
+        if name == "contribution_policy_publish":
+            return (
+                event == "published"
+                and consistent_prior
+                and from_version == "draft"
+                and to_version == "published"
+                and to_policy == "active"
+            )
+        return (
+            event == "retired"
+            and from_policy == "active"
+            and to_policy == "retired"
+            and from_version == "published"
+            and to_version == "retired"
+            and prior_id is not None
+            and cls._same_uuid(prior_id, str(data.get("contribution_policy_version_id")))
+            and prior_number == version_number
+        )
 
     @classmethod
     def _policy_lineage_matches(cls, data: dict[str, Any], selector: str) -> bool:
