@@ -160,6 +160,7 @@ class HostedReleaseConfigTests(unittest.TestCase):
             self.assertEqual(service["restart"], "on-failure:5")
             self.assertTrue(service["healthcheck"]["test"])
         for name in preflight.PROOF_SERVICES:
+            self.assertEqual(services[name]["pull_policy"], "never")
             self.assertEqual(services[name]["profiles"], ["aws-proof"])
             self.assertEqual(services[name]["command"], ["/bin/false"])
         for name in preflight.ROLE_SECRET_FILE_KEYS:
@@ -747,6 +748,46 @@ class HostedReleaseConfigTests(unittest.TestCase):
         self.assertTrue(
             all(call.kwargs.get("timeout", 0) > 0 for call in run.call_args_list)
         )
+
+    def test_proof_services_reject_registry_dependent_pull_policies(self) -> None:
+        rendered = preflight.render_compose(self.environment_path, self.environment)
+        for name in preflight.PROOF_SERVICES:
+            for policy in (None, "always", "missing"):
+                with self.subTest(service=name, policy=policy):
+                    altered = copy.deepcopy(rendered)
+                    if policy is None:
+                        altered["services"][name].pop("pull_policy")
+                    else:
+                        altered["services"][name]["pull_policy"] = policy
+                    with self.assertRaisesRegex(
+                        preflight.PreflightError, "cached release image without pulling"
+                    ):
+                        preflight.validate_compose(altered, self.environment)
+
+    def test_missing_cached_proof_image_stops_before_later_identities(self) -> None:
+        nonce = preflight.UUID("0199f68b-5dc2-7000-8000-000000000001")
+        calls: list[list[str]] = []
+
+        def missing_image_then_cleanup(command, **kwargs):
+            calls.append(command)
+            if command[:2] == ["docker", "compose"]:
+                return subprocess.CompletedProcess(command, 1)
+            return subprocess.CompletedProcess(command, 0)
+
+        with patch.object(
+            preflight.subprocess, "run", side_effect=missing_image_then_cleanup
+        ):
+            self.assertEqual(
+                preflight.run_proof_group(
+                    self.environment_path, self.environment, nonce
+                ),
+                1,
+            )
+        name = f"workstream-proof-{nonce.hex}-aws-proof-runtime"
+        self.assertEqual(len(calls), 2)
+        self.assertIn("aws-proof-runtime", calls[0])
+        self.assertEqual(calls[1], ["docker", "rm", "--force", name])
+        self.assertFalse(any("aws-proof-coordinate" in command for command in calls))
 
     def test_proof_group_timeout_cleans_exact_container_and_stops_sequence(
         self,
