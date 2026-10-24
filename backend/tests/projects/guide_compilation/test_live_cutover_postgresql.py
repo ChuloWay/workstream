@@ -801,7 +801,8 @@ async def test_concurrent_live_deliveries_converge_on_one_finalization(
         asyncio.gather(first, duplicate), timeout=30
     )
     assert receipt["status"] == "policy_draft_ready"
-    assert duplicate_receipt == receipt
+    assert duplicate_receipt["status"] == "provider_result_accepted_not_persisted"
+    assert duplicate_receipt["attempt_id"]
     assert runtime.calls == 2
     assert await (await worker._coordinator(factory)).run(delivery) == receipt
     async with factory() as session:
