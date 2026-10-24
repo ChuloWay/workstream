@@ -39,7 +39,7 @@ from tests.test_checker_output_storage import (
 
 pytestmark = pytest.mark.postgres_schema_contract
 
-_SCHEMA_0062_SHA256 = "482698a75dd54023f02dd1a6c86c14e39af34a8513adeb3d227501d9a4c14e13"
+_SCHEMA_0062_SHA256 = "d14a06c088aae0e8876bebb637a7b3fb0c19344f8cc4fdfd31aa2c1a47348593"
 _PROJECTION_SHIMS = (
     "alter table checker_runs add column input_context_custody jsonb",
     "alter table artifact_put_attempts add column checker_trial_evidence_id uuid",
