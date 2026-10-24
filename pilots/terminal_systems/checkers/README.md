@@ -4,6 +4,25 @@ These are project-owned images. They use the standard request/result protocol
 and verified read-only material mounted at `/work/input`; they do not import
 Workstream, modify the shared Rust service, or depend on the five initial tasks.
 
+## How the parts fit together
+
+The project guide defines the work. Setup proposes PRE and POST check
+specifications from that guide; engineering implements the project images and
+the PM approves their policy bindings. Setup does not decide revision limits or
+task lifecycle rules.
+
+Workstream supplies shared budgeted model access and stores verified evidence.
+The external Rust service supplies isolated execution. This project's Python
+POST image decides what to inspect and how to assess it against the project
+requirements. A different project supplies its own rules and image.
+
+Here, a **trial** is one isolated execution of submitted code, such as a build
+or test run. The `trial_*` modules implement its transport, limits, execution,
+and evidence handling; they are not separate services or product lifecycles.
+`post/qualification/runtime_package` is an engineering test fixture, not the
+real project guide or a live pilot task. The runtime qualification limits below
+remain distinct from a completed live project journey.
+
 ## Source specification
 
 [`setup-handoff.json`](setup-handoff.json) retains the actual final reviewed
