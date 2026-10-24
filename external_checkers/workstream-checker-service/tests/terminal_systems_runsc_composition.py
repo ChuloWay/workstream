@@ -725,8 +725,8 @@ async def test_production_service_executes_project_trial_under_runsc_with_real_c
                 socket_path=proxy_path,
                 handler=model_proxy.handle,
                 trial_handler=trial_proxy.handle,
-                read_timeout_seconds=700.0,
-                write_timeout_seconds=700.0,
+                read_timeout_seconds=60.0,
+                write_timeout_seconds=60.0,
                 shutdown_timeout_seconds=30.0,
             ):
                 command = [

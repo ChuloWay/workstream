@@ -97,15 +97,16 @@ def _trial_fixture():
 
     def catalog_for(request):
         return PinnedTrialExecutionCatalog(
-            (
+            tuple(
                 TrialAuthorityBinding(
-                    registry_entry_id=request.registry.registry_entry_id,
-                    registry_entry_digest=request.registry.entry_digest,
-                    checker_image_digest=request.registry.image_digest,
-                    configuration_sha256=request.configuration_sha256,
+                    registry_entry_id=entry.registry.registry_entry_id,
+                    registry_entry_digest=entry.registry.entry_digest,
+                    checker_image_digest=entry.registry.image_digest,
+                    configuration_sha256=entry.configuration_sha256,
                     profile=selected,
                     projection=projected,
-                ),
+                )
+                for entry in request.policy.entries
             )
         )
 
