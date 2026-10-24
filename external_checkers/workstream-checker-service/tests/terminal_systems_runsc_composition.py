@@ -74,6 +74,7 @@ from tests.checkers.execution.support import (
 )
 from tests.checkers.external.support import post_registry_spec
 from tests.checkers.external.test_trial_evidence import _owner
+from tests.checkers.external.test_revision_materialization import DiagnosticMaterialization
 from tests.checkers.external.test_trial_policy import trial_specification
 from tests.checkers_model_calls.test_composed_execution import (
     model_review_specification,
@@ -573,6 +574,7 @@ async def test_production_service_executes_project_trial_under_runsc_with_real_c
             reservation_ttl_seconds=750.0,
         ),
     ) as h:
+        h.service = DiagnosticMaterialization(h.service)
         await provision_post_submit_service(h.factory, ServiceIdentity.ARTIFACT_CHECKER_OUTPUT)
         assert len(h.request.policy.entries) == 2
         assert {
@@ -777,7 +779,7 @@ async def test_production_service_executes_project_trial_under_runsc_with_real_c
                     ),
                 )
                 result = await executor.evaluate_post_submission(h.request)
-            assert result.outcome == "completed"
+            assert result.outcome == "completed", result
             assert len(result.execution.external_members) == 2
             assert {
                 member.requirement_id: (member.result.outcome, member.result.verdict)
@@ -891,5 +893,8 @@ async def test_production_service_executes_project_trial_under_runsc_with_real_c
                     service.kill()
                     service.wait(timeout=15)
             service_log.close()
+            diagnostic = (root / "service.stderr").read_text(encoding="utf-8")
+            if diagnostic:
+                print("Rust service diagnostic:", diagnostic[-16_384:])
             if service is not None and service.returncode not in {0, -15, 143}:
                 raise AssertionError((root / "service.stderr").read_text(encoding="utf-8"))
