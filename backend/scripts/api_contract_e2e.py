@@ -1552,9 +1552,34 @@ async def exercise_api_contract(base_url: str, env: dict[str, str]) -> None:
             idempotency_key=str(uuid4()),
         )
         assert patched_guide["change_summary"] == "Patched before activation through real API"
+        setup_operator_token = issue_flow_token(
+            f"real-api-setup-operator-{run_id}",
+            [],
+            issuer=flow_issuer,
+            audience=flow_audience,
+            secret=flow_secret,
+        )
+        setup_operator = await request_json(
+            client, "GET", "/api/v1/actors/me", setup_operator_token,
+        )
+        await request_json(
+            client,
+            "POST",
+            "/api/v1/admin-role-grants",
+            manager_token,
+            {
+                "target_actor_profile_id": setup_operator["actor_profile_id"],
+                "role": "operator",
+                "scope_type": "system",
+                "scope_project_id": None,
+                "reason": "Provision the scripted setup model profile",
+            },
+            201,
+            idempotency_key=str(uuid4()),
+        )
         from guide_compilation_e2e import publish_scripted_model_profile
         published_model_profile = await publish_scripted_model_profile(
-            client, manager_token, project["id"],
+            client, setup_operator_token, project["id"],
         )
         assert published_model_profile["project_id"] == project["id"]
         assert published_model_profile["spec"]["profile_version"] == 1
