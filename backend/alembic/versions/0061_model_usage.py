@@ -322,7 +322,6 @@ CREATE TABLE public.checker_model_invocation_grant_calls (
  request_sha256 varchar(71) NOT NULL,
  bound_at timestamptz DEFAULT clock_timestamp() NOT NULL,
  CONSTRAINT pk_checker_model_invocation_grant_calls PRIMARY KEY(grant_id,call_index),
- CONSTRAINT uq_checker_model_invocation_grant_calls_attempt UNIQUE(attempt_id),
  CONSTRAINT ck_checker_model_invocation_grant_calls_facts CHECK (
   call_index BETWEEN 0 AND 99 AND request_sha256 ~ '^sha256:[0-9a-f]{64}$'),
  CONSTRAINT fk_checker_model_invocation_grant_calls_grant FOREIGN KEY(grant_id)
@@ -1951,10 +1950,21 @@ DECLARE prepare_authority public.audit_events%ROWTYPE;
 DECLARE dispatch_authority public.audit_events%ROWTYPE;
 DECLARE observation_authority public.audit_events%ROWTYPE;
 DECLARE terminal_authority public.audit_events%ROWTYPE;
+DECLARE terminal_actor public.actor_profiles%ROWTYPE;
 DECLARE prepare_action text;
 DECLARE dispatch_action text;
 DECLARE observation_action text;
 DECLARE terminal_action text;
+DECLARE terminal_service text;
+DECLARE terminal_resource_type text;
+DECLARE terminal_slot jsonb;
+DECLARE terminal_effect jsonb;
+DECLARE terminal_evidence jsonb;
+DECLARE terminal_usage jsonb;
+DECLARE terminal_digest varchar;
+DECLARE terminal_facts jsonb;
+DECLARE terminal_resource_facts jsonb;
+DECLARE terminal_resource_digest varchar;
 BEGIN
  IF TG_OP='DELETE' THEN
   RAISE EXCEPTION 'checker model call attempts cannot be deleted' USING ERRCODE='55000';
@@ -2032,6 +2042,88 @@ BEGIN
    profile.uncached_input_rate::numeric + NEW.cached_input_tokens::numeric *
    profile.cached_input_rate::numeric + NEW.output_tokens::numeric *
    profile.output_rate::numeric;
+ END IF;
+ IF NEW.state IN ('completed','known_failed','known_no_effect') THEN
+  terminal_evidence:=CASE WHEN NEW.state IN ('completed','known_failed') THEN
+   pg_catalog.jsonb_build_object(
+    'binding_id',NEW.response_binding_id,'content_id',NEW.response_content_id,
+    'put_attempt_id',NEW.response_put_attempt_id,
+    'verification_receipt_id',NEW.response_verification_receipt_id,
+    'content_sha256',NEW.response_content_sha256,'byte_count',NEW.response_byte_count,
+    'media_type','application/json') ELSE NULL END;
+  terminal_usage:=CASE WHEN NEW.state IN ('completed','known_failed') THEN
+   pg_catalog.jsonb_build_object(
+    'input_tokens',NEW.input_tokens,'cached_input_tokens',NEW.cached_input_tokens,
+    'output_tokens',NEW.output_tokens,'reasoning_tokens',NEW.reasoning_tokens)
+   ELSE NULL END;
+  IF NEW.checker_slot_id IS NOT NULL THEN
+   terminal_service:='workstream.checker.post_submit';
+   terminal_resource_type:='checker_model_call';
+   terminal_slot:=pg_catalog.jsonb_build_object(
+    'project_id',slot.project_id,'assignment_id',slot.assignment_id,
+    'submission_id',slot.submission_id,'submission_version',slot.submission_version,
+    'requirement_id',slot.requirement_id,
+    'registry_entry_digest',slot.registry_entry_digest,
+    'configuration_sha256',slot.configuration_sha256,
+    'profile_id',slot.profile_id,'profile_version',slot.profile_version,
+    'profile_digest',slot.profile_digest,'slot_index',slot.slot_index);
+   terminal_effect:=pg_catalog.jsonb_build_object(
+    'project_id',slot.project_id,'task_id',slot.task_id,'slot_id',slot.id,
+    'slot_key',terminal_slot,'attempt_id',NEW.id,
+    'internal_call_request_id',NEW.internal_call_request_id);
+   IF NEW.state IN ('completed','known_failed') THEN
+    terminal_digest:=public.model_usage_json_digest(pg_catalog.jsonb_build_object(
+     'status',NEW.state,'provider_response_id',NEW.provider_response_id,
+     'provider_model_snapshot',profile.model_snapshot,
+     'response_evidence',terminal_evidence,'usage',terminal_usage));
+   END IF;
+  ELSE
+   terminal_service:='workstream.project.setup';
+   terminal_resource_type:='setup_model_usage';
+   terminal_slot:=pg_catalog.jsonb_build_object(
+    'compilation_attempt_id',setup_slot.compilation_attempt_id,
+    'project_id',setup_slot.project_id,'guide_id',setup_slot.guide_id,
+    'source_snapshot_id',setup_slot.source_snapshot_id,
+    'setup_run_id',setup_slot.setup_run_id,
+    'setup_generation',setup_slot.setup_generation,
+    'runtime_configuration_hash',setup_slot.runtime_configuration_hash,
+    'profile_id',setup_slot.profile_id,'profile_version',setup_slot.profile_version,
+    'profile_digest',setup_slot.profile_digest,'phase',setup_slot.phase,
+    'call_index',setup_slot.call_index);
+   terminal_effect:=pg_catalog.jsonb_build_object(
+    'project_id',setup_slot.project_id,'slot_id',setup_slot.id,
+    'slot_key',terminal_slot,'effect_id',NEW.id,
+    'internal_call_request_id',NEW.internal_call_request_id);
+   IF NEW.state IN ('completed','known_failed') THEN
+    terminal_digest:=public.model_usage_json_digest(pg_catalog.jsonb_build_object(
+     'status','completed','provider_response_id',NEW.provider_response_id,
+     'provider_model_snapshot',profile.model_snapshot,
+     'response_evidence',terminal_evidence,'usage',terminal_usage,
+     'usable',NEW.state='completed'));
+   END IF;
+  END IF;
+  IF NEW.state='known_no_effect' THEN
+   terminal_digest:=public.model_usage_json_digest(pg_catalog.jsonb_build_object(
+    'state','known_no_effect','proof_id',NEW.no_effect_proof_id,
+    'proof_digest',NEW.no_effect_proof_digest,
+    'observed_at',
+     to_char(NEW.no_effect_observed_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS') ||
+     CASE WHEN rtrim(to_char(NEW.no_effect_observed_at AT TIME ZONE 'UTC','US'),'0')=''
+      THEN '' ELSE '.' ||
+       rtrim(to_char(NEW.no_effect_observed_at AT TIME ZONE 'UTC','US'),'0') END || '+00:00'));
+  END IF;
+  terminal_facts:=pg_catalog.jsonb_build_object(
+   'effect',terminal_effect,'response_evidence',terminal_evidence,
+   'terminal_digest',terminal_digest);
+  terminal_resource_facts:=CASE WHEN terminal_evidence IS NULL THEN
+   terminal_facts-'response_evidence' ELSE terminal_facts END;
+  terminal_resource_digest:=public.model_usage_json_digest(
+   pg_catalog.jsonb_build_object('resource_context',pg_catalog.jsonb_build_object(
+    'resource_type',terminal_resource_type,'resource_id',NEW.id,
+    'scope_project_id',coalesce(slot.project_id,setup_slot.project_id),
+    'action_id',terminal_action,'facts',terminal_resource_facts,
+    'facts_digest',public.model_usage_json_digest(pg_catalog.jsonb_build_object(
+     'action',terminal_action,'facts',terminal_facts)))));
  END IF;
  IF TG_OP='INSERT' THEN
   IF NEW.attempt_number=1 THEN
@@ -2225,15 +2317,21 @@ BEGIN
  ELSIF NEW.state='completed' THEN
   SELECT * INTO terminal_authority FROM public.audit_events
    WHERE id=NEW.terminal_authorization_evidence_id FOR SHARE;
-  IF terminal_authority.id IS NULL OR
+  SELECT * INTO terminal_actor FROM public.actor_profiles
+   WHERE id=terminal_authority.actor_id::uuid FOR SHARE;
+  IF terminal_authority.id IS NULL OR terminal_actor.id IS NULL OR
      terminal_authority.event_domain IS DISTINCT FROM 'authority' OR
      terminal_authority.event_type IS DISTINCT FROM 'SensitiveAuthorizationAllowed' OR
      terminal_authority.actor_ref_kind IS DISTINCT FROM 'actor_profile' OR
      terminal_authority.action_id IS DISTINCT FROM terminal_action OR
      terminal_authority.permission_id IS DISTINCT FROM terminal_action OR
      terminal_authority.denial_code IS NOT NULL OR
-     coalesce(terminal_authority.after_facts->>'resource_context_digest','')
-      !~ '^sha256:[0-9a-f]{64}$' OR
+     terminal_authority.after_facts::jsonb IS DISTINCT FROM
+      pg_catalog.jsonb_build_object(
+       'allowed',true,'resource_context_digest',terminal_resource_digest) OR
+     terminal_actor.actor_kind IS DISTINCT FROM 'service' OR
+     terminal_actor.status IS DISTINCT FROM 'active' OR
+     terminal_actor.service_identity IS DISTINCT FROM terminal_service OR
      NEW.provider_response_id IS NULL OR NOT response_complete OR NOT usage_complete OR
 	    NEW.settled_nanodollars IS NULL OR NEW.settled_nanodollars::numeric<>exact_cost OR
      NEW.terminal_authorization_evidence_id IS NULL OR NEW.terminal_at IS NULL OR
@@ -2245,35 +2343,48 @@ BEGIN
  ELSIF NEW.state='known_failed' THEN
   SELECT * INTO terminal_authority FROM public.audit_events
    WHERE id=NEW.terminal_authorization_evidence_id FOR SHARE;
-  IF terminal_authority.id IS NULL OR
+  SELECT * INTO terminal_actor FROM public.actor_profiles
+   WHERE id=terminal_authority.actor_id::uuid FOR SHARE;
+  IF terminal_authority.id IS NULL OR terminal_actor.id IS NULL OR
      terminal_authority.event_domain IS DISTINCT FROM 'authority' OR
      terminal_authority.event_type IS DISTINCT FROM 'SensitiveAuthorizationAllowed' OR
      terminal_authority.actor_ref_kind IS DISTINCT FROM 'actor_profile' OR
      terminal_authority.action_id IS DISTINCT FROM terminal_action OR
      terminal_authority.permission_id IS DISTINCT FROM terminal_action OR
      terminal_authority.denial_code IS NOT NULL OR
-     coalesce(terminal_authority.after_facts->>'resource_context_digest','')
-      !~ '^sha256:[0-9a-f]{64}$' OR
+     terminal_authority.after_facts::jsonb IS DISTINCT FROM
+      pg_catalog.jsonb_build_object(
+       'allowed',true,'resource_context_digest',terminal_resource_digest) OR
+     terminal_actor.actor_kind IS DISTINCT FROM 'service' OR
+     terminal_actor.status IS DISTINCT FROM 'active' OR
+     terminal_actor.service_identity IS DISTINCT FROM terminal_service OR
      NEW.provider_response_id IS NULL OR NOT response_complete OR
      NEW.terminal_authorization_evidence_id IS NULL OR NEW.terminal_at IS NULL OR
      NEW.no_effect_proof_id IS NOT NULL OR
 	    NOT usage_complete OR NEW.settled_nanodollars IS NULL OR
 	    NEW.settled_nanodollars::numeric<>exact_cost OR
-     NEW.settlement_authorization_evidence_id IS NULL OR NEW.settled_at IS NULL THEN
+     NEW.settlement_authorization_evidence_id IS DISTINCT FROM
+      NEW.terminal_authorization_evidence_id OR NEW.settled_at IS NULL THEN
    RAISE EXCEPTION 'invalid known-failed checker model call' USING ERRCODE='23514';
   END IF;
  ELSIF NEW.state='known_no_effect' THEN
   SELECT * INTO terminal_authority FROM public.audit_events
    WHERE id=NEW.terminal_authorization_evidence_id FOR SHARE;
-  IF terminal_authority.id IS NULL OR
+  SELECT * INTO terminal_actor FROM public.actor_profiles
+   WHERE id=terminal_authority.actor_id::uuid FOR SHARE;
+  IF terminal_authority.id IS NULL OR terminal_actor.id IS NULL OR
      terminal_authority.event_domain IS DISTINCT FROM 'authority' OR
      terminal_authority.event_type IS DISTINCT FROM 'SensitiveAuthorizationAllowed' OR
      terminal_authority.actor_ref_kind IS DISTINCT FROM 'actor_profile' OR
      terminal_authority.action_id IS DISTINCT FROM terminal_action OR
      terminal_authority.permission_id IS DISTINCT FROM terminal_action OR
      terminal_authority.denial_code IS NOT NULL OR
-     coalesce(terminal_authority.after_facts->>'resource_context_digest','')
-      !~ '^sha256:[0-9a-f]{64}$' OR
+     terminal_authority.after_facts::jsonb IS DISTINCT FROM
+      pg_catalog.jsonb_build_object(
+       'allowed',true,'resource_context_digest',terminal_resource_digest) OR
+     terminal_actor.actor_kind IS DISTINCT FROM 'service' OR
+     terminal_actor.status IS DISTINCT FROM 'active' OR
+     terminal_actor.service_identity IS DISTINCT FROM terminal_service OR
      NEW.provider_response_id IS NOT NULL OR NEW.response_binding_id IS NOT NULL OR
      NEW.response_content_id IS NOT NULL OR NEW.response_put_attempt_id IS NOT NULL OR
      NEW.response_verification_receipt_id IS NOT NULL OR

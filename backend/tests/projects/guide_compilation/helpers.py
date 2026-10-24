@@ -457,8 +457,6 @@ async def _seed_artifact_custody(
     namespace=None,
     provider_object_ref: str | None = None,
 ) -> None:
-    from datetime import datetime, timezone
-
     namespace_values = {
         "id": "primary",
         "backend": namespace.backend if namespace else "local",
@@ -509,6 +507,13 @@ async def _seed_artifact_custody(
             integrity_state="unknown",
         )
     )
+    await _seed_verified_guide_put(session, values, namespace_values, provider_ref)
+
+
+async def _seed_verified_guide_put(session, values, namespace_values, provider_ref) -> None:
+    """Arrange the retained put, its terminal receipt and their exact linkage."""
+    from datetime import datetime, timezone
+
     await session.execute(
         insert(ArtifactPutAttempt).values(
             id=str(PUT_ATTEMPT_ID),

@@ -891,6 +891,39 @@ async def test_claim_and_scanner_denials_persist_without_art_side_effects(
         await engine.dispose()
 
 
+async def _pending_verification_with_service_authority(
+    session, settings, namespace, store, tmp_path, resolver, verifier,
+):
+    """Store exact model evidence and return its pending verification job."""
+    session.add_all((*resolver, *verifier))
+    await session.commit()
+    relationships = await seed_checker_output_relationships(session, namespace)
+    async with minted_source(
+        tmp_path / "atomic-verify", b'{"verified":true}', media_type="application/json"
+    ) as source:
+        _, _, _, admission = await _admit_checker_output(
+            session, settings, namespace, source, relationships=relationships)
+        assert (
+            await ArtifactStorageOrchestrator(
+                session,
+                store,
+                namespace,
+                settings,
+                _internal_authority(session, ServiceIdentity.ARTIFACT_PUT_RESOLVER),
+            ).execute_committed_put(
+                attempt_id=admission.attempt_id,
+                source=source,
+            )
+            == "stored_pending_verification"
+        )
+
+    job = (await session.scalars(select(ArtifactVerificationJob).where(
+        ArtifactVerificationJob.originating_put_attempt_id == str(admission.attempt_id)))).one()
+    job_id = UUID(job.id)
+    await session.rollback()
+    return job, job_id
+
+
 @pytest.mark.asyncio
 async def test_verification_claim_and_terminal_failures_roll_back_both_sides(
     isolated_database_env: str,
@@ -905,32 +938,9 @@ async def test_verification_claim_and_terminal_failures_roll_back_both_sides(
     bootstrap, store = _local_store(settings, namespace)
     try:
         async with factory() as session:
-            session.add_all((*resolver, *verifier))
-            await session.commit()
-            relationships = await seed_checker_output_relationships(session, namespace)
-            async with minted_source(
-                tmp_path / "atomic-verify", b'{"verified":true}', media_type="application/json"
-            ) as source:
-                _, _, _, admission = await _admit_checker_output(
-                    session, settings, namespace, source, relationships=relationships)
-                assert (
-                    await ArtifactStorageOrchestrator(
-                        session,
-                        store,
-                        namespace,
-                        settings,
-                        _internal_authority(session, ServiceIdentity.ARTIFACT_PUT_RESOLVER),
-                    ).execute_committed_put(
-                        attempt_id=admission.attempt_id,
-                        source=source,
-                    )
-                    == "stored_pending_verification"
-                )
-
-            job = (await session.scalars(select(ArtifactVerificationJob).where(
-                ArtifactVerificationJob.originating_put_attempt_id == str(admission.attempt_id)))).one()
-            job_id = UUID(job.id)
-            await session.rollback()
+            job, job_id = await _pending_verification_with_service_authority(
+                session, settings, namespace, store, tmp_path, resolver, verifier,
+            )
             claim = ArtifactStorageOrchestrator(
                 session,
                 store,

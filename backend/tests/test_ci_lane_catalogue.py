@@ -79,6 +79,7 @@ def test_checker_delivery_and_routing_preparation_partition_every_node_once() ->
         "tests/checkers_model_calls/test_model_call_transactions_postgresql.py",
         "tests/checkers_model_calls/test_model_invocation_grants_postgresql.py",
         "tests/checkers_model_calls/test_model_shared_setup_postgresql.py",
+        "tests/checkers_model_calls/test_model_terminal_authority_postgresql.py",
         "tests/checkers_model_calls/test_model_usage_inspection.py",
         "tests/checkers_model_calls/test_model_runtime.py",
         "tests/checkers_model_calls/test_proxy_orchestration.py",
@@ -298,8 +299,8 @@ def test_semantic_family_membership_has_an_independent_fingerprint() -> None:
             "c8a0538c251f77fc1893ed8aa76feff8fa2134cf8e9b5a049f32fbabd5226277",
         ),
         "project": (
-            241,
-            "62b178baa073eef99e3eaba4d89125b2595b2700c440a255eef10b2e89ef5361",
+            242,
+            "23586e063f500da8c05b7be9d7844a8955778a2f85676e96918d29cacd74b6ed",
         ),
         "task": (
             95,
@@ -371,9 +372,9 @@ def test_project_lane_ownership_has_an_independent_fingerprint() -> None:
         )
         + "\n"
     )
-    assert len(catalogue.PROJECT_PARTITIONED_MODULES) == 241
+    assert len(catalogue.PROJECT_PARTITIONED_MODULES) == 242
     assert hashlib.sha256(canonical.encode()).hexdigest() == (
-        "b88480ccdc0fbaa19a2f152d611b22f86e9990a6393023f5934498e4683acafd"
+        "80e0d22d598bed7b68fafb299594ee8c90212b748d1304c8e507551d52e3ee26"
     )
 
 

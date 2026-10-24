@@ -506,6 +506,7 @@ CHECKER_DELIVERY_MODULES = (
     "tests/checkers_model_calls/test_model_call_transactions_postgresql.py",
     "tests/checkers_model_calls/test_model_invocation_grants_postgresql.py",
     "tests/checkers_model_calls/test_model_shared_setup_postgresql.py",
+    "tests/checkers_model_calls/test_model_terminal_authority_postgresql.py",
     "tests/checkers_model_calls/test_model_usage_inspection.py",
     "tests/checkers_model_calls/test_model_runtime.py",
     "tests/checkers_model_calls/test_proxy_orchestration.py",

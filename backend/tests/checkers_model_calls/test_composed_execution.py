@@ -25,6 +25,8 @@ from app.interfaces.checker_model_provider import (
     CheckerModelCreateResult,
     CheckerModelObservation,
     CheckerModelProviderStatus,
+    CheckerModelRecoveryOutcome,
+    CheckerModelRecoveryResult,
     CheckerModelResponseReference,
     CheckerModelUsage,
 )
@@ -219,8 +221,22 @@ async def test_public_profile_to_private_model_call_and_completed_checker(
                     ),
                 )
 
-            async def recover(self, _):
-                raise AssertionError("completed call must use its retained ART response")
+            async def recover(self, reference):
+                # A concurrent callback can attach after the first dispatch has
+                # persisted its provider identity but before response ART is
+                # terminal. It may retrieve that exact effect, never create it
+                # again; completed replays still read retained ART directly.
+                return CheckerModelRecoveryResult(
+                    CheckerModelRecoveryOutcome.OBSERVED,
+                    reference,
+                    CheckerModelObservation(
+                        reference,
+                        profiles[0]["spec"]["model_snapshot"],
+                        CheckerModelProviderStatus.COMPLETED,
+                        '{"verdict":"passed"}',
+                        CheckerModelUsage(20, 5, 10, 2, 30),
+                    ),
+                )
 
         @asynccontextmanager
         async def provider(_):

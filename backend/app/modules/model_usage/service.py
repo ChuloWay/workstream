@@ -37,6 +37,7 @@ from app.modules.model_usage.api import (
     ProjectModelProfile,
     model_action_digest,
     model_retry_terminal_digest,
+    model_usage_instant,
     model_usage_cost,
 )
 from app.modules.model_usage.models import (
@@ -208,7 +209,7 @@ def _stored_retry_terminal_digest(row: ModelUsageEffect) -> str | None:
                 "state": row.state,
                 "proof_id": row.no_effect_proof_id,
                 "proof_digest": row.no_effect_proof_digest,
-                "observed_at": row.no_effect_observed_at.isoformat(),
+                "observed_at": model_usage_instant(row.no_effect_observed_at),
             }
         )
     if row.state == "known_failed":
