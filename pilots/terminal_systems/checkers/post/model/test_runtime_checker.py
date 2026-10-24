@@ -234,6 +234,7 @@ def trial_from_plan(
                 "outcome": outcome,
                 "exit_code": 0 if outcome == "succeeded" else 2,
                 "signal": None,
+                "export_outcome": "exported",
                 "stdout_sha256": DIGEST,
                 "stdout_byte_count": 0,
                 "stderr_sha256": DIGEST,

@@ -31,6 +31,7 @@ _OUTCOMES = frozenset(
         "disk_exceeded",
         "output_exceeded",
         "dependency_skipped",
+        "export_invalid",
     }
 )
 _FAILURE_CODES = frozenset(
@@ -133,7 +134,9 @@ def execute_trial(
     payload = _canonical(request)
     if not payload or len(payload) > maximum_frame_bytes:
         raise TrialTransportError("invalid_request")
-    factory = socket_factory or (lambda: socket.socket(socket.AF_UNIX, socket.SOCK_STREAM))
+    factory = socket_factory or (
+        lambda: socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    )
     stream = factory()
     try:
         stream.settimeout(float(timeout_seconds))
@@ -178,7 +181,10 @@ def _decode_response(raw: bytes) -> dict[str, object]:
         )
     except (UnicodeError, json.JSONDecodeError, TrialTransportError) as exc:
         raise TrialTransportError("invalid_response") from exc
-    if type(value) is not dict or value.get("protocol_version") != TRIAL_PROTOCOL_VERSION:
+    if (
+        type(value) is not dict
+        or value.get("protocol_version") != TRIAL_PROTOCOL_VERSION
+    ):
         raise TrialTransportError("invalid_response")
     return value
 
@@ -289,6 +295,7 @@ def _validate_operation(value: dict[str, object], *, build: bool) -> None:
         "outcome",
         "exit_code",
         "signal",
+        "export_outcome",
         "stdout_sha256",
         "stdout_byte_count",
         "stderr_sha256",
@@ -340,7 +347,13 @@ def _validate_operation(value: dict[str, object], *, build: bool) -> None:
         )
     ):
         raise TrialTransportError("invalid_response")
-    _validate_exit(outcome, value.get("exit_code"), value.get("signal"))
+    _validate_exit(
+        outcome,
+        value.get("exit_code"),
+        value.get("signal"),
+        value.get("export_outcome"),
+        build=build,
+    )
     if build:
         image = value["candidate_image_digest"]
         archive = value["candidate_archive_digest"]
@@ -371,15 +384,38 @@ def _validate_operation(value: dict[str, object], *, build: bool) -> None:
             raise TrialTransportError("invalid_response")
 
 
-def _validate_exit(outcome: object, exit_code: object, signal: object) -> None:
+def _validate_exit(
+    outcome: str,
+    exit_code: object,
+    signal: object,
+    export_outcome: object,
+    *,
+    build: bool,
+) -> None:
+    exited = type(exit_code) is int and 0 <= exit_code <= 255 and signal is None
+    signalled = exit_code is None and type(signal) is int and 1 <= signal <= 64
     if outcome == "succeeded":
-        valid = exit_code == 0 and type(exit_code) is int and signal is None
+        valid = exited and exit_code == 0 and export_outcome == "exported"
     elif outcome == "exit_nonzero":
-        valid = type(exit_code) is int and exit_code != 0 and signal is None
+        valid = (
+            exited
+            and exit_code != 0
+            and export_outcome == ("not_started" if build else "exported")
+        )
+    elif outcome == "signalled":
+        valid = signalled and export_outcome == ("not_started" if build else "exported")
     elif outcome == "dependency_skipped":
-        valid = exit_code is None and signal is None
+        valid = exit_code is None and signal is None and export_outcome == "not_started"
+    elif outcome == "export_invalid":
+        valid = (exited or signalled) and export_outcome == "invalid"
+    elif outcome == "disk_exceeded" and export_outcome == "capacity_exceeded":
+        valid = exited or signalled
     else:
-        valid = exit_code is None and type(signal) is int and signal > 0
+        valid = (
+            exit_code is None
+            and (signal is None or signalled)
+            and export_outcome == "unavailable"
+        )
     if not valid:
         raise TrialTransportError("invalid_response")
 

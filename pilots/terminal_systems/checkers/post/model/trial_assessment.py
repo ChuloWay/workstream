@@ -7,7 +7,12 @@ import hashlib
 import json
 from pathlib import Path
 
-from assessment import AssessmentError, ValidatedFinding, build_prompt, validate_assessment
+from assessment import (
+    AssessmentError,
+    ValidatedFinding,
+    build_prompt,
+    validate_assessment,
+)
 from material import MaterialEvidence, MaterialSnapshot
 from rubric import FindingRule, Rubric, RubricError
 from trial_plan import MAXIMUM_MODEL_PROMPT_BYTES, SourceEvidence
@@ -49,6 +54,7 @@ _RESOURCE_FAILURES = frozenset(
         "disk_exceeded",
         "output_exceeded",
         "dependency_skipped",
+        "export_invalid",
     }
 )
 
@@ -68,9 +74,7 @@ class RuntimeAssessmentInput:
 
 def load_runtime_rubric(path: Path = HANDOFF_PATH) -> tuple[dict[str, str], Rubric]:
     """Load the exact retained source rule without treating it as policy authority."""
-    return _load_execution_rubric(
-        RUNTIME_REQUIREMENT, _CONDITION_FINDINGS, path=path
-    )
+    return _load_execution_rubric(RUNTIME_REQUIREMENT, _CONDITION_FINDINGS, path=path)
 
 
 def load_revision_rerun_rubric(

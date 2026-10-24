@@ -77,6 +77,7 @@ def metrics() -> dict[str, object]:
         "outcome": "succeeded",
         "exit_code": 0,
         "signal": None,
+        "export_outcome": "exported",
         "stdout_sha256": DIGEST,
         "stdout_byte_count": 0,
         "stderr_sha256": DIGEST,
@@ -250,15 +251,17 @@ class TrialTransportTests(unittest.TestCase):
             missing_outcome,
             wrong_typed_outcome,
         ):
-            with self.subTest(invalid=invalid), self.assertRaisesRegex(
-                TrialTransportError, "invalid_response"
+            with (
+                self.subTest(invalid=invalid),
+                self.assertRaisesRegex(TrialTransportError, "invalid_response"),
             ):
                 self.exchange(invalid)
 
     def test_nonfinite_or_unrepresentable_timeout_is_rejected_before_connect(self):
         for timeout in (float("nan"), float("inf"), 10**1000):
-            with self.subTest(timeout=timeout), self.assertRaisesRegex(
-                TrialTransportError, "invalid_request"
+            with (
+                self.subTest(timeout=timeout),
+                self.assertRaisesRegex(TrialTransportError, "invalid_request"),
             ):
                 execute_trial(
                     plan(),
@@ -282,8 +285,9 @@ class TrialTransportTests(unittest.TestCase):
             dict(extra_step["observations"]["steps"][0])
         )
         for response in (wrong_digest, wrong_slot, extra_step):
-            with self.subTest(response=response), self.assertRaisesRegex(
-                TrialTransportError, "invalid_response"
+            with (
+                self.subTest(response=response),
+                self.assertRaisesRegex(TrialTransportError, "invalid_response"),
             ):
                 self.exchange(response)
 
@@ -304,8 +308,90 @@ class TrialTransportTests(unittest.TestCase):
             missing_candidate,
             unavailable_measurement,
         ):
-            with self.subTest(response=response), self.assertRaisesRegex(
-                TrialTransportError, "invalid_response"
+            with (
+                self.subTest(response=response),
+                self.assertRaisesRegex(TrialTransportError, "invalid_response"),
+            ):
+                self.exchange(response)
+
+    def test_forced_limits_do_not_require_an_invented_signal(self):
+        for outcome in (
+            "deadline_exceeded",
+            "cpu_exceeded",
+            "memory_exceeded",
+            "pid_exceeded",
+            "disk_exceeded",
+            "output_exceeded",
+        ):
+            response = completed_response(plan())
+            step = response["observations"]["steps"][0]
+            step.update(outcome=outcome, exit_code=None, export_outcome="unavailable")
+            with self.subTest(outcome=outcome):
+                self.exchange(response)
+                step["exit_code"] = 137
+                with self.assertRaisesRegex(TrialTransportError, "invalid_response"):
+                    self.exchange(response)
+
+    def test_export_failures_preserve_real_child_status(self):
+        for build in (False, True):
+            for outcome, export in (
+                ("disk_exceeded", "capacity_exceeded"),
+                ("export_invalid", "invalid"),
+            ):
+                response = completed_response(plan())
+                observation = (
+                    response["observations"]["build"]
+                    if build
+                    else response["observations"]["steps"][0]
+                )
+                observation.update(outcome=outcome, export_outcome=export)
+                if build:
+                    observation.update(
+                        candidate_image_digest=None, candidate_archive_digest=None
+                    )
+                with self.subTest(build=build, outcome=outcome):
+                    self.exchange(response)
+                    observation["export_outcome"] = "exported"
+                    with self.assertRaisesRegex(
+                        TrialTransportError, "invalid_response"
+                    ):
+                        self.exchange(response)
+
+    def test_actual_reserved_exit_codes_remain_work_failures(self):
+        for build in (False, True):
+            for code in (125, 126):
+                response = completed_response(plan())
+                observation = (
+                    response["observations"]["build"]
+                    if build
+                    else response["observations"]["steps"][0]
+                )
+                observation.update(
+                    outcome="exit_nonzero",
+                    exit_code=code,
+                    export_outcome="not_started" if build else "exported",
+                )
+                if build:
+                    observation.update(
+                        candidate_image_digest=None, candidate_archive_digest=None
+                    )
+                with self.subTest(build=build, code=code):
+                    self.exchange(response)
+
+    def test_invalid_child_status_and_missing_export_fact_are_rejected(self):
+        for changes in (
+            {"exit_code": True},
+            {"exit_code": 256, "outcome": "exit_nonzero"},
+            {"exit_code": -1, "outcome": "exit_nonzero"},
+            {"exit_code": None, "signal": 65, "outcome": "signalled"},
+            {"export_outcome": "unavailable"},
+            {"export_outcome": None},
+        ):
+            response = completed_response(plan())
+            response["observations"]["steps"][0].update(changes)
+            with (
+                self.subTest(changes=changes),
+                self.assertRaisesRegex(TrialTransportError, "invalid_response"),
             ):
                 self.exchange(response)
 

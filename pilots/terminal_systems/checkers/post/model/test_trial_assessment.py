@@ -60,6 +60,7 @@ def operation(identifier: str, outcome: str = "succeeded") -> dict[str, object]:
         "outcome": outcome,
         "exit_code": 0 if outcome == "succeeded" else 2,
         "signal": None,
+        "export_outcome": "exported",
         "stdout_sha256": DIGEST,
         "stdout_byte_count": 0,
         "stderr_sha256": DIGEST,
@@ -187,7 +188,10 @@ class RuntimeAssessmentTests(unittest.TestCase):
         source, rubric = load_runtime_rubric()
         self.assertEqual(rubric.requirement_id, RUNTIME_REQUIREMENT)
         self.assertEqual(len(rubric.pass_conditions), 11)
-        self.assertEqual(source["guide_sha256"], "13d789d4b8df5d6b310d844c622336f265d53d2ddc38e8aa101b67765f9f7183")
+        self.assertEqual(
+            source["guide_sha256"],
+            "13d789d4b8df5d6b310d844c622336f265d53d2ddc38e8aa101b67765f9f7183",
+        )
 
     def test_prompt_uses_opaque_handle_out_of_band_and_binds_receipt_digest(self):
         prompt = json.loads(self.prepared.prompt)
@@ -195,7 +199,9 @@ class RuntimeAssessmentTests(unittest.TestCase):
             self.prepared.required_receipt_handles,
             ("trial_receipt_" + "b" * 32,),
         )
-        self.assertNotIn(self.prepared.required_receipt_handles[0], self.prepared.prompt)
+        self.assertNotIn(
+            self.prepared.required_receipt_handles[0], self.prepared.prompt
+        )
         self.assertEqual(
             prompt["authenticated_trial_binding"]["receipt_digest"],
             self.trial.receipt_digest,
