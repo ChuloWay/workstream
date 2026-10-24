@@ -1,6 +1,6 @@
 """A corrected unified generation replaces one policy chain without rewriting evidence."""
 
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from sqlalchemy import text
@@ -8,18 +8,50 @@ from sqlalchemy.exc import DBAPIError
 
 from app.core.identifiers import new_record_id
 from app.core.hashing import canonical_json_hash
+from app.core.config import get_settings
 from app.modules.projects.api.guide_proposals import GuideProposalApproval, GuideProposalSelection
 from app.modules.projects.api.post_policy import PostPolicyApproval, PostPolicyCorrection, PostPolicyDerive
 from tests.projects.guide_compilation.helpers import service_actor
-from tests.projects.guide_compilation.proposals.pg_support import proposal_case, read_package, finalize_corrected_attempt
+from tests.projects.guide_compilation.proposals.pg_support import (
+    finalize_corrected_attempt,
+    proposal_case,
+    read_package,
+    seed_review_actor,
+)
+from tests.projects.guide_compilation.runtime_fixtures import (
+    publish_scripted_model_profile,
+    scripted_runtime_configuration,
+)
 from tests.projects.guide_compilation.proposals.test_postgresql import approve
 from tests.projects.guide_compilation.proposals.public_support import proposal_client, proposal_path
 from .pg_support import prepare_post_policy, operate
 
 
 @pytest.mark.parametrize('origin', ['post_policy', 'unified'])
-async def test_corrected_generation_replaces_policy_and_retains_original_receipts(clean_postgres_database, origin):
+async def test_corrected_generation_replaces_policy_and_retains_original_receipts(
+    clean_postgres_database, monkeypatch, origin
+):
+    monkeypatch.setenv(
+        "WORKSTREAM_API_RATE_LIMIT_KEY_SECRET",
+        "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=",
+    )
+    get_settings.cache_clear()
     async with proposal_case(clean_postgres_database) as (values, factory, command, actor, grant):
+        operator, _ = await seed_review_actor(factory, None, role="operator", scope="system")
+        configuration = scripted_runtime_configuration(
+            get_settings(), adapter_profile_builder=lambda value: value
+        )
+        async with proposal_client(factory, operator) as operator_client:
+            profile = await publish_scripted_model_profile(
+                operator_client, command.project_id, configuration
+            )
+        configuration = configuration.model_copy(
+            update={
+                "model_profile_id": UUID(profile["profile_id"]),
+                "model_profile_version": profile["spec"]["profile_version"],
+                "model_profile_digest": profile["profile_digest"],
+            }
+        )
         setup = service_actor(values)
         derive, first = await prepare_post_policy(factory, command, actor, grant, setup)
         approval = PostPolicyApproval(target=first.target, idempotency_key=uuid4())
@@ -33,7 +65,9 @@ async def test_corrected_generation_replaces_policy_and_retains_original_receipt
             from tests.projects.guide_compilation.proposals.test_postgresql import correct
             successor = await correct(factory, command, actor, grant, GuideProposalCorrection(
                 target=first.target.proposal, idempotency_key=uuid4(), reason='Reconsider the complete guide proposal'))
-        next_command = await finalize_corrected_attempt(factory, values, actor, successor)
+        next_command = await finalize_corrected_attempt(
+            factory, values, actor, successor, configuration=configuration
+        )
         package = await read_package(factory, next_command, actor, grant)
         upstream = await approve(factory, next_command, actor, grant, GuideProposalApproval(
             target=package.target, idempotency_key=uuid4(),

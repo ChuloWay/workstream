@@ -814,6 +814,14 @@ async def test_artifact_binding_truncate_custody_blocks_direct_and_cascade_delet
                 )
                 for table, constraint in (
                     (
+                        "model_usage_effects",
+                        "fk_model_usage_effects_request_binding",
+                    ),
+                    (
+                        "model_usage_effects",
+                        "fk_model_usage_effects_response_binding",
+                    ),
+                    (
                         "submission_binding_receipts",
                         "fk_submission_binding_receipts_binding_id_artifact_bindings",
                     ),
