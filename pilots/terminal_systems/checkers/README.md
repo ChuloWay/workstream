@@ -141,6 +141,10 @@ ordinary backend test suite. It requires the prepared, stopped, uniquely owned
 PILOT-00 DIND harness plus isolated-test PostgreSQL and MinIO endpoints:
 
 ```bash
+qualification_evidence_dir="$(mktemp -d /tmp/workstream-runsc-evidence.XXXXXX)"
+WORKSTREAM_TS_RUNSC_EXPECTED_HEAD="$(git rev-parse HEAD)" \
+WORKSTREAM_TS_RUNSC_EXPECTED_TREE="$(git rev-parse 'HEAD^{tree}')" \
+WORKSTREAM_TS_RUNSC_EVIDENCE_PREFIX="${qualification_evidence_dir}/composition" \
 WORKSTREAM_TS_RUNSC_STATE_ROOT=/tmp/ws-pilot00-tsengine26 \
 WORKSTREAM_TS_RUNSC_SHARED_ROOT="$PWD/external_checkers/target/ws493-tsengine26" \
 WORKSTREAM_TS_RUNSC_CONTAINER=ws-pilot00-tsengine26-qualification-dind \
@@ -153,6 +157,13 @@ WORKSTREAM_TEST_MINIO_ENDPOINT='<isolated-test-minio-endpoint>' \
 
 Run from the repository root after preparing the owned PILOT-00 harness. The
 qualification container must be distinct from the stopped preparation container.
+The source index and worktree must remain clean at the exact commit/tree for
+the entire run. Use a fresh private evidence directory for each invocation.
+The wrapper retains logs and exit status on failure. A passing result requires
+exactly one passed JUnit test, no skipped/failed/errored tests, verified isolated
+database/MinIO cleanup, and removal of owned Docker resources. Its final summary
+binds source/runtime identities and hashes the retained test and ART-custody
+evidence; a failed run cannot publish that success summary.
 The wrapper fails rather than skipping when an exact prerequisite is absent. It
 temporarily gives only the outer checker runtime `host-uds=open`, keeps the
 separate submitted-code runtime at `host-uds=none`, binds both identities into

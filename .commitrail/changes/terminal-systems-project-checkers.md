@@ -552,3 +552,13 @@ failures. Dependent steps cannot use unexported state. The project client must
 accept truthful forced-stop observations with an unknown signal and must reject
 synthetic exit codes, absent export facts and contradictory outcomes. These
 facts do not add project grading or lifecycle decisions to the shared runtime.
+
+Qualification evidence is bound to a clean, explicit source commit and tree.
+Both wrappers use fresh private evidence paths, preserve failure logs and exit
+status, refuse stale success, and publish success only after owned cleanup.
+The composed fixture retains bounded image/profile/runtime and verified
+ART receipt/binding identities before isolated database/storage cleanup; its
+wrapper requires exactly one passed JUnit node with no skipped or failed cases.
+The required external-checker runtime job in `.github/workflows/backend.yml`
+also runs the standalone wrapper's source/stale/publication regression tests.
+This extends the existing checker job without altering other required lanes.
