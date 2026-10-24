@@ -1544,6 +1544,12 @@ async def exercise_api_contract(base_url: str, env: dict[str, str]) -> None:
             idempotency_key=str(uuid4()),
         )
         assert patched_guide["change_summary"] == "Patched before activation through real API"
+        from guide_compilation_e2e import publish_scripted_model_profile
+        published_model_profile = await publish_scripted_model_profile(
+            client, manager_token, project["id"],
+        )
+        assert published_model_profile["project_id"] == project["id"]
+        assert published_model_profile["spec"]["profile_version"] == 1
         await exercise_guide_setup_contract(
             client,
             manager_token,
