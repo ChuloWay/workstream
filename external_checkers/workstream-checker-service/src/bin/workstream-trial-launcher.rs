@@ -28,17 +28,34 @@ const CAP_FOWNER: u32 = 3;
 type Result<T> = std::result::Result<T, LauncherError>;
 
 #[derive(Debug)]
-struct LauncherError(String);
+struct LauncherError {
+    message: String,
+    raw_os_error: Option<i32>,
+    export_failure: Option<ExportFailure>,
+}
 
 impl std::fmt::Display for LauncherError {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        formatter.write_str(&self.0)
+        formatter.write_str(&self.message)
     }
 }
 
 impl From<io::Error> for LauncherError {
     fn from(error: io::Error) -> Self {
-        Self(error.to_string())
+        Self {
+            message: error.to_string(),
+            raw_os_error: error.raw_os_error(),
+            export_failure: None,
+        }
+    }
+}
+
+impl LauncherError {
+    fn classified_export_failure(&self) -> Option<ExportFailure> {
+        self.export_failure.or_else(|| {
+            matches!(self.raw_os_error, Some(libc::ENOSPC | libc::EDQUOT))
+                .then_some(ExportFailure::CapacityExceeded)
+        })
     }
 }
 
@@ -48,12 +65,19 @@ struct FilesystemLimit {
     inodes: u64,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct ExportOwner {
+    uid: u32,
+    gid: u32,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct BuilderArguments {
     root: FilesystemLimit,
     temporary: FilesystemLimit,
     shared_memory: FilesystemLimit,
     candidate_bytes: u64,
+    export_owner: ExportOwner,
     command: Vec<OsString>,
 }
 
@@ -69,6 +93,7 @@ struct StepArguments {
     workspace: FilesystemLimit,
     temporary: FilesystemLimit,
     shared_memory: FilesystemLimit,
+    export_owner: ExportOwner,
     working_directory: PathBuf,
     uid: u32,
     gid: u32,
@@ -80,6 +105,21 @@ struct StepArguments {
 struct ChildOutcome {
     exit_code: Option<i32>,
     signal: Option<i32>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ExportFailure {
+    CapacityExceeded,
+    Invalid,
+}
+
+impl ExportFailure {
+    fn json(self) -> &'static str {
+        match self {
+            Self::CapacityExceeded => "\"capacity_exceeded\"",
+            Self::Invalid => "\"invalid\"",
+        }
+    }
 }
 
 struct SpawnedChild {
@@ -138,6 +178,8 @@ fn parse_builder(cursor: &mut ArgumentCursor) -> Result<BuilderArguments> {
     let mut temporary = LimitBuilder::default();
     let mut shared_memory = LimitBuilder::default();
     let mut candidate_bytes = None;
+    let mut export_uid = None;
+    let mut export_gid = None;
     while !cursor.at_separator() {
         let option = cursor.next_utf8("builder option")?;
         let value = cursor.next_u64(&option)?;
@@ -149,6 +191,14 @@ fn parse_builder(cursor: &mut ArgumentCursor) -> Result<BuilderArguments> {
             "--shm-bytes" => shared_memory.set_bytes(value)?,
             "--shm-inodes" => shared_memory.set_inodes(value)?,
             "--candidate-bytes" => set_once(&mut candidate_bytes, value)?,
+            "--export-uid" => set_once(
+                &mut export_uid,
+                u32::try_from(value).map_err(|_| failure("invalid export uid"))?,
+            )?,
+            "--export-gid" => set_once(
+                &mut export_gid,
+                u32::try_from(value).map_err(|_| failure("invalid export gid"))?,
+            )?,
             _ => return Err(failure("unknown builder option")),
         }
     }
@@ -164,6 +214,7 @@ fn parse_builder(cursor: &mut ArgumentCursor) -> Result<BuilderArguments> {
         temporary: temporary.finish()?,
         shared_memory: shared_memory.finish()?,
         candidate_bytes,
+        export_owner: finish_export_owner(export_uid, export_gid)?,
         command,
     })
 }
@@ -176,6 +227,8 @@ fn parse_step(cursor: &mut ArgumentCursor) -> Result<StepArguments> {
     let mut working_directory = None;
     let mut uid = None;
     let mut gid = None;
+    let mut export_uid = None;
+    let mut export_gid = None;
     let mut visible_roles = Vec::new();
     while !cursor.at_separator() {
         let option = cursor.next_utf8("step option")?;
@@ -191,6 +244,8 @@ fn parse_step(cursor: &mut ArgumentCursor) -> Result<StepArguments> {
             "--working-directory" => set_once(&mut working_directory, cursor.next_relative()?)?,
             "--uid" => set_once(&mut uid, cursor.next_u32(&option)?)?,
             "--gid" => set_once(&mut gid, cursor.next_u32(&option)?)?,
+            "--export-uid" => set_once(&mut export_uid, cursor.next_u32(&option)?)?,
+            "--export-gid" => set_once(&mut export_gid, cursor.next_u32(&option)?)?,
             "--visible" => visible_roles.push(cursor.next_visible_role()?),
             _ => return Err(failure("unknown step option")),
         }
@@ -207,6 +262,7 @@ fn parse_step(cursor: &mut ArgumentCursor) -> Result<StepArguments> {
         workspace: workspace.finish()?,
         temporary: temporary.finish()?,
         shared_memory: shared_memory.finish()?,
+        export_owner: finish_export_owner(export_uid, export_gid)?,
         working_directory: working_directory.ok_or_else(|| failure("missing working directory"))?,
         uid,
         gid,
@@ -224,22 +280,50 @@ fn validate_builder_command(command: &[OsString]) -> Result<()> {
                 .ok_or_else(|| failure("non-UTF-8 builder argument"))
         })
         .collect::<Result<Vec<_>>>()?;
-    if values.first().copied() != Some("/kaniko/executor")
-        || !values.contains(&"--tar-path=/out/candidate.tar")
-        || !values.contains(&"--ignore-path=/out")
-        || !values
+    let fixed = [
+        "/kaniko/executor",
+        "",
+        "",
+        "--cache=true",
+        "--cache-dir=/cache",
+        "--cache-run-layers=false",
+        "--cache-copy-layers=false",
+        "--no-push",
+        "--no-push-cache",
+        "--tar-path=/out/candidate.tar",
+        "--ignore-path=/out",
+        "",
+        "--force",
+        "--log-format=text",
+    ];
+    if values.len() != fixed.len()
+        || values
             .iter()
-            .any(|value| value.starts_with("--context=dir:///workspace/"))
-        || !values
-            .iter()
-            .any(|value| value.starts_with("--dockerfile=/workspace/"))
-        || !values.contains(&"--cache-dir=/cache")
+            .zip(fixed)
+            .any(|(actual, expected)| !expected.is_empty() && *actual != expected)
+        || !valid_prefixed_relative(values[1], "--dockerfile=/workspace/", false)
+        || !valid_prefixed_relative(values[2], "--context=dir:///workspace/", true)
+        || values[11]
+            .strip_prefix("--destination=")
+            .is_none_or(|value| {
+                value.is_empty() || value.bytes().any(|byte| byte.is_ascii_control())
+            })
     {
         return Err(failure(
             "builder command violates the fixed sandbox contract",
         ));
     }
     Ok(())
+}
+
+fn valid_prefixed_relative(value: &str, prefix: &str, allow_dot: bool) -> bool {
+    let Some(relative) = value.strip_prefix(prefix) else {
+        return false;
+    };
+    if relative.is_empty() || (!allow_dot && relative == ".") {
+        return false;
+    }
+    normalized_relative(OsStr::new(relative)).is_ok()
 }
 
 fn validate_visible_roles(roles: &[VisibleRole]) -> Result<()> {
@@ -270,6 +354,7 @@ fn validate_visible_roles(roles: &[VisibleRole]) -> Result<()> {
 
 fn run_builder(arguments: BuilderArguments) -> Result<()> {
     require_empty_export()?;
+    require_export_owner(arguments.export_owner)?;
     create_clean_directory(Path::new(ROOT), 0o700)?;
     mount_tmpfs(Path::new(ROOT), &arguments.root, 0o755, false)?;
     prepare_builder_root(&arguments)?;
@@ -286,16 +371,35 @@ fn run_builder(arguments: BuilderArguments) -> Result<()> {
     drain_descendants()?;
     require_no_child_setup_error(child.error)?;
     let candidate_exported = outcome.exit_code == Some(0);
-    if candidate_exported {
-        export_regular_file_at(
+    let mut export_failure = None;
+    let candidate_exported = if candidate_exported {
+        match export_regular_file_at(
             output.as_raw_fd(),
             "candidate.tar",
             export.as_raw_fd(),
             "candidate.tar",
             arguments.candidate_bytes,
-        )?;
-    }
-    write_status(export.as_raw_fd(), outcome, candidate_exported, false)
+            arguments.export_owner,
+        ) {
+            Ok(()) => true,
+            Err(error) if error.classified_export_failure().is_some() => {
+                remove_export_entry(export.as_raw_fd(), "candidate.tar")?;
+                export_failure = error.classified_export_failure();
+                false
+            }
+            Err(error) => return Err(error),
+        }
+    } else {
+        false
+    };
+    write_status(
+        export.as_raw_fd(),
+        outcome,
+        candidate_exported,
+        false,
+        export_failure,
+        arguments.export_owner,
+    )
 }
 
 fn prepare_builder_root(arguments: &BuilderArguments) -> Result<()> {
@@ -343,6 +447,7 @@ fn prepare_builder_root(arguments: &BuilderArguments) -> Result<()> {
 
 fn run_step(arguments: StepArguments) -> Result<()> {
     require_empty_export()?;
+    require_export_owner(arguments.export_owner)?;
     create_clean_directory(Path::new(ROOT), 0o700)?;
     mount_tmpfs(Path::new(ROOT), &arguments.root, 0o755, false)?;
     prepare_candidate_skeleton(Path::new(ROOT))?;
@@ -365,12 +470,37 @@ fn run_step(arguments: StepArguments) -> Result<()> {
     drain_descendants()?;
     require_no_child_setup_error(child.error)?;
     unmount_visible_roles(&arguments.visible_roles)?;
-    export_workspace(
-        export.as_raw_fd(),
+    let mut export_failure = inspect_workspace(
+        Path::new("/workspace"),
         arguments.workspace.bytes,
         arguments.workspace.inodes,
     )?;
-    write_status(export.as_raw_fd(), outcome, false, true)?;
+    let workspace_exported = if export_failure.is_none() {
+        match export_workspace(
+            export.as_raw_fd(),
+            arguments.workspace.bytes,
+            arguments.workspace.inodes,
+            arguments.export_owner,
+        ) {
+            Ok(()) => true,
+            Err(error) if error.classified_export_failure().is_some() => {
+                remove_export_entry(export.as_raw_fd(), "workspace.next")?;
+                export_failure = error.classified_export_failure();
+                false
+            }
+            Err(error) => return Err(error),
+        }
+    } else {
+        false
+    };
+    write_status(
+        export.as_raw_fd(),
+        outcome,
+        false,
+        workspace_exported,
+        export_failure,
+        arguments.export_owner,
+    )?;
     Ok(())
 }
 
@@ -708,7 +838,7 @@ fn close_other_file_descriptors() -> Result<()> {
 }
 
 fn write_child_error(descriptor: RawFd, error: &LauncherError) {
-    let mut message = error.0.as_bytes();
+    let mut message = error.message.as_bytes();
     if message.len() > 4096 {
         message = &message[..4096];
     }
@@ -734,7 +864,11 @@ fn require_no_child_setup_error(error: OwnedFd) -> Result<()> {
     if message.len() > 4096 {
         return Err(failure("child setup error exceeded its bound"));
     }
-    Err(LauncherError(format!("child setup failed: {message}")))
+    Err(LauncherError {
+        message: format!("child setup failed: {message}"),
+        raw_os_error: None,
+        export_failure: None,
+    })
 }
 
 fn exec_command(command: &[OsString]) -> Result<()> {
@@ -835,10 +969,12 @@ fn drop_bounding_capabilities(retained: &[u32]) -> Result<()> {
             continue;
         }
         if unsafe { libc::prctl(libc::PR_CAPBSET_DROP, capability, 0, 0, 0) } != 0 {
-            return Err(LauncherError(format!(
-                "bounding capability drop {capability}: {}",
-                io::Error::last_os_error()
-            )));
+            let error = io::Error::last_os_error();
+            return Err(LauncherError {
+                message: format!("bounding capability drop {capability}: {error}"),
+                raw_os_error: error.raw_os_error(),
+                export_failure: None,
+            });
         }
     }
     Ok(())
@@ -962,6 +1098,20 @@ fn require_empty_export() -> Result<()> {
     Ok(())
 }
 
+fn require_export_owner(owner: ExportOwner) -> Result<()> {
+    let metadata = fs::symlink_metadata(EXPORT)?;
+    if metadata.uid() != owner.uid
+        || metadata.gid() != owner.gid
+        || metadata.permissions().mode() & 0o700 != 0o700
+        || metadata.permissions().mode() & 0o077 != 0
+    {
+        return Err(failure(
+            "export directory owner does not match the trusted identity",
+        ));
+    }
+    Ok(())
+}
+
 fn open_export_directory() -> Result<OwnedFd> {
     open_directory(Path::new(EXPORT))
 }
@@ -986,6 +1136,7 @@ fn export_regular_file_at(
     export_fd: RawFd,
     export_name: &str,
     maximum_bytes: u64,
+    owner: ExportOwner,
 ) -> Result<()> {
     let source_name = CString::new(source_name).map_err(|_| failure("invalid source name"))?;
     let descriptor = unsafe {
@@ -996,20 +1147,34 @@ fn export_regular_file_at(
         )
     };
     if descriptor < 0 {
-        return Err(io::Error::last_os_error().into());
+        let error = io::Error::last_os_error();
+        if matches!(
+            error.raw_os_error(),
+            Some(libc::ENOENT | libc::ELOOP | libc::ENOTDIR)
+        ) {
+            return Err(invalid_export_failure(
+                "candidate export is missing or redirects",
+            ));
+        }
+        return Err(error.into());
     }
     let mut input = unsafe { File::from_raw_fd(descriptor) };
     let metadata = input.metadata()?;
-    if !metadata.file_type().is_file() || metadata.nlink() != 1 || metadata.len() > maximum_bytes {
-        return Err(failure(
+    if !metadata.file_type().is_file() || metadata.nlink() != 1 {
+        return Err(invalid_export_failure(
             "candidate export violates the bounded regular-file contract",
         ));
     }
-    let mut output = create_export_file(export_fd, export_name, 0o600)?;
+    if metadata.len() > maximum_bytes {
+        return Err(capacity_failure("candidate export exceeds its byte limit"));
+    }
+    let mut output = create_export_file(export_fd, export_name, 0o600, owner)?;
     let mut bounded = Read::take(&mut input, maximum_bytes.saturating_add(1));
     let copied = io::copy(&mut bounded, &mut output)?;
     if copied != metadata.len() {
-        return Err(failure("candidate export changed while copying"));
+        return Err(invalid_export_failure(
+            "candidate export changed while copying",
+        ));
     }
     output.sync_all()?;
     if unsafe { libc::unlinkat(source_fd, source_name.as_ptr(), 0) } != 0 {
@@ -1018,14 +1183,74 @@ fn export_regular_file_at(
     sync_directory(export_fd)
 }
 
-fn export_workspace(export_fd: RawFd, maximum_bytes: u64, maximum_entries: u64) -> Result<()> {
-    let export_root = export_fd_path(export_fd).join("workspace.next");
-    fs::create_dir(&export_root)?;
-    fs::set_permissions(&export_root, fs::Permissions::from_mode(0o700))?;
+fn export_workspace(
+    export_fd: RawFd,
+    maximum_bytes: u64,
+    maximum_entries: u64,
+    owner: ExportOwner,
+) -> Result<()> {
+    let export_root = create_export_directory(export_fd, "workspace.next", owner)?;
     let mut budget = CopyBudget::new(maximum_bytes, maximum_entries);
-    copy_export_tree(Path::new("/workspace"), &export_root, &mut budget)?;
+    copy_export_tree(Path::new("/workspace"), &export_root, &mut budget, owner)?;
     sync_tree(&export_root)?;
     sync_directory(export_fd)
+}
+
+fn inspect_workspace(
+    root: &Path,
+    maximum_bytes: u64,
+    maximum_entries: u64,
+) -> Result<Option<ExportFailure>> {
+    let metadata = fs::symlink_metadata(root)?;
+    if !metadata.file_type().is_dir() || metadata.file_type().is_symlink() {
+        return Ok(Some(ExportFailure::Invalid));
+    }
+    let mut bytes = 0_u64;
+    let mut entries = 0_u64;
+    inspect_workspace_entries(
+        root,
+        &mut bytes,
+        &mut entries,
+        maximum_bytes,
+        maximum_entries,
+    )
+}
+
+fn inspect_workspace_entries(
+    root: &Path,
+    bytes: &mut u64,
+    entries: &mut u64,
+    maximum_bytes: u64,
+    maximum_entries: u64,
+) -> Result<Option<ExportFailure>> {
+    let mut children = BTreeMap::new();
+    for entry in fs::read_dir(root)? {
+        let entry = entry?;
+        children.insert(entry.file_name(), entry.path());
+    }
+    for path in children.values() {
+        let metadata = fs::symlink_metadata(path)?;
+        if metadata.file_type().is_symlink()
+            || (!metadata.file_type().is_dir() && !metadata.file_type().is_file())
+        {
+            return Ok(Some(ExportFailure::Invalid));
+        }
+        *entries = entries.saturating_add(1);
+        if metadata.file_type().is_file() {
+            *bytes = bytes.saturating_add(metadata.len());
+        }
+        if *entries > maximum_entries || *bytes > maximum_bytes {
+            return Ok(Some(ExportFailure::CapacityExceeded));
+        }
+        if metadata.file_type().is_dir() {
+            if let Some(failure) =
+                inspect_workspace_entries(path, bytes, entries, maximum_bytes, maximum_entries)?
+            {
+                return Ok(Some(failure));
+            }
+        }
+    }
+    Ok(None)
 }
 
 fn write_status(
@@ -1033,6 +1258,8 @@ fn write_status(
     outcome: ChildOutcome,
     candidate_exported: bool,
     workspace_exported: bool,
+    export_failure: Option<ExportFailure>,
+    owner: ExportOwner,
 ) -> Result<()> {
     let exit_code = outcome
         .exit_code
@@ -1040,10 +1267,11 @@ fn write_status(
     let signal = outcome
         .signal
         .map_or_else(|| "null".to_owned(), |value| value.to_string());
+    let export_failure = export_failure.map_or("null", ExportFailure::json);
     let document = format!(
-        "{{\"candidate_exported\":{candidate_exported},\"child\":{{\"exit_code\":{exit_code},\"signal\":{signal}}},\"schema\":\"{STATUS_SCHEMA}\",\"workspace_exported\":{workspace_exported}}}"
+        "{{\"candidate_exported\":{candidate_exported},\"child\":{{\"exit_code\":{exit_code},\"signal\":{signal}}},\"export_failure\":{export_failure},\"schema\":\"{STATUS_SCHEMA}\",\"workspace_exported\":{workspace_exported}}}"
     );
-    let mut temporary = create_export_file(export_fd, "status.json.tmp", 0o600)?;
+    let mut temporary = create_export_file(export_fd, "status.json.tmp", 0o600, owner)?;
     temporary.write_all(document.as_bytes())?;
     temporary.sync_all()?;
     drop(temporary);
@@ -1051,7 +1279,7 @@ fn write_status(
     sync_directory(export_fd)
 }
 
-fn create_export_file(export_fd: RawFd, name: &str, mode: u32) -> Result<File> {
+fn create_export_file(export_fd: RawFd, name: &str, mode: u32, owner: ExportOwner) -> Result<File> {
     let name = CString::new(name).map_err(|_| failure("invalid export name"))?;
     let descriptor = unsafe {
         libc::openat(
@@ -1064,7 +1292,54 @@ fn create_export_file(export_fd: RawFd, name: &str, mode: u32) -> Result<File> {
     if descriptor < 0 {
         return Err(io::Error::last_os_error().into());
     }
-    Ok(unsafe { File::from_raw_fd(descriptor) })
+    let file = unsafe { File::from_raw_fd(descriptor) };
+    if let Err(error) = change_file_owner(&file, owner) {
+        drop(file);
+        unsafe { libc::unlinkat(export_fd, name.as_ptr(), 0) };
+        return Err(error);
+    }
+    Ok(file)
+}
+
+fn create_export_directory(export_fd: RawFd, name: &str, owner: ExportOwner) -> Result<PathBuf> {
+    let name = CString::new(name).map_err(|_| failure("invalid export name"))?;
+    if unsafe { libc::mkdirat(export_fd, name.as_ptr(), 0o700) } != 0 {
+        return Err(io::Error::last_os_error().into());
+    }
+    let descriptor = unsafe {
+        libc::openat(
+            export_fd,
+            name.as_ptr(),
+            libc::O_RDONLY | libc::O_DIRECTORY | libc::O_NOFOLLOW | libc::O_CLOEXEC,
+        )
+    };
+    if descriptor < 0 {
+        let error = io::Error::last_os_error();
+        unsafe { libc::unlinkat(export_fd, name.as_ptr(), libc::AT_REMOVEDIR) };
+        return Err(error.into());
+    }
+    let directory = unsafe { OwnedFd::from_raw_fd(descriptor) };
+    if let Err(error) = change_descriptor_owner(directory.as_raw_fd(), owner) {
+        drop(directory);
+        unsafe { libc::unlinkat(export_fd, name.as_ptr(), libc::AT_REMOVEDIR) };
+        return Err(error);
+    }
+    Ok(export_fd_path(export_fd).join(OsStr::from_bytes(name.as_bytes())))
+}
+
+fn remove_export_entry(export_fd: RawFd, name: &str) -> Result<()> {
+    let path = export_fd_path(export_fd).join(name);
+    let metadata = match fs::symlink_metadata(&path) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(()),
+        Err(error) => return Err(error.into()),
+    };
+    if metadata.file_type().is_dir() && !metadata.file_type().is_symlink() {
+        fs::remove_dir_all(path)?;
+    } else {
+        fs::remove_file(path)?;
+    }
+    Ok(())
 }
 
 fn rename_export(export_fd: RawFd, source: &str, destination: &str) -> Result<()> {
@@ -1121,14 +1396,21 @@ fn copy_input_entry(source: &Path, destination: &Path, owner: Option<(u32, u32)>
     } else {
         0o700
     };
-    copy_regular(source, destination, mode)?;
-    if let Some((uid, gid)) = owner {
-        change_owner(destination, uid, gid)?;
-    }
+    copy_regular(
+        source,
+        destination,
+        mode,
+        owner.map(|(uid, gid)| ExportOwner { uid, gid }),
+    )?;
     Ok(())
 }
 
-fn copy_export_tree(source: &Path, destination: &Path, budget: &mut CopyBudget) -> Result<()> {
+fn copy_export_tree(
+    source: &Path,
+    destination: &Path,
+    budget: &mut CopyBudget,
+    owner: ExportOwner,
+) -> Result<()> {
     let mut children = BTreeMap::new();
     for entry in fs::read_dir(source)? {
         let entry = entry?;
@@ -1146,9 +1428,8 @@ fn copy_export_tree(source: &Path, destination: &Path, budget: &mut CopyBudget) 
             0
         })?;
         if metadata.file_type().is_dir() {
-            fs::create_dir(&target)?;
-            fs::set_permissions(&target, fs::Permissions::from_mode(0o700))?;
-            copy_export_tree(&path, &target, budget)?;
+            create_owned_directory(&target, 0o700, owner)?;
+            copy_export_tree(&path, &target, budget, owner)?;
             fs::remove_dir(&path)?;
         } else if metadata.file_type().is_file() {
             let mode = if metadata.permissions().mode() & 0o111 == 0 {
@@ -1156,7 +1437,7 @@ fn copy_export_tree(source: &Path, destination: &Path, budget: &mut CopyBudget) 
             } else {
                 0o700
             };
-            copy_regular(&path, &target, mode)?;
+            copy_regular(&path, &target, mode, Some(owner))?;
             fs::remove_file(&path)?;
         } else {
             return Err(failure("workspace export contains a special file"));
@@ -1165,7 +1446,12 @@ fn copy_export_tree(source: &Path, destination: &Path, budget: &mut CopyBudget) 
     Ok(())
 }
 
-fn copy_regular(source: &Path, destination: &Path, mode: u32) -> Result<()> {
+fn copy_regular(
+    source: &Path,
+    destination: &Path,
+    mode: u32,
+    owner: Option<ExportOwner>,
+) -> Result<()> {
     let mut input = OpenOptions::new()
         .read(true)
         .custom_flags(libc::O_NOFOLLOW)
@@ -1179,6 +1465,9 @@ fn copy_regular(source: &Path, destination: &Path, mode: u32) -> Result<()> {
         .create_new(true)
         .mode(mode)
         .open(destination)?;
+    if let Some(owner) = owner {
+        change_file_owner(&output, owner)?;
+    }
     let copied = io::copy(&mut input, &mut output)?;
     if copied != opened.len() {
         return Err(failure("copy source changed while copying"));
@@ -1213,6 +1502,17 @@ fn create_clean_directory(path: &Path, mode: u32) -> Result<()> {
 fn create_directory(path: &Path, mode: u32) -> Result<()> {
     fs::create_dir(path)?;
     fs::set_permissions(path, fs::Permissions::from_mode(mode))?;
+    Ok(())
+}
+
+fn create_owned_directory(path: &Path, mode: u32, owner: ExportOwner) -> Result<()> {
+    create_directory(path, mode)?;
+    let directory = open_directory(path)?;
+    if let Err(error) = change_descriptor_owner(directory.as_raw_fd(), owner) {
+        drop(directory);
+        let _ = fs::remove_dir(path);
+        return Err(error);
+    }
     Ok(())
 }
 
@@ -1254,6 +1554,17 @@ fn change_owner(path: &Path, uid: u32, gid: u32) -> Result<()> {
     Ok(())
 }
 
+fn change_file_owner(file: &File, owner: ExportOwner) -> Result<()> {
+    change_descriptor_owner(file.as_raw_fd(), owner)
+}
+
+fn change_descriptor_owner(descriptor: RawFd, owner: ExportOwner) -> Result<()> {
+    if unsafe { libc::fchown(descriptor, owner.uid, owner.gid) } != 0 {
+        return Err(io::Error::last_os_error().into());
+    }
+    Ok(())
+}
+
 fn path_cstring(path: &Path) -> Result<CString> {
     CString::new(path.as_os_str().as_bytes()).map_err(|_| failure("path contains NUL"))
 }
@@ -1281,9 +1592,21 @@ fn valid_role(value: &str) -> bool {
     !value.is_empty()
         && value.len() <= 100
         && value != "."
+        && value != ".."
         && value
             .bytes()
             .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-' | b'.'))
+}
+
+fn finish_export_owner(uid: Option<u32>, gid: Option<u32>) -> Result<ExportOwner> {
+    let owner = ExportOwner {
+        uid: uid.ok_or_else(|| failure("missing export uid"))?,
+        gid: gid.ok_or_else(|| failure("missing export gid"))?,
+    };
+    if owner.uid == 0 || owner.gid == 0 {
+        return Err(failure("export uid and gid must be nonzero"));
+    }
+    Ok(owner)
 }
 
 fn set_once<T>(slot: &mut Option<T>, value: T) -> Result<()> {
@@ -1294,11 +1617,36 @@ fn set_once<T>(slot: &mut Option<T>, value: T) -> Result<()> {
 }
 
 fn failure(message: &str) -> LauncherError {
-    LauncherError(message.to_owned())
+    LauncherError {
+        message: message.to_owned(),
+        raw_os_error: None,
+        export_failure: None,
+    }
+}
+
+fn capacity_failure(message: &str) -> LauncherError {
+    LauncherError {
+        message: message.to_owned(),
+        raw_os_error: Some(libc::ENOSPC),
+        export_failure: Some(ExportFailure::CapacityExceeded),
+    }
+}
+
+fn invalid_export_failure(message: &str) -> LauncherError {
+    LauncherError {
+        message: message.to_owned(),
+        raw_os_error: None,
+        export_failure: Some(ExportFailure::Invalid),
+    }
 }
 
 fn os_failure(operation: &str) -> LauncherError {
-    LauncherError(format!("{operation}: {}", io::Error::last_os_error()))
+    let error = io::Error::last_os_error();
+    LauncherError {
+        message: format!("{operation}: {error}"),
+        raw_os_error: error.raw_os_error(),
+        export_failure: None,
+    }
 }
 
 #[derive(Default)]
@@ -1465,13 +1813,25 @@ mod tests {
             "4",
             "--candidate-bytes",
             "800",
+            "--export-uid",
+            "65532",
+            "--export-gid",
+            "65532",
             "--",
             "/kaniko/executor",
             "--dockerfile=/workspace/Dockerfile",
             "--context=dir:///workspace/source",
+            "--cache=true",
             "--cache-dir=/cache",
+            "--cache-run-layers=false",
+            "--cache-copy-layers=false",
+            "--no-push",
+            "--no-push-cache",
             "--tar-path=/out/candidate.tar",
             "--ignore-path=/out",
+            "--destination=workstream.invalid/test:local",
+            "--force",
+            "--log-format=text",
         ]))
         .unwrap();
         assert!(matches!(parsed, Mode::Builder(_)));
@@ -1512,13 +1872,25 @@ mod tests {
             "4",
             "--candidate-bytes",
             "1001",
+            "--export-uid",
+            "65532",
+            "--export-gid",
+            "65532",
             "--",
             "/kaniko/executor",
             "--dockerfile=/workspace/Dockerfile",
             "--context=dir:///workspace/source",
+            "--cache=true",
             "--cache-dir=/cache",
+            "--cache-run-layers=false",
+            "--cache-copy-layers=false",
+            "--no-push",
+            "--no-push-cache",
             "--tar-path=/out/candidate.tar",
             "--ignore-path=/out",
+            "--destination=workstream.invalid/test:local",
+            "--force",
+            "--log-format=text",
         ]));
         assert!(oversized_candidate.is_err());
     }
@@ -1548,6 +1920,10 @@ mod tests {
             "--uid",
             "65532",
             "--gid",
+            "65532",
+            "--export-uid",
+            "65532",
+            "--export-gid",
             "65532",
             "--visible",
             "tests=tests",
@@ -1583,6 +1959,10 @@ mod tests {
             "65532",
             "--gid",
             "65532",
+            "--export-uid",
+            "65532",
+            "--export-gid",
+            "65532",
             "--visible",
             "tests=../tests",
             "--",
@@ -1604,5 +1984,52 @@ mod tests {
             },
         ];
         assert!(validate_visible_roles(&roles).is_err());
+        assert!(!valid_role(".."));
+        assert!(finish_export_owner(Some(0), Some(65532)).is_err());
+    }
+
+    #[test]
+    fn builder_rejects_traversal_and_extra_critical_flags() {
+        let mut command = strings(&[
+            "/kaniko/executor",
+            "--dockerfile=/workspace/Dockerfile",
+            "--context=dir:///workspace/source",
+            "--cache=true",
+            "--cache-dir=/cache",
+            "--cache-run-layers=false",
+            "--cache-copy-layers=false",
+            "--no-push",
+            "--no-push-cache",
+            "--tar-path=/out/candidate.tar",
+            "--ignore-path=/out",
+            "--destination=workstream.invalid/test:local",
+            "--force",
+            "--log-format=text",
+        ]);
+        command[1] = "--dockerfile=/workspace/../Dockerfile".into();
+        assert!(validate_builder_command(&command).is_err());
+        command[1] = "--dockerfile=/workspace/Dockerfile".into();
+        command.push("--tar-path=/out/alternate.tar".into());
+        assert!(validate_builder_command(&command).is_err());
+    }
+
+    #[test]
+    fn workspace_export_classifies_invalid_and_sparse_overflow() {
+        let root = env::temp_dir().join(format!("workstream-launcher-test-{}", process::id()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir(&root).unwrap();
+        symlink("outside", root.join("redirect")).unwrap();
+        assert_eq!(
+            inspect_workspace(&root, 1024, 8).unwrap(),
+            Some(ExportFailure::Invalid)
+        );
+        fs::remove_file(root.join("redirect")).unwrap();
+        let file = File::create(root.join("sparse")).unwrap();
+        file.set_len(4096).unwrap();
+        assert_eq!(
+            inspect_workspace(&root, 1024, 8).unwrap(),
+            Some(ExportFailure::CapacityExceeded)
+        );
+        fs::remove_dir_all(root).unwrap();
     }
 }
