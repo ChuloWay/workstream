@@ -467,3 +467,23 @@ existing attempt's exact configuration on replay. A later Operator profile
 publication must not change that attempt. This owns the affected correction
 dispatch, live coordinator, request-input and composition files plus their
 existing public and boundary tests; it adds no new route or model call.
+
+An S3 write timeout may cancel the pinned aiohttp request while its separately
+scheduled body-writer task is still advancing the single committed scratch
+stream. Recovery must own that task to quiescence before it validates, observes,
+or releases the sealed source. This bounded repair owns only the S3-compatible
+adapter and its focused tests: it must reproduce the actual asynchronous-writer
+race, prevent concurrent advancement and post-return source access, preserve
+the source's finite scratch deadline, and never accept an incomplete source as
+a replay. A canceled partial write is unavailable/uncertain and remains
+recoverable only through the existing complete provider-object observation;
+increasing transport timeouts is not a correctness fix.
+
+The pre-repair probe used the pinned aiohttp 3.14.3 writer against a local
+stalled HTTP endpoint and deterministically produced the qualification failure:
+request timeout followed by `anext(): asynchronous generator is already
+running`. With explicit consumer ownership, the same probe joins the writer and
+classifies the still-incomplete body unavailable. Eleven focused S3 cases pass
+against MinIO, covering transport timeout, outer caller cancellation, no source
+access after return, early 412 replay, missing replay, malformed sealed bytes,
+unconsumed success, and independent uncertain-write observation.
