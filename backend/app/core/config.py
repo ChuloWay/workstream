@@ -287,6 +287,17 @@ class Settings(BaseSettings):
         gt=0.0,
         le=3700.0,
     )
+    # Read-only GitHub App used to read pull-request proof facts. The private
+    # key stays in a file; settings hold only its absolute path.
+    github_app_id: int | None = Field(default=None, ge=1)
+    github_app_private_key_file: Path | None = None
+    github_app_installation_id: int | None = Field(default=None, ge=1)
+    github_api_base_url: str = "https://api.github.com"
+    github_api_request_timeout_seconds: float = Field(default=10.0, gt=0.0, le=30.0)
+    # One facts read, including every retry, stays far inside the selected POST
+    # handler budget (SELECTED_POST_HANDLER_TIMEOUT_SECONDS).
+    github_facts_total_deadline_seconds: float = Field(default=45.0, gt=0.0, le=120.0)
+    github_facts_maximum_attempts: int = Field(default=3, ge=1, le=5)
 
     artifact_pending_work_scan_interval_seconds: int = Field(default=60, gt=0, le=3600)
     artifact_pending_work_scan_page_size: int = Field(default=100, gt=0, le=1000)
@@ -560,6 +571,36 @@ class Settings(BaseSettings):
         ):
             secrets = _EMPTY_ARTIFACT_S3_SECRETS
             raise ValueError("native AWS S3 rejects static credentials")
+
+    @model_validator(mode="after")
+    def validate_github_app(self) -> Settings:
+        """Require a complete GitHub App identity and a credential-safe API origin."""
+        if (self.github_app_id is None) != (self.github_app_private_key_file is None):
+            raise ValueError("GitHub App id and private key file must be configured together")
+        if self.github_app_installation_id is not None and self.github_app_id is None:
+            raise ValueError("GitHub App installation id requires a GitHub App id")
+        key_file = self.github_app_private_key_file
+        if key_file is not None and not key_file.is_absolute():
+            raise ValueError("GitHub App private key file must be an absolute path")
+        parsed = urlsplit(self.github_api_base_url)
+        loopback_http = (
+            parsed.scheme == "http"
+            and parsed.hostname in {"127.0.0.1", "localhost", "::1"}
+            and self.environment in {"local", "dev", "development", "test"}
+        )
+        if (
+            (parsed.scheme != "https" and not loopback_http)
+            or not parsed.hostname
+            or parsed.username is not None
+            or parsed.password is not None
+            or parsed.query
+            or parsed.fragment
+            or self.github_api_base_url.endswith("/")
+        ):
+            raise ValueError("GitHub API base URL must be a credential-free HTTPS origin")
+        if self.github_api_request_timeout_seconds > self.github_facts_total_deadline_seconds:
+            raise ValueError("GitHub request timeout cannot exceed the facts deadline")
+        return self
 
     @model_validator(mode="after")
     def validate_project_agent_runtime(self) -> Settings:

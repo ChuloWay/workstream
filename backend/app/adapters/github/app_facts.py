@@ -1,0 +1,617 @@
+"""GitHub App adapter that reads pull-request proof facts with bounded retries.
+
+Credential custody: the RSA private key is held only as a parsed key object,
+and installation tokens only inside ``_InstallationToken``. Neither is placed in
+an exception, log record, representation or returned fact. Every adapter error
+is raised ``from None`` so that no HTTP exception carrying request headers is
+chained to it.
+"""
+
+from __future__ import annotations
+
+import asyncio
+from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
+from datetime import UTC, datetime
+import hashlib
+import logging
+from pathlib import Path
+import time
+from typing import Any
+from urllib.parse import quote, urlsplit
+
+import httpx
+import jwt
+from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
+from cryptography.hazmat.primitives.serialization import load_pem_private_key
+from pydantic import ValidationError
+
+from app.interfaces.external_services import (
+    ExternalServiceAdapterIdentity,
+    ExternalServiceConfigurationError,
+)
+from app.interfaces.github_facts import (
+    GITHUB_APP_PROVIDER_KEY,
+    GITHUB_FACTS_CAPABILITY_KEY,
+    GitHubFactsAccessDeniedError,
+    GitHubFactsProtocolError,
+    GitHubFactsUnavailableError,
+    GitHubPullRequestFacts,
+    GitHubPullRequestNotFoundError,
+    GitHubRequiredCheckFact,
+    GitHubRequiredChecksNotConfiguredError,
+    GitHubResponseDigest,
+    is_github_repository,
+)
+
+logger = logging.getLogger(__name__)
+
+GITHUB_API_VERSION = "2022-11-28"
+MAXIMUM_PAGES = 10
+PAGE_SIZE = 100
+MAXIMUM_PRIVATE_KEY_BYTES = 16_384
+# GitHub accepts App JWTs for at most ten minutes; backdate for clock drift.
+JWT_BACKDATE_SECONDS = 60
+JWT_LIFETIME_SECONDS = 540
+# Refresh an installation token this long before GitHub's stated expiry.
+TOKEN_REFRESH_MARGIN_SECONDS = 300
+INITIAL_BACKOFF_SECONDS = 0.5
+_CHECK_RUN_CONCLUSIONS = frozenset(
+    {
+        "success",
+        "failure",
+        "neutral",
+        "cancelled",
+        "skipped",
+        "timed_out",
+        "action_required",
+        "stale",
+    }
+)
+_STATUS_STATES = frozenset({"success", "failure", "error", "pending"})
+_IDENTITY = ExternalServiceAdapterIdentity(GITHUB_FACTS_CAPABILITY_KEY, GITHUB_APP_PROVIDER_KEY)
+
+
+class _InstallationToken:
+    """Installation access token whose value never appears in a representation."""
+
+    __slots__ = ("_value", "refresh_at")
+
+    def __init__(self, value: str, refresh_at: float) -> None:
+        self._value = value
+        self.refresh_at = refresh_at
+
+    def header(self) -> str:
+        """Return the Authorization header value for one GitHub request."""
+        return f"Bearer {self._value}"
+
+    def __repr__(self) -> str:
+        """Redact the token value."""
+        return "_InstallationToken(<redacted>)"
+
+
+@dataclass(frozen=True, slots=True)
+class GitHubAppFactsConfiguration:
+    """Validated non-secret adapter limits and endpoints."""
+
+    app_id: int
+    installation_id: int | None
+    api_base_url: str
+    request_timeout_seconds: float
+    total_deadline_seconds: float
+    maximum_attempts: int
+
+
+def load_github_app_private_key(path: Path) -> RSAPrivateKey:
+    """Read and parse one bounded PEM RSA key without exposing its bytes."""
+    key: object = None
+    try:
+        with path.open("rb") as handle:
+            data = handle.read(MAXIMUM_PRIVATE_KEY_BYTES + 1)
+        if len(data) <= MAXIMUM_PRIVATE_KEY_BYTES:
+            key = load_pem_private_key(data, password=None)
+    except (OSError, ValueError, TypeError):
+        key = None
+    if not isinstance(key, RSAPrivateKey):
+        raise ExternalServiceConfigurationError(_IDENTITY) from None
+    return key
+
+
+class _Deadline:
+    """Monotonic budget shared by every request and retry of one facts read."""
+
+    def __init__(self, seconds: float, monotonic: Callable[[], float]) -> None:
+        self._monotonic = monotonic
+        self._expires_at = monotonic() + seconds
+
+    def remaining(self) -> float:
+        """Return the seconds left in this budget."""
+        return self._expires_at - self._monotonic()
+
+
+class GitHubAppFactsAdapter:
+    """Read one pull request's merge and required-check facts as a GitHub App."""
+
+    __slots__ = (
+        "_configuration",
+        "_private_key",
+        "_transport",
+        "_wall_clock",
+        "_monotonic",
+        "_sleep",
+        "_tokens",
+        "_installations",
+        "_token_lock",
+        "_api_origin",
+    )
+
+    def __init__(
+        self,
+        configuration: GitHubAppFactsConfiguration,
+        private_key: RSAPrivateKey,
+        *,
+        transport: httpx.AsyncBaseTransport | None = None,
+        wall_clock: Callable[[], float] = time.time,
+        monotonic: Callable[[], float] = time.monotonic,
+        sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
+    ) -> None:
+        if not isinstance(private_key, RSAPrivateKey):
+            raise ExternalServiceConfigurationError(_IDENTITY)
+        self._configuration = configuration
+        self._private_key = private_key
+        self._transport = transport
+        self._wall_clock = wall_clock
+        self._monotonic = monotonic
+        self._sleep = sleep
+        self._tokens: dict[str, _InstallationToken] = {}
+        self._installations: dict[str, int] = {}
+        self._token_lock = asyncio.Lock()
+        parsed = urlsplit(configuration.api_base_url)
+        self._api_origin = (parsed.scheme, parsed.netloc)
+
+    def __repr__(self) -> str:
+        """Show only the non-secret App id."""
+        return f"GitHubAppFactsAdapter(app_id={self._configuration.app_id})"
+
+    @property
+    def identity(self) -> ExternalServiceAdapterIdentity:
+        """Return the fixed GitHub App facts provider identity."""
+        return _IDENTITY
+
+    async def fetch_pull_request_facts(
+        self,
+        *,
+        repository: str,
+        pull_request_number: int,
+    ) -> GitHubPullRequestFacts:
+        """Read the pull request, base-branch required checks and head-SHA results."""
+        if (
+            not is_github_repository(repository)
+            or type(pull_request_number) is not int
+            or pull_request_number < 1
+        ):
+            raise ExternalServiceConfigurationError(_IDENTITY)
+        deadline = _Deadline(self._configuration.total_deadline_seconds, self._monotonic)
+        digests: list[GitHubResponseDigest] = []
+        async with httpx.AsyncClient(
+            transport=self._transport,
+            follow_redirects=False,
+            headers={
+                "Accept": "application/vnd.github+json",
+                "X-GitHub-Api-Version": GITHUB_API_VERSION,
+                "User-Agent": "workstream-github-facts",
+            },
+        ) as client:
+            session = _FactsSession(self, client, repository, deadline, digests)
+            pull = await session.read_json(
+                "pull_request",
+                f"/repos/{repository}/pulls/{pull_request_number}",
+                not_found=GitHubPullRequestNotFoundError,
+            )
+            pull_facts = _pull_request_facts(pull, repository, pull_request_number)
+            required = _required_checks(
+                await session.read_json(
+                    "required_status_checks",
+                    f"/repos/{repository}/branches/"
+                    f"{quote(pull_facts['base_ref'], safe='')}"
+                    "/protection/required_status_checks",
+                    not_found=GitHubRequiredChecksNotConfiguredError,
+                )
+            )
+            head_sha = pull_facts["head_sha"]
+            check_runs = await session.read_pages(
+                "check_runs",
+                f"/repos/{repository}/commits/{head_sha}/check-runs",
+                item_key="check_runs",
+            )
+            statuses = await session.read_pages(
+                "commit_status",
+                f"/repos/{repository}/commits/{head_sha}/status",
+                item_key="statuses",
+            )
+        try:
+            return GitHubPullRequestFacts(
+                repository=pull_facts["repository"],
+                pull_request_number=pull_request_number,
+                state=pull_facts["state"],
+                merged=pull_facts["merged"],
+                merge_commit_sha=pull_facts["merge_commit_sha"],
+                base_ref=pull_facts["base_ref"],
+                head_sha=head_sha,
+                required_checks=tuple(
+                    GitHubRequiredCheckFact(
+                        name=name,
+                        app_id=app_id,
+                        conclusion=_conclusion(name, app_id, check_runs, statuses),
+                    )
+                    for name, app_id in required
+                ),
+                fetched_at=datetime.fromtimestamp(self._wall_clock(), UTC),
+                responses=tuple(digests),
+            )
+        except (ValidationError, KeyError, TypeError):
+            raise GitHubFactsProtocolError(_IDENTITY) from None
+
+    # -- credentials -------------------------------------------------------
+
+    def _app_jwt(self) -> str:
+        """Sign a short-lived RS256 App JWT; it authenticates only token exchange."""
+        now = int(self._wall_clock())
+        return jwt.encode(
+            {
+                "iat": now - JWT_BACKDATE_SECONDS,
+                "exp": now + JWT_LIFETIME_SECONDS,
+                "iss": str(self._configuration.app_id),
+            },
+            self._private_key,
+            algorithm="RS256",
+        )
+
+    def _cached_token(self, repository: str) -> _InstallationToken | None:
+        """Return a repository-scoped token that is not yet due for refresh."""
+        token = self._tokens.get(repository.casefold())
+        if token is None or self._wall_clock() >= token.refresh_at:
+            return None
+        return token
+
+    def _forget_token(self, repository: str) -> None:
+        """Drop a token that GitHub rejected."""
+        self._tokens.pop(repository.casefold(), None)
+
+    async def _installation_token(self, session: _FactsSession) -> _InstallationToken:
+        """Return a cached repository-scoped token or exchange a fresh App JWT."""
+        repository = session.repository
+        async with self._token_lock:
+            token = self._cached_token(repository)
+            if token is not None:
+                return token
+            installation_id = self._configuration.installation_id
+            if installation_id is None:
+                installation_id = self._installations.get(repository.casefold())
+            if installation_id is None:
+                body = await session.app_json(
+                    "GET", f"/repos/{repository}/installation", self._app_jwt()
+                )
+                installation_id = body.get("id") if isinstance(body, dict) else None
+                if type(installation_id) is not int or installation_id < 1:
+                    raise GitHubFactsProtocolError(_IDENTITY)
+                self._installations[repository.casefold()] = installation_id
+            body = await session.app_json(
+                "POST",
+                f"/app/installations/{installation_id}/access_tokens",
+                self._app_jwt(),
+                json_body={"repositories": [repository.split("/", 1)[1]]},
+            )
+            value = body.get("token") if isinstance(body, dict) else None
+            expires_at = body.get("expires_at") if isinstance(body, dict) else None
+            try:
+                expiry = datetime.fromisoformat(str(expires_at).replace("Z", "+00:00"))
+            except ValueError:
+                expiry = None
+            if (
+                not isinstance(value, str)
+                or not value
+                or any(character.isspace() for character in value)
+                or expiry is None
+                or expiry.tzinfo is None
+            ):
+                raise GitHubFactsProtocolError(_IDENTITY)
+            token = _InstallationToken(
+                value, expiry.timestamp() - TOKEN_REFRESH_MARGIN_SECONDS
+            )
+            self._tokens[repository.casefold()] = token
+            return token
+
+
+class _FactsSession:
+    """One bounded facts read: shared deadline, retries and response digests."""
+
+    def __init__(
+        self,
+        adapter: GitHubAppFactsAdapter,
+        client: httpx.AsyncClient,
+        repository: str,
+        deadline: _Deadline,
+        digests: list[GitHubResponseDigest],
+    ) -> None:
+        self._adapter = adapter
+        self._client = client
+        self.repository = repository
+        self._deadline = deadline
+        self._digests = digests
+
+    def _url(self, path_or_url: str) -> str:
+        """Resolve an API path against the configured origin."""
+        if path_or_url.startswith("/"):
+            return self._adapter._configuration.api_base_url + path_or_url
+        return path_or_url
+
+    async def app_json(
+        self,
+        method: str,
+        path: str,
+        app_jwt: str,
+        *,
+        json_body: dict[str, Any] | None = None,
+    ) -> object:
+        """Send one App-JWT request; its body may hold a token and is never hashed."""
+        response = await self._send(
+            method,
+            self._url(path),
+            authorization=lambda: f"Bearer {app_jwt}",
+            json_body=json_body,
+            not_found=GitHubFactsAccessDeniedError,
+            installation=False,
+        )
+        return _json(response)
+
+    async def read_json(
+        self,
+        label: str,
+        path: str,
+        *,
+        not_found: type[Exception],
+    ) -> object:
+        """Read and hash one installation-token GET response."""
+        response = await self._installation_get(self._url(path), not_found=not_found)
+        self._record(label, response)
+        return _json(response)
+
+    async def read_pages(self, label: str, path: str, *, item_key: str) -> list[dict]:
+        """Follow same-origin ``next`` links for a bounded number of pages."""
+        url = self._url(path) + f"?per_page={PAGE_SIZE}"
+        items: list[dict] = []
+        for page in range(1, MAXIMUM_PAGES + 1):
+            response = await self._installation_get(url, not_found=GitHubFactsProtocolError)
+            self._record(f"{label}.page.{page}", response)
+            body = _json(response)
+            page_items = body.get(item_key) if isinstance(body, dict) else None
+            if not isinstance(page_items, list) or not all(
+                isinstance(item, dict) for item in page_items
+            ):
+                raise GitHubFactsProtocolError(_IDENTITY)
+            items.extend(page_items)
+            next_url = response.links.get("next", {}).get("url")
+            if next_url is None:
+                return items
+            parsed = urlsplit(next_url)
+            if (parsed.scheme, parsed.netloc) != self._adapter._api_origin:
+                raise GitHubFactsProtocolError(_IDENTITY)
+            url = next_url
+        raise GitHubFactsProtocolError(_IDENTITY)
+
+    def _record(self, label: str, response: httpx.Response) -> None:
+        """Keep the SHA-256 of one raw facts response body."""
+        digest = hashlib.sha256(response.content).hexdigest()
+        self._digests.append(GitHubResponseDigest(request=label, sha256=f"sha256:{digest}"))
+
+    async def _installation_get(
+        self, url: str, *, not_found: type[Exception]
+    ) -> httpx.Response:
+        """GET with the installation token, refreshing a rejected token once."""
+        token = await self._adapter._installation_token(self)
+        try:
+            return await self._send(
+                "GET",
+                url,
+                authorization=token.header,
+                json_body=None,
+                not_found=not_found,
+                installation=True,
+            )
+        except _TokenRejected:
+            # A revoked or expired cached token gets one fresh exchange.
+            self._adapter._forget_token(self.repository)
+        token = await self._adapter._installation_token(self)
+        try:
+            return await self._send(
+                "GET",
+                url,
+                authorization=token.header,
+                json_body=None,
+                not_found=not_found,
+                installation=True,
+            )
+        except _TokenRejected:
+            raise GitHubFactsAccessDeniedError(_IDENTITY) from None
+
+    async def _send(
+        self,
+        method: str,
+        url: str,
+        *,
+        authorization: Callable[[], str],
+        json_body: dict[str, Any] | None,
+        not_found: type[Exception],
+        installation: bool,
+    ) -> httpx.Response:
+        """Send with bounded retries for transport errors, 5xx and rate limits."""
+        configuration = self._adapter._configuration
+        for attempt in range(1, configuration.maximum_attempts + 1):
+            remaining = self._deadline.remaining()
+            if remaining <= 0:
+                break
+            timeout = min(configuration.request_timeout_seconds, remaining)
+            response: httpx.Response | None = None
+            try:
+                response = await self._client.request(
+                    method,
+                    url,
+                    json=json_body,
+                    headers={"Authorization": authorization()},
+                    timeout=timeout,
+                )
+            except httpx.TransportError:
+                response = None
+            delay = INITIAL_BACKOFF_SECONDS * (2 ** (attempt - 1))
+            if response is not None:
+                status = response.status_code
+                if 200 <= status < 300:
+                    return response
+                if status == 404:
+                    raise not_found(_IDENTITY) from None
+                if status == 401:
+                    if installation:
+                        raise _TokenRejected()
+                    raise GitHubFactsAccessDeniedError(_IDENTITY) from None
+                rate_limit_delay = _rate_limit_delay(response, self._adapter._wall_clock())
+                if status in {403, 429} and rate_limit_delay is not None:
+                    delay = max(delay, rate_limit_delay)
+                elif status == 403:
+                    raise GitHubFactsAccessDeniedError(_IDENTITY) from None
+                elif status != 408 and status < 500:
+                    raise GitHubFactsProtocolError(_IDENTITY) from None
+            logger.warning(
+                "github_facts_request_retryable status=%s attempt=%s",
+                None if response is None else response.status_code,
+                attempt,
+            )
+            if attempt == configuration.maximum_attempts:
+                break
+            if delay >= self._deadline.remaining():
+                break
+            await self._adapter._sleep(delay)
+        raise GitHubFactsUnavailableError(_IDENTITY) from None
+
+
+class _TokenRejected(Exception):
+    """Internal signal that GitHub rejected an installation token."""
+
+
+def _json(response: httpx.Response) -> object:
+    """Parse a JSON body or fail as a protocol error."""
+    try:
+        return response.json()
+    except ValueError:
+        raise GitHubFactsProtocolError(_IDENTITY) from None
+
+
+def _rate_limit_delay(response: httpx.Response, now: float) -> float | None:
+    """Return GitHub's requested wait for a primary or secondary rate limit."""
+    retry_after = response.headers.get("retry-after")
+    if retry_after is not None:
+        try:
+            return max(0.0, float(int(retry_after)))
+        except ValueError:
+            return None
+    if response.headers.get("x-ratelimit-remaining") == "0":
+        try:
+            return max(0.0, float(int(response.headers["x-ratelimit-reset"])) - now)
+        except (KeyError, ValueError):
+            return None
+    return None
+
+
+def _pull_request_facts(body: object, repository: str, number: int) -> dict[str, Any]:
+    """Extract the pull request fields and confirm it belongs to the repository."""
+    try:
+        if not isinstance(body, dict):
+            raise TypeError
+        base = body["base"]
+        head = body["head"]
+        full_name = base["repo"]["full_name"]
+        merged = body["merged"]
+        values = {
+            "repository": full_name,
+            "state": body["state"],
+            "merged": merged,
+            "merge_commit_sha": body["merge_commit_sha"] if merged is True else None,
+            "base_ref": base["ref"],
+            "head_sha": head["sha"],
+        }
+        valid = (
+            body["number"] == number
+            and isinstance(full_name, str)
+            and full_name.casefold() == repository.casefold()
+            and isinstance(values["base_ref"], str)
+            and isinstance(values["head_sha"], str)
+        )
+    except (KeyError, TypeError):
+        valid = False
+    if not valid:
+        raise GitHubFactsProtocolError(_IDENTITY) from None
+    return values
+
+
+def _required_checks(body: object) -> tuple[tuple[str, int | None], ...]:
+    """Return required (context, app id) pairs; none configured fails closed."""
+    if not isinstance(body, dict):
+        raise GitHubFactsProtocolError(_IDENTITY)
+    checks = body.get("checks")
+    required: dict[tuple[str, int | None], None] = {}
+    if isinstance(checks, list) and checks:
+        for item in checks:
+            context = item.get("context") if isinstance(item, dict) else None
+            app_id = item.get("app_id") if isinstance(item, dict) else None
+            if not isinstance(context, str) or not context:
+                raise GitHubFactsProtocolError(_IDENTITY)
+            if app_id is not None and (type(app_id) is not int or app_id < 1):
+                # GitHub reports -1 or null for "any source".
+                app_id = None
+            required[(context, app_id)] = None
+    else:
+        contexts = body.get("contexts")
+        if not isinstance(contexts, list):
+            raise GitHubFactsProtocolError(_IDENTITY)
+        for context in contexts:
+            if not isinstance(context, str) or not context:
+                raise GitHubFactsProtocolError(_IDENTITY)
+            required[(context, None)] = None
+    if not required:
+        raise GitHubRequiredChecksNotConfiguredError(_IDENTITY)
+    return tuple(sorted(required, key=lambda item: (item[0], item[1] or 0)))
+
+
+def _conclusion(
+    name: str,
+    app_id: int | None,
+    check_runs: list[dict],
+    statuses: list[dict],
+) -> str:
+    """Combine every matching check run and commit status; all must succeed."""
+    observed: list[str] = []
+    for run in check_runs:
+        app = run.get("app")
+        run_app_id = app.get("id") if isinstance(app, dict) else None
+        if run.get("name") != name or (app_id is not None and run_app_id != app_id):
+            continue
+        if run.get("status") != "completed":
+            observed.append("pending")
+            continue
+        conclusion = run.get("conclusion")
+        if conclusion not in _CHECK_RUN_CONCLUSIONS:
+            raise GitHubFactsProtocolError(_IDENTITY)
+        observed.append(conclusion)
+    if app_id is None:
+        # Commit statuses carry no App identity, so they satisfy only
+        # requirements that accept any source.
+        for status in statuses:
+            if status.get("context") != name:
+                continue
+            state = status.get("state")
+            if state not in _STATUS_STATES:
+                raise GitHubFactsProtocolError(_IDENTITY)
+            observed.append(state)
+    if not observed:
+        return "missing"
+    return next((value for value in observed if value != "success"), "success")

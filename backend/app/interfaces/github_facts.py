@@ -1,0 +1,161 @@
+"""Typed GitHub pull-request facts capability for proof comparison.
+
+A trusted WorkStream owner reads these facts outside the checker sandbox. The
+networkless checker receives them as request input and compares them with the
+contributor's claims. The facts never contain a credential.
+"""
+
+from __future__ import annotations
+
+from datetime import datetime
+import re
+from typing import Annotated, Literal, Protocol
+
+from pydantic import (
+    AfterValidator,
+    BaseModel,
+    ConfigDict,
+    Field,
+    StrictBool,
+    StrictInt,
+    StrictStr,
+)
+
+from app.interfaces.external_services import (
+    ExternalServiceAdapter,
+    ExternalServiceAdapterError,
+    ExternalServiceConfigurationError,
+    ExternalServiceProtocolError,
+    ExternalServiceUnavailableError,
+)
+
+
+GITHUB_FACTS_CAPABILITY_KEY = "github_facts"
+GITHUB_APP_PROVIDER_KEY = "github_app"
+GITHUB_FACTS_SCHEMA_VERSION = "workstream.github_facts.v1"
+
+# GitHub owner logins are at most 39 characters; repository names at most 100.
+_GITHUB_REPOSITORY = re.compile(
+    r"^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})/(?!\.{1,2}$)[A-Za-z0-9._-]{1,100}$"
+)
+
+GitSha = Annotated[StrictStr, Field(pattern=r"^[0-9a-f]{40}$")]
+Sha256 = Annotated[StrictStr, Field(pattern=r"^sha256:[0-9a-f]{64}$")]
+# Check-run conclusions and commit-status states, plus two derived values:
+# ``pending`` (not completed) and ``missing`` (no matching check or status).
+GitHubCheckConclusion = Literal[
+    "success",
+    "failure",
+    "neutral",
+    "cancelled",
+    "skipped",
+    "timed_out",
+    "action_required",
+    "stale",
+    "error",
+    "pending",
+    "missing",
+]
+
+
+def is_github_repository(value: object) -> bool:
+    """Return whether a value is one canonical ``owner/name`` repository."""
+    return isinstance(value, str) and _GITHUB_REPOSITORY.fullmatch(value) is not None
+
+
+def _github_repository(value: str) -> str:
+    """Validate one canonical repository name."""
+    if not is_github_repository(value):
+        raise ValueError("GitHub repository must be owner/name")
+    return value
+
+
+GitHubRepository = Annotated[StrictStr, AfterValidator(_github_repository)]
+
+
+class _FactsValue(BaseModel):
+    """Strict immutable facts value."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True, revalidate_instances="always")
+
+
+class GitHubRequiredCheckFact(_FactsValue):
+    """One check required by base-branch protection and its head-SHA result."""
+
+    name: Annotated[StrictStr, Field(min_length=1, max_length=255)]
+    app_id: StrictInt | None
+    conclusion: GitHubCheckConclusion
+
+
+class GitHubResponseDigest(_FactsValue):
+    """SHA-256 of one raw GitHub response body that produced these facts."""
+
+    request: Annotated[StrictStr, Field(pattern=r"^[a-z_]+(?:\.page\.[1-9][0-9]*)?$")]
+    sha256: Sha256
+
+
+class GitHubPullRequestFacts(_FactsValue):
+    """Immutable ``workstream.github_facts.v1`` value for one pull request.
+
+    ``merge_commit_sha`` is null unless the pull request is merged, because
+    GitHub reports a test-merge commit for open pull requests. Serialize with
+    ``model_dump(mode="json")`` to place the value in checker request input.
+    """
+
+    schema_version: Literal["workstream.github_facts.v1"] = GITHUB_FACTS_SCHEMA_VERSION
+    repository: GitHubRepository
+    pull_request_number: Annotated[StrictInt, Field(ge=1)]
+    state: Literal["open", "closed"]
+    merged: StrictBool
+    merge_commit_sha: GitSha | None
+    base_ref: Annotated[StrictStr, Field(min_length=1, max_length=255)]
+    head_sha: GitSha
+    required_checks: tuple[GitHubRequiredCheckFact, ...] = Field(min_length=1)
+    fetched_at: datetime
+    responses: tuple[GitHubResponseDigest, ...] = Field(min_length=1)
+
+
+class GitHubFactsUnavailableError(ExternalServiceUnavailableError):
+    """GitHub stayed unavailable or rate-limited within the bounded retry budget."""
+
+    code = "github_facts_unavailable"
+
+
+class GitHubFactsAccessDeniedError(ExternalServiceConfigurationError):
+    """The GitHub App credential, installation or permission is not usable."""
+
+    code = "github_facts_access_denied"
+
+
+class GitHubRequiredChecksNotConfiguredError(ExternalServiceConfigurationError):
+    """The base branch has no classic branch-protection required checks.
+
+    Without required checks, "CI passed" has no meaning, so facts fail closed.
+    """
+
+    code = "github_required_checks_not_configured"
+
+
+class GitHubPullRequestNotFoundError(ExternalServiceAdapterError):
+    """The repository has no pull request with the requested number."""
+
+    code = "github_pull_request_not_found"
+    category = "not_found"
+
+
+class GitHubFactsProtocolError(ExternalServiceProtocolError):
+    """GitHub returned a response outside the supported facts protocol."""
+
+    code = "github_facts_protocol_invalid"
+
+
+class GitHubFactsAdapter(ExternalServiceAdapter, Protocol):
+    """Read verified facts about one pull request with a read-only credential."""
+
+    async def fetch_pull_request_facts(
+        self,
+        *,
+        repository: str,
+        pull_request_number: int,
+    ) -> GitHubPullRequestFacts:
+        """Return facts or raise a secret-free ``ExternalServiceAdapterError``."""
